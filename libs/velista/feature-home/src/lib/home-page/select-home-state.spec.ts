@@ -1,4 +1,9 @@
-import type { Identity, MyZone } from '@portfolio/velista/models';
+import {
+  displayNames,
+  type GeneratedListSummary,
+  type Identity,
+  type MyZone,
+} from '@portfolio/velista/models';
 import { selectHomeState } from './select-home-state';
 
 /**
@@ -35,6 +40,31 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
   };
 }
 
+function basket(overrides: Partial<GeneratedListSummary> = {}): GeneratedListSummary {
+  return {
+    id: 'gl1',
+    name: 'Saturday big shop',
+    status: 'ACTIVE',
+    generatedAt: new Date('2026-08-21T10:00:00.000Z'),
+    lineCount: 12,
+    settledLineCount: 4,
+    ...overrides,
+  };
+}
+
+/**
+ * The container's own pairing of a listing with its names, so a spec cannot
+ * accidentally test a card named from a different set than it was selected from.
+ */
+function withNames(lists: readonly GeneratedListSummary[]) {
+  return {
+    activeShoppingLists: lists,
+    shoppingListNames: displayNames(lists, (date) =>
+      date.toISOString().slice(0, 10)
+    ),
+  };
+}
+
 function select(
   overrides: Partial<Parameters<typeof selectHomeState>[0]> = {}
 ) {
@@ -43,8 +73,8 @@ function select(
     zones: [zone()],
     loadState: 'loaded',
     correlationId: null,
-    resumeListId: null,
-    resumeShoppers: [],
+    activeShoppingLists: [],
+    shoppingListNames: new Map(),
     zoneOnline: () => [],
     listViewers: () => [],
     guestBannerDismissed: false,
@@ -284,60 +314,70 @@ describe('selectHomeState', () => {
     });
   });
 
-  describe('the resume card', () => {
-    it('resolves the remembered list against the loaded zones', () => {
-      const state = select({ resumeListId: 'z1/l1' });
+  // Plan 0045. The resume card is gone and this replaces it, which is why the block is
+  // rewritten rather than added beside the old one: the dashboard has one card in that
+  // slot, and it now comes from the server rather than from what the device remembered.
+  describe('the shopping list card', () => {
+    it('shows the most recently generated active basket', () => {
+      const state = select(withNames([basket()]));
 
       expect(state).toMatchObject({
-        resume: {
-          listId: 'l1',
-          zoneId: 'z1',
-          listName: 'Weekly shop',
-          zoneName: 'Flat 3B',
+        shoppingList: {
+          id: 'gl1',
+          name: 'Saturday big shop',
           lineCount: 12,
-          wantedCount: 7,
+          settledLineCount: 4,
+          otherActiveCount: 0,
         },
       });
     });
 
-    it('is absent when nothing was remembered', () => {
-      expect(select()).toMatchObject({ resume: null });
+    // Absent entirely, and null is what the template reads as "draw no section at all":
+    // no header, no empty card, no gap (section 3.1).
+    it('is absent when there is no active basket', () => {
+      expect(select()).toMatchObject({ shoppingList: null });
     });
 
-    it('is absent when the remembered list is no longer reachable', () => {
-      // After being removed from a group. Offering a card that leads to a 403 is
-      // worse than offering none.
-      expect(select({ resumeListId: 'z1/gone' })).toMatchObject({
-        resume: null,
+    // Several can be live at once, which happens when somebody generates a second run
+    // before finishing the first. The newest leads and the rest are a count, because
+    // guessing which one they mean would be wrong for somebody.
+    it('counts the other active baskets without drawing them', () => {
+      const state = select(
+        withNames([
+          basket({ id: 'gl1' }),
+          basket({ id: 'gl2', name: 'Corner shop' }),
+          basket({ id: 'gl3', name: 'Market' }),
+        ])
+      );
+
+      expect(state).toMatchObject({
+        shoppingList: { id: 'gl1', otherActiveCount: 2 },
       });
     });
 
-    // Plan 0012 changed the stored value's shape from `listId` to `zoneId/listId`,
-    // because the list route needs both and there is no `GET /v1/lists/:id` to resolve
-    // an id on its own. A device that still holds the old form must not break: it is
-    // read as a list id with no zone and the card simply does not render, which is a
-    // missing card once rather than a navigation to nowhere (section 4.1).
-    it('declines a value stored before the zone was part of it', () => {
-      expect(select({ resumeListId: 'l1' })).toMatchObject({ resume: null });
-    });
+    it('takes the display name the container resolved, not the stored one', () => {
+      // An unnamed basket shows its date. The name cannot be built from one basket in
+      // isolation, so the container hands the whole map down; this asserts the card
+      // uses it rather than falling back to a raw null.
+      const state = select(withNames([basket({ name: null })]));
 
-    it('is absent when the zone remembered is not the one holding the list', () => {
-      expect(select({ resumeListId: 'z-other/l1' })).toMatchObject({
-        resume: null,
+      expect(state).toMatchObject({
+        shoppingList: { name: '2026-08-21' },
       });
     });
 
-    // Plan 0017, section 7. The container resolves the names, because presence
-    // carries user ids and a name is a fact about a zone rather than about a person.
-    it('carries whoever the container says is shopping the list', () => {
-      expect(
-        select({ resumeListId: 'z1/l1', resumeShoppers: ['Ana', 'Marc'] })
-      ).toMatchObject({ resume: { shoppers: ['Ana', 'Marc'] } });
-    });
+    // Two unnamed baskets on one day are told apart by a number, counted upwards in
+    // time so the labels stay put as older pages load (backend 0050, section 1).
+    it('numbers a second unnamed basket from the same day', () => {
+      const state = select(
+        withNames([
+          basket({ id: 'gl2', name: null }),
+          basket({ id: 'gl1', name: null }),
+        ])
+      );
 
-    it('carries an empty list of shoppers rather than omitting the field', () => {
-      expect(select({ resumeListId: 'z1/l1' })).toMatchObject({
-        resume: { shoppers: [] },
+      expect(state).toMatchObject({
+        shoppingList: { id: 'gl2', name: '2026-08-21 2' },
       });
     });
   });

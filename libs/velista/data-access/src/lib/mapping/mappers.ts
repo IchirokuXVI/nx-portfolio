@@ -1,6 +1,8 @@
 import {
   COMMENT_TRANSCRIPTION_FALLBACK,
   COMMENT_TRANSCRIPTIONS,
+  GENERATED_LIST_STATUS_FALLBACK,
+  GENERATED_LIST_STATUSES,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
   LIST_PERMISSIONS,
@@ -24,6 +26,9 @@ import {
   type Comment,
   type CommentRecording,
   type CommentTranscription,
+  type GeneratedListRun,
+  type GeneratedListSkippedLine,
+  type GeneratedListSummary,
   type Line,
   type LineSettlement,
   type ListAccessEntry,
@@ -983,4 +988,119 @@ export function toCatalogScope(raw: unknown): CatalogScope | null {
     coverage: mapArray(raw['coverage'], toPostalCodeCoverage),
     approximate: raw['approximate'] === true,
   };
+}
+
+/**
+ * From `GeneratedListSummaryView` (backend `0050` section 7).
+ *
+ * `name` is `nullableStr` for `toShoppingProfile`'s reason: null is a basket nobody
+ * named, which this client displays as its localized generation date, and collapsing it
+ * to an empty string would erase the difference between unnamed and named nothing.
+ *
+ * A summary with no readable `generatedAt` is **dropped**, and that is the one strict
+ * field here. The date is not decoration on this object: the history is ordered by it
+ * and an unnamed basket's whole display name is built from it, so a row that kept a
+ * fabricated `new Date()` would sort itself to the top of somebody's history and title
+ * itself today. Dropping it costs one row and is counted, per rule D4.
+ */
+export function toGeneratedListSummary(
+  raw: unknown
+): GeneratedListSummary | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  const generatedAt = date(raw['generatedAt']);
+  if (id === null || generatedAt === null) {
+    return null;
+  }
+
+  return {
+    id,
+    name: nullableStr(raw['name']),
+    status: oneOf(
+      raw['status'],
+      GENERATED_LIST_STATUSES,
+      GENERATED_LIST_STATUS_FALLBACK
+    ),
+    generatedAt,
+    lineCount: numOr(raw['lineCount'], 0),
+    settledLineCount: numOr(raw['settledLineCount'], 0),
+  };
+}
+
+/** From `GeneratedListSkippedLineView`. */
+function toGeneratedListSkippedLine(
+  raw: unknown
+): GeneratedListSkippedLine | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const listId = str(raw['listId']);
+  return listId === null
+    ? null
+    : { listId, content: strOr(raw['content'], '') };
+}
+
+/**
+ * From `GeneratedListRunResult` (backend `0050` section 4), keeping the summary alone.
+ *
+ * The create answers the whole basket, lines and origins and options included, and this
+ * client reads a summary out of it. That is deliberate: the sheet's next act is to
+ * navigate to the basket screen, which fetches what it needs for itself, so holding the
+ * lines here would be caching a copy that the basket screen immediately supersedes.
+ *
+ * The response carries no `lineCount`, having sent the lines themselves, so the counts
+ * are taken from the array. `settledLineCount` is zero on a basket composed a moment
+ * ago, and is read rather than assumed for the idempotent replay: the same key returns
+ * the **first** run, which by then may have been half shopped.
+ */
+export function toGeneratedListRun(raw: unknown): GeneratedListRun | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const list = toGeneratedListFromView(raw['list']);
+  return list === null
+    ? null
+    : { list, skipped: mapArray(raw['skipped'], toGeneratedListSkippedLine) };
+}
+
+/**
+ * From `GeneratedListView`, the **whole** basket, keeping only what a summary holds.
+ *
+ * The create answers one of these and so do the two owner realtime events, none of
+ * which carry the two counts the summary listing serves, having sent the lines
+ * themselves. So the counts are derived here, in one place, rather than at each of the
+ * three call sites where they would eventually disagree.
+ *
+ * A line counts as settled when its settled quantity has caught up with what was asked
+ * for. That is the same arithmetic the row draws, and it is why a `NOT_AVAILABLE`
+ * outcome counts too: it closes the outstanding amount without claiming anything was
+ * bought (backend `0051` section 6), so the line is done and the card should say so.
+ *
+ * A line asking for nothing is not counted as settled, because zero is not an amount
+ * somebody worked through, and counting it would let an empty basket report itself
+ * finished.
+ */
+export function toGeneratedListFromView(
+  raw: unknown
+): GeneratedListSummary | null {
+  const summary = toGeneratedListSummary(raw);
+  if (summary === null || !isRecord(raw)) {
+    return null;
+  }
+
+  const lines = Array.isArray(raw['lines']) ? raw['lines'] : [];
+  const settled = lines.filter((line) => {
+    if (!isRecord(line)) {
+      return false;
+    }
+    const wanted = numOr(line['quantity'], 0);
+    return wanted > 0 && numOr(line['settledQuantity'], 0) >= wanted;
+  }).length;
+
+  return { ...summary, lineCount: lines.length, settledLineCount: settled };
 }

@@ -249,6 +249,7 @@ export const ASSISTANT_AUDIO_MIME_TYPES: readonly string[] = [
 export const LINES_PAGE_SIZE = 100;
 
 /**
+/**
  * What a history section asks for in one request (velista plan 0043, section 5.3).
  *
  * Far smaller than a page of lines, and for the opposite reason. A list is read whole
@@ -262,3 +263,13 @@ export const LINES_PAGE_SIZE = 100;
  * draw ten.
  */
 export const SETTLEMENTS_PAGE_SIZE = 20;
+
+/**
+ * `CreateGeneratedListDto.name` and `UpdateGeneratedListDto.name`, which is
+ * `GENERATED_LIST_LIMITS.nameMaxLength` in the contracts (backend plan 0050).
+ *
+ * The field it guards is optional, unlike every other name in this file: an unnamed
+ * basket is displayed as its generation date, so the limit only ever applies to
+ * somebody who chose to type one.
+ */
+export const GENERATED_LIST_NAME_MAX_LENGTH = 120;

@@ -223,3 +223,27 @@ export const PARTICIPANT_KINDS = [
 export type ParticipantKind = (typeof PARTICIPANT_KINDS)[number];
 export const PARTICIPANT_KIND_FALLBACK: ParticipantKind = 'UNKNOWN';
 
+/**
+ * Where a generated shopping list has got to (backend plan 0050, section 1).
+ *
+ * `DRAFT` is composed and not yet taken to a shop, `ACTIVE` is the one being worked
+ * through, `COMPLETED` is a trip that is over, and `ARCHIVED` hides a trip from the
+ * default listing without deleting it.
+ *
+ * `ACTIVE` is the only value this app derives anything from: it is what puts a basket
+ * on the dashboard card and marks a row in the history as being shopped now. The other
+ * three are carried so the history can be read back, and nothing branches on them.
+ *
+ * `UNKNOWN` is the fallback for a status this build does not recognise, following
+ * `ZONE_STATUSES`: an unrecognised value must not read as `ACTIVE`, because that would
+ * put a basket the server considers finished back on the dashboard.
+ */
+export const GENERATED_LIST_STATUSES = [
+  'DRAFT',
+  'ACTIVE',
+  'COMPLETED',
+  'ARCHIVED',
+  'UNKNOWN',
+] as const;
+export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
+export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';

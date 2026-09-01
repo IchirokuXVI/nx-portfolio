@@ -1,5 +1,6 @@
 import {
   toComment,
+  toGeneratedListFromView,
   toLine,
   toLineSettlement,
   toListPermissions,
@@ -268,6 +269,24 @@ export function toRealtimeEvent(
       // build could not read.
       const profiles = mapArray(payload['profiles'], toShoppingProfile);
       return profiles.length === 0 ? null : { type: name, profiles };
+    }
+
+    case 'generatedList.created':
+    case 'generatedList.updated': {
+      // The payload is the whole basket and only its summary is kept. A body this
+      // build cannot read is dropped and counted rather than applied, which for these
+      // two means the card keeps whatever the last read said instead of losing its
+      // counts to an unreadable event.
+      const list = toGeneratedListFromView(payload);
+      return list === null ? null : { type: name, list };
+    }
+
+    case 'generatedList.deleted': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const generatedListId = str(payload['id']);
+      return generatedListId === null ? null : { type: name, generatedListId };
     }
 
     case 'presence.zoneUpdated': {

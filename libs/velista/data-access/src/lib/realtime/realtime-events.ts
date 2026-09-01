@@ -1,5 +1,6 @@
 import type {
   Comment,
+  GeneratedListSummary,
   Line,
   LineSettlement,
   ListPermission,
@@ -230,6 +231,35 @@ export type RealtimeEvent =
       readonly type: 'profiles.changed';
       readonly profiles: readonly ShoppingProfile[];
     }
+  | {
+      /**
+       * A generated shopping list of the caller's was composed, or one of them moved
+       * (backend `0050` section 9), on their own sessions and on nothing else.
+       *
+       * A basket is private, so the owner's room is the only audience it can have: not
+       * the zones it drew from, not the admins of those zones, nobody. What it buys is
+       * the one thing a private resource still needs from realtime, which is that the
+       * same basket stays in sync between the phone in the shop and the laptop at home.
+       *
+       * The payload is the **whole** basket, lines included, and this app keeps the
+       * summary out of it: the dashboard card and the history draw a name, a date and
+       * two counts, and the screen that wants the lines fetches them itself.
+       */
+      readonly type: 'generatedList.created' | 'generatedList.updated';
+      readonly list: GeneratedListSummary;
+    }
+  | {
+      /**
+       * A generated shopping list of the caller's was deleted.
+       *
+       * No screen in this app deletes one (plan 0045, section 3.3), so this only ever
+       * arrives from somewhere else: another client, or a future screen. It is applied
+       * anyway, because a card pointing at a basket the server no longer has is worse
+       * than a card that quietly goes away.
+       */
+      readonly type: 'generatedList.deleted';
+      readonly generatedListId: string;
+    }
   | { readonly type: 'presence.zoneUpdated'; readonly presence: ZonePresence }
   | { readonly type: 'presence.listUpdated'; readonly presence: ListPresence };
 
@@ -266,6 +296,9 @@ export const REALTIME_EVENT_NAMES = [
   'merge.approved',
   'merge.rejected',
   'profiles.changed',
+  'generatedList.created',
+  'generatedList.updated',
+  'generatedList.deleted',
   'presence.zoneUpdated',
   'presence.listUpdated',
 ] as const;

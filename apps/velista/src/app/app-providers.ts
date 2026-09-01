@@ -24,6 +24,8 @@ import {
   CommentApi,
   ConnectionRecovery,
   gatewayInterceptor,
+  GENERATED_LIST_SERVICE,
+  GeneratedListApi,
   LINE_SERVICE,
   LineApi,
   LIST_SERVICE,
@@ -210,6 +212,14 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // they fail apart, and this one fails softly by design — a search that does not
   // answer must never be able to stop a line being added.
   provideService(CATALOG_SERVICE, CatalogApi),
+
+  // Generated shopping lists (plan 0045). The note worth making is
+  // what is **not** on this service: it carries the owner's two calls, listing their
+  // own baskets and composing one, and nothing a participant does inside a basket.
+  // Those are authenticated by a participant session rather than by this account token,
+  // so they are a different service on a different credential and not a wider version
+  // of this one.
+  provideService(GENERATED_LIST_SERVICE, GeneratedListApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches

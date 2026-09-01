@@ -63,10 +63,13 @@ describe('AppShellRoutes', () => {
       ).toBe(true);
     });
 
-    it('offers the same two over the dashboard', () => {
-      // Both pages offer both actions, so the two copies come from one function and
-      // cannot drift apart.
+    it('offers the same two over the dashboard, beside its own', () => {
+      // Both pages offer both entry actions, so those two copies come from one
+      // function and cannot drift apart. `get` is the dashboard's alone (plan 0045):
+      // Get shopping list is the primary action of this page and of no other, so it is
+      // written here rather than added to `entrySheetRoutes`.
       expect(sheetsOf('home').map((route) => route.path)).toEqual([
+        'get',
         'zones/new',
         'zones/join',
       ]);
@@ -79,9 +82,13 @@ describe('AppShellRoutes', () => {
         'landing',
         'landing',
       ]);
-      expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
-        ['home', 'home']
-      );
+      // `get` carries no `returnTo`: it is offered over the dashboard and nowhere
+      // else, so where Cancel goes is not a question it has to be told the answer to.
+      expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual([
+        undefined,
+        'home',
+        'home',
+      ]);
     });
 
     it('keeps the shared link page public and full screen', () => {
@@ -644,6 +651,7 @@ describe('the sheets and their exit animation', () => {
    * direction.
    */
   const SHEET_PATHS = [
+    'get',
     'zones/new',
     'zones/join',
     'lists/new',

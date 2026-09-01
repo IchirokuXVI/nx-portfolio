@@ -20,3 +20,5 @@ export * from './lib/join-page/join-page';
 export * from './lib/people-sheet/people-sheet';
 export * from './lib/settle-sheet/settle-sheet';
 export * from './lib/share-sheet/share-sheet';
+export * from './lib/shopping-list-row/shopping-list-row';
+export * from './lib/shopping-lists-page/shopping-lists-page';

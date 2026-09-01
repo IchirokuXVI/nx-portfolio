@@ -1,0 +1,87 @@
+@let page = state();
+
+<div class="page">
+  <header class="bar">
+    <button
+      (click)="back()"
+      [attr.aria-label]="'history.back' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="glyph" />
+    </button>
+    <h1 class="title">{{ 'history.title' | rokuT }}</h1>
+  </header>
+
+  @switch (page.kind) {
+    @case ('loading') {
+      <div class="content">
+        <lib-row-skeleton [count]="4" labelKey="history.row.loading" />
+      </div>
+    }
+
+    @case ('error') {
+      <div class="content">
+        <lib-error-state
+          (copyReference)="copyReference($event)"
+          (retry)="retry()"
+          [body]="'history.error.body' | rokuT"
+          [correlationId]="page.correlationId"
+          [title]="'history.error.title' | rokuT"
+        />
+      </div>
+    }
+
+    @case ('empty') {
+      <!--
+        One sentence and one action (section 3.3). The action is Get shopping list,
+        which is the only thing that can put anything on this page, and it is here
+        rather than in a bottom bar because there is nothing to scroll past it.
+      -->
+      <div class="content">
+        <lib-empty-state
+          [body]="'history.empty.body' | rokuT"
+          [title]="'history.empty.title' | rokuT"
+        >
+          <button (click)="getList()" class="primary" type="button">
+            <lib-basket-icon class="glyph" />
+            {{ 'getList.title' | rokuT }}
+          </button>
+        </lib-empty-state>
+      </div>
+    }
+
+    @case ('populated') {
+      <div (scroll)="onScroll($event)" class="content scroller">
+        <!--
+          One announcement for the page, not one per row (section 7). It is `polite`, so
+          it waits for whatever the reader is in the middle of rather than cutting in.
+        -->
+        <p aria-live="polite" class="visually-hidden" role="status">
+          {{ 'history.announce.loaded' | rokuT: { count: page.rows.length } }}
+        </p>
+
+        <div class="rows">
+          @for (row of page.rows; track row.id) {
+            <lib-shopping-list-row
+              (open)="open($event)"
+              [generatedOn]="generatedOn(row.generatedAt)"
+              [row]="row"
+            />
+          }
+        </div>
+
+        @if (page.loadingMore) {
+          <lib-row-skeleton [count]="2" labelKey="history.row.loading" />
+        }
+      </div>
+
+      <div class="footer">
+        <button (click)="getList()" class="primary" type="button">
+          <lib-basket-icon class="glyph" />
+          {{ 'getList.title' | rokuT }}
+        </button>
+      </div>
+    }
+  }
+</div>

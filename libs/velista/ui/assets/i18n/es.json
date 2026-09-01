@@ -293,15 +293,23 @@
       "emailSignIn": "Entrar con correo",
       "newZone": "Nuevo grupo",
       "generateList": "Obtener lista de la compra",
-      "generateListSoon": "Próximamente",
+      "history": "Historial",
       "account": "Tu cuenta",
       "changeLocale": "Cambiar idioma",
       "assistant": "Asistente"
     },
     "zoneExplainer": "Un grupo es la casa o los compañeros de piso con quienes compartes listas. Puedes empezar sin cuenta.",
     "section": {
-      "resume": "Sigue donde lo dejaste",
+      "shoppingList": "Tu lista de la compra",
       "zones": "Tus grupos"
+    },
+    "shoppingList": {
+      "open": "{{name}}, faltan {{count}}",
+      "more_one": "y {{count}} más",
+      "more_other": "y {{count}} más",
+      "got": "{{settled}} de {{total}} cogidos",
+      "generatedToday": "generada hoy",
+      "generatedOn": "generada el {{date}}"
     },
     "zone": {
       "members_one": "{{count}} miembro",
@@ -977,6 +985,52 @@
       "checking": "Comprobando el enlace",
       "joining": "Uniéndote",
       "failed": "No ha funcionado. Inténtalo de nuevo."
+    }
+  },
+  "getList": {
+    "title": "Obtener lista de la compra",
+    "body": "Una lista para llevar por la tienda, con todo lo que aún hace falta en las listas que elijas.",
+    "name": {
+      "label": "Nombre",
+      "hint": "Si lo dejas vacío, la lista muestra su fecha; una segunda el mismo día lleva un número"
+    },
+    "profile": {
+      "label": "Perfil de compra"
+    },
+    "sources": {
+      "label": "Sacar de",
+      "hint": "Solo aparecen las listas que puedes editar. Un grupo marcado entero incluye las listas que se creen después.",
+      "none": "Primero necesitas un grupo donde puedas editar listas",
+      "expand": "Mostrar las listas de {{name}}",
+      "collapse": "Ocultar las listas de {{name}}"
+    },
+    "submit": "Generar",
+    "submitting": "Generando",
+    "cancel": "Cancelar",
+    "error": "No se pudo completar. Inténtalo de nuevo"
+  },
+  "history": {
+    "title": "Tus listas de la compra",
+    "back": "Atrás",
+    "status": {
+      "active": "Comprando ahora"
+    },
+    "row": {
+      "got": "{{settled}} de {{total}} cogidos",
+      "loading": "Cargando tus listas de la compra"
+    },
+    "empty": {
+      "title": "Aún no hay listas de la compra",
+      "body": "Genera una con todo lo que aún hace falta en tus grupos y se guardará aquí."
+    },
+    "error": {
+      "title": "No hemos podido cargar tus listas de la compra",
+      "body": "Algo ha fallado por nuestra parte. No se ha perdido nada de lo que guardaste.",
+      "retry": "Inténtalo de nuevo"
+    },
+    "announce": {
+      "loaded_one": "{{count}} lista de la compra cargada",
+      "loaded_other": "{{count}} listas de la compra cargadas"
     }
   }
 }

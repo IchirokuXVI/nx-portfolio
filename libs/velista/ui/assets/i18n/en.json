@@ -293,15 +293,23 @@
       "emailSignIn": "Sign in with email",
       "newZone": "New group",
       "generateList": "Get shopping list",
-      "generateListSoon": "Coming soon",
+      "history": "History",
       "account": "Your account",
       "changeLocale": "Change language",
       "assistant": "Assistant"
     },
     "zoneExplainer": "A group is the household or flatmates you share lists with. You can start without an account.",
     "section": {
-      "resume": "Pick up where you left off",
+      "shoppingList": "Your shopping list",
       "zones": "Your groups"
+    },
+    "shoppingList": {
+      "open": "{{name}}, {{count}} still to get",
+      "more_one": "and {{count}} more",
+      "more_other": "and {{count}} more",
+      "got": "{{settled}} of {{total}} got",
+      "generatedToday": "generated today",
+      "generatedOn": "generated {{date}}"
     },
     "zone": {
       "members_one": "{{count}} member",
@@ -977,6 +985,52 @@
       "checking": "Checking the link",
       "joining": "Joining",
       "failed": "That did not work. Try again."
+    }
+  },
+  "getList": {
+    "title": "Get shopping list",
+    "body": "One list to carry around the shop, from everything still needed in the lists you choose.",
+    "name": {
+      "label": "Name",
+      "hint": "Left empty, the list shows its date; a second one the same day gets a number"
+    },
+    "profile": {
+      "label": "Shopping profile"
+    },
+    "sources": {
+      "label": "Draw from",
+      "hint": "Only lists where you can edit appear. A group checked whole includes lists made later.",
+      "none": "You need a group where you can edit lists first",
+      "expand": "Show the lists in {{name}}",
+      "collapse": "Hide the lists in {{name}}"
+    },
+    "submit": "Generate",
+    "submitting": "Generating",
+    "cancel": "Cancel",
+    "error": "That did not go through. Try again"
+  },
+  "history": {
+    "title": "Your shopping lists",
+    "back": "Back",
+    "status": {
+      "active": "Shopping now"
+    },
+    "row": {
+      "got": "{{settled}} of {{total}} got",
+      "loading": "Loading your shopping lists"
+    },
+    "empty": {
+      "title": "No shopping lists yet",
+      "body": "Generate one from everything still needed across your groups, and it will be kept here."
+    },
+    "error": {
+      "title": "We could not load your shopping lists",
+      "body": "Something went wrong on our side. Nothing you saved has been lost.",
+      "retry": "Try again"
+    },
+    "announce": {
+      "loaded_one": "{{count}} shopping list loaded",
+      "loaded_other": "{{count}} shopping lists loaded"
     }
   }
 }

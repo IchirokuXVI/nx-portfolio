@@ -1,0 +1,180 @@
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!submitting()"
+  labelledBy="get-list-title"
+>
+  <h2 class="title" id="get-list-title">{{ 'getList.title' | rokuT }}</h2>
+  <p class="body">{{ 'getList.body' | rokuT }}</p>
+
+  <label class="label" for="get-list-name">
+    {{ 'getList.name.label' | rokuT }}
+  </label>
+
+  <!--
+    Read only rather than disabled while the request is out, for `CreateGroupSheet`'s
+    reason: a disabled input leaves the accessible tree and loses focus, throwing the
+    person to the top of the sheet at the moment they are waiting to hear something.
+
+    The placeholder is the date, because that is literally what an empty name produces.
+    A placeholder that shows the real default is worth more than one that describes it.
+  -->
+  <input
+    (input)="onNameInput($event)"
+    [attr.maxlength]="maxLength"
+    [placeholder]="namePlaceholder()"
+    [readOnly]="submitting()"
+    [value]="name()"
+    autocomplete="off"
+    class="field"
+    id="get-list-name"
+    type="text"
+  />
+  <p class="hint">{{ 'getList.name.hint' | rokuT }}</p>
+
+  <!--
+    One choice is furniture, so the row is drawn only for somebody with more than one
+    profile. The run still names the profile either way.
+  -->
+  @if (showProfiles()) {
+    <div class="profile-row">
+      <label class="label profile-label" for="get-list-profile">
+        {{ 'getList.profile.label' | rokuT }}
+      </label>
+      <select
+        (change)="onProfileChange($event)"
+        [disabled]="submitting()"
+        [value]="selectedProfileId()"
+        class="profile-select"
+        id="get-list-profile"
+      >
+        @for (profile of profiles(); track profile.id) {
+          <option [value]="profile.id">
+            {{ profile.name ?? ('profiles.defaultName' | rokuT) }}
+          </option>
+        }
+      </select>
+    </div>
+  }
+
+  <span class="label sources-label">{{ 'getList.sources.label' | rokuT }}</span>
+
+  @if (noSources()) {
+    <p class="none" role="status">{{ 'getList.sources.none' | rokuT }}</p>
+  } @else {
+    <!--
+      A real checkbox tree (section 7): the group's name is a disclosure button with
+      `aria-expanded`, its tick is a separate `role="checkbox"` that reports
+      `mixed` when its lists disagree, and each list is a checkbox of its own. Two
+      controls per group row rather than one, because expanding and choosing are two
+      different acts and a single target would make one of them unreachable.
+    -->
+    <div class="tree">
+      @for (zone of zones(); track zone.id) {
+        <div class="zone">
+          <div class="zone-row">
+            <button
+              (click)="toggleExpanded(zone.id)"
+              [attr.aria-expanded]="isExpanded(zone.id)"
+              [attr.aria-label]="
+                (isExpanded(zone.id)
+                  ? 'getList.sources.collapse'
+                  : 'getList.sources.expand'
+                ) | rokuT: { name: zone.name }
+              "
+              class="zone-disclosure"
+              type="button"
+            >
+              @if (isExpanded(zone.id)) {
+                <lib-chevron-down-icon class="twisty" />
+              } @else {
+                <lib-chevron-right-icon class="twisty" />
+              }
+              <span class="zone-name">{{ zone.name }}</span>
+            </button>
+
+            <button
+              (click)="toggleZone(zone.id)"
+              [attr.aria-checked]="
+                zoneState(zone.id) === 'all'
+                  ? 'true'
+                  : zoneState(zone.id) === 'none'
+                    ? 'false'
+                    : 'mixed'
+              "
+              [attr.aria-label]="zone.name"
+              [class.is-mixed]="zoneState(zone.id) === 'some'"
+              [class.is-on]="zoneState(zone.id) === 'all'"
+              class="tick"
+              role="checkbox"
+              type="button"
+            >
+              @if (zoneState(zone.id) === 'all') {
+                <lib-check-icon class="check" />
+              }
+            </button>
+          </div>
+
+          @if (isExpanded(zone.id)) {
+            @let loaded = listsOf(zone.id);
+
+            @if (loaded?.state === 'loading') {
+              <p class="list-note"><lib-spinner-icon class="spinner" /></p>
+            } @else if (loaded?.state === 'failed') {
+              <p class="list-note">{{ 'getList.error' | rokuT }}</p>
+            } @else if (loaded?.lists?.length === 0) {
+              <p class="list-note">{{ 'getList.sources.none' | rokuT }}</p>
+            } @else {
+              @for (list of loaded?.lists ?? []; track list.id) {
+                <button
+                  (click)="toggleList(zone.id, list.id)"
+                  [attr.aria-checked]="listChecked(zone.id, list.id)"
+                  class="list-row"
+                  role="checkbox"
+                  type="button"
+                >
+                  <span class="list-name">{{ list.name }}</span>
+                  <span
+                    [class.is-on]="listChecked(zone.id, list.id)"
+                    class="tick"
+                  >
+                    @if (listChecked(zone.id, list.id)) {
+                      <lib-check-icon class="check" />
+                    }
+                  </span>
+                </button>
+              }
+            }
+          }
+        </div>
+      }
+    </div>
+    <p class="hint">{{ 'getList.sources.hint' | rokuT }}</p>
+  }
+
+  @if (errorKey(); as key) {
+    <p class="error" role="alert">{{ key | rokuT }}</p>
+  }
+
+  <button
+    (click)="submit()"
+    [disabled]="!canSubmit()"
+    class="primary"
+    type="button"
+  >
+    @if (submitting()) {
+      <lib-spinner-icon class="spinner" />
+      {{ 'getList.submitting' | rokuT }}
+    } @else {
+      {{ 'getList.submit' | rokuT }}
+    }
+  </button>
+
+  <button
+    (click)="dismiss()"
+    [disabled]="submitting()"
+    class="cancel"
+    type="button"
+  >
+    {{ 'getList.cancel' | rokuT }}
+  </button>
+</lib-sheet-shell>

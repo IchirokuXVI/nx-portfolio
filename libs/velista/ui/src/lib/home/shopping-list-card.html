@@ -1,0 +1,75 @@
+@let vm = list();
+
+<section class="wrapper">
+  <div class="head-row">
+    <h2 class="section-label">{{ 'home.section.shoppingList' | rokuT }}</h2>
+
+    <!--
+      A control of its own and not part of the card, because it goes somewhere else.
+      Section 7: the card and the history are two destinations, so they are two stops.
+    -->
+    <button (click)="openHistory.emit()" class="history" type="button">
+      {{ 'home.action.history' | rokuT }}
+    </button>
+  </div>
+
+  <!--
+    One tap target for the whole card, with the chevron as decoration inside it rather
+    than a control of its own, exactly as the resume card and the zone card are.
+
+    The accessible name is stated rather than read off the parts: left to itself a
+    screen reader would say the name, then the date, then "33%", then "4 of 12 got",
+    which is four facts in the order they happen to be laid out. Section 7 asks for the
+    name and what is left.
+  -->
+  <button
+    (click)="open.emit(vm.id)"
+    [attr.aria-label]="
+      'home.shoppingList.open' | rokuT: { name: vm.name, count: outstanding() }
+    "
+    class="card"
+    type="button"
+  >
+    <div class="head">
+      <div class="titles">
+        <span class="list-name">{{ vm.name }}</span>
+        <span class="meta">
+          @if (generatedToday()) {
+            {{ 'home.shoppingList.generatedToday' | rokuT }}
+          } @else {
+            {{ 'home.shoppingList.generatedOn' | rokuT: { date: generatedOn() } }}
+          }
+        </span>
+      </div>
+      <lib-chevron-right-icon class="chevron" />
+    </div>
+
+    <!--
+      Hidden from the reader, because the sentence under it says the same thing in
+      words and the aria-label above already said what is left. A progressbar here
+      would make the card announce its fraction three times.
+    -->
+    @if (progress(); as percent) {
+      <div class="progress">
+        <div aria-hidden="true" class="track">
+          <div [style.width.%]="percent" class="fill"></div>
+        </div>
+        <span class="progress-label">{{
+          'home.shoppingList.got'
+            | rokuT: { settled: vm.settledLineCount, total: vm.lineCount }
+        }}</span>
+      </div>
+    }
+  </button>
+
+  <!--
+    The other live baskets, which is a link to the history and not a part of the card
+    above it (section 7). Drawn only when there is more than one, because "and 0 more"
+    is furniture.
+  -->
+  @if (vm.otherActiveCount > 0) {
+    <button (click)="openHistory.emit()" class="more" type="button">
+      {{ 'home.shoppingList.more' | rokuT: { count: vm.otherActiveCount } }}
+    </button>
+  }
+</section>

@@ -9,11 +9,15 @@ import {
   untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
   AUTH_SERVICE,
   GatewayError,
+  GeneratedListStore,
   hasOthers,
   MemberNames,
   NetworkError,
@@ -26,12 +30,15 @@ import {
   type AuthServiceI,
   type RealtimeClientI,
 } from '@portfolio/velista/data-access';
-import type {
-  HomeState,
-  MyZone,
-  PresenceUser,
+import {
+  displayNames,
+  formatGeneratedDate,
+  isSameDay,
+  type HomeState,
+  type MyZone,
+  type PresenceUser,
 } from '@portfolio/velista/models';
-import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import { BrowserFacade } from '@portfolio/velista/platform';
 import {
   AppBar,
   AskedNotice,
@@ -41,7 +48,7 @@ import {
   ErrorState,
   GuestUpgradeBanner,
   InviteCard,
-  ResumeListCard,
+  ShoppingListCard,
   SuccessNote,
   ZoneCard,
   ZoneSkeleton,
@@ -81,7 +88,7 @@ import { selectHomeState } from './select-home-state';
     ErrorState,
     GuestUpgradeBanner,
     InviteCard,
-    ResumeListCard,
+    ShoppingListCard,
     SuccessNote,
     ZoneCard,
     ZoneSkeleton,
@@ -92,6 +99,7 @@ import { selectHomeState } from './select-home-state';
 })
 export class HomePage {
   private readonly _zoneStore = inject(ZoneStore);
+  private readonly _generated = inject(GeneratedListStore);
   private readonly _presence = inject(PresenceStore);
   private readonly _names = inject(MemberNames);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
@@ -118,65 +126,32 @@ export class HomePage {
   });
 
   /**
-   * The list this device last opened, resolved against the zones actually loaded.
+   * The caller's `ACTIVE` baskets, newest first, and their resolved display names.
    *
-   * Stored as `zoneId/listId` since plan 0012, because the list route needs both.
-   * A **stored value changing shape** is worth naming: a device that remembers the old
-   * form holds a bare list id with no separator, which `selectHomeState` reads as "a
-   * list id with no zone" and declines to build a card from. That is a missing card
-   * once, on one device, rather than a card that navigates somewhere broken
-   * (section 4.1).
+   * Both come off `GeneratedListStore`, which is app scoped, so moving between the
+   * dashboard and the history does not refetch the listing.
+   *
+   * The names are built here rather than in `selectHomeState` because naming an unnamed
+   * basket needs the reader's **locale** and a date formatter, and that function is pure
+   * so that it needs neither. Reading `locale()` makes this recompute on a language
+   * change, which is exactly right: the card is titled "21 August" in one language and
+   * "21 de agosto" in the other, and a title chosen at fetch time would stay in the
+   * language the fetch happened in.
+   *
+   * Over the whole listing rather than only the active ones, because the same day
+   * numbering has to agree with the history page. Numbering the two active baskets of a
+   * day on their own would call one of them "21 August 2" here and "21 August 3" there.
    */
-  private readonly _resumeListId = signal<string | null>(null);
+  private readonly _locale = inject(RokuLocaleStore).locale;
 
-  /**
-   * The remembered list, as `zoneId/listId`, but only once its zone is one of ours.
-   *
-   * A **string** rather than a pair, and that is what makes it usable in an effect:
-   * a computed returning a fresh object would be a new value on every zone reload, so
-   * the room below would be left and re-joined every time the dashboard refreshed.
-   *
-   * The zone check is not a permission check, which is the server's job. It saves a
-   * subscription that could only ever be refused, for a list on a device that has since
-   * left the group.
-   */
-  private readonly _presenceListKey = computed<string | null>(() => {
-    const stored = this._resumeListId();
-    if (stored === null) {
-      return null;
+  private readonly _shoppingListNames = computed<ReadonlyMap<string, string>>(
+    () => {
+      const locale = this._locale();
+      return displayNames(this._generated.lists(), (date) =>
+        formatGeneratedDate(date, locale)
+      );
     }
-
-    const separator = stored.indexOf('/');
-    if (separator < 0) {
-      return null;
-    }
-
-    const zoneId = stored.slice(0, separator);
-    return this._zoneStore.myZones().some((zone) => zone.id === zoneId)
-      ? stored
-      : null;
-  });
-
-  /**
-   * Who else is shopping the resume list, named and without the reader.
-   *
-   * The three joins this and every other presence row on the page make are
-   * `presenceNames`, which is where they are explained: the reader is dropped here
-   * rather than in the store, a name that will not resolve is left out rather than
-   * rendered as an id, and a wire username would win if one ever appeared.
-   */
-  private readonly _resumeShoppers = computed<readonly string[]>(() => {
-    const key = this._presenceListKey();
-    if (key === null) {
-      return [];
-    }
-
-    const separator = key.indexOf('/');
-    return this._named(
-      key.slice(0, separator),
-      this._presence.viewersOf(key.slice(separator + 1))
-    );
-  });
+  );
 
   /**
    * Who is online in each group, and who is shopping each of its lists, all named.
@@ -237,8 +212,8 @@ export class HomePage {
       zones: this._zoneStore.myZones(),
       loadState: this._zoneStore.state(),
       correlationId: this._correlationId(),
-      resumeListId: this._resumeListId(),
-      resumeShoppers: this._resumeShoppers(),
+      activeShoppingLists: this._generated.active(),
+      shoppingListNames: this._shoppingListNames(),
       zoneOnline: (zoneId) => this._presenceNames().zones.get(zoneId) ?? [],
       listViewers: (listId) => this._presenceNames().lists.get(listId) ?? [],
       guestBannerDismissed: this._guestBannerDismissed(),
@@ -345,30 +320,18 @@ export class HomePage {
   readonly canShare = this._browser.window?.navigator.share !== undefined;
 
   constructor() {
-    this._resumeListId.set(this._browser.readStorage(StorageKeys.lastList));
     void this._zoneStore.load();
 
-    // The resume card's one live room (plan 0017, section 7).
+    // The card's own read (plan 0045, section 3.1). Alongside the zones rather than
+    // after them, so the card renders with the zone skeletons instead of appearing a
+    // beat later and pushing the groups down as somebody is reaching for one.
     //
-    // `subscribeList` and deliberately **not** `viewList`: this page holds the room to
-    // watch it, and announcing a view here would put the reader in their own card's
-    // sentence. It is also the one place plan 0016's "do not subscribe to a list for
-    // updates the zone room already carries" does not apply, because
-    // `presence.listUpdated` is published to `list:{id}` alone.
-    //
-    // The names come from the zone's memberships, since presence carries ids only.
-    effect((onCleanup) => {
-      const key = this._presenceListKey();
-      if (key === null) {
-        return;
-      }
-
-      const separator = key.indexOf('/');
-      const release = this._realtime.subscribeList(key.slice(separator + 1));
-      void this._names.ensure(key.slice(0, separator));
-
-      onCleanup(() => release());
-    });
+    // No room is subscribed to for it. `generatedList.created` and `.updated` are
+    // addressed to the owner's own sessions, which this client already holds, so unlike
+    // the resume card this needs no `subscribeList` at all. The one thing that does not
+    // arrive is a settle, which core publishes to the basket's room; `GeneratedListStore`
+    // documents that gap where it applies the events.
+    void this._generated.load();
 
     // The names behind the presence rows, asked for only when there is somebody to
     // name (plan 0022, section 3.1).
@@ -594,6 +557,57 @@ export class HomePage {
       ['..', 'zones', target.zoneId, 'lists', target.listId],
       { relativeTo: this._route }
     );
+  }
+
+  /**
+   * The card's date, formatted, and whether it is today's.
+   *
+   * Methods rather than fields on the view model, because both depend on the **clock**
+   * as well as on the basket: "generated today" stops being true at midnight, and a
+   * value baked into `selectHomeState` would keep saying it. A method is re-evaluated
+   * whenever the template renders, which is the cheapest correct answer here and costs
+   * one `Intl` format on a card that appears at most once.
+   */
+  generatedOn(date: Date): string {
+    return formatGeneratedDate(date, this._locale());
+  }
+
+  generatedToday(date: Date): boolean {
+    return isSameDay(date);
+  }
+
+  /**
+   * Open the basket the card names (plan 0045, section 3.2).
+   *
+   * `['..', 'shopping-lists', id]` because this page's own path is `home`, so the basket
+   * screen is its **sibling**, exactly as the group page and the account screen are.
+   * Neither the locale nor the mount is written down (extraction contract, item 5).
+   *
+   * One id and not two, unlike `openList`: a basket is addressed on its own, because
+   * unlike a zone list it belongs to the caller rather than to a group.
+   */
+  openShoppingList(generatedListId: string): void {
+    void this._router.navigate(['..', 'shopping-lists', generatedListId], {
+      relativeTo: this._route,
+    });
+  }
+
+  /** The history (plan 0045, section 3.3). A sibling for `openShoppingList`'s reason. */
+  openShoppingLists(): void {
+    void this._router.navigate(['..', 'shopping-lists'], {
+      relativeTo: this._route,
+    });
+  }
+
+  /**
+   * The generation sheet (plan 0045, section 3.4).
+   *
+   * A **child** route and so a bare relative path, exactly as the two entry sheets are:
+   * it covers this page without losing it, and Android's back button dismisses it
+   * rather than closing the app (rule E1, plan 0008).
+   */
+  getShoppingList(): void {
+    void this._router.navigate(['get'], { relativeTo: this._route });
   }
 
   /**

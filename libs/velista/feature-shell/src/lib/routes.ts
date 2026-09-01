@@ -286,7 +286,25 @@ export const AppShellRoutes: Route[] = [
             canActivate: [authenticatedGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-home').then((m) => m.HomePage),
-            children: [...entrySheetRoutes('home')],
+            children: [
+              sheet({
+                // Get shopping list (plan 0045, section 3.4). A child of the dashboard
+                // and so a sheet by rule E1, for the two entry sheets' reason exactly:
+                // it covers the page without losing its scroll, and Android's back
+                // button dismisses it rather than closing the app.
+                //
+                // No guard beyond the dashboard's own. Whether the caller may generate
+                // anything is decided by what they hold `WRITE` on (backend `0051`
+                // section 2), which is not knowable before the sources are read, so the
+                // sheet is where it is answered and not the route.
+                path: 'get',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-home').then(
+                    (m) => m.GetListSheet
+                  ),
+              }),
+              ...entrySheetRoutes('home'),
+            ],
           },
           // The credential flows (plan 0009). Routes and not sheets, because none of them
           // completes one field in place over a page that keeps its context: each has two
@@ -447,6 +465,29 @@ export const AppShellRoutes: Route[] = [
                   ),
               }),
             ],
+          },
+          {
+            // The history of generated shopping lists (plan 0045, section 3.3).
+            //
+            // Declared **before** `account` and before the front door, like every other
+            // non empty path, and it will also need to come before `0044`'s
+            // `shopping-lists/:generatedListId` once that lands: the two are siblings
+            // rather than parent and child, because the basket screen is its own
+            // destination and not something drawn over this page. `:generatedListId`
+            // carries a `canMatch` UUID guard for `zoneIdGuard`'s reason, so the two
+            // cannot swallow one another whichever way round they sit.
+            //
+            // `authenticatedGuard` and nothing more. A basket is private and the
+            // listing resolves from the caller's own token, so there is nothing here to
+            // authorize that the gateway does not already. The **basket** screen is the
+            // one that must not carry this guard, since a guest with no account has to
+            // reach it by link.
+            path: 'shopping-lists',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shopping-lists').then(
+                (m) => m.ShoppingListsPage
+              ),
           },
           {
             // Shopping profiles (plan 0046). A page of its own and **not a child of

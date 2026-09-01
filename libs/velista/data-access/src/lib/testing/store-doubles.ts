@@ -1,6 +1,7 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
   Comment,
+  GeneratedListSummary,
   Identity,
   Line,
   LineApprovalStatus,
@@ -13,6 +14,7 @@ import type {
   ProfileLoad,
   SessionTokens,
   SettlementOutcome,
+  ShoppingListsLoad,
   ShoppingListSummary,
   ShoppingProfile,
   Supermarket,
@@ -23,6 +25,7 @@ import type {
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
+import { GeneratedListStore } from '../generated-lists/generated-list-store';
 import {
   AUTH_SERVICE,
   type AuthServiceI,
@@ -1545,4 +1548,70 @@ export function provideFakeShoppingProfileStore(
   store: FakeShoppingProfileStore = fakeShoppingProfileStore()
 ): Provider {
   return { provide: ShoppingProfileStore, useValue: store };
+}
+
+/**
+ * A `GeneratedListStore` holding a fixed listing (plan 0045).
+ *
+ * A double rather than the real store over a fake service, for `fakeZoneStore`'s
+ * reason: a page spec wants to state "there is one active basket" as a fact about the
+ * world, not to drive a request and wait for it. The real store's own behaviour, which
+ * is the paging, the merge on a further page and the realtime upsert, is covered
+ * against the real thing in its own spec.
+ */
+export function fakeGeneratedListStore(
+  initial: readonly GeneratedListSummary[] = [],
+  options: { state?: ShoppingListsLoad; error?: unknown; hasMore?: boolean } = {}
+) {
+  const lists = signal<readonly GeneratedListSummary[]>(initial);
+  const state = signal<ShoppingListsLoad>(options.state ?? 'loaded');
+  const error = signal<unknown>(options.error ?? null);
+  const loadingMore = signal(false);
+  const hasMore = signal(options.hasMore ?? false);
+
+  /** What the page asked for, so a spec can assert the read happened at all. */
+  const calls: string[] = [];
+
+  return {
+    lists: lists.asReadonly(),
+    state: state.asReadonly(),
+    error: error.asReadonly(),
+    loadingMore: loadingMore.asReadonly(),
+    hasMore: hasMore.asReadonly(),
+    active: computed(() => lists().filter((list) => list.status === 'ACTIVE')),
+
+    load: async () => {
+      calls.push('load');
+    },
+    reload: async () => {
+      calls.push('reload');
+    },
+    loadMore: async () => {
+      calls.push('loadMore');
+    },
+    create: async () => {
+      calls.push('create');
+      throw new Error('fakeGeneratedListStore.create is not configured');
+    },
+
+    calls: calls as readonly string[],
+
+    /** Move the store while a fixture is mounted, to test a live update. */
+    set: (next: readonly GeneratedListSummary[]) => lists.set(next),
+    setState: (next: ShoppingListsLoad, cause: unknown = null) => {
+      state.set(next);
+      error.set(cause);
+    },
+    setLoadingMore: (next: boolean) => loadingMore.set(next),
+    setHasMore: (next: boolean) => hasMore.set(next),
+  };
+}
+
+export type FakeGeneratedListStore = ReturnType<typeof fakeGeneratedListStore>;
+
+/** {@link fakeGeneratedListStore} bound to the real token. */
+export function provideFakeGeneratedListStore(
+  store: FakeGeneratedListStore = fakeGeneratedListStore()
+): Provider {
+  return { provide: GeneratedListStore, useValue: store };
 }
