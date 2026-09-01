@@ -1,6 +1,7 @@
 import {
   ListPermission,
   type CommentView,
+  type LineClaim,
   type LineSettlementSummary,
   type LineSettlementView,
   type LineView,
@@ -84,11 +85,18 @@ const PERMISSION_ORDER: readonly ListPermission[] = [
  * indicator off a settled line on every phone in the household, silently, over an
  * unrelated edit. Making the compiler ask is what turns that from a bug nobody
  * would look for into a line somebody has to write.
+ *
+ * The claim arrives on the same terms and for the same reason (plan 0052,
+ * section 4). It is derived from the live baskets carrying the line, so a mapper
+ * that resolved it would be a join per row of a page, and an edit that announced
+ * an unclaimed line because a call site forgot it would take the indicator off a
+ * line somebody is holding in a shop right now.
  */
 export function toLineView(
   line: ListLine,
   itemIds: readonly string[],
-  settlements: LineSettlementSummary
+  settlements: LineSettlementSummary,
+  claim: LineClaim
 ): LineView {
   return {
     id: line.id,
@@ -104,6 +112,8 @@ export function toLineView(
     version: line.version,
     boughtCount: settlements.boughtCount,
     lastSettlementOutcome: settlements.lastOutcome,
+    claimed: claim.claimed,
+    claimedByUserId: claim.claimedByUserId,
     createdAt: line.createdAt.toISOString(),
     updatedAt: line.updatedAt.toISOString(),
   };

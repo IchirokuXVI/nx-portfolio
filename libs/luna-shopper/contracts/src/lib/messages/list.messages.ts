@@ -251,6 +251,41 @@ export interface LineView {
    * read off the top of the history (plan 0047, section 5).
    */
   lastSettlementOutcome: SettlementOutcome | null;
+  /**
+   * Whether somebody is out buying this right now (plan 0052, section 4).
+   *
+   * The third indicator plan 0047 section 5 lists, and the one that could not be
+   * derived from the line's own history: the line is carried by a basket that has
+   * been composed and not yet finished, so putting it in a second trolley buys the
+   * household two of it.
+   *
+   * It is **state on the line and not only an event**, which is the correction
+   * plan 0052 makes to plan 0051. An event tells a connected client what changed
+   * and tells a client that connects afterwards nothing at all, and a shopping
+   * trip lasts an hour while a phone sleeps in a pocket. Announced as well as
+   * read, exactly like {@link boughtCount}, so a reconnect and a live socket agree.
+   *
+   * **Derived on read and stored nowhere.** A flag on the line would have to stay
+   * correct across basket deletion, account deletion, a trip nobody ever took and
+   * a line carried by two baskets at once, and every one of those is a way to
+   * leave a line claimed by a basket that no longer exists.
+   */
+  claimed: boolean;
+  /**
+   * Who is out buying it: the basket's **owner**, or null.
+   *
+   * The owner and never the participant holding the line (plan 0052, section 2). A
+   * basket shared with three guests is still one person's trip from the
+   * household's point of view, and naming a guest to a zone member would disclose
+   * a participant of a private basket to somebody who is not on it. "Ana is buying
+   * this" is true when Ana's guest is the one in the shop.
+   *
+   * Null on an unclaimed line, and **also** null on a claimed one whose owner has
+   * since left the zone (section 6): the line still reports `claimed`, without a
+   * name. Access is resolved at request time everywhere else here and this is the
+   * same rule, so a zone a person left takes their name with it.
+   */
+  claimedByUserId: string | null;
   /** ISO 8601 UTC (plan 0017, section 7). */
   createdAt: string;
   /** ISO 8601 UTC (plan 0017, section 7). */
@@ -274,6 +309,69 @@ export const NO_LINE_SETTLEMENTS: LineSettlementSummary = {
   boughtCount: 0,
   lastOutcome: null,
 };
+
+/**
+ * Whether a line is in somebody's live basket, as the line read derives it.
+ *
+ * The two fields {@link LineView} carries, named together for the same reason
+ * {@link LineSettlementSummary} is: the query that answers them for a whole page
+ * and the mapper that writes them onto one line agree by type rather than by
+ * argument order.
+ *
+ * The pair is not one nullable field, and that is section 6 of plan 0052 rather
+ * than an oversight. `claimed` without a `claimedByUserId` is a real state, and
+ * collapsing the two would make a claim whose owner has left the zone
+ * indistinguishable from no claim at all.
+ */
+export interface LineClaim {
+  claimed: boolean;
+  claimedByUserId: string | null;
+}
+
+/** A line nobody is out buying, which is every line most of the time. */
+export const NO_LINE_CLAIM: LineClaim = {
+  claimed: false,
+  claimedByUserId: null,
+};
+
+/** One zone line named by a claim change, with the list that holds it. */
+export interface LineClaimRef {
+  lineId: string;
+  listId: string;
+}
+
+/**
+ * A line is, or is no longer, in somebody's live basket (plan 0052), on the
+ * **zone** room. The payload of {@link RealtimeEvent.LineClaimChanged}.
+ *
+ * ## What it may say, which is very little
+ *
+ * That a line is claimed and whose it is. Not what else is in the basket, not
+ * where they are shopping, not what it costs, and **not the generated list id**.
+ * That last omission is the load bearing one: an id in a payload is an invitation
+ * for a client to fetch it, and the refusal would then be the only thing standing
+ * between a zone member and somebody else's basket. The event names a person, not
+ * a basket.
+ *
+ * ## Why it names many lines and not one
+ *
+ * A run takes every wanted line of every list it drew from, and a per line fan out
+ * of a hundred events into a household room is a self inflicted problem (section
+ * 3.1). One event per zone room carries the whole burst, and the single line
+ * transitions use the same shape with one entry rather than a second payload that
+ * could drift from this one.
+ *
+ * The zone is the room's own addressing and rides the envelope as well; the list
+ * is per line, because one basket draws from several lists of one zone at once.
+ */
+export interface LineClaimChangedEvent {
+  zoneId: string;
+  /** Whether the lines named are now claimed. False is a release. */
+  claimed: boolean;
+  /** The basket's owner, or null on a release and on a name the reader may not have. */
+  claimedByUserId: string | null;
+  lines: LineClaimRef[];
+}
 
 /**
  * What a recording on a comment weighs and how long it runs (plan 0045).

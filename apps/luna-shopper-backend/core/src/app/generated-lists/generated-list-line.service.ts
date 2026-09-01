@@ -25,6 +25,7 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { GeneratedListService } from './generated-list.service';
+import { LineClaimService } from './line-claim.service';
 
 /** Answered for a line that is not on the basket the request named. */
 const NO_SUCH_LINE = 'Generated list line not found';
@@ -70,6 +71,7 @@ export class GeneratedListLineService {
     private readonly generatedLists: GeneratedListService,
     private readonly listAccess: ListAccessService,
     private readonly zoneLines: LineService,
+    private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -192,8 +194,14 @@ export class GeneratedListLineService {
       req.generatedListId
     );
     const line = await this.loadLine(list.id, req.lineId);
+    // Read before the delete, because the provenance rows cascade with it (plan
+    // 0052, section 3.3). Taking a line out of the basket is the "I decided not
+    // to buy this today" gesture, so the zone line goes back to nobody having
+    // it, exactly as the zone line itself stays wanted.
+    const refs = await this.claims.refsOfBasketLine(line.id);
     await this.lines.delete({ id: line.id });
     await this.announceList(req.userId, list);
+    await this.claims.announceReleased(refs);
     return { id: line.id };
   }
 

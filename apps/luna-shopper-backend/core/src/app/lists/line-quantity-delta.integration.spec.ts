@@ -20,6 +20,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -73,6 +74,7 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
       dataSource.getRepository(ListLineItem),
       dataSource.getRepository(LineSettlement),
       listAccess,
+      fakeLineClaims().service,
       { emit: jest.fn() } as never
     );
 

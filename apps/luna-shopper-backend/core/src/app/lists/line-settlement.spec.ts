@@ -11,6 +11,7 @@ import type { DataSource, EntityManager } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineItems } from './line-items.fake';
 import { fakeLineSettlements } from './line-settlements.fake';
@@ -166,6 +167,7 @@ function build(options: {
     dataSource,
     settlementRepo as never,
     listAccess,
+    fakeLineClaims().service,
     publisher
   );
 

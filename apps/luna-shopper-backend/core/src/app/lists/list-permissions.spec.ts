@@ -11,6 +11,7 @@ import type { DataSource } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { CommentService } from './comment.service';
 import { fakeLineItems } from './line-items.fake';
@@ -199,6 +200,7 @@ function world(options: {
     lineItems.repo as never,
     settlementRepo as never,
     listAccess,
+    fakeLineClaims().service,
     publisher
   );
 
@@ -206,6 +208,7 @@ function world(options: {
     dataSource,
     settlementRepo as never,
     listAccess,
+    fakeLineClaims().service,
     publisher
   );
 

@@ -19,6 +19,7 @@ import {
   CANDIDATE_LINE_ITEMS_SQL,
   WRITABLE_LISTS_SQL,
 } from './generated-list.sql';
+import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 
 /**
  * The generation run (plan 0050, sections 2, 3 and 4).
@@ -62,6 +63,7 @@ interface Harness {
     options: Partial<GeneratedListLineOption>[];
   };
   events: { event: RealtimeEvent; userIds: readonly string[] }[];
+  claims: FakeLineClaims;
 }
 
 function build(options: {
@@ -81,6 +83,13 @@ function build(options: {
    * at all rather than the up front check being enough.
    */
   loseTheRace?: Partial<GeneratedList>;
+  /**
+   * What the basket is claiming, for the transitions in plan 0052 section 3.
+   *
+   * The run itself writes the provenance rows the real query reads, so a spec
+   * about generation states them here rather than reaching into the write.
+   */
+  claiming?: { zoneId: string; listId: string; lineId: string }[];
 }): Harness {
   const writable = options.writable ?? [
     { listId: LIST_A, zoneId: ZONE_A },
@@ -228,6 +237,8 @@ function build(options: {
     },
   } as unknown as CoreEventsPublisher;
 
+  const claims = fakeLineClaims({}, () => options.claiming ?? []);
+
   const service = new GeneratedListService(
     dataSource,
     listRepo as never,
@@ -239,10 +250,11 @@ function build(options: {
     // find is the whole of what this needs to answer.
     { find: async () => [] } as never,
     profiles,
+    claims.service,
     publisher
   );
 
-  return { service, written, events };
+  return { service, written, events, claims };
 }
 
 /**
@@ -561,5 +573,118 @@ describe('the generation run', () => {
 
     expect(result.list.lines).toEqual([]);
     expect(written.lines).toEqual([]);
+  });
+});
+
+/**
+ * The one zone event a generated list emits (plan 0052).
+ *
+ * Plan 0050 section 8 said generated lists never emit zone events, and this is
+ * the declared exception rather than a contradiction to be discovered later: a
+ * household has to be able to see that somebody is already out buying the milk.
+ */
+describe('a basket claims the lines it took (plan 0052, section 3)', () => {
+  const CLAIMING = [
+    { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-1' },
+    { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-2' },
+  ];
+
+  it('claims every origin the run took, naming the owner', async () => {
+    const w = build({
+      candidates: [
+        { id: 'li-1', listId: LIST_A, content: 'Milk', quantity: 1 },
+        { id: 'li-2', listId: LIST_A, content: 'Bread', quantity: 1 },
+      ],
+      claiming: CLAIMING,
+    });
+
+    await w.service.create({ userId: OWNER });
+
+    // One call carrying both lines, not one call each: a run takes every wanted
+    // line of every list it drew from, and a per line fan out into a household
+    // room is a self inflicted problem (section 3.1).
+    expect(w.claims.calls).toEqual([
+      { claimed: true, claimedByUserId: OWNER, lineIds: ['li-1', 'li-2'] },
+    ]);
+  });
+
+  it('releases them when the trip is over', async () => {
+    const w = build({
+      existing: {
+        id: 'gl-old',
+        ownerUserId: OWNER,
+        status: GeneratedListStatus.ACTIVE,
+        name: null,
+        generatedAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+      claiming: CLAIMING,
+    });
+
+    await w.service.update({
+      userId: OWNER,
+      generatedListId: 'gl-old',
+      status: GeneratedListStatus.COMPLETED,
+    });
+
+    expect(w.claims.calls).toEqual([
+      { claimed: false, claimedByUserId: null, lineIds: ['li-1', 'li-2'] },
+    ]);
+  });
+
+  it('says nothing when a rename leaves the status where it was', async () => {
+    const w = build({
+      existing: {
+        id: 'gl-old',
+        ownerUserId: OWNER,
+        status: GeneratedListStatus.ACTIVE,
+        name: null,
+        generatedAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+      claiming: CLAIMING,
+    });
+
+    await w.service.update({
+      userId: OWNER,
+      generatedListId: 'gl-old',
+      name: 'Saturday',
+    });
+
+    expect(w.claims.calls).toEqual([]);
+  });
+
+  it('releases them when the basket is deleted', async () => {
+    const w = build({
+      existing: {
+        id: 'gl-old',
+        ownerUserId: OWNER,
+        status: GeneratedListStatus.DRAFT,
+        name: null,
+        generatedAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+      claiming: CLAIMING,
+    });
+
+    await w.service.delete({ userId: OWNER, generatedListId: 'gl-old' });
+
+    expect(w.claims.calls).toEqual([
+      { claimed: false, claimedByUserId: null, lineIds: ['li-1', 'li-2'] },
+    ]);
+  });
+
+  it('says nothing when deleting a basket that was already finished', async () => {
+    const w = build({
+      existing: {
+        id: 'gl-old',
+        ownerUserId: OWNER,
+        status: GeneratedListStatus.COMPLETED,
+        name: null,
+        generatedAt: new Date('2026-03-01T00:00:00.000Z'),
+      },
+      claiming: CLAIMING,
+    });
+
+    await w.service.delete({ userId: OWNER, generatedListId: 'gl-old' });
+
+    expect(w.claims.calls).toEqual([]);
   });
 });

@@ -21,6 +21,7 @@ import {
 import { DataSource, Repository } from 'typeorm';
 import { LineSettlement, ListLine, ListLineItem } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { LineClaimService } from '../generated-lists/line-claim.service';
 import { ListAccessService } from './list-access.service';
 import { toLineSettlementView, toLineView } from './list.mappers';
 import { ITEM_SETTLEMENTS_SQL } from './settlement.sql';
@@ -63,6 +64,7 @@ export class SettlementService {
     @InjectRepository(LineSettlement)
     private readonly settlements: Repository<LineSettlement>,
     private readonly listAccess: ListAccessService,
+    private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -181,11 +183,20 @@ export class SettlementService {
         where: { lineId: line.id, outcome: SettlementOutcome.BOUGHT },
       });
 
+      // The third indicator, read through the caller's manager (plan 0052,
+      // section 4). Settling from the list page does not touch a basket, so the
+      // claim rarely moves here, but a line somebody else is out buying is
+      // exactly the line two people settle at once and an event announcing it
+      // unclaimed would clear the mark that was warning them.
+      const claim = await this.claims.claimOf(line.id, manager);
+
       return {
-        line: toLineView(line, itemIds, {
-          boughtCount,
-          lastOutcome: req.outcome,
-        }),
+        line: toLineView(
+          line,
+          itemIds,
+          { boughtCount, lastOutcome: req.outcome },
+          claim
+        ),
         settlement: toLineSettlementView(settlement),
       };
     });

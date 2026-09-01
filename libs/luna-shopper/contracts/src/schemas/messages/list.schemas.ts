@@ -30,6 +30,8 @@ export const LIST_SCHEMA_IDS = {
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
   lineViewList: schemaId('list/LineViewList'),
+  lineClaimRef: schemaId('list/LineClaimRef'),
+  lineClaimChangedEvent: schemaId('list/LineClaimChangedEvent'),
   lineSettlementView: schemaId('list/LineSettlementView'),
   lineSettlementResult: schemaId('list/LineSettlementResult'),
   lineSettlementPage: schemaId('list/LineSettlementPage'),
@@ -153,6 +155,15 @@ const lineView = object(
     lastSettlementOutcome: {
       anyOf: [ref(ENUM_IDS.settlementOutcome), { type: 'null' }],
     },
+    // The third indicator (plan 0052, section 4), derived on read and stored
+    // nowhere. Required for the reason the two above are: an absent field would
+    // make "nobody is buying this" indistinguishable from "this build of the
+    // server does not say", and the two draw different rows.
+    //
+    // Two fields rather than one nullable one, because a claim whose owner has
+    // since left the zone reports `true` with a null name (section 6).
+    claimed: boolean(),
+    claimedByUserId: nullableString(),
     ...timestamps,
   },
   [
@@ -169,6 +180,8 @@ const lineView = object(
     'version',
     'boughtCount',
     'lastSettlementOutcome',
+    'claimed',
+    'claimedByUserId',
     ...timestampKeys,
   ]
 );
@@ -213,6 +226,33 @@ const lineSettlementResult = object(
     settlement: ref(LIST_SCHEMA_IDS.lineSettlementView),
   },
   ['line', 'settlement']
+);
+
+// One zone line named by a claim change (plan 0052, section 2). The list rides
+// per line, because one basket draws from several lists of one zone at once.
+const lineClaimRef = object(
+  LIST_SCHEMA_IDS.lineClaimRef,
+  { lineId: nonEmptyString(), listId: nonEmptyString() },
+  ['lineId', 'listId']
+);
+
+// The zone room's claim event (plan 0052, section 2), and the whole of what it
+// may say: that these lines are claimed, and whose. No generated list id, ever;
+// an id in a payload is an invitation to fetch it, and the refusal would then be
+// the only thing between a zone member and somebody else's basket.
+//
+// Many lines rather than one, because a run claims every line it took and a per
+// line fan out into a household room is a self inflicted problem (section 3.1).
+// The single line transitions send the same shape holding one entry.
+const lineClaimChangedEvent = object(
+  LIST_SCHEMA_IDS.lineClaimChangedEvent,
+  {
+    zoneId: nonEmptyString(),
+    claimed: boolean(),
+    claimedByUserId: nullableString(),
+    lines: array(ref(LIST_SCHEMA_IDS.lineClaimRef)),
+  },
+  ['zoneId', 'claimed', 'claimedByUserId', 'lines']
 );
 
 const commentRecording = object(
@@ -540,6 +580,8 @@ export const listSchemas: JsonSchema[] = [
   listAccessView,
   lineView,
   lineViewList,
+  lineClaimRef,
+  lineClaimChangedEvent,
   lineSettlementView,
   lineSettlementResult,
   commentRecording,

@@ -7,6 +7,7 @@ import {
   LINE_QUANTITY_MIN,
   LineApprovalStatus,
   ListPermission,
+  NO_LINE_CLAIM,
   NO_LINE_SETTLEMENTS,
   RealtimeEvent,
   SettlementOutcome,
@@ -15,6 +16,7 @@ import {
   type AddLinesItem,
   type AddLinesRequest,
   type DeleteLineRequest,
+  type LineClaim,
   type LineOrder,
   type LinePage,
   type LineSettlementSummary,
@@ -47,10 +49,11 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { LineClaimService } from '../generated-lists/line-claim.service';
 import { itemSetHash } from './item-set-hash';
 import { ListAccessService } from './list-access.service';
-import { readLineSettlementSummaries } from './settlement.sql';
 import { toLineView } from './list.mappers';
+import { readLineSettlementSummaries } from './settlement.sql';
 
 interface LineCursor {
   order: LineOrder;
@@ -75,6 +78,8 @@ interface WrittenLine {
   itemIds: string[];
   /** Carried so the announcement says what a read would, not the zero summary. */
   settlements: LineSettlementSummary;
+  /** And the third indicator, for the same reason (plan 0052, section 4). */
+  claim: LineClaim;
 }
 
 /** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
@@ -96,6 +101,11 @@ export class LineService {
     @InjectRepository(LineSettlement)
     private readonly settlements: Repository<LineSettlement>,
     private readonly listAccess: ListAccessService,
+    // Read only as well, and for the same shape of reason as the settlements
+    // above: every line this service answers with carries the third indicator
+    // (plan 0052, section 4), and a read that left it out would take the "Ana is
+    // buying this" mark off a line the moment anybody edited it.
+    private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -265,18 +275,23 @@ export class LineService {
    * settled line on every other phone in the household, for no reason other than
    * somebody having renamed it. A line that has just been created is the one case
    * where zero is the truth, and it says so at the call site.
+   *
+   * The claim is carried on exactly the same terms (plan 0052, section 4): it is
+   * a whole line on the wire, so an edit that announced an unclaimed one would
+   * clear the indicator on every phone in the household over a rename.
    */
   private emit(
     event: RealtimeEvent,
     zoneId: string,
     line: ListLine,
     itemIds: string[],
-    settlements: LineSettlementSummary
+    settlements: LineSettlementSummary,
+    claim: LineClaim
   ): void {
     this.events.emit(
       event,
       zoneId,
-      toLineView(line, itemIds, settlements),
+      toLineView(line, itemIds, settlements, claim),
       line.listId
     );
   }
@@ -340,16 +355,18 @@ export class LineService {
             return line;
           });
 
-    // A line cannot have been bought in the same breath as being added, so the
-    // zero summary is the truth here rather than a stand in for an unread one.
+    // A line cannot have been bought in the same breath as being added, nor be
+    // in somebody's basket a moment after it was typed, so the empty pair is the
+    // truth here rather than a stand in for two unread values.
     this.emit(
       RealtimeEvent.LineAdded,
       list.zoneId,
       saved,
       itemIds,
-      NO_LINE_SETTLEMENTS
+      NO_LINE_SETTLEMENTS,
+      NO_LINE_CLAIM
     );
-    return toLineView(saved, itemIds, NO_LINE_SETTLEMENTS);
+    return toLineView(saved, itemIds, NO_LINE_SETTLEMENTS, NO_LINE_CLAIM);
   }
 
   /**
@@ -437,11 +454,12 @@ export class LineService {
         list.zoneId,
         row,
         itemSets[index],
-        NO_LINE_SETTLEMENTS
+        NO_LINE_SETTLEMENTS,
+        NO_LINE_CLAIM
       );
     }
     return saved.map((row, index) =>
-      toLineView(row, itemSets[index], NO_LINE_SETTLEMENTS)
+      toLineView(row, itemSets[index], NO_LINE_SETTLEMENTS, NO_LINE_CLAIM)
     );
   }
 
@@ -606,18 +624,20 @@ export class LineService {
       // No transaction on this path (see above), so the pooled repositories are
       // free to answer in parallel.
       const saved = await this.lines.save(line);
-      const [itemIds, settlements] = await Promise.all([
+      const [itemIds, settlements, claim] = await Promise.all([
         this.itemIdsOf(saved.id),
         this.settlementsOf(saved.id),
+        this.claims.claimOf(saved.id),
       ]);
       this.emit(
         RealtimeEvent.LineUpdated,
         list.zoneId,
         saved,
         itemIds,
-        settlements
+        settlements,
+        claim
       );
-      return toLineView(saved, itemIds, settlements);
+      return toLineView(saved, itemIds, settlements, claim);
     }
 
     // The set and the line have to move together, or a stored hash outlives the
@@ -778,13 +798,18 @@ export class LineService {
     // where that deadlocks the pool. There is nothing to gain from the other route:
     // this service never writes settlements, so both see the same rows.
     const settlements = await this.settlementsOf(line.id, manager);
+    // Through the caller's manager for the same reason, and with one of its own:
+    // inside a settle's transaction the manager is the only route that can see
+    // the basket line the settle has just moved (plan 0052, section 3.3).
+    const claim = await this.claims.claimOf(line.id, manager);
 
     const saved = await repo.save(line);
     return {
-      view: toLineView(saved, itemIds, settlements),
+      view: toLineView(saved, itemIds, settlements, claim),
       line: saved,
       itemIds,
       settlements,
+      claim,
     };
   }
 
@@ -795,7 +820,8 @@ export class LineService {
       list.zoneId,
       written.line,
       written.itemIds,
-      written.settlements
+      written.settlements,
+      written.claim
     );
     return written.view;
   }
@@ -855,18 +881,20 @@ export class LineService {
       req.approvalStatus === LineApprovalStatus.PENDING ? null : req.userId;
     line.version += 1;
     const saved = await this.lines.save(line);
-    const [itemIds, settlements] = await Promise.all([
+    const [itemIds, settlements, claim] = await Promise.all([
       this.itemIdsOf(saved.id),
       this.settlementsOf(saved.id),
+      this.claims.claimOf(saved.id),
     ]);
     this.emit(
       RealtimeEvent.LineUpdated,
       list.zoneId,
       saved,
       itemIds,
-      settlements
+      settlements,
+      claim
     );
-    return toLineView(saved, itemIds, settlements);
+    return toLineView(saved, itemIds, settlements, claim);
   }
 
   /**
@@ -964,17 +992,22 @@ export class LineService {
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
     const pageIds = page.map((line) => line.id);
-    // Two queries for the page, not two per row: the product sets, and the
-    // settlement summary the indicators are drawn from.
-    const [sets, settlements] = await Promise.all([
+    // Three queries for the page, not three per row: the product sets, the
+    // settlement summary two of the indicators are drawn from, and the live
+    // baskets the third one is (plan 0052, section 4). This is the read that
+    // makes the claim survive a reconnect, so a phone that was asleep while
+    // somebody generated a basket draws the same row as one that was watching.
+    const [sets, settlements, claims] = await Promise.all([
       this.itemIdsOfMany(pageIds),
       this.settlementsOfMany(pageIds),
+      this.claims.claimsOf(pageIds),
     ]);
     const items = page.map((line) =>
       toLineView(
         line,
         sets.get(line.id) ?? [],
-        settlements.get(line.id) ?? NO_LINE_SETTLEMENTS
+        settlements.get(line.id) ?? NO_LINE_SETTLEMENTS,
+        claims.get(line.id) ?? NO_LINE_CLAIM
       )
     );
     const last = page[page.length - 1];

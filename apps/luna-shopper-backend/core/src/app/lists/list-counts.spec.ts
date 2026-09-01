@@ -1,6 +1,7 @@
 import {
   LineApprovalStatus,
   ListPermission,
+  NO_LINE_CLAIM,
   NO_LINE_SETTLEMENTS,
   RealtimeEvent,
   ZoneRole,
@@ -66,13 +67,18 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
       updatedAt: new Date('2026-03-02T00:00:00.000Z'),
     } as ListLine;
 
-    const view = toLineView(line, [], NO_LINE_SETTLEMENTS);
+    const view = toLineView(line, [], NO_LINE_SETTLEMENTS, NO_LINE_CLAIM);
     expect(view.createdAt).toBe('2026-03-01T00:00:00.000Z');
     expect(view.updatedAt).toBe('2026-03-02T00:00:00.000Z');
     // A free text line, which is what most lines are: an empty set and a null
     // hash, said out loud rather than left absent (plan 0048, section 1.1).
     expect(view.itemIds).toEqual([]);
     expect(view.itemSetHash).toBeNull();
+    // And nobody out buying it, said out loud for the same reason (plan 0052,
+    // section 4): an absent pair would leave "nobody has this" and "this server
+    // does not say" looking identical, and they draw different rows.
+    expect(view.claimed).toBe(false);
+    expect(view.claimedByUserId).toBeNull();
   });
 });
 
