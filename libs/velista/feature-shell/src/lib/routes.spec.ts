@@ -298,9 +298,10 @@ describe('AppShellRoutes', () => {
         // has to dismiss it. Ticking a line off is deliberately not among them.
         expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
           [
-            // What a tap opens (velista plan 0043, section 5.1). `/detail` rather
-            // than the bare `lines/:lineId`, which belongs to the line page.
-            'lines/:lineId/detail',
+            // What a tap opens (velista plan 0043, section 5.1). `/sheet`, because
+            // `/detail` is the line page and neither of them is the bare
+            // `lines/:lineId` any more.
+            'lines/:lineId/sheet',
             'lines/:lineId/edit',
             'lines/:lineId/comments',
             'lines/:lineId/confirm/delete',
@@ -320,6 +321,54 @@ describe('AppShellRoutes', () => {
         for (const sheet of sheets) {
           expect(sheet.canActivate).toBeUndefined();
         }
+      });
+    });
+
+    /**
+     * The line page (velista plan 0043, section 5.3).
+     *
+     * Every screen below a line ends in a segment that says which screen it is, and
+     * that is what these assert. The bare `lines/:lineId` used to be the page, so the
+     * page was the one thing under a line that no URL named, and the sheet over the
+     * list carried `/detail` while not being the details of anything. Reading the two
+     * back was a coin toss for anybody who had not written them.
+     */
+    describe('the line page', () => {
+      const linePath = 'zones/:zoneId/lists/:listId/lines/:lineId/detail';
+      const coveredPath = 'zones/:zoneId/lists/:listId';
+
+      it('answers to /detail, and nothing answers to the bare line', () => {
+        const paths = pages.map((route) => route.path);
+
+        expect(paths).toContain(linePath);
+        expect(paths).not.toContain(
+          'zones/:zoneId/lists/:listId/lines/:lineId'
+        );
+      });
+
+      it('does not collide with the sheets over the list page', () => {
+        // The list page's path is a prefix of this one, so this URL is offered to that
+        // branch first. It gets there because no sheet under the list answers to
+        // `detail`, which is a fact worth asserting rather than assuming.
+        const sheets = routeAt(coveredPath)?.children?.map(
+          (route) => route.path
+        );
+
+        expect(sheets).not.toContain('lines/:lineId/detail');
+        expect(sheets).toContain('lines/:lineId/sheet');
+      });
+
+      it('checks both ids with canMatch and demands an account', () => {
+        expect(routeAt(linePath)?.canMatch).toHaveLength(2);
+        expect(routeAt(linePath)?.canActivate).toHaveLength(1);
+      });
+
+      it('confirms a delete over itself rather than over the list', () => {
+        // Deleting is the one thing on either screen that discards a history, so it is
+        // confirmed from here too, and its URL sits under this page's own.
+        expect(routeAt(linePath)?.children?.map((route) => route.path)).toEqual(
+          ['confirm/delete']
+        );
       });
     });
 
@@ -545,11 +594,9 @@ describe('AppShellRoutes', () => {
     });
 
     it('offers the three sheets over the basket', () => {
-      expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual([
-        'lines/:lineId/settle',
-        'people',
-        'share',
-      ]);
+      expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
+        ['lines/:lineId/settle', 'people', 'share']
+      );
     });
 
     it('guards none of the sheets, because what a reader may do is not a route', () => {
@@ -655,7 +702,7 @@ describe('the sheets and their exit animation', () => {
     'lists/new',
     'settings',
     'lines/:lineId/edit',
-    'lines/:lineId/detail',
+    'lines/:lineId/sheet',
     'lines/:lineId/comments',
     'lines/:lineId/confirm/delete',
     'name',

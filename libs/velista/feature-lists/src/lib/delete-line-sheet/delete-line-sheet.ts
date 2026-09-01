@@ -48,9 +48,7 @@ import { listErrorKey } from '../list-error-copy';
       [confirmLabel]="'list.confirm.deleteLine.action' | rokuT"
       [destructive]="true"
       [errorKey]="errorKey()"
-      [title]="
-        'list.confirm.deleteLine.title' | rokuT: { name: lineName() }
-      "
+      [title]="'list.confirm.deleteLine.title' | rokuT: { name: lineName() }"
       titleId="delete-line-title"
     />
   `,
@@ -94,20 +92,27 @@ export class DeleteLineSheet {
       return;
     }
 
-    await this.dismiss();
+    // `leaveTo` rather than `dismiss`, because the line is gone and the screen
+    // underneath may have been the line's own page (section 5.3 puts this confirm on
+    // both screens). Popping would hand back a page about a line that no longer
+    // exists. The list is where a deletion leaves you from either side, and replacing
+    // the sheet's entry keeps a spent confirmation out of the back stack.
+    await this._sheet.leaveTo(this._listUrl());
   }
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {
-    await this._sheet.dismiss(
-      appPath(
-        this._locale(),
-        this._basePath,
-        'zones',
-        this.zoneId(),
-        'lists',
-        this.listId()
-      )
+    await this._sheet.dismiss(this._listUrl());
+  }
+
+  private _listUrl(): string {
+    return appPath(
+      this._locale(),
+      this._basePath,
+      'zones',
+      this.zoneId(),
+      'lists',
+      this.listId()
     );
   }
 }

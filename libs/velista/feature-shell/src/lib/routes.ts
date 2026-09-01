@@ -156,16 +156,21 @@ function listSheetRoutes(): Route[] {
     sheet({
       // What a tap on a row opens (velista plan 0043, section 5.1).
       //
-      // `lines/:lineId/detail` rather than the bare `lines/:lineId`, and the segment is
-      // load bearing: the bare path belongs to the **line page**, which is a page of
-      // its own so it can be linked to and reached from a search later (section 5.3).
-      // Giving the sheet the short URL would have taken the linkable one away from the
-      // screen whose whole reason for being a page is that it can be linked to.
+      // `/sheet`, and the segment is load bearing. The word `detail` belongs to the
+      // **line page** (`lines/:lineId/detail`), which is the screen somebody means when
+      // they say the details of a line: everything the app knows, linkable, reachable
+      // from a search later (section 5.3). This is the panel that covers the list for
+      // as long as a purchase takes to record, so it is named for what it is.
+      //
+      // Neither is the bare `lines/:lineId` any more. That path named the line and not
+      // a screen of it, so the two screens were told apart by which one had a suffix,
+      // and the one without it was the one nothing links to by name. Both carry a
+      // segment now and no URL below a line is ambiguous.
       //
       // No guard, like the others here: whether this caller may record a purchase is
       // decided inside it from the same abilities the page uses, and opening it to read
       // a history is something anybody holding `READ` may do.
-      path: 'lines/:lineId/detail',
+      path: 'lines/:lineId/sheet',
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.LineDetailSheet
@@ -383,20 +388,22 @@ export const AppShellRoutes: Route[] = [
           /**
            * Everything about one line (velista plan 0043, section 5.3).
            *
-           * **Declared before `zones/:zoneId/lists/:listId`**, and that is necessity
-           * rather than habit, exactly as the list page itself is declared before
-           * `zones/:zoneId`: the list page's path is a prefix of this one and it
-           * carries children, so a URL ending in `lines/<uuid>` would be offered to
-           * that branch first. None of its sheet children matches a bare line id, so
-           * the branch would fail and the router would fall through to here anyway,
-           * which works and is exactly the kind of thing that stops working when
-           * somebody adds a sheet. Ordering makes it not depend on that.
+           * **Declared before `zones/:zoneId/lists/:listId`**, which is habit now and
+           * used to be necessity. The list page's path is still a prefix of this one
+           * and it still carries children, so this URL is offered to that branch
+           * first; what changed is that `/detail` is a segment no sheet under the list
+           * page answers to, so the branch fails on its own and the router arrives
+           * here regardless of the order. Kept as it is because the specific before
+           * the general is the ordering that stays correct when the list page is given
+           * more children later.
            *
-           * A page rather than a deeper sheet because it can be linked to, which is
-           * also why it holds the short URL and the detail sheet takes `/detail`.
+           * A page rather than a deeper sheet because it can be linked to, and it
+           * takes the word `detail` because that is what somebody asking for the
+           * details of a line means. The panel over the list is `/sheet`. Neither is
+           * the bare `lines/:lineId`, which named a line rather than a screen of one.
            */
           {
-            path: 'zones/:zoneId/lists/:listId/lines/:lineId',
+            path: 'zones/:zoneId/lists/:listId/lines/:lineId/detail',
             canMatch: [zoneIdGuard, listIdGuard],
             canActivate: [authenticatedGuard],
             loadComponent: () =>

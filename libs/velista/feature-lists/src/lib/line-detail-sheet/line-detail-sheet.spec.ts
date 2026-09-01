@@ -26,7 +26,10 @@ import type {
   ListPermission,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  provideVelistaTesting,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { LineDetailSheet } from './line-detail-sheet';
 
@@ -94,9 +97,14 @@ interface Options {
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<LineDetailSheet>;
   itemNames: FakeItemNames;
+  sheets: { dismiss: jest.Mock; leaveTo: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
+  const sheets = {
+    dismiss: jest.fn().mockResolvedValue(undefined),
+    leaveTo: jest.fn().mockResolvedValue(undefined),
+  };
   const itemNames = options.itemNames ?? fakeItemNames({ items: [MILK] });
   const map = convertToParamMap({
     zoneId: ZONE_ID,
@@ -121,6 +129,7 @@ async function render(options: Options = {}): Promise<{
       provideFakeItemNames(itemNames),
       provideFakeSessionStore('REGISTERED'),
       { provide: REALTIME_CLIENT, useValue: new RealtimeMemory() },
+      { provide: SheetNavigation, useValue: sheets },
       {
         provide: Router,
         useValue: {
@@ -145,7 +154,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, itemNames };
+  return { fixture, itemNames, sheets };
 }
 
 /**
@@ -226,5 +235,38 @@ describe('LineDetailSheet', () => {
 
     expect(textOf(fixture)).toContain('line.indicator.claimedBy');
     expect(fixture.componentInstance.detail()?.claimedBy).toBe('Ana');
+  });
+
+  /**
+   * The way out of the sheet, and the difference between the two ways.
+   *
+   * `dismiss` gives back the screen underneath and pops the history to do it, so it
+   * ignores the URL it is handed whenever there is something to pop. Sending the line
+   * page through it therefore did not open the line page: it went back to the list,
+   * which is the defect these two assert against, and it is invisible in any test that
+   * only checks which URL was built.
+   */
+  describe('leaving it', () => {
+    it('travels to the line page rather than popping back to the list', async () => {
+      const { fixture, sheets } = await render();
+
+      await fixture.componentInstance.openPage();
+
+      expect(sheets.leaveTo).toHaveBeenCalledWith(
+        `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}/lines/${LINE_ID}/detail`
+      );
+      expect(sheets.dismiss).not.toHaveBeenCalled();
+    });
+
+    it('still dismisses to the list, which is what cancelling means', async () => {
+      const { fixture, sheets } = await render();
+
+      await fixture.componentInstance.dismiss();
+
+      expect(sheets.dismiss).toHaveBeenCalledWith(
+        `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}`
+      );
+      expect(sheets.leaveTo).not.toHaveBeenCalled();
+    });
   });
 });

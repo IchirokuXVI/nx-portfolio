@@ -452,7 +452,7 @@ describe('ListPage', () => {
 
       // The sheet, relative to the list page, exactly as every other sheet is opened.
       expect(router.navigate).toHaveBeenCalledWith(
-        ['lines', 'ln-1', 'detail'],
+        ['lines', 'ln-1', 'sheet'],
         expect.anything()
       );
     });
