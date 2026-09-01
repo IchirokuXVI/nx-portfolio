@@ -234,6 +234,10 @@ function build(options: {
     lineRepo as never,
     originRepo as never,
     optionRepo as never,
+    // The settlements repository, read only, for the basket line view's
+    // `lastOutcome` (velista 0044). The run itself never touches it, so an empty
+    // find is the whole of what this needs to answer.
+    { find: async () => [] } as never,
     profiles,
     publisher
   );

@@ -15,6 +15,7 @@ import { BasketStore } from '@portfolio/velista/data-access';
 import {
   inLocale,
   outstanding,
+  QUANTITY_REEL_PAGE_STEP,
   type BasketLine,
   type BasketSettleResult,
 } from '@portfolio/velista/models';
@@ -34,8 +35,12 @@ type Pane = 'settle' | 'quantity' | 'product' | 'allocate';
 /**
  * How far each key moves the spinbutton, matching `QuantityReel`'s own table.
  *
+ * The page step is **imported rather than repeated**, so the two controls cannot
+ * drift into paging by different amounts: a person who learns the gesture on the
+ * list page should find it does the same thing here.
+ *
  * `Home` and `End` carry a step of zero because they are absolute rather than
- * relative; the handler reads the key for those two and this map only says that
+ * relative; the handler reads the key for those two, and this map only says that
  * they are keys it handles at all.
  */
 const STEP_FOR: Readonly<Record<string, number>> = {
@@ -43,8 +48,8 @@ const STEP_FOR: Readonly<Record<string, number>> = {
   ArrowRight: 1,
   ArrowDown: -1,
   ArrowLeft: -1,
-  PageUp: 5,
-  PageDown: -5,
+  PageUp: QUANTITY_REEL_PAGE_STEP,
+  PageDown: -QUANTITY_REEL_PAGE_STEP,
   Home: 0,
   End: 0,
 };
