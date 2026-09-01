@@ -10,6 +10,7 @@
   (openAssistant)="openAssistant()"
   [accountInitial]="accountInitial()"
   [connected]="connected()"
+  [homeUrl]="homeUrl()"
   [signedIn]="true"
 />
 
@@ -201,9 +202,9 @@
         (spoke)="addAloud($event)"
         (submitted)="add($event)"
         [busy]="composerBusy()"
-        [suggestions]="suggestions()"
         [keepListening]="keepListening()"
         [sendOnSilence]="sendOnSilence()"
+        [suggestions]="suggestions()"
         [takeFocus]="page.empty"
       />
     </div>

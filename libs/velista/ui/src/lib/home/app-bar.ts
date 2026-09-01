@@ -9,6 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { BrandWordmark } from '../brand/brand-wordmark';
 import { ChevronDownIcon, CommentIcon, OfflineIcon } from '../icons/icons';
@@ -39,6 +40,7 @@ import { ChevronDownIcon, CommentIcon, OfflineIcon } from '../icons/icons';
   selector: 'lib-app-bar',
   imports: [
     RokuTranslatorPipe,
+    RouterLink,
     BrandWordmark,
     CommentIcon,
     ChevronDownIcon,
@@ -62,6 +64,19 @@ export class AppBar {
     viewChild<ElementRef<HTMLButtonElement>>('localeTrigger');
 
   readonly signedIn = input(false);
+
+  /**
+   * Where the lockup leads, or null to leave it as plain text.
+   *
+   * Rule D1 again: this component may not build the URL, because the locale and the
+   * mount are both things it would have to reach for, and the mount is `/velista`
+   * today and `''` after extraction. So the page passes an absolute URL built with
+   * `appPath`, the same one its own back controls already use.
+   *
+   * Null on the front door and on the dashboard, the two screens where the lockup
+   * would point at the page being looked at.
+   */
+  readonly homeUrl = input<string | null>(null);
 
   /**
    * The letter in the account button.

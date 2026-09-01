@@ -659,6 +659,16 @@ export class ListPage {
   readonly connected = this._realtime.connected;
 
   /**
+   * Where the header's lockup leads. Home, from every screen that is not home.
+   *
+   * Built with `appPath` like every other link this page makes, so the locale and the
+   * mount are the ones actually in force rather than a string written down twice.
+   */
+  readonly homeUrl = computed(() =>
+    appPath(this._locale(), this._basePath, 'home')
+  );
+
+  /**
    * The letter in the app bar's account button.
    *
    * Unbound on this screen until plan 0015, so the button drew its neutral glyph on the

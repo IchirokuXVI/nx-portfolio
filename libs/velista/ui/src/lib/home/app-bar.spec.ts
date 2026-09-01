@@ -1,6 +1,7 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { provideVelistaTesting, TEST_BRAND } from '@portfolio/velista/platform';
 import { AppBar } from './app-bar';
 
 interface Options {
@@ -8,6 +9,7 @@ interface Options {
   readonly locale?: string;
   readonly locales?: readonly string[];
   readonly connected?: boolean;
+  readonly homeUrl?: string | null;
 }
 
 async function render(
@@ -15,7 +17,9 @@ async function render(
 ): Promise<ComponentFixture<AppBar>> {
   await TestBed.configureTestingModule({
     imports: [AppBar, RokuTranslatorTestingModule.forTesting()],
-    providers: [provideVelistaTesting()],
+    // The lockup is a `routerLink` when it has somewhere to go, so the specs need a
+    // router even though nothing here navigates.
+    providers: [provideVelistaTesting(), provideRouter([])],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(AppBar);
@@ -23,6 +27,7 @@ async function render(
   fixture.componentRef.setInput('locale', options.locale ?? 'EN');
   fixture.componentRef.setInput('locales', options.locales ?? ['en', 'es']);
   fixture.componentRef.setInput('connected', options.connected ?? true);
+  fixture.componentRef.setInput('homeUrl', options.homeUrl ?? null);
   fixture.detectChanges();
 
   return fixture;
@@ -59,6 +64,39 @@ describe('AppBar', () => {
       const fixture = await render();
 
       expect(host(fixture).querySelectorAll('lib-brand-mark')).toHaveLength(1);
+    });
+
+    it('leads home when the page names a home URL', async () => {
+      const fixture = await render({ signedIn: true, homeUrl: '/en/home' });
+
+      const link = host(fixture).querySelector<HTMLAnchorElement>('.lockup');
+
+      expect(link?.tagName).toBe('A');
+      expect(link?.getAttribute('href')).toBe('/en/home');
+    });
+
+    it('takes its accessible name from the wordmark', async () => {
+      // Not an `aria-label` of its own. The visible word is the brand, so a name that
+      // did not contain it would leave a link nobody can ask for by what they see.
+      const fixture = await render({ signedIn: true, homeUrl: '/en/home' });
+
+      const link = host(fixture).querySelector('.lockup');
+
+      expect(link?.getAttribute('aria-label')).toBeNull();
+      expect(
+        link?.querySelector('lib-brand-wordmark')?.getAttribute('aria-label')
+      ).toBe(TEST_BRAND.name);
+    });
+
+    it('is not a control on a page that names none', async () => {
+      // The dashboard and the front door, where the destination is the page already
+      // being looked at.
+      const fixture = await render({ signedIn: true });
+
+      const lockup = host(fixture).querySelector('.lockup');
+
+      expect(lockup?.tagName).toBe('DIV');
+      expect(host(fixture).querySelector('a.lockup')).toBeNull();
     });
   });
 
