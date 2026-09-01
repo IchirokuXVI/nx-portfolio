@@ -469,6 +469,12 @@ export const AppShellRoutes: Route[] = [
           {
             // The history of generated shopping lists (plan 0045, section 3.3).
             //
+            // The path is written out rather than taken from `BASKET_PATHS`, which the
+            // three screens that link here build their links from: naming that constant
+            // is a static import of `feature-shopping-lists`, which this file lazy
+            // loads, so it would pull those pages into the shell's initial payload.
+            // `routes.spec.ts` asserts the two still agree.
+            //
             // Declared **before** `account` and before the front door, like every other
             // non empty path, and it will also need to come before `0044`'s
             // `shopping-lists/:generatedListId` once that lands: the two are siblings

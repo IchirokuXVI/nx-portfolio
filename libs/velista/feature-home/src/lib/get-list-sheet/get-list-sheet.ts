@@ -337,12 +337,7 @@ export class GetListSheet {
       // the back button cannot return to a filled in form whose basket already exists
       // (plan 0031).
       await this._sheet.leaveTo(
-        appPath(
-          this._locale(),
-          this._basePath,
-          'shopping-lists',
-          run.list.id
-        )
+        appPath(this._locale(), this._basePath, 'shopping-lists', run.list.id)
       );
     } catch {
       // The sheet stays open with everything still ticked, which is the whole of
@@ -355,9 +350,7 @@ export class GetListSheet {
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {
-    await this._sheet.dismiss(
-      appPath(this._locale(), this._basePath, 'home')
-    );
+    await this._sheet.dismiss(appPath(this._locale(), this._basePath, 'home'));
   }
 
   onNameInput(event: Event): void {

@@ -37,7 +37,9 @@
           @if (generatedToday()) {
             {{ 'home.shoppingList.generatedToday' | rokuT }}
           } @else {
-            {{ 'home.shoppingList.generatedOn' | rokuT: { date: generatedOn() } }}
+            {{
+              'home.shoppingList.generatedOn' | rokuT: { date: generatedOn() }
+            }}
           }
         </span>
       </div>

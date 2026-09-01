@@ -30,6 +30,7 @@ import {
   type AuthServiceI,
   type RealtimeClientI,
 } from '@portfolio/velista/data-access';
+import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
   displayNames,
   formatGeneratedDate,
@@ -587,14 +588,14 @@ export class HomePage {
    * unlike a zone list it belongs to the caller rather than to a group.
    */
   openShoppingList(generatedListId: string): void {
-    void this._router.navigate(['..', 'shopping-lists', generatedListId], {
+    void this._router.navigate(['..', BASKET_PATHS.list, generatedListId], {
       relativeTo: this._route,
     });
   }
 
   /** The history (plan 0045, section 3.3). A sibling for `openShoppingList`'s reason. */
   openShoppingLists(): void {
-    void this._router.navigate(['..', 'shopping-lists'], {
+    void this._router.navigate(['..', BASKET_PATHS.list], {
       relativeTo: this._route,
     });
   }

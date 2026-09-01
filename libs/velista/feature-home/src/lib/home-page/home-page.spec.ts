@@ -15,20 +15,15 @@ import {
   provideFakePresenceStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
-  REALTIME_CLIENT,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
   type FakeGeneratedListStore,
   type FakeIdentity,
   type FakePresenceOptions,
   type FakeZoneStore,
-  type RealtimeMemory,
   type ZoneEntry,
 } from '@portfolio/velista/data-access';
-import type {
-  GeneratedListSummary,
-  MyZone,
-} from '@portfolio/velista/models';
+import type { GeneratedListSummary, MyZone } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -121,7 +116,9 @@ async function render(
       provideFakeZoneStore(store),
       // Plan 0045: the dashboard's shopping list card reads the listing. A double, so
       // a spec states "there is one active basket" rather than driving a request.
-      provideFakeGeneratedListStore(options.generated ?? fakeGeneratedListStore()),
+      provideFakeGeneratedListStore(
+        options.generated ?? fakeGeneratedListStore()
+      ),
       provideFakeSessionStore(options.identity ?? 'REGISTERED'),
       // Both arrived with plan 0009: the page reports what just happened to the
       // account, and offers another confirmation email once there is an endpoint.

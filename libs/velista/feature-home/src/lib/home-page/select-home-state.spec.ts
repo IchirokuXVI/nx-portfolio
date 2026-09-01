@@ -40,7 +40,9 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
   };
 }
 
-function basket(overrides: Partial<GeneratedListSummary> = {}): GeneratedListSummary {
+function basket(
+  overrides: Partial<GeneratedListSummary> = {}
+): GeneratedListSummary {
   return {
     id: 'gl1',
     name: 'Saturday big shop',

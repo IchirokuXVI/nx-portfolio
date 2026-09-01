@@ -28,6 +28,7 @@ import {
   ErrorState,
   RowSkeleton,
 } from '@portfolio/velista/ui';
+import { BASKET_PATHS } from '../basket-paths';
 import { ShoppingListRow } from '../shopping-list-row/shopping-list-row';
 
 /**
@@ -177,7 +178,7 @@ export class ShoppingListsPage {
   }
 
   open(generatedListId: string): void {
-    void this._router.navigate(['..', 'shopping-lists', generatedListId], {
+    void this._router.navigate(['..', BASKET_PATHS.list, generatedListId], {
       relativeTo: this._route,
     });
   }

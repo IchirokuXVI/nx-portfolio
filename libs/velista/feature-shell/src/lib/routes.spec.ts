@@ -84,11 +84,9 @@ describe('AppShellRoutes', () => {
       ]);
       // `get` carries no `returnTo`: it is offered over the dashboard and nowhere
       // else, so where Cancel goes is not a question it has to be told the answer to.
-      expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual([
-        undefined,
-        'home',
-        'home',
-      ]);
+      expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
+        [undefined, 'home', 'home']
+      );
     });
 
     it('keeps the shared link page public and full screen', () => {
@@ -695,5 +693,50 @@ describe('the sheets and their exit animation', () => {
       .map(({ path }) => path);
 
     expect(overreach).toEqual([]);
+  });
+});
+
+/**
+ * The basket routes (plans 0044 and 0045).
+ *
+ * The paths are written out here rather than compared against `BASKET_PATHS`, which the
+ * links are built from, and that is forced rather than sloppy: this library **lazy
+ * loads** `feature-shopping-lists`, so a static import of it is an eslint error even in
+ * a spec, and it would be a real problem rather than a pedantic one, since naming the
+ * constant here pulls those pages into the shell's initial payload.
+ *
+ * So the two are tied by these assertions instead: if somebody renames the constant,
+ * the links move and these fail; if somebody renames the route, these fail. Either way
+ * a rename cannot land half done, which is what matters, because a route path is the
+ * one string that fails at neither compile time nor run time. A `routerLink` to a path
+ * that does not exist simply does nothing when tapped, on a phone, in a shop.
+ */
+describe('the basket routes', () => {
+  const paths = pages.map((route) => route.path);
+
+  it('declares the history at the path the links are built from', () => {
+    expect(paths).toContain('shopping-lists');
+  });
+
+  // Every non empty path comes before the front door, which the table-wide assertion
+  // above already covers; this names it, so removing it is a failure rather than a
+  // shorter list that still happens to be ordered.
+  it('declares it before the front door', () => {
+    expect(paths.indexOf('shopping-lists')).toBeLessThan(paths.indexOf(''));
+  });
+
+  // A basket is private and the listing resolves from the caller's own token. The
+  // **basket** screen is the one that must not carry this guard, since a guest with no
+  // account has to reach it by link; that route is `0044`'s.
+  it('keeps the history behind the authenticated guard', () => {
+    expect(
+      pages.find((route) => route.path === 'shopping-lists')?.canActivate
+    ).toHaveLength(1);
+  });
+
+  it('keeps it lazy, like every other page', () => {
+    expect(
+      pages.find((route) => route.path === 'shopping-lists')?.loadComponent
+    ).toBeDefined();
   });
 });

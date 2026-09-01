@@ -25,7 +25,6 @@ import type {
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
-import { GeneratedListStore } from '../generated-lists/generated-list-store';
 import {
   AUTH_SERVICE,
   type AuthServiceI,
@@ -33,6 +32,7 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { GeneratedListStore } from '../generated-lists/generated-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
 import { MemberNames } from '../memberships/member-names';
@@ -1561,7 +1561,11 @@ export function provideFakeShoppingProfileStore(
  */
 export function fakeGeneratedListStore(
   initial: readonly GeneratedListSummary[] = [],
-  options: { state?: ShoppingListsLoad; error?: unknown; hasMore?: boolean } = {}
+  options: {
+    state?: ShoppingListsLoad;
+    error?: unknown;
+    hasMore?: boolean;
+  } = {}
 ) {
   const lists = signal<readonly GeneratedListSummary[]>(initial);
   const state = signal<ShoppingListsLoad>(options.state ?? 'loaded');
