@@ -2,8 +2,14 @@ import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   BasketAddLineRequest,
+  BasketBindResult,
   BasketLine,
+  BasketLineOrigins,
+  BasketLineTarget,
   BasketLinkPreview,
+  BasketOriginQuantityRequest,
+  BasketOriginQuantityResult,
+  BasketOutstandingRequest,
   BasketParticipant,
   BasketSession,
   BasketSettleRequest,
@@ -182,6 +188,93 @@ export interface BasketServiceI {
     generatedListId: string,
     query: string
   ): Promise<readonly CatalogSuggestion[]>;
+
+  /**
+   * Say how many of a line are still to get (`POST .../lines/:lineId/outstanding`),
+   * velista `0054`.
+   *
+   * **The number, not a delta**, and {@link BasketOutstandingRequest.from} is the
+   * whole of why. Above the current amount the basket asks for more and nothing is
+   * settled; below it, the difference was bought; zero finishes the line exactly as
+   * "got all" does. Which of those a gesture meant depends entirely on where it
+   * started, so a `from` that no longer matches is refused with `stale_quantity`
+   * rather than applied to a number that moved underneath it.
+   *
+   * Answers a {@link BasketSettleResult} in **both** directions, which is not a
+   * convenience: the downward move writes a settlement and can skip an origin whose
+   * access has gone, so the caller has to be told something did not land, exactly as
+   * it does after {@link settle}.
+   */
+  setOutstanding(
+    generatedListId: string,
+    lineId: string,
+    body: BasketOutstandingRequest
+  ): Promise<BasketSettleResult>;
+
+  /**
+   * Which lists are on this line, and which could be (`GET .../lines/:lineId/origins`),
+   * velista `0055`.
+   *
+   * **Zone data throughout**, so the server refuses it outright to a guest and to a
+   * registered participant who does not pass the all or nothing rule: a redacted
+   * version of this answer would be an empty sheet, which is a worse lie than a
+   * refusal. The screen does not draw the way in for them either.
+   */
+  getLineOrigins(
+    generatedListId: string,
+    lineId: string
+  ): Promise<BasketLineOrigins>;
+
+  /**
+   * Set what one list contributes (`POST .../lines/:lineId/origins`), velista `0055`.
+   *
+   * One call for three gestures, because they are one write at different starting
+   * points: changing an existing contribution, adopting a candidate (`from: 0`), and
+   * taking a list off the line altogether (`quantity: 0`).
+   *
+   * **It buys nothing, ever.** No settlement is written and no bought indicator is
+   * set, whichever way the number goes, which is what keeps this sheet's captions
+   * free of any sentence about a purchase. Going under what the basket has already
+   * bought against the list is refused with `below_settled` rather than quietly
+   * unbuying it.
+   */
+  setOriginQuantity(
+    generatedListId: string,
+    lineId: string,
+    body: BasketOriginQuantityRequest
+  ): Promise<BasketOriginQuantityResult>;
+
+  /**
+   * The lists this line could be sent to (`GET .../lines/:lineId/targets`),
+   * velista `0056`.
+   *
+   * Every list **both** the reader and the basket's owner can write right now. The
+   * owner's access is not a formality: it is what authorizes every later settle
+   * against the line, so a list only the reader can write would give a household a
+   * line it never sees bought.
+   */
+  getLineTargets(
+    generatedListId: string,
+    lineId: string
+  ): Promise<readonly BasketLineTarget[]>;
+
+  /**
+   * Send a line to a shopping list (`POST .../lines/:lineId/target`), velista `0056`.
+   *
+   * Only an `ADDED` line, and only one that has been sent nowhere: a `DERIVED` line
+   * already has the lists it came from, and a bound one cannot be bound twice. Both
+   * refusals have codes of their own, because "this is not that kind of line" and
+   * "this has already gone" are different sentences to whoever is holding the phone.
+   *
+   * The created zone line asks for what is **outstanding**, which may be zero on a
+   * line already bought: sending it is still worth doing, because it puts what
+   * happened onto the household's list.
+   */
+  bindLine(
+    generatedListId: string,
+    lineId: string,
+    listId: string
+  ): Promise<BasketBindResult>;
 
   /** Everybody on the basket (`GET .../participants/mine`), for presence. */
   listParticipants(

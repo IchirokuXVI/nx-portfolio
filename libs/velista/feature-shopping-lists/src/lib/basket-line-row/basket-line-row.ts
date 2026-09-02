@@ -136,6 +136,21 @@ export class BasketLineRow {
    */
   readonly canReopen = input(false);
 
+  /**
+   * Whether this line was sent to a list that has not accepted it yet (`0056`).
+   *
+   * An input rather than something read off the line, because **no field of the line
+   * carries it**: `GeneratedListLineOriginView` holds no approval state, so after a
+   * reload nothing can say a bound line is waiting. What fills it is
+   * `BasketStore.pendingTargets`, which is what this session's own bind was told, and
+   * that is the case where somebody is standing there waiting to be told something.
+   *
+   * False everywhere else, which is honest rather than optimistic: the row says
+   * nothing rather than guessing at a state it has no source for. When the origin
+   * view carries it the row reads the line and this input goes.
+   */
+  readonly awaitingApproval = input(false);
+
   readonly open = output<void>();
 
   /**
@@ -293,6 +308,11 @@ export class BasketLineRow {
       this.touched() ?? '',
       this.added() ?? '',
       this.from() ?? '',
+      // Announced with the rest of the row rather than only drawn, because a reader
+      // moving by button hears this string and nothing else about the line.
+      this.awaitingApproval()
+        ? this._translator.t('basket.send.pending', undefined, this._locale())
+        : '',
     ];
     return parts.filter((part) => part !== '').join('. ');
   });
