@@ -160,10 +160,7 @@ export class SuggestionList {
   /** What a group row says it will do, so choosing it is not a surprise. */
   groupSummaryArgs(suggestion: CatalogSuggestion): { count: number } {
     return {
-      count:
-        suggestion.kind === 'group'
-          ? suggestion.itemIds.length || suggestion.group.itemCount
-          : 0,
+      count: suggestion.kind === 'group' ? suggestion.itemIds.length : 0,
     };
   }
 }

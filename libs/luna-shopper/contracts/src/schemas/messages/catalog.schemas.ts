@@ -17,6 +17,9 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
 } from '../../lib/messages/catalog.messages';
+// The one bound a suggestion's product set has to respect, taken from the line it
+// will become rather than restated here, so the two cannot drift apart.
+import { LINE_ITEM_SET_MAX } from '../../lib/messages/list.messages';
 import {
   array,
   boolean,
@@ -303,8 +306,9 @@ const productGroupOfferView = object(
     offer: {
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
     },
+    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
   },
-  ['group', 'cheapestItem', 'offer']
+  ['group', 'cheapestItem', 'offer', 'itemIds']
 );
 
 const catalogSuggestion = object(

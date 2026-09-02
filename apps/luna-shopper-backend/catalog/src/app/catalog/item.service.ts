@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ITEM_LOOKUP_LIMITS,
+  LINE_ITEM_SET_MAX,
   type CreateItemRequest,
   type FindItemByEanRequest,
   type FindItemByEanResult,
@@ -410,8 +411,14 @@ export class ItemService {
         : await this.items.find({ where: { id: In(itemIds) } });
     const byId = new Map(members.map((item) => [item.id, item]));
 
+    // The whole membership of every group on the page, which is what choosing one
+    // attaches to a line. One query for the page rather than one per group.
+    const membership = await this.membersOf(page.map((row) => row.id));
+
     return {
-      items: page.map((row) => this.toOfferView(row, byId)),
+      items: page.map((row) =>
+        this.toOfferView(row, byId, membership.get(row.id) ?? [])
+      ),
       nextCursor: hasMore
         ? encodeCursor({
             order: 'relevance',
@@ -422,9 +429,59 @@ export class ItemService {
     };
   }
 
+  /**
+   * The members of each of these groups, capped per group, in one query.
+   *
+   * The cap is applied **in the database** with a window function rather than by
+   * slicing what came back, because the unbounded read is the thing worth
+   * avoiding: ten groups on a page and no cap is ten whole product ranges pulled
+   * out of Postgres to answer one keystroke.
+   *
+   * Ordered by English name, then id. Any deterministic order would do for the
+   * cap to be stable, and this one also decides the order the products sit in on
+   * the line the composer is about to create, where alphabetical is a better
+   * answer than insertion order.
+   */
+  private async membersOf(groupIds: string[]): Promise<Map<string, string[]>> {
+    if (groupIds.length === 0) {
+      return new Map();
+    }
+    const p = params();
+    const rows: { id: string; productGroupId: string }[] =
+      await this.items.query(
+        `
+      SELECT "id", "productGroupId"
+      FROM (
+        SELECT i."id", i."productGroupId",
+               row_number() OVER (
+                 PARTITION BY i."productGroupId"
+                 ORDER BY i."name" ->> 'en' ASC, i."id" ASC
+               ) AS rn
+        FROM "items" i
+        WHERE i."productGroupId" = ANY(${p.bind(groupIds)})
+      ) ranked
+      WHERE rn <= ${p.bind(LINE_ITEM_SET_MAX)}
+      ORDER BY "productGroupId" ASC, rn ASC
+      `,
+        p.values
+      );
+
+    const byGroup = new Map<string, string[]>();
+    for (const row of rows) {
+      const current = byGroup.get(row.productGroupId);
+      if (current === undefined) {
+        byGroup.set(row.productGroupId, [row.id]);
+      } else {
+        current.push(row.id);
+      }
+    }
+    return byGroup;
+  }
+
   private toOfferView(
     row: RankedGroupRow,
-    members: Map<string, Item>
+    members: Map<string, Item>,
+    itemIds: string[]
   ): ProductGroupOfferView {
     const group = toProductGroupView({
       id: row.id,
@@ -436,7 +493,7 @@ export class ItemService {
 
     const member = row.offerItemId ? members.get(row.offerItemId) : undefined;
     if (!member || !row.offerScopeId) {
-      return { group, cheapestItem: null, offer: null };
+      return { group, cheapestItem: null, offer: null, itemIds };
     }
     const offer: ItemOfferView = {
       itemId: member.id,
@@ -451,7 +508,7 @@ export class ItemService {
         : null,
       priceSourceKind: row.offerSourceKind,
     };
-    return { group, cheapestItem: toItemView(member, offer), offer };
+    return { group, cheapestItem: toItemView(member, offer), offer, itemIds };
   }
 
   /**

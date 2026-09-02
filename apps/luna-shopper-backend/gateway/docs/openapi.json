@@ -16647,12 +16647,21 @@
                 "type": "null"
               }
             ]
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 100
           }
         },
         "required": [
           "group",
           "cheapestItem",
-          "offer"
+          "offer",
+          "itemIds"
         ],
         "additionalProperties": false
       },

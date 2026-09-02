@@ -581,11 +581,39 @@ describe('contract schemas', () => {
               },
               cheapestItem: null,
               offer: null,
+              // Unpriced and still worth choosing: the members are what the
+              // composer attaches, and they exist whether or not anybody has a
+              // price for them.
+              itemIds: ['i1', 'i2'],
             },
           ],
           nextCursor: null,
         }).valid
       ).toBe(true);
+    });
+
+    it('item.searchOffers must say which products a group holds (plan 0048, section 1.1)', () => {
+      // Required rather than optional, because the client's whole use of a group
+      // suggestion is the set: a response without it produces a row that offers
+      // to add zero products and a line with none attached.
+      expect(
+        validateMessageResponse('item.searchOffers', {
+          items: [
+            {
+              group: {
+                id: 'g',
+                name: { en: 'Milk', es: 'Leche' },
+                slug: 'milk',
+                referenceUnit: 'LITER',
+                synonyms: { en: ['milk'], es: ['leche'] },
+              },
+              cheapestItem: null,
+              offer: null,
+            },
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(false);
     });
 
     it('item.searchOffers takes scopes, and takes none (plan 0048, section 3.1)', () => {

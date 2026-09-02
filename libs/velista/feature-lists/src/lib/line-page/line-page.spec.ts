@@ -364,11 +364,7 @@ describe('LinePage', () => {
 
       await fixture.componentInstance.addProduct({
         kind: 'group',
-        group: {
-          id: 'group-milk',
-          name: { es: 'Leche', en: 'Milk' },
-          itemCount: 2,
-        },
+        group: { id: 'group-milk', name: { es: 'Leche', en: 'Milk' } },
         itemIds: ['item-milk-a', 'item-oat'],
       });
 
