@@ -5,10 +5,10 @@
 anyway, so nothing has drifted and turning it on is a flag rather than a rewrite.
 
 This plan turns it on, for **store discovery only**, because
-`apps/luna-shopper-backend/plans/0062` puts a discovery run in the path of an ordinary user adding
+`apps/luna-shopper-backend/plans/0063` puts a discovery run in the path of an ordinary user adding
 a postal code, and a service that does not exist in a cluster cannot run there.
 
-It gates the user visible half of the whole postal code set. Nothing in `0059` through `0063` is
+It gates the user visible half of the whole postal code set. Nothing in `0060` through `0064` is
 observable outside a dev slot until this ships.
 
 ## 1. One of the two reasons is gone; the other is not
@@ -23,7 +23,7 @@ Two costs are bundled there and they come apart under this plan.
 
 **The fetching cost evaporates for this workload.** `HarvestRunMode`'s own doc puts
 `STORE_DISCOVERY` at **two requests**: one geocode, one Overpass query. Against 4,383 it does not
-register, and with `0062`'s thirty day cooldown a postal code costs two requests a month no matter
+register, and with `0063`'s thirty day cooldown a postal code costs two requests a month no matter
 how many users share it.
 
 **The resident cost is unchanged.** A fourth Postgres with its own 2Gi volume and another Node
@@ -57,7 +57,7 @@ Staging's file adds a second objection that production's does not:
 While both clusters are on, both will query Overpass for postal codes their own users added. That
 is real and should be written down rather than argued away. Three things bound it:
 
-- The cooldown in `0062` is thirty days, so a shared postal code is two requests per cluster per
+- The cooldown in `0063` is thirty days, so a shared postal code is two requests per cluster per
   month.
 - Staging holds few real profiles, so the overlap is small in practice and shrinks as production
   grows.
@@ -86,7 +86,7 @@ failure mode a newly enabled service introduces.
 Worth sizing, because the 2Gi volume was sized for a workload this plan is not enabling.
 
 Store discovery writes `DiscoveredPlace` rows, roughly 75 per postal code from `0038`'s
-measurement, plus `HarvestRun` rows and `0062`'s queue table. A few hundred postal codes is tens of
+measurement, plus `HarvestRun` rows and `0063`'s queue table. A few hundred postal codes is tens of
 thousands of small rows. The volume that made the harvester expensive is
 `SourceCatalogEntry` from catalog discovery, which stays switched off.
 

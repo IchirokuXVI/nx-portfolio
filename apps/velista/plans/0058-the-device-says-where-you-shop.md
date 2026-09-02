@@ -1,7 +1,7 @@
-# 0057: the device says where you shop
+# 0058: the device says where you shop
 
-> Server halves: `apps/luna-shopper-backend/plans/0059` (the centroid table and the lookup this
-> screen calls) and `0061` (the source of a postal code, and the neighbours it brings).
+> Server halves: `apps/luna-shopper-backend/plans/0060` (the centroid table and the lookup this
+> screen calls) and `0062` (the source of a postal code, and the neighbours it brings).
 >
 > A shopping profile's postal codes decide whether the app can show a price at all, and today the
 > only way to get one onto a profile is to know it and type it. Above that field sits a free text
@@ -11,7 +11,7 @@
 > say where you are, and take the postal code from that.
 >
 > Prerequisite reading: `0046` (the profiles page and the postal code list this modifies) and
-> backend `0059` section 6, which is the whole reason step 3 asks for confirmation.
+> backend `0060` section 6, which is the whole reason step 3 asks for confirmation.
 
 ## 1. What is being built
 
@@ -57,7 +57,7 @@ press, on a control that says what it is going to do, and the sheet in this plan
    we turn them into a postal code, we keep the postal code and not the coordinates. That sentence
    is true because of section 3.3, and it must not be written until it is.
 2. **The press**, which raises the browser prompt.
-3. **After**: the resolved postal code, and a confirm. **Not adopted silently.** Backend `0059`
+3. **After**: the resolved postal code, and a confirm. **Not adopted silently.** Backend `0060`
    section 6 is explicit that the lookup is nearest centroid rather than a boundary test, and that
    somebody at the edge of a large rural code can be resolved into the neighbouring one. Showing
    the answer and asking is the difference between an approximation and a wrong fact about a user.
@@ -70,7 +70,7 @@ The point goes to the server in one request and comes back as a postal code. It 
 not on the profile, not in a log line, not in an analytics event. Only the postal code is written,
 with `source: DEVICE`.
 
-This is what makes the sentence in step 1 honest, and it is also why backend `0059` ships a dataset
+This is what makes the sentence in step 1 honest, and it is also why backend `0060` ships a dataset
 instead of calling Nominatim: with the lookup local, the coordinates never leave our own process
 either.
 
@@ -94,7 +94,7 @@ otherwise unwritable.
 
 ## 4. A postal code that says where it came from
 
-`PostalCodeList` renders `source` from backend `0061`.
+`PostalCodeList` renders `source` from backend `0062`.
 
 | Source   | Reads as                                         | May be removed | May be added       |
 | -------- | ------------------------------------------------ | -------------- | ------------------ |
@@ -103,7 +103,7 @@ otherwise unwritable.
 | `NEARBY` | ours, added because it is close to one of theirs | yes            | **no**             |
 
 A derived code is visibly not something the user did, and removing one is an ordinary swipe or
-button. The server turns that into a suppression rather than a delete, which is `0061` section 3.1
+button. The server turns that into a suppression rather than a delete, which is `0062` section 3.1
 and is invisible here: the row goes away and stays away.
 
 **The label falls back to the postal code.** `label` is nullable, and a row with none shows the
@@ -125,13 +125,13 @@ how many were added rather than leaving the list to grow silently under the user
 
 **No progress, no waiting, no notification.** The expansion is a local query on the server and
 returns with the write. Discovery of stores in those codes is a background matter the user is
-never told about, per backend `0062`, and the store screen's empty state is where the absence
+never told about, per backend `0063`, and the store screen's empty state is where the absence
 eventually shows up.
 
 ## 6. What this screen still does not promise
 
 Adding a postal code does not mean supermarkets appear in it. Catalog may hold none, a discovery
-run may not have happened, and an import certainly has not. `apps/velista/plans/0058` owns that
+run may not have happened, and an import certainly has not. `apps/velista/plans/0059` owns that
 empty state, and this screen must not imply otherwise: no "you can now see supermarkets", no
 count, no tick.
 

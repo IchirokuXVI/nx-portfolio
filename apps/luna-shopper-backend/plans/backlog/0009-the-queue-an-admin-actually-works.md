@@ -7,7 +7,7 @@
 > free number there, so parking a design never burns a number in the build sequence.
 
 > **Priority: parked, and the only plan in this directory that gates a shipped feature's value.**
-> `apps/velista/plans/0058` draws a screen of the supermarkets near you. `0062` fills a review
+> `apps/velista/plans/0059` draws a screen of the supermarkets near you. `0063` fills a review
 > queue with candidates. **Nothing imports them**, so that screen renders "we don't have
 > supermarkets for that postal code yet" until a person acts, and there is no surface for a person
 > to act on. This plan is that surface. It is parked because the feature ships coherently without
@@ -68,7 +68,7 @@ queue for the remainder**:
   `import()`'s own doc explains why that is deliberately not automatic: one run returns 17 brands
   and creating a `Supermarket` for each would clutter the catalog with chains nobody shops.
 - **A place with no brand at all** queues, or is deferred indefinitely. This is the OTHER bucket in
-  `apps/velista/plans/0058`, it is roughly half the volume, and it is the half with the least value
+  `apps/velista/plans/0059`, it is roughly half the volume, and it is the half with the least value
   per row and the most work per row.
 
 That cuts the human queue to new chains only, which is a handful per city rather than dozens per
@@ -83,13 +83,13 @@ explicitly, in the runner's own doc, rather than letting the code and the commen
 
 - The place: name, brand, address, city, coordinates, opening hours, and its OSM link. Reviewing is
   a visual act and a map pin is worth more than any of the fields.
-- **Which postal code it is in**, which is only reliably answerable after `0060` gives the same
+- **Which postal code it is in**, which is only reliably answerable after `0061` gives the same
   nearest centroid treatment to `DiscoveredPlace` that it gives to `SupermarketLocation`. The OSM
   tag alone is a third populated.
 - **How many profiles are waiting on that postal code**, which is the only real prioritisation
   signal and lives in core rather than the harvester. Approximate is fine; a cross service exact
   count is not worth a round trip per row.
-- The failed rows from `0062`'s queue, separately. A postal code Nominatim cannot geocode usually
+- The failed rows from `0063`'s queue, separately. A postal code Nominatim cannot geocode usually
   means the user typed a code that does not exist, and that is worth seeing.
 
 ## 6. Why it is parked and not scheduled

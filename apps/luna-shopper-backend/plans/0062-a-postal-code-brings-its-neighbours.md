@@ -1,4 +1,4 @@
-# 0061 A postal code brings its neighbours
+# 0062 A postal code brings its neighbours
 
 A profile holds the codes its owner typed, and a person does not shop only in the code they sleep
 in. The supermarket two streets away is in the next code along, and asking somebody to know that,
@@ -7,9 +7,9 @@ and to type it, is asking them to do geography to buy milk.
 So: adding a postal code may also add the ones near it, marked as ours rather than theirs, visibly
 and removably.
 
-Depends on `0059` (the centroid table and `postalCodesWithin`) and `0049` (the profile and
-`ProfilePostalCode`). Feeds `0062`, which discovers stores for any code we have never seen, and
-`apps/velista/plans/0057`, which is the screen this is configured from.
+Depends on `0060` (the centroid table and `postalCodesWithin`) and `0049` (the profile and
+`ProfilePostalCode`). Feeds `0063`, which discovers stores for any code we have never seen, and
+`apps/velista/plans/0058`, which is the screen this is configured from.
 
 ## 1. Where a postal code came from
 
@@ -20,7 +20,7 @@ Depends on `0059` (the centroid table and `postalCodesWithin`) and `0049` (the p
 | Value    | Meaning                                                          |
 | -------- | ---------------------------------------------------------------- |
 | `TYPED`  | The user typed it.                                               |
-| `DEVICE` | Resolved from a location permission (`apps/velista/plans/0057`). |
+| `DEVICE` | Resolved from a location permission (`apps/velista/plans/0058`). |
 | `NEARBY` | We derived it from a `TYPED` or `DEVICE` code within the radius. |
 
 `TYPED` and `DEVICE` behave identically everywhere in this plan: both are the user's, both are
@@ -111,7 +111,7 @@ one that makes sense in rural Córdoba are unlikely to be the same number.
 
 Worth knowing before anyone tunes it: 2 km around a dense urban centroid may pull in several
 codes, and 2 km around a rural one may pull in none, leaving that user with exactly the code they
-typed and a screen that looks broken to them and correct to us. Once `0059`'s table is loaded, the
+typed and a screen that looks broken to them and correct to us. Once `0060`'s table is loaded, the
 distribution is a twenty line script over real data rather than a guess, and it may argue for
 "the nearest N codes, capped by distance" instead of a pure radius. That is a change to this
 function's body and to nothing else, which is a further reason the derived set is recomputed.
@@ -119,12 +119,12 @@ function's body and to nothing else, which is a further reason the derived set i
 ## 5. Every new code asks whether we know it
 
 A code arriving on any profile, `TYPED`, `DEVICE` or `NEARBY`, may be one catalog holds no
-locations for. That is `0062`'s trigger, and this plan's only obligation to it is to announce the
+locations for. That is `0063`'s trigger, and this plan's only obligation to it is to announce the
 codes it wrote, fire and forget, outside the transaction. A discovery run takes minutes and an
 admin import takes longer; neither may hold up a profile save, and a failure to enqueue one must
 not fail the write that caused it.
 
-What the user is told meanwhile is `apps/velista/plans/0058` section on the empty state: we do not
+What the user is told meanwhile is `apps/velista/plans/0059` section on the empty state: we do not
 have locations for that postal code yet. No notification system is built for this and none is
 planned here.
 

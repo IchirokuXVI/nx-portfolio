@@ -1,8 +1,8 @@
-# 0058: the screen that picks the shops
+# 0059: the screen that picks the shops
 
-> Server halves: `apps/luna-shopper-backend/plans/0063` (a profile excludes a location, not only a
-> chain), `0060` (without which two thirds of these shops have no postal code and never appear) and
-> `0061` (the codes the list is drawn from).
+> Server halves: `apps/luna-shopper-backend/plans/0064` (a profile excludes a location, not only a
+> chain), `0061` (without which two thirds of these shops have no postal code and never appear) and
+> `0062` (the codes the list is drawn from).
 >
 > A profile knows which postal codes its owner shops in. Catalog knows which shops sit in them.
 > Nothing puts the two in front of a person, and the only control that exists is a list of chain
@@ -10,7 +10,7 @@
 >
 > This is that screen. It is the first place in velista where a user sees an actual shop.
 >
-> Prerequisite reading: `0046` (the profiles page it is reached from) and backend `0063` in full,
+> Prerequisite reading: `0046` (the profiles page it is reached from) and backend `0064` in full,
 > which owns every rule about what an exclusion means.
 
 ## 1. What is being built
@@ -39,7 +39,7 @@ this page is deep linkable, so the argument is doing real work rather than satis
   number.
 - **It does not filter the catalog.** Excluding every shop leaves every product visible and every
   price absent, which is the same state as a profile with no postal code and is already what the
-  client renders. Backend `0063` section 3 owns that rule; this screen must not contradict it with
+  client renders. Backend `0064` section 3 owns that rule; this screen must not contradict it with
   a warning that implies otherwise.
 
 ## 3. The shape
@@ -64,7 +64,7 @@ under a `null` key, and `0038` measured **35 of the 75** places in one city radi
 shops with no chain at all. It is the largest button on the screen for many users, and it is the
 neighbourhood grocer people actually walk to.
 
-Each button carries three states, which is `0063` section 2.2's consequence rather than a design
+Each button carries three states, which is `0064` section 2.2's consequence rather than a design
 flourish:
 
 | State          | Meaning                                             |
@@ -86,16 +86,16 @@ distance from either, because there are two centres, so distance is not the axis
 is.
 
 Each group is headed by `ProfilePostalCode.label` ("home", "the office") **falling back to the
-postal code** when there is none, which is the same rule `0057` applies to the code list itself.
+postal code** when there is none, which is the same rule `0058` applies to the code list itself.
 
 **Select and deselect all** sits on the group's franchise, not on each postal code group. Per
-`0063` section 2.2 deselect all writes the **chain** exclusion, so it is a different action from
+`0064` section 2.2 deselect all writes the **chain** exclusion, so it is a different action from
 switching off every row by hand and the label must not pretend otherwise: it reads as excluding the
 brand.
 
 ### 3.4 Toggling
 
-Immediate, optimistically, with the row reverting if the write fails. `0063` provides a bulk write,
+Immediate, optimistically, with the row reverting if the write fails. `0064` provides a bulk write,
 which the select and deselect all control uses; a single toggle is a single request.
 
 ## 4. The empty states, which are most of the early life of this screen
@@ -103,10 +103,10 @@ which the select and deselect all control uses; a single toggle is a single requ
 Three, and they say different things.
 
 - **No postal code on the profile.** The screen cannot be drawn at all. It says so and offers the
-  way to fix it, which is `0057`'s screen. This is the only empty state with an action.
+  way to fix it, which is `0058`'s screen. This is the only empty state with an action.
 - **Postal codes, no shops.** We have never looked, or we looked and nobody has imported what we
   found. The honest sentence is **"we don't have supermarkets for that postal code yet"**, with no
-  estimate and no promise, because backend `0062` fills a review queue and an admin decides, and
+  estimate and no promise, because backend `0063` fills a review queue and an admin decides, and
   nothing in the system can say when.
 - **Shops, but the search matched none.** Ordinary, and distinct from the second, because a user
   who cannot find "Lidl" needs to know whether Lidl is missing or their spelling is.
@@ -122,7 +122,7 @@ as an exported constant so the obligation travels with the data rather than livi
 sees the data.
 
 It renders wherever the shops do, from the constant and never as a typed string. Where a postal
-code grouping is drawn from a code that was derived rather than given (`0060`), GeoNames' CC BY
+code grouping is drawn from a code that was derived rather than given (`0061`), GeoNames' CC BY
 attribution applies alongside it.
 
 ## 6. Conventions this screen must not break

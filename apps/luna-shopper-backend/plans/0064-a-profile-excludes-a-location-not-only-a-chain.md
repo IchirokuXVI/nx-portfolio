@@ -1,4 +1,4 @@
-# 0063 A profile excludes a location, not only a chain
+# 0064 A profile excludes a location, not only a chain
 
 `ProfileSupermarketPreference` is emphatic about its own scope:
 
@@ -7,14 +7,14 @@
 > location preference anywhere in this plan, including on the page that edits it.
 
 That was right for a profile whose only geography was a postal code. It stops being right the
-moment `apps/velista/plans/0058` puts a list of actual shops in front of somebody, because the
+moment `apps/velista/plans/0059` puts a list of actual shops in front of somebody, because the
 question that screen asks is per shop: not "do you shop at DIA" but "do you go to _that_ DIA, the
 one with no parking".
 
 This plan adds the finer axis. It does **not** remove the coarser one, and section 2 is why.
 
-Depends on `0049` (the profile and its chain preferences) and `0060` (without which the screen has
-nothing to list). Backend only; the screen is `apps/velista/plans/0058`.
+Depends on `0049` (the profile and its chain preferences) and `0061` (without which the screen has
+nothing to list). Backend only; the screen is `apps/velista/plans/0059`.
 
 ## 1. The new table
 
@@ -62,7 +62,7 @@ maintaining a list forever.
 Individual deselection stays the finer tool underneath. One consequence to carry into the screen:
 deselecting every location by hand is **not** the same as pressing deselect all, and the franchise
 button therefore has three states rather than two: chain excluded, some locations excluded, none.
-`apps/velista/plans/0058` owns how that reads.
+`apps/velista/plans/0059` owns how that reads.
 
 ## 3. What exclusion actually changes
 
@@ -75,7 +75,7 @@ of them are true here.
   profile has not excluded. Without this, exclusion is cosmetic: a user could exclude every
   Mercadona near them and still be quoted Mercadona's local price.
 - **The catalog does not shrink.** An excluded chain or store removes prices from consideration,
-  never items from the catalog. That is `0049`'s rule and `apps/velista/plans/0058` restates it for
+  never items from the catalog. That is `0049`'s rule and `apps/velista/plans/0059` restates it for
   the screen. A user who excludes everything sees every product and no prices, which is the same
   state as a user with no postal code, and the client already renders it.
 

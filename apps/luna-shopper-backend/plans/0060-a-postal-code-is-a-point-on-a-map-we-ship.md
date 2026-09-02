@@ -1,16 +1,16 @@
-# 0059 A postal code is a point on a map we ship
+# 0060 A postal code is a point on a map we ship
 
 Two questions this system is about to ask constantly, and cannot answer today:
 
 1. **Which postal code is this device in?** A browser granted location permission hands back a
    latitude and a longitude. A shopping profile stores a postal code. Nothing bridges them.
-2. **Which postal codes are within 2 km of this one?** The profile expansion in `0061` is entirely
-   this question, and the store screen in `apps/velista/plans/0058` is only worth drawing once a
+2. **Which postal codes are within 2 km of this one?** The profile expansion in `0062` is entirely
+   this question, and the store screen in `apps/velista/plans/0059` is only worth drawing once a
    profile holds more than the one code its owner typed.
 
 Neither has an answer we are allowed to buy from an API, so this plan ships the data instead: a
 table of postal code centroids, loaded by a migration, owned by catalog. It is the foundation
-under `0060`, `0061` and `0062`, and it is deliberately the least interesting plan in the set.
+under `0061`, `0062` and `0063`, and it is deliberately the least interesting plan in the set.
 
 Depends on `0012` (the catalog and its locations) and `0049` (the profile that holds postal
 codes). Nothing in it depends on the harvester.
@@ -129,7 +129,7 @@ extension buys nothing until the table is two orders of magnitude larger. **Why 
 different image for catalog's Postgres in the compose file, in both values files and on two VPSs,
 for a query a btree already answers instantly.
 
-The second read takes a postal code rather than a point on purpose. Its caller in `0061` has a
+The second read takes a postal code rather than a point on purpose. Its caller in `0062` has a
 code, and making it geocode first would put the centroid lookup in two places.
 
 ## 6. What this table is not
@@ -141,17 +141,17 @@ real and has to be said in three places rather than assumed away:
 - **"Which code is this device in" is approximate.** The nearest centroid to somebody standing at
   the edge of a large rural code may belong to the neighbouring code. `maxDistanceMetres` exists so
   the answer can be "we don't know" rather than a confident wrong code, and the frontend in
-  `apps/velista/plans/0057` shows the resolved code for confirmation rather than adopting it
+  `apps/velista/plans/0058` shows the resolved code for confirmation rather than adopting it
   silently.
 - **"Which codes are within 2 km" is centroid to centroid.** Two adjacent codes whose centroids sit
   2.5 km apart are neighbours in reality and not in this query. That is acceptable for the feature
   it serves, which is widening the net a little, and unacceptable as an authoritative statement
   about geography.
-- **It never overrides a postcode we were told.** `0060` uses it as a fallback for locations whose
+- **It never overrides a postcode we were told.** `0061` uses it as a fallback for locations whose
   source gave no postal code, and never to correct one that did.
 
 Radii are configuration from the start, not constants, because the right value in central Madrid
-and the right value in rural Córdoba are unlikely to be the same number. `0061` section 4 owns the
+and the right value in rural Córdoba are unlikely to be the same number. `0062` section 4 owns the
 default.
 
 ## 7. Contracts and endpoints
@@ -160,8 +160,8 @@ Two new NATS messages in `libs/luna-shopper/contracts` under the catalog domain,
 schemas: `ResolveNearestPostalCodeRequest` / `NearestPostalCodeView` and
 `ListNearbyPostalCodesRequest` / `NearbyPostalCodesView`.
 
-**No gateway route in this plan.** Nothing user facing calls either read directly: `0061` calls
-them from core, and `0057` reaches the first through a core route that plan defines. A public
+**No gateway route in this plan.** Nothing user facing calls either read directly: `0062` calls
+them from core, and `0058` reaches the first through a core route that plan defines. A public
 endpoint here would create a geocoding service nobody asked for.
 
 ## 8. Migrations

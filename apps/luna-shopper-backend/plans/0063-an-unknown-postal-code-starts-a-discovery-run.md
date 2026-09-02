@@ -1,4 +1,4 @@
-# 0062 An unknown postal code starts a discovery run
+# 0063 An unknown postal code starts a discovery run
 
 Every run the harvester has ever done was asked for by a person. `HarvestRunTrigger`'s doc says so,
 and says what the other two values are for:
@@ -10,7 +10,7 @@ and says what the other two values are for:
 This is the plan where `SYSTEM` starts being written. A postal code lands on somebody's profile,
 catalog holds no locations in it, and a `STORE_DISCOVERY` run goes and looks.
 
-Depends on `0061` (which announces new codes) and `0038` (the runner, the run lifecycle, the
+Depends on `0062` (which announces new codes) and `0038` (the runner, the run lifecycle, the
 review queue). Blocked in staging and production by `k8s/plans/0008`, which is what makes the
 harvester exist there at all.
 
@@ -31,7 +31,7 @@ harvester tables at once is a worse world than a queue.
 But it means the obvious implementation fails immediately. One user granting a location permission
 with `expandNearby` set can produce six new postal codes in a single write, six of them unknown,
 and six `runService.start()` calls of which one succeeds and five throw. The failure is not even
-visible to anybody, because section 5 of `0061` makes the announcement fire and forget.
+visible to anybody, because section 5 of `0062` makes the announcement fire and forget.
 
 **Politeness compounds it.** `OsmPlacesClient` gates itself to one request per second, per client
 instance. Six concurrent clients are six times the rate Nominatim's policy allows, and the policy
@@ -79,9 +79,9 @@ wrong rather than that the internet is broken.
 "Catalog holds no locations in this postal code", asked of catalog over NATS, counting
 `SupermarketLocation` rows whose `postalCode` matches.
 
-That count is only meaningful after `0060`, which is the plan that stops two thirds of imported
+That count is only meaningful after `0061`, which is the plan that stops two thirds of imported
 locations having a null postcode. Before it, almost every code looks unknown and this queue would
-re discover the whole country. **`0060` ships first.** It is not a soft ordering preference.
+re discover the whole country. **`0061` ships first.** It is not a soft ordering preference.
 
 An unknown code is also the normal state for a long time, because a discovery run creates nothing:
 it fills the review queue and waits for an admin. So a code moves from unknown to known only when
@@ -100,9 +100,9 @@ coherent configuration and the one `k8s/plans/0008` deploys.
 
 ## 7. The radius, which is not the profile's radius
 
-`StoreDiscoveryInput.radiusMetres` and `0061`'s expansion radius are different numbers answering
+`StoreDiscoveryInput.radiusMetres` and `0062`'s expansion radius are different numbers answering
 different questions, and giving them one configuration key would be a bug waiting to happen.
-`0061`'s radius decides **which postal codes a person shops in**. This one decides **how far around
+`0062`'s radius decides **which postal codes a person shops in**. This one decides **how far around
 a code's centre to look for shops**, and it should be comfortably larger, because a store at the
 edge of a code is still that code's store and `0038` section 2.8's whole finding is that a postal
 code's extent and its centre are not the same thing.

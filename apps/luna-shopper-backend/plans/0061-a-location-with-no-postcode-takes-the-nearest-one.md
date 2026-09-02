@@ -1,12 +1,12 @@
-# 0060 A location with no postcode takes the nearest one
+# 0061 A location with no postcode takes the nearest one
 
 Two thirds of the supermarkets OpenStreetMap knows about carry no `addr:postcode` tag. That
 number is recorded in `osm-places/src/lib/types.ts` as the reason discovery is a radius and never
 a postcode search, and it was treated there as a fact about _searching_. It is also a fact about
 _storing_, and this is the plan for that half.
 
-Depends on `0059` (the centroid table and its `nearestPostalCode` read). Everything in
-`apps/velista/plans/0058` depends on this, in a way that is easy to miss, so section 2 says how.
+Depends on `0060` (the centroid table and its `nearestPostalCode` read). Everything in
+`apps/velista/plans/0059` depends on this, in a way that is easy to miss, so section 2 says how.
 
 ## 1. What actually happens today
 
@@ -45,7 +45,7 @@ rung two or three: its `NATIONAL` scope, or the owner set default with the resul
 approximate**. The user has a Mercadona 400 metres away and is shown a price labelled as somebody
 else's city, because we hold that store's coordinates and not its postcode.
 
-**The store screen.** `apps/velista/plans/0058` answers "which supermarkets are in my postal
+**The store screen.** `apps/velista/plans/0059` answers "which supermarkets are in my postal
 codes" with the same column. Two thirds of every store ever imported would simply not appear on
 the screen built to show them. This is the dependency worth stating loudly: **the screen plan and
 the dataset plan are not independent, and the coupling hides inside the import step rather than in
@@ -71,7 +71,7 @@ update leaves the postcode absent; an update that sets one is a statement.
 
 **A source postcode is never overridden.** If OSM gave us one, it wins, even when it disagrees with
 the nearest centroid. The centroid is an approximation of a boundary and the tag is somebody's
-observation of a sign on a building. This is `0059` section 6's third bullet, and it is the rule
+observation of a sign on a building. This is `0060` section 6's third bullet, and it is the rule
 this plan exists to obey rather than to bend.
 
 **A guess beyond a bounded distance is not made.** `nearestPostalCode` takes `maxDistanceMetres`
