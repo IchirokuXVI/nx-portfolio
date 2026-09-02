@@ -44,6 +44,30 @@ export interface ScopeQuery {
 }
 
 /**
+ * Who the caller shops as, for the two shop reads of plan 0068, section 2.
+ *
+ * The postal codes and the refusals, and nothing resolved: a shop is a place and
+ * a price scope is not, so this stops one call short of
+ * {@link CatalogScopeView}.
+ */
+export interface ShopperSelection {
+  /** The profile the refusals came from, or null when the caller has none. */
+  profileId: string | null;
+  /** The codes to look in: the caller's own if they stated any, else the profile's. */
+  postalCodes: string[];
+  excludedSupermarketIds: string[];
+  excludedSupermarketLocationIds: string[];
+}
+
+/**
+ * What a shop read says about who is asking: the codes, or a profile of theirs.
+ */
+export interface ShopQuery {
+  postalCodes?: string[];
+  profileId?: string;
+}
+
+/**
  * Resolving where the caller shops, before a catalog read runs (plan 0049,
  * sections 2.1, 3 and 3.1).
  *
@@ -130,6 +154,44 @@ export class ScopeResolutionService {
 
     const resolved = await this.resolve(userId, query.profileId);
     return resolved;
+  }
+
+  /**
+   * The postal codes and refusals a shop read runs with (plan 0068, section 2).
+   *
+   * **Not {@link describe}, deliberately.** That path throws
+   * `CATALOG_SCOPE_REQUIRED` for a profile that has said nothing, and "which
+   * shops are near me" is precisely the question somebody in the middle of
+   * filling their profile in has to be able to ask. Here an empty profile is an
+   * empty answer, which the two reads turn into no chains and no shops rather
+   * than into an error.
+   *
+   * **Stated codes replace the profile's, and never its refusals.** A screen
+   * asking about a code the user has not saved yet is still that user, so what
+   * they have refused still holds; the codes are the only half they are
+   * overriding.
+   *
+   * Uncached, unlike the scope ladder: a resolution here is one round trip
+   * rather than two, it is made once per screen rather than once per keystroke,
+   * and caching it would put a minute of staleness between refusing a shop and
+   * seeing it go.
+   */
+  async forShops(userId: string, query: ShopQuery): Promise<ShopperSelection> {
+    const selector = await this.nats.send<ProfileScopeSelector>(
+      PROFILE_PATTERNS.resolveScopes,
+      { userId, profileId: query.profileId }
+    );
+    const stated = query.postalCodes ?? [];
+
+    return {
+      profileId: selector.profileId,
+      postalCodes: stated.length > 0 ? stated : selector.postalCodes,
+      excludedSupermarketIds: selector.excludedSupermarketIds,
+      // Absent until plan 0064 lands, and absent is none: the field is optional
+      // on the selector for exactly that reason (plan 0068, section 2).
+      excludedSupermarketLocationIds:
+        selector.excludedSupermarketLocationIds ?? [],
+    };
   }
 
   /**

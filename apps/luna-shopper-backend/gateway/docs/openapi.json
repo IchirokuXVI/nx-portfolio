@@ -10553,6 +10553,241 @@
         ]
       }
     },
+    "/v1/catalog/shops/summary": {
+      "get": {
+        "operationId": "CatalogShopsController_summary_v1",
+        "parameters": [
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. The codes to look in, instead of the ones on your profile.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Look as this profile of yours rather than as your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeExcluded",
+            "required": false,
+            "in": "query",
+            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every chain with at least one shop in your postal codes: how many it has there, how many of those you have refused, and whether you have refused the chain itself.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ShopChainSummariesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/shops": {
+      "get": {
+        "operationId": "CatalogShopsController_search_v1",
+        "parameters": [
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. The codes to look in, instead of the ones on your profile.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Look as this profile of yours rather than as your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeExcluded",
+            "required": false,
+            "in": "query",
+            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "Only this chain’s shops. What tapping a franchise asks.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "required": false,
+            "in": "query",
+            "description": "Matched against the shop’s name, its chain’s name in any language, its address, its city and its postal code.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `supermarketLocation.search` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ShopPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/v1/catalog/suggest": {
       "get": {
         "operationId": "CatalogSuggestController_suggest_v1",
@@ -16694,6 +16929,113 @@
           "postalCode",
           "origin",
           "approximate"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopChainSummariesView": {
+        "type": "object",
+        "properties": {
+          "chains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopChainSummaryView"
+            }
+          }
+        },
+        "required": [
+          "chains"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopChainSummaryView": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "logoUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "externalBrandKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "locations": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "excluded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "excludedChain": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "supermarketId",
+          "name",
+          "logoUrl",
+          "externalBrandKey",
+          "locations",
+          "excluded",
+          "excludedChain"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "catalog.ShopView": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/catalog.SupermarketLocationView"
+          },
+          "supermarket": {
+            "$ref": "#/components/schemas/catalog.SupermarketView"
+          },
+          "excluded": {
+            "type": "boolean"
+          },
+          "excludedChain": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "location",
+          "supermarket",
+          "excluded",
+          "excludedChain"
         ],
         "additionalProperties": false
       },

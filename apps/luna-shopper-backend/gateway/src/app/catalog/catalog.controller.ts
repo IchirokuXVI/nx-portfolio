@@ -32,8 +32,11 @@ import {
   type ProductGroupOfferPage,
   type ProductGroupPage,
   type ProductGroupView,
+  type ShopChainSummariesView,
+  type ShopPage,
   type SupermarketItemPage,
   type SupermarketItemView,
+  type SupermarketLocationChainSummariesView,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
   type SupermarketLocationView,
@@ -62,6 +65,8 @@ import {
   PriceScopedQueryDto,
   SearchItemsQueryDto,
   SearchOffersQueryDto,
+  SearchShopsQueryDto,
+  ShopQueryDto,
   SuggestQueryDto,
   UpdateItemDto,
   UpdatePriceScopeDto,
@@ -93,6 +98,15 @@ export const SUGGEST_SCHEMA = hoistContractSchema(
  * it (plan 0049, sections 3.1 and 5).
  */
 const SCOPE_SCHEMA = hoistContractSchema(CATALOG_SCHEMA_IDS.catalogScopeView);
+
+/**
+ * The franchise buttons (plan 0068, section 3.1). Hoisted like the two above it
+ * because the row is assembled here, from catalog's counts and core's refusals,
+ * so no broker subject answers with it.
+ */
+const SHOP_SUMMARY_SCHEMA = hoistContractSchema(
+  CATALOG_SCHEMA_IDS.shopChainSummariesView
+);
 
 /**
  * The three ways a query says where the caller shops (plan 0049, section 3),
@@ -290,6 +304,109 @@ export class CatalogLocationsController {
         limit: query.limit,
       }
     );
+  }
+}
+
+/**
+ * The shops in the caller's postal codes (plan 0068), which is what
+ * `apps/velista/plans/0059` draws.
+ *
+ * **`shops` rather than `locations`, and the word is doing work.**
+ * {@link CatalogLocationsController} is the owner surface for one location by
+ * id: it is administered, one row at a time, by the app owner. This is the same
+ * table browsed, by a shopper, keyed on the one axis a shopper has, which is
+ * where they are. Distance is deliberately not that axis (plan 0068, section
+ * 3.3): a profile can hold Córdoba and Madrid, so there is no single centre to
+ * sort by, and the postal code is the one thing both services already agree on.
+ *
+ * Both routes resolve and pass, like every priced read since plan 0049: core
+ * says what the caller wants, catalog says what that means, and the gateway is
+ * the only place that holds both.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/shops', version: '1' })
+export class CatalogShopsController {
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
+
+  /**
+   * One row per chain with a shop in the caller's codes (plan 0068, section
+   * 3.1): the franchise buttons, ready to draw.
+   *
+   * The row's three states come from two services. Catalog counts, because only
+   * catalog knows which shop belongs to which chain; core says which chains the
+   * caller refused outright, which is a statement about the brand that covers
+   * shops it has not opened yet; and this method is where they meet.
+   */
+  @Get('summary')
+  @ApiOkResponse({
+    description:
+      'Every chain with at least one shop in your postal codes: how many it has there, how many of those you have refused, and whether you have refused the chain itself.',
+    schema: componentRef(SHOP_SUMMARY_SCHEMA),
+  })
+  async summary(
+    @AuthUser() user: CurrentUser,
+    @Query() query: ShopQueryDto
+  ): Promise<ShopChainSummariesView> {
+    const selection = await this.scopes.forShops(user.userId, {
+      postalCodes: query.postalCode,
+      profileId: query.profileId,
+    });
+    const summaries =
+      await this.nats.send<SupermarketLocationChainSummariesView>(
+        SUPERMARKET_LOCATION_PATTERNS.summarizeByChain,
+        {
+          userId: user.userId,
+          postalCodes: selection.postalCodes,
+          excludedSupermarketIds: selection.excludedSupermarketIds,
+          excludedSupermarketLocationIds:
+            selection.excludedSupermarketLocationIds,
+          includeExcluded: query.includeExcluded ?? false,
+        }
+      );
+
+    const refusedChains = new Set(selection.excludedSupermarketIds);
+    return {
+      chains: summaries.chains.map((chain) => ({
+        ...chain,
+        excludedChain: refusedChains.has(chain.supermarketId),
+      })),
+    };
+  }
+
+  /**
+   * The shops themselves (plan 0068, section 3.2): a franchise's, or a typed
+   * word's across all of them.
+   *
+   * A page rather than the whole set, unlike the summary above: a dense city
+   * holds hundreds of shops in a profile's codes and the screen scrolls them.
+   */
+  @Get()
+  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.search)
+  async search(
+    @AuthUser() user: CurrentUser,
+    @Query() query: SearchShopsQueryDto
+  ): Promise<ShopPage> {
+    const selection = await this.scopes.forShops(user.userId, {
+      postalCodes: query.postalCode,
+      profileId: query.profileId,
+    });
+    return this.nats.send<ShopPage>(SUPERMARKET_LOCATION_PATTERNS.search, {
+      userId: user.userId,
+      postalCodes: selection.postalCodes,
+      supermarketId: query.supermarketId,
+      query: query.query,
+      includeExcluded: query.includeExcluded ?? false,
+      excludedSupermarketIds: selection.excludedSupermarketIds,
+      excludedSupermarketLocationIds: selection.excludedSupermarketLocationIds,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
   }
 }
 

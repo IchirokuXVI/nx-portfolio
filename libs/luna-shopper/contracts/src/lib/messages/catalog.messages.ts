@@ -60,6 +60,28 @@ export const SUPERMARKET_LOCATION_PATTERNS = {
    * earns a discovery run.
    */
   countByPostalCode: 'supermarketLocation.countByPostalCode',
+  /**
+   * One row per chain with at least one shop in these postal codes (plan 0068,
+   * section 3.1). The franchise buttons of `apps/velista/plans/0059`.
+   *
+   * A grouped count rather than a page, which is the decision
+   * {@link SUPERMARKET_LOCATION_PATTERNS.countByPostalCode} made and for the
+   * same reason: a country has tens of chains and a neighbourhood a handful,
+   * and a cursor over tens of rows is one nobody would ever pass back. The
+   * caller wants the whole shape at once because it draws all of it at once.
+   */
+  summarizeByChain: 'supermarketLocation.summarizeByChain',
+  /**
+   * A page of shops in these postal codes, optionally one chain's, optionally
+   * matching a typed word (plan 0068, section 3.2).
+   *
+   * Not {@link SUPERMARKET_LOCATION_PATTERNS.list}, which is keyed by chain and
+   * answers that chain's shops nationwide: this one is keyed by **place**, which
+   * is the axis a shopper actually has. It is one subject rather than a listing
+   * and a search beside it, restating plan 0048's decision for `item.search`: no
+   * query is a listing, a query narrows the same read.
+   */
+  search: 'supermarketLocation.search',
 } as const;
 
 export const ITEM_PATTERNS = {
@@ -231,6 +253,77 @@ export interface SupermarketLocationView {
    */
   externalRef: string | null;
   externalProvider: string | null;
+}
+
+/**
+ * One chain with at least one shop in the postal codes asked about (plan 0068,
+ * section 3.1).
+ *
+ * The counts are over **every** shop of that chain in those codes, refused or
+ * not, which is what makes the three franchise states of
+ * `apps/velista/plans/0059` derivable from one row: `excluded` at zero is "none
+ * refused", `excluded` between one and `locations` is "some refused", and the
+ * chain's own refusal is the third state, which catalog does not know and the
+ * gateway adds (see `ShopChainSummaryView`).
+ *
+ * **`externalBrandKey` is what survives an import, not a grouping.**
+ * `SupermarketLocation.supermarketId` is not nullable, so the harvester gives an
+ * unbranded shop a chain named after itself; "Frutería Paco" is a chain with one
+ * shop rather than an absent chain. A client buckets the keyless rows into its
+ * own OTHER button (plan 0068, section 4), and catalog neither knows nor uses
+ * that word.
+ */
+export interface SupermarketLocationChainSummaryView {
+  supermarketId: string;
+  name: LocalizedText;
+  logoUrl: string | null;
+  /** Null for an independent shop, and for a chain nobody has keyed yet. */
+  externalBrandKey: string | null;
+  /** Shops this chain has in the codes asked about. Never zero: a chain with none is absent. */
+  locations: number;
+  /** How many of those {@link locations} the caller has refused. */
+  excluded: number;
+}
+
+/**
+ * Every chain with a shop in the codes, unpaged (plan 0068, section 3.1).
+ *
+ * Wrapped in a named object rather than answered as a bare array, like every
+ * other subject here, so the reply has one JSON Schema and can gain a field
+ * without breaking a reader.
+ */
+export interface SupermarketLocationChainSummariesView {
+  chains: SupermarketLocationChainSummaryView[];
+}
+
+/**
+ * A shop as somebody browsing for one sees it (plan 0068, section 3.2).
+ *
+ * It carries the **chain**, not only its id, because "Ronda de los Tejares" does
+ * not identify a shop on its own and a row a client can draw from one response
+ * is the whole point of the read.
+ *
+ * The attribution a client owes for this data travels with the data already:
+ * `location.externalProvider` says who discovered the shop and
+ * `location.postalCodeSource` says whether its code was observed or derived from
+ * a centroid. There is deliberately no attribution string on the view, because
+ * that would be the same sentence shipped a thousand times (plan 0068, section
+ * 3.3).
+ */
+export interface ShopView {
+  location: SupermarketLocationView;
+  supermarket: SupermarketView;
+  /**
+   * The caller refused **this shop**. Only ever true on a read that asked for
+   * the refused ones: they are absent by default (plan 0068, section 6).
+   *
+   * Flagged rather than merely present, so the row can be drawn switched off
+   * without the client cross referencing its profile against the page it just
+   * fetched.
+   */
+  excluded: boolean;
+  /** The caller refused the **whole chain**, which hides its future shops too. */
+  excludedChain: boolean;
 }
 
 /**
@@ -500,6 +593,83 @@ export interface ListSupermarketLocationsRequest extends PageQuery {
    * into somewhere to go. Absent lists the whole chain, as before.
    */
   priceScopeId?: string;
+}
+
+/**
+ * What the caller refuses, as the two reads below take it (plan 0068, section
+ * 6, generalizing plan 0064).
+ *
+ * Catalog is handed the ids rather than asked to look them up: the refusals live
+ * on a profile in core and the shops live here, and the gateway is what resolves
+ * one and passes it to the other. Both lists are optional and an absent list is
+ * an empty one, so a caller with nothing to refuse sends nothing.
+ */
+export interface ShopRefusals {
+  /** Shops refused one by one. */
+  excludedSupermarketLocationIds?: string[];
+  /** Chains refused whole, which covers shops they open later. */
+  excludedSupermarketIds?: string[];
+}
+
+/**
+ * The chains with a shop in these postal codes (plan 0068, section 3.1).
+ *
+ * **The codes are the whole filter and they are required**: this read is keyed
+ * by place, and a call naming no code answers no chains rather than the country.
+ *
+ * There is no country beside them, matching `priceScope.resolve`, which is the
+ * other read the same postal codes are passed to: a profile's codes reach the
+ * gateway as bare strings and inventing a country here would have it disagree
+ * with the scopes the same profile prices against.
+ */
+export interface SummarizeLocationsByChainRequest extends ShopRefusals {
+  userId: string;
+  postalCodes: string[];
+  /**
+   * Whether a chain the caller refused whole gets a row.
+   *
+   * Only the **rows** are governed here, never the counts: `locations` and
+   * `excluded` are over every shop in the codes either way, because a button
+   * that reads "some refused" is counting exactly the shops a filtered count
+   * would have dropped. Default false, because every other caller is offering a
+   * shop rather than editing an opinion about one.
+   */
+  includeExcluded?: boolean;
+}
+
+/**
+ * A page of shops in these postal codes (plan 0068, section 3.2).
+ *
+ * The three ways it is called, all of them one subject:
+ *
+ * - no `query`, `supermarketId` set: one franchise's shops near the caller
+ * - `query` set, no `supermarketId`: the search bar, which searches **across**
+ *   franchises on purpose
+ * - both: a search within a franchise, which no screen asks for today and costs
+ *   nothing to allow
+ */
+export interface SearchShopsRequest extends PageQuery, ShopRefusals {
+  userId: string;
+  postalCodes: string[];
+  /** One chain's shops, rather than every chain's. */
+  supermarketId?: string;
+  /**
+   * A typed word, matched case insensitively against the shop's label, its
+   * chain's name in **any** locale, its address, its city and its postal code
+   * (plan 0068, section 5). Absent lists rather than searches.
+   */
+  query?: string;
+  /**
+   * Whether shops the caller refused are in the page, flagged (plan 0068,
+   * section 6). Default false: they are absent, because the reads that offer a
+   * shop must not offer a refused one. The screen that edits those choices is
+   * the caller that asks for them.
+   *
+   * A refused **chain**'s shops follow the same flag, carrying
+   * {@link ShopView.excludedChain}, because that is the control a person needs
+   * in order to change their mind.
+   */
+  includeExcluded?: boolean;
 }
 
 // --- Item requests ---------------------------------------------------------
@@ -886,6 +1056,31 @@ export interface CatalogScopeView extends ResolvedScopesView {
   explicit: boolean;
 }
 
+/**
+ * What the gateway's `GET /v1/catalog/shops/summary` answers (plan 0068,
+ * section 3.1): one franchise button, ready to draw.
+ *
+ * A gateway shape in `contracts` for the reason {@link CatalogScopeView} is, and
+ * this one is the plainest case of it: the two counts come from catalog, which
+ * alone knows which shop belongs to which chain, and
+ * {@link ShopChainSummaryView.excludedChain} comes from core, which alone knows
+ * what the caller said. Neither service learns the other's domain and the
+ * gateway is what puts them in one row.
+ */
+export interface ShopChainSummaryView extends SupermarketLocationChainSummaryView {
+  /**
+   * The caller refused the chain itself, which is a durable statement about the
+   * brand and covers shops it opens later. Different from having refused every
+   * shop currently listed, and the reason the franchise button has three states
+   * rather than two.
+   */
+  excludedChain: boolean;
+}
+
+export interface ShopChainSummariesView {
+  chains: ShopChainSummaryView[];
+}
+
 // --- Supermarket location item requests ------------------------------------
 
 export interface UpsertSupermarketLocationItemRequest {
@@ -912,6 +1107,8 @@ export interface ListSupermarketLocationItemsRequest extends PageQuery {
 
 export type SupermarketPage = Paginated<SupermarketView>;
 export type SupermarketLocationPage = Paginated<SupermarketLocationView>;
+/** The browsed read of the same table (plan 0068), chain attached and refusals flagged. */
+export type ShopPage = Paginated<ShopView>;
 export type ItemPage = Paginated<ItemView>;
 export type SupermarketItemPage = Paginated<SupermarketItemView>;
 export type PriceScopePage = Paginated<PriceScopeView>;

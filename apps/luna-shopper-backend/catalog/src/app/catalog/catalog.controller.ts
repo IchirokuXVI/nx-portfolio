@@ -48,10 +48,14 @@ import {
   type ResolvePriceScopesRequest,
   type SearchItemsRequest,
   type SearchOffersRequest,
+  type SearchShopsRequest,
+  type ShopPage,
+  type SummarizeLocationsByChainRequest,
   type SupermarketIdRequest,
   type SupermarketItemIdRequest,
   type SupermarketItemPage,
   type SupermarketItemView,
+  type SupermarketLocationChainSummariesView,
   type SupermarketLocationIdRequest,
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
@@ -185,6 +189,27 @@ export class CatalogController {
     @Payload() req: CountLocationsByPostalCodeRequest
   ): Promise<PostalCodeLocationCountsView> {
     return this.locations.countByPostalCode(req);
+  }
+
+  /**
+   * The chains with a shop in the caller's postal codes, and how many they have
+   * (plan 0068, section 3.1).
+   *
+   * The refusals arrive as ids because the gateway resolved them from core:
+   * catalog knows which shop belongs to which chain and nothing else, which is
+   * exactly the split every priced read has kept since plan 0049.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.summarizeByChain)
+  summarizeLocationsByChain(
+    @Payload() req: SummarizeLocationsByChainRequest
+  ): Promise<SupermarketLocationChainSummariesView> {
+    return this.locations.summarizeByChain(req);
+  }
+
+  /** The shops themselves, in those codes (plan 0068, section 3.2). */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.search)
+  searchShops(@Payload() req: SearchShopsRequest): Promise<ShopPage> {
+    return this.locations.search(req);
   }
 
   // --- Items ---------------------------------------------------------------

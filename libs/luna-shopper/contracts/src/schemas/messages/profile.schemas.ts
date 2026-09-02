@@ -131,6 +131,9 @@ const scopeSelector = object(
     postalCodes: array(nonEmptyString()),
     supermarketIds: array(nonEmptyString()),
     excludedSupermarketIds: array(nonEmptyString()),
+    // Not required: plan 0064 owns the rows it comes from and has not landed,
+    // and the shop reads of plan 0068 read absent as none (plan 0068, section 2).
+    excludedSupermarketLocationIds: array(nonEmptyString()),
     empty: boolean(),
   },
   [
