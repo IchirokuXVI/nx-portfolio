@@ -5,6 +5,9 @@
  * The composer sends whatever is in the box after three characters, so the term
  * reaching here is routinely a fragment of a word, occasionally a misspelling,
  * and always untrusted text.
+ *
+ * Occasionally it is not text at all but a barcode, off a label or a scanner, in
+ * which case it names one product outright and the term carries it separately.
  */
 
 /** How much of a word two strings have to share for the fuzzy match to fire. */
@@ -22,9 +25,30 @@ export const TRIGRAM_THRESHOLD = 0.3;
  */
 export const TRIGRAM_WEIGHT = 0.05;
 
+/**
+ * The digit counts a barcode is allowed to have: EAN-8, UPC-A, EAN-13 and
+ * GTIN-14.
+ *
+ * The comparison against the column is an equality, so a stray "500" would find
+ * nothing with or without this test. What the length buys is the meaning of the
+ * field: {@link SearchTerm.ean} says "the caller handed us a barcode", which is
+ * what the ranking reads it for, and a quantity somebody typed into the box is
+ * not one.
+ */
+const BARCODE_LENGTHS = new Set([8, 12, 13, 14]);
+
 export interface SearchTerm {
   /** What the caller typed, for the trigram comparisons and the exact test. */
   raw: string;
+  /**
+   * The barcode this query is, when it is one, for an equality test against
+   * `items.ean`. Null for everything typed as words.
+   *
+   * It sits **beside** the text fields rather than replacing them: a query is
+   * matched as a barcode and as text both, so a product whose name is a number
+   * does not stop being findable by name.
+   */
+  ean: string | null;
   /**
    * A `to_tsquery` expression: each word prefix matched, joined with `&`.
    *
@@ -58,5 +82,29 @@ export function parseSearchTerm(query?: string): SearchTerm | null {
   if (words.length === 0) {
     return null;
   }
-  return { raw, tsquery: words.map((word) => `${word}:*`).join(' & ') };
+  return {
+    raw,
+    tsquery: words.map((word) => `${word}:*`).join(' & '),
+    ean: parseBarcode(raw),
+  };
+}
+
+/**
+ * The barcode a query is, or null when it is not one.
+ *
+ * Separators are dropped first, because a code read off a label or pasted from a
+ * receipt arrives with spaces or hyphens between its digit groups while the
+ * column holds the digits alone.
+ *
+ * What is left is compared to the column **exactly**, the same way
+ * `item.findByEan` compares it. Catalog stores the code its source published, so
+ * a search that quietly padded a twelve digit UPC into a thirteen digit EAN
+ * would answer for products the lookup beside it cannot find, and the two would
+ * disagree about what a barcode names.
+ */
+export function parseBarcode(query: string): string | null {
+  const digits = query.replace(/[\s.-]+/g, '');
+  return /^[0-9]+$/.test(digits) && BARCODE_LENGTHS.has(digits.length)
+    ? digits
+    : null;
 }
