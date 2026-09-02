@@ -19,15 +19,15 @@ catalog references those rows.
 
 The export is data only, table by table, in dependency order:
 
-| Table | Why it is in the list |
-| --- | --- |
-| `supermarkets` | the chain |
-| `price_scopes` | a location cannot exist without one to price against |
-| `supermarket_locations` | physical stores, when a store discovery run has been imported |
-| `product_groups` | an item may point at one |
-| `items` | the products |
-| `supermarket_items` | one price per item per scope |
-| `supermarket_location_items` | per store overrides, when there are any |
+| Table                        | Why it is in the list                                         |
+| ---------------------------- | ------------------------------------------------------------- |
+| `supermarkets`               | the chain                                                     |
+| `price_scopes`               | a location cannot exist without one to price against          |
+| `supermarket_locations`      | physical stores, when a store discovery run has been imported |
+| `product_groups`             | an item may point at one                                      |
+| `items`                      | the products                                                  |
+| `supermarket_items`          | one price per item per scope                                  |
+| `supermarket_location_items` | per store overrides, when there are any                       |
 
 `migrations` is deliberately **not** exported. The target's schema belongs to the
 migrations the chart has already run, and carrying that table over would make the
@@ -49,6 +49,24 @@ bash k8s/catalog-seed/export-catalog.sh luna-slot2-catalog-db-1 catalog-seed.sql
 
 It prints a row count per table. Check them before moving on: an export that
 silently wrote nothing looks exactly like a successful one until it is restored.
+
+## Restore BEFORE the reference catalog seed, never after
+
+Plan 0067 adds a second writer of catalog products: a seed that creates the 239
+products the till receipts name, Mercadona included, so a database with no
+harvest still has something real in it. The two agree on identity by barcode, and
+`uq_items_ean` is UNIQUE where not null, so whichever writes second is refused
+for every product they share.
+
+The seed handles that in one direction and only one. It looks each barcode up
+first, so on a database that already holds this dump it adopts the harvested rows
+and creates only the eight products the harvest does not carry. The other
+direction has no such check: restoring this dump onto a database the seed has
+already populated tries to insert a second row for 109 barcodes and fails.
+
+So on any environment where both are wanted, restore this first and let the seed
+run afterwards. On a cluster that means restoring before the deploy that sets
+`lunaShopperBackend.referenceSeed.enabled: true`.
 
 ## Restore into staging, then production
 

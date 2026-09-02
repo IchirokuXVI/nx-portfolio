@@ -738,3 +738,26 @@ lunaShopperBackend:
     enabled: true
     # Command the Job runs inside the service image.
     command: ['node', 'migrate.js']
+
+  # The normalized reference catalog (plan 0067): 162 product groups, the two
+  # chains priced from till receipts, and the group assignment for whatever
+  # harvested Mercadona products the catalog database happens to hold.
+  #
+  # A Job hook of its own rather than a step inside the migration one, because
+  # they are different kinds of thing and fail differently. A migration that does
+  # not run leaves new code on an old schema and must stop the rollout; seed data
+  # that does not arrive leaves a working deployment with less in it. So this Job
+  # runs after the migration hook (a heavier hook-weight) and is the only one of
+  # the two that may be switched off.
+  #
+  # Off by default, which is what makes `values.production.yaml` able to leave it
+  # off without saying anything: the seed is content, and content arriving in
+  # production unattended on every deploy is a decision to take deliberately
+  # rather than inherit. Staging turns it on.
+  #
+  # It is idempotent by derived id and never deletes, so a re-run rewrites the
+  # same rows. It also refuses to overwrite any price whose source is ADMIN, so
+  # turning it on does not cost a hand correction made through the admin surface.
+  referenceSeed:
+    enabled: false
+    command: ['node', 'seed-reference.js']
