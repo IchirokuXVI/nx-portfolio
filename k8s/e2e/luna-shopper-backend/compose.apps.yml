@@ -217,6 +217,14 @@ services:
       CORE_DB_URL: postgres://luna_core:luna_core@core-db:5432/luna_core
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       ZONE_REAPER_ENABLED: 'false'
+      # The basket sweep (plan 0059) is off here for the reason the reaper is: a
+      # timer that finishes baskets underneath a suite is a flake, not a test.
+      # The window is stated beside it because the two share one number and the
+      # claim read still uses it with the sweep off.
+      GENERATED_LIST_CLAIM_WINDOW: 60h
+      GENERATED_LIST_SWEEP_ENABLED: 'false'
+      GENERATED_LIST_SWEEP_INTERVAL: 1h
+      GENERATED_LIST_SWEEP_BATCH: '100'
       # The same two numbers the gateway above is running with (plan 0045,
       # section 6). Core checks them again on the far side of the broker, and the
       # two disagreeing is a recording the gateway accepts and core refuses.

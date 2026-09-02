@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_LIMITS,
+  isLiveGeneratedList,
   LineApprovalStatus,
   OriginUnavailableReason,
   RealtimeEvent,
@@ -18,6 +19,7 @@ import {
 import {
   BelowSettledException,
   ForbiddenException,
+  GeneratedListFinishedException,
   NotFoundException,
   StaleQuantityException,
   ValidationException,
@@ -340,6 +342,15 @@ export class GeneratedListOriginsService {
     req: SetGeneratedListOriginQuantityRequest
   ): Promise<SetGeneratedListOriginQuantityResult> {
     const { list, line, seesZoneData, actorUserId } = await this.resolve(req);
+    if (!isLiveGeneratedList(list.status)) {
+      // Not in plan 0059's table of nine, and refused by its one rule all the
+      // same (section 3.2): this saves the basket line as well as the zone line,
+      // and a household changing what it wants belongs on the list page once
+      // the trip that drew from it is over.
+      throw new GeneratedListFinishedException(
+        'This basket is finished, so what its lines came from cannot be changed'
+      );
+    }
     const quantity = this.checkQuantity(req.quantity, 'quantity');
     this.checkQuantity(req.from, 'from');
 

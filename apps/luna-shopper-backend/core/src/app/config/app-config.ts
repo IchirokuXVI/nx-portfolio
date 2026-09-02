@@ -41,8 +41,9 @@ export const coreValidationSchema = Joi.object({
   ZONE_REAPER_BATCH: Joi.number().integer().min(1).default(200),
 
   /**
-   * How long a basket nobody has shopped goes on claiming its lines (plan 0052,
-   * section 4.1).
+   * How long a basket nobody has finished goes on claiming its lines (plan 0052,
+   * section 4.1), and how old a live basket may get before the sweep finishes it
+   * (plan 0059, section 4).
    *
    * A basket that is neither finished nor archived holds its lines forever, so
    * somebody who generates one on Tuesday and does not go shopping leaves the
@@ -50,13 +51,31 @@ export const coreValidationSchema = Joi.object({
    * than storing it turns that into a question about the basket, and this is the
    * answer: a live basket older than this window claims nothing.
    *
-   * Plan 0052 section 4.1 asks for the retention window plan 0050 section 7
-   * defines, so that there is one number rather than two that can disagree. That
-   * section left retention **unbounded**, so there is no number to borrow and this
-   * is the single definition: a cap or an age based archive, when one lands,
-   * should read this rather than declare a second one beside it.
+   * **Two readers, one number, on purpose.** `LINE_CLAIMS_SQL` stops counting a
+   * basket past this age, and `GeneratedListSweepService` moves it to
+   * `COMPLETED` past the same age. Past the window the claim has already
+   * expired, so the sweep is writing down what the read already believed rather
+   * than changing what anybody sees, and a second number here would be a way for
+   * the status and the claim to disagree. The invariant to keep when changing
+   * it: a live basket never outlives its own claim.
+   *
+   * Sixty hours rather than a flat two days (plan 0059, section 4.3): a basket
+   * generated on Friday evening and shopped on Sunday afternoon is two days later
+   * at a different hour, and `48h` would close it on Sunday morning, before the
+   * shopping. The half day covers the second day whatever time of day the trip
+   * happens, and stops well short of a third. Seven days was plan 0052's
+   * placeholder for a retention window plan 0050 section 7 left unbounded, and
+   * that section still has no number to borrow; a cap or an age based archive,
+   * when one lands, should read this rather than declare another beside it.
    */
-  GENERATED_LIST_CLAIM_WINDOW: Joi.string().default('7d'),
+  GENERATED_LIST_CLAIM_WINDOW: Joi.string().default('60h'),
+
+  // The sweep (plan 0059, section 4): finishes live baskets older than the claim
+  // window, one `update` each so the household hears the release. Switched the
+  // same way the zone reaper above is, and on by default like it.
+  GENERATED_LIST_SWEEP_ENABLED: Joi.boolean().default(true),
+  GENERATED_LIST_SWEEP_INTERVAL: Joi.string().default('1h'),
+  GENERATED_LIST_SWEEP_BATCH: Joi.number().integer().min(1).default(100),
 
   /**
    * The voice comment caps (plan 0045, section 6).
@@ -99,8 +118,17 @@ export interface CoreConfig {
     batchSize: number;
   };
   generatedList: {
-    /** A live basket older than this claims nothing (plan 0052, section 4.1). */
+    /**
+     * A live basket older than this claims nothing (plan 0052, section 4.1) and
+     * is finished by the sweep (plan 0059, section 4.2). One number for both.
+     */
     claimWindowMs: number;
+    sweep: {
+      enabled: boolean;
+      intervalMs: number;
+      /** A cap per tick, not per run: whatever is left waits for the next one. */
+      batchSize: number;
+    };
   };
   voiceComment: {
     maxBytes: number;
@@ -146,6 +174,13 @@ export const coreConfiguration = registerAs(
       claimWindowMs: parseDurationMs(
         process.env.GENERATED_LIST_CLAIM_WINDOW as string
       ),
+      sweep: {
+        enabled: process.env.GENERATED_LIST_SWEEP_ENABLED !== 'false',
+        intervalMs: parseDurationMs(
+          process.env.GENERATED_LIST_SWEEP_INTERVAL as string
+        ),
+        batchSize: Number(process.env.GENERATED_LIST_SWEEP_BATCH),
+      },
     },
     voiceComment: {
       maxBytes: Number(

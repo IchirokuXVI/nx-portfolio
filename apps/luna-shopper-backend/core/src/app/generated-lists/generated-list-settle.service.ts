@@ -1,14 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  isLiveGeneratedList,
   NO_LINE_CLAIM,
   RealtimeEvent,
   SettlementOutcome,
   type GeneratedListAllocationEntry,
   type GeneratedListLineMovedEvent,
+  type GeneratedListSettlementRef,
   type GeneratedListSettleResult,
   type GeneratedListSettleSkip,
-  type GeneratedListSettlementRef,
   type LineClaim,
   type LineSettlementSummary,
   type SettleGeneratedListLineRequest,
@@ -16,6 +17,7 @@ import {
 import {
   ConflictException,
   ForbiddenException,
+  GeneratedListFinishedException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -94,6 +96,16 @@ export class GeneratedListSettleService {
     });
     if (!list) {
       throw new NotFoundException('Generated list not found');
+    }
+    if (!isLiveGeneratedList(list.status)) {
+      // The write that matters most (plan 0059, section 3.1): a finished trip
+      // that still took settlements could write into a household's zone lines
+      // days after the shopper went home, from a link shared with somebody who
+      // is no longer shopping. Its own code, so the screen can say the trip is
+      // over rather than that something failed.
+      throw new GeneratedListFinishedException(
+        'This basket is finished, so nothing more can be settled in it'
+      );
     }
     const line = await this.lines.findOne({
       where: { id: req.lineId, generatedListId: list.id },

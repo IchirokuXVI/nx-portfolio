@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GeneratedLineOrigin,
+  isLiveGeneratedList,
   RealtimeEvent,
   type AddGeneratedListLineRequest,
   type GeneratedListLineIdRequest,
@@ -12,6 +13,7 @@ import {
   type UpdateGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  GeneratedListFinishedException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -37,6 +39,24 @@ import { LineClaimService } from './line-claim.service';
 
 /** Answered for a line that is not on the basket the request named. */
 const NO_SUCH_LINE = 'Generated list line not found';
+
+/**
+ * A finished basket refuses every write, the owner's included (plan 0059,
+ * section 3.2). The owner's remedy is to unfinish it, which is one write and is
+ * already built, rather than a special case that lets a finished trip be edited
+ * while everybody else looks at a screen that disagrees with itself.
+ *
+ * Checked on the row the caller already holds, never re-read: every write here
+ * loads the basket first, and a helper that fetched it again would add a query
+ * per write to save three lines.
+ */
+function requireLive(list: GeneratedList): void {
+  if (!isLiveGeneratedList(list.status)) {
+    throw new GeneratedListFinishedException(
+      'This basket is finished, so its lines cannot be edited'
+    );
+  }
+}
 
 /**
  * What a write back created: the zone line, the zone it landed in, and what it
@@ -119,6 +139,7 @@ export class GeneratedListLineService {
       req.userId,
       req.generatedListId
     );
+    requireLive(list);
     const content = checkContent(req.content);
     const quantity = checkQuantity(req.quantity ?? 1);
     const target =
@@ -183,6 +204,7 @@ export class GeneratedListLineService {
       req.userId,
       req.generatedListId
     );
+    requireLive(list);
     const line = await this.loadLine(list.id, req.lineId);
 
     if (req.content !== undefined) {
@@ -228,6 +250,7 @@ export class GeneratedListLineService {
       req.userId,
       req.generatedListId
     );
+    requireLive(list);
     const line = await this.loadLine(list.id, req.lineId);
     // Read before the delete, because the provenance rows cascade with it (plan
     // 0052, section 3.3). Taking a line out of the basket is the "I decided not
@@ -253,6 +276,7 @@ export class GeneratedListLineService {
       req.userId,
       req.generatedListId
     );
+    requireLive(list);
     const lines = await this.lines.find({
       where: { generatedListId: list.id },
     });

@@ -540,6 +540,12 @@ PORT=${CORE_PORT}
 # reached the broker without passing the interceptor.
 VOICE_COMMENT_MAX_BYTES=2097152
 VOICE_COMMENT_CONTENT_TYPES=
+# One number, two readers (plans 0052 and 0059): a live basket older than this
+# claims none of its lines, and the sweep finishes it at the same age.
+GENERATED_LIST_CLAIM_WINDOW=60h
+GENERATED_LIST_SWEEP_ENABLED=true
+GENERATED_LIST_SWEEP_INTERVAL=1h
+GENERATED_LIST_SWEEP_BATCH=100
 EOF
   telemetry_env core >> "$root/apps/luna-shopper-backend/core/.env"
 

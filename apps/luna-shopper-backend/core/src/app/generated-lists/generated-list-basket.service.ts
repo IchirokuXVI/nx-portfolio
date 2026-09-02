@@ -171,6 +171,15 @@ export class GeneratedListBasketService {
   ): Promise<GeneratedListBasketLineView> {
     const { list, seesZoneData } = await this.resolve(req);
 
+    if (!isLiveGeneratedList(list.status)) {
+      // A finished basket refuses every write (plan 0059, section 3.2), and a
+      // pick is one: it moves the product the row names, which is what the
+      // receipt a finished trip has become would then misreport.
+      throw new GeneratedListFinishedException(
+        'This basket is finished, so its picks cannot be changed'
+      );
+    }
+
     const line = await this.lines.findOne({
       where: { id: req.lineId, generatedListId: list.id },
     });

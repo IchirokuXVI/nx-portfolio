@@ -5,6 +5,7 @@ import { ProfileService } from '../profiles/profile.service';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBindService } from './generated-list-bind.service';
+import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListService } from './generated-list.service';
 import { GeneratedListsModule } from './generated-lists.module';
 
@@ -61,6 +62,15 @@ describe('GeneratedListsModule wiring', () => {
     // is still one worth catching in a second rather than in CI's stack.
     expect(providersOf(GeneratedListsModule)).toContain(
       GeneratedListBindService
+    );
+  });
+
+  it('provides the sweep, which nothing injects and Nest alone would start', () => {
+    // Plan 0059's backstop has no caller: it is a timer that Nest starts on
+    // bootstrap, so a missing provider is not a failed injection anywhere but a
+    // sweep that silently never runs and baskets that stay live for ever.
+    expect(providersOf(GeneratedListsModule)).toContain(
+      GeneratedListSweepService
     );
   });
 

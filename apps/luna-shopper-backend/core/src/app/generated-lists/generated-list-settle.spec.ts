@@ -1,4 +1,5 @@
 import {
+  GeneratedListStatus,
   ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
@@ -259,7 +260,11 @@ function build(options: {
   const service = new GeneratedListSettleService(
     dataSource,
     {
-      findOne: async () => ({ id: BASKET, ownerUserId: OWNER }),
+      findOne: async () => ({
+        id: BASKET,
+        ownerUserId: OWNER,
+        status: GeneratedListStatus.ACTIVE,
+      }),
     } as never,
     { findOne: async () => basketLine } as never,
     {
