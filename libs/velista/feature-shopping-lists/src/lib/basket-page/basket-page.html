@@ -189,10 +189,14 @@
             <li>
               <lib-basket-line-row
                 (open)="openLine(line)"
+                (reopen)="reopenLine(line)"
+                (settle)="settleLine(line)"
                 [busy]="isBusy(line)"
+                [canReopen]="canReopen"
                 [line]="line"
                 [listNames]="listNames()"
                 [meId]="meId()"
+                [ownName]="ownName()"
                 [people]="participantsById()"
                 [products]="products()"
               />

@@ -8,6 +8,8 @@ import { LineSettlements1756000800000 } from './1756000800000-LineSettlements';
 import { GeneratedLists1756001000000 } from './1756001000000-GeneratedLists';
 import { GeneratedListSharing1756001100000 } from './1756001100000-GeneratedListSharing';
 import { SettlementParticipants1756001200000 } from './1756001200000-SettlementParticipants';
+import { ParticipantUsernameAndReopen1756001300000 } from './1756001300000-ParticipantUsernameAndReopen';
+import { BasketLineAuthor1756001400000 } from './1756001400000-BasketLineAuthor';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -30,7 +32,17 @@ export const CORE_MIGRATIONS = [
   LineSettlements1756000800000,
   GeneratedLists1756001000000,
   GeneratedListSharing1756001100000,
-  // Last, because it alters plan 0047's table rather than creating one of its
-  // own, so it has to run after whichever migration did (plan 0051, section 10).
+  // Last of plan 0051's, because it alters plan 0047's table rather than
+  // creating one of its own, so it has to run after whichever migration did
+  // (plan 0051, section 10).
   SettlementParticipants1756001200000,
+  // Additive on both tables plan 0051 left behind, so it follows them (plan
+  // 0054, section 5).
+  ParticipantUsernameAndReopen1756001300000,
+  // Additive on the lines table `GeneratedLists1756001000000` created, so it
+  // follows that (plan 0055, section 8). It took the next timestamp rather than
+  // 0054's because that plan landed first and the two were written in parallel;
+  // they touch different columns and neither depends on the other, so the order
+  // between them is only the order they arrived in.
+  BasketLineAuthor1756001400000,
 ];

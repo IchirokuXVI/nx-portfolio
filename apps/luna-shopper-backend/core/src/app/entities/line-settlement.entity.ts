@@ -123,6 +123,36 @@ export class LineSettlement {
   settledAt!: Date;
 
   /**
+   * When somebody took this settlement back, or null while it stands (plan
+   * 0054, section 3.3).
+   *
+   * **A settlement is an append, and a reopen does not delete one.** The row
+   * stays, marked, because "somebody said they got this and then took it back"
+   * is a truer history than a gap, and because the alternative, a compensating
+   * row carrying a negative quantity, would make every existing sum over
+   * {@link quantity} wrong until it was taught about signs. A nullable timestamp
+   * changes each of those by one `WHERE` clause instead.
+   *
+   * So a reverted row is excluded from every consumption total and is still
+   * served by the settlement history. The partial index the migration adds is
+   * what keeps that exclusion off a sequential scan.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  revertedAt!: Date | null;
+
+  /**
+   * Who took it back, when somebody did (plan 0054, section 3.3).
+   *
+   * A participant, always, and never a user, for the reason
+   * {@link settledByParticipantId} is: a reopen happens on a basket, where every
+   * actor is a participant. It carries the same check constraint shape and the
+   * same absence of a foreign key, since a settlement is a zone fact that must
+   * outlive the basket it came off.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  revertedByParticipantId!: string | null;
+
+  /**
    * The basket line this came off, when it came off one (plan 0051).
    *
    * Written by nothing in plan 0047, where every settle comes straight from the

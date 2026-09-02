@@ -61,6 +61,13 @@ export const ERROR_CATALOG: Record<
     en: 'Add a postal code or choose a supermarket to see prices.',
     es: 'Añade un código postal o elige un supermercado para ver precios.',
   },
+  // Phrased as a fact about the trip rather than as a failure of the tap, so the
+  // shopper is told what is true instead of that something went wrong (plan
+  // 0055, section 3.3).
+  [ERROR_CODES.GENERATED_LIST_FINISHED]: {
+    en: 'This basket is finished, so nothing more can be added to it.',
+    es: 'Esta cesta está terminada, así que no se puede añadir nada más.',
+  },
   // Both carry their number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is
   // actionable and "that failed" is not (plan 0057, sections 5 and 5.2).

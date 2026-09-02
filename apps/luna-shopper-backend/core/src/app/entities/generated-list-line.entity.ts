@@ -80,6 +80,23 @@ export class GeneratedListLine extends BaseEntity {
   position!: number;
 
   /**
+   * Who **put this line here**, written once and never afterwards (plan 0055,
+   * section 4).
+   *
+   * A second column beside {@link lastEditedByParticipantId} rather than a reuse
+   * of it, because that one moves: the moment anybody settles the line, or edits
+   * its quantity, or swaps its product, it becomes them. "Who put this on the
+   * list" is the question a shop full of people actually asks about a line
+   * nobody recognises, and after one settle the other column cannot answer it.
+   *
+   * Null for every line the run composed, which is honest rather than missing: a
+   * `DERIVED` line was put there by the generation, and the person who ran the
+   * generation is the owner, who is already named on the basket.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  createdByParticipantId!: string | null;
+
+  /**
    * Who touched this line last, written by every edit and every settle (plan
    * 0051, section 8).
    *

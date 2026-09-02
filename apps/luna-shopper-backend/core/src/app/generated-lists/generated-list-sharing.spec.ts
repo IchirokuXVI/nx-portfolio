@@ -6,10 +6,7 @@ import {
 import { DomainException } from '@portfolio/luna-shopper/platform';
 import { createHash } from 'node:crypto';
 import type { DataSource } from 'typeorm';
-import {
-  GeneratedListParticipant,
-  GeneratedListShareLink,
-} from '../entities';
+import { GeneratedListParticipant, GeneratedListShareLink } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import {
@@ -52,18 +49,20 @@ function hash(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
-function build(options: {
-  status?: GeneratedListStatus;
-  /** Seeded links, newest last. */
-  links?: Partial<GeneratedListShareLink>[];
-  participants?: Partial<GeneratedListParticipant>[];
-  /** Source lists the basket's provenance rows point at. */
-  sourceLists?: { listId: string; zoneId: string }[];
-  /** userId -> the lists that user may write, at request time. */
-  writable?: Record<string, string[]>;
-  /** Make the next link insert lose the partial unique index. */
-  loseTheLinkRace?: Partial<GeneratedListShareLink>;
-} = {}): Harness {
+function build(
+  options: {
+    status?: GeneratedListStatus;
+    /** Seeded links, newest last. */
+    links?: Partial<GeneratedListShareLink>[];
+    participants?: Partial<GeneratedListParticipant>[];
+    /** Source lists the basket's provenance rows point at. */
+    sourceLists?: { listId: string; zoneId: string }[];
+    /** userId -> the lists that user may write, at request time. */
+    writable?: Record<string, string[]>;
+    /** Make the next link insert lose the partial unique index. */
+    loseTheLinkRace?: Partial<GeneratedListShareLink>;
+  } = {}
+): Harness {
   const links = [...(options.links ?? [])];
   const participants = [...(options.participants ?? [])];
   const events: Harness['events'] = [];
@@ -194,10 +193,14 @@ function build(options: {
 
   const manager = {
     query,
-    find: async (entity: unknown, { where }: { where: Record<string, unknown> }) =>
-      rowsOf(entity).filter((row) => matches(row, where)),
-    count: async (entity: unknown, { where }: { where: Record<string, unknown> }) =>
-      rowsOf(entity).filter((row) => matches(row, where)).length,
+    find: async (
+      entity: unknown,
+      { where }: { where: Record<string, unknown> }
+    ) => rowsOf(entity).filter((row) => matches(row, where)),
+    count: async (
+      entity: unknown,
+      { where }: { where: Record<string, unknown> }
+    ) => rowsOf(entity).filter((row) => matches(row, where)).length,
     create: (_entity: unknown, data: Partial<GeneratedListParticipant>) => ({
       ...data,
     }),
@@ -220,7 +223,8 @@ function build(options: {
   };
 
   const dataSource = {
-    transaction: async (fn: (m: typeof manager) => Promise<unknown>) => fn(manager),
+    transaction: async (fn: (m: typeof manager) => Promise<unknown>) =>
+      fn(manager),
   } as unknown as DataSource;
 
   const service = new GeneratedListSharingService(
@@ -302,7 +306,10 @@ describe('a basket has zero share links or one (section 3)', () => {
   it('is not found for somebody else, never forbidden', async () => {
     const harness = build();
     await expect(
-      harness.service.ensureLink({ userId: OTHER_USER, generatedListId: BASKET })
+      harness.service.ensureLink({
+        userId: OTHER_USER,
+        generatedListId: BASKET,
+      })
     ).rejects.toBeInstanceOf(DomainException);
   });
 });
@@ -336,10 +343,15 @@ describe('the link preview discloses nothing (section 4, step 1)', () => {
       userId: OWNER,
       generatedListId: BASKET,
     });
-    await harness.service.revokeLink({ userId: OWNER, generatedListId: BASKET });
+    await harness.service.revokeLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
 
     const revoked = await harness.service.preview({ secret: link.secret });
-    const fictional = await harness.service.preview({ secret: 'never-existed' });
+    const fictional = await harness.service.preview({
+      secret: 'never-existed',
+    });
 
     expect(revoked).toEqual({ joinable: false });
     expect(fictional).toEqual({ joinable: false });
@@ -507,9 +519,7 @@ describe('a registered person is attached once, however many links (section 4)',
 
     expect(joined.participant.kind).toBe(ParticipantKind.OWNER);
     expect(
-      harness.participants.filter(
-        (p) => p.kind === ParticipantKind.OWNER
-      )
+      harness.participants.filter((p) => p.kind === ParticipantKind.OWNER)
     ).toHaveLength(1);
   });
 
@@ -536,6 +546,149 @@ describe('a registered person is attached once, however many links (section 4)',
   });
 });
 
+describe('a participant carries the account holder’s name (plan 0054, section 2)', () => {
+  it('names the owner on the row sharing mints for them', async () => {
+    const harness = build();
+
+    await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+      username: 'Swift Sail',
+    });
+
+    const owner = harness.participants.find(
+      (row) => row.kind === ParticipantKind.OWNER
+    );
+    expect(owner?.username).toBe('Swift Sail');
+    // The typed name stays empty: the owner never went through a join screen,
+    // and the two are different facts rather than one field with two sources.
+    expect(owner?.displayName).toBeNull();
+  });
+
+  it('backfills an owner row that predates the plan, on the next share', async () => {
+    // The same lazy repair plan 0051 chose for the row existing at all: nothing
+    // else can supply the name, and this is one of the two calls that carry one.
+    const harness = build({
+      participants: [
+        {
+          id: 'p-owner',
+          generatedListId: BASKET,
+          kind: ParticipantKind.OWNER,
+          userId: OWNER,
+          displayName: null,
+          username: null,
+        },
+      ],
+    });
+
+    await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+      username: 'Swift Sail',
+    });
+
+    expect(harness.participants[0].username).toBe('Swift Sail');
+  });
+
+  it('names the owner from the participants read as well, unshared basket included', async () => {
+    // The share sheet reads this whether or not anybody has pressed share, so an
+    // owner who has never minted a link is still named on the screen listing
+    // them (section 2.3).
+    const harness = build();
+
+    const people = await harness.service.listParticipants({
+      generatedListId: BASKET,
+      userId: OWNER,
+      username: 'Swift Sail',
+    });
+
+    expect(people.participants).toHaveLength(1);
+    expect(people.participants[0].username).toBe('Swift Sail');
+  });
+
+  it('names a signed in joiner, who never sees the name prompt', async () => {
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+
+    const joined = await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+      username: 'Quiet Lantern',
+    });
+
+    expect(joined.participant.username).toBe('Quiet Lantern');
+    // Plan 0044 section 3 takes them through the screen without asking, so the
+    // typed name is null and the client has something to draw all the same.
+    expect(joined.participant.displayName).toBeNull();
+  });
+
+  it('keeps a typed name beside the account name when they typed one', async () => {
+    // Section 2.4: a signed in participant may still type a name, and if they do
+    // it wins, because they said it on purpose.
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+
+    const joined = await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+      username: 'Quiet Lantern',
+      displayName: 'Dani',
+    });
+
+    expect(joined.participant.displayName).toBe('Dani');
+    expect(joined.participant.username).toBe('Quiet Lantern');
+  });
+
+  it('never puts one on a guest, whatever the message said', async () => {
+    // There is no account behind them for it to be the name of, and a username
+    // on a guest row would make an unverified name look like a verified one.
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+
+    const joined = await harness.service.join({
+      secret: link.secret,
+      username: 'Quiet Lantern',
+      displayName: 'Dani',
+    });
+
+    expect(joined.participant.kind).toBe(ParticipantKind.GUEST);
+    expect(joined.participant.username).toBeNull();
+  });
+
+  it('does not rename anybody retroactively', async () => {
+    // Section 2.4. A username is a snapshot taken at join time, as a zone
+    // membership's is, so somebody who renames their account keeps the old name
+    // on baskets they have already joined.
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+      username: 'Quiet Lantern',
+    });
+
+    const again = await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+      username: 'Renamed Since',
+    });
+
+    expect(again.participant.username).toBe('Quiet Lantern');
+  });
+});
+
 describe('the three revoke levels (section 3.4)', () => {
   async function shared() {
     const harness = build();
@@ -550,7 +703,10 @@ describe('the three revoke levels (section 3.4)', () => {
 
   it('revoking the link stops new joins and evicts nobody', async () => {
     const { harness, link, one } = await shared();
-    await harness.service.revokeLink({ userId: OWNER, generatedListId: BASKET });
+    await harness.service.revokeLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
 
     await expect(
       harness.service.join({ secret: link.secret })
@@ -638,7 +794,10 @@ describe('the three revoke levels (section 3.4)', () => {
 
   it('sharing again after a revoke mints a fresh link', async () => {
     const { harness, link } = await shared();
-    await harness.service.revokeLink({ userId: OWNER, generatedListId: BASKET });
+    await harness.service.revokeLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
     const fresh = await harness.service.ensureLink({
       userId: OWNER,
       generatedListId: BASKET,
@@ -697,7 +856,10 @@ describe('what a participant may see (section 5.2)', () => {
 
   it('lets the owner see it by construction (section 2)', async () => {
     const harness = build({ sourceLists: sources, writable: {} });
-    await harness.service.ensureLink({ userId: OWNER, generatedListId: BASKET });
+    await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
 
     const context = await harness.service.resolveParticipant({
       generatedListId: BASKET,

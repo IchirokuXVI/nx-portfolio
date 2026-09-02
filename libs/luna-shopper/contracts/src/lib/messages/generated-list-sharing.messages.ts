@@ -85,6 +85,20 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    */
   settleLine: 'generatedList.settleLine',
   /**
+   * Take a settled basket line back to outstanding (plan 0054, section 3).
+   *
+   * The reverse of {@link settleLine} and not a second kind of settle: it puts
+   * back every unit this basket line took off an origin list, and marks the
+   * settlements that took them rather than deleting them, because a settlement
+   * is an append (plan 0047, section 3) and "somebody said they got this and
+   * then took it back" is a truer history than a gap.
+   *
+   * Whole line rather than a number of units, because that is the gesture the
+   * control makes and because a partial reopen has no honest answer to which of
+   * several settlements it is undoing.
+   */
+  reopenLine: 'generatedList.reopenLine',
+  /**
    * The basket as a **participant** sees it (section 5).
    *
    * Separate from `generatedList.get`, which resolves a basket by its owner's id
@@ -103,6 +117,29 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * exactly who wants another brand.
    */
   setPick: 'generatedList.setPick',
+  /**
+   * Put a line in the basket, as any live participant (plan 0055, section 3).
+   *
+   * Distinct from `generatedList.addLine`, which resolves a basket by its
+   * owner's id and therefore cannot answer the guest in the aisle who remembers
+   * the milk. It is the same distinction `basketGet` draws against
+   * `generatedList.get`, and it is the whole of plan 0055's first half.
+   *
+   * The line is created `ADDED` with no target, so it lives in the basket and
+   * nowhere else. That is what makes it safe to hand to a stranger: it names no
+   * zone, claims no zone line, and emits no zone event.
+   */
+  addLine: 'generatedList.basket.addLine',
+  /**
+   * Where a search inside this basket should be priced (plan 0055, section 5.1).
+   *
+   * Core answers what the **run** was composed against and catalog answers what
+   * that means today, which is the split plan 0049 section 2.1 already draws for
+   * an account holder's own search. The caller's own profile is deliberately not
+   * consulted: a guest has none, and a registered participant's would rank a
+   * stranger's basket by a different city's shops.
+   */
+  searchScope: 'generatedList.basket.searchScope',
   /**
    * What a basket line is made of: the lists that contributed to it, and the
    * lists holding the same thing that did not (plan 0057, section 3).
@@ -210,6 +247,31 @@ export interface GeneratedListParticipantView {
   kind: ParticipantKind;
   /** Null when a guest skipped the prompt; the client renders `Guest N`. */
   displayName: string | null;
+  /**
+   * The account holder's own name, for an `OWNER` or a `REGISTERED` participant
+   * (plan 0054, section 2).
+   *
+   * A **separate field from {@link displayName}** rather than a value written
+   * into it, because they are different facts: one is unverified text typed on
+   * an unauthenticated link, the other is an account's own name. Merging them
+   * would make a guest's typed "Dani" indistinguishable on the wire from an
+   * account called Dani, which is the distinction section 3.5 rests on.
+   *
+   * Null for a `GUEST`, who has no account, and null on a row that predates the
+   * plan until the next share backfills it. A client shows `displayName` first
+   * when the person typed one, because they said it on purpose.
+   *
+   * Served to every reader of the basket, guests included, and that is a
+   * deliberate disclosure: the people on one basket are shopping together and
+   * already see each other's faces, join times and typed names. What stays
+   * private is everything on the other side of the all or nothing rule, and a
+   * username is not zone data.
+   *
+   * A **snapshot taken at join time**, as a zone membership's is: somebody who
+   * changes their account name keeps the old one on baskets they have already
+   * joined, because the alternative is a join at read time.
+   */
+  username: string | null;
   /** Monotonic per basket, so the fallback label is stable. Guests only. */
   guestNumber: number | null;
   /** Set for `OWNER` and `REGISTERED`, null for a `GUEST`. */
@@ -390,6 +452,17 @@ export interface EnsureShareLinkRequest extends GeneratedListShareRequest {
    * explicit null asks for no expiry, which the service still caps.
    */
   expiresAt?: string | null;
+  /**
+   * The owner's own account name, so the row this call creates for them carries
+   * it (plan 0054, section 2.3).
+   *
+   * Sharing is where the owner's participant row is minted, lazily, so it is
+   * where the name has to arrive: core owns no usernames and the gateway holds
+   * the token that resolves one. An owner row that predates the plan is
+   * backfilled here on the next share, which is the same lazy repair plan 0051
+   * chose for the row's existence in the first place.
+   */
+  username?: string | null;
 }
 
 /**
@@ -429,6 +502,16 @@ export interface JoinGeneratedListRequest {
   displayName?: string;
   /** Set only when the caller presented a valid account token. */
   userId?: string;
+  /**
+   * The account holder's own name, resolved by the gateway from the verified
+   * token (plan 0054, section 2.3).
+   *
+   * **Core is told the name and never asks for it**, which is plan 0018
+   * section 9's rule for `CreateZoneRequest.username` applied unchanged: core
+   * owns no usernames and may not reach into auth for one. Null or absent for a
+   * guest, who has no account behind them.
+   */
+  username?: string | null;
   /** Captured at join, shown on tap to readers who pass section 5.2 alone. */
   userAgent?: string;
 }
@@ -475,6 +558,15 @@ export interface ListParticipantsRequest {
    * which passes by construction.
    */
   asParticipantId?: string;
+  /** The owner asking through an account authenticated route. */
+  userId?: string;
+  /**
+   * That owner's account name, for the same reason
+   * {@link EnsureShareLinkRequest.username} carries it (plan 0054,
+   * section 2.3): this read mints the owner's row when it is missing, so it is
+   * the second place a name can reach a row nobody else can name.
+   */
+  username?: string | null;
 }
 
 /** The people on a basket, newest last, revoked ones omitted. */
@@ -625,6 +717,55 @@ export interface GeneratedListSettleResult {
   skipped?: GeneratedListSettleSkip[];
 }
 
+// --- Reopening a settled line ----------------------------------------------
+
+/**
+ * Take a settled basket line back to outstanding (plan 0054, section 3).
+ *
+ * The whole line, so there is no quantity to send: a partial reopen has no
+ * honest answer to which of several settlements it is undoing, and the control
+ * on the row is a switch rather than a dial.
+ *
+ * ## Who may
+ *
+ * **The same authorization the settle has, and no more**: any live participant,
+ * guests included (section 3.5). A reopen is not a wider act than a settle, it
+ * touches exactly the origins this basket line's own settlements touched, and
+ * refusing it to the person who just made the mistake would leave the mistake
+ * standing.
+ */
+export interface ReopenGeneratedListLineRequest {
+  generatedListId: string;
+  /** The basket line, not the zone line. */
+  lineId: string;
+  /** The actor, resolved from their credential by the gateway's guard. */
+  participantId: string;
+}
+
+/**
+ * What one reopen did, projected for the participant who did it (plan 0054,
+ * section 3.5).
+ *
+ * **It names nothing**, which is why it is a smaller shape than
+ * {@link GeneratedListSettleResult} rather than the same one: the line and a
+ * count of origins it could not reach, with no settlement refs and no list
+ * names. That is what lets the act itself sit outside the all or nothing rule,
+ * which gates naming zone data rather than touching it.
+ *
+ * {@link skippedCount} is the same report {@link GeneratedListSettleResult}
+ * makes with the names taken out (plan 0051, section 6.4): an origin whose zone
+ * line has since been deleted has nothing to put back, and the caller has to
+ * know something did not land.
+ */
+export interface GeneratedListReopenResult {
+  line: GeneratedListBasketLineView;
+  /**
+   * How many origins this act could not put units back on. Always present, for
+   * every reader, because the fact is the actor's business.
+   */
+  skippedCount: number;
+}
+
 /**
  * What the basket's own room hears when a line moves (plan 0051, section 10):
  * a settle, or a pick swapped at the shelf.
@@ -677,6 +818,22 @@ export interface GeneratedListBasketLineView {
   /** The products the pick may be switched between. Catalog data, never zone data. */
   options: string[];
   position: number;
+  /**
+   * Who **put this line here**, written once and never afterwards (plan 0055,
+   * section 4).
+   *
+   * A second field beside {@link lastEditedByParticipantId} rather than a reuse
+   * of it, because they answer different questions and that one moves: the
+   * moment anybody settles the line, or edits its quantity, or swaps its
+   * product, `lastEditedBy` becomes them. "Who put this on the list" is the
+   * question a shop full of people actually asks about a line nobody
+   * recognises, and after one settle the other column can no longer answer it.
+   *
+   * Null for every line the run composed, which is honest rather than missing: a
+   * `DERIVED` line was put there by the generation, and the person who ran the
+   * generation is the owner, who is already named on the basket.
+   */
+  createdByParticipantId: string | null;
   /**
    * Who last edited or settled this line, so the row can say who got the bread
    * (plan 0044, section 4.3).
@@ -1001,6 +1158,90 @@ export interface SetGeneratedListOriginQuantityResult {
    * line already below what it contributed lands at zero rather than below it.
    */
   listQuantity: number;
+}
+
+// --- A participant adds a line, and searches for one (plan 0055) -----------
+
+/**
+ * Put a line in the basket, as any live participant (plan 0055, section 3).
+ *
+ * ## Why a guest may do this at all
+ *
+ * Because the alternative is worse and because it costs nothing. The rule plan
+ * 0050 section 5 protects is that **a basket never changes a shared list unless
+ * somebody says which one**, and an added line has no target, so it changes
+ * nothing shared. It is a note the shopper wrote on the list they are carrying,
+ * and the household sees it only if somebody with an account and the access
+ * binds it later, which is plan `0058`.
+ *
+ * The disclosure runs the other way too: a guest typing "batteries" tells the
+ * basket nothing about any household, and the line they created carries no list
+ * name for anybody to read.
+ *
+ * ## No `userId`, and no `targetListId`
+ *
+ * The participant id is the whole of the identity, exactly as it is for
+ * {@link GetGeneratedListBasketRequest}. A target list is **refused on this
+ * surface** rather than accepted and ignored: binding a basket line to a
+ * shopping list is a gesture with a list picker in front of it, and plan `0058`
+ * owns it.
+ */
+export interface AddGeneratedListParticipantLineRequest {
+  generatedListId: string;
+  /** The actor, resolved from their credential by the gateway's guard. */
+  participantId: string;
+  content: string;
+  /** Defaults to one. A line you do not want is not a gesture anybody makes. */
+  quantity?: number;
+  /** The pick, when the composer offered one and the shopper took it. */
+  itemId?: string;
+  /** The product set a group suggestion attaches (plan 0048, section 1.1). */
+  options?: string[];
+}
+
+/**
+ * Where a search inside a basket is priced (plan 0055, section 5.1).
+ *
+ * What **core** can answer, which is what the run was composed against; catalog
+ * turns it into scope ids, and the gateway is what asks both. The same split
+ * plan 0049 section 2.1 draws, applied to a reader who may hold no account.
+ *
+ * ## Why the owner is named
+ *
+ * The snapshot's profile is the **owner's**, so it can only be resolved as them,
+ * and the search that follows runs as the basket's own account would have run
+ * it. It is a gateway-internal value and reaches no client: nothing on the
+ * participant surface has ever carried a user id, and section 5.2's whole point
+ * is that a guest learns no household's business from a catalog read.
+ */
+export interface GeneratedListBasketScope {
+  /** The account the basket belongs to, for the reads the gateway makes next. */
+  ownerUserId: string;
+  /**
+   * The run's profile, or null when the snapshot named none.
+   *
+   * Null is section 5.1's third row rather than an error: the search runs
+   * unscoped, so it answers with products and no prices. A dropdown that names
+   * the right thing without a price beats one that refuses to open.
+   */
+  profileId: string | null;
+}
+
+/**
+ * A line was **added** to a basket (plan 0055, section 8), on the basket's own
+ * room.
+ *
+ * Its own event rather than a {@link GeneratedListLineMovedEvent}, because a
+ * client receiving one would have to decide whether to replace a row or append
+ * one, and that decision is exactly what the event name is for.
+ *
+ * Redacted to the least privileged reader in the room like everything else
+ * broadcast there, and it costs nothing here: an `ADDED` line has no origins and
+ * no target, so a guest's projection of it is the whole of it.
+ */
+export interface GeneratedListLineAddedEvent {
+  generatedListId: string;
+  line: GeneratedListBasketLineView;
 }
 
 // --- Presence --------------------------------------------------------------

@@ -154,6 +154,32 @@ export class CircleIcon {
   );
 }
 
+/**
+ * A circle half filled: a line somebody has got some of, and not all of.
+ *
+ * The third weight between `CircleIcon` and `CheckFilledIcon`, and it is a weight
+ * rather than a colour on purpose (plan 0044, section 7): the three states of a
+ * basket row have to be told apart at a glance in a moving hand and in a bright
+ * aisle, so empty, half and full is the difference, and never the hue.
+ *
+ * The fill is a semicircle rather than an arc of progress. A basket line's outstanding
+ * amount is a number the row already draws beside this, and a glyph that tried to draw
+ * the same fraction would be a second, less precise copy of it that could disagree.
+ */
+@Component({
+  selector: 'lib-half-circle-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class HalfCircleIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./half-circle-icon.svg?raw')
+  );
+}
+
 /** A line the shop did not have. */
 @Component({
   selector: 'lib-x-circle-icon',

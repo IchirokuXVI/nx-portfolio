@@ -16,6 +16,17 @@
   color: var(--app-action-quiet-fg);
 }
 
+// What happened, where "0 outstanding" used to be (plan 0052, section 7.1).
+//
+// Quieter than the count it replaces, and that is the point of the difference: the
+// count is a thing still to do and takes the accent, this is a record of something
+// already done and takes muted copy.
+.happened {
+  margin: var(--app-space-1) 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
 .pane-title {
   margin: var(--app-space-2) 0 0;
   font-size: var(--app-text-base);
@@ -259,11 +270,26 @@
   color: var(--app-status-danger-fg);
 }
 
+// The support reference, on its own line under the sentence. Quiet and monospaced,
+// because it is a string somebody copies rather than reads.
+.reference {
+  display: block;
+  margin-block-start: var(--app-space-1);
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
 // --- What happened to this line ---------------------------------------------
 
 // The way into the history, from the settle pane. A link rather than a button
 // shape: it goes somewhere to read rather than doing anything to the line, and
 // three button shaped controls above it are already competing for the thumb.
+//
+// **Not underlined** (plan 0052, section 8). It is a button, it is already drawn in
+// `--app-action-quiet-fg` against secondary copy, it is already a full width row
+// with a 44px target, and nothing else in this app underlines a control. The rule
+// was borrowed from the shape of a hyperlink for something that is not one.
 .link {
   @include shared.tap-target;
 
@@ -278,8 +304,17 @@
   font-family: inherit;
   font-size: var(--app-text-sm);
   color: var(--app-action-quiet-fg);
-  text-decoration: underline;
   cursor: pointer;
+}
+
+// "Taken back", beside the sentence it qualifies. Muted rather than struck
+// through: the settle happened, and somebody undid it, which is a different fact
+// from it never having happened (plan 0052, section 8).
+.history-reverted {
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-text-muted);
 }
 
 .history {

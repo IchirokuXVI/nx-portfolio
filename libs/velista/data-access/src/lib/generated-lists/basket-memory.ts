@@ -22,7 +22,10 @@ const BASKET_ID = 'basket-saturday';
 const PRODUCTS: readonly BasketProduct[] = [
   {
     id: 'item-milk-hacendado',
-    name: { en: 'Hacendado whole milk, 1 L', es: 'Leche entera Hacendado, 1 L' },
+    name: {
+      en: 'Hacendado whole milk, 1 L',
+      es: 'Leche entera Hacendado, 1 L',
+    },
     brand: 'Hacendado',
     size: 1,
     unit: 'LITER',
@@ -57,6 +60,7 @@ const OWNER: BasketParticipant = {
   id: 'p-owner',
   kind: 'OWNER',
   displayName: 'Ana',
+  username: 'ana',
   guestNumber: null,
   userId: 'u-ana',
   joinedAt: new Date('2026-09-01T08:00:00.000Z'),
@@ -68,6 +72,7 @@ const REGISTERED: BasketParticipant = {
   id: 'p-marc',
   kind: 'REGISTERED',
   displayName: 'Marc',
+  username: 'marc',
   guestNumber: null,
   userId: 'u-marc',
   joinedAt: new Date('2026-09-01T10:05:00.000Z'),
@@ -79,6 +84,8 @@ const GUEST: BasketParticipant = {
   id: 'p-guest-2',
   kind: 'GUEST',
   displayName: null,
+  // No account, so no username. `Guest 2` is what the screen calls them.
+  username: null,
   guestNumber: 2,
   userId: null,
   joinedAt: new Date('2026-09-01T10:41:00.000Z'),
@@ -243,6 +250,10 @@ export class BasketMemory implements BasketServiceI {
       // Absent and empty both mean "they skipped it", which is a first class
       // outcome: they become Guest N and nothing about their view is degraded.
       displayName: displayName?.trim() ? displayName.trim() : null,
+      // This fake joins everybody as a guest, and a guest has no account to take a
+      // username from. The signed in join, which is where luna `0054` fills it, is
+      // not modelled here.
+      username: null,
       guestNumber,
       userId: null,
       joinedAt: new Date(),
@@ -334,6 +345,61 @@ export class BasketMemory implements BasketServiceI {
 
     return {
       line: this._project(settled),
+      skippedCount: 0,
+      // Absent for a reader who may not have it, exactly as the server answers.
+      ...(this.seesZoneData ? { skipped: [] } : {}),
+    };
+  }
+
+  /**
+   * Take a finished line back to fully outstanding (luna `0054`, section 3).
+   *
+   * The whole line and never a number of units, which is what makes `settled: 0` the
+   * whole of it here. `lastOutcome` goes with it: it is what the row's caption and its
+   * status glyph both read to tell a purchase from a shop that had none, and leaving
+   * the old one behind would caption an outstanding line with what somebody did to it
+   * before it was reopened.
+   *
+   * A line with nothing settled is a **conflict** rather than a validation failure,
+   * matching what luna `0054` section 4 does to the settle: there is nothing to undo,
+   * and the state is the reason.
+   */
+  async reopen(
+    _generatedListId: string,
+    lineId: string
+  ): Promise<BasketSettleResult> {
+    const line = this._lines.find((row) => row.id === lineId);
+    if (!line) {
+      throw new GatewayError({
+        code: 'not_found',
+        status: 404,
+        correlationId: 'memory',
+        detail: 'Line not found',
+      });
+    }
+
+    if (line.settled === 0) {
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: 'memory',
+        detail: 'This line has nothing settled against it',
+      });
+    }
+
+    const reopened: BasketLine = {
+      ...line,
+      settled: 0,
+      touchedBy: this.me.id,
+      touchedAt: new Date(),
+      lastOutcome: null,
+    };
+    this._lines = this._lines.map((row) =>
+      row.id === lineId ? reopened : row
+    );
+
+    return {
+      line: this._project(reopened),
       skippedCount: 0,
       // Absent for a reader who may not have it, exactly as the server answers.
       ...(this.seesZoneData ? { skipped: [] } : {}),

@@ -2,14 +2,17 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   GENERATED_LIST_SHARING_PATTERNS,
+  type AddGeneratedListParticipantLineRequest,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
+  type GeneratedListBasketScope,
   type GeneratedListBasketView,
   type GeneratedListJoinCoreResult,
   type GeneratedListLineOriginsResult,
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
+  type GeneratedListReopenResult,
   type GeneratedListSettleResult,
   type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
@@ -19,6 +22,7 @@ import {
   type JoinGeneratedListRequest,
   type ListParticipantsRequest,
   type PreviewShareLinkRequest,
+  type ReopenGeneratedListLineRequest,
   type ResolveParticipantRequest,
   type RevokeParticipantRequest,
   type RevokeShareLinkRequest,
@@ -29,6 +33,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
+import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 
@@ -48,6 +53,7 @@ export class GeneratedListSharingController {
   constructor(
     private readonly sharing: GeneratedListSharingService,
     private readonly settle: GeneratedListSettleService,
+    private readonly reopenService: GeneratedListReopenService,
     private readonly basket: GeneratedListBasketService,
     private readonly origins: GeneratedListOriginsService
   ) {}
@@ -129,6 +135,21 @@ export class GeneratedListSharingController {
   }
 
   /**
+   * Take a settled basket line back to outstanding (plan 0054, section 3).
+   *
+   * The same authorization the settle has and no more: any live participant,
+   * guests included. It puts back every unit this basket line took off an origin
+   * list and marks the settlements that took them, rather than deleting them,
+   * because a settlement is an append.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.reopenLine)
+  reopenLine(
+    @Payload() req: ReopenGeneratedListLineRequest
+  ): Promise<GeneratedListReopenResult> {
+    return this.reopenService.reopen(req);
+  }
+
+  /**
    * The basket as a participant reads it (plan 0051, section 5).
    *
    * Distinct from `generatedList.get`, which resolves by the owner's id and so
@@ -152,6 +173,35 @@ export class GeneratedListSharingController {
     @Payload() req: SetGeneratedListPickRequest
   ): Promise<GeneratedListBasketLineView> {
     return this.basket.setPick(req);
+  }
+
+  /**
+   * Put a line in the basket, as any live participant (plan 0055, section 3).
+   *
+   * Distinct from `generatedList.addLine`, which resolves a basket by its
+   * owner's id and so cannot answer the guest in the aisle who remembers the
+   * milk. The line is created `ADDED` with no target, so it changes nothing any
+   * household shares.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.addLine)
+  addLine(
+    @Payload() req: AddGeneratedListParticipantLineRequest
+  ): Promise<GeneratedListBasketLineView> {
+    return this.basket.addLine(req);
+  }
+
+  /**
+   * Where a search inside this basket is priced (plan 0055, section 5.1).
+   *
+   * Core says what the run was composed against and catalog says what that
+   * means today, which is plan 0049 section 2.1's split reached by a caller who
+   * may hold no account.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.searchScope)
+  searchScope(
+    @Payload() req: GetGeneratedListBasketRequest
+  ): Promise<GeneratedListBasketScope> {
+    return this.basket.searchScope(req);
   }
 
   /**

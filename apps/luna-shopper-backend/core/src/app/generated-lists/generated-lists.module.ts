@@ -18,6 +18,7 @@ import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
+import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
@@ -74,6 +75,10 @@ import { LineClaimModule } from './line-claim.module';
     GeneratedListLineService,
     GeneratedListSharingService,
     GeneratedListSettleService,
+    // The reverse of the settle (plan 0054, section 3), and a provider of its
+    // own for the same reason: it is the other operation here that reaches a
+    // zone list, with its own transaction and its own announcements.
+    GeneratedListReopenService,
     GeneratedListBasketService,
     // Editing what each household asked for, which is deliberately not the
     // settle service (plan 0057, section 1): it changes a zone list without

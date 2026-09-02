@@ -165,6 +165,19 @@ export enum RealtimeEvent {
   GeneratedListUpdated = 'generatedList.updated',
   /** One line of a basket moved: an edit, a pick switch, or a settle. */
   GeneratedListLineUpdated = 'generatedList.lineUpdated',
+  /**
+   * A line was **added** to a shared basket (plan 0055, section 8), on the
+   * basket's own room.
+   *
+   * Its own name rather than a second {@link GeneratedListLineUpdated}, because
+   * a client receiving that one has to decide whether to replace a row or append
+   * one, and that decision is exactly what an event name is for.
+   *
+   * **No zone event goes with it.** An `ADDED` line names no zone and claims no
+   * zone line, which is the whole reason plan 0055 section 3.1 can hand this
+   * write to a guest.
+   */
+  GeneratedListLineAdded = 'generatedList.lineAdded',
   GeneratedListDeleted = 'generatedList.deleted',
 
   /**
@@ -251,6 +264,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.GeneratedListCreated,
   RealtimeEvent.GeneratedListUpdated,
   RealtimeEvent.GeneratedListLineUpdated,
+  RealtimeEvent.GeneratedListLineAdded,
   RealtimeEvent.GeneratedListDeleted,
   RealtimeEvent.GeneratedListLineSettled,
   RealtimeEvent.GeneratedListParticipantJoined,

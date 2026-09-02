@@ -112,6 +112,19 @@ export class CatalogScopeRequiredException extends DomainException {
 }
 
 /**
+ * The basket is over, and the write asked to change it (plan 0055, section 3.3).
+ *
+ * A `COMPLETED` or `ARCHIVED` basket takes no new lines. Kept apart from
+ * `conflict` and from `validation_failed` by its own code for the reason plan
+ * 0054 section 4 gives: a client that cannot tell a state it can explain from a
+ * bug it cannot will show the wrong sentence for both, and "this basket is
+ * finished" is a sentence the shopper can act on.
+ */
+export class GeneratedListFinishedException extends DomainException {
+  readonly code = ERROR_CODES.GENERATED_LIST_FINISHED;
+}
+
+/**
  * The number being moved is not where the caller believed it started (plan 0057,
  * section 5).
  *

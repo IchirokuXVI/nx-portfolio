@@ -368,6 +368,25 @@ export class BasketStore {
   }
 
   /**
+   * Take a finished line back to fully outstanding (luna `0054`, section 3).
+   *
+   * The other direction of the row's status control, and it goes through the same
+   * {@link _write} as {@link settle} so the row is busy while the request is out and
+   * `aria-busy` is already handled.
+   *
+   * It answers the same shape for the same reason: an origin whose line has been
+   * deleted since cannot have its units put back, so a reopen can report a skip
+   * exactly as a settle can, and the caller has to be told something did not land.
+   */
+  async reopen(lineId: string): Promise<BasketSettleResult | null> {
+    return this._write(lineId, async (id) => {
+      const result = await this._service.reopen(id, lineId);
+      this.apply(result.line);
+      return result;
+    });
+  }
+
+  /**
    * Swap a line's pick to another of its options.
    *
    * Available to everybody, guests included: the options are catalog products and

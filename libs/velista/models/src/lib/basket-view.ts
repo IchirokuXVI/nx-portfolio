@@ -40,6 +40,25 @@ export interface BasketParticipant {
   kind: ParticipantKind;
   /** Null when a guest skipped the prompt; the screen renders `Guest N`. */
   displayName: string | null;
+  /**
+   * The account holder's own name, as it stood when they joined (luna `0054`,
+   * section 2).
+   *
+   * Null for a guest, who has no account to take one from. **A separate field from
+   * {@link displayName} and not a value written into it**, because they are different
+   * facts: one is unverified text typed on an unauthenticated link and the other is an
+   * account's own name, and `0051` section 3.5 rests on being able to tell them apart.
+   * A guest typing "Dani" must not be indistinguishable from an account called Dani.
+   *
+   * A **snapshot**, like a zone membership's: somebody who renames their account keeps
+   * the old name on baskets they have already joined, because the alternative is a
+   * join at read time on the one screen that is refetched every time anybody settles
+   * anything.
+   *
+   * Null on a basket generated before that plan shipped, which is what the role word
+   * fallback in `participantName` still exists to draw.
+   */
+  username: string | null;
   /** Monotonic per basket, so the fallback label is stable. Guests only. */
   guestNumber: number | null;
   /** Set for `OWNER` and `REGISTERED`, null for a `GUEST`. */

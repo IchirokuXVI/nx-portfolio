@@ -13,6 +13,7 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { LineService } from '../lists/line.service';
 import type { ListAccessService } from '../lists/list-access.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import type { GeneratedListSharingService } from './generated-list-sharing.service';
 import type { GeneratedListService } from './generated-list.service';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 
@@ -31,6 +32,8 @@ import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
  */
 
 const OWNER = 'u-owner';
+/** The owner's own participant row, which every line they add is authored by. */
+const OWNER_PARTICIPANT = 'p-owner';
 const BASKET = 'gl-1';
 const ZONE = 'z-flat';
 const TARGET_LIST = 'l-flat';
@@ -159,6 +162,13 @@ function build(options: {
 
   const claims = fakeLineClaims({}, () => options.claiming ?? []);
 
+  // The owner's participant row, which a line records itself as authored by
+  // (plan 0055, section 4). Idempotent in the real service; here it is the one
+  // method this suite needs from sharing.
+  const sharing = {
+    ensureOwnerParticipant: async () => ({ id: OWNER_PARTICIPANT }),
+  } as unknown as GeneratedListSharingService;
+
   const service = new GeneratedListLineService(
     lineRepo as never,
     optionRepo as never,
@@ -166,6 +176,7 @@ function build(options: {
     listAccess,
     zoneLines,
     claims.service,
+    sharing,
     publisher
   );
 

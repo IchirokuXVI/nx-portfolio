@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { GatewayCatalogModule } from '../catalog/catalog.module';
 import type { GatewayConfig } from '../config/app-config';
 import { MessagingModule } from '../messaging/messaging.module';
 import { BasketPresenceService } from './basket-presence.service';
 import { GENERATED_LIST_SHARING_CONTROLLERS } from './generated-list-sharing.controller';
 import { GeneratedListController } from './generated-list.controller';
+import { ParticipantThrottlerGuard } from './participant-throttler.guard';
 import { ParticipantGuard } from './participant.guard';
 
 /**
@@ -31,6 +33,11 @@ import { ParticipantGuard } from './participant.guard';
 @Module({
   imports: [
     MessagingModule,
+    // For `ScopeResolutionService` alone, which the basket's own catalog search
+    // uses to price a run's profile (plan 0055, section 5.1). Importing the
+    // module rather than providing a second copy is what keeps one Redis cache
+    // and one invalidation for both searches.
+    GatewayCatalogModule,
     // Offline verification with auth's public key, the same key and algorithm
     // the passport strategy uses (plan 0004, section 10).
     JwtModule.registerAsync({
@@ -42,6 +49,13 @@ import { ParticipantGuard } from './participant.guard';
     }),
   ],
   controllers: [GeneratedListController, ...GENERATED_LIST_SHARING_CONTROLLERS],
-  providers: [ParticipantGuard, BasketPresenceService],
+  // The throttler guard is a provider rather than a bare class in `@UseGuards`
+  // so Nest injects the throttler's options and its Redis storage into it, the
+  // same two the global guard holds (plan 0055, section 7).
+  providers: [
+    ParticipantGuard,
+    ParticipantThrottlerGuard,
+    BasketPresenceService,
+  ],
 })
 export class GatewayGeneratedListsModule {}
