@@ -1,10 +1,199 @@
 @use '../basket-shared' as shared;
 
 .title {
-  margin: 0 0 var(--app-space-2);
+  margin: 0;
   font-family: var(--app-font-display);
   font-weight: 400;
   font-size: var(--app-text-xl);
   line-height: var(--app-leading-heading);
   color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+// The sentence that says this is not buying (section 5). Quiet copy, no colour and no
+// icon: a warning treatment would make it read as a risk, and it is a fact about what
+// the controls below it mean.
+.not-buying {
+  margin: var(--app-space-1) 0 var(--app-space-4);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+// What the basket will buy, at the top and in the accent this app reads as "still to
+// do". `--app-action-quiet-fg` is the amber; `--app-status-attention-*` is violet
+// despite its name.
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin: 0 0 var(--app-space-4);
+}
+
+.total-value {
+  font-size: var(--app-text-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-action-quiet-fg);
+}
+
+// The second, quieter sentence: how much of the line nobody asked for. Without it the
+// arithmetic on the screen does not add up and reads as a defect (section 4.1).
+.total-extra {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.hint {
+  margin: var(--app-space-2) 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+.failed {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-status-danger-fg);
+}
+
+.secondary {
+  @include shared.secondary-button;
+
+  margin-block-start: var(--app-space-2);
+}
+
+.quiet {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  margin-block-start: var(--app-space-4);
+  padding: var(--app-space-2);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--app-text-secondary);
+  }
+}
+
+// --- The rows ---------------------------------------------------------------
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// The reel is the right hand end of every row and keeps its size at the smallest
+// supported width: the number is the control and the text beside it is not, so the
+// name truncates rather than the target shrinking (section 7).
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding-block: var(--app-space-1);
+  border-block-end: 1px solid var(--app-border-subtle);
+
+  &:last-child {
+    border-block-end: none;
+  }
+}
+
+.row-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.row-name {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.row-zone,
+.row-wants {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// A match the run made on the words alone. Drawn apart from the plain captions, so a
+// reader confirms it rather than reading past it (backend 0057, section 8).
+.row-matched {
+  font-size: var(--app-text-2xs);
+  font-style: italic;
+  color: var(--app-text-muted);
+  overflow-wrap: anywhere;
+}
+
+// Why there is no control. Attention rather than danger: nothing has gone wrong, and
+// the row is telling the reader a fact about somebody else's list.
+.row-reason {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
+// What the last write on this row came to. Danger here, because this one is a refusal
+// of something the reader just did.
+.row-notice {
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+  text-wrap: pretty;
+}
+
+// The number on a row with no reel, drawn where the reel would have been so a column of
+// rows still reads down its right edge.
+.row-number {
+  flex: none;
+  min-inline-size: var(--app-quantity-width);
+  font-size: var(--app-text-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+  text-align: center;
+}
+
+// --- The lists that are not in ----------------------------------------------
+
+// A real disclosure, full width and with a 44px target, because it is the one control
+// on this sheet that is not a number.
+.disclosure {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  inline-size: 100%;
+  margin-block-start: var(--app-space-3);
+  padding: var(--app-space-2) 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-action-quiet-fg);
+  text-align: start;
+  cursor: pointer;
+}
+
+// Sunken, so the section reads as being behind the lists that are actually in the line
+// rather than as more of them.
+.others {
+  padding: var(--app-space-2) var(--app-space-3);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-sunken);
 }
