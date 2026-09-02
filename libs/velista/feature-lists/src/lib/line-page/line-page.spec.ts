@@ -347,6 +347,44 @@ describe('LinePage', () => {
       }
     });
 
+    it('offers products and never groups, because the line is already a set of them', async () => {
+      jest.useFakeTimers();
+      try {
+        const catalog = catalogOffering([
+          {
+            kind: 'group',
+            group: { id: 'group-milk', name: { es: 'Leche', en: 'Milk' } },
+            itemIds: ['item-milk-a', 'item-oat'],
+          },
+          { kind: 'item', item: OAT },
+        ]);
+        const { fixture } = await render({ catalog });
+
+        fixture.componentInstance.startAdding();
+        fixture.detectChanges();
+
+        const field = fixture.debugElement.query(By.css('.search-field'))
+          .nativeElement as HTMLInputElement;
+        field.value = 'milk';
+        field.dispatchEvent(new Event('input'));
+        fixture.detectChanges();
+
+        jest.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
+        // The answer arrives on a microtask, which fake timers do not drive.
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // The group is dropped and the order of what is left is the server's: this
+        // screen attaches one product at a time, and a group row here reads as a group
+        // being poured into a group.
+        expect(fixture.componentInstance.suggestions()).toEqual([
+          { kind: 'item', item: OAT },
+        ]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('attaches what was chosen, unioned onto the set the line already has', async () => {
       const { fixture, lines } = await render();
 
@@ -363,7 +401,10 @@ describe('LinePage', () => {
       ]);
     });
 
-    it('attaches a whole group, as the composer does', async () => {
+    // Handed one directly, which the search above no longer does. The row type is the
+    // catalog's union, so the case still has to be answered, and attaching the members
+    // is the only answer that is not a tap doing nothing.
+    it('attaches a whole group when it is given one', async () => {
       const { fixture, lines } = await render();
 
       await fixture.componentInstance.addProduct({
