@@ -30,6 +30,7 @@ function selector(patch: Partial<ProfileScopeSelector> = {}) {
     postalCodes: ['14010', '28001'],
     supermarketIds: [],
     excludedSupermarketIds: [],
+    excludedSupermarketLocationIds: [],
     empty: false,
     ...patch,
   } satisfies ProfileScopeSelector;
@@ -117,7 +118,7 @@ describe('GET /v1/catalog/shops/summary', () => {
     });
   });
 
-  it('passes the refused shops through once plan 0064 fills them in', async () => {
+  it('passes the shops the caller refused one by one', async () => {
     const { controller, send } = build({
       selector: selector({ excludedSupermarketLocationIds: [SHOP] }),
     });
@@ -130,9 +131,10 @@ describe('GET /v1/catalog/shops/summary', () => {
   });
 
   it('answers a profile that has said nothing, rather than refusing to', async () => {
-    // The priced reads raise `CATALOG_SCOPE_REQUIRED` here. "Which shops are
-    // near me" is exactly the question somebody halfway through filling their
-    // profile in has to be able to ask.
+    // "Which shops are near me" is exactly the question somebody halfway
+    // through filling their profile in has to be able to ask. The priced reads
+    // used to raise `CATALOG_SCOPE_REQUIRED` here and answer unpriced since plan
+    // 0069; this read never asked for a scope in the first place.
     const { controller, send } = build({
       selector: selector({ postalCodes: [], empty: true }),
       chains: [],

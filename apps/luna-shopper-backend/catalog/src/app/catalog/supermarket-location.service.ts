@@ -192,6 +192,15 @@ export class SupermarketLocationService {
     );
   }
 
+  /**
+   * A chain's shops, newest first, and everybody's alike.
+   *
+   * **It applies no refusals**, because it is the owner's read of one chain
+   * rather than a shopper's read of their neighbourhood. What a person has
+   * switched off belongs to {@link search} and {@link summarizeByChain}, which
+   * are narrowed to their postal codes and take the refusals with them (plan
+   * 0068).
+   */
   async list(
     req: ListSupermarketLocationsRequest
   ): Promise<SupermarketLocationPage> {

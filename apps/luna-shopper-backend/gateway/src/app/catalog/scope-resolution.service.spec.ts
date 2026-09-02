@@ -18,6 +18,7 @@ const FILLED_PROFILE: ProfileScopeSelector = {
   postalCodes: ['28001'],
   supermarketIds: [],
   excludedSupermarketIds: ['chain-dia'],
+  excludedSupermarketLocationIds: ['shop-no-parking'],
   empty: false,
 };
 
@@ -26,6 +27,7 @@ const EMPTY_PROFILE: ProfileScopeSelector = {
   postalCodes: [],
   supermarketIds: [],
   excludedSupermarketIds: [],
+  excludedSupermarketLocationIds: [],
   empty: true,
 };
 
@@ -169,6 +171,7 @@ describe('ScopeResolutionService', () => {
       postalCodes: ['28001'],
       supermarketIds: [],
       excludedSupermarketIds: ['chain-dia'],
+      excludedSupermarketLocationIds: ['shop-no-parking'],
     });
   });
 
@@ -284,5 +287,72 @@ describe('ScopeResolutionService', () => {
     const ids = await service.forRead(USER, {});
 
     expect(ids).toEqual(['scope-a']);
+  });
+  /**
+   * The finer axis reaching catalog (plan 0064, section 3). The gateway is the
+   * only thing that knows both halves, so a refusal that stops here is a refusal
+   * that never happens.
+   */
+  describe('the shops the caller refuses', () => {
+    it('passes them to catalog beside the chains', async () => {
+      const nats = makeNats();
+      const { redis } = makeRedis();
+      const service = new ScopeResolutionService(nats, redis);
+
+      await service.describe(USER, {});
+
+      expect(nats.send).toHaveBeenCalledWith(
+        PRICE_SCOPE_PATTERNS.resolve,
+        expect.objectContaining({
+          excludedSupermarketIds: ['chain-dia'],
+          excludedSupermarketLocationIds: ['shop-no-parking'],
+        })
+      );
+    });
+
+    it('sends none for a caller who stated a place rather than a profile', async () => {
+      const nats = makeNats();
+      const { redis } = makeRedis();
+      const service = new ScopeResolutionService(nats, redis);
+
+      await service.describe(USER, { postalCodes: ['28001'] });
+
+      // Nobody named a profile, so there is nothing to have refused.
+      expect(nats.send).toHaveBeenCalledWith(
+        PRICE_SCOPE_PATTERNS.resolve,
+        expect.objectContaining({ excludedSupermarketLocationIds: [] })
+      );
+    });
+
+    it('hands them to a shop read without climbing the scope ladder', async () => {
+      const nats = makeNats();
+      const { redis } = makeRedis();
+      const service = new ScopeResolutionService(nats, redis);
+
+      const selection = await service.forShops(USER, {});
+
+      expect(selection.excludedSupermarketLocationIds).toEqual([
+        'shop-no-parking',
+      ]);
+      // Core alone (plan 0068, section 2). A shop is a place rather than a
+      // price, so which scopes serve the caller is a question this read has no
+      // reason to ask.
+      expect(nats.send.mock.calls.map((call) => call[0])).toEqual([
+        PROFILE_PATTERNS.resolveScopes,
+      ]);
+    });
+
+    it('answers for a profile that has said nothing', async () => {
+      const nats = makeNats(EMPTY_PROFILE);
+      const { redis } = makeRedis();
+      const service = new ScopeResolutionService(nats, redis);
+
+      const selection = await service.forShops(USER, {});
+
+      // Somebody in the middle of filling their profile in still gets an
+      // answer, which is the whole reason this does not go through `describe`.
+      expect(selection.excludedSupermarketLocationIds).toEqual([]);
+      expect(selection.postalCodes).toEqual([]);
+    });
   });
 });

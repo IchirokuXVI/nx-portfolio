@@ -810,6 +810,7 @@ const resolvePriceScopesRequest = object(
     postalCodes: array(nonEmptyString()),
     supermarketIds: array(nonEmptyString()),
     excludedSupermarketIds: array(nonEmptyString()),
+    excludedSupermarketLocationIds: array(nonEmptyString()),
   },
   ['userId']
 );

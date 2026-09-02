@@ -137,7 +137,10 @@ function toScopeQuery(query: PriceScopedQueryDto): ScopeQuery {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/supermarkets', version: '1' })
 export class CatalogSupermarketsController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
 
   @Post()
   @ApiContractResponse(SUPERMARKET_PATTERNS.create, {
@@ -223,6 +226,15 @@ export class CatalogSupermarketsController {
     );
   }
 
+  /**
+   * Every shop of one chain, nationwide, newest first.
+   *
+   * **The owner's read, and it applies nobody's refusals.** The shopper's read
+   * of the same table is `GET /v1/catalog/shops` (plan 0068), which is narrowed
+   * to the caller's postal codes and knows what they have switched off; this one
+   * is how the chain itself is administered, and filtering it by whoever happens
+   * to be looking would hide rows from the person maintaining them.
+   */
   @Get(':id/locations')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.list)
   listLocations(

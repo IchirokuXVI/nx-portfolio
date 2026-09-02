@@ -148,6 +148,10 @@ export class ScopeResolutionService {
         postalCodes: query.postalCodes ?? [],
         supermarketIds: query.supermarketIds ?? [],
         excludedSupermarketIds: [],
+        // A caller who named a place has not named a profile, so there are no
+        // refusals to apply. Stated rather than left off, so the empty case is
+        // a decision on the page that makes it.
+        excludedSupermarketLocationIds: [],
       });
       return { ...resolved, profileId: null, explicit: true };
     }
@@ -159,12 +163,12 @@ export class ScopeResolutionService {
   /**
    * The postal codes and refusals a shop read runs with (plan 0068, section 2).
    *
-   * **Not {@link describe}, deliberately.** That path throws
-   * `CATALOG_SCOPE_REQUIRED` for a profile that has said nothing, and "which
-   * shops are near me" is precisely the question somebody in the middle of
-   * filling their profile in has to be able to ask. Here an empty profile is an
-   * empty answer, which the two reads turn into no chains and no shops rather
-   * than into an error.
+   * **Not {@link describe}, deliberately.** That one resolves postal codes into
+   * price scopes, and a shop is a place rather than a price, so this stops a
+   * call short of it: one round trip instead of two, and no scope ladder climbed
+   * to answer a question about geography. It also answers for a profile that has
+   * said nothing, which is precisely the question somebody in the middle of
+   * filling their profile in has to be able to ask.
    *
    * **Stated codes replace the profile's, and never its refusals.** A screen
    * asking about a code the user has not saved yet is still that user, so what
@@ -187,10 +191,7 @@ export class ScopeResolutionService {
       profileId: selector.profileId,
       postalCodes: stated.length > 0 ? stated : selector.postalCodes,
       excludedSupermarketIds: selector.excludedSupermarketIds,
-      // Absent until plan 0064 lands, and absent is none: the field is optional
-      // on the selector for exactly that reason (plan 0068, section 2).
-      excludedSupermarketLocationIds:
-        selector.excludedSupermarketLocationIds ?? [],
+      excludedSupermarketLocationIds: selector.excludedSupermarketLocationIds,
     };
   }
 
@@ -258,6 +259,7 @@ export class ScopeResolutionService {
       postalCodes: selector.postalCodes,
       supermarketIds: selector.supermarketIds,
       excludedSupermarketIds: selector.excludedSupermarketIds,
+      excludedSupermarketLocationIds: selector.excludedSupermarketLocationIds,
     });
     const view: CatalogScopeView = {
       ...resolved,
@@ -280,6 +282,7 @@ export class ScopeResolutionService {
     postalCodes: string[];
     supermarketIds: string[];
     excludedSupermarketIds: string[];
+    excludedSupermarketLocationIds: string[];
   }): Promise<ResolvedScopesView> {
     return this.nats.send<ResolvedScopesView>(
       PRICE_SCOPE_PATTERNS.resolve,

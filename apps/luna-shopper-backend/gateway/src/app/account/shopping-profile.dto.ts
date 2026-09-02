@@ -97,7 +97,7 @@ export class ProfileSupermarketDto {
   @ApiProperty({
     format: 'uuid',
     description:
-      'The chain, never one of its locations: "no DIA" means no DIA anywhere.',
+      'The chain: "no DIA" means no DIA anywhere, including the DIA that opens next month. Refusing one particular shop is the separate, finer choice below.',
   })
   @IsUUID()
   supermarketId!: string;
@@ -109,6 +109,50 @@ export class ProfileSupermarketDto {
   @IsOptional()
   @IsBoolean()
   excluded?: boolean;
+}
+
+/**
+ * One shop, and whether the profile refuses it (plan 0064).
+ *
+ * The finer axis beside {@link ProfileSupermarketDto}, not a replacement for it:
+ * "not that shop" is about parking and a route home, "not DIA" is about the
+ * brand, and an excluded chain hides its shops whatever these say.
+ */
+export class ProfileLocationDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'One shop of a chain, rather than the chain.',
+  })
+  @IsUUID()
+  supermarketLocationId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'False switches the shop back on, and deletes the row rather than storing it: absence already means included, so a shop imported later is one you can see rather than one silently missing.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  excluded?: boolean;
+}
+
+/**
+ * Several shops at once (plan 0064, section 5).
+ *
+ * A **partial** write, unlike the collections on the profile body: shops it does
+ * not name keep whatever they had. A profile can see hundreds of shops and a
+ * screen holds a screenful, so a replacement would make one toggle require the
+ * client to send every shop it has ever seen.
+ */
+export class SetProfileLocationsDto {
+  @ApiProperty({
+    type: [ProfileLocationDto],
+    maxItems: PROFILE_LIMITS.maxLocationPreferences,
+  })
+  @IsArray()
+  @ArrayMaxSize(PROFILE_LIMITS.maxLocationPreferences)
+  @ValidateNested({ each: true })
+  @Type(() => ProfileLocationDto)
+  locations!: ProfileLocationDto[];
 }
 
 export class ProfileGenerationSourceDto {
