@@ -61,6 +61,19 @@ export class DiscoveredPlace extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   postalCode!: string | null;
 
+  /**
+   * ISO 3166-1 alpha-2, from the run's own `StoreDiscoveryInput` and not from an
+   * OSM tag (plan 0061, section 4).
+   *
+   * The runner always had it and used to discard it. It matters on import: the
+   * centroid lookup that fills the postcode two thirds of these places lack is
+   * keyed on `(country, postalCode)`, and a search with no country would put
+   * Spain and Bolivia in one result. Nullable, because rows discovered before
+   * this column existed have no country to claim.
+   */
+  @Column({ type: 'varchar', length: 2, nullable: true })
+  country!: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   website!: string | null;
 

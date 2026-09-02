@@ -16697,6 +16697,16 @@
               "null"
             ]
           },
+          "postalCodeSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PostalCodeSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "latitude": {
             "type": [
               "number",
@@ -16731,6 +16741,7 @@
           "city",
           "country",
           "postalCode",
+          "postalCodeSource",
           "latitude",
           "longitude",
           "externalRef",
@@ -17013,6 +17024,14 @@
           "OWNER",
           "REGISTERED",
           "GUEST"
+        ]
+      },
+      "enums.PostalCodeSource": {
+        "type": "string",
+        "enum": [
+          "SOURCE",
+          "DERIVED",
+          "MANUAL"
         ]
       },
       "enums.PriceScopeKind": {
@@ -18279,6 +18298,12 @@
               "null"
             ]
           },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "website": {
             "type": [
               "string",
@@ -18328,6 +18353,7 @@
           "street",
           "city",
           "postalCode",
+          "country",
           "website",
           "openingHours",
           "tags",

@@ -50,6 +50,7 @@ export function toSupermarketLocationView(
     city: row.city,
     country: row.country,
     postalCode: row.postalCode,
+    postalCodeSource: row.postalCodeSource,
     latitude: row.latitude,
     longitude: row.longitude,
     externalRef: row.externalRef,

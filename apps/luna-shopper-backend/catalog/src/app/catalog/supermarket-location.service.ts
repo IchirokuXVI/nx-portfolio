@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  PostalCodeSource,
   type CreateSupermarketLocationRequest,
   type ListSupermarketLocationsRequest,
   type SupermarketLocationIdRequest,
@@ -16,9 +18,11 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { randomUUID } from 'node:crypto';
 import { Repository } from 'typeorm';
+import type { CatalogConfig } from '../config/app-config';
 import { Supermarket, SupermarketLocation } from '../entities';
 import { toSupermarketLocationView } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
 
 interface LocationCursor {
@@ -26,17 +30,32 @@ interface LocationCursor {
   id: string;
 }
 
-/** Supermarket locations (plan 0012). Writes owner only; reads open. */
+/**
+ * Supermarket locations (plan 0012). Writes owner only; reads open.
+ *
+ * Since plan 0061 it is also where a missing postal code is filled in. **Catalog
+ * fills it, not the harvester** (section 3): every creator gets the behaviour,
+ * including a supermarket an admin typed by hand, and the centroid table lives
+ * here, so filling it from the harvester would send one fact across a service
+ * boundary and straight back.
+ */
 @Injectable()
 export class SupermarketLocationService {
+  private readonly deriveMaxMetres: number;
+
   constructor(
     @InjectRepository(SupermarketLocation)
     private readonly locations: Repository<SupermarketLocation>,
     @InjectRepository(Supermarket)
     private readonly supermarkets: Repository<Supermarket>,
     private readonly scopes: PriceScopeService,
-    private readonly admin: PlatformAdminService
-  ) {}
+    private readonly admin: PlatformAdminService,
+    private readonly postalCodes: PostalCodeService,
+    config: ConfigService
+  ) {
+    this.deriveMaxMetres =
+      config.getOrThrow<CatalogConfig>('catalog').postalCodeDeriveMaxMetres;
+  }
 
   /**
    * Create a store.
@@ -74,23 +93,26 @@ export class SupermarketLocationService {
           )
         ).id;
 
-    const saved = await this.locations.save(
-      this.locations.create({
-        id,
-        supermarketId: req.supermarketId,
-        priceScopeId,
-        label: req.label ?? null,
-        address: req.address ?? null,
-        city: req.city ?? null,
-        country: req.country ?? null,
-        postalCode: req.postalCode ?? null,
-        latitude: req.latitude ?? null,
-        longitude: req.longitude ?? null,
-        externalRef: req.externalRef ?? null,
-        externalProvider: req.externalProvider ?? null,
-      })
-    );
-    return toSupermarketLocationView(saved);
+    const draft = this.locations.create({
+      id,
+      supermarketId: req.supermarketId,
+      priceScopeId,
+      label: req.label ?? null,
+      address: req.address ?? null,
+      city: req.city ?? null,
+      country: req.country ?? null,
+      postalCode: req.postalCode ?? null,
+      postalCodeSource: req.postalCode
+        ? (req.postalCodeSource ?? PostalCodeSource.MANUAL)
+        : null,
+      latitude: req.latitude ?? null,
+      longitude: req.longitude ?? null,
+      externalRef: req.externalRef ?? null,
+      externalProvider: req.externalProvider ?? null,
+    });
+    await this.fillPostalCodeFromCentroid(draft);
+
+    return toSupermarketLocationView(await this.locations.save(draft));
   }
 
   async update(
@@ -122,7 +144,13 @@ export class SupermarketLocationService {
       row.longitude = req.longitude;
     }
     if (req.postalCode !== undefined) {
+      // An update that sets one is a statement (plan 0061, section 3), and it
+      // stands even against a nearer centroid. Setting it to null hands the
+      // field back to the lookup below.
       row.postalCode = req.postalCode;
+      row.postalCodeSource = req.postalCode
+        ? (req.postalCodeSource ?? PostalCodeSource.MANUAL)
+        : null;
     }
     if (req.externalRef !== undefined) {
       row.externalRef = req.externalRef;
@@ -130,6 +158,8 @@ export class SupermarketLocationService {
     if (req.externalProvider !== undefined) {
       row.externalProvider = req.externalProvider;
     }
+    await this.fillPostalCodeFromCentroid(row);
+
     return toSupermarketLocationView(await this.locations.save(row));
   }
 
@@ -188,6 +218,56 @@ export class SupermarketLocationService {
     return { items: page.map(toSupermarketLocationView), nextCursor };
   }
 
+  /**
+   * Take the nearest postal code centroid where the row has no code of its own
+   * (plan 0061, sections 3 and 4). Mutates the row in place, and does nothing at
+   * all to a row that has one.
+   *
+   * **A source postcode is never overridden**, which is the rule this exists to
+   * obey rather than to bend: the centroid is an approximation of a boundary and
+   * the tag is somebody's observation of a sign on a building. The guard is the
+   * first line, and it is the whole of it.
+   *
+   * **A guess beyond the bound is not made.** A store in the middle of nowhere
+   * whose nearest centroid is 30 km away keeps a null postcode, because a wrong
+   * postcode is worse than none: none produces a price flagged approximate,
+   * wrong produces a confident price for the wrong scope.
+   *
+   * The country is required and has to be alpha-2, because the lookup is keyed
+   * on `(country, postalCode)` and a search with no country would put Spain and
+   * Bolivia in one result. A row carrying a country spelled some other way is
+   * left alone rather than guessed at.
+   */
+  private async fillPostalCodeFromCentroid(
+    row: Pick<
+      SupermarketLocation,
+      'country' | 'latitude' | 'longitude' | 'postalCode' | 'postalCodeSource'
+    >
+  ): Promise<void> {
+    if (row.postalCode) {
+      return;
+    }
+    row.postalCodeSource = null;
+
+    const country = alpha2(row.country);
+    if (!country || row.latitude === null || row.longitude === null) {
+      return;
+    }
+
+    const { nearest } = await this.postalCodes.nearest({
+      country,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      maxDistanceMetres: this.deriveMaxMetres,
+    });
+    if (!nearest) {
+      return;
+    }
+
+    row.postalCode = nearest.postalCode;
+    row.postalCodeSource = PostalCodeSource.DERIVED;
+  }
+
   private async load(id: string): Promise<SupermarketLocation> {
     const row = await this.locations.findOne({ where: { id } });
     if (!row) {
@@ -195,4 +275,14 @@ export class SupermarketLocationService {
     }
     return row;
   }
+}
+
+/**
+ * The country as the centroid table spells it, or null. `country` on a location
+ * is a free text column an admin can type a full name into, and only alpha-2 is
+ * a key into `postal_code_points`.
+ */
+function alpha2(country: string | null): string | null {
+  const trimmed = (country ?? '').trim();
+  return trimmed.length === 2 ? trimmed.toLowerCase() : null;
 }

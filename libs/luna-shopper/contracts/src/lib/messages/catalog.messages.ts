@@ -1,5 +1,6 @@
 import type {
   ItemCategory,
+  PostalCodeSource,
   PriceScopeKind,
   PriceSourceKind,
   UnitOfMeasure,
@@ -199,6 +200,16 @@ export interface SupermarketLocationView {
   city: string | null;
   country: string | null;
   postalCode: string | null;
+  /**
+   * Where {@link postalCode} came from (plan 0061, section 5), and null wherever
+   * the code itself is null.
+   *
+   * `DERIVED` is the review flag: two thirds of OSM stores carry no postcode, so
+   * catalog fills those from the nearest postal code centroid within a bound.
+   * That value is an approximation of a boundary by a single point, and this is
+   * what lets a reader tell it apart from a code somebody observed.
+   */
+  postalCodeSource: PostalCodeSource | null;
   latitude: number | null;
   longitude: number | null;
   /**
@@ -416,8 +427,27 @@ export interface CreateSupermarketLocationRequest {
   label?: LocalizedText | null;
   address?: string | null;
   city?: string | null;
+  /**
+   * ISO 3166-1 alpha-2. Optional, but a location that carries coordinates and no
+   * postal code needs it: the centroid lookup that fills the gap is keyed on
+   * `(country, postalCode)`, and a search with no country would put Spain and
+   * Bolivia in one result (plan 0061, section 4).
+   */
   country?: string | null;
+  /**
+   * Absent, with coordinates and a country present, means "work it out": catalog
+   * takes the nearest centroid within the bound and records
+   * {@link PostalCodeSource.DERIVED}. A value given here is never overridden.
+   */
   postalCode?: string | null;
+  /**
+   * Where the caller got {@link postalCode}. Defaults to
+   * {@link PostalCodeSource.MANUAL}, because a caller with a code and no
+   * provenance to declare is a person typing one; the import path states
+   * {@link PostalCodeSource.SOURCE}. Ignored when no postal code is given, since
+   * a derived code is `DERIVED` by definition.
+   */
+  postalCodeSource?: PostalCodeSource;
   latitude?: number | null;
   longitude?: number | null;
   externalRef?: string | null;
@@ -432,7 +462,13 @@ export interface UpdateSupermarketLocationRequest {
   address?: string | null;
   city?: string | null;
   country?: string | null;
+  /**
+   * Setting one is a statement and it stands; setting it to null hands the field
+   * back to the centroid lookup, which runs again on the row as the update leaves
+   * it (plan 0061, section 3).
+   */
   postalCode?: string | null;
+  postalCodeSource?: PostalCodeSource;
   latitude?: number | null;
   longitude?: number | null;
   externalRef?: string | null;

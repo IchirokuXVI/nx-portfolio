@@ -1,4 +1,7 @@
-import type { LocalizedText } from '@portfolio/luna-shopper/contracts';
+import {
+  PostalCodeSource,
+  type LocalizedText,
+} from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { PriceScope } from './price-scope.entity';
@@ -25,10 +28,13 @@ export class SupermarketLocation extends BaseEntity {
    * own, which is what makes hand entered supermarkets need no special case.
    *
    * Assigning it: where the store's own postal code is known it resolves through
-   * the chain's own resolver; where it is not (two thirds of OSM stores carry no
-   * postcode) it takes the scope of the postal code the discovery run was centred
-   * on, and the location is flagged for review. Within one city the price
-   * difference was not measurable, and the flag means the guess is visible.
+   * the chain's own resolver; where it is not, the location still gets a STORE
+   * scope of its own and nothing here changes.
+   *
+   * **Deriving a postal code does not touch this column** (plan 0061, section 4).
+   * {@link postalCodeSource} says where the location *is*; this says what it
+   * prices against, and re resolving a scope from a derived code is a larger
+   * change belonging to whoever picks up chain specific scope resolution.
    */
   @Index('ix_locations_price_scope')
   @Column({ type: 'uuid' })
@@ -63,6 +69,23 @@ export class SupermarketLocation extends BaseEntity {
    */
   @Column({ type: 'varchar', nullable: true })
   postalCode!: string | null;
+
+  /**
+   * Where {@link postalCode} came from (plan 0061, section 5). Nullable
+   * alongside a null code, so "we have no idea" stays expressible: a store whose
+   * nearest centroid is beyond the bound keeps both columns null, because a
+   * wrong postcode is worse than none. None produces a price that says it is
+   * approximate; wrong produces a confident price for the wrong scope.
+   *
+   * `DERIVED` is the review flag the class doc used to promise and nothing
+   * implemented. It is what an eventual admin queue sorts on.
+   */
+  @Column({
+    type: 'enum',
+    enum: PostalCodeSource,
+    nullable: true,
+  })
+  postalCodeSource!: PostalCodeSource | null;
 
   /**
    * The discovery provider's own reference, e.g. `node/1156230891`.
