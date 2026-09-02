@@ -539,9 +539,12 @@ const asArray = ({ value }: { value: unknown }) =>
  * - Nothing at all, optionally with `profileId`: the caller's default (or named)
  *   shopping profile is resolved for them.
  *
- * **Saying nothing no longer means everything.** A caller whose profile holds
- * neither a postal code nor a chain is answered with `catalog_scope_required`,
- * which the client renders as an onboarding step rather than as a failure.
+ * **Saying nothing no longer means everything**, and it is not an error either.
+ * A caller whose profile holds neither a postal code nor a chain resolves to no
+ * scopes, and the read answers with the catalog ranked as usual and every price
+ * field null (plan 0069, section 2). `GET /v1/catalog/scope` is what tells a
+ * client whether that is because nothing was said, because nobody serves the
+ * area, or because every shop in it was refused.
  */
 export class PriceScopedQueryDto extends SearchOrderQueryDto {
   @ApiPropertyOptional({

@@ -6,10 +6,7 @@ import {
   type ProfileScopeSelector,
   type ResolvedScopesView,
 } from '@portfolio/luna-shopper/contracts';
-import {
-  CatalogScopeRequiredException,
-  RedisService,
-} from '@portfolio/luna-shopper/platform';
+import { RedisService } from '@portfolio/luna-shopper/platform';
 import { NatsClient } from '../messaging/nats-client';
 
 /**
@@ -88,12 +85,12 @@ export class ScopeResolutionService {
   /**
    * The scopes a catalog read runs against.
    *
-   * With `explicitScopeIds`, the caller has already said where they shop and
+   * With explicit scope ids, the caller has already said where they shop and
    * nothing is resolved. Otherwise the named or default profile is, and a
-   * profile holding neither a postal code nor a chain **fails** with
-   * `CATALOG_SCOPE_REQUIRED` (section 3): it does not fall back to everything,
-   * and it does not answer an empty page, because an empty page reads as "there
-   * is nothing", which is a different and false statement.
+   * profile holding neither a postal code nor a chain resolves to **no scopes**
+   * (plan 0069, section 2). That is not a failure and never was: a scope is how
+   * a price gets attached to a product, so having none is a statement about
+   * prices and never about products, and the read below proceeds unpriced.
    */
   async forRead(userId: string, query: ScopeQuery): Promise<string[]> {
     const { priceScopeIds } = await this.describe(userId, query);
@@ -174,13 +171,24 @@ export class ScopeResolutionService {
     );
 
     if (selector.empty) {
+      // No scopes, no coverage, and no round trip to catalog: a selector with
+      // nothing positive in it resolves to exactly this, so asking would spend a
+      // call to be told what is already known. The pair of empties is the answer
+      // a client reads as "you have not told us where you shop" (plan 0069,
+      // section 3), told apart from "you have refused everywhere you could shop"
+      // by `coverage` carrying rows there and none here.
+      //
       // Deliberately not cached: the next thing this user does is fill the
       // profile in, and the read after that must not be answered from a minute
       // old "you have said nothing".
-      throw new CatalogScopeRequiredException(
-        'Add a postal code or choose a supermarket first',
-        { details: { profileId: selector.profileId } }
-      );
+      return {
+        priceScopeIds: [],
+        scopes: [],
+        coverage: [],
+        approximate: false,
+        profileId: selector.profileId,
+        explicit: false,
+      };
     }
 
     const resolved = await this.askCatalog({

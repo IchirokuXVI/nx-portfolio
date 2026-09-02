@@ -715,11 +715,11 @@ export class GeneratedListParticipantController {
    * The resolution this basket's reads are priced at, or none (section 5.1):
    * the scope ids, and since plan 0066 which chain each belongs to.
    *
-   * **Undefined and not an empty array**, which is the difference between an
-   * unscoped search and no search at all: catalog answers an empty array with an
-   * empty page, and answers an absent one with products carrying no prices. A
-   * dropdown that names the right thing without a price beats one that will not
-   * open, so every way of having no scope lands on undefined here.
+   * **Undefined rather than an empty array**, which since plan 0069 is a
+   * distinction the reads no longer make: both answer products carrying no
+   * prices. It is kept because it says what happened rather than what it costs,
+   * and because a dropdown that names the right thing without a price beats one
+   * that will not open, so every way of having no scope lands on undefined here.
    *
    * Resolved through the same service and the same Redis cache the owner's own
    * searches use, keyed by that owner and that profile, so a basket search costs
@@ -762,9 +762,13 @@ export class GeneratedListParticipantController {
    *
    * Every branch that cannot produce a scope set produces **null**, and the read
    * proceeds unpriced (section 3.1): a run scoped by hand names no profile, a
-   * profile with no postal code and no chain throws `CATALOG_SCOPE_REQUIRED`, a
    * profile since deleted, core slow, Redis down. A basket in an aisle is worth
    * more than a price.
+   *
+   * A profile with no postal code and no chain used to arrive here as a thrown
+   * `CATALOG_SCOPE_REQUIRED` and leave through the `catch`. Since plan 0069 it
+   * resolves to no scopes instead, so it takes the ordinary path and the `catch`
+   * is left to the four reasons above.
    */
   private async resolvedScopesOf(
     generatedListId: string,

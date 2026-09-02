@@ -47,26 +47,6 @@ interface ItemCursor {
   id: string;
 }
 
-const EMPTY_ITEM_PAGE: ItemPage = { items: [], nextCursor: null };
-const EMPTY_GROUP_PAGE: ProductGroupOfferPage = { items: [], nextCursor: null };
-
-/**
- * Whether the caller stated where they shop and reached no chain we know (plan
- * 0049, section 3).
- *
- * **Absent and empty are different, and this is the whole of the difference.**
- * Absent is an unscoped read, which still ranks the catalog and quotes no price;
- * that is what the admin surface does and it is not reachable through the
- * gateway any more. An empty array is a place: a postal code nobody serves, or
- * chains that were all excluded. Listing the global product table for it would
- * answer a question the caller did not ask, so the answer is an empty page,
- * which the client explains from the coverage flags the resolver returned
- * alongside (section 5).
- */
-function resolvedToNothing(priceScopeIds: string[] | undefined): boolean {
-  return Array.isArray(priceScopeIds) && priceScopeIds.length === 0;
-}
-
 /** Collects positional parameters while a query is assembled around them. */
 function params() {
   const values: unknown[] = [];
@@ -101,15 +81,18 @@ function params() {
  * caller's shopping profile is the gateway's job (plan 0049, section 2.1), which
  * is what keeps catalog stateless about users.
  *
- * Since plan 0049, section 3, the two ways of sending nothing mean different
- * things. **Absent** is an unscoped read: it ranks, it quotes no price, and it is
- * how the admin surface lists the catalog. **An empty array** is a caller who
- * said where they shop and reached no chain we know, and it answers with an empty
- * page rather than with the global product table.
+ * **Absent and empty scopes are the same answer** (plan 0069, section 2): a
+ * ranked, paged read with every price field null. They were different for a
+ * while, an empty array answering an empty page, and that was the wrong shape of
+ * rule: the catalog is a list of things that exist, and a scope is how a price
+ * gets attached to one, so having none says something about prices and nothing
+ * about products. Which of the three states a caller is in — nothing said, a
+ * place nobody serves, everywhere refused — is read from `coverage` on the scope
+ * view, not from the size of this page.
  *
- * What did not change is that a group with no priced member still comes back
- * whenever there are scopes at all: the composer is attaching identity, not
- * quoting a price, and the harvester is off outside development.
+ * A group with no priced member still comes back for the same reason: the
+ * composer is attaching identity, not quoting a price, and the harvester is off
+ * outside development.
  */
 @Injectable()
 export class ItemService {
@@ -261,9 +244,6 @@ export class ItemService {
    * would be a rule that never fired.
    */
   async search(req: SearchItemsRequest): Promise<ItemPage> {
-    if (resolvedToNothing(req.priceScopeIds)) {
-      return EMPTY_ITEM_PAGE;
-    }
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
     const term = parseSearchTerm(req.query);
@@ -303,9 +283,6 @@ export class ItemService {
    * on a catalog full of exactly the right answers.
    */
   async searchOffers(req: SearchOffersRequest): Promise<ProductGroupOfferPage> {
-    if (resolvedToNothing(req.priceScopeIds)) {
-      return EMPTY_GROUP_PAGE;
-    }
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
     const term = parseSearchTerm(req.query);

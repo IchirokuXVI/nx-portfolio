@@ -30,7 +30,7 @@ so the resolver in section 1.1 has real scopes to resolve to. Companion plan:
 - `addressText` (nullable free text: "Calle Mayor 12". Display and context only; nothing is
   geocoded, and the postal codes below are what resolve to scopes)
 - `minSavingCents` (int, default 0): the money a second stop has to save before the basket
-  generator suggests it. Declared here because it is per profile; what it *means* is defined
+  generator suggests it. Declared here because it is per profile; what it _means_ is defined
   in backlog 0004 section 5.
 - `minSavingPercent` (int, nullable): the optional relative floor beside the absolute one.
 - `generationScope`: `GenerationScope` enum (`ALL`, `SELECTED`), default `ALL`: which zones
@@ -126,6 +126,11 @@ because it goes stale exactly when a user edits a profile, which is the moment t
 the catalog to change.
 
 ## 3. The catalog stops being listable
+
+> **Superseded by `0069`.** The error this section introduces is gone, and with it the empty
+> page: an empty scope set and an absent one are now the same read, ranked and paged with
+> every price field null. The rest of the section, including 3.1's ladder, still stands. This
+> file is left as it was written.
 
 Today a read API that returns items is a read API that can return all of them. This plan
 makes an unscoped listing an error.

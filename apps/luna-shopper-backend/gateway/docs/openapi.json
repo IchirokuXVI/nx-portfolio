@@ -10352,16 +10352,6 @@
               }
             }
           },
-          "400": {
-            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
           "401": {
             "description": "`unauthorized` — You need to sign in to do that.",
             "content": {
@@ -10498,16 +10488,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.CatalogScopeView"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -10657,16 +10637,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.CatalogSuggestResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -10955,16 +10925,6 @@
               }
             }
           },
-          "400": {
-            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
           "401": {
             "description": "`unauthorized` — You need to sign in to do that.",
             "content": {
@@ -11109,16 +11069,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ProductGroupOfferPage"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -19892,7 +19842,6 @@
               "rate_limited",
               "not_configured",
               "client_too_old",
-              "catalog_scope_required",
               "generated_list_finished",
               "stale_quantity",
               "below_settled",
