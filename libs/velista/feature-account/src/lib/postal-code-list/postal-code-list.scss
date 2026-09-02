@@ -158,12 +158,30 @@
   margin-block-start: var(--app-space-2);
 }
 
+// A submit and its cancel, which makes them one control pair at one size, differing
+// only in weight (plan 0061, section 2). The overrides below are deliberate and are not
+// redundant with the mixins they follow.
+//
+// `quiet-action` describes "a secondary action beside a line of copy", which is what it
+// is everywhere else on the account and profiles screens: a 44px row scale button at the
+// end of a row. It is not what Cancel is here, standing next to a page scale submit, so
+// it takes the submit's height and text size. Editing the mixin instead would grow
+// every row button on three screens to fix this one form (section 2.1).
+//
+// `primary-action`'s `--app-space-6` is a page's lone commitment. Half of a pair takes
+// less, and both halves take the same one.
 .primary {
   @include page.primary-action;
+
+  padding-inline: var(--app-space-5);
 }
 
 .quiet {
   @include page.quiet-action;
+
+  min-block-size: var(--app-button-height);
+  padding-inline: var(--app-space-5);
+  font-size: var(--app-text-base);
 }
 
 .hint {

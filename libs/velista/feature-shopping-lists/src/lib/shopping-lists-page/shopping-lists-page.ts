@@ -31,6 +31,7 @@ import {
 } from '@portfolio/velista/platform';
 import {
   BasketIcon,
+  BottomActionBar,
   ChevronLeftIcon,
   EmptyState,
   ErrorState,
@@ -70,6 +71,7 @@ import { ShoppingListRow } from '../shopping-list-row/shopping-list-row';
   imports: [
     RokuTranslatorPipe,
     BasketIcon,
+    BottomActionBar,
     ChevronLeftIcon,
     EmptyState,
     ErrorState,

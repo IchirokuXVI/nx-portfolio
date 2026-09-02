@@ -88,12 +88,17 @@
         }
       </div>
 
-      <div class="footer">
+      <!--
+        The app's one bottom bar, not a second copy of it (plan 0061, section 1). The
+        shell owns the rule, the ground and the safe area inset; this screen projects
+        the single button that goes in the row.
+      -->
+      <lib-bottom-action-bar>
         <button (click)="getList()" class="primary" type="button">
           <lib-basket-icon class="glyph" />
           {{ 'getList.title' | rokuT }}
         </button>
-      </div>
+      </lib-bottom-action-bar>
     }
   }
 </div>

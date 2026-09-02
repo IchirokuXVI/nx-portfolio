@@ -91,20 +91,24 @@
   padding-block-end: var(--app-space-4);
 }
 
-.footer {
+// The bar itself is `BottomActionBar`, which owns the rule, the ground and the safe
+// area inset for both screens that end in one (plan 0061, section 1). What stays here
+// is the one thing this page decides: the bar is fixed in the column and only the
+// middle scrolls. The shell places nothing itself, so this is the place to say it.
+lib-bottom-action-bar {
   flex: none;
-  padding: var(--app-space-3) var(--app-space-5)
-    calc(var(--app-space-6) + env(safe-area-inset-bottom));
-  border-block-start: 1px solid var(--app-border-subtle);
 }
 
+// Two buttons wear this: the one projected into the bar above, and the one inside the
+// empty state, which has no bar to sit in because there is nothing to scroll past it.
 .primary {
   inline-size: 100%;
   min-block-size: var(--app-button-height);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--app-space-3);
+  // The dashboard's glyph gap, which is the one the shared bar was measured with.
+  gap: var(--app-space-2);
   border: none;
   border-radius: var(--app-button-radius);
   background: var(--app-action-bg);
