@@ -18,6 +18,8 @@ import {
   GENERATED_LIST_SHARING_SCHEMA_IDS,
   ITEM_PATTERNS,
   type AddGeneratedListParticipantLineRequest,
+  type BindGeneratedListLineRequest,
+  type BindGeneratedListLineResult,
   type CatalogSuggestResponse,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
@@ -36,6 +38,8 @@ import {
   type GeneratedListShareLinkView,
   type GetGeneratedListBasketRequest,
   type GetGeneratedListLineOriginsRequest,
+  type GetGeneratedListLineTargetsRequest,
+  type GetGeneratedListLineTargetsResult,
   type GetItemsRequest,
   type GetItemsResult,
   type ItemPage,
@@ -69,6 +73,7 @@ import { NatsClient } from '../messaging/nats-client';
 import {
   AddGeneratedListParticipantLineDto,
   BasketSuggestQueryDto,
+  BindGeneratedListLineDto,
   EnsureShareLinkDto,
   JoinGeneratedListDto,
   RevokeShareLinkDto,
@@ -824,11 +829,93 @@ export class GeneratedListParticipantController {
   }
 
   /**
+   * Which lists this added line may be sent to (plan 0058, section 3).
+   *
+   * The picker in front of the bind below, and gated on the same rule the origin
+   * sheet is: a target is nothing but the name of a list and the name of a zone,
+   * so a guest is refused rather than handed an empty set. **A guest never sees
+   * either half of this plan**, and the reason is not that a guest is untrusted:
+   * naming a list to them is exactly the disclosure section 5.2 exists to
+   * prevent. Their line stays in the basket, which is where they put it, and
+   * anybody with an account binds it afterwards.
+   *
+   * Answered as a set. The `fromRun` flag says which lists this basket was
+   * composed from, and the client draws those first and groups by zone, because
+   * the zone is how the reader thinks about it rather than how it is stored.
+   */
+  @Get(':id/lines/:lineId/targets')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.lineTargets)
+  @ApiProblemResponses({ auth: true, notFound: true })
+  lineTargets(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string
+  ): Promise<GetGeneratedListLineTargetsResult> {
+    this.requireZoneData(participant);
+    const req: GetGeneratedListLineTargetsRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+    };
+    return this.nats.send<GetGeneratedListLineTargetsResult>(
+      GENERATED_LIST_SHARING_PATTERNS.lineTargets,
+      req
+    );
+  }
+
+  /**
+   * Send this added line to a shopping list, once (plan 0058, section 4).
+   *
+   * **The one gesture that takes a line out of the basket.** Everything else on
+   * this surface either changes the basket alone or settles a line back to an
+   * origin the run already created; this one gives a household a line it has
+   * never seen, which is why it takes a list picker and an account.
+   *
+   * `target` in the singular, and it is not a collection: a line has one target
+   * and binding is once, so the URL names the thing being set rather than a set
+   * being added to. That is the difference from `origins` above it, where a
+   * basket line legitimately has several and the write is an upsert.
+   *
+   * 409 when the line already has a target, 400 when it is `DERIVED`, and each
+   * carries its own code so the client can say which one it hit rather than
+   * showing one sentence for three different states.
+   */
+  @Post(':id/lines/:lineId/target')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.bindLine, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+  })
+  bindLine(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: BindGeneratedListLineDto
+  ): Promise<BindGeneratedListLineResult> {
+    this.requireZoneData(participant);
+    const req: BindGeneratedListLineRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+      listId: dto.listId,
+    };
+    return this.nats.send<BindGeneratedListLineResult>(
+      GENERATED_LIST_SHARING_PATTERNS.bindLine,
+      req
+    );
+  }
+
+  /**
    * Plan 0051 section 5.2's all or nothing rule, at the gateway.
    *
-   * Both origin routes are refused rather than answered with less, for the reason
-   * the allocation sheet is refused above: naming source lists is naming zone
-   * data, and here there is nothing else in the answer.
+   * The origin routes and plan 0058's two are refused rather than answered with
+   * less, for the reason the allocation sheet is refused above: naming source
+   * lists is naming zone data, and in all four there is nothing else in the
+   * answer.
    */
   private requireZoneData(participant: GeneratedListParticipantContext): void {
     if (!participant.seesZoneData) {

@@ -7725,6 +7725,192 @@
         ]
       }
     },
+    "/v1/generated-lists/{id}/lines/{lineId}/targets": {
+      "get": {
+        "operationId": "GeneratedListParticipantController_lineTargets_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.lineTargets` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.generatedList.lineTargets.response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/lines/{lineId}/target": {
+      "post": {
+        "operationId": "GeneratedListParticipantController_bindLine_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindGeneratedListLineDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.bindLine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.generatedList.bindLine.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
     "/v1/generated-lists/{id}/participants/mine": {
       "get": {
         "operationId": "GeneratedListParticipantController_listParticipants_v1",
@@ -14848,6 +15034,19 @@
           "from"
         ]
       },
+      "BindGeneratedListLineDto": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The shopping list to send this line to. Must be one both you and the basket’s owner can write right now: the owner’s access is what authorizes every later settle on it, so a list they cannot write would give the household a line it never sees bought."
+          }
+        },
+        "required": [
+          "listId"
+        ]
+      },
       "LocalizedTextDto": {
         "type": "object",
         "properties": {
@@ -17133,6 +17332,42 @@
         ],
         "additionalProperties": false
       },
+      "generated-list-sharing.LineTarget": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zoneName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "listId",
+          "zoneId",
+          "listName",
+          "zoneName",
+          "fromRun"
+        ],
+        "additionalProperties": false
+      },
       "generated-list-sharing.LinkPreview": {
         "type": "object",
         "properties": {
@@ -19077,6 +19312,42 @@
         ],
         "additionalProperties": false
       },
+      "msg.generatedList.bindLine.response": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdLineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pendingApproval": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "line",
+          "listId",
+          "zoneId",
+          "createdLineId",
+          "quantity",
+          "pendingApproval"
+        ],
+        "additionalProperties": false
+      },
       "msg.generatedList.lineOrigins.response": {
         "type": "object",
         "properties": {
@@ -19106,6 +19377,31 @@
           "lineId",
           "origins",
           "candidates"
+        ],
+        "additionalProperties": false
+      },
+      "msg.generatedList.lineTargets.response": {
+        "type": "object",
+        "properties": {
+          "generatedListId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.LineTarget"
+            }
+          }
+        },
+        "required": [
+          "generatedListId",
+          "lineId",
+          "targets"
         ],
         "additionalProperties": false
       },

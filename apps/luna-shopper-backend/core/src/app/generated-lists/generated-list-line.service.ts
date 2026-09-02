@@ -7,6 +7,7 @@ import {
   type GeneratedListLineIdRequest,
   type GeneratedListLineView,
   type GeneratedListView,
+  type LineView,
   type ReorderGeneratedListLinesRequest,
   type UpdateGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -36,6 +37,21 @@ import { LineClaimService } from './line-claim.service';
 
 /** Answered for a line that is not on the basket the request named. */
 const NO_SUCH_LINE = 'Generated list line not found';
+
+/**
+ * What a write back created: the zone line, the zone it landed in, and what it
+ * asked for.
+ *
+ * Returned rather than kept, because plan 0058's caller has to tell the reader
+ * whether the household still has to approve it, and that is a property of the
+ * created line alone.
+ */
+export interface PromotedLine {
+  line: LineView;
+  zoneId: string;
+  /** The units the zone line was created with, which the origin row records. */
+  quantity: number;
+}
 
 /**
  * Editing a basket (plan 0050, section 5), and the one rule the whole plan turns
@@ -281,23 +297,42 @@ export class GeneratedListLineService {
    * line's `origin` **stays `ADDED`**, because the history worth recording is
    * that this came from a shop rather than from the list.
    *
-   * Reachable from the participant surface since plan 0055, and **only for the
-   * owner** (section 3.2): the default target is the owner's standing intent
-   * about their own additions, and a guest's line silently promoted into a
-   * household list would be a zone write they cannot see, cannot explain and did
-   * not ask for. `userId` is therefore always the basket's owner, and the write
-   * goes through their access at that moment like every other one here.
+   * Reachable from the participant surface since plan 0055 as the owner's
+   * default target (section 3.2), which is their standing intent about their
+   * **own** additions: a guest's line silently promoted into a household list
+   * would be a zone write they cannot see, cannot explain and did not ask for.
+   *
+   * Since plan 0058 it is also how a named target reaches a list from the
+   * basket, and that is what {@link userId} is for. It is the account whose
+   * `WRITE` the add is checked against and whose name the created line carries,
+   * so it is the **owner** on the two paths above and the **actor** when
+   * somebody with an account binds a line: a household's list may name only
+   * accounts, and the account that said which list is the honest author. The
+   * owner's own access is checked by that caller separately, because it is the
+   * owner's access that authorizes every later settle on the origin this writes.
+   *
+   * The created line is returned rather than discarded, for one field: whether
+   * the list's ordinary rules approved it or left it `PENDING`. Nothing here
+   * decides that (plan 0037) and nothing here overrides it; a caller that has to
+   * tell a reader their line is waiting can only be told by the add itself.
    */
   async promote(
     userId: string,
     line: GeneratedListLine,
-    targetListId: string
-  ): Promise<void> {
+    targetListId: string,
+    // The units to ask that list for, when they are not the basket line's own
+    // quantity. Plan 0058 section 4.1 binds at what is **outstanding**, because
+    // a line whose units are already bought would otherwise ask the household
+    // for things that are in the cupboard. Zero is a legitimate value and is
+    // plan 0047 section 2.2's line: known about, not currently wanted.
+    options: { quantity?: number } = {}
+  ): Promise<PromotedLine> {
+    const quantity = options.quantity ?? line.quantity;
     const created = await this.zoneLines.add({
       userId,
       listId: targetListId,
       content: line.content,
-      quantity: line.quantity,
+      quantity,
       itemIds: line.itemId ? [line.itemId] : [],
     });
     const list = await this.listAccess.getList(targetListId);
@@ -314,10 +349,15 @@ export class GeneratedListLineService {
         list.zoneId,
         targetListId,
         created.id,
-        line.quantity,
+        // The provenance row records what this list actually contributed, which
+        // is the number the zone line was created with and not the basket
+        // line's, or a settle would allocate against units nobody asked for.
+        quantity,
         created.version,
       ]
     );
+
+    return { line: created, zoneId: list.zoneId, quantity };
   }
 
   /**

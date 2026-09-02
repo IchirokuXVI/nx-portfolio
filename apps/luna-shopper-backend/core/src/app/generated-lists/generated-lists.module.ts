@@ -16,6 +16,7 @@ import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
+import { GeneratedListBindService } from './generated-list-bind.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
@@ -88,6 +89,11 @@ import { LineClaimModule } from './line-claim.module';
     // settle service (plan 0057, section 1): it changes a zone list without
     // buying anything.
     GeneratedListOriginsService,
+    // The one gesture that takes a line out of the basket (plan 0058). It writes
+    // no zone rows of its own: it is a picker and a set of preconditions in
+    // front of the write back above, which is where plan 0050 section 5's rule
+    // lives and where it stays.
+    GeneratedListBindService,
   ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets
   // without reaching into the repositories itself. The sharing service is

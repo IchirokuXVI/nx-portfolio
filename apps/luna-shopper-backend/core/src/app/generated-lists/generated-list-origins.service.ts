@@ -39,7 +39,6 @@ import { GeneratedListService } from './generated-list.service';
 import {
   ACTIVE_OVERLAP_SQL,
   SHEET_CANDIDATE_LINES_SQL,
-  WRITABLE_LISTS_SQL,
   type ActiveOverlapRow,
   type SheetCandidateLineRow,
   type WritableListRow,
@@ -280,25 +279,14 @@ export class GeneratedListOriginsService {
    * settle runs through to become per origin, which section 8 records and does not
    * build.
    */
-  private async candidateScope(
+  private candidateScope(
     ownerUserId: string,
     actorUserId: string
   ): Promise<WritableListRow[]> {
-    const owned = await this.lists.query<WritableListRow[]>(
-      WRITABLE_LISTS_SQL,
-      [ownerUserId]
-    );
-    if (actorUserId === ownerUserId) {
-      return owned;
-    }
-    const actors = new Set(
-      (
-        await this.lists.query<WritableListRow[]>(WRITABLE_LISTS_SQL, [
-          actorUserId,
-        ])
-      ).map((row) => row.listId)
-    );
-    return owned.filter((row) => actors.has(row.listId));
+    // Shared with plan 0058's target picker rather than copied, because the two
+    // offer different things and must not be able to disagree about which lists
+    // qualify: both end in a provenance row that every later settle acts on.
+    return this.sharing.writableIntersection(ownerUserId, actorUserId);
   }
 
   /**

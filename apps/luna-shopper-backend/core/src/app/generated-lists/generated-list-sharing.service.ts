@@ -47,6 +47,7 @@ import {
   type BasketSourceListRow,
   type WritableAmongRow,
 } from './generated-list-sharing.sql';
+import { WRITABLE_LISTS_SQL, type WritableListRow } from './generated-list.sql';
 
 /**
  * Sharing a basket with people who have no account (plan 0051, sections 3, 4, 5
@@ -589,6 +590,50 @@ export class GeneratedListSharingService {
       [userId, [...listIds]]
     );
     return new Set(rows.map((row) => row.listId));
+  }
+
+  /**
+   * Every list **both** these people may write right now (plan 0057, section
+   * 4.1; plan 0058, section 3.1).
+   *
+   * The scope behind both pickers on this surface, and it lives here rather than
+   * on either of them because they must not be allowed to disagree about it: one
+   * offers a list to adopt and the other offers a list to bind into, and both
+   * end in a provenance row that every later settle acts on.
+   *
+   * For the overwhelming case, where the actor **is** the owner, it is their
+   * entire writable set across every zone they are in, which is exactly what
+   * both plans ask for: a list from a zone the run never drew from qualifies,
+   * and so does a zone the run never heard of.
+   *
+   * The intersection bites only on a registered co-shopper, and it is plan 0051
+   * section 6.4 that puts it there. **A settle is authorized by the owner's
+   * access.** A row created against a list the owner cannot write is one every
+   * subsequent settle skips and reports, for the life of the basket: the
+   * household would see the line and never see it bought, and the shopper would
+   * get a skip report they cannot act on. Lifting it needs that security rule to
+   * become per origin, which plan 0057 section 8 records as one decision for
+   * both plans rather than two.
+   */
+  async writableIntersection(
+    ownerUserId: string,
+    actorUserId: string
+  ): Promise<WritableListRow[]> {
+    const owned = await this.lists.query<WritableListRow[]>(
+      WRITABLE_LISTS_SQL,
+      [ownerUserId]
+    );
+    if (actorUserId === ownerUserId) {
+      return owned;
+    }
+    const actors = new Set(
+      (
+        await this.lists.query<WritableListRow[]>(WRITABLE_LISTS_SQL, [
+          actorUserId,
+        ])
+      ).map((row) => row.listId)
+    );
+    return owned.filter((row) => actors.has(row.listId));
   }
 
   /** The distinct zone lists a basket's provenance rows point at. */
