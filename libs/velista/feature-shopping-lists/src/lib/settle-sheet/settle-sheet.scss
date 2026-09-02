@@ -123,53 +123,15 @@
   }
 }
 
-// --- The stepper ------------------------------------------------------------
+// --- How many ---------------------------------------------------------------
 
-.stepper {
+// The reel draws itself, so this only puts it where the stepper used to sit:
+// centred, with the same air above and below, so the pane does not jump for
+// somebody who knew where the number was.
+.quantity-control {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: var(--app-space-4);
   margin-block: var(--app-space-5);
-}
-
-.step {
-  @include shared.tap-target;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  // `--app-button-height` and not `--app-control-height`: the latter *is* the 44
-  // minimum, and these two want to be larger than it. They are the controls a
-  // thumb hunts for while the other hand is holding a trolley.
-  inline-size: var(--app-button-height);
-  block-size: var(--app-button-height);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-full);
-  background: var(--app-surface-raised);
-  font-family: inherit;
-  font-size: var(--app-text-xl);
-  color: var(--app-text-primary);
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-}
-
-.stepper-value {
-  min-inline-size: 3ch;
-  font-size: var(--app-text-3xl);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-primary);
-  text-align: center;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-    border-radius: var(--app-radius-sm);
-  }
 }
 
 // --- The options ------------------------------------------------------------

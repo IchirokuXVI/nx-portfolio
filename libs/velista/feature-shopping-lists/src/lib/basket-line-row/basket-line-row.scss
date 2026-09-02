@@ -162,6 +162,9 @@
   color: var(--app-text-muted);
 }
 
+// The trailing column, which is the reel and one caption under it. `flex: none` so
+// the control keeps its size on the narrowest phone and the words truncate instead:
+// the number is the control and the text is not (plan 0054, section 7).
 .numbers {
   display: flex;
   flex-direction: column;
@@ -170,22 +173,31 @@
   flex: none;
 }
 
-.quantity,
-.outstanding {
-  font-size: var(--app-text-lg);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-primary);
-}
-
-.outstanding {
-  font-weight: 600;
-  color: var(--app-action-quiet-fg);
-}
-
+// What the gesture is about to record, and the progress caption the rest of the
+// time. One line, never wrapped: a caption that grew a second line while a thumb was
+// down would move the number out from under it.
+.preview,
 .progress {
   font-size: var(--app-text-2xs);
   color: var(--app-text-muted);
   white-space: nowrap;
+}
+
+// The one about to happen, said in the colour the reel's own current number takes,
+// so the caption and the control read as one thing. `--app-action-quiet-fg` is this
+// app's amber; `--app-status-attention-*` is violet despite its name.
+.preview {
+  color: var(--app-action-quiet-fg);
+}
+
+// A refusal, under the row it is about. Quiet rather than an error treatment: the
+// number beside it is now the true one, so nothing here is broken and there is
+// nothing to retry.
+.line-notice {
+  margin: 0;
+  padding: 0 var(--app-space-4) var(--app-space-3);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
 }
 
 .visually-hidden {

@@ -175,41 +175,24 @@
       <p class="pane-title">{{ 'basket.settle.someTitle' | rokuT }}</p>
 
       <!--
-        `spinbutton` rather than a number input: the value is bounded by what is
-        outstanding, and the two buttons beside it are the primary way in on a
-        phone. The keyboard path comes with the role.
+        **The same reel the row uses** (plan 0054, section 6), where this drew its
+        own spinbutton with a copy of `QuantityReel`'s key table beside a comment
+        saying it matched. There is one number control in this product and one
+        keyboard path through it, and a copy that no longer exists cannot drift.
+
+        Bounded at one and at what is outstanding, because this asks how many of
+        the line were bought: zero is "they had none", which is the button below
+        and an outcome rather than a quantity.
       -->
-      <div class="stepper">
-        <button
-          (click)="step(-1)"
-          [attr.aria-label]="'basket.settle.fewer' | rokuT"
-          [disabled]="typed() <= 1"
-          class="step"
-          type="button"
-        >
-          &minus;
-        </button>
-        <span
-          (keydown)="onKeydown($event)"
-          [attr.aria-label]="'basket.settle.quantity' | rokuT"
-          [attr.aria-valuemax]="outstanding()"
-          [attr.aria-valuemin]="1"
-          [attr.aria-valuenow]="typed()"
-          class="stepper-value"
-          role="spinbutton"
-          tabindex="0"
-        >
-          {{ typed() }}
-        </span>
-        <button
-          (click)="step(1)"
-          [attr.aria-label]="'basket.settle.more' | rokuT"
-          [disabled]="typed() >= outstanding()"
-          class="step"
-          type="button"
-        >
-          +
-        </button>
+      <div class="quantity-control">
+        <lib-quantity-reel
+          (committedTo)="typed.set($event.to)"
+          (preview)="onQuantityPreview($event)"
+          [label]="'basket.settle.quantity' | rokuT"
+          [max]="quantityMax()"
+          [min]="1"
+          [value]="typed()"
+        />
       </div>
 
       <div class="actions">

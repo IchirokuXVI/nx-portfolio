@@ -891,6 +891,12 @@
       "free": "No product chosen",
       "busy": "Saving"
     },
+    "outstanding": {
+      "label": "{{name}}, still to get",
+      "bought_one": "{{count}} bought",
+      "bought_other": "{{count}} bought",
+      "buying": "buying {{next}} instead of {{current}}"
+    },
     "touched": {
       "got": "{{name}} got it",
       "gotSome": "{{name}} got {{count}}",
