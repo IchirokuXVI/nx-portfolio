@@ -10,7 +10,15 @@ import { DataSource } from 'typeorm';
  */
 registerTsPaths({
   baseUrl: process.cwd(),
-  paths: { '@portfolio/luna-shopper/*': ['libs/luna-shopper/*/src/index.ts'] },
+  paths: {
+    '@portfolio/luna-shopper/*': ['libs/luna-shopper/*/src/index.ts'],
+    // A secondary entry point the wildcard above would map to a directory
+    // that does not exist. The postal code migration (plan 0060) imports the
+    // dataset through it, so the CLI has to know it as tsconfig.base does.
+    '@portfolio/luna-shopper/postal-codes/dataset': [
+      'libs/luna-shopper/postal-codes/src/dataset.ts',
+    ],
+  },
 });
 
 loadEnv({ path: 'apps/luna-shopper-backend/catalog/.env' });

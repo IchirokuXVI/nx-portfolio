@@ -7,6 +7,7 @@ import {
 import {
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
+  POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
   SCOPE_ORIGINS,
@@ -108,6 +109,11 @@ export const CATALOG_SCHEMA_IDS = {
   postalCodeCoverageView: schemaId('catalog/PostalCodeCoverageView'),
   resolvedScopesView: schemaId('catalog/ResolvedScopesView'),
   catalogScopeView: schemaId('catalog/CatalogScopeView'),
+  postalCodeDistanceView: schemaId('catalog/PostalCodeDistanceView'),
+  resolveNearestPostalCodeRequest: schemaId('msg/postalCode.nearest/request'),
+  nearestPostalCodeView: schemaId('catalog/NearestPostalCodeView'),
+  listNearbyPostalCodesRequest: schemaId('msg/postalCode.nearby/request'),
+  nearbyPostalCodesView: schemaId('catalog/NearbyPostalCodesView'),
   upsertLocationItemRequest: schemaId(
     'msg/supermarketLocationItem.upsert/request'
   ),
@@ -851,6 +857,73 @@ const listLocationItemsRequest = object(
   ['userId', 'supermarketLocationId']
 );
 
+// --- Postal code geography (plan 0060, sections 5 and 7) --------------------
+
+/**
+ * ISO 3166-1 alpha-2. Not constrained to two lowercase letters here, although
+ * the table stores exactly that, for two reasons: the service normalizes case
+ * and whitespace before it looks, and no contract schema carries a `pattern`
+ * because the gateway's OpenAPI bridge samples every string as `sample` and
+ * would reject its own document.
+ */
+const countryCode = (): JsonSchema => nonEmptyString();
+/** A radius or a cut off in metres. Zero is allowed and answers nothing. */
+const metres = (): JsonSchema => ({ type: 'number', minimum: 0 });
+
+const postalCodeDistanceView = object(
+  CATALOG_SCHEMA_IDS.postalCodeDistanceView,
+  {
+    postalCode: nonEmptyString(),
+    distanceMetres: metres(),
+  },
+  ['postalCode', 'distanceMetres']
+);
+
+const resolveNearestPostalCodeRequest = object(
+  CATALOG_SCHEMA_IDS.resolveNearestPostalCodeRequest,
+  {
+    country: countryCode(),
+    latitude: { type: 'number', minimum: -90, maximum: 90 },
+    longitude: { type: 'number', minimum: -180, maximum: 180 },
+    maxDistanceMetres: metres(),
+  },
+  ['country', 'latitude', 'longitude', 'maxDistanceMetres']
+);
+
+const nearestPostalCodeView = object(
+  CATALOG_SCHEMA_IDS.nearestPostalCodeView,
+  {
+    country: countryCode(),
+    // Null beyond `maxDistanceMetres`: "we don't know" rather than a confident
+    // wrong code (plan 0060, section 6).
+    nearest: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.postalCodeDistanceView), { type: 'null' }],
+    },
+  },
+  ['country', 'nearest']
+);
+
+const listNearbyPostalCodesRequest = object(
+  CATALOG_SCHEMA_IDS.listNearbyPostalCodesRequest,
+  {
+    country: countryCode(),
+    postalCode: nonEmptyString(),
+    radiusMetres: metres(),
+  },
+  ['country', 'postalCode', 'radiusMetres']
+);
+
+const nearbyPostalCodesView = object(
+  CATALOG_SCHEMA_IDS.nearbyPostalCodesView,
+  {
+    country: countryCode(),
+    postalCode: nonEmptyString(),
+    known: boolean(),
+    postalCodes: array(ref(CATALOG_SCHEMA_IDS.postalCodeDistanceView)),
+  },
+  ['country', 'postalCode', 'known', 'postalCodes']
+);
+
 export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.itemCategory, Object.values(ItemCategory)),
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
@@ -920,6 +993,11 @@ export const catalogSchemas: JsonSchema[] = [
   upsertLocationItemRequest,
   getLocationItemRequest,
   listLocationItemsRequest,
+  postalCodeDistanceView,
+  resolveNearestPostalCodeRequest,
+  nearestPostalCodeView,
+  listNearbyPostalCodesRequest,
+  nearbyPostalCodesView,
 ];
 
 export const catalogMessageContracts: Record<
@@ -1077,5 +1155,13 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_LOCATION_ITEM_PATTERNS.listByLocation]: {
     request: CATALOG_SCHEMA_IDS.listLocationItemsRequest,
     response: CATALOG_SCHEMA_IDS.supermarketLocationItemPage,
+  },
+  [POSTAL_CODE_PATTERNS.nearest]: {
+    request: CATALOG_SCHEMA_IDS.resolveNearestPostalCodeRequest,
+    response: CATALOG_SCHEMA_IDS.nearestPostalCodeView,
+  },
+  [POSTAL_CODE_PATTERNS.nearby]: {
+    request: CATALOG_SCHEMA_IDS.listNearbyPostalCodesRequest,
+    response: CATALOG_SCHEMA_IDS.nearbyPostalCodesView,
   },
 };

@@ -104,6 +104,12 @@
       "@portfolio/luna-shopper/platform/tracing": [
         "./libs/luna-shopper/platform/src/tracing.ts"
       ],
+      "@portfolio/luna-shopper/postal-codes": [
+        "./libs/luna-shopper/postal-codes/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/postal-codes/dataset": [
+        "./libs/luna-shopper/postal-codes/src/dataset.ts"
+      ],
       "@portfolio/luna-shopper/test-fixtures": [
         "./libs/luna-shopper/test-fixtures/src/index.ts"
       ],
