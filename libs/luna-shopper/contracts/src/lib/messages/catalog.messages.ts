@@ -489,6 +489,16 @@ export interface ListSupermarketLocationsRequest extends PageQuery {
    * into somewhere to go. Absent lists the whole chain, as before.
    */
   priceScopeId?: string;
+  /**
+   * Shops the caller has refused, left out of the answer (plan 0064, section 3).
+   *
+   * Catalog is told the ids rather than asked to work them out: the preference
+   * lives in core and the gateway is what knows both, exactly as it is for the
+   * chain exclusions it already resolves before a catalog read. Absent lists
+   * everything, which is what an owner surface and the screen that edits the
+   * exclusions both want.
+   */
+  excludedSupermarketLocationIds?: string[];
 }
 
 // --- Item requests ---------------------------------------------------------
@@ -798,6 +808,19 @@ export interface ResolvePriceScopesRequest {
   supermarketIds?: string[];
   /** Chains to leave out, applied after the two above. */
   excludedSupermarketIds?: string[];
+  /**
+   * Individual shops to leave out of rung one (plan 0064, section 3).
+   *
+   * The finer axis beside `excludedSupermarketIds`, and it narrows a different
+   * step: a chain exclusion drops the chain from the candidates, this drops the
+   * shops from the set that answers "who sits in these postal codes". Without it
+   * exclusion would be cosmetic, because a caller could refuse every Mercadona
+   * near them and still be quoted Mercadona's local price.
+   *
+   * It never re admits anything: a shop of an excluded chain stays excluded
+   * whatever this list says, which is section 2.1's precedence.
+   */
+  excludedSupermarketLocationIds?: string[];
 }
 
 /**

@@ -127,12 +127,42 @@ export class ScopeResolutionService {
         postalCodes: query.postalCodes ?? [],
         supermarketIds: query.supermarketIds ?? [],
         excludedSupermarketIds: [],
+        // A caller who named a place has not named a profile, so there are no
+        // refusals to apply. Stated rather than left off, so the empty case is
+        // a decision on the page that makes it.
+        excludedSupermarketLocationIds: [],
       });
       return { ...resolved, profileId: null, explicit: true };
     }
 
     const resolved = await this.resolve(userId, query.profileId);
     return resolved;
+  }
+
+  /**
+   * The shops this caller has switched off (plan 0064, section 3).
+   *
+   * For the reads that offer a shop rather than price one, which need the
+   * refusals without needing the scopes. **Deliberately not the cached path
+   * above**: that one throws `CATALOG_SCOPE_REQUIRED` for a profile that has
+   * said nothing, which is the right answer when the question is "what do prices
+   * cost here" and the wrong one when it is "which shops are there". A profile
+   * with no postal code still has opinions, and a person filling one in should
+   * see their shops rather than an onboarding error.
+   *
+   * One round trip to core and no caching. The alternative is a second cache
+   * keyed the same way as the scope one and invalidated by the same writes,
+   * which is a copy of a mechanism to save a call that happens once per screen.
+   */
+  async refusedLocations(
+    userId: string,
+    profileId?: string
+  ): Promise<string[]> {
+    const selector = await this.nats.send<ProfileScopeSelector>(
+      PROFILE_PATTERNS.resolveScopes,
+      { userId, profileId }
+    );
+    return selector.excludedSupermarketLocationIds;
   }
 
   /**
@@ -188,6 +218,7 @@ export class ScopeResolutionService {
       postalCodes: selector.postalCodes,
       supermarketIds: selector.supermarketIds,
       excludedSupermarketIds: selector.excludedSupermarketIds,
+      excludedSupermarketLocationIds: selector.excludedSupermarketLocationIds,
     });
     const view: CatalogScopeView = {
       ...resolved,
@@ -210,6 +241,7 @@ export class ScopeResolutionService {
     postalCodes: string[];
     supermarketIds: string[];
     excludedSupermarketIds: string[];
+    excludedSupermarketLocationIds: string[];
   }): Promise<ResolvedScopesView> {
     return this.nats.send<ResolvedScopesView>(
       PRICE_SCOPE_PATTERNS.resolve,

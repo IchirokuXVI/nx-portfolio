@@ -5652,6 +5652,111 @@
         ]
       }
     },
+    "/v1/account/shopping-profiles/{id}/locations": {
+      "put": {
+        "operationId": "AccountController_setProfileLocations_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProfileLocationsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `profiles.setLocationPreferences` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profile.ShoppingProfileView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
     "/v1/account/shopping-profiles/{id}/default": {
       "post": {
         "operationId": "AccountController_setDefaultProfile_v1",
@@ -8840,6 +8945,25 @@
                 "created",
                 "updated"
               ]
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Apply this profile of yours rather than your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeExcluded",
+            "required": false,
+            "in": "query",
+            "description": "List the shops you have switched off as well as the ones you have not. For the screen that edits those choices; every other caller wants the default.",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -14765,7 +14889,7 @@
           "supermarketId": {
             "type": "string",
             "format": "uuid",
-            "description": "The chain, never one of its locations: \"no DIA\" means no DIA anywhere."
+            "description": "The chain: \"no DIA\" means no DIA anywhere, including the DIA that opens next month. Refusing one particular shop is the separate, finer choice below."
           },
           "excluded": {
             "type": "boolean",
@@ -14948,6 +15072,38 @@
         },
         "required": [
           "postalCode"
+        ]
+      },
+      "ProfileLocationDto": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "One shop of a chain, rather than the chain."
+          },
+          "excluded": {
+            "type": "boolean",
+            "description": "False switches the shop back on, and deletes the row rather than storing it: absence already means included, so a shop imported later is one you can see rather than one silently missing."
+          }
+        },
+        "required": [
+          "supermarketLocationId"
+        ]
+      },
+      "SetProfileLocationsDto": {
+        "type": "object",
+        "properties": {
+          "locations": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileLocationDto"
+            }
+          }
+        },
+        "required": [
+          "locations"
         ]
       },
       "GeneratedListSourceDto": {
@@ -19954,6 +20110,28 @@
         ],
         "additionalProperties": false
       },
+      "profile.ProfileLocationPreferenceView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "excluded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "supermarketLocationId",
+          "excluded"
+        ],
+        "additionalProperties": false
+      },
       "profile.ProfilePostalCodeView": {
         "type": "object",
         "properties": {
@@ -20088,6 +20266,12 @@
               "$ref": "#/components/schemas/profile.ProfileSupermarketPreferenceView"
             }
           },
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/profile.ProfileLocationPreferenceView"
+            }
+          },
           "generationSources": {
             "type": "array",
             "items": {
@@ -20106,6 +20290,7 @@
           "generationScope",
           "postalCodes",
           "supermarkets",
+          "locations",
           "generationSources"
         ],
         "additionalProperties": false

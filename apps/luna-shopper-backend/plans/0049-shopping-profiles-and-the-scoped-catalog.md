@@ -44,6 +44,11 @@ so the resolver in section 1.1 has real scopes to resolve to. Companion plan:
 names the **chain**, never a location: "no DIA" means no DIA anywhere, and which locations a
 chain reaches is the scope resolver's business, not the user's.
 
+> **Superseded in part by `0064`.** There is a per location preference now, beside this one
+> rather than instead of it: `ProfileLocationPreference` says "not that shop", this one says
+> "not that brand, including its future shops", and an excluded chain still hides every one of
+> its locations whatever their own rows say.
+
 **ProfileGenerationSource** (only meaningful when `generationScope = SELECTED`): `id`,
 `profileId`, `zoneId`, `listId` (nullable: null means the whole zone); unique (`profileId`,
 `zoneId`, `listId`).
@@ -64,6 +69,10 @@ a short lifetime. The resolver lives in catalog beside the scopes, not in core w
 profile row lives.
 
 ### 1.2 Supermarket preferences are a filter, not a second address
+
+> **Superseded in part by `0064`**, which adds the finer axis this section says there is not.
+> Everything below is still true of the chain preference; what changed is that it is no longer
+> the only one. `0064` section 2 is why both exist.
 
 A postal code answers "where am I". A supermarket preference answers "and of the chains that
 reach here, these ones". Both are needed: a profile with one postal code and no chain

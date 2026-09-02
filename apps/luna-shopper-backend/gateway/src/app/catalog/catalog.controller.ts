@@ -57,6 +57,7 @@ import {
   CreateProductGroupDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
+  ListLocationsQueryDto,
   ListProductGroupsQueryDto,
   LookupItemsDto,
   PriceScopedQueryDto,
@@ -123,7 +124,10 @@ function toScopeQuery(query: PriceScopedQueryDto): ScopeQuery {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/supermarkets', version: '1' })
 export class CatalogSupermarketsController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
 
   @Post()
   @ApiContractResponse(SUPERMARKET_PATTERNS.create, {
@@ -209,18 +213,32 @@ export class CatalogSupermarketsController {
     );
   }
 
+  /**
+   * A chain's shops, minus the ones the caller has switched off (plan 0064,
+   * section 3).
+   *
+   * The refusals live in core and the shops live in catalog, so this is the
+   * gateway resolving and passing, exactly as it does for a priced read. It
+   * costs one extra round trip, and `includeExcluded` skips even that for the
+   * screen that edits the refusals and therefore has to see them.
+   */
   @Get(':id/locations')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.list)
-  listLocations(
+  async listLocations(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
-    @Query() query: CatalogListQueryDto
+    @Query() query: ListLocationsQueryDto
   ): Promise<SupermarketLocationPage> {
+    const excludedSupermarketLocationIds = query.includeExcluded
+      ? []
+      : await this.scopes.refusedLocations(user.userId, query.profileId);
+
     return this.nats.send<SupermarketLocationPage>(
       SUPERMARKET_LOCATION_PATTERNS.list,
       {
         userId: user.userId,
         supermarketId: id,
+        excludedSupermarketLocationIds,
         cursor: query.cursor,
         limit: query.limit,
       }

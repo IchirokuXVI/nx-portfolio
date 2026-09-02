@@ -3,12 +3,22 @@ import { BaseEntity } from './base.entity';
 import { ShoppingProfile } from './shopping-profile.entity';
 
 /**
- * A chain this profile does, or does not, shop (plan 0049, section 1.2).
+ * A chain this profile does, or does not, shop (plan 0049, section 1.2, as
+ * superseded by plan 0064).
  *
- * **It names the chain and never a location.** "No DIA" means no DIA anywhere,
- * and which stores a chain reaches is the resolver's business rather than the
- * user's. There is deliberately no per location preference anywhere in this
- * plan, including on the page that edits it.
+ * **It names the chain, and it is the durable statement about a brand.** "No
+ * DIA" means no DIA anywhere, including the DIA that opens down the road next
+ * month, and it keeps being true with no maintenance. That is what distinguishes
+ * it from {@link ProfileLocationPreference}, which is the specific statement
+ * about one shop: the two axes exist together because "not that shop, the one
+ * with no parking" and "not that brand" are different things to mean, and
+ * collapsing them into one mechanism loses whichever was not chosen (plan 0064,
+ * section 2).
+ *
+ * **This axis wins.** An excluded chain hides every one of its locations
+ * whatever their own rows say, and those rows are left alone rather than
+ * deleted, so un excluding the chain restores the selection the user last had
+ * (plan 0064, section 2.1).
  *
  * `excluded` is why this is not simply an allowlist: "everything except DIA"
  * would otherwise force the user to enumerate every other chain, and a chain

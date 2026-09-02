@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import type { CoreConfig } from '../config/app-config';
 import {
   ProfileGenerationSource,
+  ProfileLocationPreference,
   ProfilePostalCode,
   ProfileSupermarketPreference,
   ShoppingProfile,
@@ -18,8 +19,9 @@ import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
 
 /**
- * Shopping profiles (plan 0049): the four tables, the service that holds their
- * invariants and the NATS surface the gateway calls.
+ * Shopping profiles (plan 0049, and the fifth table in plan 0064): the tables,
+ * the service that holds their invariants and the NATS surface the gateway
+ * calls.
  *
  * It imports {@link ZonesModule} for the event publisher alone, which is where
  * that provider is declared and exported. `profiles.changed` is addressed to the
@@ -38,6 +40,7 @@ import { ProfileService } from './profile.service';
       ShoppingProfile,
       ProfilePostalCode,
       ProfileSupermarketPreference,
+      ProfileLocationPreference,
       ProfileGenerationSource,
     ]),
     ZonesModule,

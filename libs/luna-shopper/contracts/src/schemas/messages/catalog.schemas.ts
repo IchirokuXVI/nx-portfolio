@@ -479,6 +479,8 @@ const listLocationsRequest = object(
     supermarketId: nonEmptyString(),
     // Plan 0066, section 4: only the shops that sell at this scope.
     priceScopeId: nonEmptyString(),
+    // Plan 0064, section 3: the shops the caller refused are not offered.
+    excludedSupermarketLocationIds: array(nonEmptyString()),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -788,6 +790,7 @@ const resolvePriceScopesRequest = object(
     postalCodes: array(nonEmptyString()),
     supermarketIds: array(nonEmptyString()),
     excludedSupermarketIds: array(nonEmptyString()),
+    excludedSupermarketLocationIds: array(nonEmptyString()),
   },
   ['userId']
 );

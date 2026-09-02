@@ -182,6 +182,15 @@ export class SupermarketLocationService {
     );
   }
 
+  /**
+   * A chain's shops, newest first.
+   *
+   * The caller's refusals are filtered out when the request carries them (plan
+   * 0064, section 3) and not otherwise, which is what keeps this one read
+   * serving both the screen that **offers** shops and the screen that **edits**
+   * the refusals: the second has to render a shop that is switched off, and a
+   * read that hid it could not be used to switch it back on.
+   */
   async list(
     req: ListSupermarketLocationsRequest
   ): Promise<SupermarketLocationPage> {
@@ -198,6 +207,15 @@ export class SupermarketLocationService {
       // Plan 0066, section 4: the shops that sell at one scope, which is how a
       // price keyed by scope becomes somewhere a person can go.
       qb.andWhere('l."priceScopeId" = :scope', { scope: req.priceScopeId });
+    }
+    const refused = req.excludedSupermarketLocationIds ?? [];
+    if (refused.length > 0) {
+      // Plan 0064, section 3: a shop the caller refused is not offered. Catalog
+      // is handed the ids rather than asked to work them out, because the
+      // preference lives in core and the gateway is the one thing that knows
+      // both. An empty list is not a filter: `NOT IN ()` is not valid SQL, and
+      // "the caller refused nothing" is the ordinary case.
+      qb.andWhere('l.id NOT IN (:...refused)', { refused });
     }
     if (cursor) {
       qb.andWhere('(l."createdAt", l.id) < (:cv, :cid)', {

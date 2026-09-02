@@ -49,6 +49,23 @@ export const PROFILE_PATTERNS = {
    * not have to (plan 0062, sections 3.1 and 6).
    */
   removePostalCode: 'profiles.removePostalCode',
+  /**
+   * Say which individual shops this profile does and does not go to (plan 0064,
+   * section 5).
+   *
+   * **Several at once, and set and clear are the same call.** Absence means
+   * included, so a row saying `excluded: false` and no row at all describe the
+   * same profile; sending `false` is therefore how a shop is switched back on,
+   * and the row is deleted rather than stored saying nothing. The screen's
+   * natural gesture is several toggles together and one request per checkbox is
+   * a poor fit for a phone on a bus, so the bulk shape is the only shape.
+   *
+   * It is a **partial** write and not a replacement, which is the one place it
+   * parts company with `supermarkets` on {@link PROFILE_PATTERNS.update}: shops
+   * this call does not mention keep whatever they had. A replacement would make
+   * one toggle require the client to hold every shop it has ever seen.
+   */
+  setLocationPreferences: 'profiles.setLocationPreferences',
 } as const;
 
 /**
@@ -81,6 +98,15 @@ export const PROFILE_LIMITS = {
    */
   maxNearbyPerPostalCode: 10,
   maxSupermarketPreferences: 100,
+  /**
+   * How many individual shops one profile may hold an opinion about (plan 0064).
+   *
+   * Larger than the chain cap because it counts a finer thing: a profile with
+   * five postal codes and their neighbours can see several hundred shops, and
+   * the chain list only ever holds brands. Still a bound rather than a budget,
+   * and only exclusions occupy it: switching a shop back on deletes its row.
+   */
+  maxLocationPreferences: 500,
   maxGenerationSources: 100,
   nameMaxLength: 64,
   postalCodeMaxLength: 16,
@@ -128,17 +154,42 @@ export interface ProfilePostalCodeView {
 }
 
 /**
- * A chain the profile does or does not shop (plan 0049, section 1.2).
+ * A chain the profile does or does not shop (plan 0049, section 1.2, as
+ * superseded by plan 0064).
  *
- * It names the **chain and never a location**: "no DIA" means no DIA anywhere,
- * and which stores a chain reaches is the resolver's business. `excluded` exists
- * so "everything except DIA" does not force the user to enumerate every other
- * chain, and so a chain added to the catalog later is included by default rather
- * than silently missing from a hand written allowlist.
+ * **The durable statement about a brand.** "No DIA" means no DIA anywhere,
+ * including the DIA that opens down the road next month, and it keeps being
+ * true with no maintenance. {@link ProfileLocationPreferenceView} beside it is
+ * the specific one, about a shop rather than a brand, and an excluded chain
+ * hides every one of its shops whatever their own rows say (plan 0064, section
+ * 2.1).
+ *
+ * `excluded` exists so "everything except DIA" does not force the user to
+ * enumerate every other chain, and so a chain added to the catalog later is
+ * included by default rather than silently missing from a hand written
+ * allowlist.
  */
 export interface ProfileSupermarketPreferenceView {
   id: string;
   supermarketId: string;
+  excluded: boolean;
+}
+
+/**
+ * One shop the profile does or does not go to (plan 0064, section 1).
+ *
+ * The finer axis beside {@link ProfileSupermarketPreferenceView}, and the two
+ * are not redundant: "not that shop" is about parking, a bad experience, a route
+ * home, and "not DIA" is about the brand. A blacklist for the same reason as its
+ * sibling, so a shop imported next week is one the user can see rather than one
+ * silently missing until they notice.
+ *
+ * `supermarketLocationId` is an opaque catalog reference, exactly as
+ * `supermarketId` is on the chain preference.
+ */
+export interface ProfileLocationPreferenceView {
+  id: string;
+  supermarketLocationId: string;
   excluded: boolean;
 }
 
@@ -175,6 +226,12 @@ export interface ShoppingProfileView {
   generationScope: GenerationScope;
   postalCodes: ProfilePostalCodeView[];
   supermarkets: ProfileSupermarketPreferenceView[];
+  /**
+   * The shops this profile has an opinion about (plan 0064). Only the ones it
+   * does: absence means included, so this is the exclusions and not a roll call
+   * of every shop the user can reach.
+   */
+  locations: ProfileLocationPreferenceView[];
   generationSources: ProfileGenerationSourceView[];
 }
 
@@ -205,6 +262,18 @@ export interface ProfileScopeSelector {
   /** Chains the profile listed. Empty means "every chain that serves me". */
   supermarketIds: string[];
   excludedSupermarketIds: string[];
+  /**
+   * The individual shops this profile refuses (plan 0064, section 3).
+   *
+   * There is no included counterpart, and there is not going to be one: the
+   * finer axis is a blacklist, so naming a shop can only ever take it away.
+   * Chains still work both ways, which is why `supermarketIds` above has one.
+   *
+   * It does **not** contribute to `empty`. A profile that has only refused
+   * things has still said nothing about where it shops, and "not that DIA" is no
+   * more a place than "not DIA" is.
+   */
+  excludedSupermarketLocationIds: string[];
   empty: boolean;
 }
 
@@ -240,6 +309,19 @@ export interface ProfilePostalCodeInput {
 
 export interface ProfileSupermarketPreferenceInput {
   supermarketId: string;
+  excluded?: boolean;
+}
+
+/**
+ * One shop, and whether the profile refuses it (plan 0064).
+ *
+ * The same shape as its chain sibling, deliberately: this is a second axis and
+ * not a second vocabulary. `excluded` defaults to false, which on the finer axis
+ * means "delete whatever row is there", because absence and `false` say the same
+ * thing and only one of them should be stored.
+ */
+export interface ProfileLocationPreferenceInput {
+  supermarketLocationId: string;
   excluded?: boolean;
 }
 
@@ -332,4 +414,27 @@ export interface RemoveProfilePostalCodeRequest {
   userId: string;
   profileId: string;
   postalCode: string;
+}
+
+/**
+ * Set or clear what a profile thinks of several shops at once (plan 0064,
+ * section 5).
+ *
+ * **The only way location preferences are written**, and deliberately not a
+ * fourth collection on {@link UpdateShoppingProfileRequest} beside `supermarkets`
+ * and the other two. Those are replacements, which suits a list the page holds
+ * in full; this axis is per shop and a page holds a screenful of a set that can
+ * run to hundreds, so a replacement would make one toggle require the client to
+ * send every shop it has ever seen, and an incomplete send would silently
+ * un exclude the rest.
+ *
+ * Answers the whole profile, like every other profile write, so a client that
+ * toggled three shops has the profile the toggles produced rather than the one
+ * it assumed.
+ */
+export interface SetProfileLocationPreferencesRequest {
+  userId: string;
+  profileId: string;
+  /** Each shop, and whether it is refused. `false` deletes the row. */
+  locations: ProfileLocationPreferenceInput[];
 }

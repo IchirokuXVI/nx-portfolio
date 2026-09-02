@@ -51,6 +51,31 @@ interface CacheEntry {
  * through. Averaging across a chain's scopes is deliberately not a fourth rung:
  * an average price is a price that exists in no store.
  *
+ * ## The two ways a caller refuses somewhere
+ *
+ * `excludedSupermarketIds` drops a **chain** from the candidates, before any
+ * rung is climbed. `excludedSupermarketLocationIds` drops individual **shops**
+ * from the set that answers rung one, and does nothing to the other two: rungs
+ * two and three are about a chain that has no shop here, so there is no shop
+ * there to have refused.
+ *
+ * **The coarser axis wins** (plan 0064, section 2.1). A chain that is excluded
+ * is gone whatever its shops' rows say, which falls out of the order above
+ * rather than being enforced twice, and it is why the finer axis can never re
+ * admit what the coarser one refused.
+ *
+ * A caller who refuses **every** shop that serves them resolves to no scopes at
+ * all, and the read that follows answers an empty page rather than the whole
+ * catalog. That is not new and not this axis's doing: refusing every chain has
+ * always done exactly the same thing, because a chain with no rung one scope is
+ * not a candidate for rungs two and three either. Plan 0064 section 3 describes
+ * that state as "every product and no prices" instead, which is a different rule
+ * from the one plan 0049 shipped in `item.service`, where an **empty** scope set
+ * is an explicable empty page and an **absent** one is the unscoped listing.
+ * Changing which of those an exhausted exclusion produces is a change to plan
+ * 0049's rule, for both axes at once, and belongs to whichever plan decides to
+ * make it rather than to this one.
+ *
  * ## What the answer carries beyond the ids
  *
  * Every scope says which postal code reached it and by which rung, and every
@@ -75,14 +100,25 @@ export class ScopeResolverService {
     const postalCodes = dedupe(req.postalCodes ?? []);
     const included = dedupe(req.supermarketIds ?? []);
     const excluded = new Set(req.excludedSupermarketIds ?? []);
+    const excludedLocations = new Set(req.excludedSupermarketLocationIds ?? []);
 
-    const key = cacheKey(postalCodes, included, [...excluded].sort());
+    const key = cacheKey(
+      postalCodes,
+      included,
+      [...excluded].sort(),
+      [...excludedLocations].sort()
+    );
     const hit = this.cache.get(key);
     if (hit && hit.expiresAt > Date.now()) {
       return hit.value;
     }
 
-    const value = await this.resolveUncached(postalCodes, included, excluded);
+    const value = await this.resolveUncached(
+      postalCodes,
+      included,
+      excluded,
+      excludedLocations
+    );
     this.remember(key, value);
     return value;
   }
@@ -90,11 +126,12 @@ export class ScopeResolverService {
   private async resolveUncached(
     postalCodes: string[],
     included: string[],
-    excluded: Set<string>
+    excluded: Set<string>,
+    excludedLocations: Set<string>
   ): Promise<ResolvedScopesView> {
     // Rung one: the stores that actually sit in those postal codes, and the
     // scopes they price against.
-    const serving =
+    const inCodes =
       postalCodes.length === 0
         ? []
         : await this.locations.find({
@@ -107,12 +144,23 @@ export class ScopeResolverService {
             },
           });
 
+    // Coverage is computed **before** the caller's refusals, and stays a
+    // property of our data rather than of their preferences (plan 0064, section
+    // 3). Somebody who excluded every shop in their postal code has not
+    // discovered that nobody serves it; they have said they will not go, and
+    // their client is the one thing that already knows that.
     const coverage: PostalCodeCoverageView[] = postalCodes.map(
       (postalCode) => ({
         postalCode,
-        served: serving.some((row) => row.postalCode === postalCode),
+        served: inCodes.some((row) => row.postalCode === postalCode),
       })
     );
+
+    // The finer axis, applied to rung one and to nothing else (plan 0064,
+    // section 3). Without it exclusion is cosmetic: a caller could refuse every
+    // Mercadona near them and still be quoted Mercadona's local price, because
+    // the price is keyed on the scope their shop happens to share.
+    const serving = inCodes.filter((row) => !excludedLocations.has(row.id));
 
     // Which chains are in play: the ones the caller listed, or every chain that
     // serves them; then minus the exclusions. Intersection, in that order, which
@@ -241,12 +289,17 @@ export class ScopeResolverService {
 function cacheKey(
   postalCodes: string[],
   included: string[],
-  excluded: string[]
+  excluded: string[],
+  excludedLocations: string[]
 ): string {
   return JSON.stringify([
     [...postalCodes].sort(),
     [...included].sort(),
     excluded,
+    // Part of the key rather than an afterthought: two profiles in the same
+    // postal code refusing different shops are two different questions, and one
+    // answering from the other's entry is the bug this argument prevents.
+    excludedLocations,
   ]);
 }
 

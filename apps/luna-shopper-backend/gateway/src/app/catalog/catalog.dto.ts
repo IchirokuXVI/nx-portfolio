@@ -498,6 +498,53 @@ export class CatalogListQueryDto extends PageQueryDto {
 }
 
 /**
+ * A query string carries no types, so a flag arrives as `"true"` or as nothing.
+ *
+ * Only the two spellings a client would actually send are honoured, and anything
+ * else is left alone for `@IsBoolean` to refuse: quietly reading an unrecognized
+ * value as false would turn a typo into a silently different answer.
+ */
+const asBoolean = ({ value }: { value: unknown }) => {
+  if (value === 'true' || value === true) {
+    return true;
+  }
+  if (value === 'false' || value === false) {
+    return false;
+  }
+  return value;
+};
+
+/**
+ * A chain's shops (plan 0064, section 3).
+ *
+ * **The caller's refusals apply unless the caller says otherwise.** A shop
+ * somebody has switched off is not somewhere to be offered, so filtering is the
+ * default and the flag is how the one screen that needs the whole list asks for
+ * it: the page that *edits* the refusals has to draw a shop that is switched
+ * off, and a read that hid it could not be used to switch it back on.
+ */
+export class ListLocationsQueryDto extends CatalogListQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Apply this profile of yours rather than your default one. Somebody else’s profile is not found.',
+  })
+  @IsOptional()
+  @IsUUID()
+  profileId?: string;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description:
+      'List the shops you have switched off as well as the ones you have not. For the screen that edits those choices; every other caller wants the default.',
+  })
+  @IsOptional()
+  @Transform(asBoolean)
+  @IsBoolean()
+  includeExcluded?: boolean;
+}
+
+/**
  * The same orders plus `relevance` (plan 0048, section 3).
  *
  * A sibling of {@link CatalogListQueryDto} rather than a subclass that widens
