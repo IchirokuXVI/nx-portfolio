@@ -1,20 +1,28 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
+import {
+  BasketStore,
+  GatewayError,
+  SessionStore,
+} from '@portfolio/velista/data-access';
 import type {
   BasketAddLineRequest,
   BasketLine,
   BasketParticipant,
   BasketPresenceEntry,
+  BasketSettleResult,
   CatalogSuggestion,
+  ErrorCode,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
+import { BasketLineRow } from '../basket-line-row/basket-line-row';
 import { BasketPage } from './basket-page';
 
 /**
@@ -54,6 +62,14 @@ interface FakeStore {
   readonly searched: string[];
   /** Every time the page said the shopper has gone. See the teardown test. */
   readonly leave: jest.Mock<void, []>;
+  /** The rows, writable so a spec can stand in for the refetch a refusal does. */
+  readonly lines: WritableSignal<readonly BasketLine[]>;
+  /** What the store last failed with, which is where the row's sentence comes from. */
+  readonly error: WritableSignal<unknown>;
+  /** Every move of a row's number, and what it answered (plan 0054). */
+  readonly setOutstanding: jest.Mock;
+  /** Where the page navigated, so a spec can see the settle sheet being opened. */
+  readonly navigate: jest.Mock;
 }
 
 interface Options {
@@ -71,6 +87,8 @@ interface Options {
   readonly addAnswers?: BasketLine | null;
   /** What the catalog offers under the field. */
   readonly suggestions?: readonly CatalogSuggestion[];
+  /** The rows on the basket. Empty draws the empty state. */
+  readonly lines?: readonly BasketLine[];
 }
 
 function guest(
@@ -98,7 +116,10 @@ function owner(participantId = 'p-owner'): BasketPresenceEntry {
 }
 
 /** The line an add answers with, which is all the page does with the answer. */
-function line(content: string): BasketLine {
+function line(
+  content: string,
+  overrides: Partial<BasketLine> = {}
+): BasketLine {
   return {
     id: `line-${content}`,
     content,
@@ -111,6 +132,7 @@ function line(content: string): BasketLine {
     touchedBy: null,
     touchedAt: null,
     lastOutcome: null,
+    ...overrides,
   };
 }
 
@@ -146,6 +168,18 @@ async function render(options: Options = {}): Promise<{
     added: [],
     searched: [],
     leave: jest.fn(),
+    lines: signal<readonly BasketLine[]>(options.lines ?? []),
+    error: signal<unknown>(null),
+    // A raise and a lower both answer a settle result, so the default is the one
+    // neither has anything to report about (backend `0056`, section 3).
+    setOutstanding: jest.fn(
+      (lineId: string): Promise<BasketSettleResult | null> =>
+        Promise.resolve({
+          line: line(lineId),
+          skippedCount: 0,
+        })
+    ),
+    navigate: jest.fn().mockResolvedValue(true),
   };
 
   const paramMap = convertToParamMap({ generatedListId: 'basket-saturday' });
@@ -158,7 +192,7 @@ async function render(options: Options = {}): Promise<{
       {
         provide: Router,
         useValue: {
-          navigate: jest.fn().mockResolvedValue(true),
+          navigate: store.navigate,
           navigateByUrl: jest.fn().mockResolvedValue(true),
         },
       },
@@ -188,7 +222,8 @@ async function render(options: Options = {}): Promise<{
             products: new Map(),
           }),
           state: signal('ready'),
-          lines: signal([]),
+          lines: store.lines,
+          error: store.error,
           progress: signal({ done: 0, unavailable: 0, total: 0 }),
           busyLines: signal(new Set<string>()),
           participantsById: signal(new Map<string, BasketParticipant>()),
@@ -207,7 +242,13 @@ async function render(options: Options = {}): Promise<{
             return Promise.resolve();
           },
           leave: store.leave,
+          // Session local, and empty unless a spec says otherwise: no field of a line
+          // carries whether the list it was sent to has accepted it (`0056`).
+          pendingTargets: signal(new Set<string>()),
           refresh: () => Promise.resolve(),
+          settle: () => Promise.resolve(null),
+          reopen: () => Promise.resolve(null),
+          setOutstanding: store.setOutstanding,
           addLine: (body: BasketAddLineRequest) => {
             store.added.push(body);
             const answer =
@@ -576,5 +617,152 @@ describe('the basket header, live', () => {
     fixture.destroy();
 
     expect(store.leave).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The number on the row, once it has been let go (plan 0054).
+ *
+ * The page is where the gesture becomes a request, and there are only three things
+ * it has to get right: it sends both numbers, it opens the sheet when the write had
+ * something to report that a row cannot draw, and it says one sentence when the
+ * write was refused. The gesture itself is the row's spec and the reel's.
+ */
+describe('the number on a row', () => {
+  /** The row component, which is what a gesture reaches the page through. */
+  function row(fixture: ComponentFixture<BasketPage>): BasketLineRow {
+    return fixture.debugElement.query(By.directive(BasketLineRow))
+      .componentInstance as BasketLineRow;
+  }
+
+  /** Let the page await the write, then draw what came back. */
+  async function settleWrites(
+    fixture: ComponentFixture<BasketPage>
+  ): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  const milk = () => line('Milk', { quantity: 5 });
+
+  it('sends where the gesture ended and where it believed it began', async () => {
+    // `from` is not decoration: without it a stale gesture is applied as the
+    // opposite act, which is the one thing this message must never do (backend
+    // `0056`, section 3.2).
+    const { fixture, store } = await render({ lines: [milk()] });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(store.setOutstanding).toHaveBeenCalledWith('line-Milk', 3, 5);
+  });
+
+  it('says which of the two happened, once, in the live region', async () => {
+    // The same sentence the caption showed under the thumb, so a reader who could
+    // not see it still learns whether they recorded a purchase or raised a target
+    // (section 7).
+    const { fixture } = await render({ lines: [milk()] });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(query(fixture, '.said')?.textContent).toContain(
+      'basket.outstanding.bought'
+    );
+  });
+
+  it('opens the sheet when an origin was missed', async () => {
+    // A skipped origin report is a paragraph and a row is three short lines, so it
+    // goes where the sentence for it already lives (plan 0052, section 6.4). A raise
+    // answers `skippedCount: 0`, so this needs no branch on direction.
+    const { fixture, store } = await render({ lines: [milk()] });
+    store.setOutstanding.mockResolvedValue({
+      line: milk(),
+      skippedCount: 1,
+    });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'lines', 'line-Milk', 'settle'],
+      expect.anything()
+    );
+  });
+
+  it('tells the row what the line says now when somebody else moved it', async () => {
+    // Section 4.1. The store refetches before it answers, so the count in the
+    // sentence is the true one; a refusal that only said "that did not work" would
+    // send somebody dragging again into the same race.
+    const { fixture, store } = await render({ lines: [milk()] });
+    store.setOutstanding.mockImplementation(() => {
+      store.error.set(
+        new GatewayError({
+          code: 'stale_quantity' as ErrorCode,
+          status: 409,
+          correlationId: 'ref-1',
+        })
+      );
+      store.lines.set([line('Milk', { quantity: 3 })]);
+      return Promise.resolve(null);
+    });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(row(fixture).notice()?.key).toBe('basket.error.staleLine');
+    expect(row(fixture).notice()?.count).toBe(3);
+    expect(query(fixture, '.said')?.textContent).toContain(
+      'basket.error.staleLine'
+    );
+  });
+
+  it('gives every other failure a sentence of its own', async () => {
+    // A failure with no sentence is the defect `basket-error-copy.ts` exists to
+    // close: somebody in a shop performed this on purpose and is waiting on it.
+    const { fixture, store } = await render({ lines: [milk()] });
+    store.setOutstanding.mockImplementation(() => {
+      store.error.set(
+        new GatewayError({
+          code: 'forbidden',
+          status: 403,
+          correlationId: 'ref-2',
+        })
+      );
+      return Promise.resolve(null);
+    });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(row(fixture).notice()?.key).toBe('basket.error.accessChanged');
+  });
+
+  it('clears the last refusal before the next move goes out', async () => {
+    // One sentence at a time across the whole basket. A refusal left under a row
+    // somebody has since moved again is a claim about the present that nothing is
+    // checking.
+    const { fixture, store } = await render({ lines: [milk()] });
+    store.setOutstanding.mockImplementation(() => {
+      store.error.set(
+        new GatewayError({
+          code: 'forbidden',
+          status: 403,
+          correlationId: 'ref-3',
+        })
+      );
+      return Promise.resolve(null);
+    });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+    expect(row(fixture).notice()).not.toBeNull();
+
+    store.setOutstanding.mockResolvedValue({ line: milk(), skippedCount: 0 });
+    row(fixture).outstanding.emit({ from: 5, to: 4 });
+    await settleWrites(fixture);
+
+    expect(row(fixture).notice()).toBeNull();
   });
 });

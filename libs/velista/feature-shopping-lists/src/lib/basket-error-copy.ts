@@ -132,6 +132,12 @@ export function basketErrorKey(
       }
 
     case 'forbidden':
+      // `basket.origins` and `basket.bind` sit with the row writes rather than apart:
+      // the three zone surfaces refuse a guest and a reader who has lost `WRITE`
+      // outright rather than answering an empty sheet, so a 403 on one of them is the
+      // same fact as a 403 on a settle. The comment is above the group and not between
+      // two of its labels because `no-fallthrough` reads one there as a case with a
+      // body and no break.
       switch (operation) {
         // The last three refuse a guest and a reader who has lost `WRITE` outright
         // rather than answering an empty sheet, so a 403 on one of them is the same

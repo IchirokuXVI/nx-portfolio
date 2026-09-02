@@ -891,6 +891,12 @@
       "free": "Sin producto elegido",
       "busy": "Guardando"
     },
+    "outstanding": {
+      "label": "{{name}}, aún por conseguir",
+      "bought_one": "{{count}} comprado",
+      "bought_other": "{{count}} comprados",
+      "buying": "comprando {{next}} en vez de {{current}}"
+    },
     "touched": {
       "got": "{{name}} lo consiguió",
       "gotSome": "{{name}} consiguió {{count}}",
