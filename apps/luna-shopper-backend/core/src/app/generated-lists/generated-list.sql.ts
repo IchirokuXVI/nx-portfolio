@@ -1,3 +1,5 @@
+import type { LineApprovalStatus } from '@portfolio/luna-shopper/contracts';
+
 /**
  * The three reads a generation run makes (plan 0050, sections 2 and 3).
  *
@@ -90,6 +92,39 @@ export const CANDIDATE_LINES_SQL = `
   WHERE ll."listId" = ANY($1)
     AND ll."approvalStatus" = 'APPROVED'
     AND ll.quantity > 0
+  ORDER BY ll."listId", ll.position ASC, ll.id ASC
+`;
+
+/**
+ * The same lines {@link CANDIDATE_LINES_SQL} reads, with its two predicates
+ * lifted out into columns (plan 0057, section 3.2). `$1` is the list ids.
+ *
+ * The origins sheet **shows** what the run silently dropped, which is the one
+ * place this codebase deliberately serves something the caller cannot act on. A
+ * line the run would not have taken is a fact worth knowing while standing in a
+ * dairy aisle: "the parents' house also wants milk and it has not been approved
+ * yet" is actionable in a way that its absence is not. So the two predicates
+ * become `approvalStatus` and the quantity, and the service turns them into
+ * `NOT_APPROVED` and `SETTLED` reasons beside the row.
+ *
+ * A separate constant rather than a parameterised one, because the two reads
+ * want opposite things and a flag that flips a `WHERE` clause reads as an
+ * accident at every call site. The **projection** is deliberately identical to
+ * {@link CANDIDATE_LINES_SQL}'s plus the one column, so the same
+ * {@link CandidateLineRow} shape describes both and `mergeKey` sees exactly what
+ * a run would have seen.
+ */
+export const SHEET_CANDIDATE_LINES_SQL = `
+  SELECT
+    ll.id AS "id",
+    ll."listId" AS "listId",
+    ll.content AS "content",
+    ll.quantity AS "quantity",
+    ll.version AS "version",
+    ll."itemSetHash" AS "itemSetHash",
+    ll."approvalStatus" AS "approvalStatus"
+  FROM "list_lines" ll
+  WHERE ll."listId" = ANY($1)
   ORDER BY ll."listId", ll.position ASC, ll.id ASC
 `;
 
@@ -205,6 +240,14 @@ export interface CandidateLineRow {
   quantity: number;
   version: number;
   itemSetHash: string | null;
+}
+
+/**
+ * One row of {@link SHEET_CANDIDATE_LINES_SQL}: a candidate line plus the
+ * approval the run would have filtered on.
+ */
+export interface SheetCandidateLineRow extends CandidateLineRow {
+  approvalStatus: LineApprovalStatus;
 }
 
 /** One row of {@link ACTIVE_OVERLAP_SQL}. */

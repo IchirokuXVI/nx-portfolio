@@ -68,6 +68,17 @@ export const ERROR_CATALOG: Record<
     en: 'This basket is finished, so nothing more can be added to it.',
     es: 'Esta cesta está terminada, así que no se puede añadir nada más.',
   },
+  // Both carry their number in the message rather than only in a code, because
+  // the client's job is to say it: "somebody else moved this, it is 3 now" is
+  // actionable and "that failed" is not (plan 0057, sections 5 and 5.2).
+  [ERROR_CODES.STALE_QUANTITY]: {
+    en: 'Somebody else changed this while you were looking at it. It is {current} now.',
+    es: 'Alguien más cambió esto mientras lo mirabas. Ahora es {current}.',
+  },
+  [ERROR_CODES.BELOW_SETTLED]: {
+    en: 'This basket has already bought {floor}, so it cannot go below that.',
+    es: 'Esta cesta ya ha comprado {floor}, así que no puede bajar de ahí.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

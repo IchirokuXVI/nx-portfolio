@@ -91,6 +91,59 @@ export class SetGeneratedListPickDto {
   itemId!: string;
 }
 
+/**
+ * Set one list's contribution to a basket line (plan 0057, section 5).
+ *
+ * `listId` and `lineId` name the **zone** line, not the basket line: the basket
+ * line is already in the path. They keep the plan's own names here, where the
+ * body is read beside the URL and the pairing is obvious, and are forwarded to
+ * core as `sourceListId` and `sourceLineId`, where nothing sits beside them to
+ * make the difference obvious.
+ *
+ * **This buys nothing.** The same control one screen up means "bought"; this one
+ * means what a household wants, and the response carries neither settlement refs
+ * nor a skip report so a client cannot read one into the other.
+ */
+export class SetGeneratedListOriginQuantityDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The zone list whose contribution is being set. It must be one the basket’s owner and you both hold write access on.',
+  })
+  @IsUUID()
+  listId!: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it.',
+  })
+  @IsUUID()
+  lineId!: string;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'What this list should contribute. Zero takes the list off the line, releases its claim and lowers its own line by what it had contributed. No settlement is written and no bought indicator is set.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  quantity!: number;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'The contribution you believed this list had, which is 0 for an adoption. A mismatch is refused with `stale_quantity` rather than applied: two people editing one split must not silently overwrite each other’s arithmetic.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  from!: number;
+}
+
 export class GeneratedListAllocationDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
