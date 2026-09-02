@@ -1,0 +1,4 @@
+# A model's reading is a record of what that model returned. Reformatting it
+# would make the file no longer the thing it is evidence of, so the ticket
+# folders are left exactly as written. The tools and the reports are formatted.
+ticket-*/*.json

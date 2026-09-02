@@ -1,0 +1,60 @@
+{
+  "lines": [
+    {
+      "rawText": "CARNICERIA",
+      "isDepartment": true,
+      "lineTotal": 5.97,
+      "discount": null,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 5.97
+    },
+    {
+      "rawText": "JUD=AS FINDUS",
+      "isDepartment": false,
+      "lineTotal": 1.99,
+      "discount": null,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.99
+    },
+    {
+      "rawText": "GARBANZA FRASC",
+      "isDepartment": false,
+      "lineTotal": 2.3,
+      "discount": null,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 1.15
+    },
+    {
+      "rawText": "AQUADEUS 50CL",
+      "isDepartment": false,
+      "lineTotal": 0.31,
+      "discount": null,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.31
+    },
+    {
+      "rawText": "CHARCUTERIA",
+      "isDepartment": true,
+      "lineTotal": 0.91,
+      "discount": null,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.91
+    }
+  ],
+  "total": 11.48,
+  "truncated": false,
+  "currency": "EUR",
+  "datetime": "2026-08-28T19:36:00",
+  "paymentMethod": "cash",
+  "receiptDiscount": null,
+  "store": "GRUPO EMPRESARIAL EL JAMON, S.L.",
+  "storeAddress": "C/ RONDA, 5 14013-CORDOBA CORDOBA",
+  "storeVatId": "B21053848",
+  "subtotal": null,
+  "taxTotal": 0.94
+}

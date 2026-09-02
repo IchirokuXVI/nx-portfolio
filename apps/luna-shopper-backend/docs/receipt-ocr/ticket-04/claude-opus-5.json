@@ -1,0 +1,87 @@
+{
+  "store": "GRUPO EMPRESARIAL EL JAMON, S.L.",
+  "storeAddress": "Ctra. N-431, Km 120.6",
+  "storeVatId": "B21053848",
+  "datetime": "2026-07-25T11:23:00",
+  "currency": "EUR",
+  "lines": [
+    {
+      "rawText": "ESPETEC ELIGES",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.1,
+      "discount": null,
+      "lineTotal": 2.1
+    },
+    {
+      "rawText": "PATr 125G",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.32,
+      "discount": null,
+      "lineTotal": 1.32
+    },
+    {
+      "rawText": "BOCADIT.CODAN",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.19,
+      "discount": null,
+      "lineTotal": 1.19
+    },
+    {
+      "rawText": "BOLSA EL JAMON",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.15,
+      "discount": null,
+      "lineTotal": 0.15
+    },
+    {
+      "rawText": "BOCAT\"N 180G",
+      "isDepartment": false,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 0.55,
+      "discount": null,
+      "lineTotal": 1.1
+    },
+    {
+      "rawText": "PEPITO NATA",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.95,
+      "discount": null,
+      "lineTotal": 1.95
+    },
+    {
+      "rawText": "PEPITO CREMA",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.95,
+      "discount": null,
+      "lineTotal": 1.95
+    },
+    {
+      "rawText": "PANADERIA",
+      "isDepartment": true,
+      "quantity": 6,
+      "unit": "UNIT",
+      "unitPrice": 0.33,
+      "discount": null,
+      "lineTotal": 1.98
+    }
+  ],
+  "receiptDiscount": null,
+  "subtotal": null,
+  "taxTotal": 0.95,
+  "total": 11.74,
+  "paymentMethod": "TARJETA VISA",
+  "truncated": false
+}
