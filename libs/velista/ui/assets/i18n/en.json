@@ -947,6 +947,15 @@
       "submit": "Record it",
       "cancel": "Cancel"
     },
+    "units": {
+      "open": "Change what each list asked for",
+      "title": "{{name}}"
+    },
+    "send": {
+      "open": "Send to a shopping list",
+      "title": "{{name}}",
+      "pending": "Waiting for that list to approve it"
+    },
     "people": {
       "title": "On this list",
       "open": "See who is on this list",
@@ -1033,6 +1042,13 @@
       "gone": "This list is no longer here",
       "tooFast": "That was too quick. Try again in a moment",
       "failed": "That did not save. Try again",
+      "staleLine_one": "Somebody else changed this line. It says {{count}} now",
+      "staleLine_other": "Somebody else changed this line. It says {{count}} now",
+      "belowSettled_one": "One of these has already been bought for this list",
+      "belowSettled_other": "{{count}} of these have already been bought for this list",
+      "basketFinished": "This list is finished, so it cannot be changed",
+      "notSendable": "Only a line added here can be sent to a shopping list",
+      "alreadySent": "This line has already been sent to a shopping list",
       "reference": "ref {{correlationId}}"
     },
     "status": {

@@ -82,6 +82,15 @@
   margin-block-start: var(--app-space-2);
 }
 
+// The two sheets about this line's lists, set apart from the settle targets above
+// them by a rule and a wider gap. They are not things to buy with, and a thumb
+// travelling to the big button must not arrive at one of these instead.
+.actions.lists {
+  margin-block-start: var(--app-space-4);
+  padding-block-start: var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
 .primary {
   @include shared.primary-button;
 }

@@ -1,4 +1,4 @@
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, sheetSegments } from '@portfolio/velista/platform';
 
 /**
  * Where a basket and its join screen live in the route table, in one place.
@@ -37,6 +37,32 @@ export function basketPath(
   generatedListId: string
 ): string {
   return appPath(locale, basePath, BASKET_PATHS.list, generatedListId);
+}
+
+/**
+ * The settle sheet's own URL, which is where the two sheets over it go back to.
+ *
+ * A line's units sheet (`0055`) and its send sheet (`0056`) are both reached from
+ * the settle sheet, so dismissing one of them onto the basket would take the person
+ * two screens back from one gesture. They name this instead, in full, for the reason
+ * every dismissal in this app names its page in full: a relative climb makes a
+ * component's correctness depend on how many segments some other file's path
+ * happens to have (plan 0031).
+ *
+ * The `sheet` marker is stamped by {@link sheetSegments} rather than typed, because
+ * a URL written by hand is the one that can quietly opt out of the rule.
+ */
+export function settleSheetPath(
+  locale: string,
+  basePath: string,
+  generatedListId: string,
+  lineId: string
+): string {
+  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
+    'lines',
+    lineId,
+    'settle'
+  ).join('/')}`;
 }
 
 /** The path to the join screen for one link secret. */

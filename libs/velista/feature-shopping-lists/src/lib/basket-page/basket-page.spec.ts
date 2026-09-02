@@ -242,6 +242,9 @@ async function render(options: Options = {}): Promise<{
             return Promise.resolve();
           },
           leave: store.leave,
+          // Session local, and empty unless a spec says otherwise: no field of a line
+          // carries whether the list it was sent to has accepted it (`0056`).
+          pendingTargets: signal(new Set<string>()),
           refresh: () => Promise.resolve(),
           settle: () => Promise.resolve(null),
           reopen: () => Promise.resolve(null),

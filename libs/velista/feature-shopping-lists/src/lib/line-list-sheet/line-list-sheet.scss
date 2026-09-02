@@ -1,0 +1,10 @@
+@use '../basket-shared' as shared;
+
+.title {
+  margin: 0 0 var(--app-space-2);
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}

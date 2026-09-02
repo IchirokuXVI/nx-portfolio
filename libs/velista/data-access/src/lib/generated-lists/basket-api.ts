@@ -2,8 +2,14 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
   BasketAddLineRequest,
+  BasketBindResult,
   BasketLine,
+  BasketLineOrigins,
+  BasketLineTarget,
   BasketLinkPreview,
+  BasketOriginQuantityRequest,
+  BasketOriginQuantityResult,
+  BasketOutstandingRequest,
   BasketParticipant,
   BasketSession,
   BasketSettleRequest,
@@ -16,8 +22,12 @@ import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { anonymous, operation } from '../auth/http-context';
 import {
+  toBasketBindResult,
   toBasketLine,
+  toBasketLineOrigins,
+  toBasketLineTarget,
   toBasketLinkPreview,
+  toBasketOriginQuantityResult,
   toBasketParticipant,
   toBasketSession,
   toBasketSettleResult,
@@ -154,6 +164,109 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketSettleResult(answer), 'basket.reopen');
+  }
+
+  /**
+   * Say how many are still to get (velista `0054`).
+   *
+   * The participant credential, like every other write on this surface: the gesture
+   * is made in an aisle by whoever is holding the phone, which is very often not the
+   * person who wrote the list.
+   */
+  async setOutstanding(
+    generatedListId: string,
+    lineId: string,
+    body: BasketOutstandingRequest
+  ): Promise<BasketSettleResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/outstanding`,
+        body,
+        this._participantOptions(generatedListId, 'basket.outstanding')
+      )
+    );
+
+    return required(toBasketSettleResult(answer), 'basket.outstanding');
+  }
+
+  /**
+   * Which lists are on this line, and which could be (velista `0055`).
+   *
+   * The same participant credential, and the server is what refuses it to a guest.
+   * There is no check here, on purpose: a client side gate would be a second answer
+   * to a question the gateway already answers per request, against the database, and
+   * the two would eventually disagree.
+   */
+  async getLineOrigins(
+    generatedListId: string,
+    lineId: string
+  ): Promise<BasketLineOrigins> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        `${this._line(generatedListId, lineId)}/origins`,
+        this._participantOptions(generatedListId, 'basket.origins')
+      )
+    );
+
+    return required(toBasketLineOrigins(body), 'basket.origins');
+  }
+
+  /** Set what one list contributes to this line (velista `0055`). */
+  async setOriginQuantity(
+    generatedListId: string,
+    lineId: string,
+    body: BasketOriginQuantityRequest
+  ): Promise<BasketOriginQuantityResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/origins`,
+        body,
+        this._participantOptions(generatedListId, 'basket.setOriginQuantity')
+      )
+    );
+
+    return required(
+      toBasketOriginQuantityResult(answer),
+      'basket.setOriginQuantity'
+    );
+  }
+
+  /** The lists this line could be sent to (velista `0056`). */
+  async getLineTargets(
+    generatedListId: string,
+    lineId: string
+  ): Promise<readonly BasketLineTarget[]> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        `${this._line(generatedListId, lineId)}/targets`,
+        this._participantOptions(generatedListId, 'basket.targets')
+      )
+    );
+
+    return isRecord(body) ? mapArray(body['targets'], toBasketLineTarget) : [];
+  }
+
+  /**
+   * Send this line to a shopping list (velista `0056`).
+   *
+   * The path is `target` and the read beside it is `targets`, which is the ordinary
+   * singular and plural rather than a typo: one is the list of candidates and the
+   * other is the one that was chosen.
+   */
+  async bindLine(
+    generatedListId: string,
+    lineId: string,
+    listId: string
+  ): Promise<BasketBindResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/target`,
+        { listId },
+        this._participantOptions(generatedListId, 'basket.bindLine')
+      )
+    );
+
+    return required(toBasketBindResult(answer), 'basket.bindLine');
   }
 
   async setPick(

@@ -55,6 +55,37 @@ export const ERROR_CODES = [
    * which is the one screen that can turn it into a real answer.
    */
   'catalog_scope_required',
+  /**
+   * The basket is `COMPLETED` or `ARCHIVED` and the write asked to change it
+   * (backend plan 0055, section 3.3), as a 409.
+   *
+   * A state the screen can explain rather than a failure it cannot: the trip is over,
+   * nothing about the request was malformed, and no field of it is at fault. Without
+   * this member it read as a plain `conflict`, which on the settle path is a
+   * different sentence entirely: "somebody already finished this line".
+   */
+  'generated_list_finished',
+  /**
+   * The number this write was moving is not where the caller believed it started
+   * (backend plans 0056 and 0057), as a 409.
+   *
+   * The one code on this screen the app **acts** on rather than only reporting: two
+   * phones in one shop dragging one line is the ordinary case, so the store refetches
+   * and the control redraws at the number as it now stands, with a sentence naming
+   * it. Read as a plain `conflict` it drew "somebody already finished this line" over
+   * a line nobody had finished.
+   */
+  'stale_quantity',
+  /**
+   * A contribution was set below what this basket has already bought against it
+   * (backend plan 0057, section 5.2), as a 409.
+   *
+   * Distinct from `stale_quantity` because nothing moved underneath the caller. Two
+   * units of the flat's milk having been bought means the flat cannot retroactively
+   * have wanted one, and the honest sentence names the floor rather than saying the
+   * save failed.
+   */
+  'below_settled',
   'internal',
 ] as const;
 

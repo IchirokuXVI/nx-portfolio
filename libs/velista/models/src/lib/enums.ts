@@ -249,6 +249,45 @@ export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
 export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';
 
 /**
+ * Where a basket line came from (backend `0055`, section 3; velista `0056`).
+ *
+ * `DERIVED` is a line the run composed out of the zone lists it drew from, and
+ * `ADDED` is one a participant typed into the basket in an aisle. The difference
+ * is not decoration: an `ADDED` line claims no household's line and can be sent to
+ * one, and a `DERIVED` line already has its lists and cannot be sent anywhere.
+ *
+ * The mapper reads an absent or unrecognised value as `DERIVED`, which is the quiet
+ * direction: a line the run composed offers no send control, so an unknown value
+ * costs a gesture rather than offering one the server would refuse. It is stated at
+ * the mapper rather than as a constant here because it is also what an **older
+ * backend** means by omitting the field, and those are the same answer.
+ */
+export const BASKET_LINE_KINDS = ['DERIVED', 'ADDED'] as const;
+export type BasketLineKind = (typeof BASKET_LINE_KINDS)[number];
+
+/**
+ * Why a list holding the same thing cannot be taken onto a basket line (backend
+ * `0057`, section 4.3).
+ *
+ * `CLAIMED` is a line another basket is already carrying, `NOT_APPROVED` is one
+ * still waiting for its list to accept it, and `SETTLED` is one that has already
+ * been bought. Three reasons rather than one flag, because the sheet says which:
+ * "somebody else is shopping this" and "this was already bought" send a person to
+ * two different places.
+ *
+ * There is no fallback and there is no member for "it is fine", which is what the
+ * wire omitting the field means. Null is the adoptable case, and it is a real value
+ * here rather than a missing one.
+ */
+export const BASKET_ORIGIN_UNAVAILABLE_REASONS = [
+  'CLAIMED',
+  'NOT_APPROVED',
+  'SETTLED',
+] as const;
+export type BasketOriginUnavailableReason =
+  (typeof BASKET_ORIGIN_UNAVAILABLE_REASONS)[number];
+
+/**
  * How much a shopping profile draws from when it generates a basket (backend `0049`,
  * section 1).
  *

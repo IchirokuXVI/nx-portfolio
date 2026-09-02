@@ -115,6 +115,14 @@
     @if (from(); as origins) {
       <span class="from">{{ origins }}</span>
     }
+
+    <!--
+      Right after the "from" caption, because it is about the same thing: which
+      household's list this line reaches, and whether it has got there yet.
+    -->
+    @if (awaitingApproval()) {
+      <span class="from">{{ 'basket.send.pending' | rokuT }}</span>
+    }
   </button>
 
   <!--

@@ -17,6 +17,8 @@ import {
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
+import { LineListSheet } from './line-list-sheet/line-list-sheet';
+import { LineUnitsSheet } from './line-units-sheet/line-units-sheet';
 import { PeopleSheet } from './people-sheet/people-sheet';
 import { SettleSheet } from './settle-sheet/settle-sheet';
 import { ShareSheet } from './share-sheet/share-sheet';
@@ -52,6 +54,32 @@ const SHEETS: readonly {
 ];
 
 /**
+ * The two sheets a line's settle sheet leads on to, and the URL they go back to.
+ *
+ * A second table rather than two more rows in the first, because they close onto a
+ * **different** screen and that is the whole point of them: they are reached from
+ * the settle sheet, so leaving one onto the basket would take somebody two screens
+ * back from one gesture. Everything else about the rule is the same, which is why
+ * the assertions below read almost identically.
+ */
+const LINE_SHEETS: readonly {
+  readonly name: string;
+  readonly component: Type<unknown>;
+  readonly path: string;
+}[] = [
+  {
+    name: 'LineUnitsSheet',
+    component: LineUnitsSheet,
+    path: 'lines/:lineId/units',
+  },
+  {
+    name: 'LineListSheet',
+    component: LineListSheet,
+    path: 'lines/:lineId/list',
+  },
+];
+
+/**
  * A store that answers everything and holds nothing.
  *
  * These tests are about the URL a sheet leaves on, and that URL is the same whether the
@@ -60,6 +88,11 @@ const SHEETS: readonly {
 function storeDouble() {
   return {
     basket: signal(null),
+    // The three members the two line sheets and the basket page read. They are here
+    // rather than in each plan's own double so that a sheet added by either plan can
+    // rely on the same store shape this file already provides.
+    pendingTargets: signal(new Set<string>()),
+    rememberListNames: jest.fn(),
     state: signal('loaded'),
     error: signal(null),
     shareLink: signal(null),
@@ -75,6 +108,11 @@ function storeDouble() {
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
     setPick: jest.fn().mockResolvedValue(null),
+    setOutstanding: jest.fn().mockResolvedValue(null),
+    loadLineOrigins: jest.fn().mockResolvedValue(null),
+    setOriginQuantity: jest.fn().mockResolvedValue(null),
+    loadLineTargets: jest.fn().mockResolvedValue(null),
+    bindLine: jest.fn().mockResolvedValue(null),
     apply: jest.fn(),
     loadShareLink: jest.fn().mockResolvedValue(undefined),
     share: jest.fn().mockResolvedValue(null),
@@ -225,6 +263,58 @@ describe('the sheets over the basket', () => {
       const { fixture, sheets, router } = await render(
         component,
         params,
+        '/velista'
+      );
+
+      await close(fixture);
+
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+      expect(router.navigate).not.toHaveBeenCalled();
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The two sheets reached **from** the settle sheet (velista 0055 and 0056).
+   *
+   * One screen back from one gesture, which is the whole rule: somebody who opened
+   * the units sheet from the settle sheet expects cancel to put them back on the
+   * settle sheet, not on the basket two screens down. The URL is asserted whole, for
+   * the reason the table above asserts its own whole: a half climbed path is the
+   * defect this file exists for, and it renders as a 404 rather than as an error.
+   */
+  describe.each(LINE_SHEETS)('$name, declared at $path', ({ component }) => {
+    const settleUrl = (basePath: string) =>
+      `${basePath}/en/shopping-lists/${BASKET_ID}/sheet/lines/${LINE_ID}/settle`;
+
+    it('closes onto the settle sheet it was opened from, whole', async () => {
+      const { fixture, sheets } = await render(
+        component,
+        { lineId: LINE_ID },
+        '/velista'
+      );
+
+      await close(fixture);
+
+      expect(sheets.dismiss).toHaveBeenCalledWith(settleUrl('/velista'));
+    });
+
+    it('names the settle sheet in the standalone build too', async () => {
+      const { fixture, sheets } = await render(
+        component,
+        { lineId: LINE_ID },
+        ''
+      );
+
+      await close(fixture);
+
+      expect(sheets.dismiss).toHaveBeenCalledWith(settleUrl(''));
+    });
+
+    it('dismisses rather than navigating, so back cannot reopen it', async () => {
+      const { fixture, sheets, router } = await render(
+        component,
+        { lineId: LINE_ID },
         '/velista'
       );
 

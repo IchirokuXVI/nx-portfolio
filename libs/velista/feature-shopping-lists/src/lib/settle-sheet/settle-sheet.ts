@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -31,6 +31,7 @@ import {
 import {
   generatedListIdOf,
   SheetNavigation,
+  sheetSegments,
 } from '@portfolio/velista/platform';
 import { QuantityReel, SheetShell } from '@portfolio/velista/ui';
 import {
@@ -129,6 +130,14 @@ export class SettleSheet {
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
+  /**
+   * For the two sheets this one leads on to, and for nothing else.
+   *
+   * A navigation and not a dismissal, because those two sheets are being **opened**:
+   * `SheetNavigation` is what closes one, popping the entry it was opened with, and
+   * the way in is an ordinary push so that back from the units sheet lands here.
+   */
+  private readonly _router = inject(Router);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -377,6 +386,73 @@ export class SettleSheet {
 
   /** The sheet's accessible title, which is the line's own words. */
   protected readonly title = computed(() => this.line()?.content ?? '');
+
+  /**
+   * Whether to offer the units sheet (velista `0055`, section 2).
+   *
+   * The reader must hold an account and pass the all or nothing rule, which is
+   * {@link canReadHistory}'s pair of conditions and for the same reason: the read
+   * behind it names households, and the server refuses the whole of it to anybody
+   * else rather than redacting it.
+   *
+   * The line must also have something to show. An `ADDED` line with no origins came
+   * from nowhere and is on nobody's list, so the sheet would open on two empty
+   * sections; once it has been sent somewhere it has an origin, and then it does.
+   *
+   * A control you may not use is not drawn (`0030`), so this decides whether the way
+   * in exists rather than whether it is disabled.
+   */
+  protected readonly canEditUnits = computed(() => {
+    const line = this.line();
+    return (
+      this._store.seesZoneData() &&
+      this._store.me()?.kind !== 'GUEST' &&
+      line !== null &&
+      !(line.kind === 'ADDED' && (line.origins?.length ?? 0) === 0)
+    );
+  });
+
+  /**
+   * Whether to offer the send sheet (velista `0056`, section 2).
+   *
+   * The same reader as above, and a line that is **`ADDED` and sent nowhere yet**. A
+   * `DERIVED` line already has the lists it came from and there is nothing to send;
+   * a bound one has already gone, and the server refuses a second bind.
+   *
+   * `targetListId === null` and not a falsy check, deliberately: the field is
+   * **absent** for a reader who may not see it, and absent must not read as "sent
+   * nowhere" or the control would be drawn for exactly the person who may not use it.
+   */
+  protected readonly canSendToList = computed(() => {
+    const line = this.line();
+    return (
+      this._store.seesZoneData() &&
+      this._store.me()?.kind !== 'GUEST' &&
+      line !== null &&
+      line.kind === 'ADDED' &&
+      line.targetListId === null
+    );
+  });
+
+  /**
+   * Open the units sheet over this one.
+   *
+   * Relative to the **basket**, which is `_route.parent`, because that is where both
+   * sheets are declared: a sheet has no children, so a sheet reached from a sheet is
+   * a sibling of it. `sheetSegments` stamps the marker rather than this writing it.
+   */
+  protected openUnits(): void {
+    void this._router.navigate(sheetSegments('lines', this._lineId, 'units'), {
+      relativeTo: this._route.parent,
+    });
+  }
+
+  /** Open the send sheet over this one. See {@link openUnits} for the relativity. */
+  protected openSendToList(): void {
+    void this._router.navigate(sheetSegments('lines', this._lineId, 'list'), {
+      relativeTo: this._route.parent,
+    });
+  }
 
   /**
    * The whole outstanding amount, in one tap. The common case.

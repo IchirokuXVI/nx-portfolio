@@ -192,6 +192,7 @@
                 (outstanding)="setOutstanding(line, $event)"
                 (reopen)="reopenLine(line)"
                 (settle)="settleLine(line)"
+                [awaitingApproval]="pendingTargets().has(line.id)"
                 [busy]="isBusy(line)"
                 [canReopen]="canReopen"
                 [line]="line"
