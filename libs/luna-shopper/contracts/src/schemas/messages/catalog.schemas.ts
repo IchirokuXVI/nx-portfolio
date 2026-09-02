@@ -116,6 +116,13 @@ export const CATALOG_SCHEMA_IDS = {
   nearestPostalCodeView: schemaId('catalog/NearestPostalCodeView'),
   listNearbyPostalCodesRequest: schemaId('msg/postalCode.nearby/request'),
   nearbyPostalCodesView: schemaId('catalog/NearbyPostalCodesView'),
+  countLocationsByPostalCodeRequest: schemaId(
+    'msg/supermarketLocation.countByPostalCode/request'
+  ),
+  postalCodeLocationCount: schemaId('catalog/PostalCodeLocationCount'),
+  postalCodeLocationCountsView: schemaId(
+    'catalog/PostalCodeLocationCountsView'
+  ),
   upsertLocationItemRequest: schemaId(
     'msg/supermarketLocationItem.upsert/request'
   ),
@@ -944,6 +951,37 @@ const nearbyPostalCodesView = object(
   ['country', 'postalCode', 'known', 'postalCodes']
 );
 
+// --- Do we have shops there (plan 0063, section 5) -------------------------
+
+const countLocationsByPostalCodeRequest = object(
+  CATALOG_SCHEMA_IDS.countLocationsByPostalCodeRequest,
+  {
+    country: countryCode(),
+    postalCodes: array(nonEmptyString()),
+  },
+  ['country', 'postalCodes']
+);
+
+const postalCodeLocationCount = object(
+  CATALOG_SCHEMA_IDS.postalCodeLocationCount,
+  {
+    postalCode: nonEmptyString(),
+    locations: integer({ minimum: 0 }),
+  },
+  ['postalCode', 'locations']
+);
+
+const postalCodeLocationCountsView = object(
+  CATALOG_SCHEMA_IDS.postalCodeLocationCountsView,
+  {
+    country: countryCode(),
+    // One entry per code asked about, zeros included: a caller deciding what is
+    // unknown needs the zeros, which is why it asked.
+    counts: array(ref(CATALOG_SCHEMA_IDS.postalCodeLocationCount)),
+  },
+  ['country', 'counts']
+);
+
 export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.itemCategory, Object.values(ItemCategory)),
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
@@ -1019,6 +1057,9 @@ export const catalogSchemas: JsonSchema[] = [
   nearestPostalCodeView,
   listNearbyPostalCodesRequest,
   nearbyPostalCodesView,
+  countLocationsByPostalCodeRequest,
+  postalCodeLocationCount,
+  postalCodeLocationCountsView,
 ];
 
 export const catalogMessageContracts: Record<
@@ -1184,5 +1225,9 @@ export const catalogMessageContracts: Record<
   [POSTAL_CODE_PATTERNS.nearby]: {
     request: CATALOG_SCHEMA_IDS.listNearbyPostalCodesRequest,
     response: CATALOG_SCHEMA_IDS.nearbyPostalCodesView,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.countByPostalCode]: {
+    request: CATALOG_SCHEMA_IDS.countLocationsByPostalCodeRequest,
+    response: CATALOG_SCHEMA_IDS.postalCodeLocationCountsView,
   },
 };

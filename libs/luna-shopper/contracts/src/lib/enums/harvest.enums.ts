@@ -88,3 +88,26 @@ export enum DiscoveredPlaceStatus {
   IMPORTED = 'IMPORTED',
   REJECTED = 'REJECTED',
 }
+
+/**
+ * Where one postal code stands in the discovery queue (plan 0063, section 3).
+ *
+ * The queue exists because a run cannot: the active run index treats PENDING and
+ * RUNNING as in progress, so six codes announced by one profile write cannot be
+ * six runs, and this table is the backlog of work that has not become a run yet.
+ *
+ * `DONE` means **we looked**, never that we found anything. A discovery run
+ * creates no catalog location, only `DiscoveredPlace` rows an admin still has to
+ * import, so a code stays unknown to catalog long after the queue is finished
+ * with it (section 5).
+ */
+export enum PostalCodeDiscoveryStatus {
+  /** Waiting for the worker. Also where a backed off retry sits between attempts. */
+  QUEUED = 'QUEUED',
+  /** A run for this code exists and is in progress. One row at a time, by design. */
+  RUNNING = 'RUNNING',
+  /** We looked. Not re-asked until the cooldown expires (section 4). */
+  DONE = 'DONE',
+  /** Out of attempts, left with its reason for backlog 0009 to show somebody. */
+  FAILED = 'FAILED',
+}

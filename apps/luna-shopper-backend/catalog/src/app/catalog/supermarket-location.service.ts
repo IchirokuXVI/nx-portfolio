@@ -3,8 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   PostalCodeSource,
+  type CountLocationsByPostalCodeRequest,
   type CreateSupermarketLocationRequest,
   type ListSupermarketLocationsRequest,
+  type PostalCodeLocationCountsView,
   type SupermarketLocationIdRequest,
   type SupermarketLocationPage,
   type SupermarketLocationView,
@@ -216,6 +218,57 @@ export class SupermarketLocationService {
         : null;
 
     return { items: page.map(toSupermarketLocationView), nextCursor };
+  }
+
+  /**
+   * How many shops we hold in each of these postal codes (plan 0063, section 5).
+   *
+   * The harvester's definition of an **unknown** code, and the reason a postal
+   * code someone put on their profile turns into a discovery run. It is one
+   * grouped count rather than a page per code because a profile write announces
+   * several codes at once, and it answers a zero for every code asked about:
+   * without the zeros the caller cannot tell "no shops" from "not asked".
+   *
+   * Only meaningful after plan 0061, which is what stopped two thirds of
+   * imported locations carrying a null postcode. Before it almost every code
+   * counted zero, and the queue would have re discovered the country.
+   */
+  async countByPostalCode(
+    req: CountLocationsByPostalCodeRequest
+  ): Promise<PostalCodeLocationCountsView> {
+    const country = req.country.trim().toLowerCase();
+    const codes = [
+      ...new Set(req.postalCodes.map((code) => code.trim()).filter(Boolean)),
+    ];
+    if (codes.length === 0) {
+      return { country, counts: [] };
+    }
+
+    const rows = await this.locations
+      .createQueryBuilder('l')
+      .select('l."postalCode"', 'postalCode')
+      .addSelect('COUNT(*)', 'locations')
+      .where('l."postalCode" IN (:...codes)', { codes })
+      // A location with no country recorded is counted for whatever country
+      // asked: the column arrived with plan 0061 and the rows that predate it
+      // are all Spanish. Excluding them would report a code we do serve as
+      // unknown and spend a discovery run finding shops already in the catalog.
+      .andWhere('(l.country IS NULL OR lower(l.country) = :country)', {
+        country,
+      })
+      .groupBy('l."postalCode"')
+      .getRawMany<{ postalCode: string; locations: string }>();
+
+    const found = new Map(
+      rows.map((row) => [row.postalCode, Number(row.locations)])
+    );
+    return {
+      country,
+      counts: codes.map((postalCode) => ({
+        postalCode,
+        locations: found.get(postalCode) ?? 0,
+      })),
+    };
   }
 
   /**

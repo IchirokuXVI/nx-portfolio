@@ -49,6 +49,17 @@ export const SUPERMARKET_LOCATION_PATTERNS = {
   delete: 'supermarketLocation.delete',
   get: 'supermarketLocation.get',
   list: 'supermarketLocation.list',
+  /**
+   * How many shops catalog holds in each of these postal codes (plan 0063,
+   * section 5).
+   *
+   * Not {@link SUPERMARKET_LOCATION_PATTERNS.list}, which is keyed by chain and
+   * answers a page: this question is about a place rather than a chain, the
+   * caller wants a count and not the rows, and it asks about several codes at
+   * once because one profile write announces several. Zero is the answer that
+   * earns a discovery run.
+   */
+  countByPostalCode: 'supermarketLocation.countByPostalCode',
 } as const;
 
 export const ITEM_PATTERNS = {
@@ -1041,4 +1052,37 @@ export interface NearbyPostalCodesView {
   known: boolean;
   /** Nearest first, never the code asked about. Empty when nothing is in range. */
   postalCodes: PostalCodeDistanceView[];
+}
+
+/**
+ * Do we have any shops in these codes (plan 0063, section 5)?
+ *
+ * Several codes in one request because one profile write announces several: a
+ * code with `expandNearby` set adds a parent and its neighbours at once, and
+ * asking one at a time would be six round trips to answer one event.
+ *
+ * **No `userId`.** Every other catalog write and admin read carries one; this is
+ * a count over a table catalog already serves openly, asked service to service,
+ * and naming a user would put an account id on the path to a queue row that
+ * outlives the request by a month.
+ */
+export interface CountLocationsByPostalCodeRequest {
+  /** ISO 3166-1 alpha-2, lowercase. Every code in one request shares it. */
+  country: string;
+  postalCodes: string[];
+}
+
+/** One code and how many locations catalog holds in it. */
+export interface PostalCodeLocationCount {
+  postalCode: string;
+  locations: number;
+}
+
+/**
+ * One entry per code asked about, including the ones with no shops: a caller
+ * deciding what is unknown needs the zeros, which is the whole point of asking.
+ */
+export interface PostalCodeLocationCountsView {
+  country: string;
+  counts: PostalCodeLocationCount[];
 }
