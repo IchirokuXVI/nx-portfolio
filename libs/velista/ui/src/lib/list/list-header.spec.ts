@@ -58,8 +58,8 @@ describe('ListHeader', () => {
 
   describe('the progress', () => {
     it('says a list with nothing on it is empty rather than 0 of 0', async () => {
-      // "0 of 0 ready" describes progress through a shop nobody has written down, and
-      // an empty bar under it describes nothing (plan 0019, section 3).
+      // "0 of 0 pending" describes progress through a shop nobody has written down,
+      // and an empty bar under it describes nothing (plan 0019, section 3).
       const fixture = await render(header({ wantedCount: 0, lineCount: 0 }));
 
       expect(host(fixture).textContent).toContain('list.empty.short');
@@ -69,11 +69,56 @@ describe('ListHeader', () => {
     it('fills the bar from the lines the page is holding', async () => {
       const fixture = await render(header({ wantedCount: 3, lineCount: 4 }));
 
-      expect(fixture.componentInstance.percent()).toBe(75);
+      // One of the four is done, so the bar is a quarter full.
+      expect(fixture.componentInstance.percent()).toBe(25);
       expect(
         host(fixture).querySelector<HTMLElement>('.progress-fill')?.style
           .inlineSize
-      ).toBe('75%');
+      ).toBe('25%');
+    });
+
+    // Plan 0060. `wantedCount` counts what the household still wants, and the bar
+    // used to divide by it directly: full before the shop and empty after it. The two
+    // ends are where an inversion shows, and either of them is the assertion that
+    // failed before the fix.
+    it('draws an empty bar for a list nothing has been bought from', async () => {
+      const fixture = await render(header({ wantedCount: 12, lineCount: 12 }));
+
+      expect(fixture.componentInstance.percent()).toBe(0);
+    });
+
+    it('draws a full bar for a list that has been shopped', async () => {
+      const fixture = await render(header({ wantedCount: 0, lineCount: 12 }));
+
+      expect(fixture.componentInstance.percent()).toBe(100);
+    });
+
+    it('rounds the part way case', async () => {
+      const fixture = await render(header({ wantedCount: 5, lineCount: 12 }));
+
+      expect(fixture.componentInstance.percent()).toBe(58);
+    });
+
+    it('says the count is what is still pending', async () => {
+      // The translator double returns the key, so this reads as a key name. The
+      // interpolated number is not asserted here for the reason the testing translator
+      // gives: it does not interpolate, so an assertion on "7 of 12 pending" would
+      // pass on nothing.
+      const fixture = await render(header({ wantedCount: 7, lineCount: 12 }));
+
+      expect(
+        host(fixture).querySelector('.progress-line')?.textContent?.trim()
+      ).toBe('list.header.pending');
+    });
+
+    it('says "nothing left" rather than 0 of 12 pending', async () => {
+      // Plan 0060, section 3.1. The bar is full behind it either way.
+      const fixture = await render(header({ wantedCount: 0, lineCount: 12 }));
+
+      expect(
+        host(fixture).querySelector('.progress-line')?.textContent?.trim()
+      ).toBe('list.header.done');
+      expect(host(fixture).querySelector('.progress')).not.toBeNull();
     });
   });
 });
