@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -31,6 +32,7 @@ import { UpdateProfileDto } from './account.dto';
 import {
   AddPostalCodeDto,
   CreateShoppingProfileDto,
+  SetProfileLocationsDto,
   UpdateShoppingProfileDto,
 } from './shopping-profile.dto';
 
@@ -238,6 +240,45 @@ export class AccountController {
       PROFILE_PATTERNS.removePostalCode,
       { userId: user.userId, profileId: id, postalCode }
     );
+    await this.scopes.invalidate(user.userId);
+    return profile;
+  }
+
+  /**
+   * Say what this profile thinks of several shops at once (plan 0064, section
+   * 5).
+   *
+   * **A partial write, and a PUT rather than a PATCH**, because each shop it
+   * names is stated in full: the body says what those shops are, not how to
+   * change them. Shops it does not name keep whatever they had, which is what
+   * separates it from the collections on the profile body: a profile can see
+   * hundreds of shops, and a replacement would make one toggle require the
+   * client to send every one of them.
+   *
+   * Switching a shop back on deletes its row, because absence already means
+   * included. Answers the whole profile, so a client that toggled three shops
+   * has the profile the toggles produced.
+   */
+  @Put('shopping-profiles/:id/locations')
+  @ApiContractResponse(PROFILE_PATTERNS.setLocationPreferences)
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+  })
+  async setProfileLocations(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: SetProfileLocationsDto
+  ): Promise<ShoppingProfileView> {
+    const profile = await this.nats.send<ShoppingProfileView>(
+      PROFILE_PATTERNS.setLocationPreferences,
+      { userId: user.userId, profileId: id, locations: dto.locations }
+    );
+    // The exclusions narrow rung one of scope resolution (plan 0064, section 3),
+    // so a stale cached resolution would keep quoting a price from a shop the
+    // caller has just refused.
     await this.scopes.invalidate(user.userId);
     return profile;
   }

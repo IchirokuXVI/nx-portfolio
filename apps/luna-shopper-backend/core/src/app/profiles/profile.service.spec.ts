@@ -14,6 +14,7 @@ import {
 import { FindOperator, type DataSource, type Repository } from 'typeorm';
 import {
   ProfileGenerationSource,
+  ProfileLocationPreference,
   ProfilePostalCode,
   ProfileSupermarketPreference,
   type ShoppingProfile,
@@ -221,12 +222,62 @@ function build(
   const supermarkets = childRepo<ProfileSupermarketPreference>();
   const sources = childRepo<ProfileGenerationSource>();
 
+  /**
+   * A real in memory table for the same reason the postal codes get one: plan
+   * 0064's rules are about what a row survives. A `false` deletes, a `true`
+   * upserts, and an unmentioned shop is left alone, none of which a double
+   * answering empty could tell apart.
+   */
+  let locationRows: ProfileLocationPreference[] = [];
+  let mintedLocations = 0;
+  const locations = {
+    find: jest.fn(async (options?: { where?: Record<string, unknown> }) =>
+      locationRows.filter((row) =>
+        Object.entries(options?.where ?? {}).every(([key, value]) =>
+          matchesValue((row as unknown as Record<string, unknown>)[key], value)
+        )
+      )
+    ),
+    create: jest.fn((row: Partial<ProfileLocationPreference>) => ({
+      excluded: false,
+      ...row,
+    })),
+    save: jest.fn(
+      async (
+        input: ProfileLocationPreference | ProfileLocationPreference[]
+      ) => {
+        for (const row of Array.isArray(input) ? input : [input]) {
+          if (!row.id) {
+            row.id = `loc-${mintedLocations++}`;
+            row.createdAt = new Date(2026, 0, mintedLocations);
+            locationRows.push(row);
+          }
+        }
+        return input;
+      }
+    ),
+    delete: jest.fn(async (where: Record<string, unknown>) => {
+      const before = locationRows.length;
+      locationRows = locationRows.filter(
+        (row) =>
+          !Object.entries(where).every(([key, value]) =>
+            matchesValue(
+              (row as unknown as Record<string, unknown>)[key],
+              value
+            )
+          )
+      );
+      return { affected: before - locationRows.length };
+    }),
+  } as unknown as Repository<ProfileLocationPreference>;
+
   // Named rather than a fallback: a catch all `getRepository` would hand the
   // postal code writes the profile table and every assertion below would be
   // about the wrong rows.
   const repositoriesByEntity = new Map<unknown, unknown>([
     [ProfilePostalCode, postalCodes],
     [ProfileSupermarketPreference, supermarkets],
+    [ProfileLocationPreference, locations],
     [ProfileGenerationSource, sources],
   ]);
   const manager = {
@@ -265,6 +316,7 @@ function build(
     profileRepo,
     postalCodes,
     supermarkets,
+    locations,
     sources,
     events,
     geography,
@@ -278,6 +330,18 @@ function build(
     profileRepo,
     read: () => profiles,
     readCodes: () => codes,
+    readLocations: () => locationRows,
+    seedLocations: (rows: Partial<ProfileLocationPreference>[]) => {
+      for (const row of rows) {
+        locationRows.push({
+          id: `loc-${mintedLocations++}`,
+          profileId: 'p1',
+          excluded: true,
+          createdAt: new Date(2026, 0, mintedLocations),
+          ...row,
+        } as ProfileLocationPreference);
+      }
+    },
   };
 }
 
@@ -321,8 +385,8 @@ describe('ProfileService', () => {
       const selector = await service.resolveScopes({ userId: USER });
 
       expect(selector.profileId).toBeTruthy();
-      // Nothing in it yet, which is what the gateway turns into
-      // CATALOG_SCOPE_REQUIRED rather than into everything.
+      // Nothing in it yet, which is what the gateway turns into a read with no
+      // scopes: the whole catalog, with no price on any of it (plan 0069).
       expect(selector.empty).toBe(true);
     });
 
@@ -493,6 +557,7 @@ describe('ProfileService', () => {
         postalCodes: [],
         supermarketIds: [],
         excludedSupermarketIds: [],
+        excludedSupermarketLocationIds: [],
         empty: true,
       });
     });
@@ -869,6 +934,249 @@ describe('ProfileService', () => {
           suppressed: false,
         },
       ]);
+    });
+  });
+  /**
+   * The finer axis (plan 0064). What these prove is what a row *survives*: a
+   * partial write leaves unmentioned shops alone, switching one back on deletes
+   * its row rather than storing a `false`, and a chain exclusion never touches
+   * these rows at all.
+   */
+  describe('a profile excludes a shop, not only a chain', () => {
+    const SHOP_A = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const SHOP_B = 'bbbbbbbb-2222-4222-8222-222222222222';
+    const SHOP_C = 'cccccccc-3333-4333-8333-333333333333';
+
+    const profile = () => [{ id: 'p1', isDefault: true }];
+
+    const excludedShops = (
+      rows: { supermarketLocationId: string; excluded: boolean }[]
+    ) =>
+      rows
+        .filter((row) => row.excluded)
+        .map((row) => row.supermarketLocationId)
+        .sort();
+
+    it('writes an exclusion and reads it back on the profile', async () => {
+      const { service, readLocations } = build(profile());
+
+      const view = await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+
+      expect(excludedShops(readLocations())).toEqual([SHOP_A]);
+      expect(view.locations).toEqual([
+        expect.objectContaining({
+          supermarketLocationId: SHOP_A,
+          excluded: true,
+        }),
+      ]);
+    });
+
+    it('hands the gateway the shops it refuses, and nothing about the ones it does not', async () => {
+      const { service, seedLocations } = build(profile());
+      seedLocations([
+        { supermarketLocationId: SHOP_A, excluded: true },
+        { supermarketLocationId: SHOP_B, excluded: false },
+      ]);
+
+      const selector = await service.resolveScopes({ userId: USER });
+
+      expect(selector.excludedSupermarketLocationIds).toEqual([SHOP_A]);
+    });
+
+    it('does not make a profile non empty: refusing a shop is not a place to shop', async () => {
+      const { service, seedLocations } = build(profile());
+      seedLocations([{ supermarketLocationId: SHOP_A, excluded: true }]);
+
+      const selector = await service.resolveScopes({ userId: USER });
+
+      expect(selector.empty).toBe(true);
+    });
+
+    it('leaves the shops it was not told about alone', async () => {
+      const { service, readLocations } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [
+          { supermarketLocationId: SHOP_A, excluded: true },
+          { supermarketLocationId: SHOP_B, excluded: true },
+        ],
+      });
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_C, excluded: true }],
+      });
+
+      // A replacement would have dropped the first two, which is the whole
+      // reason this write is a partial one (plan 0064, section 5).
+      expect(excludedShops(readLocations())).toEqual(
+        [SHOP_A, SHOP_B, SHOP_C].sort()
+      );
+    });
+
+    it('deletes the row rather than storing a false when a shop is switched back on', async () => {
+      const { service, readLocations } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: false }],
+      });
+
+      // Absence already means included, so a row saying so is a row worth
+      // nothing, and a shop imported later must not need one to be visible.
+      expect(readLocations()).toEqual([]);
+    });
+
+    it('writes one row when the same shop is toggled twice before saving', async () => {
+      const { service, readLocations } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [
+          { supermarketLocationId: SHOP_A, excluded: false },
+          { supermarketLocationId: SHOP_A, excluded: true },
+        ],
+      });
+
+      expect(excludedShops(readLocations())).toEqual([SHOP_A]);
+    });
+
+    it('is idempotent: excluding a shop twice leaves one row', async () => {
+      const { service, readLocations } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+
+      expect(readLocations()).toHaveLength(1);
+    });
+
+    it('is not found for somebody else’s profile', async () => {
+      const { service } = build([
+        { id: 'mine', userId: USER, isDefault: true },
+        { id: 'theirs', userId: STRANGER, isDefault: true },
+      ]);
+
+      await expect(
+        service.setLocationPreferences({
+          userId: USER,
+          profileId: 'theirs',
+          locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+        })
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('refuses an entry with no shop', async () => {
+      const { service } = build(profile());
+
+      await expect(
+        service.setLocationPreferences({
+          userId: USER,
+          profileId: 'p1',
+          locations: [{ supermarketLocationId: '  ', excluded: true }],
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
+    });
+
+    it('caps what the profile ends up holding, not what one request states', async () => {
+      const { service, seedLocations } = build(profile());
+      seedLocations(
+        Array.from(
+          { length: PROFILE_LIMITS.maxLocationPreferences },
+          (_, index) => ({ supermarketLocationId: `shop-${index}` })
+        )
+      );
+
+      // One more shop on a profile already at the limit is exactly the case the
+      // cap exists for, and counting only the request would never see it.
+      await expect(
+        service.setLocationPreferences({
+          userId: USER,
+          profileId: 'p1',
+          locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+        })
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('survives excluding the chain and un excluding it, intact', async () => {
+      const { service, readLocations } = build(profile());
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+
+      // The chain axis is written through `update`, and it writes a different
+      // table. A row under an excluded chain is inert rather than deleted
+      // (plan 0064, section 2.1), which is what lets un excluding the chain
+      // restore exactly the selection the user last had.
+      await service.update({
+        userId: USER,
+        profileId: 'p1',
+        supermarkets: [{ supermarketId: 'chain-dia', excluded: true }],
+      });
+      await service.update({
+        userId: USER,
+        profileId: 'p1',
+        supermarkets: [{ supermarketId: 'chain-dia', excluded: false }],
+      });
+
+      expect(excludedShops(readLocations())).toEqual([SHOP_A]);
+    });
+
+    it('says nothing about a shop imported after the user made their choices', async () => {
+      const { service } = build(profile());
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [
+          { supermarketLocationId: SHOP_A, excluded: true },
+          { supermarketLocationId: SHOP_B, excluded: true },
+        ],
+      });
+
+      const selector = await service.resolveScopes({ userId: USER });
+
+      // A blacklist has never heard of the shop that opens next month, so it is
+      // included by default. That is the failure a person can actually detect,
+      // which is why this axis is not an allowlist (plan 0064, section 1).
+      expect(selector.excludedSupermarketLocationIds).not.toContain(SHOP_C);
+    });
+
+    it('tells the owner’s own sessions and nobody else’s', async () => {
+      const { service, events } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+
+      expect(events.emitToUsers).toHaveBeenCalledWith(
+        RealtimeEvent.ProfilesChanged,
+        [USER],
+        expect.anything()
+      );
     });
   });
 });

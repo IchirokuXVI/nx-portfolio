@@ -347,6 +347,30 @@ describeIntegration('catalog search (real Postgres)', () => {
       expect(page.items[0].group.slug).toBe('bread');
       expect(page.items[0].cheapestItem).toBeNull();
       expect(page.items[0].offer).toBeNull();
+      // Unpriced and still choosable: the members are the point of the row.
+      expect(page.items[0].itemIds.length).toBeGreaterThan(0);
+    });
+
+    it('carries every member of the group, which choosing it copies onto a line', async () => {
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        query: 'leche',
+        priceScopeIds: [ids.scopeA],
+      });
+
+      // The whole membership, not just the cheapest one the offer names: picking
+      // a group in the composer copies its members onto the line (plan 0048,
+      // section 1.1), and the household trims the set afterwards.
+      expect([...page.items[0].itemIds].sort()).toEqual(
+        [ids.pascualMilk, ids.hacendadoMilk].sort()
+      );
+    });
+
+    it('carries the members with no scopes given, where nothing is priced', async () => {
+      const page = await items.searchOffers({ userId: SHOPPER, query: 'leche' });
+      expect([...page.items[0].itemIds].sort()).toEqual(
+        [ids.pascualMilk, ids.hacendadoMilk].sort()
+      );
     });
 
     it('works with no scopes at all, quoting nothing', async () => {

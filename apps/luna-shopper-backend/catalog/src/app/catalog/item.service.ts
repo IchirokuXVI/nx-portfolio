@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ITEM_LOOKUP_LIMITS,
+  LINE_ITEM_SET_MAX,
   type CreateItemRequest,
   type FindItemByEanRequest,
   type FindItemByEanResult,
@@ -47,26 +48,6 @@ interface ItemCursor {
   id: string;
 }
 
-const EMPTY_ITEM_PAGE: ItemPage = { items: [], nextCursor: null };
-const EMPTY_GROUP_PAGE: ProductGroupOfferPage = { items: [], nextCursor: null };
-
-/**
- * Whether the caller stated where they shop and reached no chain we know (plan
- * 0049, section 3).
- *
- * **Absent and empty are different, and this is the whole of the difference.**
- * Absent is an unscoped read, which still ranks the catalog and quotes no price;
- * that is what the admin surface does and it is not reachable through the
- * gateway any more. An empty array is a place: a postal code nobody serves, or
- * chains that were all excluded. Listing the global product table for it would
- * answer a question the caller did not ask, so the answer is an empty page,
- * which the client explains from the coverage flags the resolver returned
- * alongside (section 5).
- */
-function resolvedToNothing(priceScopeIds: string[] | undefined): boolean {
-  return Array.isArray(priceScopeIds) && priceScopeIds.length === 0;
-}
-
 /** Collects positional parameters while a query is assembled around them. */
 function params() {
   const values: unknown[] = [];
@@ -101,15 +82,18 @@ function params() {
  * caller's shopping profile is the gateway's job (plan 0049, section 2.1), which
  * is what keeps catalog stateless about users.
  *
- * Since plan 0049, section 3, the two ways of sending nothing mean different
- * things. **Absent** is an unscoped read: it ranks, it quotes no price, and it is
- * how the admin surface lists the catalog. **An empty array** is a caller who
- * said where they shop and reached no chain we know, and it answers with an empty
- * page rather than with the global product table.
+ * **Absent and empty scopes are the same answer** (plan 0069, section 2): a
+ * ranked, paged read with every price field null. They were different for a
+ * while, an empty array answering an empty page, and that was the wrong shape of
+ * rule: the catalog is a list of things that exist, and a scope is how a price
+ * gets attached to one, so having none says something about prices and nothing
+ * about products. Which of the three states a caller is in — nothing said, a
+ * place nobody serves, everywhere refused — is read from `coverage` on the scope
+ * view, not from the size of this page.
  *
- * What did not change is that a group with no priced member still comes back
- * whenever there are scopes at all: the composer is attaching identity, not
- * quoting a price, and the harvester is off outside development.
+ * A group with no priced member still comes back for the same reason: the
+ * composer is attaching identity, not quoting a price, and the harvester is off
+ * outside development.
  */
 @Injectable()
 export class ItemService {
@@ -261,9 +245,6 @@ export class ItemService {
    * would be a rule that never fired.
    */
   async search(req: SearchItemsRequest): Promise<ItemPage> {
-    if (resolvedToNothing(req.priceScopeIds)) {
-      return EMPTY_ITEM_PAGE;
-    }
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
     const term = parseSearchTerm(req.query);
@@ -303,9 +284,6 @@ export class ItemService {
    * on a catalog full of exactly the right answers.
    */
   async searchOffers(req: SearchOffersRequest): Promise<ProductGroupOfferPage> {
-    if (resolvedToNothing(req.priceScopeIds)) {
-      return EMPTY_GROUP_PAGE;
-    }
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
     const term = parseSearchTerm(req.query);
@@ -410,8 +388,14 @@ export class ItemService {
         : await this.items.find({ where: { id: In(itemIds) } });
     const byId = new Map(members.map((item) => [item.id, item]));
 
+    // The whole membership of every group on the page, which is what choosing one
+    // attaches to a line. One query for the page rather than one per group.
+    const membership = await this.membersOf(page.map((row) => row.id));
+
     return {
-      items: page.map((row) => this.toOfferView(row, byId)),
+      items: page.map((row) =>
+        this.toOfferView(row, byId, membership.get(row.id) ?? [])
+      ),
       nextCursor: hasMore
         ? encodeCursor({
             order: 'relevance',
@@ -422,9 +406,59 @@ export class ItemService {
     };
   }
 
+  /**
+   * The members of each of these groups, capped per group, in one query.
+   *
+   * The cap is applied **in the database** with a window function rather than by
+   * slicing what came back, because the unbounded read is the thing worth
+   * avoiding: ten groups on a page and no cap is ten whole product ranges pulled
+   * out of Postgres to answer one keystroke.
+   *
+   * Ordered by English name, then id. Any deterministic order would do for the
+   * cap to be stable, and this one also decides the order the products sit in on
+   * the line the composer is about to create, where alphabetical is a better
+   * answer than insertion order.
+   */
+  private async membersOf(groupIds: string[]): Promise<Map<string, string[]>> {
+    if (groupIds.length === 0) {
+      return new Map();
+    }
+    const p = params();
+    const rows: { id: string; productGroupId: string }[] =
+      await this.items.query(
+        `
+      SELECT "id", "productGroupId"
+      FROM (
+        SELECT i."id", i."productGroupId",
+               row_number() OVER (
+                 PARTITION BY i."productGroupId"
+                 ORDER BY i."name" ->> 'en' ASC, i."id" ASC
+               ) AS rn
+        FROM "items" i
+        WHERE i."productGroupId" = ANY(${p.bind(groupIds)})
+      ) ranked
+      WHERE rn <= ${p.bind(LINE_ITEM_SET_MAX)}
+      ORDER BY "productGroupId" ASC, rn ASC
+      `,
+        p.values
+      );
+
+    const byGroup = new Map<string, string[]>();
+    for (const row of rows) {
+      const current = byGroup.get(row.productGroupId);
+      if (current === undefined) {
+        byGroup.set(row.productGroupId, [row.id]);
+      } else {
+        current.push(row.id);
+      }
+    }
+    return byGroup;
+  }
+
   private toOfferView(
     row: RankedGroupRow,
-    members: Map<string, Item>
+    members: Map<string, Item>,
+    itemIds: string[]
   ): ProductGroupOfferView {
     const group = toProductGroupView({
       id: row.id,
@@ -436,7 +470,7 @@ export class ItemService {
 
     const member = row.offerItemId ? members.get(row.offerItemId) : undefined;
     if (!member || !row.offerScopeId) {
-      return { group, cheapestItem: null, offer: null };
+      return { group, cheapestItem: null, offer: null, itemIds };
     }
     const offer: ItemOfferView = {
       itemId: member.id,
@@ -451,7 +485,7 @@ export class ItemService {
         : null,
       priceSourceKind: row.offerSourceKind,
     };
-    return { group, cheapestItem: toItemView(member, offer), offer };
+    return { group, cheapestItem: toItemView(member, offer), offer, itemIds };
   }
 
   /**

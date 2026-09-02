@@ -53,10 +53,10 @@ const EGGS: readonly CatalogItem[] = [
 ];
 
 const GROUPS: readonly ProductGroup[] = [
-  group('group-milk', 'Leche', 'Milk', MILK.length),
-  group('group-bread', 'Pan', 'Bread', BREAD.length),
-  group('group-oil', 'Aceite de oliva', 'Olive oil', OIL.length),
-  group('group-eggs', 'Huevos', 'Eggs', EGGS.length),
+  group('group-milk', 'Leche', 'Milk'),
+  group('group-bread', 'Pan', 'Bread'),
+  group('group-oil', 'Aceite de oliva', 'Olive oil'),
+  group('group-eggs', 'Huevos', 'Eggs'),
 ];
 
 const ITEMS: readonly CatalogItem[] = [...MILK, ...BREAD, ...OIL, ...EGGS];
@@ -152,11 +152,6 @@ function item(
   return { id, name: { es, en }, brand, size, unit, productGroupId };
 }
 
-function group(
-  id: string,
-  es: string,
-  en: string,
-  itemCount: number
-): ProductGroup {
-  return { id, name: { es, en }, itemCount };
+function group(id: string, es: string, en: string): ProductGroup {
+  return { id, name: { es, en } };
 }

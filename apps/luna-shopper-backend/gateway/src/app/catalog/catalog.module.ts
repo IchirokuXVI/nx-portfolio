@@ -7,6 +7,7 @@ import {
   CatalogPriceScopesController,
   CatalogProductGroupsController,
   CatalogScopeController,
+  CatalogShopsController,
   CatalogSuggestController,
   CatalogSupermarketItemsController,
   CatalogSupermarketsController,
@@ -21,7 +22,9 @@ import { ScopeResolutionService } from './scope-resolution.service';
  * suggestion endpoint, which is the only route here that fans out to two
  * subjects rather than proxying one. Plan 0049 made the reads that return items
  * or prices scoped, and added the one endpoint that describes the resolution
- * instead of using it.
+ * instead of using it. Plan 0068 added the shop reads, which are the same table
+ * as the locations controller seen from the other side: browsed by a shopper,
+ * keyed on where they are, rather than administered one row at a time.
  */
 @Module({
   imports: [MessagingModule],
@@ -31,6 +34,7 @@ import { ScopeResolutionService } from './scope-resolution.service';
     CatalogPriceScopesController,
     CatalogProductGroupsController,
     CatalogScopeController,
+    CatalogShopsController,
     CatalogSuggestController,
     CatalogItemsController,
     CatalogSupermarketItemsController,

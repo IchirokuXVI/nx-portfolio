@@ -13,6 +13,7 @@ import { ListLine } from './list-line.entity';
 import { MergeRequest } from './merge-request.entity';
 import { ProcessedEvent } from './processed-event.entity';
 import { ProfileGenerationSource } from './profile-generation-source.entity';
+import { ProfileLocationPreference } from './profile-location-preference.entity';
 import { ProfilePostalCode } from './profile-postal-code.entity';
 import { ProfileSupermarketPreference } from './profile-supermarket-preference.entity';
 import { ShoppingList } from './shopping-list.entity';
@@ -36,6 +37,7 @@ export { ListLine } from './list-line.entity';
 export { MergeRequest } from './merge-request.entity';
 export { ProcessedEvent } from './processed-event.entity';
 export { ProfileGenerationSource } from './profile-generation-source.entity';
+export { ProfileLocationPreference } from './profile-location-preference.entity';
 export { ProfilePostalCode } from './profile-postal-code.entity';
 export { ProfileSupermarketPreference } from './profile-supermarket-preference.entity';
 export { ShoppingList } from './shopping-list.entity';
@@ -62,6 +64,9 @@ export const CORE_ENTITIES = [
   ShoppingProfile,
   ProfilePostalCode,
   ProfileSupermarketPreference,
+  // The finer axis beside the chain preference (plan 0064). Same parent, same
+  // cascade, so it sits with its siblings.
+  ProfileLocationPreference,
   ProfileGenerationSource,
   // Generated shopping lists (plan 0050). The basket comes first: its lines
   // reference it, and the origins and options reference the lines.

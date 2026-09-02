@@ -12,7 +12,6 @@ import {
   type GeneratedListParticipantContext,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
-import { CatalogScopeRequiredException } from '@portfolio/luna-shopper/platform';
 import { GeneratedListParticipantController } from './generated-list-sharing.controller';
 
 /**
@@ -122,8 +121,8 @@ interface World {
   readonly seesZoneData?: boolean;
   /** What catalog answers the priced lookup with, or a throw. */
   readonly items?: ItemView[] | 'throws';
-  /** What the resolver does: a view, or a throw. */
-  readonly resolves?: CatalogScopeView | 'throws';
+  /** What the resolver answers with. */
+  readonly resolves?: CatalogScopeView;
   /** The run's profile, null for a run scoped by hand. */
   readonly profileId?: string | null;
 }
@@ -184,12 +183,7 @@ function build(world: World = {}) {
     }
   });
 
-  const describe = jest.fn(async () => {
-    if (world.resolves === 'throws') {
-      throw new CatalogScopeRequiredException('empty profile');
-    }
-    return world.resolves ?? resolution();
-  });
+  const describe = jest.fn(async () => world.resolves ?? resolution());
 
   const controller = new GeneratedListParticipantController(
     { send } as never,
@@ -232,7 +226,19 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
   });
 
   it('answers the basket unpriced when the profile resolves to nothing (section 3.1)', async () => {
-    const { controller, lookups } = build({ resolves: 'throws' });
+    const { controller, lookups } = build({
+      // The ordinary path, not the `catch`: since plan 0069 an empty profile
+      // resolves to no scopes rather than raising, so this arrives as a view
+      // with nothing in it and the read carries on.
+      resolves: {
+        priceScopeIds: [],
+        scopes: [],
+        coverage: [],
+        approximate: false,
+        profileId: PROFILE,
+        explicit: false,
+      },
+    });
 
     const result = await controller.getBasket(participant(), BASKET_ID);
 

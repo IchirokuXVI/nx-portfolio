@@ -12,11 +12,13 @@ import {
   type ListShoppingProfilesRequest,
   type PostalCodeDistanceView,
   type ProfileGenerationSourceInput,
+  type ProfileLocationPreferenceInput,
   type ProfilePostalCodeInput,
   type ProfileScopeSelector,
   type ProfileSupermarketPreferenceInput,
   type RemoveProfilePostalCodeRequest,
   type ResolveProfileScopesRequest,
+  type SetProfileLocationPreferencesRequest,
   type ShoppingProfileIdRequest,
   type ShoppingProfileListResult,
   type ShoppingProfileView,
@@ -32,6 +34,7 @@ import type { CoreConfig } from '../config/app-config';
 import { radiusFor } from '../config/nearby-radius';
 import {
   ProfileGenerationSource,
+  ProfileLocationPreference,
   ProfilePostalCode,
   ProfileSupermarketPreference,
   ShoppingProfile,
@@ -100,6 +103,8 @@ export class ProfileService {
     private readonly postalCodes: Repository<ProfilePostalCode>,
     @InjectRepository(ProfileSupermarketPreference)
     private readonly supermarkets: Repository<ProfileSupermarketPreference>,
+    @InjectRepository(ProfileLocationPreference)
+    private readonly locations: Repository<ProfileLocationPreference>,
     @InjectRepository(ProfileGenerationSource)
     private readonly sources: Repository<ProfileGenerationSource>,
     private readonly events: CoreEventsPublisher,
@@ -338,6 +343,91 @@ export class ProfileService {
   }
 
   /**
+   * Say what this profile thinks of several shops at once (plan 0064, section
+   * 5).
+   *
+   * **A partial write, and the one place this axis parts company with the chain
+   * preferences on {@link update}.** Those are a replacement, which suits a list
+   * the page holds in full; a profile's shops run to hundreds and a screen holds
+   * a screenful, so replacing would make one toggle require the client to send
+   * every shop it has ever seen and an incomplete send would silently un exclude
+   * the rest. Shops this call does not name keep whatever they had.
+   *
+   * **Set and clear are the same call.** Absence means included, so a row saying
+   * `excluded: false` and no row at all describe the same profile; switching a
+   * shop back on therefore deletes its row rather than storing a fact worth
+   * nothing. The unique index makes the write idempotent under a retry.
+   *
+   * It does not check that a `supermarketLocationId` names a real shop, for the
+   * same reason the chain preference does not check its chain: the reference is
+   * opaque across a service boundary, and a preference naming a shop catalog has
+   * since deleted is ignored by the resolver rather than blocking the save.
+   */
+  async setLocationPreferences(
+    req: SetProfileLocationPreferencesRequest
+  ): Promise<ShoppingProfileView> {
+    const profile = await this.load(req.userId, req.profileId);
+    const stated = this.checkLocations(req.locations);
+
+    await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ProfileLocationPreference);
+      const existing = await repo.find({ where: { profileId: profile.id } });
+
+      const cleared = stated
+        .filter((input) => !input.excluded)
+        .map((input) => input.supermarketLocationId);
+      const gone = existing.filter((row) =>
+        cleared.includes(row.supermarketLocationId)
+      );
+      if (gone.length > 0) {
+        await repo.delete({ id: In(gone.map((row) => row.id)) });
+      }
+
+      const excluded = stated.filter((input) => input.excluded);
+      if (excluded.length === 0) {
+        return;
+      }
+
+      // The cap counts what the profile would hold afterwards rather than what
+      // this request states: a client toggling one more shop on a profile that
+      // is already at the limit is the case the cap exists for, and counting
+      // only the request would never see it.
+      const kept = existing.filter(
+        (row) => !gone.some((row2) => row2.id === row.id)
+      );
+      const added = excluded.filter(
+        (input) =>
+          !kept.some(
+            (row) => row.supermarketLocationId === input.supermarketLocationId
+          )
+      );
+      if (kept.length + added.length > PROFILE_LIMITS.maxLocationPreferences) {
+        throw new ConflictException(
+          `A profile can hold at most ${PROFILE_LIMITS.maxLocationPreferences} shop preferences`
+        );
+      }
+
+      await repo.save(
+        excluded.map((input) => {
+          const row =
+            kept.find(
+              (r) => r.supermarketLocationId === input.supermarketLocationId
+            ) ??
+            repo.create({
+              profileId: profile.id,
+              supermarketLocationId: input.supermarketLocationId,
+            });
+          row.excluded = true;
+          return row;
+        })
+      );
+    });
+
+    await this.announce(req.userId);
+    return this.viewFor(profile);
+  }
+
+  /**
    * Move the default (plan 0049, section 1.3).
    *
    * Clear then set, in one transaction and in that order, because the partial
@@ -421,7 +511,7 @@ export class ProfileService {
       ? await this.load(req.userId, req.profileId)
       : await this.defaultProfile(req.userId);
 
-    const [postalCodes, preferences] = await Promise.all([
+    const [postalCodes, preferences, locations] = await Promise.all([
       // Suppressed rows are not places this person shops (plan 0062, section
       // 3.1), so they are absent here exactly as they are absent from the view.
       this.postalCodes.find({
@@ -429,6 +519,7 @@ export class ProfileService {
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
       this.supermarkets.find({ where: { profileId: profile.id } }),
+      this.locations.find({ where: { profileId: profile.id, excluded: true } }),
     ]);
 
     const supermarketIds = preferences
@@ -443,8 +534,15 @@ export class ProfileService {
       postalCodes: postalCodes.map((row) => row.postalCode),
       supermarketIds,
       excludedSupermarketIds,
+      // The finer axis (plan 0064, section 3). Only the refusals travel: there
+      // is no included counterpart, because a blacklist can only take away.
+      excludedSupermarketLocationIds: locations.map(
+        (row) => row.supermarketLocationId
+      ),
       // A profile holding only exclusions is empty too: "not DIA" is not a place
       // to shop from, and section 3 answers it the same way as saying nothing.
+      // Refusing one shop is no more a place than refusing a brand, so the
+      // finer axis does not enter into this either.
       empty: postalCodes.length === 0 && supermarketIds.length === 0,
     };
   }
@@ -567,7 +665,7 @@ export class ProfileService {
     return view;
   }
 
-  /** Every child of these profiles in three queries, whatever the page size. */
+  /** Every child of these profiles in four queries, whatever the page size. */
   private async viewsFor(
     rows: ShoppingProfile[]
   ): Promise<ShoppingProfileView[]> {
@@ -575,7 +673,7 @@ export class ProfileService {
       return [];
     }
     const ids = rows.map((row) => row.id);
-    const [postalCodes, supermarkets, sources] = await Promise.all([
+    const [postalCodes, supermarkets, locations, sources] = await Promise.all([
       // A suppressed code is absent rather than present with a flag (plan 0062,
       // section 6): no client has a reason to render one, and an absent row
       // cannot be shown by accident.
@@ -584,6 +682,14 @@ export class ProfileService {
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
       this.supermarkets.find({
+        where: { profileId: In(ids) },
+        order: { createdAt: 'ASC' },
+      }),
+      // Every row, excluded or not. A row saying `false` is one this service
+      // would have deleted, so in practice these are the exclusions; reading
+      // them unfiltered keeps the view a description of the table rather than an
+      // interpretation of it (plan 0064, section 1).
+      this.locations.find({
         where: { profileId: In(ids) },
         order: { createdAt: 'ASC' },
       }),
@@ -597,6 +703,7 @@ export class ProfileService {
       toShoppingProfileView(row, {
         postalCodes: postalCodes.filter((c) => c.profileId === row.id),
         supermarkets: supermarkets.filter((s) => s.profileId === row.id),
+        locations: locations.filter((l) => l.profileId === row.id),
         generationSources: sources.filter((s) => s.profileId === row.id),
       })
     );
@@ -1010,6 +1117,36 @@ export class ProfileService {
       });
     }
     return [...byChain.values()];
+  }
+
+  /**
+   * Deduplicated on the shop, last statement winning: it is a set of shops, and
+   * a client that toggled the same row twice before saving means the second one.
+   *
+   * No cap here, unlike its chain sibling: the request states a delta rather
+   * than the whole set, so the number that matters is what the profile ends up
+   * holding, which only the write can know (plan 0064, section 5).
+   */
+  private checkLocations(
+    inputs: ProfileLocationPreferenceInput[] | undefined
+  ): Required<ProfileLocationPreferenceInput>[] {
+    const byLocation = new Map<
+      string,
+      Required<ProfileLocationPreferenceInput>
+    >();
+    for (const input of inputs ?? []) {
+      const id = input.supermarketLocationId?.trim();
+      if (!id) {
+        throw new ValidationException('A shop preference needs a shop', {
+          details: { locations: 'each entry needs a supermarketLocationId' },
+        });
+      }
+      byLocation.set(id, {
+        supermarketLocationId: id,
+        excluded: input.excluded ?? false,
+      });
+    }
+    return [...byLocation.values()];
   }
 
   private checkSources(

@@ -434,4 +434,134 @@ describe('ScopeResolverService', () => {
     // not per caller. Two people in one street resolve to one answer.
     expect(second).toBe(first);
   });
+  /**
+   * The finer axis (plan 0064, section 3). Rung one is the only rung it touches:
+   * rungs two and three are about a chain with no shop here, so there is no shop
+   * there to have refused.
+   */
+  describe('the shop preference narrows rung one', () => {
+    const MERCADONA_NORTH = 'shop-mercadona-north';
+    const MERCADONA_SOUTH = 'shop-mercadona-south';
+
+    const twoMercadonas = {
+      locations: [
+        {
+          id: MERCADONA_NORTH,
+          supermarketId: MERCADONA,
+          priceScopeId: 'scope-north',
+          postalCode: '28001',
+        },
+        {
+          id: MERCADONA_SOUTH,
+          supermarketId: MERCADONA,
+          priceScopeId: 'scope-south',
+          postalCode: '28001',
+        },
+      ],
+      scopes: [],
+      chains: [],
+    };
+
+    it('drops an excluded shop and keeps its neighbour', async () => {
+      const resolver = build(twoMercadonas);
+
+      const resolved = await resolver.resolve({
+        userId: CALLER,
+        postalCodes: ['28001'],
+        excludedSupermarketLocationIds: [MERCADONA_NORTH],
+      });
+
+      expect(resolved.priceScopeIds).toEqual(['scope-south']);
+    });
+
+    it('leaves a chain with no prices when every one of its shops is refused', async () => {
+      const resolver = build(twoMercadonas);
+
+      // The point of the whole plan: without this a caller could refuse every
+      // Mercadona near them and still be quoted Mercadona's local price.
+      const resolved = await resolver.resolve({
+        userId: CALLER,
+        postalCodes: ['28001'],
+        excludedSupermarketLocationIds: [MERCADONA_NORTH, MERCADONA_SOUTH],
+      });
+
+      expect(resolved.priceScopeIds).toEqual([]);
+    });
+
+    it('still reports the postal code as served, because coverage is about our data', async () => {
+      const resolver = build(twoMercadonas);
+
+      const resolved = await resolver.resolve({
+        userId: CALLER,
+        postalCodes: ['28001'],
+        excludedSupermarketLocationIds: [MERCADONA_NORTH, MERCADONA_SOUTH],
+      });
+
+      // Somebody who refused every shop near them has not discovered that
+      // nobody serves their street. They said they will not go, and their own
+      // client is the one thing that already knows it.
+      expect(resolved.coverage).toEqual([
+        { postalCode: '28001', served: true },
+      ]);
+    });
+
+    it('never re admits a shop of a chain the caller excluded', async () => {
+      const resolver = build(twoMercadonas);
+
+      const resolved = await resolver.resolve({
+        userId: CALLER,
+        postalCodes: ['28001'],
+        excludedSupermarketIds: [MERCADONA],
+        // Saying nothing about these two shops does not bring them back: the
+        // coarser axis wins, which is section 2.1's precedence.
+        excludedSupermarketLocationIds: [],
+      });
+
+      expect(resolved.priceScopeIds).toEqual([]);
+    });
+
+    it('does not reach rungs two and three, which have no shop to refuse', async () => {
+      const resolver = build({
+        locations: [],
+        scopes: [
+          {
+            id: 'scope-national',
+            supermarketId: LIDL,
+            kind: PriceScopeKind.NATIONAL,
+          },
+        ],
+        chains: [],
+      });
+
+      const resolved = await resolver.resolve({
+        userId: CALLER,
+        postalCodes: ['28001'],
+        supermarketIds: [LIDL],
+        excludedSupermarketLocationIds: ['shop-lidl-anywhere'],
+      });
+
+      expect(resolved.priceScopeIds).toEqual(['scope-national']);
+    });
+
+    it('answers two callers refusing different shops differently', async () => {
+      const resolver = build(twoMercadonas);
+
+      const north = await resolver.resolve({
+        userId: CALLER,
+        postalCodes: ['28001'],
+        excludedSupermarketLocationIds: [MERCADONA_NORTH],
+      });
+      const south = await resolver.resolve({
+        userId: CALLER,
+        postalCodes: ['28001'],
+        excludedSupermarketLocationIds: [MERCADONA_SOUTH],
+      });
+
+      // The refusals are part of the cache key. Two profiles in one postal code
+      // refusing different shops are two different questions, and one answering
+      // from the other's entry is the bug that key prevents.
+      expect(north.priceScopeIds).toEqual(['scope-south']);
+      expect(south.priceScopeIds).toEqual(['scope-north']);
+    });
+  });
 });

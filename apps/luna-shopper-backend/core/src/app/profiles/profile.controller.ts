@@ -8,6 +8,7 @@ import {
   type ProfileScopeSelector,
   type RemoveProfilePostalCodeRequest,
   type ResolveProfileScopesRequest,
+  type SetProfileLocationPreferencesRequest,
   type ShoppingProfileIdRequest,
   type ShoppingProfileListResult,
   type ShoppingProfileView,
@@ -76,6 +77,18 @@ export class ProfileController {
     @Payload() req: RemoveProfilePostalCodeRequest
   ): Promise<ShoppingProfileView> {
     return this.profiles.removePostalCode(req);
+  }
+
+  /**
+   * Several shops at once (plan 0064, section 5), and the only way this axis is
+   * written: a partial write rather than a replacement, because the set can run
+   * to hundreds and a screen holds a screenful of it.
+   */
+  @MessagePattern(PROFILE_PATTERNS.setLocationPreferences)
+  setLocationPreferences(
+    @Payload() req: SetProfileLocationPreferencesRequest
+  ): Promise<ShoppingProfileView> {
+    return this.profiles.setLocationPreferences(req);
   }
 
   /** The gateway's call before a catalog read (plan 0049, section 2.1). */

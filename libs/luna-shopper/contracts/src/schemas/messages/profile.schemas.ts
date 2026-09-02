@@ -34,6 +34,7 @@ export const PROFILE_SCHEMA_IDS = {
   supermarketPreferenceView: schemaId(
     'profile/ProfileSupermarketPreferenceView'
   ),
+  locationPreferenceView: schemaId('profile/ProfileLocationPreferenceView'),
   generationSourceView: schemaId('profile/ProfileGenerationSourceView'),
   shoppingProfileView: schemaId('profile/ShoppingProfileView'),
   shoppingProfileListResult: schemaId('profile/ShoppingProfileListResult'),
@@ -42,6 +43,7 @@ export const PROFILE_SCHEMA_IDS = {
   supermarketPreferenceInput: schemaId(
     'profile/ProfileSupermarketPreferenceInput'
   ),
+  locationPreferenceInput: schemaId('profile/ProfileLocationPreferenceInput'),
   generationSourceInput: schemaId('profile/ProfileGenerationSourceInput'),
   listRequest: schemaId('msg/profiles.list/request'),
   createRequest: schemaId('msg/profiles.create/request'),
@@ -50,6 +52,9 @@ export const PROFILE_SCHEMA_IDS = {
   resolveScopesRequest: schemaId('msg/profiles.resolveScopes/request'),
   addPostalCodeRequest: schemaId('msg/profiles.addPostalCode/request'),
   removePostalCodeRequest: schemaId('msg/profiles.removePostalCode/request'),
+  setLocationPreferencesRequest: schemaId(
+    'msg/profiles.setLocationPreferences/request'
+  ),
 } as const;
 
 const postalCodeView = object(
@@ -74,6 +79,16 @@ const supermarketPreferenceView = object(
     excluded: boolean(),
   },
   ['id', 'supermarketId', 'excluded']
+);
+
+const locationPreferenceView = object(
+  PROFILE_SCHEMA_IDS.locationPreferenceView,
+  {
+    id: nonEmptyString(),
+    supermarketLocationId: nonEmptyString(),
+    excluded: boolean(),
+  },
+  ['id', 'supermarketLocationId', 'excluded']
 );
 
 const generationSourceView = object(
@@ -101,6 +116,7 @@ const shoppingProfileView = object(
     generationScope: ref(PROFILE_SCHEMA_IDS.generationScope),
     postalCodes: array(ref(PROFILE_SCHEMA_IDS.postalCodeView)),
     supermarkets: array(ref(PROFILE_SCHEMA_IDS.supermarketPreferenceView)),
+    locations: array(ref(PROFILE_SCHEMA_IDS.locationPreferenceView)),
     generationSources: array(ref(PROFILE_SCHEMA_IDS.generationSourceView)),
   },
   [
@@ -114,6 +130,7 @@ const shoppingProfileView = object(
     'generationScope',
     'postalCodes',
     'supermarkets',
+    'locations',
     'generationSources',
   ]
 );
@@ -131,6 +148,7 @@ const scopeSelector = object(
     postalCodes: array(nonEmptyString()),
     supermarketIds: array(nonEmptyString()),
     excludedSupermarketIds: array(nonEmptyString()),
+    excludedSupermarketLocationIds: array(nonEmptyString()),
     empty: boolean(),
   },
   [
@@ -138,6 +156,7 @@ const scopeSelector = object(
     'postalCodes',
     'supermarketIds',
     'excludedSupermarketIds',
+    'excludedSupermarketLocationIds',
     'empty',
   ]
 );
@@ -169,6 +188,12 @@ const supermarketPreferenceInput = object(
   PROFILE_SCHEMA_IDS.supermarketPreferenceInput,
   { supermarketId: nonEmptyString(), excluded: boolean() },
   ['supermarketId']
+);
+
+const locationPreferenceInput = object(
+  PROFILE_SCHEMA_IDS.locationPreferenceInput,
+  { supermarketLocationId: nonEmptyString(), excluded: boolean() },
+  ['supermarketLocationId']
 );
 
 const generationSourceInput = object(
@@ -254,6 +279,16 @@ const removePostalCodeRequest = object(
   ['userId', 'profileId', 'postalCode']
 );
 
+const setLocationPreferencesRequest = object(
+  PROFILE_SCHEMA_IDS.setLocationPreferencesRequest,
+  {
+    userId: nonEmptyString(),
+    profileId: nonEmptyString(),
+    locations: array(ref(PROFILE_SCHEMA_IDS.locationPreferenceInput)),
+  },
+  ['userId', 'profileId', 'locations']
+);
+
 export const profileSchemas: JsonSchema[] = [
   enumOf(PROFILE_SCHEMA_IDS.generationScope, Object.values(GenerationScope)),
   enumOf(
@@ -262,12 +297,14 @@ export const profileSchemas: JsonSchema[] = [
   ),
   postalCodeView,
   supermarketPreferenceView,
+  locationPreferenceView,
   generationSourceView,
   shoppingProfileView,
   shoppingProfileListResult,
   scopeSelector,
   postalCodeInput,
   supermarketPreferenceInput,
+  locationPreferenceInput,
   generationSourceInput,
   listRequest,
   createRequest,
@@ -276,6 +313,7 @@ export const profileSchemas: JsonSchema[] = [
   resolveScopesRequest,
   addPostalCodeRequest,
   removePostalCodeRequest,
+  setLocationPreferencesRequest,
 ];
 
 export const profileMessageContracts: Record<
@@ -314,6 +352,12 @@ export const profileMessageContracts: Record<
   },
   [PROFILE_PATTERNS.removePostalCode]: {
     request: PROFILE_SCHEMA_IDS.removePostalCodeRequest,
+    response: PROFILE_SCHEMA_IDS.shoppingProfileView,
+  },
+  // The whole profile again, for the same reason: one call writes several rows,
+  // and some of them by deleting (plan 0064, section 5).
+  [PROFILE_PATTERNS.setLocationPreferences]: {
+    request: PROFILE_SCHEMA_IDS.setLocationPreferencesRequest,
     response: PROFILE_SCHEMA_IDS.shoppingProfileView,
   },
 };

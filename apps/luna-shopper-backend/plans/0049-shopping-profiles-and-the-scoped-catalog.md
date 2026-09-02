@@ -30,7 +30,7 @@ so the resolver in section 1.1 has real scopes to resolve to. Companion plan:
 - `addressText` (nullable free text: "Calle Mayor 12". Display and context only; nothing is
   geocoded, and the postal codes below are what resolve to scopes)
 - `minSavingCents` (int, default 0): the money a second stop has to save before the basket
-  generator suggests it. Declared here because it is per profile; what it *means* is defined
+  generator suggests it. Declared here because it is per profile; what it _means_ is defined
   in backlog 0004 section 5.
 - `minSavingPercent` (int, nullable): the optional relative floor beside the absolute one.
 - `generationScope`: `GenerationScope` enum (`ALL`, `SELECTED`), default `ALL`: which zones
@@ -43,6 +43,11 @@ so the resolver in section 1.1 has real scopes to resolve to. Companion plan:
 `excluded` (boolean, default false); unique (`profileId`, `supermarketId`). The preference
 names the **chain**, never a location: "no DIA" means no DIA anywhere, and which locations a
 chain reaches is the scope resolver's business, not the user's.
+
+> **Superseded in part by `0064`.** There is a per location preference now, beside this one
+> rather than instead of it: `ProfileLocationPreference` says "not that shop", this one says
+> "not that brand, including its future shops", and an excluded chain still hides every one of
+> its locations whatever their own rows say.
 
 **ProfileGenerationSource** (only meaningful when `generationScope = SELECTED`): `id`,
 `profileId`, `zoneId`, `listId` (nullable: null means the whole zone); unique (`profileId`,
@@ -64,6 +69,10 @@ a short lifetime. The resolver lives in catalog beside the scopes, not in core w
 profile row lives.
 
 ### 1.2 Supermarket preferences are a filter, not a second address
+
+> **Superseded in part by `0064`**, which adds the finer axis this section says there is not.
+> Everything below is still true of the chain preference; what changed is that it is no longer
+> the only one. `0064` section 2 is why both exist.
 
 A postal code answers "where am I". A supermarket preference answers "and of the chains that
 reach here, these ones". Both are needed: a profile with one postal code and no chain
@@ -126,6 +135,11 @@ because it goes stale exactly when a user edits a profile, which is the moment t
 the catalog to change.
 
 ## 3. The catalog stops being listable
+
+> **Superseded by `0069`.** The error this section introduces is gone, and with it the empty
+> page: an empty scope set and an absent one are now the same read, ranked and paged with
+> every price field null. The rest of the section, including 3.1's ladder, still stands. This
+> file is left as it was written.
 
 Today a read API that returns items is a read API that can return all of them. This plan
 makes an unscoped listing an error.

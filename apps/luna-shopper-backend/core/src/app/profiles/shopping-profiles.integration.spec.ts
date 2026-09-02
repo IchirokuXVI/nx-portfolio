@@ -12,6 +12,7 @@ import { DataSource } from 'typeorm';
 import {
   CORE_ENTITIES,
   ProfileGenerationSource,
+  ProfileLocationPreference,
   ProfilePostalCode,
   ProfileSupermarketPreference,
   ShoppingProfile,
@@ -25,7 +26,7 @@ import { ProfileService } from './profile.service';
  *
  * Three of this plan's rules are the database's and can only be proven here:
  *
- * - **the migration ran**, creating four tables and, crucially, the partial
+ * - **the migrations ran**, creating five tables and, crucially, the partial
  *   unique index that the rest depends on;
  * - **the lazy default is idempotent under concurrency**, which is the exit
  *   criterion phrased as "it survives being listed twice concurrently". A mocked
@@ -87,6 +88,7 @@ describeIntegration('shopping profiles (real Postgres)', () => {
       dataSource.getRepository(ShoppingProfile),
       dataSource.getRepository(ProfilePostalCode),
       dataSource.getRepository(ProfileSupermarketPreference),
+      dataSource.getRepository(ProfileLocationPreference),
       dataSource.getRepository(ProfileGenerationSource),
       events,
       geography,
@@ -103,7 +105,7 @@ describeIntegration('shopping profiles (real Postgres)', () => {
     await dataSource?.destroy();
   });
 
-  it('has the four tables the migration creates', async () => {
+  it('has the five tables the migrations create', async () => {
     const rows = await dataSource.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`
     );
@@ -114,6 +116,8 @@ describeIntegration('shopping profiles (real Postgres)', () => {
       'shopping_profiles',
       'profile_postal_codes',
       'profile_supermarket_preferences',
+      // Plan 0064's, beside the chain preferences rather than instead of them.
+      'profile_location_preferences',
       'profile_generation_sources',
     ]) {
       expect(names.has(table)).toBe(true);
@@ -266,6 +270,11 @@ describeIntegration('shopping profiles (real Postgres)', () => {
       postalCodes: [{ postalCode: '41001' }],
       generationSources: [{ zoneId: randomUUID(), listId: null }],
     });
+    await profiles.setLocationPreferences({
+      userId,
+      profileId: extra.id,
+      locations: [{ supermarketLocationId: randomUUID(), excluded: true }],
+    });
 
     await profiles.delete({ userId, profileId: extra.id });
 
@@ -275,8 +284,14 @@ describeIntegration('shopping profiles (real Postgres)', () => {
     const sources = await dataSource
       .getRepository(ProfileGenerationSource)
       .count({ where: { profileId: extra.id } });
+    // Plan 0064's exit criterion, and only a real database can answer it: the
+    // cascade is a foreign key rather than anything the service does.
+    const shops = await dataSource
+      .getRepository(ProfileLocationPreference)
+      .count({ where: { profileId: extra.id } });
     expect(orphans).toBe(0);
     expect(sources).toBe(0);
+    expect(shops).toBe(0);
     // And the default is untouched, because it was not the one deleted.
     const left = await profiles.list({ userId });
     expect(left.profiles.map((row) => row.id)).toEqual([rows[0].id]);

@@ -261,11 +261,7 @@ describe('SuggestionList, how big the packet is', () => {
       [
         {
           kind: 'group',
-          group: {
-            id: 'group-milk',
-            name: { es: 'Leche', en: 'Milk' },
-            itemCount: 3,
-          },
+          group: { id: 'group-milk', name: { es: 'Leche', en: 'Milk' } },
           itemIds: ['item-milk-1l', 'item-milk-half'],
         },
       ],

@@ -1023,3 +1023,65 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
     });
   });
 });
+
+/**
+ * The composer's dropdown, where a group row is only worth drawing because of the
+ * products it carries: choosing one adds a line with the group's whole set
+ * attached (backend plan 0048, section 1.1).
+ *
+ * The field names here are the wire's, and that is the point of the test. The
+ * mapper read `itemIds` off the offer while nothing on the server ever wrote one,
+ * so every group row offered to add zero products and added none.
+ */
+describe('toCatalogSuggestion', () => {
+  const offer = {
+    kind: 'group',
+    group: {
+      group: { id: 'g1', name: { en: 'Milk', es: 'Leche' } },
+      cheapestItem: null,
+      offer: null,
+      itemIds: ['i1', 'i2'],
+    },
+    item: null,
+  };
+
+  it("carries the group's products, which choosing it attaches whole", () => {
+    const mapped = toCatalogSuggestion(offer);
+
+    expect(mapped?.kind).toBe('group');
+    expect(mapped?.kind === 'group' ? mapped.itemIds : null).toEqual([
+      'i1',
+      'i2',
+    ]);
+  });
+
+  it('reads an offer that names no products as an empty set, not a failure', () => {
+    // A legitimate suggestion: it adds a line with the group's name and no set,
+    // which the line page can fill in later.
+    const mapped = toCatalogSuggestion({
+      ...offer,
+      group: { ...offer.group, itemIds: undefined },
+    });
+
+    expect(mapped?.kind === 'group' ? mapped.itemIds : null).toEqual([]);
+  });
+
+  it('drops a group suggestion with no group on it', () => {
+    expect(toCatalogSuggestion({ ...offer, group: null })).toBeNull();
+  });
+
+  it('maps an item suggestion to the one product', () => {
+    const mapped = toCatalogSuggestion({
+      kind: 'item',
+      group: null,
+      item: {
+        id: 'i1',
+        name: { en: 'Milk', es: 'Leche' },
+        brand: 'Pascual',
+        productGroupId: 'g1',
+      },
+    });
+
+    expect(mapped?.kind === 'item' ? mapped.item.id : null).toBe('i1');
+  });
+});
