@@ -325,7 +325,8 @@
       "items_other": "{{count}} items"
     },
     "progress": {
-      "ready": "{{ready}} of {{total}} ready"
+      "pending": "{{pending}} of {{total}} pending",
+      "done": "Nothing left"
     },
     "presence": {
       "here_one": "{{names}} is here now",
@@ -364,7 +365,8 @@
   "list": {
     "header": {
       "inGroup": "in {{name}}",
-      "ready": "{{ready}} of {{total}} ready",
+      "pending": "{{pending}} of {{total}} pending",
+      "done": "Nothing left",
       "notLive": "Not updating right now",
       "back": "Back to the group"
     },

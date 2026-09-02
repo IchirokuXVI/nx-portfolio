@@ -51,6 +51,17 @@ export class ListHeader {
   /**
    * The bar's fill, as a percentage.
    *
+   * It fills with what is **finished**, not with what is wanted. `wantedCount` counts
+   * the lines the household still wants, so the bar filled backwards until plan 0060:
+   * full before the shop and empty after it.
+   *
+   * `wantedCount` can never exceed `lineCount`, so the subtraction cannot go negative
+   * and the bar cannot invert. Both of the header's sources guarantee it: once the
+   * lines are here `selectHeader` counts a subset of the lines it is also measuring,
+   * and before they arrive the cached summary has been through `readListCounts`, which
+   * clamps. That clamp is load bearing here, and the mapper's own comment explains it
+   * only as a display nicety.
+   *
    * An empty list is 0 rather than a division by zero, and the template never asks:
    * at zero lines it draws "List is empty" and no bar at all, because an empty bar
    * under an empty list is decoration that describes nothing (plan 0019, section 3).
@@ -58,6 +69,9 @@ export class ListHeader {
    */
   readonly percent = computed(() => {
     const { wantedCount, lineCount } = this.header();
-    return lineCount === 0 ? 0 : Math.round((wantedCount / lineCount) * 100);
+
+    return lineCount === 0
+      ? 0
+      : Math.round(((lineCount - wantedCount) / lineCount) * 100);
   });
 }

@@ -43,11 +43,16 @@
 </header>
 
 <!--
-  "7 of 12 ready", with the bar underneath. The text is the accessible version and the
-  bar is `aria-hidden`, because a progressbar role here would announce a number the
-  sentence beside it already gives in words.
+  "7 of 12 pending", with the bar underneath. The number is what the list still wants,
+  so the sentence counts down while the bar fills (plan 0060). The text is the
+  accessible version and the bar is `aria-hidden`, because a progressbar role here
+  would announce a number the sentence beside it already gives in words.
 
-  An empty list gets neither: "0 of 0 ready" describes progress through a shop nobody
+  Nothing pending gets its own sentence. "0 of 12 pending" is arithmetically fine and
+  reads badly on the one screen somebody wants to feel good about (plan 0060, section
+  3.1); the bar is full behind it either way.
+
+  An empty list gets neither: "0 of 0 pending" describes progress through a shop nobody
   has written down, and an empty bar under it is decoration that describes nothing
   (plan 0019, section 3).
 -->
@@ -55,10 +60,14 @@
   <p class="progress-line">{{ 'list.empty.short' | rokuT }}</p>
 } @else {
   <p class="progress-line">
-    {{
-      'list.header.ready'
-        | rokuT: { ready: header().wantedCount, total: header().lineCount }
-    }}
+    @if (header().wantedCount === 0) {
+      {{ 'list.header.done' | rokuT }}
+    } @else {
+      {{
+        'list.header.pending'
+          | rokuT: { pending: header().wantedCount, total: header().lineCount }
+      }}
+    }
   </p>
 
   <div aria-hidden="true" class="progress">

@@ -10,7 +10,7 @@ import { ListHeader } from './list/list-header';
 import { ListRow } from './zone/list-row';
 
 /**
- * Plan 0019, section 3. An empty list rendered "0 of 0 ready", which is a sentence
+ * Plan 0019, section 3. An empty list rendered "0 of 0 pending", which is a sentence
  * about progress through a shop nobody has written down: arithmetically true and read
  * as a bug.
  *
@@ -96,7 +96,9 @@ describe('an empty list says so, and an unknown one says nothing', () => {
         listRow({ lineCount: 12, wantedCount: 7 }),
       ]);
 
-      expect(text(fixture, '.list-progress')).toEqual(['home.progress.ready']);
+      expect(text(fixture, '.list-progress')).toEqual([
+        'home.progress.pending',
+      ]);
     });
 
     it('renders nothing while the counts have not arrived', async () => {
@@ -116,7 +118,9 @@ describe('an empty list says so, and an unknown one says nothing', () => {
     }
 
     it('reads "list is empty" at zero lines', async () => {
-      const fixture = await renderRow(listRow({ lineCount: 0, wantedCount: 0 }));
+      const fixture = await renderRow(
+        listRow({ lineCount: 0, wantedCount: 0 })
+      );
 
       expect(text(fixture, '.meta')).toEqual(['list.empty.short']);
     });
@@ -126,7 +130,7 @@ describe('an empty list says so, and an unknown one says nothing', () => {
         listRow({ lineCount: 12, wantedCount: 7 })
       );
 
-      expect(text(fixture, '.meta')).toEqual(['home.progress.ready']);
+      expect(text(fixture, '.meta')).toEqual(['home.progress.pending']);
     });
 
     it('renders nothing while the counts have not arrived', async () => {
@@ -157,7 +161,7 @@ describe('an empty list says so, and an unknown one says nothing', () => {
         header({ lineCount: 12, wantedCount: 7 })
       );
 
-      expect(text(fixture, '.progress-line')).toEqual(['list.header.ready']);
+      expect(text(fixture, '.progress-line')).toEqual(['list.header.pending']);
       expect(text(fixture, '.progress')).toHaveLength(1);
     });
   });
