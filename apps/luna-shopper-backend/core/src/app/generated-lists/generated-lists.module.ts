@@ -24,6 +24,7 @@ import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
+import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListController } from './generated-list.controller';
 import { GeneratedListService } from './generated-list.service';
 import { LineClaimModule } from './line-claim.module';
@@ -94,6 +95,10 @@ import { LineClaimModule } from './line-claim.module';
     // front of the write back above, which is where plan 0050 section 5's rule
     // lives and where it stays.
     GeneratedListBindService,
+    // The backstop for a trip nobody finished (plan 0059, section 4). A timer
+    // in the zone reaper's shape that finishes live baskets past the claim
+    // window, through `GeneratedListService.update` so the release is heard.
+    GeneratedListSweepService,
   ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets
   // without reaching into the repositories itself. The sharing service is

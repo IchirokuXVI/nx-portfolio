@@ -1,4 +1,5 @@
 import {
+  GeneratedListStatus,
   LineApprovalStatus,
   OriginUnavailableReason,
   ParticipantKind,
@@ -346,7 +347,11 @@ function build(
   const service = new GeneratedListOriginsService(
     dataSource,
     {
-      findOne: async () => ({ id: BASKET, ownerUserId: OWNER }),
+      findOne: async () => ({
+        id: BASKET,
+        ownerUserId: OWNER,
+        status: GeneratedListStatus.ACTIVE,
+      }),
       query,
     } as never,
     { findOne: async () => basketLine } as never,

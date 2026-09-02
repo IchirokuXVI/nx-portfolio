@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  isLiveGeneratedList,
   NO_LINE_CLAIM,
   RealtimeEvent,
   SettlementOutcome,
@@ -13,6 +14,7 @@ import {
 import {
   ConflictException,
   ForbiddenException,
+  GeneratedListFinishedException,
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -92,6 +94,14 @@ export class GeneratedListReopenService {
     });
     if (!list) {
       throw new NotFoundException('Generated list not found');
+    }
+    if (!isLiveGeneratedList(list.status)) {
+      // The mirror of the settle's refusal (plan 0059, section 3.2): a reopen
+      // writes the zone line and the settlement table exactly as a settle does,
+      // in the other direction, and a finished trip does neither.
+      throw new GeneratedListFinishedException(
+        'This basket is finished, so its lines cannot be reopened'
+      );
     }
     const line = await this.lines.findOne({
       where: { id: req.lineId, generatedListId: list.id },
