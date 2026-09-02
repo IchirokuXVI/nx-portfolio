@@ -123,6 +123,21 @@ export const CATALOG_SCHEMA_IDS = {
   postalCodeLocationCountsView: schemaId(
     'catalog/PostalCodeLocationCountsView'
   ),
+  // The shops in your postal codes (plan 0068).
+  summarizeLocationsByChainRequest: schemaId(
+    'msg/supermarketLocation.summarizeByChain/request'
+  ),
+  supermarketLocationChainSummaryView: schemaId(
+    'catalog/SupermarketLocationChainSummaryView'
+  ),
+  supermarketLocationChainSummariesView: schemaId(
+    'catalog/SupermarketLocationChainSummariesView'
+  ),
+  shopChainSummaryView: schemaId('catalog/ShopChainSummaryView'),
+  shopChainSummariesView: schemaId('catalog/ShopChainSummariesView'),
+  searchShopsRequest: schemaId('msg/supermarketLocation.search/request'),
+  shopView: schemaId('catalog/ShopView'),
+  shopPage: schemaId('catalog/ShopPage'),
   upsertLocationItemRequest: schemaId(
     'msg/supermarketLocationItem.upsert/request'
   ),
@@ -982,6 +997,126 @@ const postalCodeLocationCountsView = object(
   ['country', 'counts']
 );
 
+// --- The shops in your postal codes (plan 0068) ----------------------------
+
+/** Both shop reads take the same refusals, so they are written once. */
+const shopRefusalFields = {
+  excludedSupermarketLocationIds: array(nonEmptyString()),
+  excludedSupermarketIds: array(nonEmptyString()),
+};
+
+const summarizeLocationsByChainRequest = object(
+  CATALOG_SCHEMA_IDS.summarizeLocationsByChainRequest,
+  {
+    userId: nonEmptyString(),
+    // Required and the whole filter: this read is keyed by place, and no code
+    // answers no chains rather than the country.
+    postalCodes: array(nonEmptyString()),
+    ...shopRefusalFields,
+    // Governs the rows, never the counts (plan 0068, section 3.1).
+    includeExcluded: boolean(),
+  },
+  ['userId', 'postalCodes']
+);
+
+const supermarketLocationChainSummaryView = object(
+  CATALOG_SCHEMA_IDS.supermarketLocationChainSummaryView,
+  {
+    supermarketId: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    logoUrl: nullableString(),
+    // Null for an independent shop, which is what a client buckets as OTHER
+    // (plan 0068, section 4). Catalog does not use that word.
+    externalBrandKey: nullableString(),
+    locations: integer({ minimum: 1 }),
+    excluded: integer({ minimum: 0 }),
+  },
+  [
+    'supermarketId',
+    'name',
+    'logoUrl',
+    'externalBrandKey',
+    'locations',
+    'excluded',
+  ]
+);
+
+const supermarketLocationChainSummariesView = object(
+  CATALOG_SCHEMA_IDS.supermarketLocationChainSummariesView,
+  {
+    chains: array(ref(CATALOG_SCHEMA_IDS.supermarketLocationChainSummaryView)),
+  },
+  ['chains']
+);
+
+/**
+ * The gateway's row: catalog's counts plus the chain's own refusal, which comes
+ * from core (plan 0068, section 3.1). Restated rather than composed with
+ * `allOf`, because the OpenAPI bridge samples these schemas and a composed one
+ * documents as an empty object.
+ */
+const shopChainSummaryView = object(
+  CATALOG_SCHEMA_IDS.shopChainSummaryView,
+  {
+    supermarketId: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    logoUrl: nullableString(),
+    externalBrandKey: nullableString(),
+    locations: integer({ minimum: 1 }),
+    excluded: integer({ minimum: 0 }),
+    excludedChain: boolean(),
+  },
+  [
+    'supermarketId',
+    'name',
+    'logoUrl',
+    'externalBrandKey',
+    'locations',
+    'excluded',
+    'excludedChain',
+  ]
+);
+
+const shopChainSummariesView = object(
+  CATALOG_SCHEMA_IDS.shopChainSummariesView,
+  { chains: array(ref(CATALOG_SCHEMA_IDS.shopChainSummaryView)) },
+  ['chains']
+);
+
+const searchShopsRequest = object(
+  CATALOG_SCHEMA_IDS.searchShopsRequest,
+  {
+    userId: nonEmptyString(),
+    postalCodes: array(nonEmptyString()),
+    supermarketId: nonEmptyString(),
+    query: string(),
+    includeExcluded: boolean(),
+    ...shopRefusalFields,
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'postalCodes']
+);
+
+const shopView = object(
+  CATALOG_SCHEMA_IDS.shopView,
+  {
+    location: ref(CATALOG_SCHEMA_IDS.supermarketLocationView),
+    // The chain itself and not only its id: an address does not identify a shop
+    // (plan 0068, section 5).
+    supermarket: ref(CATALOG_SCHEMA_IDS.supermarketView),
+    excluded: boolean(),
+    excludedChain: boolean(),
+  },
+  ['location', 'supermarket', 'excluded', 'excludedChain']
+);
+
+const shopPage = paginated(
+  CATALOG_SCHEMA_IDS.shopPage,
+  CATALOG_SCHEMA_IDS.shopView
+);
+
 export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.itemCategory, Object.values(ItemCategory)),
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
@@ -1060,6 +1195,14 @@ export const catalogSchemas: JsonSchema[] = [
   countLocationsByPostalCodeRequest,
   postalCodeLocationCount,
   postalCodeLocationCountsView,
+  summarizeLocationsByChainRequest,
+  supermarketLocationChainSummaryView,
+  supermarketLocationChainSummariesView,
+  shopChainSummaryView,
+  shopChainSummariesView,
+  searchShopsRequest,
+  shopView,
+  shopPage,
 ];
 
 export const catalogMessageContracts: Record<
@@ -1229,5 +1372,13 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_LOCATION_PATTERNS.countByPostalCode]: {
     request: CATALOG_SCHEMA_IDS.countLocationsByPostalCodeRequest,
     response: CATALOG_SCHEMA_IDS.postalCodeLocationCountsView,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.summarizeByChain]: {
+    request: CATALOG_SCHEMA_IDS.summarizeLocationsByChainRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketLocationChainSummariesView,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.search]: {
+    request: CATALOG_SCHEMA_IDS.searchShopsRequest,
+    response: CATALOG_SCHEMA_IDS.shopPage,
   },
 };

@@ -205,6 +205,16 @@ export interface ProfileScopeSelector {
   /** Chains the profile listed. Empty means "every chain that serves me". */
   supermarketIds: string[];
   excludedSupermarketIds: string[];
+  /**
+   * Shops the profile refused one by one, as opposed to the chains above (plan
+   * 0064).
+   *
+   * **Optional, and absent means none.** Plan 0064 owns the table it is read
+   * from and has not landed; the shop reads of plan 0068 pass whatever is here
+   * straight to catalog, so they are complete the day it does and refuse nothing
+   * until then. A reader treats absent and empty alike.
+   */
+  excludedSupermarketLocationIds?: string[];
   empty: boolean;
 }
 
