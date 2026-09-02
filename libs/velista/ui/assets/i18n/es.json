@@ -402,6 +402,14 @@
       "suggestions": "Productos que coinciden",
       "groupAdds": "añade sus {{count}} productos",
       "groupBadge": "GRUPO",
+      "size": {
+        "UNIT": "{{size}} uds",
+        "GRAM": "{{size}} g",
+        "KILOGRAM": "{{size}} kg",
+        "MILLILITER": "{{size}} ml",
+        "LITER": "{{size}} L",
+        "PACK": "{{size}} packs"
+      },
       "asWritten": "Añadir “{{text}}” tal cual"
     },
     "empty": {

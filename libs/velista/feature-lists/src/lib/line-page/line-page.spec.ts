@@ -63,6 +63,8 @@ const MILK: CatalogItem = {
   id: 'item-milk-a',
   name: { es: 'Leche entera', en: 'Whole milk' },
   brand: 'Hacendado',
+  size: 1,
+  unit: 'LITER',
   productGroupId: null,
 };
 
@@ -70,6 +72,8 @@ const OAT: CatalogItem = {
   id: 'item-oat',
   name: { es: 'Bebida de avena', en: 'Oat drink' },
   brand: 'Oatly',
+  size: 1,
+  unit: 'LITER',
   productGroupId: null,
 };
 

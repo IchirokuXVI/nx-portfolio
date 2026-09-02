@@ -123,6 +123,27 @@
   white-space: nowrap;
 }
 
+// How big the packet is, at the trailing edge and **never truncated**, which is the
+// whole reason it is not on the note line under the name.
+//
+// The catalog holds one record per size, so two cartons of the same milk carry the
+// same name and the same brand and this is the only field that tells them apart. Both
+// of the fields beside it ellipsize, and a long product name ellipsizes to the same
+// string on both rows, so a disambiguator that could be cut off is not one.
+//
+// Quieter than the group badge on purpose: it is a fact about the product rather than
+// a claim about what pressing the row will do, and two things competing for the same
+// corner would make every row look like it had a badge.
+.suggestion-size {
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  // The sizes sit in a column down the trailing edge, so the digits line up rather
+  // than shuffling by a fraction of a character from row to row.
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .suggestion-badge {
   flex-shrink: 0;
   padding: var(--app-chip-padding-block) var(--app-space-3);

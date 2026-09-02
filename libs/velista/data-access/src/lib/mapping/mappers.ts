@@ -12,6 +12,8 @@ import {
   MEMBERSHIP_STATUSES,
   SETTLEMENT_OUTCOME_FALLBACK,
   SETTLEMENT_OUTCOMES,
+  UNIT_OF_MEASURE_FALLBACK,
+  UNITS_OF_MEASURE,
   USER_KIND_FALLBACK,
   USER_KINDS,
   ZONE_ROLE_FALLBACK,
@@ -63,6 +65,7 @@ import {
   date,
   isRecord,
   mapArray,
+  nullableNum,
   nullableStr,
   numOr,
   oneOf,
@@ -463,10 +466,15 @@ export function toLineSettlement(raw: unknown): LineSettlement | null {
 /**
  * From `catalog.ItemView` (backend plan 0048).
  *
- * Deliberately narrow: an id, a name, a brand and the group it belongs to.
- * Everything about price is out of scope until the backend's backlog `0004`
- * exists (velista plan 0043, section 9), and carrying fields nothing renders
- * would be a promise the screen cannot keep.
+ * Deliberately narrow: an id, a name, a brand, how big the packet is and the
+ * group it belongs to. Everything about price is still out of scope until the
+ * backend's backlog `0004` exists (velista plan 0043, section 9), and carrying
+ * fields nothing renders would be a promise the screen cannot keep.
+ *
+ * `unitSize` and `defaultUnit` are read because **the catalog holds one record
+ * per size**, so a search for "leche" answers with the same name and the same
+ * brand once per carton size. They were on the wire all along and dropped here,
+ * which is what made those rows identical on screen.
  */
 export function toCatalogItem(raw: unknown): CatalogItem | null {
   if (!isRecord(raw)) {
@@ -482,6 +490,8 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
     id,
     name: toLocalizedName(raw['name']),
     brand: nullableStr(raw['brand']),
+    size: nullableNum(raw['unitSize']),
+    unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     productGroupId: nullableStr(raw['productGroupId']),
   };
 }

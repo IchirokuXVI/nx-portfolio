@@ -402,6 +402,14 @@
       "suggestions": "Matching products",
       "groupAdds": "adds its {{count}} products",
       "groupBadge": "GROUP",
+      "size": {
+        "UNIT": "{{size}} units",
+        "GRAM": "{{size}} g",
+        "KILOGRAM": "{{size}} kg",
+        "MILLILITER": "{{size}} ml",
+        "LITER": "{{size}} L",
+        "PACK": "{{size}} packs"
+      },
       "asWritten": "Add “{{text}}” as written"
     },
     "empty": {

@@ -41,6 +41,18 @@ export function numOr(value: unknown, fallback: number): number {
 }
 
 /**
+ * A finite number that is allowed to be absent or null, collapsing both to `null`.
+ *
+ * The sibling of {@link nullableStr}, for the catalog fields where **absent is a
+ * fact worth keeping**: a product whose size the catalog does not know is not a
+ * product of size zero, and no default could stand in for it without stating
+ * something about the packet that nobody measured.
+ */
+export function nullableNum(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
  * Narrows a string to one of a known set, falling back when it is not among them.
  *
  * This is the function that makes a newer backend safe: a status this build has never

@@ -2,6 +2,7 @@ import {
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
   input,
   output,
@@ -27,7 +28,7 @@ import { BasketIcon, PlusIcon, ProductIcon } from '../icons/icons';
  * one. A second one is where the ranking rules drift, so it moved out here and the
  * composer now uses the extracted component like anybody else.
  *
- * ## The two rules it carries
+ * ## The three rules it carries
  *
  * - **The order is the server's** and is never re-sorted. A group ranks above an item
  *   for a bare word, and that ranking was made with prices, scopes and synonyms this
@@ -35,6 +36,9 @@ import { BasketIcon, PlusIcon, ProductIcon } from '../icons/icons';
  * - **No empty state, ever.** An absent list is the ordinary case for two characters, a
  *   rare word, or a shop the catalog has not been taught, and "no matches" would be a
  *   screen telling somebody their shopping list is wrong.
+ * - **A row says how big the packet is**, because the catalog holds one record per
+ *   size and two cartons of the same milk are otherwise the same row twice over. See
+ *   {@link sizeOf}, which is where the rule and its one exception live.
  *
  * ## Free text belongs to the caller
  *
@@ -166,4 +170,75 @@ export class SuggestionList {
           : 0,
     };
   }
+
+  /**
+   * How big the packet is, as a key and the number to put in it, or null when
+   * there is nothing worth saying.
+   *
+   * **This is what stops the list drawing the same row three times.** The catalog
+   * holds one record per size, so "Leche entera Hacendado" at 1 L, at 1.5 L and
+   * at 6 L are three products carrying the same name and the same brand. Every
+   * field the row drew was identical, and the answer looked like a bug in the
+   * search rather than three genuinely different cartons.
+   *
+   * ## Suppressed below two, for counts only
+   *
+   * A mass or a volume is always drawn when the catalog has one: most sizes are
+   * **below** one (0.35 kg, 0.75 L), which is exactly where two records differ,
+   * so a rule that only spoke above one would stay silent on the case it exists
+   * for.
+   *
+   * `UNIT` and `PACK` are the exception, and it is a real one rather than a
+   * tidy-up: they are counts, and "1 unit" is what every single product is. It
+   * says nothing, it says it on every row at once, and a size that appears
+   * everywhere distinguishes nothing. Twelve eggs beside one lettuce is worth a
+   * row's width; one lettuce beside one cucumber is not.
+   *
+   * A count is also where {@link UNIT_OF_MEASURE_FALLBACK} lands, so a unit this
+   * build has never heard of is suppressed by the same rule rather than
+   * announcing a number in a unit nobody here can name.
+   */
+  sizeOf(
+    suggestion: CatalogSuggestion
+  ): { key: string; args: { size: string } } | null {
+    if (suggestion.kind !== 'item') {
+      return null;
+    }
+
+    const { size, unit } = suggestion.item;
+    // Zero and below are not sizes. They reach here only from a catalog row that
+    // is wrong about itself, and drawing "0 kg" beside a product is worse than
+    // drawing nothing.
+    if (size === null || size <= 0) {
+      return null;
+    }
+    if ((unit === 'UNIT' || unit === 'PACK') && size < 2) {
+      return null;
+    }
+
+    return {
+      key: `list.add.size.${unit}`,
+      args: { size: this._sizeFormat().format(size) },
+    };
+  }
+
+  /**
+   * The number, in the reader's language: `0,35` for a Spanish reader and `0.35`
+   * for an English one, which is the same rule every other number in velista
+   * follows.
+   *
+   * Three fraction digits because that is what the catalog's own precision comes
+   * to once trailing zeroes are dropped: `1.0` reads as "1" rather than "1.000",
+   * and `0.075` survives.
+   *
+   * Held in a `computed` rather than built per row: `Intl.NumberFormat` is the
+   * expensive part of formatting a number, and this method runs once per row on
+   * every change detection pass over a list that a keystroke replaces whole.
+   */
+  private readonly _sizeFormat = computed(
+    () =>
+      new Intl.NumberFormat(this._locale(), {
+        maximumFractionDigits: 3,
+      })
+  );
 }
