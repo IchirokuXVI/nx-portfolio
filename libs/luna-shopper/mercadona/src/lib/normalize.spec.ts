@@ -142,10 +142,25 @@ describe('the category tree', () => {
       unitPrice: 11.29,
       unitPriceLabel: 'kg',
       unit: UnitOfMeasure.KILOGRAM,
+      // Nodes rather than names: the level 2 id is what section 5.6 splits
+      // cheese from cured meat on, and a path of names cannot carry it.
       categoryPath: [
-        'Charcutería y quesos',
-        'Queso curado, semicurado y tierno',
+        { id: 51, name: 'Charcutería y quesos' },
+        { id: 53, name: 'Queso curado, semicurado y tierno' },
       ],
+    });
+  });
+
+  it('starts the path at the ancestors it is given, so the walk can supply the root', () => {
+    // The response for a level 2 category does not contain its level 1 parent,
+    // and the category map is keyed on the 26 level 1 names. The walk passes the
+    // root down; without it every product resolves to OTHER.
+    const [product] = normalizeCategoryProducts(categoryExpanded, [
+      { id: 4, name: 'Charcutería y quesos' },
+    ]);
+    expect(product.categoryPath[0]).toEqual({
+      id: 4,
+      name: 'Charcutería y quesos',
     });
   });
 });
