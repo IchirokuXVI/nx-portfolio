@@ -243,6 +243,17 @@ export class ItemService {
    * key anything to break: `ts_rank` is a float, two genuinely equal matches
    * differ in the fifteenth digit, and without the rounding "exact match wins"
    * would be a rule that never fired.
+   *
+   * ## A barcode is one of the things a query can be
+   *
+   * A query that is a whole barcode also matches `ean`, and the row carrying it
+   * sorts above every text hit. This is a **search** and {@link findByEan} is
+   * still a lookup: the two differ in what they are for, not in how they compare
+   * the digits. The lookup answers the harvester's matching ladder, where the
+   * only acceptable answer is that one product or none; this puts the scanned
+   * product at the top of a dropdown that goes on offering the text matches
+   * underneath, because somebody typing digits may not have been scanning at
+   * all.
    */
   async search(req: SearchItemsRequest): Promise<ItemPage> {
     const limit = clampPageSize(req.limit);
@@ -282,6 +293,12 @@ export class ItemService {
    * outside development, so in staging and production almost every group is in
    * it, and a composer that dropped unpriced groups would show an empty dropdown
    * on a catalog full of exactly the right answers.
+   *
+   * **Barcodes are matched by {@link search} and not here**, which is why this
+   * read gained nothing when they were. The rule the suggest endpoint enforces
+   * is that a group beats an item for a bare *word*, and it holds because a word
+   * names a kind of thing while a barcode names one product. Somebody who scans
+   * a carton is not asking to be shown milk.
    */
   async searchOffers(req: SearchOffersRequest): Promise<ProductGroupOfferPage> {
     const limit = clampPageSize(req.limit);
@@ -543,6 +560,29 @@ export class ItemService {
     const query = p.bind(term.tsquery);
     const raw = p.bind(term.raw);
     const threshold = p.bind(TRIGRAM_THRESHOLD);
+    // The barcode test, bound once and spent in both the filter and the
+    // ordering, or the constant `false` when the query is words. A barcode names
+    // one product, so the row carrying it is not merely the most relevant
+    // answer, it is the answer, and it has to beat a text hit that scored above
+    // the zero an all digit query earns from `ts_rank`.
+    const barcode =
+      term.ean === null ? 'false' : `i."ean" = ${p.bind(term.ean)}`;
+    // The same test as a ranking key, with the two things SQL three valued logic
+    // does to it spelled out.
+    //
+    // **`NULLS LAST`, because most products have no barcode at all**, and
+    // `NULL = '8480000181077'` is NULL rather than false. A descending sort puts
+    // nulls first by default, so without this every unbarcoded text match would
+    // rank above the very product that was scanned.
+    //
+    // **Written only when there is a barcode to rank on**: Postgres refuses a
+    // bare constant in `ORDER BY`, so the `false` that is harmless in the filter
+    // is a syntax error here. Leaving the key out is the same ordering anyway,
+    // since a key every row ties on decides nothing.
+    const barcodeKey =
+      term.ean === null
+        ? ''
+        : `(${barcode}) DESC NULLS LAST,\n               `;
 
     const filters: string[] = [];
     if (req.category) {
@@ -571,14 +611,15 @@ export class ItemService {
       SELECT i.*
       FROM "items" i
       WHERE (
-        i."search_es" @@ to_tsquery('spanish', ${query})
+        ${barcode}
+        OR i."search_es" @@ to_tsquery('spanish', ${query})
         OR i."search_en" @@ to_tsquery('english', ${query})
         OR similarity(coalesce(i."brand", ''), ${raw}) > ${threshold}
         OR similarity(i."name" ->> 'es', ${raw}) > ${threshold}
         OR similarity(i."name" ->> 'en', ${raw}) > ${threshold}
       )
       ${filters.map((clause) => `AND ${clause}`).join('\n      ')}
-      ORDER BY round(GREATEST(
+      ORDER BY ${barcodeKey}round(GREATEST(
                  ts_rank(i."search_es", to_tsquery('spanish', ${query})),
                  ts_rank(i."search_en", to_tsquery('english', ${query})),
                  GREATEST(
@@ -619,7 +660,8 @@ export class ItemService {
     if (term) {
       qb.andWhere(
         `(
-          i."search_es" @@ to_tsquery('spanish', :tsquery)
+          ${term.ean === null ? 'false' : 'i."ean" = :ean'}
+          OR i."search_es" @@ to_tsquery('spanish', :tsquery)
           OR i."search_en" @@ to_tsquery('english', :tsquery)
           OR similarity(coalesce(i."brand", ''), :raw) > :threshold
           OR similarity(i."name" ->> 'es', :raw) > :threshold
@@ -629,6 +671,10 @@ export class ItemService {
           tsquery: term.tsquery,
           raw: term.raw,
           threshold: TRIGRAM_THRESHOLD,
+          // The barcode filters here too, so an admin who pastes one into a
+          // table ordered by name finds the product rather than an empty table.
+          // Only the ordering is the ranked branch's alone.
+          ...(term.ean === null ? {} : { ean: term.ean }),
         }
       );
     }

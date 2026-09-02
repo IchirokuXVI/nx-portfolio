@@ -7368,7 +7368,7 @@
             "name": "q",
             "required": false,
             "in": "query",
-            "description": "What the shopper has typed. The composer asks after three characters.",
+            "description": "What the shopper has typed. The composer asks after three characters. A whole barcode matches the product carrying it, and that product is listed first.",
             "schema": {
               "maxLength": 120,
               "type": "string"
@@ -10964,7 +10964,7 @@
             "name": "q",
             "required": false,
             "in": "query",
-            "description": "What the person has typed. The composer asks after three characters.",
+            "description": "What the person has typed. The composer asks after three characters. A whole barcode matches the product carrying it, and that product is listed first.",
             "schema": {
               "type": "string"
             }
@@ -11217,6 +11217,7 @@
             "name": "query",
             "required": false,
             "in": "query",
+            "description": "What to search for. A whole barcode matches the product carrying it, and that product is listed first.",
             "schema": {
               "type": "string"
             }

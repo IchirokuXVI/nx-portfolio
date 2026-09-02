@@ -270,7 +270,7 @@ export class AddGeneratedListParticipantLineDto {
 export class BasketSuggestQueryDto {
   @ApiPropertyOptional({
     description:
-      'What the shopper has typed. The composer asks after three characters.',
+      'What the shopper has typed. The composer asks after three characters. A whole barcode matches the product carrying it, and that product is listed first.',
     maxLength: BASKET_SUGGEST_QUERY_MAX_LENGTH,
   })
   @IsOptional()

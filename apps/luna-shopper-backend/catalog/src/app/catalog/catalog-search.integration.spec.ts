@@ -43,6 +43,9 @@ const SCHEMA = 'plan0048_search_test';
 const OWNER = 'owner';
 const SHOPPER = 'shopper';
 
+/** A real EAN-13, on the Pascual carton the seed below creates. */
+const PASCUAL_EAN = '8480000181077';
+
 describeIntegration('catalog search (real Postgres)', () => {
   let dataSource: DataSource;
   let items: ItemService;
@@ -147,6 +150,9 @@ describeIntegration('catalog search (real Postgres)', () => {
       userId: OWNER,
       name: { en: 'Semi Skimmed 1L', es: 'Semidesnatada 1L' },
       brand: 'Pascual',
+      // The only carton with a barcode, so "finds the one carrying it" is a
+      // claim about the code and not about there being a single milk.
+      ean: PASCUAL_EAN,
       category: ItemCategory.DAIRY,
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: milkGroup.id,
@@ -299,6 +305,57 @@ describeIntegration('catalog search (real Postgres)', () => {
       }
     });
 
+    it('finds the product a whole barcode names', async () => {
+      // Nothing in any document holds these digits: the trigger builds the
+      // vectors from the name, the brand and the group's words. Before the `ean`
+      // test was added to the filter this answered with an empty page.
+      const page = await items.search({ userId: SHOPPER, query: PASCUAL_EAN });
+      expect(page.items.map((i) => i.id)).toEqual([ids.pascualMilk]);
+    });
+
+    it('finds it through the separators a printed code carries', async () => {
+      const page = await items.search({
+        userId: SHOPPER,
+        query: '8 480000 181077',
+      });
+      expect(page.items.map((i) => i.id)).toEqual([ids.pascualMilk]);
+    });
+
+    it('puts the scanned product above everything the digits also read as', async () => {
+      // A product actually named for the code, so the barcode row has to beat a
+      // genuine text hit rather than merely be present. The name is the only
+      // place these digits can be matched as words.
+      const impostor = await items.create({
+        userId: OWNER,
+        name: { en: PASCUAL_EAN, es: PASCUAL_EAN },
+        category: ItemCategory.OTHER,
+        defaultUnit: UnitOfMeasure.UNIT,
+      });
+
+      try {
+        const page = await items.search({ userId: SHOPPER, query: PASCUAL_EAN });
+
+        // The impostor carries no barcode, and `NULL = '848…'` is NULL, which a
+        // descending sort puts first unless it is told otherwise. This asserts
+        // the `NULLS LAST` that stops every unbarcoded product outranking the
+        // one that was actually scanned.
+        expect(page.items[0]?.id).toBe(ids.pascualMilk);
+        expect(page.items.map((i) => i.id)).toContain(impostor.id);
+      } finally {
+        // In a `finally` so a failure above cannot leave a product named for a
+        // barcode behind for the tests that follow.
+        await items.delete({ userId: OWNER, itemId: impostor.id });
+      }
+    });
+
+    it('does not read a part of a code, or a quantity, as a barcode', async () => {
+      // Six digits is no barcode length, so this runs as text, and the carton
+      // carrying the code is not findable by part of it: nothing puts an `ean`
+      // into a search document.
+      const partial = await items.search({ userId: SHOPPER, query: '848000' });
+      expect(partial.items.map((i) => i.id)).not.toContain(ids.pascualMilk);
+    });
+
     it('still lists everything when no query is given (the admin surface)', async () => {
       const page = await items.search({ userId: SHOPPER });
       expect(page.items.length).toBeGreaterThanOrEqual(3);
@@ -385,6 +442,18 @@ describeIntegration('catalog search (real Postgres)', () => {
         query: 'lácteo',
       });
       expect(page.items.map((g) => g.group.id)).toEqual([ids.milkGroup]);
+    });
+
+    it('answers nothing for a barcode, which names a product and not a kind', async () => {
+      // The group of the scanned carton is deliberately absent. "A group beats
+      // an item for a bare word" is a rule about words, and somebody holding a
+      // barcode has already chosen which milk they mean, so the suggest endpoint
+      // draws that one product and no category above it.
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        query: PASCUAL_EAN,
+      });
+      expect(page.items).toHaveLength(0);
     });
   });
 

@@ -617,7 +617,10 @@ export class PriceScopedQueryDto extends SearchOrderQueryDto {
 }
 
 export class SearchItemsQueryDto extends PriceScopedQueryDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      'What to search for. A whole barcode matches the product carrying it, and that product is listed first.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -658,7 +661,7 @@ export class SearchOffersQueryDto extends PriceScopedQueryDto {
 export class SuggestQueryDto extends PriceScopedQueryDto {
   @ApiPropertyOptional({
     description:
-      'What the person has typed. The composer asks after three characters.',
+      'What the person has typed. The composer asks after three characters. A whole barcode matches the product carrying it, and that product is listed first.',
   })
   @IsOptional()
   @IsString()
