@@ -136,14 +136,17 @@ export function basketErrorKey(
         case 'basket.settle':
         case 'basket.reopen':
         case 'basket.outstanding':
-        // The three zone surfaces refuse a guest and a reader who has lost `WRITE`
-        // outright rather than answering an empty sheet, so a 403 here is the same
-        // fact as the two above: access moved since the basket was generated.
         case 'basket.origins':
         case 'basket.bind':
           // Access to one of the lists behind this line moved since the basket was
           // generated. The line is still on the screen and still readable, so this
           // says what changed rather than taking the basket away.
+          //
+          // The three zone surfaces refuse a guest and a reader who has lost `WRITE`
+          // outright rather than answering an empty sheet, so a 403 on one of them is
+          // the same fact as it is on the two above. The reasoning sits in the body
+          // rather than between the labels because a comment there makes an otherwise
+          // empty case non empty, which `no-fallthrough` reports.
           return 'basket.error.accessChanged';
         case 'basket.share':
         case 'basket.people':
