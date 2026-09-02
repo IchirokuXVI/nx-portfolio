@@ -137,6 +137,10 @@
     It also keeps the property the composer exists for: adding happens in runs.
     Somebody typing never sees the microphone and somebody speaking never has the
     keyboard open, so neither mode interrupts the other.
+
+    With `voice` off there is no second job, so `button()` answers `add` whatever
+    the field holds and this is the plus, disabled until something is typed
+    (velista plan 0053, section 3). The basket is the one screen that does that.
   -->
     <button
       (click)="press()"

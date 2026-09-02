@@ -209,6 +209,48 @@
 </main>
 
 <!--
+  The composer, at the bottom of the basket, in the same place the list page's sits
+  so the two screens agree about where the field is (plan 0053).
+
+  **Drawn for every participant, guests included**, which is the unusual part of this
+  screen: a line added here has no target list, so there is no permission to read and
+  no branch to write. See `canAdd` for the argument, and for the one absence — a
+  basket whose status is finished, where the server refuses the add and a field that
+  cannot submit is an invitation `0038` section 2.1 refuses to draw.
+
+  **No microphone.** `voice` is false and the button is always the plus, because a
+  recording goes to the list scoped assistant and a basket has no equivalent surface
+  to send one to (section 3).
+
+  A sibling of `<main>` and pinned by `position: sticky`, exactly as the list page's
+  dock is, which is also what keeps it out of a sheet's way: a sheet is fixed to the
+  viewport above everything on the page, so the composer is covered by it rather than
+  floating a text field over the settle controls (plan 0040).
+-->
+@if (state() === 'ready' && canAdd()) {
+  <div class="composer-dock">
+    <!--
+      What arrived, said once. A single polite region rather than one per line, so
+      four people adding at the same time collapse into one sentence instead of
+      talking over each other for the length of a trip (section 8).
+    -->
+    <p aria-live="polite" class="visually-hidden">
+      @if (announcement(); as content) {
+        {{ 'basket.added.announced' | rokuT: { content } }}
+      }
+    </p>
+
+    <lib-line-composer
+      (queryChanged)="onComposerQuery($event)"
+      (submitted)="add($event)"
+      [busy]="adding()"
+      [suggestions]="suggestions()"
+      [voice]="false"
+    />
+  </div>
+}
+
+<!--
   The sheets, as children of the page they cover (rule E1, plan 0008): the page
   keeps its scroll underneath and Android's back button dismisses them.
 -->

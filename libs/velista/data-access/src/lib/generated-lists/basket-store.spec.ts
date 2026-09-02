@@ -111,7 +111,10 @@ function build(
     join: (secret, name) => memory.join(secret, name),
     getBasket: () => memory.getBasket(),
     settle: (id, lineId, body) => memory.settle(id, lineId, body),
+    reopen: (id, lineId) => memory.reopen(id, lineId),
     setPick: (id, lineId, itemId) => memory.setPick(id, lineId, itemId),
+    addLine: (id, body) => memory.addLine(id, body),
+    suggest: (id, query) => memory.suggest(id, query),
     listParticipants: () => memory.listParticipants(),
     refreshSocketToken: () => memory.refreshSocketToken(),
     ensureShareLink: () => memory.ensureShareLink(),
@@ -478,6 +481,112 @@ describe('BasketStore', () => {
    * request**. A request per settle is what four people in a shop would generate, and
    * stopping that is what a live basket is for.
    */
+  /**
+   * Plan 0053: a line added in a shop.
+   *
+   * Three claims, and each is a way the row could go wrong on somebody's phone: it
+   * arrives from the **server** rather than optimistically, it arrives **once**
+   * however many routes carried it, and somebody else's arrives at all.
+   */
+  describe('adding a line', () => {
+    it('appends what the server answered, at the end', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+      const before = store.lines().length;
+
+      const line = await store.addLine({ content: 'Batteries', quantity: 2 });
+
+      expect(line).not.toBeNull();
+      expect(store.lines()).toHaveLength(before + 1);
+      expect(store.lines()[before].content).toBe('Batteries');
+      // Written once, by the add, and it is what the row's caption reads.
+      expect(store.lines()[before].createdBy).not.toBeNull();
+    });
+
+    it('appends it once when the broadcast follows the answer', async () => {
+      // The add answers a line and the basket's room broadcasts the same one, so
+      // the person who typed it meets it twice. Without the id check they would
+      // have two rows for one thing, in a shop, on the screen they are working
+      // from.
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+      const before = store.lines().length;
+
+      const line = await store.addLine({ content: 'Batteries' });
+      socket.events.next({
+        type: 'generatedList.lineAdded',
+        generatedListId: 'basket-saturday',
+        line: line as BasketLine,
+      });
+
+      expect(store.lines()).toHaveLength(before + 1);
+    });
+
+    it('appends a line somebody else added, with no refetch', async () => {
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+      const before = store.lines().length;
+
+      socket.events.next({
+        type: 'generatedList.lineAdded',
+        generatedListId: 'basket-saturday',
+        line: { ...store.lines()[0], id: 'line-theirs', content: 'Ice' },
+      });
+
+      expect(store.lines()).toHaveLength(before + 1);
+      expect(store.lastAdded()?.content).toBe('Ice');
+    });
+
+    it('ignores an append addressed to another basket', async () => {
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+      const before = store.lines().length;
+
+      socket.events.next({
+        type: 'generatedList.lineAdded',
+        generatedListId: 'basket-somebody-elses',
+        line: { ...store.lines()[0], id: 'line-theirs' },
+      });
+
+      expect(store.lines()).toHaveLength(before);
+    });
+
+    it('answers null on a refusal, leaving the basket as it was', async () => {
+      // The caller has something to do with that null: put the text back in the
+      // field. Losing the item somebody just remembered in an aisle is the
+      // failure this screen cannot afford.
+      const memory = new BasketMemory();
+      memory.status = 'COMPLETED';
+      const { store } = build({
+        addLine: (id, body) => memory.addLine(id, body),
+      });
+      await store.open('basket-saturday');
+      const before = store.lines().length;
+
+      const line = await store.addLine({ content: 'Batteries' });
+
+      expect(line).toBeNull();
+      expect(store.lines()).toHaveLength(before);
+    });
+
+    it('says a finished basket takes no lines', async () => {
+      const memory = new BasketMemory();
+      memory.status = 'COMPLETED';
+      const { store } = build({ getBasket: () => memory.getBasket() });
+      await store.open('basket-saturday');
+
+      expect(store.takesLines()).toBe(false);
+    });
+
+    it('says nothing takes lines before anything has loaded', async () => {
+      // The safe direction: a field drawn for a frame over a basket that turns out
+      // to be finished is an invitation that cannot be honoured.
+      const { store } = build();
+
+      expect(store.takesLines()).toBe(false);
+    });
+  });
+
   describe('the live basket', () => {
     it('holds a connection to the basket it was opened for', async () => {
       const { store, socket } = build();

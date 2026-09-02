@@ -6,7 +6,9 @@ import {
   signal,
 } from '@angular/core';
 import {
+  basketTakesLines,
   outstanding,
+  type BasketAddLineRequest,
   type BasketLine,
   type BasketLoad,
   type BasketParticipant,
@@ -15,6 +17,7 @@ import {
   type BasketSettleResult,
   type BasketShareLink,
   type BasketView,
+  type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { hasResponse } from '../errors';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
@@ -84,6 +87,9 @@ export class BasketStore {
   private readonly _link = signal<BasketShareLink | null>(null);
   private readonly _busyLines = signal<ReadonlySet<string>>(new Set());
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
+  private readonly _lastAdded = signal<BasketLine | null>(null);
+  /** Whether an add is in flight, so the composer's button can wait on it. */
+  private readonly _adding = signal(false);
 
   /** Which basket this store is about, once it has been told. */
   private _id: string | null = null;
@@ -113,6 +119,17 @@ export class BasketStore {
             return;
           }
           this.apply(event.line);
+          return;
+
+        case 'generatedList.lineAdded':
+          if (event.generatedListId !== this._id) {
+            return;
+          }
+          // Its own case and not a fold into the two above, which is the whole
+          // reason the server gave it its own name: `apply` merges by id and does
+          // nothing at all for a line the basket does not hold, so an append that
+          // arrived as `lineUpdated` would be silently dropped.
+          this.append(event.line);
           return;
 
         case 'generatedList.participantJoined':
@@ -169,6 +186,15 @@ export class BasketStore {
   readonly busyLines = this._busyLines.asReadonly();
 
   /**
+   * Whether an add is in flight.
+   *
+   * The composer's field stays usable while this is true and only its button waits,
+   * which is what the run property in `0038` actually needs: somebody remembering
+   * three things in an aisle types the second while the first is on its way.
+   */
+  readonly adding = this._adding.asReadonly();
+
+  /**
    * Whether this basket is live, which the screen says out loud.
    *
    * A live basket and a refetching one look identical while nobody else is shopping,
@@ -206,6 +232,27 @@ export class BasketStore {
   readonly lines = computed<readonly BasketLine[]>(
     () => this._basket()?.lines ?? []
   );
+
+  /**
+   * Whether this basket still takes lines, which is what draws the composer.
+   *
+   * False before anything has loaded, which is the safe direction and the same one
+   * {@link seesZoneData} takes: a field drawn for a frame over a basket that turns
+   * out to be finished is an invitation that cannot be honoured.
+   */
+  readonly takesLines = computed(() =>
+    basketTakesLines(this._basket()?.status ?? '')
+  );
+
+  /**
+   * The most recent line to arrive, however it arrived, for the page's live region.
+   *
+   * One signal rather than a queue, and that is what makes the announcement right
+   * when four people add at once: a polite region reads whatever the node last held,
+   * so simultaneous adds collapse into one sentence instead of talking over each
+   * other for the length of a shopping trip (plan 0053, section 8).
+   */
+  readonly lastAdded = this._lastAdded.asReadonly();
 
   /**
    * Whether this reader may see zone data, as the **server** decided on the last
@@ -318,6 +365,8 @@ export class BasketStore {
     this._link.set(null);
     this._present.set([]);
     this._busyLines.set(new Set());
+    this._lastAdded.set(null);
+    this._adding.set(false);
     this._state.set('loading');
     this._error.set(null);
   }
@@ -398,6 +447,93 @@ export class BasketStore {
       this.apply(line);
       return line;
     });
+  }
+
+  /**
+   * Put a line in the basket (velista `0053`; luna `0055`, section 3).
+   *
+   * **Drawn from the server's answer and never optimistically**, which is the
+   * opposite of the choice on the list page, and the difference is the reader: four
+   * people are working this basket at once, and a row that appeared locally and then
+   * reordered when the server answered is a row somebody might tap in between. The
+   * wait is not felt while typing, because {@link adding} leaves the field alive and
+   * only the button waits.
+   *
+   * The socket carries the same line to everybody else through
+   * `generatedList.lineAdded`, and {@link append} is what both paths go through, so
+   * the person who typed it and the person standing next to them get the same row by
+   * the same route.
+   *
+   * **Null on failure**, and the caller has something to do with it: the text is
+   * still theirs to put back in the field. Losing six characters is nothing; losing
+   * the item somebody just remembered in an aisle is the failure this screen cannot
+   * afford (section 7).
+   */
+  async addLine(body: BasketAddLineRequest): Promise<BasketLine | null> {
+    const id = this._id;
+    if (id === null) {
+      return null;
+    }
+
+    this._adding.set(true);
+    try {
+      const line = await this._service.addLine(id, body);
+      this.append(line);
+      return line;
+    } catch (error) {
+      this._fail(id, error);
+      return null;
+    } finally {
+      this._adding.set(false);
+    }
+  }
+
+  /**
+   * What the composer offers under the field, in the server's order.
+   *
+   * On the store rather than reached for directly by the page, unlike the list
+   * page's catalog search: this one is **scoped to the basket**, so the id is part
+   * of the question, and the store is what already holds it. Nothing here debounces
+   * or counts characters, which stay the page's, for rule D1's reason.
+   *
+   * Empty on failure, because the service is: a dropdown is an offer, and the one
+   * thing this must never do is make adding a line fail because a search did.
+   */
+  async suggest(query: string): Promise<readonly CatalogSuggestion[]> {
+    const id = this._id;
+    return id === null ? [] : this._service.suggest(id, query);
+  }
+
+  /**
+   * Put a line on the end of the basket, from wherever it came.
+   *
+   * **Idempotent by id**, which is not decoration: the add answers a line and the
+   * basket's own room broadcasts the same one, so the person who typed it appends it
+   * twice unless one of the two is a no-op. A refetch landing between the two does
+   * the same thing from the other direction.
+   *
+   * A line already held is merged rather than ignored, on {@link apply}'s reasoning:
+   * the broadcast is redacted to the least privileged reader in the room, so the copy
+   * that arrives second may know less than the copy already on screen.
+   */
+  append(line: BasketLine): void {
+    const held = this._basket();
+    if (held === null) {
+      // Nothing to append to. The read that is on its way carries this line, so
+      // dropping it here costs nothing and inventing a basket around it would put a
+      // one line screen in front of somebody for a moment.
+      return;
+    }
+
+    if (held.lines.some((row) => row.id === line.id)) {
+      this.apply(line);
+      return;
+    }
+
+    this._basket.set({ ...held, lines: [...held.lines, line] });
+    // Set only for a line that was genuinely new, so the announcement follows what
+    // changed on screen rather than what arrived on the wire.
+    this._lastAdded.set(line);
   }
 
   /**

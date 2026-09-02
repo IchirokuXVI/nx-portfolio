@@ -897,6 +897,10 @@
       "none": "{{name}} says they had none",
       "you": "you"
     },
+    "added": {
+      "by": "Added by {{name}}",
+      "announced": "{{content}} added"
+    },
     "from": {
       "one": "from {{first}}",
       "two": "from {{first}} and {{second}}",

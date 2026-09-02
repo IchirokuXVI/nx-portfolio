@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
+  BasketAddLineRequest,
   BasketLine,
   BasketLinkPreview,
   BasketParticipant,
@@ -9,6 +10,7 @@ import type {
   BasketSettleResult,
   BasketShareLink,
   BasketView,
+  CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { BasketApi } from './basket-api';
 
@@ -126,6 +128,60 @@ export interface BasketServiceI {
     lineId: string,
     itemId: string
   ): Promise<BasketLine>;
+
+  /**
+   * Put a line in the basket (`POST .../basket/lines`), velista `0053`.
+   *
+   * **Every participant may, guests included**, and that is the unusual part of this
+   * screen rather than a relaxation of `0030`'s rule. There is no permission to read
+   * and no branch to write, because a line added here has no target list: it changes
+   * nothing shared, names no zone and claims no zone line. It is a note on the list
+   * somebody is carrying, and the gate that matters is on **binding** it to a
+   * household's list, which is a separate gesture with a list picker in front of it.
+   *
+   * The one refusal that has a screen treatment is a **finished basket**, which the
+   * server answers with a code of its own rather than a validation failure. The page
+   * draws no composer over one at all, so that code is a race rather than a state.
+   *
+   * Answers the created line, which is what the caller appends. Nothing is drawn
+   * optimistically here, unlike the list page: four people work a basket at once,
+   * and a row that appeared locally and then reordered when the server answered is a
+   * row somebody might tap in between.
+   *
+   * ## The path is under `basket`, not `:id/lines`
+   *
+   * `POST /v1/generated-lists/:id/lines` is the **owner's** add, resolved by
+   * `ownerUserId`, so a guest holding a perfectly valid session gets a not found
+   * from it. The participant surface reads through `basket` already, and its write
+   * sits beside that read.
+   */
+  addLine(
+    generatedListId: string,
+    body: BasketAddLineRequest
+  ): Promise<BasketLine>;
+
+  /**
+   * The catalog, searched **through the basket**
+   * (`GET .../catalog/suggest?q=`), velista `0053` section 4.
+   *
+   * A route of its own rather than `CatalogServiceI.suggest`, because that one sits
+   * behind the account guard and resolves its scope from the caller's shopping
+   * profile, and the reader here may hold no account at all. The gateway composes
+   * this one on the participant's behalf, exactly as it already composes the product
+   * names every basket line carries.
+   *
+   * **The scope is the run's, never the caller's** (luna `0055`, section 5.1): the
+   * ranking is the basket's own, so a stranger's basket is not priced by a different
+   * city's shops, and a guest with no profile gets a ranking at all.
+   *
+   * **Empty rather than thrown**, matching {@link CatalogServiceI.suggest}: a
+   * dropdown is an offer, free text has been first class since `0043`, and adding a
+   * line must never fail because a search did.
+   */
+  suggest(
+    generatedListId: string,
+    query: string
+  ): Promise<readonly CatalogSuggestion[]>;
 
   /** Everybody on the basket (`GET .../participants/mine`), for presence. */
   listParticipants(

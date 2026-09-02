@@ -82,6 +82,11 @@ export type LineComposerButton = 'add' | 'record';
  * somebody speaking never has the keyboard open, so neither mode interrupts the
  * other.
  *
+ * **{@link voice} takes the second job away**, and only the basket does that: a
+ * recording goes to the list scoped assistant, which a basket has no equivalent of
+ * and cannot be given one cheaply. With it off the slot has one job, so the button
+ * is the plus and is disabled on an empty field.
+ *
  * **A press, not a hold**, as everywhere else in this app: hold to talk needs a
  * steady hand on a phone being held one handed in a kitchen, and it has no
  * accessible equivalent.
@@ -154,6 +159,40 @@ export class LineComposer {
    * here means the one condition that justifies it is written down and testable.
    */
   readonly takeFocus = input(false);
+
+  /**
+   * Whether this composer offers a microphone at all (velista `0053`, section 3).
+   *
+   * True everywhere it has ever been drawn, so the list page needs no change. False
+   * on the **basket**, where the button is always the plus and is disabled while the
+   * field is empty; {@link button} then answers `'add'` unconditionally, and the
+   * microphone, the listening row, the level meter and the recorder are never
+   * reached.
+   *
+   * ## The reason is where a recording goes, not the shop
+   *
+   * {@link spoke} hands the audio to the page, and the page posts it to the **list
+   * scoped assistant**, an account authenticated service that resolves zones, lists
+   * and access to decide what a sentence means. A basket has no such surface and
+   * cannot have one cheaply: the assistant would have to accept a participant
+   * credential, understand a basket, and be reachable by anybody holding a link.
+   * Offering a microphone that has nowhere to send its audio is worse than offering
+   * nothing.
+   *
+   * Three supporting reasons, none of which would have been enough alone: the phone
+   * is very often not the speaker's, so a permission prompt arrives on somebody
+   * else's device in the middle of a favour; a shop is loud and the silence detector
+   * is tuned for a kitchen; and the line is going into a basket rather than a
+   * household's list, so the assistant's real value, resolving "more of the usual
+   * milk" against a list, has nothing to resolve against.
+   *
+   * ## An input and not a second component
+   *
+   * The field, the run behaviour across a submit, the counter, the quantity stepper
+   * and the suggestion list are all the same on both screens, and a copy of this
+   * component would be a second place for those five to drift.
+   */
+  readonly voice = input(true);
 
   /**
    * Whether a silence ends the recording and sends it.
@@ -245,7 +284,21 @@ export class LineComposer {
    */
   private readonly _locale = inject(RokuLocaleStore).locale;
 
-  private readonly _recorder = inject(AudioRecorder);
+  /**
+   * The microphone, **optional**, because a composer with {@link voice} off is not
+   * given one.
+   *
+   * `AudioRecorder` is provided by the page that wants recording, with that page's
+   * cap on it, so a screen that offers no microphone provides none and this resolves
+   * to null. A composer that reaches the record branch without one treats it exactly
+   * as a device that is not there, which is a state `_record` already models and the
+   * page already has a sentence for.
+   *
+   * An injection this component can go without is preferable to the basket page
+   * providing a recorder it must never start: a provider is a thing somebody later
+   * finds and wires up.
+   */
+  private readonly _recorder = inject(AudioRecorder, { optional: true });
   private readonly _detector = inject<SilenceDetectorI>(SILENCE_DETECTOR);
 
   private _watch: SilenceWatch | null = null;
@@ -272,11 +325,19 @@ export class LineComposer {
    * that gap is not something the person did.
    */
   readonly listening = computed(
-    () => this._listeningOn() || this._recorder.active()
+    () => this._listeningOn() || (this._recorder?.active() ?? false)
   );
 
+  /**
+   * What the one button is for: the plus, or the microphone.
+   *
+   * The empty field is the switch, **except** where {@link voice} is off, in which
+   * case there is no second job for the slot to hold and the button is the plus it
+   * has always been, disabled until something is typed. That branch is what makes
+   * every recording path below unreachable rather than merely unused.
+   */
   readonly button = computed<LineComposerButton>(() =>
-    this.canSubmit() ? 'add' : 'record'
+    this.canSubmit() || !this.voice() ? 'add' : 'record'
   );
 
   readonly buttonLabel = computed(() =>
@@ -371,14 +432,24 @@ export class LineComposer {
   discard(): void {
     this._listeningOn.set(false);
     this._stopWatching();
-    this._recorder.cancel();
+    this._recorder?.cancel();
     this._level.set(0);
   }
 
   private async _record(): Promise<void> {
-    await this._recorder.start();
+    const recorder = this._recorder;
+    if (recorder === null) {
+      // No microphone was provided to this composer, which is the same situation
+      // as a device that is not there and is reported the same way. Unreachable
+      // while `voice` is off, because the button never becomes a microphone.
+      this._listeningOn.set(false);
+      this.recordingFailed.emit();
+      return;
+    }
 
-    const state = this._recorder.state();
+    await recorder.start();
+
+    const state = recorder.state();
     if (state === 'refused' || state === 'unavailable') {
       // Said by the page, in the strip, because the sentence differs between a
       // refusal and a device that is not there and neither is this component's
@@ -388,14 +459,14 @@ export class LineComposer {
       // been refused will be refused again, and reopening it on every silence
       // would ask the same question in a loop.
       this._listeningOn.set(false);
-      this._recorder.cancel();
+      recorder.cancel();
       this.recordingFailed.emit();
       return;
     }
 
     this._level.set(0);
 
-    const stream = this._recorder.stream;
+    const stream = recorder.stream;
     if (stream === null) {
       // No stream to watch, which is every fake and any browser without the
       // audio API. The recording still runs and the stop button still ends it;
@@ -422,8 +493,16 @@ export class LineComposer {
   private async _finish(): Promise<void> {
     this._stopWatching();
 
-    const seconds = this._recorder.elapsedSeconds();
-    const blob = await this._recorder.stop();
+    const recorder = this._recorder;
+    if (recorder === null) {
+      // Unreachable: nothing calls this except the stop control and the detector's
+      // ending, and neither is on screen without a recording having started.
+      this._listeningOn.set(false);
+      return;
+    }
+
+    const seconds = recorder.elapsedSeconds();
+    const blob = await recorder.stop();
     this._level.set(0);
 
     // Reopened before the emit rather than after it, so the gap in which the
@@ -455,6 +534,29 @@ export class LineComposer {
   private _stopWatching(): void {
     this._watch?.close();
     this._watch = null;
+  }
+
+  /**
+   * Put back what was typed, because the add it was cleared for did not land
+   * (velista `0053`, section 7).
+   *
+   * A method the container calls rather than an input it binds, and the difference
+   * matters: an input would have to be cleared again on the next keystroke or it
+   * would fight whatever is typed next, and the container has no reason to know when
+   * that happened. This is one event — a failure — and one act.
+   *
+   * The quantity is deliberately **not** restored. It resets to one on every submit
+   * so the next item does not inherit the last one's count, and somebody who typed
+   * three is far more likely to have moved on than to want three of whatever they
+   * type next; the words are what would be painful to lose in an aisle.
+   *
+   * Only used where the add is not optimistic. The list page draws its row
+   * immediately and reports a failure on the row itself, which is a better place for
+   * it there: the line is on screen to point at.
+   */
+  restore(content: string): void {
+    this.content.set(content);
+    this._field()?.nativeElement.focus();
   }
 
   /**

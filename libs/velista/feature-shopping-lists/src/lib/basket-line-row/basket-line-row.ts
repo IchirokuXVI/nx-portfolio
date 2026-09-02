@@ -27,6 +27,7 @@ import {
   SlashCircleIcon,
 } from '@portfolio/velista/ui';
 import {
+  addedCaption,
   originsCaption,
   quantityCaption,
   touchedCaption,
@@ -249,6 +250,24 @@ export class BasketLineRow {
     )
   );
 
+  /**
+   * "Who put this here", for a line nobody has touched yet (plan 0053, section 5).
+   *
+   * Null for every line the run composed, so a basket that nobody has typed into
+   * draws exactly what it drew before: the data decides, as it does for the "from"
+   * caption beside it.
+   */
+  protected readonly added = computed(() =>
+    addedCaption(
+      this.line(),
+      this.people(),
+      this._translator,
+      this._locale(),
+      this.meId(),
+      this.ownName()
+    )
+  );
+
   /** Null for a reader who may not see origins. See the class comment. */
   protected readonly from = computed(() =>
     originsCaption(
@@ -272,6 +291,7 @@ export class BasketLineRow {
       this.quantity(),
       this.productName() ?? '',
       this.touched() ?? '',
+      this.added() ?? '',
       this.from() ?? '',
     ];
     return parts.filter((part) => part !== '').join('. ');

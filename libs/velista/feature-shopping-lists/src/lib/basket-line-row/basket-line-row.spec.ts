@@ -30,6 +30,7 @@ function line(overrides: Partial<BasketLine> = {}): BasketLine {
     pickId: null,
     optionIds: [],
     position: 0,
+    createdBy: null,
     touchedBy: null,
     touchedAt: null,
     lastOutcome: null,
@@ -43,7 +44,14 @@ const bought = () =>
 const unavailable = () =>
   line({ settled: 3, touchedBy: 'p-1', lastOutcome: 'NOT_AVAILABLE' });
 
-async function render(row: BasketLine, options: { canReopen?: boolean } = {}) {
+async function render(
+  row: BasketLine,
+  options: {
+    canReopen?: boolean;
+    people?: ReadonlyMap<string, BasketParticipant>;
+    listNames?: ReadonlyMap<string, string>;
+  } = {}
+) {
   TestBed.resetTestingModule();
 
   await TestBed.configureTestingModule({
@@ -56,12 +64,31 @@ async function render(row: BasketLine, options: { canReopen?: boolean } = {}) {
 
   const fixture = TestBed.createComponent(BasketLineRow);
   fixture.componentRef.setInput('line', row);
-  fixture.componentRef.setInput('people', new Map<string, BasketParticipant>());
+  fixture.componentRef.setInput(
+    'people',
+    options.people ?? new Map<string, BasketParticipant>()
+  );
   fixture.componentRef.setInput('products', new Map());
+  fixture.componentRef.setInput('listNames', options.listNames ?? new Map());
   fixture.componentRef.setInput('canReopen', options.canReopen ?? false);
   fixture.detectChanges();
 
   return fixture;
+}
+
+/** One participant, enough to be named. */
+function person(id: string, displayName: string): BasketParticipant {
+  return {
+    id,
+    kind: 'GUEST',
+    displayName,
+    username: null,
+    guestNumber: 1,
+    userId: null,
+    joinedAt: null,
+    lastSeenAt: null,
+    shareLinkId: 'link-1',
+  };
 }
 
 const status = (fixture: Awaited<ReturnType<typeof render>>) =>
@@ -195,6 +222,39 @@ describe('BasketLineRow: the row itself', () => {
     const label = control.getAttribute('aria-label') ?? '';
     expect(label).toContain('Milk');
     expect(label).toContain('basket.line.wanted');
+  });
+
+  /**
+   * Plan 0053, section 5: a line somebody typed in an aisle.
+   *
+   * It is an ordinary row with two things absent and one added, and none of the
+   * three needs a flag: the data decides, which is the same rule the "from" caption
+   * has followed since `0044` section 4.1.
+   */
+  describe('a line added in the shop', () => {
+    it('names who added it', async () => {
+      const fixture = await render(line({ createdBy: 'p-1' }), {
+        people: new Map([['p-1', person('p-1', 'Dani')]]),
+      });
+
+      expect(
+        (fixture.nativeElement as HTMLElement).textContent ?? ''
+      ).toContain('basket.added.by');
+    });
+
+    it('shows no list name, for a reader who would otherwise see one', async () => {
+      // `origins` present and **empty** is the case: this reader passes the rule and
+      // the line genuinely came from nowhere. Nothing in the row says so; the
+      // caption simply has nothing to draw, which is the whole design.
+      const fixture = await render(line({ createdBy: 'p-1', origins: [] }), {
+        people: new Map([['p-1', person('p-1', 'Dani')]]),
+        listNames: new Map([['list-weekly', 'Weekly shop']]),
+      });
+
+      const html = fixture.nativeElement as HTMLElement;
+      expect(html.querySelector('.from')).toBeNull();
+      expect(html.textContent ?? '').not.toContain('Weekly shop');
+    });
   });
 
   it('is a container rather than a control, so it may hold two buttons', async () => {

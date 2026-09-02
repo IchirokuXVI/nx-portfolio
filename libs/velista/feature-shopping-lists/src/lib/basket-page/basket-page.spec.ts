@@ -7,8 +7,11 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
 import type {
+  BasketAddLineRequest,
+  BasketLine,
   BasketParticipant,
   BasketPresenceEntry,
+  CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
@@ -42,7 +45,13 @@ interface FakeStore {
   readonly revoked: WritableSignal<boolean>;
   readonly present: WritableSignal<readonly BasketPresenceEntry[]>;
   readonly participants: WritableSignal<readonly BasketParticipant[]>;
+  readonly takesLines: WritableSignal<boolean>;
+  readonly lastAdded: WritableSignal<BasketLine | null>;
   readonly opened: string[];
+  /** Every add the page asked for, in order, so a spec can read what it sent. */
+  readonly added: BasketAddLineRequest[];
+  /** Every query the page searched for, after its own debounce and floor. */
+  readonly searched: string[];
   /** Every time the page said the shopper has gone. See the teardown test. */
   readonly leave: jest.Mock<void, []>;
 }
@@ -56,6 +65,12 @@ interface Options {
   readonly me?: BasketParticipant | null;
   /** Their account name, which is the one name the basket itself never carries. */
   readonly username?: string | null;
+  /** Whether the basket still takes lines. False is a finished one. */
+  readonly takesLines?: boolean;
+  /** What the add answers. Null is a refusal, which puts the text back. */
+  readonly addAnswers?: BasketLine | null;
+  /** What the catalog offers under the field. */
+  readonly suggestions?: readonly CatalogSuggestion[];
 }
 
 function guest(
@@ -79,6 +94,23 @@ function owner(participantId = 'p-owner'): BasketPresenceEntry {
     displayName: null,
     guestNumber: null,
     userId: 'u-1',
+  };
+}
+
+/** The line an add answers with, which is all the page does with the answer. */
+function line(content: string): BasketLine {
+  return {
+    id: `line-${content}`,
+    content,
+    quantity: 1,
+    settled: 0,
+    pickId: null,
+    optionIds: [],
+    position: 0,
+    createdBy: 'p-owner',
+    touchedBy: null,
+    touchedAt: null,
+    lastOutcome: null,
   };
 }
 
@@ -108,7 +140,11 @@ async function render(options: Options = {}): Promise<{
     revoked: signal(options.revoked ?? false),
     present: signal(options.present ?? []),
     participants: signal(options.participants ?? []),
+    takesLines: signal(options.takesLines ?? true),
+    lastAdded: signal<BasketLine | null>(null),
     opened: [],
+    added: [],
+    searched: [],
     leave: jest.fn(),
   };
 
@@ -163,12 +199,30 @@ async function render(options: Options = {}): Promise<{
           revoked: store.revoked,
           present: store.present,
           participants: store.participants,
+          takesLines: store.takesLines,
+          adding: signal(false),
+          lastAdded: store.lastAdded,
           open: (id: string) => {
             store.opened.push(id);
             return Promise.resolve();
           },
           leave: store.leave,
           refresh: () => Promise.resolve(),
+          addLine: (body: BasketAddLineRequest) => {
+            store.added.push(body);
+            const answer =
+              options.addAnswers === undefined
+                ? line(body.content)
+                : options.addAnswers;
+            if (answer !== null) {
+              store.lastAdded.set(answer);
+            }
+            return Promise.resolve(answer);
+          },
+          suggest: (query: string) => {
+            store.searched.push(query);
+            return Promise.resolve(options.suggestions ?? []);
+          },
         },
       },
     ],
@@ -201,6 +255,41 @@ function query(
 
 function text(fixture: ComponentFixture<BasketPage>): string {
   return (fixture.nativeElement as HTMLElement).textContent ?? '';
+}
+
+function field(fixture: ComponentFixture<BasketPage>): HTMLInputElement {
+  const found = (fixture.nativeElement as HTMLElement).querySelector(
+    'lib-line-composer input.field'
+  );
+  if (found === null) {
+    throw new Error('there is no composer to type into');
+  }
+  return found as HTMLInputElement;
+}
+
+/** Type, and let the composer hear it, exactly as a keyboard does. */
+function typeInto(fixture: ComponentFixture<BasketPage>, typed: string): void {
+  const input = field(fixture);
+  input.value = typed;
+  input.dispatchEvent(new Event('input'));
+  fixture.detectChanges();
+}
+
+/** Submit the composer, the way the phone keyboard's Go key does. */
+async function submit(fixture: ComponentFixture<BasketPage>): Promise<void> {
+  const form = (fixture.nativeElement as HTMLElement).querySelector(
+    'lib-line-composer form.composer'
+  );
+  if (form === null) {
+    throw new Error('there is no composer to submit');
+  }
+  form.dispatchEvent(new Event('submit'));
+  // The add is a promise the page awaits before it decides whether to put the text
+  // back, so the assertion has to come after the microtasks it queued. Drained by
+  // hand rather than through `whenStable`, which hangs in a zoneless spec.
+  await Promise.resolve();
+  await Promise.resolve();
+  fixture.detectChanges();
 }
 
 describe('the basket header, live', () => {
@@ -341,6 +430,127 @@ describe('the basket header, live', () => {
       expect(
         (fixture.nativeElement as HTMLElement).querySelectorAll('.stale')
       ).toHaveLength(1);
+    });
+  });
+
+  /**
+   * Plan 0053: the composer at the bottom of the basket.
+   *
+   * The claims worth a test are the ones a template mistake would quietly break:
+   * that it is drawn for **everybody** rather than for a reader who passes a rule,
+   * that it is absent on a basket the server would refuse, that it never offers a
+   * microphone, and that a refused add does not swallow what somebody typed while
+   * standing in an aisle.
+   */
+  describe('adding a line in the aisle', () => {
+    it('is drawn for a guest, who holds no account at all', async () => {
+      // The inversion of `0030`, and the one row of this screen's table with no
+      // reader-shaped condition on it: a line added here has no target list, so
+      // there is no permission to read and no branch to write.
+      const { fixture } = await render({
+        me: participant(guest('p-1', 1)),
+      });
+
+      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+      // And still no share control, which is the owner's alone. The two are
+      // independent, which is the whole point of asserting them together.
+      expect(query(fixture, '.share')).toBeNull();
+    });
+
+    it('is absent on a finished basket, never disabled', async () => {
+      // The server refuses the add, and a field that cannot submit is the
+      // invitation plan 0038 section 2.1 refuses to draw.
+      const { fixture } = await render({ takesLines: false });
+
+      expect(query(fixture, 'lib-line-composer')).toBeNull();
+    });
+
+    it('never offers a microphone', async () => {
+      // A recording goes to the list scoped assistant, which a basket has no
+      // equivalent of: offering a microphone with nowhere to send its audio is
+      // worse than offering nothing (section 3).
+      const { fixture } = await render();
+
+      expect(query(fixture, 'lib-mic-icon')).toBeNull();
+      expect(query(fixture, 'lib-plus-icon')).not.toBeNull();
+    });
+
+    it('sends what was typed, with its quantity', async () => {
+      const { fixture, store } = await render();
+
+      typeInto(fixture, 'Batteries');
+      await submit(fixture);
+
+      expect(store.added).toEqual([{ content: 'Batteries', quantity: 1 }]);
+      // Free text stays first class: nothing is attached, and no product is
+      // insisted on (section 4).
+      expect(store.added[0].itemId).toBeUndefined();
+      expect(store.added[0].options).toBeUndefined();
+    });
+
+    it('leaves the typed text in the field when the add fails', async () => {
+      // Losing six characters is nothing; losing the item somebody just remembered
+      // in an aisle is the failure this screen cannot afford (section 7).
+      const { fixture } = await render({ addAnswers: null });
+
+      typeInto(fixture, 'Batteries');
+      await submit(fixture);
+
+      expect(field(fixture).value).toBe('Batteries');
+    });
+
+    it('clears the field when the add lands', async () => {
+      // The other half of the one above, and the reason it is a separate test: a
+      // composer that never cleared would pass the restore assertion for free.
+      const { fixture } = await render();
+
+      typeInto(fixture, 'Batteries');
+      await submit(fixture);
+
+      expect(field(fixture).value).toBe('');
+    });
+
+    it('announces the new line politely, and says nothing before one arrives', async () => {
+      const { fixture } = await render();
+
+      const region = query(fixture, '.composer-dock [aria-live]');
+      expect(region?.getAttribute('aria-live')).toBe('polite');
+      expect(region?.textContent?.trim()).toBe('');
+
+      typeInto(fixture, 'Batteries');
+      await submit(fixture);
+
+      expect(
+        query(fixture, '.composer-dock [aria-live]')?.textContent?.trim()
+      ).not.toBe('');
+    });
+
+    describe('the typeahead', () => {
+      beforeEach(() => jest.useFakeTimers());
+      afterEach(() => jest.useRealTimers());
+
+      it('asks for nothing under three characters', async () => {
+        const { fixture, store } = await render();
+
+        typeInto(fixture, 'ba');
+        jest.advanceTimersByTime(1000);
+
+        expect(store.searched).toEqual([]);
+      });
+
+      it('asks once for a run of keystrokes, and for the last of them', async () => {
+        // The debounce and the sequence number are the container's, exactly as they
+        // are on the list page: somebody who has used velista's list screen must
+        // not have to learn a second search.
+        const { fixture, store } = await render();
+
+        typeInto(fixture, 'bat');
+        typeInto(fixture, 'batt');
+        typeInto(fixture, 'batte');
+        jest.advanceTimersByTime(1000);
+
+        expect(store.searched).toEqual(['batte']);
+      });
     });
   });
 

@@ -322,6 +322,24 @@ export function toRealtimeEvent(
           };
     }
 
+    case 'generatedList.lineAdded': {
+      // **Both halves are required here**, which is the difference from the two
+      // above. There the id alone is worth something, because a summary store
+      // refetches from it; here the line is the entire content of the event, and an
+      // append is the one merge that cannot fall back to what is already held.
+      //
+      // So a line this build cannot read drops the event rather than appending a
+      // blank row, and the screen learns about it at its next read.
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const addedIn = str(payload['generatedListId']);
+      const added = toBasketLine(payload['line']);
+      return addedIn === null || added === null
+        ? null
+        : { type: name, generatedListId: addedIn, line: added };
+    }
+
     case 'generatedList.participantJoined':
     case 'generatedList.participantLeft': {
       // The bare participant view, with no basket id on it, and it needs none: it

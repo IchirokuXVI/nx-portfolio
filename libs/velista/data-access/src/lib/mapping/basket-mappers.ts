@@ -164,6 +164,10 @@ export function toBasketLine(raw: unknown): BasketLine | null {
     pickId: nullableStr(raw['itemId']),
     optionIds: mapArray(raw['options'], str),
     position: numOr(raw['position'], 0),
+    // Absent on a basket served by a backend from before luna `0055`, and null on
+    // every line a run composed. Both read as null and draw the same nothing,
+    // which is what lets the two sides ship in either order.
+    createdBy: nullableStr(raw['createdByParticipantId']),
     touchedBy: nullableStr(raw['lastEditedByParticipantId']),
     touchedAt: date(raw['lastEditedAt']),
     // No fallback: null is a real value here, meaning nobody has settled this
