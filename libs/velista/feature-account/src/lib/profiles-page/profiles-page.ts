@@ -250,6 +250,31 @@ export class ProfilesPage {
     );
   }
 
+  /**
+   * The shops in the selected profile's postal codes (plan 0059).
+   *
+   * An absolute URL through `appPath` rather than a relative navigation, because the
+   * supermarkets page is a **sibling** of this one rather than a child: it is not a sheet
+   * over this screen, so it is not below this route.
+   */
+  async openSupermarkets(): Promise<void> {
+    const profile = this.selected();
+    if (profile === null) {
+      return;
+    }
+
+    await this._router.navigateByUrl(
+      appPath(
+        this._locale(),
+        this._basePath,
+        'account',
+        'profiles',
+        profile.id,
+        'supermarkets'
+      )
+    );
+  }
+
   /** The confirm sheet, as a child of this route (rule E1). */
   openDelete(): void {
     void this._router.navigate(sheetSegments('confirm', 'delete'), {
@@ -386,10 +411,10 @@ export class ProfilesPage {
    * Include or exclude a chain.
    *
    * A chain with no preference row is included, so the first press on an untouched chain
-   * adds an excluded row and the next one removes it. Removing rather than flipping
-   * `excluded` back to false is deliberate: an included chain and a chain nobody has an
-   * opinion about are the same thing to the resolver, and keeping the row would leave
-   * the profile carrying a decision that was undone.
+   * adds an excluded row and the next one removes it. What that costs on the wire is
+   * `ShoppingProfileStore.setChainsExcluded`, which the supermarkets screen's brand
+   * control also calls: the rule about what an included chain looks like is written once,
+   * where both writers can reach it.
    */
   async toggleChain(supermarketId: string): Promise<void> {
     const profile = this.selected();
@@ -401,30 +426,7 @@ export class ProfilesPage {
       (chain) => chain.supermarketId === supermarketId && chain.excluded
     );
 
-    const next = excluded
-      ? profile.chains.filter((chain) => chain.supermarketId !== supermarketId)
-      : [
-          ...profile.chains.filter(
-            (chain) => chain.supermarketId !== supermarketId
-          ),
-          {
-            id: `pending-${supermarketId}`,
-            supermarketId,
-            excluded: true,
-          },
-        ];
-
-    await this._store.save(
-      profile.id,
-      'chains',
-      {
-        supermarkets: next.map((chain) => ({
-          supermarketId: chain.supermarketId,
-          excluded: chain.excluded,
-        })),
-      },
-      (current) => ({ ...current, chains: next })
-    );
+    await this._store.setChainsExcluded(profile.id, [supermarketId], !excluded);
   }
 
   private async _savePostalCodes(

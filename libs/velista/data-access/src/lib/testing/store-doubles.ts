@@ -1588,6 +1588,28 @@ export function fakeShoppingProfileStore(
       : (held.find((profile) => profile.id !== profileId) ?? null);
   };
 
+  const save = async (
+    profileId: string,
+    field: ProfileField,
+    body: WriteShoppingProfileRequest,
+    apply: (profile: ShoppingProfile) => ShoppingProfile
+  ): Promise<'saved' | 'failed'> => {
+    calls.push({ method: 'save', profileId, field, body });
+
+    if (failing.has(field)) {
+      setSave(`${profileId}:${field}`, 'failed');
+      return 'failed';
+    }
+
+    profiles.update((held) =>
+      held.map((profile) =>
+        profile.id === profileId ? apply(profile) : profile
+      )
+    );
+    setSave(`${profileId}:${field}`, 'idle');
+    return 'saved';
+  };
+
   return {
     profiles: profiles.asReadonly(),
     state: state.asReadonly(),
@@ -1640,26 +1662,51 @@ export function fakeShoppingProfileStore(
       return created;
     },
 
-    save: async (
-      profileId: string,
-      field: ProfileField,
-      body: WriteShoppingProfileRequest,
-      apply: (profile: ShoppingProfile) => ShoppingProfile
-    ): Promise<'saved' | 'failed'> => {
-      calls.push({ method: 'save', profileId, field, body });
+    save,
 
-      if (failing.has(field)) {
-        setSave(`${profileId}:${field}`, 'failed');
+    /**
+     * The real store's chain write, through this fake's own `save`.
+     *
+     * It goes through `save` rather than editing the profiles signal directly, so a spec
+     * asserting what a chain toggle sends sees the same recorded call the page's other
+     * controls produce, and a spec that made `chains` fail still gets a failure here.
+     */
+    setChainsExcluded: async (
+      profileId: string,
+      supermarketIds: readonly string[],
+      excluded: boolean
+    ): Promise<'saved' | 'failed'> => {
+      const profile = profiles().find((held) => held.id === profileId);
+      if (profile === undefined) {
         return 'failed';
       }
 
-      profiles.update((held) =>
-        held.map((profile) =>
-          profile.id === profileId ? apply(profile) : profile
-        )
+      const named = new Set(supermarketIds);
+      const kept = profile.chains.filter(
+        (chain) => !named.has(chain.supermarketId)
       );
-      setSave(`${profileId}:${field}`, 'idle');
-      return 'saved';
+      const next = excluded
+        ? [
+            ...kept,
+            ...supermarketIds.map((supermarketId) => ({
+              id: `pending-${supermarketId}`,
+              supermarketId,
+              excluded: true,
+            })),
+          ]
+        : kept;
+
+      return save(
+        profileId,
+        'chains',
+        {
+          supermarkets: next.map((chain) => ({
+            supermarketId: chain.supermarketId,
+            excluded: chain.excluded,
+          })),
+        },
+        (current) => ({ ...current, chains: next })
+      );
     },
 
     makeDefault: async (profileId: string): Promise<'saved' | 'failed'> => {

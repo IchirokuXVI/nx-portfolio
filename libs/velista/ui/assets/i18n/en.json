@@ -872,6 +872,52 @@
       "retry": "Try again",
       "save": "That did not save. Try again",
       "delete": "That did not go through. Try again"
+    },
+    "shops": {
+      "open": "Choose your shops"
+    }
+  },
+  "shops": {
+    "title": "Supermarkets",
+    "loading": "Loading the shops near you",
+    "other": "Other shops",
+    "search": {
+      "label": "Find a shop",
+      "placeholder": "Chain, street, town or postal code",
+      "results_one": "{{count}} shop matches",
+      "results_other": "{{count}} shops match"
+    },
+    "chain": {
+      "count_one": "{{count}} shop",
+      "count_other": "{{count}} shops",
+      "exclude": "Exclude this brand",
+      "include": "Include this brand",
+      "excludeAll": "Exclude these brands",
+      "includeAll": "Include these brands",
+      "hint": "Excluding the brand also covers shops it opens later. Switching off single shops does not"
+    },
+    "state": {
+      "chain": "Brand excluded",
+      "some": "{{count}} of {{total}} off"
+    },
+    "row": {
+      "excluded": "Off",
+      "chainExcluded": "Brand off"
+    },
+    "empty": {
+      "noCodes": {
+        "title": "This profile has no postal code yet",
+        "body": "We look for shops in the postal codes you shop from, so there is nothing to show until you add one.",
+        "action": "Add a postal code"
+      },
+      "noShops": "We don't have supermarkets for that postal code yet",
+      "noMatch": "No shop here matches that. Try a chain, a street or a town",
+      "missing": "We could not find that profile",
+      "toProfiles": "Your profiles"
+    },
+    "error": {
+      "load": "We could not read the shops",
+      "save": "That did not save. Try again"
     }
   },
   "basket": {

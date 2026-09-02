@@ -83,6 +83,18 @@ export function lineIdOf(route: ActivatedRoute): Signal<string> {
 }
 
 /**
+ * The shopping profile the supermarkets screen is about (plan 0059).
+ *
+ * Stated in the URL rather than taken from `ShoppingProfileStore`'s selection, because
+ * this page is deep linkable and a selection is not: a link opened cold has a store with
+ * nothing selected, and one opened while somebody was editing their second profile would
+ * otherwise draw the first profile's shops under the second profile's name.
+ */
+export function profileIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'profileId');
+}
+
+/**
  * The basket a screen under `shopping-lists/:generatedListId` is about.
  *
  * Walked up the tree like the rest, and every reader of it is a sheet rather than the

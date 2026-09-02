@@ -152,6 +152,15 @@
           [preferences]="profile.chains"
         />
 
+        <!--
+          The way to the shops themselves (plan 0059). A button rather than a section of
+          this page: the shops in a profile's codes are a screen's worth of rows with a
+          search over them, and the list above is about brands.
+        -->
+        <button (click)="openSupermarkets()" class="quiet" type="button">
+          {{ 'profiles.shops.open' | rokuT }}
+        </button>
+
         <div class="threshold">
           <label class="threshold-label" for="profiles-threshold">
             {{ 'profiles.saving.label' | rokuT }}

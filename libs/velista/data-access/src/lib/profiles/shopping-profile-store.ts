@@ -349,6 +349,61 @@ export class ShoppingProfileStore {
     return 'saved';
   }
 
+  /**
+   * Include or exclude whole chains, in one write (plan 0046, section 4; plan 0059).
+   *
+   * **Excluding is adding a row and including is removing one**, rather than flipping a
+   * stored `excluded` back to false. An included chain and a chain nobody has an opinion
+   * about are the same thing to the resolver, so keeping the row would leave the profile
+   * carrying a decision that was undone, and a chain the catalog adds next month has no
+   * row at all and is therefore included by default.
+   *
+   * Several ids at once because the supermarkets screen's OTHER bucket is several
+   * independent chains that its one button refuses together, and the collection on the
+   * wire is a full replacement anyway: one id or twenty is the same request.
+   *
+   * It lives on this store, and not on the two screens that call it, because both write
+   * the same field and a second copy of this rule is how the two would come to disagree
+   * about what an included chain looks like.
+   */
+  async setChainsExcluded(
+    profileId: string,
+    supermarketIds: readonly string[],
+    excluded: boolean
+  ): Promise<'saved' | 'failed'> {
+    const profile = this.profiles().find((held) => held.id === profileId);
+    if (profile === null || profile === undefined) {
+      return 'failed';
+    }
+
+    const named = new Set(supermarketIds);
+    const kept = profile.chains.filter(
+      (chain) => !named.has(chain.supermarketId)
+    );
+    const next = excluded
+      ? [
+          ...kept,
+          ...supermarketIds.map((supermarketId) => ({
+            id: `pending-${supermarketId}`,
+            supermarketId,
+            excluded: true,
+          })),
+        ]
+      : kept;
+
+    return this.save(
+      profileId,
+      'chains',
+      {
+        supermarkets: next.map((chain) => ({
+          supermarketId: chain.supermarketId,
+          excluded: chain.excluded,
+        })),
+      },
+      (current) => ({ ...current, chains: next })
+    );
+  }
+
   /** Move the default onto a profile. */
   async makeDefault(profileId: string): Promise<'saved' | 'failed'> {
     const outcome = await this._mutations.run(null, () =>
