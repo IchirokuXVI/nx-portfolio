@@ -77,9 +77,14 @@ function line(overrides: Partial<BasketLine> = {}): BasketLine {
     pickId: null,
     optionIds: [],
     position: 0,
+    createdBy: null,
     touchedBy: null,
     touchedAt: null,
     lastOutcome: null,
+    // Composed by the run, which is what a basket line ordinarily is. The two sheets
+    // this one leads on to branch on it, so a test about them says otherwise.
+    kind: 'DERIVED',
+    targetListId: null,
     origins: [
       { id: 'o1', zoneId: 'z1', listId: 'l1', lineId: 'zl1', quantity: 3 },
       { id: 'o2', zoneId: 'z2', listId: 'l2', lineId: 'zl2', quantity: 1 },
@@ -167,6 +172,13 @@ function storeDouble(world: World) {
     settle: jest.fn().mockResolvedValue(null),
     reopen: jest.fn().mockResolvedValue(null),
     setPick: jest.fn().mockResolvedValue(null),
+    setOutstanding: jest.fn().mockResolvedValue(null),
+    loadLineOrigins: jest.fn().mockResolvedValue(null),
+    setOriginQuantity: jest.fn().mockResolvedValue(null),
+    loadLineTargets: jest.fn().mockResolvedValue(null),
+    bindLine: jest.fn().mockResolvedValue(null),
+    pendingTargets: signal(new Set<string>()),
+    rememberListNames: jest.fn(),
     apply: jest.fn(),
     loadShareLink: jest.fn().mockResolvedValue(undefined),
     share: jest.fn().mockResolvedValue(null),
@@ -924,5 +936,134 @@ describe('SettleSheet: how many did you get', () => {
     fixture.detectChanges();
 
     expect(reelEl(fixture).getAttribute('aria-valuenow')).toBe('2');
+  });
+});
+
+/**
+ * The two ways on from this sheet, and who is offered them (velista `0055` section 2,
+ * `0056` section 2).
+ *
+ * A control you may not use is not drawn (`0030`), so every case here is an absence,
+ * and the absences are the whole of the test: both routes behind these buttons are
+ * refused outright by the server to a guest and to a reader who has lost `WRITE`, so
+ * drawing one would be an invitation that cannot be honoured.
+ *
+ * The label rather than the rendered sentence, because
+ * `RokuTranslatorTestingModule.forTesting()` does not interpolate and the assertion
+ * is about which control exists.
+ */
+describe('SettleSheet: the two sheets this one leads on to', () => {
+  const entries = (fixture: ComponentFixture<SettleSheet>) =>
+    [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+        '.actions.lists button'
+      ),
+    ].map((button) => button.textContent?.trim());
+
+  /** A line somebody typed into the basket in an aisle, sent nowhere yet. */
+  const added = (overrides: Partial<BasketLine> = {}) =>
+    line({ kind: 'ADDED', origins: [], targetListId: null, ...overrides });
+
+  it('offers both ways on to the owner', async () => {
+    const { fixture } = await render({
+      lines: [
+        added({
+          origins: [
+            {
+              id: 'o1',
+              zoneId: 'z1',
+              listId: 'l1',
+              lineId: 'zl1',
+              quantity: 1,
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(entries(fixture)).toEqual(['basket.units.open', 'basket.send.open']);
+  });
+
+  it('offers neither to a guest', async () => {
+    // Both routes name households, and the server refuses the whole of each to
+    // somebody who arrived on a link. A guest is never asked which household a tin
+    // of tomatoes belongs to.
+    const { fixture } = await render({ meKind: 'GUEST', lines: [added()] });
+
+    expect(entries(fixture)).toEqual([]);
+  });
+
+  it('offers neither to a registered participant who does not pass the rule', async () => {
+    // `seesZoneData` is the server's answer on the most recent basket read, so
+    // losing `WRITE` on one source list takes both controls away on the next one.
+    const { fixture } = await render({
+      meKind: 'REGISTERED',
+      seesZoneData: false,
+      lines: [added()],
+    });
+
+    expect(entries(fixture)).toEqual([]);
+  });
+
+  it('never offers to send a line the run composed', async () => {
+    // A derived line already has the lists it came from, so there is nothing to send
+    // and the server refuses the bind as a validation failure.
+    const { fixture } = await render();
+
+    expect(entries(fixture)).toEqual(['basket.units.open']);
+  });
+
+  it('never offers to send a line that has already gone', async () => {
+    const { fixture } = await render({
+      lines: [
+        added({
+          targetListId: 'l1',
+          origins: [
+            {
+              id: 'o1',
+              zoneId: 'z1',
+              listId: 'l1',
+              lineId: 'zl1',
+              quantity: 1,
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(entries(fixture)).toEqual(['basket.units.open']);
+  });
+
+  it('never offers the units sheet over a line that is on nobody’s list', async () => {
+    // An added line sent nowhere has no origins and no candidates of its own, so the
+    // sheet would open on two empty sections. Once it has been sent somewhere it has
+    // an origin, and then it does.
+    const { fixture } = await render({ lines: [added()] });
+
+    expect(entries(fixture)).toEqual(['basket.send.open']);
+  });
+
+  it('draws neither where the field was redacted rather than null', async () => {
+    // `targetListId` absent is "you may not see this" and null is "sent nowhere".
+    // A falsy check would collapse them and offer the send control to exactly the
+    // reader who may not use it. The guard on `seesZoneData` is what actually stops
+    // that today, and this is the second half of the same rule.
+    const redacted = added();
+    delete (redacted as { targetListId?: string | null }).targetListId;
+
+    const { fixture } = await render({ lines: [redacted] });
+
+    expect(entries(fixture)).toEqual([]);
+  });
+
+  it('still offers them over a finished line, which is the point', async () => {
+    // Velista `0056` section 5.2 sends a line that was already bought, and `0055`
+    // raises a finished line's contribution. Neither is a purchase, so neither
+    // belongs inside the block that hides the settle targets.
+    const { fixture } = await render({
+      lines: [line({ settled: 4, lastOutcome: 'BOUGHT' })],
+    });
+
+    expect(entries(fixture)).toEqual(['basket.units.open']);
   });
 });

@@ -139,6 +139,9 @@ export function basketErrorKey(
       // two of its labels because `no-fallthrough` reads one there as a case with a
       // body and no break.
       switch (operation) {
+        // The last three refuse a guest and a reader who has lost `WRITE` outright
+        // rather than answering an empty sheet, so a 403 on one of them is the same
+        // fact the first two report.
         case 'basket.settle':
         case 'basket.reopen':
         case 'basket.outstanding':
