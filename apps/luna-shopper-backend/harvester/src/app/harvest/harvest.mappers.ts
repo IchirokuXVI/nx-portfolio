@@ -3,6 +3,7 @@ import type {
   DiscoveredPlaceView,
   HarvestRunView,
   ItemSourceRefView,
+  PostalCodeDiscoveryRequestView,
   SourceCatalogEntryView,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
@@ -10,6 +11,7 @@ import type {
   DiscoveredPlace,
   HarvestRun,
   ItemSourceRef,
+  PostalCodeDiscoveryRequest,
   SourceCatalogEntry,
   SupermarketSource,
 } from '../entities';
@@ -132,5 +134,30 @@ export function toItemSourceRefView(row: ItemSourceRef): ItemSourceRefView {
     confidence: Number(row.confidence),
     lastResolvedAt: iso(row.lastResolvedAt),
     lastSeenAt: iso(row.lastSeenAt),
+  };
+}
+
+/**
+ * One row of the postal code discovery queue (plan 0063, section 8).
+ *
+ * `requestedAt` is when the code was first announced and does not move when a
+ * later enqueue re opens the row, so a reader can see how long a code has been
+ * waiting rather than only when it was last touched.
+ */
+export function toPostalCodeDiscoveryRequestView(
+  row: PostalCodeDiscoveryRequest
+): PostalCodeDiscoveryRequestView {
+  return {
+    id: row.id,
+    country: row.country,
+    postalCode: row.postalCode,
+    status: row.status,
+    requestedAt: row.requestedAt.toISOString(),
+    lastAttemptedAt: iso(row.lastAttemptedAt),
+    discoveredAt: iso(row.discoveredAt),
+    nextAttemptAt: iso(row.nextAttemptAt),
+    attempts: row.attempts,
+    runId: row.runId,
+    error: row.error,
   };
 }

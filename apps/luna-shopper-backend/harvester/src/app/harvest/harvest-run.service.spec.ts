@@ -13,7 +13,10 @@ import {
 import type { HarvesterConfig } from '../config/app-config';
 import type { HarvestRun, SupermarketSource } from '../entities';
 import { HarvestRunService } from './harvest-run.service';
-import { ActiveRunExistsError, type HarvestRunStore } from './harvest-run.store';
+import {
+  ActiveRunExistsError,
+  type HarvestRunStore,
+} from './harvest-run.store';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { RunExecutor } from './run-executor.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
@@ -37,6 +40,10 @@ function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
     defaultMaxRequestsPerSecond: 4,
     staleAfterSeconds: 900,
     failureRatio: 0.25,
+    discoveryRadiusMetres: 5000,
+    discoveryCooldownDays: 30,
+    discoveryMaxAttempts: 3,
+    discoveryPollSeconds: 60,
     mercadonaEnabled: true,
     mercadonaBaseUrl: undefined,
     overpassUrl: undefined,
@@ -45,11 +52,13 @@ function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
   };
 }
 
-function build(overrides: {
-  config?: Partial<HarvesterConfig>;
-  source?: Partial<SupermarketSource> | null;
-  createImpl?: HarvestRunStore['create'];
-} = {}) {
+function build(
+  overrides: {
+    config?: Partial<HarvesterConfig>;
+    source?: Partial<SupermarketSource> | null;
+    createImpl?: HarvestRunStore['create'];
+  } = {}
+) {
   const admin = {
     isAdmin: (id: string) => id === ADMIN,
     requireAdmin: (id: string) => {
@@ -61,7 +70,8 @@ function build(overrides: {
 
   const created: HarvestRun[] = [];
   const store = {
-    create: overrides.createImpl ??
+    create:
+      overrides.createImpl ??
       (jest.fn(async (input) => {
         const run = {
           id: 'run-1',

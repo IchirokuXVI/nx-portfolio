@@ -378,6 +378,24 @@ lunaShopperBackend:
     # A run fails outright once this fraction of its planned work has failed.
     failureRatio: '0.25'
 
+    # The postal code discovery queue (plan 0063). An unknown code somebody put
+    # on their profile becomes a STORE_DISCOVERY run, drained one at a time.
+    #
+    # `discoveryRadiusMetres` is NOT the profile's nearby radius and must never
+    # be merged with it (section 7): that one decides which postal codes a person
+    # shops in, this decides how far around a code's centre to look for shops,
+    # and it is larger because a shop at the edge of a code is still that code's
+    # shop.
+    #
+    # Thirty days because a supermarket opening is a rare event and a closing
+    # rarer, so a thousand users in one postcode cost one run a month between
+    # them. Draining is gated by `harvestEnabled` above; the queue fills either
+    # way, so turning that on later drains a real backlog.
+    discoveryRadiusMetres: 5000
+    discoveryCooldownDays: 30
+    discoveryMaxAttempts: 3
+    discoveryPollSeconds: 60
+
     # Empty means each library's public default. OVERPASS_URL exists so a self
     # hosted instance can be pointed at without a code change if usage ever grows.
     overpassUrl: ''

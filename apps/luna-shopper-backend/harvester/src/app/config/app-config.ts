@@ -61,6 +61,27 @@ export const harvesterValidationSchema = Joi.object({
   /** A run fails outright once this fraction of its planned work has failed. */
   HARVEST_FAILURE_RATIO: Joi.number().min(0).max(1).default(0.25),
 
+  /**
+   * The postal code discovery queue (plan 0063). Four numbers, and the first
+   * two are the ones that matter.
+   *
+   * `HARVEST_DISCOVERY_RADIUS` is **not** the profile's nearby radius and must
+   * not be given one key with it (section 7). That one decides which postal
+   * codes a person shops in; this one decides how far around a code's centre to
+   * look for shops, and it is comfortably larger because a shop at the edge of a
+   * code is still that code's shop.
+   *
+   * `HARVEST_DISCOVERY_COOLDOWN_DAYS` is 30 because a supermarket opening is a
+   * rare event and a supermarket closing rarer, so a thousand users in one
+   * postcode should cost one run a month between them.
+   */
+  HARVEST_DISCOVERY_RADIUS: Joi.number().integer().min(100).default(5000),
+  HARVEST_DISCOVERY_COOLDOWN_DAYS: Joi.number().integer().min(1).default(30),
+  /** Attempts before a code is left FAILED for a person to look at. */
+  HARVEST_DISCOVERY_MAX_ATTEMPTS: Joi.number().integer().min(1).default(3),
+  /** How often the drain worker looks for a due row. */
+  HARVEST_DISCOVERY_POLL_SECONDS: Joi.number().integer().min(5).default(60),
+
   MERCADONA_ENABLED: Joi.boolean().default(false),
   MERCADONA_BASE_URL: Joi.string().allow('').default(''),
   OVERPASS_URL: Joi.string().allow('').default(''),
@@ -84,6 +105,10 @@ export interface HarvesterConfig {
   defaultMaxRequestsPerSecond: number;
   staleAfterSeconds: number;
   failureRatio: number;
+  discoveryRadiusMetres: number;
+  discoveryCooldownDays: number;
+  discoveryMaxAttempts: number;
+  discoveryPollSeconds: number;
   mercadonaEnabled: boolean;
   mercadonaBaseUrl: string | undefined;
   overpassUrl: string | undefined;
@@ -131,6 +156,16 @@ export const harvesterConfiguration = registerAs(
     ),
     staleAfterSeconds: Number(process.env.HARVEST_STALE_AFTER ?? 900),
     failureRatio: Number(process.env.HARVEST_FAILURE_RATIO ?? 0.25),
+    discoveryRadiusMetres: Number(process.env.HARVEST_DISCOVERY_RADIUS ?? 5000),
+    discoveryCooldownDays: Number(
+      process.env.HARVEST_DISCOVERY_COOLDOWN_DAYS ?? 30
+    ),
+    discoveryMaxAttempts: Number(
+      process.env.HARVEST_DISCOVERY_MAX_ATTEMPTS ?? 3
+    ),
+    discoveryPollSeconds: Number(
+      process.env.HARVEST_DISCOVERY_POLL_SECONDS ?? 60
+    ),
     mercadonaEnabled: parseBoolean(process.env.MERCADONA_ENABLED, false),
     mercadonaBaseUrl: optional(process.env.MERCADONA_BASE_URL),
     overpassUrl: optional(process.env.OVERPASS_URL),

@@ -93,6 +93,13 @@ data:
   HARVEST_BATCH_SIZE: {{ $harvest.batchSize | default 200 | quote }}
   HARVEST_STALE_AFTER: {{ $harvest.staleAfterSeconds | default 900 | quote }}
   HARVEST_FAILURE_RATIO: {{ $harvest.failureRatio | default "0.25" | quote }}
+  # The postal code discovery queue (plan 0063). The radius here is NOT the
+  # profile expansion radius in core: that one decides which codes a person shops
+  # in, this one how far around a code's centre to look for shops.
+  HARVEST_DISCOVERY_RADIUS: {{ $harvest.discoveryRadiusMetres | default 5000 | quote }}
+  HARVEST_DISCOVERY_COOLDOWN_DAYS: {{ $harvest.discoveryCooldownDays | default 30 | quote }}
+  HARVEST_DISCOVERY_MAX_ATTEMPTS: {{ $harvest.discoveryMaxAttempts | default 3 | quote }}
+  HARVEST_DISCOVERY_POLL_SECONDS: {{ $harvest.discoveryPollSeconds | default 60 | quote }}
   OVERPASS_URL: {{ $harvest.overpassUrl | default "" | quote }}
   NOMINATIM_URL: {{ $harvest.nominatimUrl | default "" | quote }}
   # --- The assistant (plan 0039) ---------------------------------------------

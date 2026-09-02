@@ -4,6 +4,7 @@ import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
+  PriceSourceKind,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
@@ -13,6 +14,7 @@ import {
   type FindItemByEanResult,
   type ItemPage,
   type ItemView,
+  type PostalCodeLocationCountsView,
   type PriceScopeKind,
   type PriceScopePage,
   type PriceScopeView,
@@ -21,7 +23,6 @@ import {
   type SupermarketPage,
   type SupermarketView,
   type UpsertSupermarketItemBatchResult,
-  PriceSourceKind,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -68,7 +69,7 @@ export class CatalogClient {
     if (!this.actorId) {
       throw new Error(
         'HARVESTER_ACTOR_ID is not set, so catalog would reject every write ' +
-          'this run makes. Set it to a uuid and add that uuid to catalog\'s ' +
+          "this run makes. Set it to a uuid and add that uuid to catalog's " +
           'PLATFORM_ADMIN_USER_IDS.'
       );
     }
@@ -123,6 +124,27 @@ export class CatalogClient {
       userId: this.actor(),
       cursor,
       limit: 100,
+    });
+  }
+
+  /**
+   * How many shops catalog holds in each of these postal codes (plan 0063,
+   * section 5). Zero is what makes a code **unknown** and earns it a place in
+   * the discovery queue.
+   *
+   * The one read here that carries no actor. It is a count over rows catalog
+   * already serves openly, and the codes come from an event that deliberately
+   * does not say whose profile they landed on: a discovery run is about a place,
+   * not a person, and naming the user would put an account id in a queue row
+   * that outlives the request by a month.
+   */
+  countLocationsByPostalCode(
+    country: string,
+    postalCodes: string[]
+  ): Promise<PostalCodeLocationCountsView> {
+    return this.send(SUPERMARKET_LOCATION_PATTERNS.countByPostalCode, {
+      country,
+      postalCodes,
     });
   }
 

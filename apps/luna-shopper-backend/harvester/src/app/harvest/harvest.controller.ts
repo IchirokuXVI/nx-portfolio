@@ -1,9 +1,11 @@
 import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   ITEM_SOURCE_REF_PATTERNS,
+  POSTAL_CODE_DISCOVERY_PATTERNS,
+  POSTAL_CODE_EVENTS,
   SOURCE_ENTRY_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   type CreateItemFromSourceEntryRequest,
@@ -23,8 +25,11 @@ import {
   type ListDiscoveredPlacesRequest,
   type ListHarvestRunsRequest,
   type ListItemSourceRefsRequest,
+  type ListPostalCodeDiscoveryRequestsRequest,
   type ListSourceEntriesRequest,
   type ListSupermarketSourcesRequest,
+  type PostalCodeDiscoveryRequestPage,
+  type PostalCodesAddedEvent,
   type SetManualItemSourceRefRequest,
   type SetSupermarketSourceEnabledRequest,
   type SourceCatalogEntryPage,
@@ -37,6 +42,7 @@ import {
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { ItemSourceRefService } from './item-source-ref.service';
+import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { SourceEntryService } from './source-entry.service';
 import { SupermarketSourceService } from './supermarket-source.service';
 
@@ -60,7 +66,8 @@ export class HarvestController {
     private readonly places: DiscoveredPlaceService,
     private readonly entries: SourceEntryService,
     private readonly refs: ItemSourceRefService,
-    private readonly sources: SupermarketSourceService
+    private readonly sources: SupermarketSourceService,
+    private readonly discovery: PostalCodeDiscoveryService
   ) {}
 
   // --- Runs ----------------------------------------------------------------
@@ -83,6 +90,35 @@ export class HarvestController {
   @MessagePattern(HARVEST_PATTERNS.runList)
   listRuns(@Payload() req: ListHarvestRunsRequest): Promise<HarvestRunPage> {
     return this.runs.list(req);
+  }
+
+  // --- The postal code discovery queue (plan 0063) -------------------------
+
+  /**
+   * Core announced the postal codes one profile write added (plan 0062,
+   * section 5). Consider each one, and queue the ones catalog holds no shops in.
+   *
+   * An `@EventPattern` and not a message: core emits it fire and forget after
+   * the profile transaction commits, because a discovery run takes minutes and
+   * may not hold up somebody saving their profile. Nothing is returned and
+   * nothing may throw at the broker, so {@link
+   * PostalCodeDiscoveryService.considerAnnounced} handles its own failures.
+   *
+   * The harvester binds its NATS connection to a queue group, so at two replicas
+   * this fires once rather than twice, which for an event with no reply is the
+   * difference between one enqueue and a duplicate.
+   */
+  @EventPattern(POSTAL_CODE_EVENTS.postalCodesAdded)
+  postalCodesAdded(@Payload() event: PostalCodesAddedEvent): Promise<void> {
+    return this.discovery.considerAnnounced(event);
+  }
+
+  /** The queue's rows, for backlog 0009. Platform admin gated like the rest. */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.list)
+  listDiscoveryRequests(
+    @Payload() req: ListPostalCodeDiscoveryRequestsRequest
+  ): Promise<PostalCodeDiscoveryRequestPage> {
+    return this.discovery.list(req);
   }
 
   // --- Discovered places ---------------------------------------------------
@@ -155,7 +191,9 @@ export class HarvestController {
   }
 
   @MessagePattern(ITEM_SOURCE_REF_PATTERNS.reject)
-  rejectRef(@Payload() req: ItemSourceRefIdRequest): Promise<ItemSourceRefView> {
+  rejectRef(
+    @Payload() req: ItemSourceRefIdRequest
+  ): Promise<ItemSourceRefView> {
     return this.refs.reject(req);
   }
 

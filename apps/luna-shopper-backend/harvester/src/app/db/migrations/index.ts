@@ -1,5 +1,6 @@
 import { InitialHarvesterSchema1756200000000 } from './1756200000000-InitialHarvesterSchema';
 import { DiscoveredPlaceCountry1756300000000 } from './1756300000000-DiscoveredPlaceCountry';
+import { PostalCodeDiscoveryRequests1756400000000 } from './1756400000000-PostalCodeDiscoveryRequests';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -12,4 +13,5 @@ import { DiscoveredPlaceCountry1756300000000 } from './1756300000000-DiscoveredP
 export const HARVESTER_MIGRATIONS = [
   InitialHarvesterSchema1756200000000,
   DiscoveredPlaceCountry1756300000000,
+  PostalCodeDiscoveryRequests1756400000000,
 ];

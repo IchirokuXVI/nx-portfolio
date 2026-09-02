@@ -9,6 +9,7 @@ import {
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type CountLocationsByPostalCodeRequest,
   type CreateItemRequest,
   type CreatePriceScopeRequest,
   type CreateProductGroupRequest,
@@ -34,6 +35,7 @@ import {
   type ListSupermarketsRequest,
   type NearbyPostalCodesView,
   type NearestPostalCodeView,
+  type PostalCodeLocationCountsView,
   type PriceScopeIdRequest,
   type PriceScopePage,
   type PriceScopeView,
@@ -169,6 +171,20 @@ export class CatalogController {
     @Payload() req: ListSupermarketLocationsRequest
   ): Promise<SupermarketLocationPage> {
     return this.locations.list(req);
+  }
+
+  /**
+   * How many shops we hold in each of these postal codes (plan 0063, section 5).
+   *
+   * Service to service and carrying no `userId`, like the two postal code reads
+   * above it: the harvester asks it to decide which announced codes are unknown,
+   * and it counts rows over a table catalog already serves openly.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.countByPostalCode)
+  countLocationsByPostalCode(
+    @Payload() req: CountLocationsByPostalCodeRequest
+  ): Promise<PostalCodeLocationCountsView> {
+    return this.locations.countByPostalCode(req);
   }
 
   // --- Items ---------------------------------------------------------------
