@@ -1,3 +1,4 @@
+import type { CategoryPathNode } from './categories';
 import {
   normalizeCategories,
   normalizeCategoryProducts,
@@ -128,12 +129,15 @@ export class MercadonaClient {
    */
   async listCategoryProducts(
     categoryId: number,
-    lang: MercadonaLang = 'es'
+    lang: MercadonaLang = 'es',
+    ancestors: CategoryPathNode[] = []
   ): Promise<MercadonaListProduct[]> {
     const payload = await this.getJson(
       this.url(`/categories/${categoryId}/`, lang)
     );
-    return payload === null ? [] : normalizeCategoryProducts(payload);
+    return payload === null
+      ? []
+      : normalizeCategoryProducts(payload, ancestors);
   }
 
   /**
@@ -193,8 +197,16 @@ export class MercadonaClient {
   ): AsyncIterable<MercadonaListProduct> {
     const seen = new Set<string>();
     for (const root of await this.listCategories(lang)) {
+      // The root is passed down as the ancestor because the response for a level
+      // 2 category does not contain it, and the category map in section 5.6 is
+      // keyed on the 26 level 1 names. Without it every product arrives with a
+      // path starting at level 2, nothing matches, and the whole assortment
+      // resolves to OTHER.
+      const rootNode: CategoryPathNode = { id: root.id, name: root.name };
       for (const child of root.children) {
-        for (const product of await this.listCategoryProducts(child.id, lang)) {
+        for (const product of await this.listCategoryProducts(child.id, lang, [
+          rootNode,
+        ])) {
           if (!product.externalId || seen.has(product.externalId)) {
             continue;
           }

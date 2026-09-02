@@ -2,6 +2,7 @@ import type {
   ItemCategory,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
+import type { CategoryPathNode } from './categories';
 
 /**
  * The library's public shapes (plan 0038, section 3.1). Nothing here is a TypeORM
@@ -65,7 +66,12 @@ export interface MercadonaListProduct {
   price: number | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  categoryPath: string[];
+  /**
+   * The path the walk took to reach it, root first and deepest last, carrying
+   * each node's id. The ids matter: section 5.6 splits cheese from cured meat by
+   * level 2 id, and a path of bare names cannot express that.
+   */
+  categoryPath: CategoryPathNode[];
 }
 
 export interface MercadonaClientOptions {
