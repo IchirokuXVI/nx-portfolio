@@ -32,8 +32,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * read already carries, and a line whose author has been revoked simply renders
  * without a name.
  */
-export class BasketLineAuthor1756001300000 implements MigrationInterface {
-  name = 'BasketLineAuthor1756001300000';
+export class BasketLineAuthor1756001400000 implements MigrationInterface {
+  name = 'BasketLineAuthor1756001400000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

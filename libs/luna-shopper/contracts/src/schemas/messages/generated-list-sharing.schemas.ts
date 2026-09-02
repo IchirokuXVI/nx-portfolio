@@ -47,6 +47,9 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   settleSkip: schemaId('generated-list-sharing/SettleSkip'),
   allocationEntry: schemaId('generated-list-sharing/AllocationEntry'),
   settleResult: schemaId('generated-list-sharing/SettleResult'),
+  /** The line and a count, and no names at all (plan 0054, section 3.5). */
+  reopenResult: schemaId('generated-list-sharing/ReopenResult'),
+  reopenRequest: schemaId('msg/generatedList.reopenLine/request'),
   shareRequest: schemaId('msg/generatedList.shareLink/request'),
   ensureLinkRequest: schemaId('msg/generatedList.shareLink.ensure/request'),
   revokeLinkRequest: schemaId('msg/generatedList.shareLink.revoke/request'),
@@ -133,6 +136,10 @@ const participantView = object(
     id: nonEmptyString(),
     kind: ref(ENUM_IDS.participantKind),
     displayName: nullableString(),
+    // The account holder's own name, a separate field from the typed one
+    // because they are different facts (plan 0054, section 2.3). Null for a
+    // guest, and on a row that predates the plan until a share backfills it.
+    username: nullableString(),
     guestNumber: { type: ['integer', 'null'] },
     userId: nullableString(),
     joinedAt: nonEmptyString(),
@@ -147,6 +154,7 @@ const participantView = object(
     'id',
     'kind',
     'displayName',
+    'username',
     'guestNumber',
     'userId',
     'joinedAt',
@@ -462,6 +470,9 @@ const ensureLinkRequest = object(
     userId: nonEmptyString(),
     generatedListId: nonEmptyString(),
     expiresAt: nullableString(),
+    // Sharing mints the owner's participant row, so it is where their account
+    // name has to arrive (plan 0054, section 2.3).
+    username: nullableString(),
   },
   ['userId', 'generatedListId']
 );
@@ -541,6 +552,9 @@ const joinRequest = object(
     secret: nonEmptyString(),
     displayName: string(),
     userId: nonEmptyString(),
+    // Resolved by the gateway from the verified token: core is told the name
+    // and never asks for it (plan 0054, section 2.2).
+    username: nullableString(),
     userAgent: string(),
   },
   ['secret']
@@ -552,6 +566,7 @@ const listParticipantsRequest = object(
     generatedListId: nonEmptyString(),
     asParticipantId: nonEmptyString(),
     userId: nonEmptyString(),
+    username: nullableString(),
   },
   ['generatedListId']
 );
@@ -596,6 +611,40 @@ const settleRequest = object(
   ['generatedListId', 'lineId', 'participantId', 'outcome']
 );
 
+/**
+ * Reopen a settled basket line (plan 0054, section 3).
+ *
+ * No quantity, deliberately: the whole line goes back to outstanding, because a
+ * partial reopen has no honest answer to which of several settlements it is
+ * undoing.
+ */
+const reopenRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.reopenRequest,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    participantId: nonEmptyString(),
+  },
+  ['generatedListId', 'lineId', 'participantId']
+);
+
+/**
+ * What a reopen answers with (plan 0054, section 3.5).
+ *
+ * Smaller than {@link settleResult} rather than the same shape, because this
+ * response **names nothing**: the line and a count of origins it could not put
+ * units back on. That is what lets the act sit outside the all or nothing rule,
+ * which gates naming zone data rather than touching it.
+ */
+const reopenResult = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.reopenResult,
+  {
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+    skippedCount: integer({ minimum: 0 }),
+  },
+  ['line', 'skippedCount']
+);
+
 export const generatedListSharingSchemas: JsonSchema[] = [
   shareLinkView,
   shareLinkResult,
@@ -621,6 +670,8 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   revokeParticipantResult,
   resolveParticipantRequest,
   settleRequest,
+  reopenRequest,
+  reopenResult,
   basketLineView,
   basketView,
   basketResult,
@@ -680,6 +731,12 @@ export const generatedListSharingMessageContracts: Record<
   [GENERATED_LIST_SHARING_PATTERNS.settleLine]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.settleRequest,
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.settleResult,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.reopenLine]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.reopenRequest,
+    // Not the settle's shape: a reopen names nothing, so there are no
+    // settlement refs and no list names to redact (plan 0054, section 3.5).
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.reopenResult,
   },
   [GENERATED_LIST_SHARING_PATTERNS.basketGet]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.basketRequest,

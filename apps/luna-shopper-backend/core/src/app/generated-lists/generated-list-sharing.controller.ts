@@ -11,6 +11,7 @@ import {
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
+  type GeneratedListReopenResult,
   type GeneratedListSettleResult,
   type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
@@ -19,6 +20,7 @@ import {
   type JoinGeneratedListRequest,
   type ListParticipantsRequest,
   type PreviewShareLinkRequest,
+  type ReopenGeneratedListLineRequest,
   type ResolveParticipantRequest,
   type RevokeParticipantRequest,
   type RevokeShareLinkRequest,
@@ -26,6 +28,7 @@ import {
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
+import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 
@@ -45,6 +48,7 @@ export class GeneratedListSharingController {
   constructor(
     private readonly sharing: GeneratedListSharingService,
     private readonly settle: GeneratedListSettleService,
+    private readonly reopenService: GeneratedListReopenService,
     private readonly basket: GeneratedListBasketService
   ) {}
 
@@ -122,6 +126,21 @@ export class GeneratedListSharingController {
     @Payload() req: SettleGeneratedListLineRequest
   ): Promise<GeneratedListSettleResult> {
     return this.settle.settle(req);
+  }
+
+  /**
+   * Take a settled basket line back to outstanding (plan 0054, section 3).
+   *
+   * The same authorization the settle has and no more: any live participant,
+   * guests included. It puts back every unit this basket line took off an origin
+   * list and marks the settlements that took them, rather than deleting them,
+   * because a settlement is an append.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.reopenLine)
+  reopenLine(
+    @Payload() req: ReopenGeneratedListLineRequest
+  ): Promise<GeneratedListReopenResult> {
+    return this.reopenService.reopen(req);
   }
 
   /**

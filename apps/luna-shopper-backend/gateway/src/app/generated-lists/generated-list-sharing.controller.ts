@@ -29,6 +29,7 @@ import {
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
+  type GeneratedListReopenResult,
   type GeneratedListSettleResult,
   type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
@@ -42,8 +43,10 @@ import {
   type MintParticipantTokenResult,
   type ParticipantTokenResult,
   type ProductGroupOfferPage,
+  type ReopenGeneratedListLineRequest,
   type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
+  type UserProfileView,
 } from '@portfolio/luna-shopper/contracts';
 import { ForbiddenException } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
@@ -75,6 +78,39 @@ import {
 import { Participant, ParticipantGuard } from './participant.guard';
 
 /**
+ * The caller's global username, for the messages that write it onto a
+ * participant row (plan 0054, section 2.3).
+ *
+ * **Core is told the name and never asks for it.** That is plan 0018 section 9's
+ * rule for `CreateZoneRequest.username`, and it applies unchanged: core owns no
+ * usernames, so resolving one here is a field on a message rather than a fan out
+ * read from core into auth. The alternative, enriching participant views at read
+ * time, would make a basket read a second request per read on the one screen in
+ * this product that is refetched every time somebody in a shop settles anything.
+ *
+ * **A failure answers null rather than throwing**, which is the one place this
+ * departs from `ZoneController.resolveIdentity`. There the hop is also the only
+ * moment the route checks that the account behind the token exists at all; here
+ * the three callers already resolve a basket by that account or mint a
+ * participant it is bound to, so the hop buys only the name. A name is an
+ * improvement on a fallback the client still has, and losing the share sheet or
+ * a join in a shop because auth was briefly unreachable would not be.
+ */
+async function resolveUsername(
+  nats: NatsClient,
+  userId: string
+): Promise<string | null> {
+  try {
+    const profile = await nats.send<UserProfileView>(AUTH_PATTERNS.getProfile, {
+      userId,
+    });
+    return profile.username ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The owner's share sheet (plan 0051, section 3).
  *
  * Account authenticated throughout, and every route resolves the basket by the
@@ -100,7 +136,7 @@ export class GeneratedListShareController {
   @Put(':id/share-link')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
   @ApiProblemResponses({ auth: true, body: true, notFound: true })
-  ensureLink(
+  async ensureLink(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Body() dto: EnsureShareLinkDto
@@ -109,6 +145,10 @@ export class GeneratedListShareController {
       userId: user.userId,
       generatedListId: id,
       ...dto,
+      // Sharing mints the owner's participant row, so this is where their name
+      // reaches it (plan 0054, section 2.3). Core is told the name and never
+      // asks for it, which is plan 0018 section 9's rule unchanged.
+      username: await resolveUsername(this.nats, user.userId),
     };
     return this.nats.send<GeneratedListShareLinkView>(
       GENERATED_LIST_SHARING_PATTERNS.linkEnsure,
@@ -159,7 +199,7 @@ export class GeneratedListShareController {
   @Get(':id/participants')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantList)
   @ApiProblemResponses({ auth: true, notFound: true })
-  listParticipants(
+  async listParticipants(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
   ): Promise<GeneratedListParticipantListResult> {
@@ -167,7 +207,14 @@ export class GeneratedListShareController {
     // device strings are theirs to see.
     return this.nats.send<GeneratedListParticipantListResult>(
       GENERATED_LIST_SHARING_PATTERNS.participantList,
-      { generatedListId: id, userId: user.userId }
+      {
+        generatedListId: id,
+        userId: user.userId,
+        // The second place the owner's row can be named (plan 0054,
+        // section 2.3): this sheet is read whether or not anybody has pressed
+        // share, so an owner who has never minted a link is still named here.
+        username: await resolveUsername(this.nats, user.userId),
+      }
     );
   }
 
@@ -248,6 +295,11 @@ export class ShareLinkController {
       secret,
       displayName: dto.displayName,
       userId: user?.userId,
+      // Null for a guest, and the account's own name for somebody signed in
+      // (plan 0054, section 2.3). A separate field from the typed one, because a
+      // guest's typed "Dani" and an account called Dani are different facts and
+      // section 3.5 rests on telling them apart.
+      username: user ? await resolveUsername(this.nats, user.userId) : null,
       userAgent,
     };
     const joined = await this.nats.send<GeneratedListJoinCoreResult>(
@@ -564,7 +616,16 @@ export class GeneratedListParticipantController {
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.settleLine, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ auth: true, body: true, notFound: true })
+  // 409 rather than 422 for a line that is already finished (plan 0054,
+  // section 4): the request is well formed and the state refuses it, and a
+  // client keying its copy on `validation_failed` could not tell that from a
+  // malformed quantity.
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+  })
   settle(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -589,6 +650,39 @@ export class GeneratedListParticipantController {
     };
     return this.nats.send<GeneratedListSettleResult>(
       GENERATED_LIST_SHARING_PATTERNS.settleLine,
+      req
+    );
+  }
+
+  /**
+   * Take a settled line back to outstanding (plan 0054, section 3).
+   *
+   * **No `seesZoneData` check**, like the pick swap above it and unlike the
+   * allocation sheet: the act touches exactly the origins this basket line's own
+   * settlements touched, and the answer names none of them. Any live participant
+   * may, guests included, because refusing it to the person who just made the
+   * mistake would leave the mistake standing.
+   *
+   * 409 when the line has nothing settled on it, which is the same distinction
+   * section 4 draws on the settle: a well formed request the state refuses.
+   */
+  @Post(':id/lines/:lineId/reopen')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.reopenLine, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, notFound: true, conflict: true })
+  reopen(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string
+  ): Promise<GeneratedListReopenResult> {
+    const req: ReopenGeneratedListLineRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+    };
+    return this.nats.send<GeneratedListReopenResult>(
+      GENERATED_LIST_SHARING_PATTERNS.reopenLine,
       req
     );
   }

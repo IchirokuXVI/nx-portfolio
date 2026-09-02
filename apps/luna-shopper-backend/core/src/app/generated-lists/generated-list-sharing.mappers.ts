@@ -61,6 +61,11 @@ export function toParticipantView(
     // Unverified text on an unauthenticated link (section 3.5): what the screen
     // shows, never what the record keeps. The id above is the attribution.
     displayName: participant.displayName,
+    // The account's own name, beside the typed one rather than instead of it
+    // (plan 0054, section 2.3): a client shows `displayName` when the person
+    // typed one, because they said it on purpose, and falls back to this rather
+    // than to a role. Null for a guest, who has no account behind them.
+    username: participant.username,
     guestNumber: participant.guestNumber,
     userId: participant.userId,
     joinedAt: participant.joinedAt.toISOString(),

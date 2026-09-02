@@ -18,7 +18,7 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { LineSettlement, ListLine, ListLineItem } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../generated-lists/line-claim.service';
@@ -164,6 +164,10 @@ export class SettlementService {
           // exactly one of the two (plan 0047, section 3.3).
           settledByParticipantId: null,
           settledAt: new Date(),
+          // Standing. Only a basket reopen writes these, and this settle came
+          // off the list page (plan 0054, section 7).
+          revertedAt: null,
+          revertedByParticipantId: null,
           generatedListLineId: null,
           pricePaidCents: null,
           supermarketLocationId: null,
@@ -180,7 +184,14 @@ export class SettlementService {
       // includes it. The most recent outcome needs no query at all: the row just
       // written is the newest settlement this line has, by construction.
       const boughtCount = await repo.count({
-        where: { lineId: line.id, outcome: SettlementOutcome.BOUGHT },
+        where: {
+          lineId: line.id,
+          outcome: SettlementOutcome.BOUGHT,
+          // Excluding anything somebody has taken back (plan 0054,
+          // section 3.3), so a line reopened on a basket and then bought from
+          // the list page counts the purchase once.
+          revertedAt: IsNull(),
+        },
       });
 
       // The third indicator, read through the caller's manager (plan 0052,

@@ -14,11 +14,12 @@ import {
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  ConflictException,
   ForbiddenException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, Repository, type EntityManager } from 'typeorm';
+import { DataSource, IsNull, Repository, type EntityManager } from 'typeorm';
 import {
   GeneratedList,
   GeneratedListLine,
@@ -111,9 +112,13 @@ export class GeneratedListSettleService {
 
     const outstanding = Math.max(0, line.quantity - line.settledQuantity);
     if (outstanding === 0) {
-      throw new ValidationException('This line is already finished', {
-        messageArgs: { field: 'lineId' },
-      });
+      // A conflict rather than a validation failure (plan 0054, section 4). The
+      // request is well formed and the state refuses it, which is what
+      // `conflict` means everywhere else in this product, and `validation_failed`
+      // is the same code a malformed quantity raises: `messageArgs.field` never
+      // reaches the client, so a client wanting to say "this line is already
+      // done" had to infer it from which button was pressed.
+      throw new ConflictException('This line is already finished');
     }
 
     const itemId = await this.resolvePick(line, req.itemId);
@@ -215,6 +220,10 @@ export class GeneratedListSettleService {
             settledByUserId: null,
             settledByParticipantId: req.participantId,
             settledAt: now,
+            // Standing, which is every settlement the moment it is written
+            // (plan 0054, section 3.3).
+            revertedAt: null,
+            revertedByParticipantId: null,
             generatedListLineId: line.id,
             pricePaidCents: null,
             supermarketLocationId: null,
@@ -252,7 +261,14 @@ export class GeneratedListSettleService {
           // each origin is settled once.
           settlementSummary: {
             boughtCount: await settlements.count({
-              where: { lineId: zoneLine.id, outcome: SettlementOutcome.BOUGHT },
+              where: {
+                lineId: zoneLine.id,
+                outcome: SettlementOutcome.BOUGHT,
+                // A settlement somebody took back is excluded from every
+                // consumption total (plan 0054, section 3.3). It is still in
+                // the table and still served by the history, marked.
+                revertedAt: IsNull(),
+              },
             }),
             lastOutcome: req.outcome,
           },

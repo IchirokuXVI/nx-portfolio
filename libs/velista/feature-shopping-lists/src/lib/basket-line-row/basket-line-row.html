@@ -1,21 +1,76 @@
 <!--
-  One button and not a checkbox. A line is settled rather than ticked, and
-  settling asks how many, so the whole row opens the sheet (plan 0043 took the
-  checkbox off the list page; this screen never had one).
+  **Two controls, not one** (plan 0052, section 6.2).
 
-  `aria-label` carries the whole row, because the quantity and the attribution
-  are separate lines visually and a reader moving by button would hear only the
-  content otherwise.
+  This was a single `<button class="row">` carrying the whole line, and a button
+  cannot contain a button, so adding the status control at the leading edge is what
+  splits the row into a `<div>` holding two of them.
+
+  `0044`'s "one button and not a checkbox" is **amended, not deleted**, and the
+  amendment is the point: settling a line still asks how many, and that is still the
+  sheet. What the status control adds is the answer to the one question the sheet does
+  not need to be opened for, "all of it", which is the common case in a shop and used
+  to cost a tap, a sheet, a tap and a dismissal.
 -->
-<button
-  (click)="open.emit()"
+<div
   [attr.aria-busy]="busy() ? 'true' : null"
-  [attr.aria-label]="label()"
   [class.is-done]="state() === 'done'"
   class="row"
-  type="button"
 >
-  <span class="body">
+  <!--
+    The state, at the **leading** edge, and that is decided by what is already
+    there: the quantity, the outstanding count and the progress caption are all at
+    the trailing edge, and a fourth thing in that column would make the one column
+    somebody scans in an aisle four things wide. The leading edge is empty, it is
+    where a state marker is expected in every list on a phone, and it is the side a
+    right handed thumb reaches when the device is held to read.
+
+    Four shapes and never four colours (`0044`, section 7): empty, half, filled with
+    a tick, and a stroke through. The fourth exists for the reason `touchedCaption`
+    has a sentence of its own for it — `NOT_AVAILABLE` closes the outstanding amount
+    exactly as a purchase does, so a tick on it would claim a purchase that never
+    happened.
+
+    Drawn for **everybody**. Every participant may settle and every participant may
+    reopen (luna `0054`, section 3.5), so there is no reader for whom this is drawn
+    and refused, and no `@if` guarding it.
+  -->
+  @if (statusIsButton()) {
+    <button
+      (click)="toggle()"
+      [attr.aria-label]="statusLabel()"
+      [disabled]="busy()"
+      class="status"
+      type="button"
+    >
+      <ng-container [ngTemplateOutlet]="glyph" />
+    </button>
+  } @else {
+    <!--
+      A finished line with no reopen route behind it: `BASKET_REOPEN_AVAILABLE` is
+      false until luna `0054` ships. It says what the line **is** and does not offer
+      an act that would 404, which is the absence rule again (`0030`). The settle
+      direction above works in full either way.
+
+      A `span` with `role="img"` rather than a disabled button, because there is no
+      control here to disable: nothing has been taken away from this reader, and a
+      dimmed button would say something about them that is not true.
+    -->
+    <span [attr.aria-label]="statusLabel()" class="status is-static" role="img">
+      <ng-container [ngTemplateOutlet]="glyph" />
+    </span>
+  }
+
+  <!--
+    The row proper, which still opens the sheet and still carries the whole line in
+    its accessible name: the quantity and the attribution are separate lines
+    visually, and a reader moving by button would otherwise hear only the content.
+  -->
+  <button
+    (click)="open.emit()"
+    [attr.aria-label]="label()"
+    class="body"
+    type="button"
+  >
     <span class="content">{{ line().content }}</span>
 
     <!--
@@ -26,7 +81,9 @@
     @if (productName(); as product) {
       <span class="product">{{ product }}</span>
     } @else if (line().optionIds.length > 0) {
-      <span class="product is-missing">{{ 'basket.product.none' | rokuT }}</span>
+      <span class="product is-missing">{{
+        'basket.product.none' | rokuT
+      }}</span>
     }
 
     <!--
@@ -45,7 +102,7 @@
     @if (from(); as origins) {
       <span class="from">{{ origins }}</span>
     }
-  </span>
+  </button>
 
   <span class="numbers">
     @if (state() === 'partly') {
@@ -63,4 +120,26 @@
       <span class="visually-hidden">{{ 'basket.line.busy' | rokuT }}</span>
     }
   </span>
-</button>
+</div>
+
+<!--
+  The four shapes, in one place, so the button and the static indicator cannot draw
+  different glyphs for the same state. Every icon is `aria-hidden` on its own; the
+  name comes from the control around it.
+-->
+<ng-template #glyph>
+  @switch (statusGlyph()) {
+    @case ('wanted') {
+      <lib-circle-icon class="status-glyph" />
+    }
+    @case ('partly') {
+      <lib-half-circle-icon class="status-glyph is-partly" />
+    }
+    @case ('bought') {
+      <lib-check-filled-icon class="status-glyph is-bought" />
+    }
+    @case ('unavailable') {
+      <lib-slash-circle-icon class="status-glyph is-unavailable" />
+    }
+  }
+</ng-template>

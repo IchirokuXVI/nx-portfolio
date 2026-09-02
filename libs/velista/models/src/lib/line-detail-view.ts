@@ -70,6 +70,15 @@ export interface SettlementRowVm {
    * per line one.
    */
   readonly listName: string | null;
+  /**
+   * Whether this settlement was taken back (luna `0054`, section 3.3).
+   *
+   * A reverted row **stays in the history, marked**, and does not disappear: the whole
+   * reason to open the pane is to reconcile two people's trips, and a purchase that was
+   * taken back is part of that. The screen qualifies the sentence quietly and never
+   * strikes it through, which would read as deleted rather than as reversed.
+   */
+  readonly reverted: boolean;
 }
 
 /** One product on a line, as a removable chip. */
@@ -380,6 +389,8 @@ export function toSettlementRow(
     readonly quantity: number;
     readonly settledByUserId: string | null;
     readonly settledAt: Date;
+    /** When it was taken back, if it was. Absent for a caller that cannot revert. */
+    readonly revertedAt?: Date | null;
   },
   input: {
     nameOf: (userId: string) => string | null;
@@ -405,5 +416,8 @@ export function toSettlementRow(
     at: settlement.settledAt,
     when: formatDay(settlement.settledAt, input.locale),
     listName,
+    // Optional on the argument rather than required, so the two callers that build a
+    // settlement shaped object by hand are not made to state a fact they do not have.
+    reverted: (settlement.revertedAt ?? null) !== null,
   };
 }

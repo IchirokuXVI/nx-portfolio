@@ -1001,7 +1001,7 @@
       "failed": "That did not work. Try again."
     },
     "history": {
-      "open": "What happened to this line",
+      "open": "Show line history",
       "title": "What happened here",
       "loading": "Loading what happened",
       "failed": "That would not load",
@@ -1013,7 +1013,25 @@
       "none": "{{who}} says they had none",
       "someone": "Someone",
       "you": "You",
-      "close": "Close"
+      "close": "Close",
+      "reverted": "Taken back"
+    },
+    "error": {
+      "alreadyFinished": "Somebody already finished this line",
+      "accessChanged": "Your access to one of the lists behind this line has changed",
+      "ownerOnly": "Only whoever made this list can do that",
+      "gone": "This list is no longer here",
+      "tooFast": "That was too quick. Try again in a moment",
+      "failed": "That did not save. Try again",
+      "reference": "ref {{correlationId}}"
+    },
+    "status": {
+      "got": "Mark {{name}} as got",
+      "rest": "Mark the rest of {{name}} as got",
+      "undoGot": "{{name}} is got. Undo it",
+      "undoNone": "{{name}} was not available. Undo it",
+      "isGot": "{{name}} is got",
+      "isNone": "{{name}} was not available"
     }
   },
   "getList": {
