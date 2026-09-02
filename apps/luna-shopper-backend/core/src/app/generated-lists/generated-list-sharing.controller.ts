@@ -26,6 +26,7 @@ import {
   type ResolveParticipantRequest,
   type RevokeParticipantRequest,
   type RevokeShareLinkRequest,
+  type SetGeneratedListLineOutstandingRequest,
   type SetGeneratedListOriginQuantityRequest,
   type SetGeneratedListOriginQuantityResult,
   type SetGeneratedListPickRequest,
@@ -33,6 +34,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
+import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
@@ -54,6 +56,7 @@ export class GeneratedListSharingController {
     private readonly sharing: GeneratedListSharingService,
     private readonly settle: GeneratedListSettleService,
     private readonly reopenService: GeneratedListReopenService,
+    private readonly outstanding: GeneratedListOutstandingService,
     private readonly basket: GeneratedListBasketService,
     private readonly origins: GeneratedListOriginsService
   ) {}
@@ -147,6 +150,21 @@ export class GeneratedListSharingController {
     @Payload() req: ReopenGeneratedListLineRequest
   ): Promise<GeneratedListReopenResult> {
     return this.reopenService.reopen(req);
+  }
+
+  /**
+   * Move what is still to get on a basket line (plan 0056, section 3).
+   *
+   * One message read in two directions: raising means this basket will buy more,
+   * lowering means that many were bought. The lower half is the settle above,
+   * called rather than reimplemented, so both ways of buying a tin write the
+   * same rows and agree about who bought it.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.setOutstanding)
+  setOutstanding(
+    @Payload() req: SetGeneratedListLineOutstandingRequest
+  ): Promise<GeneratedListSettleResult> {
+    return this.outstanding.setOutstanding(req);
   }
 
   /**

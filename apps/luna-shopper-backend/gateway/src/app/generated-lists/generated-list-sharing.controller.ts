@@ -46,6 +46,7 @@ import {
   type ParticipantTokenResult,
   type ProductGroupOfferPage,
   type ReopenGeneratedListLineRequest,
+  type SetGeneratedListLineOutstandingRequest,
   type SetGeneratedListOriginQuantityRequest,
   type SetGeneratedListOriginQuantityResult,
   type SetGeneratedListPickRequest,
@@ -71,6 +72,7 @@ import {
   EnsureShareLinkDto,
   JoinGeneratedListDto,
   RevokeShareLinkDto,
+  SetGeneratedListLineOutstandingDto,
   SetGeneratedListOriginQuantityDto,
   SetGeneratedListPickDto,
   SettleGeneratedListLineDto,
@@ -655,6 +657,56 @@ export class GeneratedListParticipantController {
     };
     return this.nats.send<GeneratedListSettleResult>(
       GENERATED_LIST_SHARING_PATTERNS.settleLine,
+      req
+    );
+  }
+
+  /**
+   * Move what is still to get on a line (plan 0056, section 3).
+   *
+   * **No `seesZoneData` check**, like the pick swap and the reopen: raising
+   * touches the basket line alone, and lowering is a settle, which is authorized
+   * by the basket **owner's** standing on each origin rather than the actor's
+   * (plan 0051, section 6.4). A guest still cannot cause a write anywhere the
+   * owner could not have written themselves, and the answer redacts the names of
+   * the origins it reached exactly as the settle's does. The guest is the person
+   * at the shelf looking at the sale, so this is the one route where refusing
+   * them would refuse the gesture the feature is named for.
+   *
+   * Two ways to be refused with a state rather than a fault, and they are told
+   * apart by code: `stale_quantity` when somebody else moved the line while it
+   * was on screen, so the client refetches rather than correcting anything, and
+   * `generated_list_finished` when the basket is `COMPLETED` or `ARCHIVED`.
+   * Both are plan 0057's and plan 0055's codes respectively, reused rather than
+   * doubled: one sentence per state, wherever the state is met.
+   */
+  @Post(':id/lines/:lineId/outstanding')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOutstanding, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+    staleQuantity: true,
+    finishedBasket: true,
+  })
+  setOutstanding(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: SetGeneratedListLineOutstandingDto
+  ): Promise<GeneratedListSettleResult> {
+    const req: SetGeneratedListLineOutstandingRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+      outstanding: dto.outstanding,
+      from: dto.from,
+    };
+    return this.nats.send<GeneratedListSettleResult>(
+      GENERATED_LIST_SHARING_PATTERNS.setOutstanding,
       req
     );
   }

@@ -64,9 +64,14 @@ export const ERROR_CATALOG: Record<
   // Phrased as a fact about the trip rather than as a failure of the tap, so the
   // shopper is told what is true instead of that something went wrong (plan
   // 0055, section 3.3).
+  // Phrased about the basket rather than about adding, because more than one
+  // write meets this state: plan 0055 refuses an add and plan 0056 refuses a
+  // move of what is outstanding, in either direction. One code with one sentence
+  // that is true of every one of them beats a sentence that is exact for the
+  // first caller and wrong for the second.
   [ERROR_CODES.GENERATED_LIST_FINISHED]: {
-    en: 'This basket is finished, so nothing more can be added to it.',
-    es: 'Esta cesta está terminada, así que no se puede añadir nada más.',
+    en: 'This basket is finished, so it cannot be changed.',
+    es: 'Esta cesta está terminada, así que no se puede modificar.',
   },
   // Both carry their number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is

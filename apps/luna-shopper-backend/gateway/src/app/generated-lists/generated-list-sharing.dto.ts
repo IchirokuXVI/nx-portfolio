@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   GENERATED_LIST_LIMITS,
   GENERATED_LIST_SHARING_LIMITS,
+  LINE_QUANTITY_MAX,
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
@@ -284,4 +285,43 @@ export class BasketSuggestQueryDto {
   @Min(1)
   @Max(MAX_PAGE_SIZE)
   limit?: number;
+}
+
+/**
+ * Move what is still to get on a basket line (plan 0056, section 3).
+ *
+ * **Two absolute numbers rather than a signed delta**, which deviates from plan
+ * 0047 section 2.1 on purpose. The zone list’s stepper emits a run of increments
+ * while a thumb moves, so a delta there cannot race and a retry is harmless;
+ * this control commits once, on release, and its meaning depends on its sign, so
+ * a retried `-2` after a network wobble would buy two more tins.
+ *
+ * Bounded by `LINE_QUANTITY_MAX` rather than by `GENERATED_LIST_LIMITS.maxQuantity`
+ * above it, and the two are different bounds on different things: that one caps
+ * the units **one settle** may claim, and this is how many a line may ask for,
+ * which is the limit a zone line already has. The service applies it again to
+ * the resulting `quantity`, which is the number it is really about.
+ */
+export class SetGeneratedListLineOutstandingDto {
+  @ApiProperty({
+    minimum: 0,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'How many are still to get after this. Above the current amount the basket will buy more and nothing is settled; below it, the difference was bought. Zero finishes the line, exactly as “got all” does.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(LINE_QUANTITY_MAX)
+  outstanding!: number;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'What the client believed was outstanding when the control was picked up. A mismatch is refused with `stale_quantity` rather than applied, because somebody else moving the line can invert what the gesture meant: refetch and show the number as it stands.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(LINE_QUANTITY_MAX)
+  from!: number;
 }

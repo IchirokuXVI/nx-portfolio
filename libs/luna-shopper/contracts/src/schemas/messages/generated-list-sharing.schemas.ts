@@ -1,5 +1,6 @@
 import { GENERATED_LIST_SHARING_PATTERNS } from '../../lib/messages/generated-list-sharing.messages';
 import { GENERATED_LIST_LIMITS } from '../../lib/messages/generated-list.messages';
+import { LINE_QUANTITY_MAX } from '../../lib/messages/list.messages';
 import {
   array,
   boolean,
@@ -85,6 +86,8 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   addLineRequest: schemaId('msg/generatedList.basket.addLine/request'),
   /** Where a search inside this basket is priced (plan 0055, section 5.1). */
   basketScope: schemaId('generated-list-sharing/BasketScope'),
+  /** Where the control was let go, and where the client believed it started. */
+  setOutstandingRequest: schemaId('msg/generatedList.setOutstanding/request'),
   /** What the basket's room hears when a line is settled or its pick swapped. */
   lineMovedEvent: schemaId('generated-list-sharing/LineMovedEvent'),
   /** What it hears when a line is added, which is an append and not a replace. */
@@ -765,6 +768,30 @@ const lineOriginsRequest = object(
 );
 
 /**
+ * Move what is still to get on a basket line (plan 0056, section 3).
+ *
+ * Both numbers are absolute and both are required, which is the deviation from
+ * plan `0047` section 2.1's delta and the reason for it: this control commits
+ * once, on release, so a delta would be a delta whose meaning depends on its
+ * sign, and a retried one would buy tins nobody asked for.
+ *
+ * `outstanding` floors at zero and is bounded here by `LINE_QUANTITY_MAX`, the
+ * limit an unsettled line already has; the service applies the same limit to the
+ * resulting `quantity`, which is the number the limit is really about.
+ */
+const setOutstandingRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.setOutstandingRequest,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    outstanding: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
+    from: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
+  },
+  ['generatedListId', 'lineId', 'participantId', 'outstanding', 'from']
+);
+
+/**
  * What a reopen answers with (plan 0054, section 3.5).
  *
  * Smaller than {@link settleResult} rather than the same shape, because this
@@ -854,6 +881,7 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   lineOriginsResult,
   setOriginQuantityRequest,
   setOriginQuantityResult,
+  setOutstandingRequest,
 ];
 
 export const generatedListSharingMessageContracts: Record<
@@ -913,6 +941,13 @@ export const generatedListSharingMessageContracts: Record<
   [GENERATED_LIST_SHARING_PATTERNS.basketGet]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.basketRequest,
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketView,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.setOutstanding]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.setOutstandingRequest,
+    // The settle's own shape, in **both** directions, so a client has one
+    // response to handle (plan 0056, section 7). A raise answers with
+    // `skippedCount: 0` and no settlement refs, which is true of it.
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.settleResult,
   },
   [GENERATED_LIST_SHARING_PATTERNS.setPick]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.setPickRequest,

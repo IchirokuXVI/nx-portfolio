@@ -169,6 +169,22 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * never said.
    */
   setOriginQuantity: 'generatedList.setOriginQuantity',
+  /**
+   * Move what is still to get on a basket line (plan 0056, section 3).
+   *
+   * **One number read in two directions**, which is the whole design: raising it
+   * means this basket will buy more, and lowering it means that many were
+   * bought. Not two behaviours bolted onto one control, and not an edit of the
+   * line's `quantity`, which would leave the shopper holding a screen with two
+   * numbers to tell apart while pushing a trolley.
+   *
+   * Lowering **calls the settle** rather than reimplementing it, so the default
+   * allocation, the owner's access check per origin, the skip report, the zone
+   * events and the claim release all come with it unchanged. A second path that
+   * wrote settlements its own way is how two ways of buying the same tin end up
+   * disagreeing about who bought it.
+   */
+  setOutstanding: 'generatedList.setOutstanding',
 } as const;
 
 /**
@@ -715,6 +731,64 @@ export interface GeneratedListSettleResult {
   settlements?: GeneratedListSettlementRef[];
   /** Which origins were missed, and why. Absent under the same rule. */
   skipped?: GeneratedListSettleSkip[];
+}
+
+/**
+ * Move what is still to get on a basket line (plan 0056, section 3).
+ *
+ * ## Both numbers are absolute, and that is the point
+ *
+ * `outstanding` is where the control was let go and {@link from} is where the
+ * client believed it started. Section 3.2 deviates from plan `0047`
+ * section 2.1's delta for the zone list's stepper, deliberately and for a
+ * reason that belongs to this control rather than to that one:
+ *
+ * - The zone stepper emits a **run** of increments while a thumb moves, each of
+ *   them a demand change with one meaning. A delta cannot race, and a retried
+ *   delta is harmless.
+ * - This commits **once**, on release, and its meaning depends on its sign. A
+ *   retried `-2` after a network wobble would buy two more tins.
+ *
+ * An absolute target with a stated origin is idempotent: the same request sent
+ * twice is refused the second time by {@link from}'s own check, which is exactly
+ * what a shopper on a bad connection needs.
+ *
+ * ## Who may
+ *
+ * **Any live participant, guests included**, on the same terms as
+ * {@link SettleGeneratedListLineRequest}, which lowering this literally is. The
+ * guest is the person at the shelf looking at the sale, so putting the one
+ * gesture this message is named for behind an account would refuse it to exactly
+ * the person it is for.
+ */
+export interface SetGeneratedListLineOutstandingRequest {
+  generatedListId: string;
+  /** The basket line, not the zone line. */
+  lineId: string;
+  /** The actor, resolved from their credential by the gateway's guard. */
+  participantId: string;
+  /**
+   * Where the control was let go: how many are still to get after this.
+   *
+   * Floors at zero, which is the whole line settled and what the "got all"
+   * button already does. Capped by `LINE_QUANTITY_MAX` applied to the resulting
+   * `quantity` rather than to this number, so a partly settled line cannot be
+   * raised past the limit an unsettled one has.
+   */
+  outstanding: number;
+  /**
+   * Where the client believed it started, checked against the server's own
+   * `quantity - settledQuantity` and refused on a mismatch (section 3.2).
+   *
+   * The one thing this message must never do is invert its own meaning. Two
+   * phones in one shop both read 5; one drags to 3 and settles 2; the second, a
+   * beat later, drags to 4 meaning "I got one". Against a current of 3 that
+   * reads as **raise by one**, and the purchase is replaced by a demand nobody
+   * expressed. So the mismatch is refused with its own code and the client
+   * refetches, which is the only honest answer: somebody else moved this line,
+   * and what the gesture meant depends on where it started.
+   */
+  from: number;
 }
 
 // --- Reopening a settled line ----------------------------------------------
