@@ -30,9 +30,10 @@ import { BasketIcon, PlusIcon, ProductIcon } from '../icons/icons';
  *
  * ## The three rules it carries
  *
- * - **The order is the server's** and is never re-sorted. A group ranks above an item
+ * - **The ranking is the server's** and is never re-sorted. A group ranks above an item
  *   for a bare word, and that ranking was made with prices, scopes and synonyms this
- *   component has never seen.
+ *   component has never seen. Which end of it sits nearest the field is a different
+ *   question, and it is {@link placement} that answers it. See {@link rows}.
  * - **No empty state, ever.** An absent list is the ordinary case for two characters, a
  *   rare word, or a shop the catalog has not been taught, and "no matches" would be a
  *   screen telling somebody their shopping list is wrong.
@@ -65,12 +66,15 @@ import { BasketIcon, PlusIcon, ProductIcon } from '../icons/icons';
 })
 export class SuggestionList {
   /**
-   * What to offer, in the **server's** order.
+   * What to offer, in the **server's** ranking, best first.
    *
    * Handed down rather than fetched here, which is rule D1: this component knows what
    * a suggestion looks like and nothing about where it came from, the debounce, or the
    * scope. It is also what keeps the ordering honest, since a component that fetched
    * would eventually be tempted to re-rank.
+   *
+   * Read through {@link rows} rather than drawn directly, because which end of the
+   * ranking sits nearest the field depends on which side of it the panel opens.
    */
   readonly suggestions = input<readonly CatalogSuggestion[]>([]);
 
@@ -97,11 +101,39 @@ export class SuggestionList {
    *   the thumb, and the last of them is the free text row, which is the one that is
    *   always there and always works. A panel that opened at the top of a scrolling
    *   list hid it behind rows the catalog merely offered.
-   *
-   * The ordering is untouched by either. The server's ranking is drawn top to bottom
-   * in both placements, and only which end of it the panel is scrolled to differs.
+   * - **It is read bottom to top**, so the ranking is drawn that way round. See
+   *   {@link rows}.
    */
   readonly placement = input<'below' | 'above'>('below');
+
+  /**
+   * The suggestions in the order they are **drawn** in, which is not always the order
+   * they arrived in.
+   *
+   * `'below'` draws the ranking straight down. The field is above the list, reading
+   * starts at the top, and the first row met is the best answer.
+   *
+   * `'above'` is read the other way round, and this is the whole of why it exists. The
+   * panel is pinned to the bottom of the screen with the field and the thumb under it,
+   * and it opens at its last row, so the row nearest the field is the one everybody
+   * sees first and the list climbs away from there. Drawn top to bottom, that put the
+   * server's best answer furthest from the thumb, at the far end of a list that
+   * usually needs scrolling to reach. Reversed, the panel reads outward from the
+   * field: the free text row at the bottom where it already was, the server's first
+   * suggestion directly above it, and the rest of the ranking climbing away in order.
+   *
+   * The ranking is still the server's and is still never re-sorted. Reversing it is
+   * not a second opinion about which answer is best; it is where the bottom of the
+   * panel is, and a panel that opens at its bottom has to be filled from there.
+   *
+   * The free text row is not in here. It is drawn after these, so it stays the last
+   * row in both placements: at the far end of an inline list, and under the thumb in
+   * the composer's.
+   */
+  readonly rows = computed<readonly CatalogSuggestion[]>(() => {
+    const offered = this.suggestions();
+    return this.placement() === 'above' ? [...offered].reverse() : offered;
+  });
 
   readonly chose = output<CatalogSuggestion>();
 
