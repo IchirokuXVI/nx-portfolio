@@ -332,3 +332,34 @@ export type PriceSourceKind = (typeof PRICE_SOURCE_KINDS)[number];
  * value that changes a sentence, so an unknown source reads as the chain's own.
  */
 export const PRICE_SOURCE_KIND_FALLBACK: PriceSourceKind = 'UNKNOWN';
+
+/**
+ * What a product's size is measured in (`UnitOfMeasure` on the wire, backend
+ * plan 0038 section 2.4).
+ *
+ * Read for one thing: saying how big a product is beside its name. The catalog
+ * holds **one record per size**, so "Leche entera Hacendado" at 1 L and the same
+ * milk at 0.5 L are two products with the same name and the same brand, and a
+ * suggestion row that drew neither size drew the same row twice.
+ */
+export const UNITS_OF_MEASURE = [
+  'UNIT',
+  'GRAM',
+  'KILOGRAM',
+  'MILLILITER',
+  'LITER',
+  'PACK',
+] as const;
+export type UnitOfMeasure = (typeof UNITS_OF_MEASURE)[number];
+
+/**
+ * A unit this build has never heard of, and the fallback is the one that says
+ * the least.
+ *
+ * `UNIT` is a count, and a count is the one unit whose size is suppressed below
+ * two (see `SuggestionList.sizeOf`), so an unrecognised unit on a 0.35 lands on
+ * a row that says nothing rather than on a row that confidently says "0.35
+ * units" about a value the backend measured in kilograms. Guessing a mass or a
+ * volume here would be inventing the very fact the row exists to state.
+ */
+export const UNIT_OF_MEASURE_FALLBACK: UnitOfMeasure = 'UNIT';

@@ -75,6 +75,8 @@ const CATALOG: readonly CatalogItem[] = [
     id: 'item-milk-a',
     name: { es: 'Leche entera', en: 'Whole milk' },
     brand: 'Hacendado',
+    size: 1,
+    unit: 'LITER',
     productGroupId: null,
   },
 ];

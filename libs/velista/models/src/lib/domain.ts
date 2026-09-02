@@ -4,6 +4,7 @@ import type {
   ListPermission,
   MembershipStatus,
   SettlementOutcome,
+  UnitOfMeasure,
   UserKind,
   ZoneRole,
   ZoneStatus,
@@ -372,6 +373,18 @@ export interface CatalogItem {
    */
   readonly name: LocalizedName;
   readonly brand: string | null;
+  /**
+   * How much of it is in the packet: `1` with {@link CatalogItem.unit} `LITER`,
+   * `0.35` with `KILOGRAM`. Null when the catalog does not know.
+   *
+   * **Read because the catalog holds one record per size.** Without it a search
+   * for "leche" offers the same name and the same brand three times over, once
+   * per carton size, and the rows are indistinguishable. It is the same field
+   * `BasketProduct.size` already reads, under the same name.
+   */
+  readonly size: number | null;
+  /** What {@link CatalogItem.size} is counted in. Never null; see the fallback. */
+  readonly unit: UnitOfMeasure;
   readonly productGroupId: string | null;
 }
 

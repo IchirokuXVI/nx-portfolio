@@ -1,5 +1,6 @@
 import {
   toAssistantReply,
+  toCatalogItem,
   toCatalogSuggestion,
   toComment,
   toGeneratedListFromView,
@@ -953,6 +954,73 @@ describe('toGeneratedListRun', () => {
   it('drops a run whose basket cannot be read', () => {
     expect(toGeneratedListRun({ ...run, list: null })).toBeNull();
     expect(toGeneratedListRun(null)).toBeNull();
+  });
+});
+
+/**
+ * How big the packet is, which the catalog has always sent and this mapper used to
+ * drop.
+ *
+ * The catalog holds **one record per size**, so a search for "leche" answers with the
+ * same name and the same brand once per carton. With `unitSize` dropped here, every
+ * field that reached a suggestion row was identical across those records and the
+ * dropdown looked like it was repeating itself.
+ */
+describe('toCatalogItem: the size the catalog was always sending', () => {
+  const item = {
+    id: 'item-milk-1l',
+    name: { es: 'Leche entera', en: 'Whole milk' },
+    brand: 'Hacendado',
+    unitSize: 0.5,
+    defaultUnit: 'LITER',
+    productGroupId: 'group-milk',
+  };
+
+  it('reads the size and the unit off the wire', () => {
+    expect(toCatalogItem(item)).toEqual({
+      id: 'item-milk-1l',
+      name: { es: 'Leche entera', en: 'Whole milk' },
+      brand: 'Hacendado',
+      size: 0.5,
+      unit: 'LITER',
+      productGroupId: 'group-milk',
+    });
+  });
+
+  /**
+   * Absent is a fact worth keeping: a product whose size the catalog does not know is
+   * not a product of size zero, and no default could stand in for it without stating
+   * something about the packet that nobody measured.
+   */
+  it('keeps an unknown size as null rather than defaulting it', () => {
+    expect(toCatalogItem({ ...item, unitSize: undefined })?.size).toBeNull();
+    expect(toCatalogItem({ ...item, unitSize: null })?.size).toBeNull();
+    expect(toCatalogItem({ ...item, unitSize: 'a lot' })?.size).toBeNull();
+    // `NaN` passes a typeof check and then renders in the middle of a row.
+    expect(toCatalogItem({ ...item, unitSize: Number.NaN })?.size).toBeNull();
+  });
+
+  /**
+   * A unit this build has never heard of lands on the count, which is the value whose
+   * size is suppressed below two, so an unrecognised unit draws nothing rather than
+   * announcing a number in a unit nobody here can name.
+   */
+  it('falls back to a count for a unit it does not recognise', () => {
+    expect(toCatalogItem({ ...item, defaultUnit: 'FURLONG' })?.unit).toBe(
+      'UNIT'
+    );
+    expect(toCatalogItem({ ...item, defaultUnit: undefined })?.unit).toBe(
+      'UNIT'
+    );
+  });
+
+  it('carries the size through a suggestion, which is where it is drawn', () => {
+    const mapped = toCatalogSuggestion({ kind: 'item', group: null, item });
+
+    expect(mapped).toEqual({
+      kind: 'item',
+      item: expect.objectContaining({ size: 0.5, unit: 'LITER' }),
+    });
   });
 });
 

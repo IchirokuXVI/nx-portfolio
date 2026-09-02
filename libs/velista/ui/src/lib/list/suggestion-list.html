@@ -71,6 +71,20 @@
             <span class="suggestion-badge">{{
               'list.add.groupBadge' | rokuT
             }}</span>
+          } @else if (sizeOf(suggestion); as size) {
+            <!--
+              How big the packet is, and it is here rather than on the note line
+              underneath the name for one reason: the catalog holds one record per size,
+              so this is the **only** field telling two otherwise identical rows apart.
+              The name and the note both truncate, and two cartons of the same milk
+              truncate to the same string; this end of the row never does.
+
+              Only ever drawn for an item. A group is sizes, plural, and quoting one of
+              them would name a carton the row does not add.
+            -->
+            <span class="suggestion-size">{{
+              size.key | rokuT: size.args
+            }}</span>
           }
         </button>
       </li>

@@ -64,7 +64,14 @@ function bought(
 }
 
 function item(id: string, en: string, brand: string | null = null): CatalogItem {
-  return { id, name: { es: en, en }, brand, productGroupId: null };
+  return {
+    id,
+    name: { es: en, en },
+    brand,
+    size: 1,
+    unit: 'LITER',
+    productGroupId: null,
+  };
 }
 
 const CATALOG: readonly CatalogItem[] = [
