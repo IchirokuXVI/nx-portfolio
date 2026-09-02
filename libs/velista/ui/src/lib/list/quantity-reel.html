@@ -5,7 +5,7 @@
   focus, so this is decoration: everything a screen reader needs is announced from the
   spinbutton above it and repeating the number here would read it out twice.
 -->
-<span [class.zero]="current === min" aria-hidden="true" class="pill">
+<span [class.zero]="current === min()" aria-hidden="true" class="pill">
   {{ current }}
 </span>
 

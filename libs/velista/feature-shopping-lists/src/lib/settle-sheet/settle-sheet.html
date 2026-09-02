@@ -118,6 +118,42 @@
       }
 
       <!--
+        The two sheets about this line's **lists**, rather than about buying it
+        (velista 0055 and 0056). Outside the `!finished()` block on purpose: sending
+        a line that was already bought still puts what happened onto a household's
+        list, and raising a finished line's contribution is a correction of the
+        record rather than a purchase.
+
+        Their own group, below the settle targets, because they are not settle
+        targets: the thumb reaching for the big button must not find one of these.
+      -->
+      @if (canEditUnits() || canSendToList()) {
+        <div class="actions lists">
+          @if (canEditUnits()) {
+            <button
+              (click)="openUnits()"
+              [disabled]="busy()"
+              class="secondary"
+              type="button"
+            >
+              {{ 'basket.units.open' | rokuT }}
+            </button>
+          }
+
+          @if (canSendToList()) {
+            <button
+              (click)="openSendToList()"
+              [disabled]="busy()"
+              class="secondary"
+              type="button"
+            >
+              {{ 'basket.send.open' | rokuT }}
+            </button>
+          }
+        </div>
+      }
+
+      <!--
         What happened to this line, for a reader entitled to it (plan 0049, section
         1.1). Not drawn for a guest, who holds no account to authenticate the read
         with, and not drawn for a participant who has lost WRITE: `canReadHistory`
