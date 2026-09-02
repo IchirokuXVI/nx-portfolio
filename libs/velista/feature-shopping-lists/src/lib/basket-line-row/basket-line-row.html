@@ -95,6 +95,19 @@
     }
 
     <!--
+      Who put this here, for a line nobody has touched yet (plan 0053, section 5).
+      Mutually exclusive with the caption above by construction rather than by an
+      `@else`: once somebody settles a line, "who got the bread" is the more urgent
+      of the two and `addedCaption` yields to it.
+
+      Absent on every line the run composed, which is all of them until somebody
+      types one in an aisle: the data decides, exactly as it does below.
+    -->
+    @if (added(); as caption) {
+      <span class="touched">{{ caption }}</span>
+    }
+
+    <!--
       Which household this came from. Drawn only when `origins` is present, which
       it is not for a guest: the data decides, so there is no flag here to get
       wrong (section 4.1).

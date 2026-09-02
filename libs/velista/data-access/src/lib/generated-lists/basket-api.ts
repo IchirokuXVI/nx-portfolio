@@ -1,6 +1,7 @@
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  BasketAddLineRequest,
   BasketLine,
   BasketLinkPreview,
   BasketParticipant,
@@ -9,6 +10,7 @@ import type {
   BasketSettleResult,
   BasketShareLink,
   BasketView,
+  CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
@@ -22,7 +24,8 @@ import {
   toBasketShareLink,
   toBasketView,
 } from '../mapping/basket-mappers';
-import { mapArray } from '../mapping/primitives';
+import { toCatalogSuggestion } from '../mapping/mappers';
+import { isRecord, mapArray } from '../mapping/primitives';
 import { required } from '../mapping/required';
 import type { BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
@@ -167,6 +170,82 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketLine(body), 'basket.setPick');
+  }
+
+  /**
+   * Put a line in the basket, as whichever kind of participant is holding it.
+   *
+   * `basket/lines` and not `lines`: the second is the **owner's** add on the account
+   * surface, resolved by `ownerUserId`, and a guest with a perfectly valid session
+   * gets a not found from it. See {@link BasketServiceI.addLine}.
+   *
+   * The optional fields are **omitted rather than sent undefined**, which is
+   * `LineApi.addLine`'s rule and matters more here: the server validates `itemId` as
+   * a uuid and `options` as an array of them, so a key present and empty is a
+   * refusal where an absent one is a free text line.
+   */
+  async addLine(
+    generatedListId: string,
+    body: BasketAddLineRequest
+  ): Promise<BasketLine> {
+    const request: Record<string, unknown> = { content: body.content };
+    if (body.quantity !== undefined) {
+      request['quantity'] = body.quantity;
+    }
+    if (body.itemId !== undefined) {
+      request['itemId'] = body.itemId;
+    }
+    if (body.options !== undefined && body.options.length > 0) {
+      request['options'] = [...body.options];
+    }
+
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._basket(generatedListId)}/basket/lines`,
+        request,
+        this._participantOptions(generatedListId, 'basket.addLine')
+      )
+    );
+
+    return required(toBasketLine(answer), 'basket.addLine');
+  }
+
+  /**
+   * The catalog, searched through the basket rather than through an account.
+   *
+   * No scope goes out with it, and that is the route's design rather than an
+   * omission on this side: the ranking is the **run's**, which the gateway resolves
+   * from the basket's own snapshot. A guest naming where to price a stranger's
+   * basket is not a thing the server accepts.
+   *
+   * **Empty rather than thrown**, exactly as `CatalogApi.suggest` is: a dropdown is
+   * an offer, and the one thing this must never do is make adding a line fail
+   * because a search did.
+   */
+  async suggest(
+    generatedListId: string,
+    query: string
+  ): Promise<readonly CatalogSuggestion[]> {
+    try {
+      const body = await firstValueFrom(
+        this._http.get<unknown>(
+          `${this._basket(generatedListId)}/catalog/suggest`,
+          {
+            ...this._participantOptions(generatedListId, 'basket.suggest'),
+            params: new HttpParams().set('q', query),
+          }
+        )
+      );
+
+      // The order is the server's and is never re-sorted here, for the reason
+      // written on `CatalogApi.suggest`: the client holds none of the prices,
+      // scopes or synonyms that decided it.
+      return isRecord(body)
+        ? mapArray(body['suggestions'], toCatalogSuggestion)
+        : [];
+    } catch {
+      return [];
+    }
   }
 
   async listParticipants(

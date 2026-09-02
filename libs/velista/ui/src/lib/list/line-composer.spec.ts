@@ -62,6 +62,8 @@ function fakeDetector(): SilenceDetectorI & {
 interface Options {
   sendOnSilence?: boolean;
   keepListening?: boolean;
+  /** False is the basket's composer, which has no microphone at all (`0053`). */
+  voice?: boolean;
 }
 
 async function render(
@@ -94,6 +96,7 @@ async function render(
     'keepListening',
     options.keepListening ?? false
   );
+  fixture.componentRef.setInput('voice', options.voice ?? true);
   fixture.detectChanges();
 
   return { fixture, detector };
@@ -154,6 +157,51 @@ describe('LineComposer, one slot and the empty field decides', () => {
     // mode somebody selected.
     type(fixture, '');
     expect(button(fixture).querySelector('lib-mic-icon')).not.toBeNull();
+  });
+
+  /**
+   * Plan 0053, section 3.1: the basket's composer has no second job for the slot.
+   *
+   * A test rather than a reading of the template, because the flag is the only thing
+   * standing between a screen with no assistant behind it and a microphone that
+   * records into nowhere. If it quietly stops working, this is what says so.
+   */
+  describe('with voice off', () => {
+    it('never becomes a microphone, however empty the field is', async () => {
+      const { fixture } = await render(fakeCapture(), { voice: false });
+
+      expect(button(fixture).querySelector('lib-mic-icon')).toBeNull();
+      expect(button(fixture).querySelector('lib-plus-icon')).not.toBeNull();
+
+      // And still not after typing and clearing again, which is the gesture that
+      // flips the button back on every other screen.
+      type(fixture, 'a');
+      type(fixture, '');
+      expect(button(fixture).querySelector('lib-mic-icon')).toBeNull();
+    });
+
+    it('disables the button on an empty field rather than repurposing it', async () => {
+      const { fixture } = await render(fakeCapture(), { voice: false });
+
+      expect(button(fixture).disabled).toBe(true);
+
+      type(fixture, 'Batteries');
+      expect(button(fixture).disabled).toBe(false);
+    });
+
+    it('starts no recording when the button is pressed', async () => {
+      const { fixture, detector } = await render(fakeCapture(), {
+        voice: false,
+      });
+
+      await press(fixture);
+
+      // Nothing was watched, nothing is listening, and the field is still there:
+      // the recorder is not merely unused, it is unreachable.
+      expect(detector.handlers).toBeNull();
+      expect(host(fixture).querySelector('.stop')).toBeNull();
+      expect(host(fixture).querySelector('input.field')).not.toBeNull();
+    });
   });
 
   it('adds the line when there is something typed, and records nothing', async () => {

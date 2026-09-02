@@ -157,6 +157,23 @@ export interface BasketLine {
   optionIds: readonly string[];
   position: number;
   /**
+   * Who **put this line here**, as a participant id, written once and never
+   * afterwards (luna `0055`, section 4).
+   *
+   * A separate field from {@link BasketLine.touchedBy} rather than a reading of
+   * it, because that one moves: the moment anybody settles the line, or edits its
+   * quantity, or swaps its product, `touchedBy` becomes them. "Who put this here"
+   * is the question a shop asks about a line nobody recognises, and after one
+   * settle the other field can no longer answer it.
+   *
+   * Null for every line the run composed, which is honest rather than missing: a
+   * derived line was put there by the generation, and the person who ran it is the
+   * owner, who is already named on the basket. Null too on a basket served by a
+   * backend from before that plan, which reads the same way and draws the same
+   * nothing.
+   */
+  createdBy: string | null;
+  /**
    * Who last edited or settled this line, as a participant id.
    *
    * An id and never a name, for {@link BasketParticipant.displayName}'s reason.
@@ -300,6 +317,42 @@ export interface BasketShareLink {
   expiresAt: Date | null;
   /** How many people arrived through it, so the sheet can say so. */
   participantCount: number;
+}
+
+/**
+ * What one add asks for (velista `0053`; luna `0055`, section 3).
+ *
+ * **No `targetListId`**, and its absence is the design rather than an omission: a
+ * line added here has no target, so it changes nothing any household shares, which
+ * is what makes the gesture safe to hand to somebody who arrived on a forwarded
+ * link. Binding one to a list is a separate gesture with a list picker in front of
+ * it, and the server refuses the field on this surface outright.
+ */
+export interface BasketAddLineRequest {
+  content: string;
+  /** Defaults to one at the server. A line you do not want is not a gesture. */
+  quantity?: number;
+  /** The pick: the exact product this line means, when one was chosen. */
+  itemId?: string;
+  /** The products the pick may be switched between: what a group attaches. */
+  options?: readonly string[];
+}
+
+/**
+ * Whether this basket still takes lines, which is what decides the composer.
+ *
+ * The server refuses an add to a basket that is finished, and a field that cannot
+ * submit is the invitation `0038` section 2.1 refuses to draw. So the question is
+ * asked here once and the page has no second reading of it.
+ *
+ * **It names the live statuses rather than the finished ones**, which is the safe
+ * direction and the same one the server's own `LIVE_GENERATED_LIST_STATUSES` takes.
+ * A status this build has never heard of costs a composer; the other way round it
+ * would draw a field over a basket the server considers closed, and every line
+ * typed into it would come back refused.
+ */
+export function basketTakesLines(status: string): boolean {
+  return status === 'DRAFT' || status === 'ACTIVE';
 }
 
 /** What one settling act asked for. The three gestures of section 4.2. */

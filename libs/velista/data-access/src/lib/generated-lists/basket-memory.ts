@@ -1,15 +1,19 @@
 import { Injectable } from '@angular/core';
-import type {
-  BasketLine,
-  BasketLinkPreview,
-  BasketParticipant,
-  BasketProduct,
-  BasketSession,
-  BasketSettleRequest,
-  BasketSettleResult,
-  BasketShareLink,
-  BasketView,
+import {
+  basketTakesLines,
+  type BasketAddLineRequest,
+  type BasketLine,
+  type BasketLinkPreview,
+  type BasketParticipant,
+  type BasketProduct,
+  type BasketSession,
+  type BasketSettleRequest,
+  type BasketSettleResult,
+  type BasketShareLink,
+  type BasketView,
+  type CatalogSuggestion,
 } from '@portfolio/velista/models';
+import { CatalogMemory } from '../catalog/catalog-memory';
 import { GatewayError } from '../errors';
 import type { BasketServiceI } from './basket-service';
 
@@ -130,6 +134,21 @@ export class BasketMemory implements BasketServiceI {
   /** Who this fake answers as. Guests get the redacted view whatever this says. */
   me: BasketParticipant = OWNER;
 
+  /**
+   * Where this basket has got to, so a developer can look at a finished one.
+   *
+   * Public and mutable for {@link seesZoneData}'s reason: the screen draws no
+   * composer over a finished basket, and that branch is otherwise unreachable
+   * without a second fake.
+   */
+  status = 'ACTIVE';
+
+  /** The catalog behind the composer's dropdown. See {@link suggest}. */
+  private readonly _catalog = new CatalogMemory();
+
+  /** How many lines have been typed into this basket, for their ids. */
+  private _added = 0;
+
   private _lines: BasketLine[] = [
     {
       id: 'line-milk',
@@ -143,6 +162,9 @@ export class BasketMemory implements BasketServiceI {
         'item-milk-central',
       ],
       position: 0,
+      // Null on all three, because the run composed them: a derived line was put
+      // there by the generation and not by a person (luna `0055`, section 4).
+      createdBy: null,
       touchedBy: null,
       touchedAt: null,
       lastOutcome: null,
@@ -171,6 +193,7 @@ export class BasketMemory implements BasketServiceI {
       pickId: 'item-eggs',
       optionIds: ['item-eggs'],
       position: 1,
+      createdBy: null,
       touchedBy: REGISTERED.id,
       touchedAt: new Date('2026-09-01T10:20:00.000Z'),
       lastOutcome: 'BOUGHT',
@@ -192,6 +215,7 @@ export class BasketMemory implements BasketServiceI {
       pickId: null,
       optionIds: [],
       position: 2,
+      createdBy: null,
       touchedBy: GUEST.id,
       touchedAt: new Date('2026-09-01T10:45:00.000Z'),
       // The shop had none: same numbers as a purchase, opposite meaning.
@@ -275,7 +299,7 @@ export class BasketMemory implements BasketServiceI {
     return {
       id: BASKET_ID,
       name: 'Saturday big shop',
-      status: 'ACTIVE',
+      status: this.status,
       generatedAt: new Date('2026-09-01T08:00:00.000Z'),
       lines: this._lines.map((line) => this._project(line)),
       participants: this._participants.map((person) =>
@@ -438,6 +462,80 @@ export class BasketMemory implements BasketServiceI {
     };
     this._lines = this._lines.map((row) => (row.id === lineId ? swapped : row));
     return this._project(swapped);
+  }
+
+  /**
+   * Put a line in the basket, as whoever this fake is answering as.
+   *
+   * Two of the server's rules are kept, because they are the two the screen's
+   * correctness rests on:
+   *
+   * - **A finished basket takes nothing**, with a code of its own rather than a
+   *   validation failure, so the page can say "this basket is finished" instead of
+   *   "that did not work" (luna `0055`, section 3.3).
+   * - **The line is created with no origins at all**, which is not the same as the
+   *   redaction {@link _project} performs: it is an `ADDED` line and it genuinely
+   *   came from nowhere, so the row draws no "from" caption for **anybody**,
+   *   including a reader who passes the rule. A fake that gave it the basket's
+   *   origins would hide exactly that.
+   */
+  async addLine(
+    _generatedListId: string,
+    body: BasketAddLineRequest
+  ): Promise<BasketLine> {
+    if (!basketTakesLines(this.status)) {
+      // A 409, which is the status the server answers. Its code there is
+      // `generated_list_finished`, which this app's hand-synced `ERROR_CODES` does
+      // not carry, so it reads as a plain conflict exactly as a real one would.
+      // That is the honest fake: the screen draws no composer over a finished
+      // basket at all, so the refusal is a race rather than a state with a
+      // sentence, and nothing branches on telling it apart.
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: 'memory',
+        detail: 'This basket is finished, so nothing more can be added to it',
+      });
+    }
+
+    const line: BasketLine = {
+      id: `line-added-${(this._added += 1)}`,
+      content: body.content,
+      quantity: body.quantity ?? 1,
+      settled: 0,
+      pickId: body.itemId ?? null,
+      optionIds: [...(body.options ?? [])],
+      position: this._lines.length,
+      // Written once, here, and never afterwards. It is the whole of what the row's
+      // "added by" caption reads.
+      createdBy: this.me.id,
+      touchedBy: null,
+      touchedAt: null,
+      lastOutcome: null,
+      // Present and empty rather than absent, for a reader who may see origins:
+      // "you may not see this" and "this line came from nowhere" are different
+      // answers and the row draws different things for them.
+      ...(this.seesZoneData ? { origins: [] } : {}),
+    };
+
+    this._lines = [...this._lines, line];
+    return line;
+  }
+
+  /**
+   * The catalog, searched through the basket.
+   *
+   * Delegated to {@link CatalogMemory} rather than given a fixture of its own,
+   * because the gateway route answers the account route's body field for field and
+   * two fixtures would be two places for the ranking rule to drift. The scope is
+   * ignored here for the reason that fake already records: there is one catalog and
+   * no prices, so honouring a scope would mean inventing one.
+   */
+  async suggest(
+    _generatedListId: string,
+    query: string
+  ): Promise<readonly CatalogSuggestion[]> {
+    return this._catalog.suggest(query);
   }
 
   async listParticipants(): Promise<readonly BasketParticipant[]> {

@@ -299,6 +299,32 @@ export type RealtimeEvent =
     }
   | {
       /**
+       * Somebody put a **new** line in a shared basket (luna `0055`, section 8).
+       *
+       * Its own name rather than a second `lineUpdated`, and the name is the whole
+       * reason it exists: a client receiving that one would have to decide whether
+       * to replace a row or append one, and that decision is what an event name is
+       * for. Guessing it from "is this id already held" works right up to the
+       * refetch that landed the line first, and then appends a duplicate.
+       *
+       * There is **no zone event beside it**, because a line added in a shop names
+       * no zone and claims no zone line until somebody binds it to a list.
+       */
+      readonly type: 'generatedList.lineAdded';
+      readonly generatedListId: string;
+      /**
+       * The new line, **redacted to the least privileged reader in the room**, for
+       * the reason every broadcast on this room is.
+       *
+       * Required rather than nullable, unlike the moved event's: there the id alone
+       * is still worth something, because `GeneratedListStore` refetches a summary
+       * from it. Here the line is the entire content of the event, and appending a
+       * row this build cannot read would put an empty line in a shop.
+       */
+      readonly line: BasketLine;
+    }
+  | {
+      /**
        * Somebody joined a shared basket, or was removed from it (backend `0051`,
        * section 3), on the basket's own room.
        *
@@ -379,6 +405,7 @@ export const REALTIME_EVENT_NAMES = [
   'generatedList.updated',
   'generatedList.lineSettled',
   'generatedList.lineUpdated',
+  'generatedList.lineAdded',
   'generatedList.participantJoined',
   'generatedList.participantLeft',
   'generatedList.deleted',

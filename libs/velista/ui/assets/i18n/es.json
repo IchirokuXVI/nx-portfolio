@@ -897,6 +897,10 @@
       "none": "{{name}} dice que no había",
       "you": "tú"
     },
+    "added": {
+      "by": "Añadido por {{name}}",
+      "announced": "{{content}} añadido"
+    },
     "from": {
       "one": "de {{first}}",
       "two": "de {{first}} y {{second}}",

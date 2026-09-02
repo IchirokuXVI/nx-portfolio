@@ -66,6 +66,46 @@ describe('the basket room, off the wire', () => {
     });
   });
 
+  it('reads an append as its own event, and carries who added it', () => {
+    // Its own name and not a second `lineUpdated`, which is the whole reason luna
+    // `0055` gave it one: a client receiving that would have to decide whether to
+    // replace a row or append one, and the merge does nothing at all for an id the
+    // basket does not hold, so the new line would vanish.
+    const event = toRealtimeEvent('generatedList.lineAdded', {
+      generatedListId: 'gl-1',
+      line: { ...line, createdByParticipantId: 'p-3' },
+    });
+
+    expect(event).toMatchObject({
+      type: 'generatedList.lineAdded',
+      generatedListId: 'gl-1',
+      line: { id: 'line-1', createdBy: 'p-3' },
+    });
+  });
+
+  it('drops an append whose line it cannot read', () => {
+    // The one place a readable id is not enough. An append has no earlier copy to
+    // fall back on, so a blank row in a shop is the alternative to dropping it.
+    expect(
+      toRealtimeEvent('generatedList.lineAdded', {
+        generatedListId: 'gl-1',
+        line: 'not a line',
+      })
+    ).toBeNull();
+  });
+
+  it('reads a line with no creator as one the run composed', () => {
+    // Null is the honest answer rather than a missing field: a derived line was put
+    // there by the generation and not by a person. Absent reads the same way, which
+    // is what lets a basket served by an older backend draw the same nothing.
+    const event = toRealtimeEvent('generatedList.lineAdded', {
+      generatedListId: 'gl-1',
+      line,
+    });
+
+    expect(event).toMatchObject({ line: { createdBy: null } });
+  });
+
   it('keeps the basket id when the line is unreadable', () => {
     // Null rather than dropping the event: the id is still good, so the store that
     // only wanted the id is unaffected and the one that wanted the line refetches.

@@ -3,7 +3,11 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
+  signal,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -16,7 +20,13 @@ import {
   BasketStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH, type BasketLine } from '@portfolio/velista/models';
+import {
+  APP_BASE_PATH,
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MIN_CHARS,
+  type BasketLine,
+  type CatalogSuggestion,
+} from '@portfolio/velista/models';
 import {
   appPath,
   PageNavigation,
@@ -24,6 +34,7 @@ import {
 } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
+  LineComposer,
   OfflineIcon,
   PersonIcon,
   ShareIcon,
@@ -45,6 +56,7 @@ import { BASKET_PATHS } from '../basket-paths';
  * | --- | --- | --- | --- |
  * | lines, quantities, outstanding | yes | yes | yes |
  * | settle, partial submit, swap the product | yes | yes | yes |
+ * | the composer, and the catalog behind it | yes | yes | yes |
  * | which list a line came from | yes | yes | no |
  * | the allocation sheet | yes | yes | no |
  * | another participant's device and join time | yes | yes | no |
@@ -59,6 +71,14 @@ import { BASKET_PATHS } from '../basket-paths';
  * alone, and the allocation pane, which the settle sheet draws on
  * `seesZoneData`. Both are also refused server side, so a template mistake is a
  * cosmetic bug rather than a disclosure.
+ *
+ * **The composer is the one row of that table with no reader-shaped condition on
+ * it at all** (plan 0053, section 2), and that is worth stating rather than
+ * inferring from a missing `@if`. The list page draws its field from certainty,
+ * because `myPermissions` arrives with the list; here a line added has no target
+ * list, so it changes nothing shared and there is no permission to read. What it
+ * does branch on is the basket: a finished one takes no lines, so it draws no
+ * field.
  *
  * ## No back arrow for a guest
  *
@@ -80,6 +100,7 @@ import { BASKET_PATHS } from '../basket-paths';
   imports: [
     BasketLineRow,
     ChevronLeftIcon,
+    LineComposer,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
@@ -331,6 +352,146 @@ export class BasketPage {
 
   protected retry(): void {
     void this._store.refresh();
+  }
+
+  // --- The composer (plan 0053) ---------------------------------------------
+
+  /**
+   * Whether the field at the bottom is drawn, and it is drawn for **everybody**.
+   *
+   * That is the unusual part of this screen and not a relaxation of `0030`. The list
+   * page draws its composer from certainty, because `myPermissions` arrives with the
+   * list and somebody without `WRITE` never sees a field. The basket inverts it:
+   * every participant may add a line, guests included, so there is no permission to
+   * read and no branch to write. A line added here has no target list, so it changes
+   * nothing shared, names no zone and claims no zone line — it is a note on the list
+   * somebody is carrying, and the gate that matters is on binding it to a
+   * household's list.
+   *
+   * The one absence is a **finished basket**, where the server refuses the add and a
+   * field that cannot submit is the invitation `0038` section 2.1 refuses to draw.
+   */
+  protected readonly canAdd = this._store.takesLines;
+
+  /** Whether an add is in flight. The field stays usable; only the button waits. */
+  protected readonly adding = this._store.adding;
+
+  /**
+   * What the composer offers under the field, in the **server's** order.
+   *
+   * Never re-sorted here, for the reason written on `CatalogApi.suggest`: the client
+   * holds none of the prices, scopes or synonyms that decided it.
+   */
+  protected readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
+
+  /**
+   * The newest line to arrive, announced politely and once.
+   *
+   * One region rather than one per line, which is what makes it bearable when four
+   * people add at the same time: a polite region reads whatever the node last held,
+   * so simultaneous adds collapse into one sentence (section 8).
+   */
+  protected readonly announcement = computed(
+    () => this._store.lastAdded()?.content ?? ''
+  );
+
+  private readonly _composer = viewChild(LineComposer);
+
+  /** The last thing typed, which the effect below watches. */
+  private readonly _query = signal('');
+
+  protected onComposerQuery(query: string): void {
+    this._query.set(query);
+  }
+
+  /**
+   * Ask the catalog, at most once per {@link SUGGEST_DEBOUNCE_MS} of quiet.
+   *
+   * **Identical in behaviour to the list page's, deliberately**: somebody who has
+   * used velista's list screen must not have to learn a second search. The container
+   * owns the debounce, the three character floor and the sequence number, and the
+   * composer emits raw keystrokes and knows nothing about requests (rule D1).
+   *
+   * The sequence number is what makes this correct rather than merely debounced: two
+   * requests can be in flight when somebody types through the beat and they can
+   * answer out of order, so an older answer must not replace a newer one. Comparing
+   * against the query the effect was started for is not enough, since the same text
+   * can be typed twice.
+   *
+   * The request goes to the **participant surface**, because the reader may hold no
+   * account token, and it is scoped to the run's own shopping profile rather than to
+   * the reader's, so the ranking is the basket's. Both of those are the store's and
+   * the gateway's business, not this page's.
+   */
+  private _suggestSeq = 0;
+
+  private readonly _suggestEffect = effect((onCleanup) => {
+    const query = this._query().trim();
+
+    if (query.length < SUGGEST_MIN_CHARS) {
+      // Cleared synchronously rather than after the debounce: a dropdown that
+      // lingered over a field somebody has just emptied is offering matches for
+      // nothing.
+      untracked(() => this.suggestions.set([]));
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const seq = (this._suggestSeq += 1);
+      void this._store.suggest(query).then((found) => {
+        if (seq === this._suggestSeq) {
+          this.suggestions.set(found);
+        }
+      });
+    }, SUGGEST_DEBOUNCE_MS);
+
+    onCleanup(() => clearTimeout(timer));
+  });
+
+  /**
+   * Add a line, from the field or from a suggestion.
+   *
+   * **Not optimistic**, which is the opposite of the list page and is the whole of
+   * section 7: four people are working this basket at once, and a row that appeared
+   * locally and then reordered when the server answered is a row somebody might tap
+   * in between. `BasketStore` appends when the server answers, and the socket carries
+   * the same line to everybody else.
+   *
+   * ## What a suggestion attaches
+   *
+   * The composer hands down `itemIds`: one product for an item suggestion, a group's
+   * whole set for a group one. Both become `options`, which is what the line may be
+   * switched between; the **pick** is set only where exactly one product was
+   * attached, because that is the case where somebody chose a product rather than a
+   * kind of thing. A group leaves the pick unset, so the row offers "which one did
+   * you get?" at the shelf, which is where that question belongs.
+   *
+   * A failed add puts the text back in the field. Losing six characters is nothing;
+   * losing the item somebody just remembered in an aisle is the failure this screen
+   * cannot afford.
+   */
+  protected async add(entry: {
+    content: string;
+    quantity: number;
+    itemIds?: readonly string[];
+  }): Promise<void> {
+    const itemIds = entry.itemIds ?? [];
+    const line = await this._store.addLine({
+      content: entry.content,
+      quantity: entry.quantity,
+      ...(itemIds.length === 1 ? { itemId: itemIds[0] } : {}),
+      ...(itemIds.length > 0 ? { options: itemIds } : {}),
+    });
+
+    // The dropdown goes with the words that produced it, whichever way the add
+    // went. Clearing it here rather than in the composer keeps the two from
+    // disagreeing about whether a list is open.
+    this._query.set('');
+    this.suggestions.set([]);
+
+    if (line === null) {
+      this._composer()?.restore(entry.content);
+    }
   }
 
   /**

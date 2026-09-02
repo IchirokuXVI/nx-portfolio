@@ -256,6 +256,55 @@ export function touchedCaption(
 }
 
 /**
+ * "Who put this here", for a line nobody has touched yet (plan 0053, section 5).
+ *
+ * The question a shop asks about a row nobody recognises, and one the basket could
+ * not answer until luna `0055` wrote {@link BasketLine.createdBy}: every line came
+ * from the run, so there was nobody to name.
+ *
+ * ## It yields to {@link touchedCaption}, and does not sit beside it
+ *
+ * Null the moment anybody has touched the line, because the row has three short
+ * lines and "who got the bread" is the more urgent of the two while somebody is
+ * shopping. The **field** is still worth keeping past that point, which is the whole
+ * argument for it being a second column: `touchedBy` moves on the first settle, so
+ * after one the row could not go back to answering this. What the row does with the
+ * answer is a layout decision and this is it.
+ *
+ * Null too for every line the run composed, which is the ordinary case in a full
+ * basket and draws no caption rather than an empty one. Both nulls arrive here as
+ * the same absent id, and both mean "there is nothing to say".
+ *
+ * A guest is visibly a guest, because {@link participantName} is what names them
+ * here as it does everywhere else on this screen.
+ *
+ * @param ownName the reader's own account name, or null for a guest, exactly as
+ *   {@link touchedCaption} takes it and for the same reason.
+ */
+export function addedCaption(
+  line: BasketLine,
+  people: ReadonlyMap<string, BasketParticipant>,
+  translator: RokuTranslatorService,
+  locale: string,
+  meId: string | null,
+  ownName: string | null = null
+): string | null {
+  if (line.createdBy === null || line.touchedBy !== null) {
+    return null;
+  }
+
+  const name = participantName(people.get(line.createdBy), translator, locale, {
+    ownName: line.createdBy === meId ? ownName : null,
+  });
+  // An id this basket's participant list does not hold, which is a participant
+  // removed since the line was added. "Added by " with nothing after it is worse
+  // than nothing, and the row is complete without it.
+  return name === ''
+    ? null
+    : translator.t('basket.added.by', undefined, locale, { name });
+}
+
+/**
  * The quantity line: how many are wanted, or how far through it is.
  *
  * Two shapes rather than one, because a line nobody has touched should read as

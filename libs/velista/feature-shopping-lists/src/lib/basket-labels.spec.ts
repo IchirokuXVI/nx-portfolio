@@ -1,6 +1,7 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import type { BasketLine, BasketParticipant } from '@portfolio/velista/models';
 import {
+  addedCaption,
   originsCaption,
   participantInitials,
   participantName,
@@ -64,6 +65,7 @@ function line(over: Partial<BasketLine> = {}): BasketLine {
     pickId: null,
     optionIds: [],
     position: 0,
+    createdBy: null,
     touchedBy: null,
     touchedAt: null,
     lastOutcome: null,
@@ -364,6 +366,84 @@ describe('touchedCaption', () => {
         'Daniel'
       )
     ).toBe('basket.touched.got:{"name":"Marc"}');
+  });
+});
+
+/**
+ * Plan 0053, section 5: who put this here.
+ *
+ * The question a shop asks about a row nobody recognises. It is a second field
+ * rather than a reading of `touchedBy`, because that one moves on the first settle;
+ * what the row does with it is to yield to the more urgent sentence once anybody
+ * has touched the line.
+ */
+describe('addedCaption', () => {
+  const people = new Map<string, BasketParticipant>([
+    ['p-1', person({ id: 'p-1', displayName: 'Dani' })],
+    ['p-owner', owner()],
+  ]);
+
+  it('names whoever put the line there', () => {
+    expect(
+      addedCaption(
+        line({ createdBy: 'p-1' }),
+        people,
+        translator,
+        'en',
+        'p-someone-else'
+      )
+    ).toBe('basket.added.by:{"name":"Dani"}');
+  });
+
+  it('draws nothing for a line the run composed', () => {
+    // Which is every line in a basket nobody has typed into, so the ordinary
+    // basket looks exactly as it did before this plan.
+    expect(addedCaption(line(), people, translator, 'en', null)).toBeNull();
+  });
+
+  it('yields the moment somebody has touched the line', () => {
+    // "Who got the bread" is the more urgent of the two while somebody is
+    // shopping, and the row has three short lines. The field is still worth
+    // keeping past that point, which is why it is a second column.
+    expect(
+      addedCaption(
+        line({ createdBy: 'p-1', touchedBy: 'p-owner' }),
+        people,
+        translator,
+        'en',
+        null
+      )
+    ).toBeNull();
+  });
+
+  it('names the reader by their own account, like everybody else', () => {
+    // The owner's participant row carries no display name at all, so their own
+    // account name is the only thing that can name it. "You added this" is not
+    // drawn, for plan 0052 section 2.1's reason: the phone is often not yours.
+    expect(
+      addedCaption(
+        line({ createdBy: 'p-owner' }),
+        people,
+        translator,
+        'en',
+        'p-owner',
+        'Daniel'
+      )
+    ).toBe('basket.added.by:{"name":"Daniel"}');
+  });
+
+  it('draws nothing for somebody this basket no longer holds', () => {
+    // A participant removed since the line was added. "Added by " with nothing
+    // after it is worse than nothing, and the row is complete without it.
+    expect(
+      addedCaption(
+        line({ createdBy: 'p-gone' }),
+        people,
+        translator,
+        'en',
+        null
+      )
+    ).toBeNull();
   });
 });
 
