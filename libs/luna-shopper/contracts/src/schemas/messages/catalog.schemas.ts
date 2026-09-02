@@ -859,11 +859,14 @@ const listLocationItemsRequest = object(
 
 // --- Postal code geography (plan 0060, sections 5 and 7) --------------------
 
-/** ISO 3166-1 alpha-2, lowercase, as the table stores it. */
-const countryCode = (): JsonSchema => ({
-  type: 'string',
-  pattern: '^[a-z]{2}$',
-});
+/**
+ * ISO 3166-1 alpha-2. Not constrained to two lowercase letters here, although
+ * the table stores exactly that, for two reasons: the service normalizes case
+ * and whitespace before it looks, and no contract schema carries a `pattern`
+ * because the gateway's OpenAPI bridge samples every string as `sample` and
+ * would reject its own document.
+ */
+const countryCode = (): JsonSchema => nonEmptyString();
 /** A radius or a cut off in metres. Zero is allowed and answers nothing. */
 const metres = (): JsonSchema => ({ type: 'number', minimum: 0 });
 
