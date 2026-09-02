@@ -264,6 +264,21 @@ async function render(options: Options = {}): Promise<{
   return { fixture, lines, catalog, profiles, holding };
 }
 
+/**
+ * Let the effects wake and their promises land, after the store has been moved.
+ *
+ * The same hand drained microtask queue `render` finishes with, for the same reason:
+ * the "also on" read resolves through a `Promise.all` that `whenStable` does not wait
+ * for in a zoneless test.
+ */
+async function drain(fixture: ComponentFixture<LinePage>): Promise<void> {
+  fixture.detectChanges();
+  for (let tick = 0; tick < 5; tick += 1) {
+    await Promise.resolve();
+  }
+  fixture.detectChanges();
+}
+
 const textOf = (fixture: ComponentFixture<LinePage>): string =>
   fixture.nativeElement.textContent ?? '';
 
@@ -452,6 +467,38 @@ describe('LinePage', () => {
       expect(holding.asked).toEqual([
         { itemId: 'item-milk-a', excludeListId: LIST_ID },
         { itemId: 'item-oat', excludeListId: LIST_ID },
+      ]);
+    });
+
+    it('asks nothing more for a write that leaves the products alone', async () => {
+      // The bug this replaced: the read was keyed on the `Line` object, which the store
+      // replaces on every write to it, and one edit is three writes (the optimistic
+      // patch, the server's row, the realtime echo). So a quantity nudge re-asked for
+      // every product on the line, three times over.
+      const { fixture, lines, holding } = await render({
+        lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
+      });
+      expect(holding.asked).toHaveLength(2);
+
+      lines.set([line({ itemIds: ['item-milk-a', 'item-oat'], quantity: 9 })]);
+      await drain(fixture);
+
+      expect(holding.asked).toHaveLength(2);
+    });
+
+    it('asks only about the product that joined the set', async () => {
+      // Adding a product does not change the answer for the products already on the
+      // line, and this page's answer is a snapshot of the visit, so the ones it holds
+      // are reused. Adding one product is one request, not one per product.
+      const { fixture, lines, holding } = await render();
+      expect(holding.asked.map((ask) => ask.itemId)).toEqual(['item-milk-a']);
+
+      lines.set([line({ itemIds: ['item-milk-a', 'item-oat'] })]);
+      await drain(fixture);
+
+      expect(holding.asked.map((ask) => ask.itemId)).toEqual([
+        'item-milk-a',
+        'item-oat',
       ]);
     });
 
