@@ -384,11 +384,32 @@ export class LinePage {
    * composer to add a product to a line they are looking at is the long way round.
    *
    * The **composer's own list component**, not a second one, so the ranking rules have
-   * one place to live. What differs is the free text row: the composer offers it,
-   * because a line is free text first, and this does not, because attaching a catalog
-   * product that is not in the catalog is not a thing.
+   * one place to live. Two things differ, and both come from what this search is for:
+   *
+   * - **No free text row.** The composer offers it, because a line is free text first.
+   *   This attaches a catalog product, and attaching a product the catalog has never
+   *   heard of is not a thing.
+   * - **No group rows.** The composer offers them, because choosing "milk" there is how
+   *   a line becomes every milk at once. Here the line already _is_ that set, and a row
+   *   that offers to pour one group into another reads as though it were adding a
+   *   second group to the line rather than moving products across. What it actually did
+   *   was correct; what it looked like was not, and a search whose rows have to be
+   *   explained is a worse search than one product at a time. See {@link suggestions}.
    */
   readonly searching = signal(false);
+
+  /**
+   * What to offer, products only, in the server's order among themselves.
+   *
+   * The groups are dropped as the answer arrives rather than hidden in the template, so
+   * there is one place that decides what this screen offers and the list component stays
+   * the same list component the composer draws. Dropping rather than asking for fewer is
+   * what the catalog allows: `suggest` takes a limit per kind and no kind selector, so
+   * the products come back whole either way and nothing is lost by discarding the rest.
+   *
+   * The surviving order is untouched, which is the rule `CatalogApi.suggest` states:
+   * removing rows is not re-ranking the ones that stay.
+   */
   readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
 
   private readonly _query = signal('');
@@ -425,7 +446,7 @@ export class LinePage {
         .suggest(query, profileId === undefined ? undefined : { profileId })
         .then((found) => {
           if (seq === this._seq) {
-            this.suggestions.set(found);
+            this.suggestions.set(found.filter((row) => row.kind === 'item'));
           }
         });
     }, SUGGEST_DEBOUNCE_MS);
@@ -456,9 +477,14 @@ export class LinePage {
   /**
    * Attach what was chosen.
    *
-   * A group attaches its members, an item attaches the one, which is exactly what the
-   * composer does with the same row: choosing "milk" gives the household every milk to
-   * trim down, and that trimming is what this page's chips are for.
+   * **One product**, because that is all this screen offers: {@link suggestions} keeps
+   * no group rows, so trimming a group down is the composer's job on the way in and this
+   * page's chips are what trims it afterwards.
+   *
+   * The group branch survives anyway, and not as a leftover. The row type is the
+   * catalog's union and this method is what a `chose` output hands its payload to, so
+   * the case has to be answered; answering it by attaching the members is the only
+   * answer that is not a tap that silently does nothing.
    *
    * The set is **unioned** rather than replaced, and a product already on the line is a
    * no-op rather than a duplicate: the line's set is a set.

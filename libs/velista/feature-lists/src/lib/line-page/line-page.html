@@ -156,6 +156,10 @@
             exists, and there is no such thing as attaching a product the catalog has
             never heard of. The composer offers it, because a line is free text first;
             this is the other half of that same rule, not an exception to it.
+
+            No group rows either, and the filtering is the component's, not a style
+            here: a line already holds a set of products, so a group row on this screen
+            reads as a group being added to a group. See `suggestions`.
           -->
           <lib-suggestion-list
             (chose)="addProduct($event)"
