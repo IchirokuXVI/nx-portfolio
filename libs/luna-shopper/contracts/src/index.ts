@@ -34,6 +34,7 @@ export * from './lib/messages/zone.messages';
 
 // Events
 export * from './lib/events/identity.events';
+export * from './lib/events/postal-code.events';
 export * from './lib/events/realtime.events';
 
 // JSON Schemas + validator (plan 0010): the language neutral, cross-service

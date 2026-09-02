@@ -6,6 +6,10 @@ import {
   identityEventSchemas,
 } from './events/identity.schemas';
 import {
+  postalCodeEventContracts,
+  postalCodeEventSchemas,
+} from './events/postal-code.schemas';
+import {
   domainEventContracts,
   realtimeEventSchemas,
 } from './events/realtime.schemas';
@@ -73,6 +77,7 @@ export const messageContracts: Record<string, MessageContract> = {
 export const eventContracts: Record<string, string> = {
   ...identityEventContracts,
   ...domainEventContracts,
+  ...postalCodeEventContracts,
 };
 
 /** Every schema, ready to hand to a single Ajv instance (`ajv.addSchema`). */
@@ -94,6 +99,7 @@ export const allSchemas: JsonSchema[] = [
   ...generatedListSharingSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
+  ...postalCodeEventSchemas,
 ];
 
 export const messageSubjects = Object.keys(messageContracts);

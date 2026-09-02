@@ -6,6 +6,11 @@ import {
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
 import { parseDurationMs } from './duration';
+import {
+  DEFAULT_NEARBY_RADIUS_METRES,
+  parseRadiusByCountry,
+  type NearbyRadiusConfig,
+} from './nearby-radius';
 import { readKey } from './read-key';
 
 /**
@@ -94,6 +99,19 @@ export const coreValidationSchema = Joi.object({
   /** Comma separated. Empty falls back to the contract's own list. */
   VOICE_COMMENT_CONTENT_TYPES: Joi.string().allow('').default(''),
 
+  /**
+   * How far a postal code reaches for its neighbours (plan 0062, section 4).
+   *
+   * Configuration from the first commit, and per country from the first commit
+   * too: `PROFILE_NEARBY_RADIUS_BY_COUNTRY` is `es=2000,bo=5000`, and any country
+   * it does not name takes `PROFILE_NEARBY_RADIUS_METRES`.
+   */
+  PROFILE_NEARBY_RADIUS_METRES: Joi.number()
+    .integer()
+    .min(0)
+    .default(DEFAULT_NEARBY_RADIUS_METRES),
+  PROFILE_NEARBY_RADIUS_BY_COUNTRY: Joi.string().allow('').default(''),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -135,6 +153,8 @@ export interface CoreConfig {
     /** Base types, lowercased, with no parameters. */
     contentTypes: string[];
   };
+  /** The radius a postal code brings its neighbours from (plan 0062). */
+  nearbyRadius: NearbyRadiusConfig;
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -187,6 +207,14 @@ export const coreConfiguration = registerAs(
         process.env.VOICE_COMMENT_MAX_BYTES ?? VOICE_COMMENT_MAX_BYTES
       ),
       contentTypes: parseContentTypes(process.env.VOICE_COMMENT_CONTENT_TYPES),
+    },
+    nearbyRadius: {
+      defaultMetres: Number(
+        process.env.PROFILE_NEARBY_RADIUS_METRES ?? DEFAULT_NEARBY_RADIUS_METRES
+      ),
+      byCountry: parseRadiusByCountry(
+        process.env.PROFILE_NEARBY_RADIUS_BY_COUNTRY
+      ),
     },
     logLevel: process.env.LOG_LEVEL as CoreConfig['logLevel'],
   })

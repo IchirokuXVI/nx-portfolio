@@ -75,8 +75,17 @@ function sampleOf(schema: Record<string, unknown>): unknown {
     : declared;
 
   switch (type) {
-    case 'string':
-      return SAMPLE_BY_FORMAT[String(schema['format'])] ?? 'sample';
+    case 'string': {
+      const sample = SAMPLE_BY_FORMAT[String(schema['format'])] ?? 'sample';
+      // Trimmed to the cap the schema states, so a short field like a two letter
+      // country code samples to something it actually accepts. Without this the
+      // generated payload fails its own schema and the disagreement it reports is
+      // the sampler's rather than the document's.
+      const maxLength = schema['maxLength'];
+      return typeof maxLength === 'number'
+        ? sample.slice(0, maxLength)
+        : sample;
+    }
     case 'integer':
     case 'number':
       return typeof schema['minimum'] === 'number' ? schema['minimum'] : 1;

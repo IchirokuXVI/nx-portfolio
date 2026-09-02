@@ -1,4 +1,7 @@
-import { GenerationScope } from '../../lib/enums/profile.enums';
+import {
+  GenerationScope,
+  ProfilePostalCodeSource,
+} from '../../lib/enums/profile.enums';
 import {
   PROFILE_LIMITS,
   PROFILE_PATTERNS,
@@ -26,6 +29,7 @@ import { COMMON_IDS } from '../common.schemas';
  */
 export const PROFILE_SCHEMA_IDS = {
   generationScope: schemaId('enums/GenerationScope'),
+  postalCodeSource: schemaId('enums/ProfilePostalCodeSource'),
   postalCodeView: schemaId('profile/ProfilePostalCodeView'),
   supermarketPreferenceView: schemaId(
     'profile/ProfileSupermarketPreferenceView'
@@ -44,6 +48,8 @@ export const PROFILE_SCHEMA_IDS = {
   updateRequest: schemaId('msg/profiles.update/request'),
   idRequest: schemaId('msg/profiles.id/request'),
   resolveScopesRequest: schemaId('msg/profiles.resolveScopes/request'),
+  addPostalCodeRequest: schemaId('msg/profiles.addPostalCode/request'),
+  removePostalCodeRequest: schemaId('msg/profiles.removePostalCode/request'),
 } as const;
 
 const postalCodeView = object(
@@ -53,8 +59,11 @@ const postalCodeView = object(
     postalCode: nonEmptyString(),
     label: nullableString(),
     position: integer({ minimum: 0 }),
+    country: nonEmptyString({ maxLength: 2 }),
+    source: ref(PROFILE_SCHEMA_IDS.postalCodeSource),
+    expandNearby: boolean(),
   },
-  ['id', 'postalCode', 'label', 'position']
+  ['id', 'postalCode', 'label', 'position', 'country', 'source', 'expandNearby']
 );
 
 const supermarketPreferenceView = object(
@@ -133,6 +142,15 @@ const scopeSelector = object(
   ]
 );
 
+/**
+ * `source` is the two the user may state and not the three the column holds:
+ * `NEARBY` is a conclusion, never an input (plan 0062, section 2).
+ */
+const userStatedSource = {
+  type: 'string',
+  enum: [ProfilePostalCodeSource.TYPED, ProfilePostalCodeSource.DEVICE],
+};
+
 const postalCodeInput = object(
   PROFILE_SCHEMA_IDS.postalCodeInput,
   {
@@ -140,6 +158,9 @@ const postalCodeInput = object(
       maxLength: PROFILE_LIMITS.postalCodeMaxLength,
     }),
     label: nullableString(),
+    country: nonEmptyString({ maxLength: 2 }),
+    source: userStatedSource,
+    expandNearby: boolean(),
   },
   ['postalCode']
 );
@@ -205,8 +226,40 @@ const resolveScopesRequest = object(
   ['userId']
 );
 
+const addPostalCodeRequest = object(
+  PROFILE_SCHEMA_IDS.addPostalCodeRequest,
+  {
+    userId: nonEmptyString(),
+    profileId: nonEmptyString(),
+    postalCode: nonEmptyString({
+      maxLength: PROFILE_LIMITS.postalCodeMaxLength,
+    }),
+    label: nullableString(),
+    country: nonEmptyString({ maxLength: 2 }),
+    source: userStatedSource,
+    expandNearby: boolean(),
+  },
+  ['userId', 'profileId', 'postalCode']
+);
+
+const removePostalCodeRequest = object(
+  PROFILE_SCHEMA_IDS.removePostalCodeRequest,
+  {
+    userId: nonEmptyString(),
+    profileId: nonEmptyString(),
+    postalCode: nonEmptyString({
+      maxLength: PROFILE_LIMITS.postalCodeMaxLength,
+    }),
+  },
+  ['userId', 'profileId', 'postalCode']
+);
+
 export const profileSchemas: JsonSchema[] = [
   enumOf(PROFILE_SCHEMA_IDS.generationScope, Object.values(GenerationScope)),
+  enumOf(
+    PROFILE_SCHEMA_IDS.postalCodeSource,
+    Object.values(ProfilePostalCodeSource)
+  ),
   postalCodeView,
   supermarketPreferenceView,
   generationSourceView,
@@ -221,6 +274,8 @@ export const profileSchemas: JsonSchema[] = [
   updateRequest,
   idRequest,
   resolveScopesRequest,
+  addPostalCodeRequest,
+  removePostalCodeRequest,
 ];
 
 export const profileMessageContracts: Record<
@@ -250,5 +305,15 @@ export const profileMessageContracts: Record<
   [PROFILE_PATTERNS.resolveScopes]: {
     request: PROFILE_SCHEMA_IDS.resolveScopesRequest,
     response: PROFILE_SCHEMA_IDS.scopeSelector,
+  },
+  // Both answer the whole profile rather than the row they touched: one add can
+  // write a parent and its neighbours, and one remove can prune several.
+  [PROFILE_PATTERNS.addPostalCode]: {
+    request: PROFILE_SCHEMA_IDS.addPostalCodeRequest,
+    response: PROFILE_SCHEMA_IDS.shoppingProfileView,
+  },
+  [PROFILE_PATTERNS.removePostalCode]: {
+    request: PROFILE_SCHEMA_IDS.removePostalCodeRequest,
+    response: PROFILE_SCHEMA_IDS.shoppingProfileView,
   },
 };

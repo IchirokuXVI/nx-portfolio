@@ -2,9 +2,11 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   PROFILE_PATTERNS,
+  type AddProfilePostalCodeRequest,
   type CreateShoppingProfileRequest,
   type ListShoppingProfilesRequest,
   type ProfileScopeSelector,
+  type RemoveProfilePostalCodeRequest,
   type ResolveProfileScopesRequest,
   type ShoppingProfileIdRequest,
   type ShoppingProfileListResult,
@@ -54,6 +56,26 @@ export class ProfileController {
   @MessagePattern(PROFILE_PATTERNS.delete)
   delete(@Payload() req: ShoppingProfileIdRequest): Promise<{ id: string }> {
     return this.profiles.delete(req);
+  }
+
+  /**
+   * One code at a time (plan 0062, section 6), beside the replacement collection
+   * on `update`. Both answer the whole profile, because one add can write a
+   * parent and its neighbours and one remove can prune several.
+   */
+  @MessagePattern(PROFILE_PATTERNS.addPostalCode)
+  addPostalCode(
+    @Payload() req: AddProfilePostalCodeRequest
+  ): Promise<ShoppingProfileView> {
+    return this.profiles.addPostalCode(req);
+  }
+
+  /** Delete or suppress, decided by the row's own source and not by the caller. */
+  @MessagePattern(PROFILE_PATTERNS.removePostalCode)
+  removePostalCode(
+    @Payload() req: RemoveProfilePostalCodeRequest
+  ): Promise<ShoppingProfileView> {
+    return this.profiles.removePostalCode(req);
   }
 
   /** The gateway's call before a catalog read (plan 0049, section 2.1). */

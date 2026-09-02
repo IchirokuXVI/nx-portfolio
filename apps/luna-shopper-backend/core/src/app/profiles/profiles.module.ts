@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import type { CoreConfig } from '../config/app-config';
 import {
   ProfileGenerationSource,
   ProfilePostalCode,
@@ -7,6 +10,10 @@ import {
   ShoppingProfile,
 } from '../entities';
 import { ZonesModule } from '../zones/zones.module';
+import {
+  POSTAL_CODE_NATS_CLIENT,
+  PostalCodeClient,
+} from './postal-code.client';
 import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
 
@@ -18,6 +25,12 @@ import { ProfileService } from './profile.service';
  * that provider is declared and exported. `profiles.changed` is addressed to the
  * owner's own sessions and to no zone room (section 5), so the import is about
  * the client rather than about zones.
+ *
+ * It also registers a NATS **client** of its own (plan 0062). Core answering and
+ * calling is unusual here, and it is the same reason the harvester does both: a
+ * postal code's neighbours live in catalog's centroid table, the boundary says
+ * core may only reach them over the broker, and the announcement plan 0063 will
+ * consume goes out on the same connection.
  */
 @Module({
   imports: [
@@ -28,9 +41,19 @@ import { ProfileService } from './profile.service';
       ProfileGenerationSource,
     ]),
     ZonesModule,
+    ClientsModule.registerAsync([
+      {
+        name: POSTAL_CODE_NATS_CLIENT,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.NATS,
+          options: { servers: [config.getOrThrow<CoreConfig>('core').natsUrl] },
+        }),
+      },
+    ]),
   ],
   controllers: [ProfileController],
-  providers: [ProfileService],
+  providers: [ProfileService, PostalCodeClient],
   exports: [ProfileService],
 })
 export class ProfilesModule {}

@@ -26,6 +26,9 @@ export function toPostalCodeView(
     postalCode: row.postalCode,
     label: row.label,
     position: row.position,
+    country: row.country,
+    source: row.source,
+    expandNearby: row.expandNearby,
   };
 }
 

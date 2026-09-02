@@ -1,4 +1,5 @@
 import { IDENTITY_EVENTS } from '../lib/events/identity.events';
+import { POSTAL_CODE_EVENTS } from '../lib/events/postal-code.events';
 import { RealtimeEvent } from '../lib/events/realtime.events';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
@@ -86,6 +87,7 @@ describe('contract schemas', () => {
     const allEventNames = [
       ...Object.values(IDENTITY_EVENTS),
       ...Object.values(RealtimeEvent),
+      ...Object.values(POSTAL_CODE_EVENTS),
     ];
 
     it.each(allEventNames)('has a payload schema for event %s', (event) => {
