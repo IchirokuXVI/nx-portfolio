@@ -274,7 +274,7 @@ describe('ShoppingListsPage', () => {
       const router = TestBed.inject(Router);
       const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
 
-      (query(fixture, '.footer button') as HTMLElement).click();
+      (query(fixture, 'lib-bottom-action-bar button') as HTMLElement).click();
 
       expect(navigate).toHaveBeenCalledWith(
         ['sheet', 'get'],

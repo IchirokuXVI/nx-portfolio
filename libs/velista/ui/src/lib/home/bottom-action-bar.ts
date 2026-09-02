@@ -37,25 +37,49 @@ import { BasketIcon, JoinCodeIcon } from '../icons/icons';
  * belongs to a zone, and the dashboard is the one screen with no zone in scope. The
  * group page already offers New list with the zone already chosen (plan 0019,
  * section 4).
+ *
+ * ## It is also the shell every bottom bar in the app is
+ *
+ * The shopping list history ended in a bar of its own that looked like this one and was
+ * measured differently: a 20px block end against this one's 16px, and no ground at all,
+ * so the two screens one tap apart were different colours (plan 0061, section 1). Two
+ * files that have to keep agreeing had already failed to.
+ *
+ * So the bar is one thing now. What it is, is a shell: a top rule, a ground, the safe
+ * area inset and one row of actions. `ng-content` takes that row, and the dashboard's
+ * own pair is the fallback, which is why the home page's call site is unchanged and its
+ * two outputs still work exactly as they did.
+ *
+ * **It places nothing.** No `position`, no `flex` on the host: it is a block, and the
+ * parent decides where the block goes. The history page is a flex column whose middle
+ * scrolls and whose bar does not, and a `position: fixed` in here would break that one
+ * screen while leaving the one being edited looking right (section 1.3).
  */
 @Component({
   selector: 'lib-bottom-action-bar',
   imports: [RokuTranslatorPipe, BasketIcon, JoinCodeIcon],
   template: `
     <div class="bar">
-      <button (click)="getList.emit()" class="primary" type="button">
-        <lib-basket-icon class="glyph" />
-        {{ 'home.action.generateList' | rokuT }}
-      </button>
+      <!--
+        The dashboard's pair is the fallback rather than a projected default, so nothing
+        about home's call site changes and its outputs keep firing whether or not a
+        caller projects a row of its own.
+      -->
+      <ng-content>
+        <button (click)="getList.emit()" class="primary" type="button">
+          <lib-basket-icon class="glyph" />
+          {{ 'home.action.generateList' | rokuT }}
+        </button>
 
-      <button
-        (click)="joinZone.emit()"
-        [attr.aria-label]="'home.action.joinCode' | rokuT"
-        class="secondary"
-        type="button"
-      >
-        <lib-join-code-icon class="glyph" />
-      </button>
+        <button
+          (click)="joinZone.emit()"
+          [attr.aria-label]="'home.action.joinCode' | rokuT"
+          class="secondary"
+          type="button"
+        >
+          <lib-join-code-icon class="glyph" />
+        </button>
+      </ng-content>
     </div>
   `,
   styleUrl: './bottom-action-bar.scss',
