@@ -29,11 +29,15 @@ function pointer(type: string, clientX: number): Event {
 
 async function render(
   value: number,
-  options: { readonly?: boolean } = {}
+  options: { readonly?: boolean; min?: number; max?: number } = {}
 ): Promise<{
   fixture: ComponentFixture<QuantityReel>;
   host: HTMLElement;
   deltas: number[];
+  /** Absolute commits, which is what the two writes behind this control take. */
+  runs: { from: number; to: number }[];
+  /** Every value the thumb sat on, in order, including the null on each close. */
+  previews: (number | null)[];
 }> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -46,12 +50,28 @@ async function render(
   if (options.readonly !== undefined) {
     fixture.componentRef.setInput('readonly', options.readonly);
   }
+  if (options.min !== undefined) {
+    fixture.componentRef.setInput('min', options.min);
+  }
+  if (options.max !== undefined) {
+    fixture.componentRef.setInput('max', options.max);
+  }
   fixture.detectChanges();
 
   const deltas: number[] = [];
   fixture.componentInstance.committed.subscribe((delta) => deltas.push(delta));
+  const runs: { from: number; to: number }[] = [];
+  fixture.componentInstance.committedTo.subscribe((run) => runs.push(run));
+  const previews: (number | null)[] = [];
+  fixture.componentInstance.preview.subscribe((seen) => previews.push(seen));
 
-  return { fixture, host: fixture.nativeElement as HTMLElement, deltas };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    deltas,
+    runs,
+    previews,
+  };
 }
 
 /** One whole drag: down, move by `units`, up. Leftwards is more (section 4). */
@@ -546,6 +566,144 @@ describe('QuantityReel', () => {
       fixture.detectChanges();
 
       expect(fixture.componentInstance.shown()).toBe(3);
+    });
+  });
+
+  /**
+   * The three things velista `0055` and `0056` need from this control, none of which
+   * changes what it already does (velista `0054`, section 5).
+   *
+   * A contribution to a line is the same gesture over a different number, and the
+   * difference is entirely in the bounds and in what has to be said while the thumb
+   * is still moving. So the reel takes its floor and its ceiling, says what is under
+   * the thumb, and reports where a run started as well as how far it went.
+   */
+  describe('the bounds a caller sets', () => {
+    it('floors where the caller says, not at zero', async () => {
+      // A contribution floors at what has already been bought against that list, and
+      // the server refuses anything under it. A control that could reach a refused
+      // number is a gesture that fails after it has already happened on screen.
+      const { fixture, host, deltas } = await render(4, { min: 2 });
+
+      drag(host, -10);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.shown()).toBe(2);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([-2]);
+    });
+
+    it('draws no neighbour past either end of the range it was given', async () => {
+      // The gap is the affordance: no disabled control, no bounce, and nothing that
+      // has to be read to be understood (section 4).
+      const { fixture, host } = await render(3, { min: 3, max: 4 });
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.previous()).toBeNull();
+      expect(fixture.componentInstance.next()).toBe(4);
+      expect(number(host, 2)).toBeNull();
+    });
+
+    it('announces that range, so the spinbutton says the truth', async () => {
+      const { host } = await render(4, { min: 2, max: 9 });
+
+      expect(host.getAttribute('aria-valuemin')).toBe('2');
+      expect(host.getAttribute('aria-valuemax')).toBe('9');
+    });
+
+    it('ceilings where the caller says', async () => {
+      const { fixture, host } = await render(4, { max: 6 });
+
+      drag(host, 10);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(6);
+    });
+  });
+
+  describe('saying what is under the thumb', () => {
+    it('reports the number the thumb is on, as it moves', async () => {
+      // The caption has to be said **while the thumb is still moving**: "buying 20
+      // instead of 5" arrives a beat too late if it waits for the delta.
+      //
+      // It is an effect, so it reports **once per change detection** rather than once
+      // per write, which is what a caption wants: a drag that crosses three numbers
+      // between two frames draws the one it landed on, not all three.
+      const { fixture, host, previews } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      fixture.detectChanges();
+      expect(previews[previews.length - 1]).toBe(2);
+
+      for (const units of [1, 2, 3]) {
+        host.dispatchEvent(
+          pointer('pointermove', -units * QUANTITY_REEL_PX_PER_UNIT)
+        );
+        fixture.detectChanges();
+        expect(previews[previews.length - 1]).toBe(2 + units);
+      }
+
+      host.dispatchEvent(pointer('pointerup', -3 * QUANTITY_REEL_PX_PER_UNIT));
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      fixture.detectChanges();
+
+      // Null the moment it closes, so the caption goes away rather than freezing at
+      // the last number a finger was over.
+      expect(previews[previews.length - 1]).toBeNull();
+    });
+
+    it('goes quiet when the overlay is closed from outside', async () => {
+      const { fixture, host, previews } = await render(2);
+
+      drag(host, 1);
+      fixture.detectChanges();
+      expect(previews[previews.length - 1]).toBe(3);
+
+      fixture.componentInstance.close();
+      fixture.detectChanges();
+      expect(previews[previews.length - 1]).toBeNull();
+    });
+  });
+
+  describe('where the run started and where it ended', () => {
+    it('reports both, beside the delta', async () => {
+      // What the two writes behind this control actually take: they refuse a `from`
+      // that no longer matches, because a gesture whose meaning depends on where it
+      // started must not be applied to a number that moved underneath it.
+      const { host, deltas, runs } = await render(5);
+
+      drag(host, 15);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+      expect(deltas).toEqual([15]);
+      expect(runs).toEqual([{ from: 5, to: 20 }]);
+    });
+
+    it('measures from where the run began, not from the last snap', async () => {
+      // Three drags inside one idle window are one request, and its `from` is where
+      // the thumb first went down.
+      const { host, runs } = await render(2);
+
+      drag(host, 2);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS / 2);
+      drag(host, 1);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+      expect(runs).toEqual([{ from: 2, to: 5 }]);
+    });
+
+    it('says nothing when the run ended where it began', async () => {
+      const { host, deltas, runs } = await render(4);
+
+      drag(host, 2);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS / 2);
+      drag(host, -2);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+      expect(deltas).toEqual([]);
+      expect(runs).toEqual([]);
     });
   });
 });

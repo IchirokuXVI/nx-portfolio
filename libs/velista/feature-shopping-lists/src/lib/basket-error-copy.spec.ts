@@ -31,6 +31,9 @@ const OPERATIONS: readonly BasketOperation[] = [
   'basket.pick',
   'basket.share',
   'basket.people',
+  'basket.outstanding',
+  'basket.origins',
+  'basket.bind',
 ];
 
 describe('basketErrorKey', () => {
@@ -146,5 +149,97 @@ describe('correlationIdOf', () => {
     expect(
       correlationIdOf(new NetworkError('ref-net', 'basket.settle'))
     ).toBeNull();
+  });
+});
+
+/**
+ * The codes velista `0054`, `0055` and `0056` made readable (velista `0054`).
+ *
+ * All three arrived before as something else: two as a plain `conflict` and one as a
+ * `validation_failed`, so the screen said "somebody already finished this line" over
+ * a line nobody had finished, and "that did not save" over a basket whose trip was
+ * over. The codes exist on the backend and were simply missing from this app's hand
+ * synced list, which is why these rows are as much about `ERROR_CODES` as about copy.
+ */
+describe('basketErrorKey: the three codes that used to read as a conflict', () => {
+  it('names the number when somebody else moved the line', () => {
+    // Every operation, deliberately: it means exactly the same thing to somebody
+    // dragging a row's number and to somebody typing a household's share. The store
+    // has already refetched by the time this is read, so the count the screen
+    // interpolates is the number as it now stands.
+    for (const operation of OPERATIONS) {
+      expect(basketErrorKey(gateway('stale_quantity', 409), operation)).toBe(
+        'basket.error.staleLine'
+      );
+    }
+  });
+
+  it('names the floor when a contribution goes under what was bought', () => {
+    expect(
+      basketErrorKey(gateway('below_settled', 409), 'basket.origins')
+    ).toBe('basket.error.belowSettled');
+  });
+
+  it('says the trip is over rather than that the save failed', () => {
+    // Distinct from `alreadyFinished`, which is about one line. This is the basket.
+    expect(
+      basketErrorKey(
+        gateway('generated_list_finished', 409),
+        'basket.outstanding'
+      )
+    ).toBe('basket.error.basketFinished');
+    expect(
+      basketErrorKey(gateway('generated_list_finished', 409), 'basket.bind')
+    ).toBe('basket.error.basketFinished');
+  });
+});
+
+describe('basketErrorKey: sending a line to a list', () => {
+  it('tells a refused kind of line apart from one already sent', () => {
+    // Two refusals, two sentences. "Only a line added here can be sent" is about what
+    // the line is; "this has already been sent" is about what has happened to it, and
+    // one message for both would be no sentence at all.
+    expect(
+      basketErrorKey(gateway('validation_failed', 400), 'basket.bind')
+    ).toBe('basket.error.notSendable');
+    expect(basketErrorKey(gateway('conflict', 409), 'basket.bind')).toBe(
+      'basket.error.alreadySent'
+    );
+  });
+
+  it('does not borrow either sentence for any other act', () => {
+    // Both are about the bind. A conflict on the units sheet means something else,
+    // and borrowing the copy would be a confident wrong answer.
+    expect(basketErrorKey(gateway('conflict', 409), 'basket.origins')).toBe(
+      'basket.error.failed'
+    );
+    expect(
+      basketErrorKey(gateway('validation_failed', 400), 'basket.origins')
+    ).toBe('basket.error.failed');
+  });
+
+  it('says the outstanding write met a line somebody else finished', () => {
+    // The row's own number is a settle by another name when it goes down, so a
+    // conflict on it reads exactly as a conflict on the sheet's button does.
+    expect(basketErrorKey(gateway('conflict', 409), 'basket.outstanding')).toBe(
+      'basket.error.alreadyFinished'
+    );
+  });
+});
+
+describe('basketErrorKey: access that moved on the three zone surfaces', () => {
+  it('says what changed rather than taking the basket away', () => {
+    // The origins, targets and bind routes refuse a guest and a reader who has lost
+    // `WRITE` outright rather than answering an empty sheet, so a 403 on one is the
+    // same fact the settle already reports.
+    for (const operation of [
+      'basket.outstanding',
+      'basket.origins',
+      'basket.bind',
+    ] as const) {
+      expect(basketErrorKey(gateway('forbidden', 403), operation)).toBe(
+        'basket.error.accessChanged'
+      );
+    }
   });
 });
