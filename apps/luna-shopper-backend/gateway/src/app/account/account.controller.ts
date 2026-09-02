@@ -29,6 +29,7 @@ import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { UpdateProfileDto } from './account.dto';
 import {
+  AddPostalCodeDto,
   CreateShoppingProfileDto,
   UpdateShoppingProfileDto,
 } from './shopping-profile.dto';
@@ -179,6 +180,66 @@ export class AccountController {
     );
     await this.scopes.invalidate(user.userId);
     return updated;
+  }
+
+  /**
+   * Add one postal code, and optionally the ones near it (plan 0062).
+   *
+   * A route of its own beside the replacement collection on `PATCH`, because a
+   * profile's codes are no longer all the user's. The derived ones are the
+   * server's: the client never states them, so it cannot lose them by omission
+   * or promote them by echoing them back.
+   *
+   * Adding a code the profile already holds is not an error. One that is already
+   * derived is **promoted** to the user's, its suppression cleared, which is also
+   * the way back from having removed it.
+   */
+  @Post('shopping-profiles/:id/postal-codes')
+  @ApiContractResponse(PROFILE_PATTERNS.addPostalCode, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+  })
+  async addPostalCode(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: AddPostalCodeDto
+  ): Promise<ShoppingProfileView> {
+    const profile = await this.nats.send<ShoppingProfileView>(
+      PROFILE_PATTERNS.addPostalCode,
+      { userId: user.userId, profileId: id, ...dto }
+    );
+    await this.scopes.invalidate(user.userId);
+    return profile;
+  }
+
+  /**
+   * Remove one postal code, whoever it belongs to.
+   *
+   * It takes no argument saying how. A code the user added is deleted and the
+   * codes it was justifying are pruned; a derived one is suppressed instead, so
+   * the recompute cannot put it straight back. Which of those happens follows
+   * from the row's own source, which the server knows and the client should not
+   * have to (plan 0062, sections 3.1 and 6).
+   */
+  @Delete('shopping-profiles/:id/postal-codes/:postalCode')
+  @ApiContractResponse(PROFILE_PATTERNS.removePostalCode)
+  @ApiProblemResponses({ auth: true, notFound: true })
+  async removePostalCode(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Param('postalCode') postalCode: string
+  ): Promise<ShoppingProfileView> {
+    const profile = await this.nats.send<ShoppingProfileView>(
+      PROFILE_PATTERNS.removePostalCode,
+      { userId: user.userId, profileId: id, postalCode }
+    );
+    await this.scopes.invalidate(user.userId);
+    return profile;
   }
 
   /**

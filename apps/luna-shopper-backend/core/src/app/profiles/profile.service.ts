@@ -1,15 +1,21 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  DEFAULT_POSTAL_CODE_COUNTRY,
   GenerationScope,
   PROFILE_LIMITS,
+  ProfilePostalCodeSource,
   RealtimeEvent,
+  type AddProfilePostalCodeRequest,
   type CreateShoppingProfileRequest,
   type ListShoppingProfilesRequest,
+  type PostalCodeDistanceView,
   type ProfileGenerationSourceInput,
   type ProfilePostalCodeInput,
   type ProfileScopeSelector,
   type ProfileSupermarketPreferenceInput,
+  type RemoveProfilePostalCodeRequest,
   type ResolveProfileScopesRequest,
   type ShoppingProfileIdRequest,
   type ShoppingProfileListResult,
@@ -22,6 +28,8 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
+import type { CoreConfig } from '../config/app-config';
+import { radiusFor } from '../config/nearby-radius';
 import {
   ProfileGenerationSource,
   ProfilePostalCode,
@@ -29,6 +37,13 @@ import {
   ShoppingProfile,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import {
+  codeKey,
+  derivedPostalCodes,
+  expandingParents,
+  type PostalCodeRef,
+} from './derived-postal-codes';
+import { PostalCodeClient } from './postal-code.client';
 import { toShoppingProfileView } from './profile.mappers';
 
 /** Postgres unique-violation, raised by the partial index on `isDefault`. */
@@ -74,6 +89,9 @@ const NO_SUCH_PROFILE = 'Shopping profile not found';
  */
 @Injectable()
 export class ProfileService {
+  /** How far a code reaches for its neighbours, per country (plan 0062, section 4). */
+  private readonly nearbyRadius: CoreConfig['nearbyRadius'];
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ShoppingProfile)
@@ -84,8 +102,12 @@ export class ProfileService {
     private readonly supermarkets: Repository<ProfileSupermarketPreference>,
     @InjectRepository(ProfileGenerationSource)
     private readonly sources: Repository<ProfileGenerationSource>,
-    private readonly events: CoreEventsPublisher
-  ) {}
+    private readonly events: CoreEventsPublisher,
+    private readonly geography: PostalCodeClient,
+    config: ConfigService
+  ) {
+    this.nearbyRadius = config.getOrThrow<CoreConfig>('core').nearbyRadius;
+  }
 
   /**
    * Every profile the caller has, creating the default one on the first call
@@ -112,31 +134,34 @@ export class ProfileService {
     const supermarkets = this.checkSupermarkets(req.supermarkets);
     const sources = this.checkSources(req.generationSources);
 
-    const created = await this.dataSource.transaction(async (manager) => {
-      const repo = manager.getRepository(ShoppingProfile);
-      const profile = await repo.save(
-        repo.create({
-          userId: req.userId,
-          name: this.checkName(req.name),
-          // Never the default on creation. `ensureProfiles` above guarantees a
-          // default already exists, so a new profile taking the flag would
-          // silently move it; moving it is `setDefault`, on purpose.
-          isDefault: false,
-          position: existing.length,
-          addressText: this.checkAddress(req.addressText),
-          minSavingCents: this.checkSavingCents(req.minSavingCents) ?? 0,
-          minSavingPercent: this.checkSavingPercent(req.minSavingPercent),
-          generationScope: req.generationScope ?? GenerationScope.ALL,
-        })
-      );
-      await this.writeChildren(manager, profile.id, {
-        postalCodes,
-        supermarkets,
-        sources,
-      });
-      return profile;
-    });
+    const { profile: created, added } = await this.dataSource.transaction(
+      async (manager) => {
+        const repo = manager.getRepository(ShoppingProfile);
+        const profile = await repo.save(
+          repo.create({
+            userId: req.userId,
+            name: this.checkName(req.name),
+            // Never the default on creation. `ensureProfiles` above guarantees a
+            // default already exists, so a new profile taking the flag would
+            // silently move it; moving it is `setDefault`, on purpose.
+            isDefault: false,
+            position: existing.length,
+            addressText: this.checkAddress(req.addressText),
+            minSavingCents: this.checkSavingCents(req.minSavingCents) ?? 0,
+            minSavingPercent: this.checkSavingPercent(req.minSavingPercent),
+            generationScope: req.generationScope ?? GenerationScope.ALL,
+          })
+        );
+        const added = await this.writeChildren(manager, profile.id, {
+          postalCodes,
+          supermarkets,
+          sources,
+        });
+        return { profile, added };
+      }
+    );
 
+    this.announceCodes(added);
     await this.announce(req.userId);
     return this.viewFor(created);
   }
@@ -168,35 +193,148 @@ export class ProfileService {
         ? undefined
         : this.checkSources(req.generationSources);
 
-    const saved = await this.dataSource.transaction(async (manager) => {
-      if (req.name !== undefined) {
-        profile.name = this.checkName(req.name);
+    const { profile: saved, added } = await this.dataSource.transaction(
+      async (manager) => {
+        if (req.name !== undefined) {
+          profile.name = this.checkName(req.name);
+        }
+        if (req.addressText !== undefined) {
+          profile.addressText = this.checkAddress(req.addressText);
+        }
+        if (req.minSavingCents !== undefined) {
+          profile.minSavingCents =
+            this.checkSavingCents(req.minSavingCents) ?? 0;
+        }
+        if (req.minSavingPercent !== undefined) {
+          profile.minSavingPercent = this.checkSavingPercent(
+            req.minSavingPercent
+          );
+        }
+        if (req.generationScope !== undefined) {
+          profile.generationScope = req.generationScope;
+        }
+        const row = await manager.getRepository(ShoppingProfile).save(profile);
+        const added = await this.writeChildren(manager, row.id, {
+          postalCodes,
+          supermarkets,
+          sources,
+        });
+        return { profile: row, added };
       }
-      if (req.addressText !== undefined) {
-        profile.addressText = this.checkAddress(req.addressText);
-      }
-      if (req.minSavingCents !== undefined) {
-        profile.minSavingCents = this.checkSavingCents(req.minSavingCents) ?? 0;
-      }
-      if (req.minSavingPercent !== undefined) {
-        profile.minSavingPercent = this.checkSavingPercent(
-          req.minSavingPercent
-        );
-      }
-      if (req.generationScope !== undefined) {
-        profile.generationScope = req.generationScope;
-      }
-      const row = await manager.getRepository(ShoppingProfile).save(profile);
-      await this.writeChildren(manager, row.id, {
-        postalCodes,
-        supermarkets,
-        sources,
-      });
-      return row;
-    });
+    );
 
+    this.announceCodes(added);
     await this.announce(req.userId);
     return this.viewFor(saved);
+  }
+
+  /**
+   * Add one postal code, optionally with its neighbours (plan 0062, section 2).
+   *
+   * A row at a time, beside the replacement collection on {@link update}, and the
+   * one a client that renders derived rows has to use. The replacement states the
+   * profile's **own** codes, so a page that read a profile with derived rows and
+   * sent the whole list back would promote every one of them to the user's; that
+   * is not what rendering a list and saving it means, and this is the surface that
+   * does not make it possible.
+   *
+   * A code the profile already holds is not an error. Typing one that is already
+   * derived **promotes** it (section 3.2): the row becomes the user's, its
+   * suppression clears, and `expandNearby` takes whatever the request asked for.
+   * That is also the way back from having suppressed a neighbour, and it returns
+   * as theirs rather than as ours, which is a more honest description of what
+   * happened.
+   */
+  async addPostalCode(
+    req: AddProfilePostalCodeRequest
+  ): Promise<ShoppingProfileView> {
+    const profile = await this.load(req.userId, req.profileId);
+    const [input] = this.checkPostalCodes([
+      {
+        postalCode: req.postalCode,
+        label: req.label,
+        country: req.country,
+        source: req.source,
+        expandNearby: req.expandNearby,
+      },
+    ]);
+
+    const added = await this.dataSource.transaction(async (manager) => {
+      const before = await this.readCodes(manager, profile.id);
+      const own = before.filter(
+        (row) => row.source !== ProfilePostalCodeSource.NEARBY
+      );
+      const existing = own.find((row) => row.postalCode === input.postalCode);
+      if (!existing && own.length >= PROFILE_LIMITS.maxPostalCodes) {
+        throw new ConflictException(
+          `A profile can hold at most ${PROFILE_LIMITS.maxPostalCodes} postal codes`
+        );
+      }
+
+      const repo = manager.getRepository(ProfilePostalCode);
+      const row =
+        before.find((r) => r.postalCode === input.postalCode) ??
+        repo.create({
+          profileId: profile.id,
+          postalCode: input.postalCode,
+          position: own.length,
+        });
+      row.label = input.label ?? row.label ?? null;
+      row.country = input.country ?? DEFAULT_POSTAL_CODE_COUNTRY;
+      row.source = input.source ?? ProfilePostalCodeSource.TYPED;
+      row.expandNearby = input.expandNearby ?? false;
+      row.suppressed = false;
+      await repo.save(row);
+
+      return this.recomputeDerived(manager, profile.id, before);
+    });
+
+    this.announceCodes(added);
+    await this.announce(req.userId);
+    return this.viewFor(profile);
+  }
+
+  /**
+   * Remove one postal code (plan 0062, sections 2 and 3.1).
+   *
+   * **Whether it deletes or suppresses follows from the row's own source**, which
+   * the server knows and the client should not have to. A `TYPED` or `DEVICE` row
+   * is deleted and the recompute prunes whatever it was justifying. A `NEARBY`
+   * row is suppressed instead, because a pure recompute would put a deleted one
+   * straight back and the user would remove it forever.
+   *
+   * Removing a code the profile does not hold answers rather than failing: the
+   * caller wanted it gone, and it is.
+   */
+  async removePostalCode(
+    req: RemoveProfilePostalCodeRequest
+  ): Promise<ShoppingProfileView> {
+    const profile = await this.load(req.userId, req.profileId);
+    const postalCode = req.postalCode.trim();
+
+    const added = await this.dataSource.transaction(async (manager) => {
+      const before = await this.readCodes(manager, profile.id);
+      const row = before.find((r) => r.postalCode === postalCode);
+      if (!row) {
+        return [];
+      }
+      const repo = manager.getRepository(ProfilePostalCode);
+      if (row.source === ProfilePostalCodeSource.NEARBY) {
+        row.suppressed = true;
+        await repo.save(row);
+      } else {
+        await repo.delete({ id: row.id });
+      }
+      // A removal can still leave a code behind: deleting a code of the user's
+      // own that another parent also reaches puts it back as a `NEARBY` row. It
+      // was on the profile before and it is on the profile after, so the diff
+      // announces nothing, which is the right answer rather than a lucky one.
+      return this.recomputeDerived(manager, profile.id, before);
+    });
+
+    this.announceCodes(added);
+    await this.announce(req.userId);
+    return this.viewFor(profile);
   }
 
   /**
@@ -284,8 +422,10 @@ export class ProfileService {
       : await this.defaultProfile(req.userId);
 
     const [postalCodes, preferences] = await Promise.all([
+      // Suppressed rows are not places this person shops (plan 0062, section
+      // 3.1), so they are absent here exactly as they are absent from the view.
       this.postalCodes.find({
-        where: { profileId: profile.id },
+        where: { profileId: profile.id, suppressed: false },
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
       this.supermarkets.find({ where: { profileId: profile.id } }),
@@ -436,8 +576,11 @@ export class ProfileService {
     }
     const ids = rows.map((row) => row.id);
     const [postalCodes, supermarkets, sources] = await Promise.all([
+      // A suppressed code is absent rather than present with a flag (plan 0062,
+      // section 6): no client has a reason to render one, and an absent row
+      // cannot be shown by accident.
       this.postalCodes.find({
-        where: { profileId: In(ids) },
+        where: { profileId: In(ids), suppressed: false },
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
       this.supermarkets.find({
@@ -461,7 +604,16 @@ export class ProfileService {
 
   // --- Writing ---------------------------------------------------------------
 
-  /** Replace whichever of the three collections the request stated. */
+  /**
+   * Replace whichever of the three collections the request stated, and answer
+   * the postal codes that were not on this profile before.
+   *
+   * `postalCodes` is **the profile's own codes** and not every row it holds (plan
+   * 0062). The derived ones are ours: the client never states them, a client that
+   * omitted them would lose nothing, and a client that echoed them back would
+   * promote them. After the user's half is written the derived half is recomputed
+   * from scratch, in this same transaction.
+   */
   private async writeChildren(
     manager: DataSource['manager'],
     profileId: string,
@@ -470,20 +622,45 @@ export class ProfileService {
       supermarkets?: ProfileSupermarketPreferenceInput[];
       sources?: ProfileGenerationSourceInput[];
     }
-  ): Promise<void> {
+  ): Promise<PostalCodeRef[]> {
+    let added: PostalCodeRef[] = [];
     if (next.postalCodes) {
       const repo = manager.getRepository(ProfilePostalCode);
-      await repo.delete({ profileId });
-      await repo.save(
-        next.postalCodes.map((input, index) =>
-          repo.create({
-            profileId,
-            postalCode: input.postalCode,
-            label: input.label ?? null,
-            position: index,
-          })
-        )
+      const before = await this.readCodes(manager, profileId);
+
+      // Only the user's own rows are replaced. A derived row the request does
+      // not mention is left to the recompute, which is the only thing that gets
+      // to decide whether it still belongs.
+      const stated = new Set(next.postalCodes.map((i) => i.postalCode));
+      const gone = before.filter(
+        (row) =>
+          row.source !== ProfilePostalCodeSource.NEARBY &&
+          !stated.has(row.postalCode)
       );
+      if (gone.length > 0) {
+        await repo.delete({ id: In(gone.map((row) => row.id)) });
+      }
+
+      const rows = next.postalCodes.map((input, index) => {
+        // Naming a code that is already derived promotes it (section 3.2): the
+        // unique index means the insert would otherwise simply fail, and
+        // promotion is the honest reading of somebody typing a code we guessed.
+        const row =
+          before.find((r) => r.postalCode === input.postalCode) ??
+          repo.create({ profileId, postalCode: input.postalCode });
+        row.label = input.label ?? null;
+        row.country = input.country ?? DEFAULT_POSTAL_CODE_COUNTRY;
+        row.source = input.source ?? ProfilePostalCodeSource.TYPED;
+        row.expandNearby = input.expandNearby ?? false;
+        row.suppressed = false;
+        row.position = index;
+        return row;
+      });
+      if (rows.length > 0) {
+        await repo.save(rows);
+      }
+
+      added = await this.recomputeDerived(manager, profileId, before);
     }
     if (next.supermarkets) {
       const repo = manager.getRepository(ProfileSupermarketPreference);
@@ -510,6 +687,136 @@ export class ProfileService {
           })
         )
       );
+    }
+    return added;
+  }
+
+  /** Every postal code row on a profile, suppressed ones included. */
+  private readCodes(
+    manager: DataSource['manager'],
+    profileId: string
+  ): Promise<ProfilePostalCode[]> {
+    return manager.getRepository(ProfilePostalCode).find({
+      where: { profileId },
+      order: { position: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
+  /**
+   * Make the derived rows equal `derived(profile)` again (plan 0062, section 3).
+   *
+   * Run after **any** write to a profile's postal codes, in the same transaction,
+   * and computed in full rather than edited: a shared neighbour, an orphan and a
+   * changed radius are all bugs an incremental scheme has and this does not, and
+   * `derived-postal-codes.ts` carries the reasoning.
+   *
+   * Three properties worth keeping when this is edited:
+   *
+   * - **Suppression survives it.** A derived row the user removed is still a
+   *   derived row; it keeps its flag and disappears from every read. Erasing it
+   *   here would put the code back on the next unrelated add, and the user would
+   *   remove it forever (section 3.1).
+   * - **A suppressed row whose last justifying parent went away is deleted**,
+   *   like any other derived row that left the set. Nothing accumulates.
+   * - **One lookup per expanding parent and no more.** It is a local query in
+   *   catalog over a table shipped with the image, so the cost is a broker round
+   *   trip rather than a third party, but the count is still the thing that grows
+   *   with what the user asked for.
+   *
+   * Answers the codes that were not on the profile in `before`, which is what
+   * section 5 announces.
+   */
+  private async recomputeDerived(
+    manager: DataSource['manager'],
+    profileId: string,
+    before: readonly ProfilePostalCode[]
+  ): Promise<PostalCodeRef[]> {
+    const repo = manager.getRepository(ProfilePostalCode);
+    const rows = await this.readCodes(manager, profileId);
+
+    const neighbours = new Map<string, PostalCodeDistanceView[]>();
+    for (const parent of expandingParents(rows)) {
+      neighbours.set(
+        codeKey(parent),
+        await this.geography.nearby(
+          parent.country,
+          parent.postalCode,
+          radiusFor(this.nearbyRadius, parent.country)
+        )
+      );
+    }
+
+    const wanted = derivedPostalCodes(
+      rows,
+      neighbours,
+      PROFILE_LIMITS.maxNearbyPerPostalCode
+    );
+    const wantedKeys = new Set(wanted.map(codeKey));
+
+    const derivedRows = rows.filter(
+      (row) => row.source === ProfilePostalCodeSource.NEARBY
+    );
+    const stale = derivedRows.filter((row) => !wantedKeys.has(codeKey(row)));
+    if (stale.length > 0) {
+      await repo.delete({ id: In(stale.map((row) => row.id)) });
+    }
+
+    const kept = new Map(derivedRows.map((row) => [codeKey(row), row]));
+    let position = rows.filter(
+      (row) => row.source !== ProfilePostalCodeSource.NEARBY
+    ).length;
+    const write = wanted.map((ref) => {
+      const row =
+        kept.get(codeKey(ref)) ??
+        repo.create({
+          profileId,
+          postalCode: ref.postalCode,
+          country: ref.country,
+          label: null,
+          source: ProfilePostalCodeSource.NEARBY,
+          // A derived code never expands further, or the set would be a
+          // transitive closure walking the country two kilometres at a time.
+          expandNearby: false,
+          suppressed: false,
+        });
+      row.position = position++;
+      return row;
+    });
+    if (write.length > 0) {
+      await repo.save(write);
+    }
+
+    const known = new Set(before.map(codeKey));
+    const own = rows
+      .filter((row) => row.source !== ProfilePostalCodeSource.NEARBY)
+      .map((row) => ({ country: row.country, postalCode: row.postalCode }));
+    const added = new Map<string, PostalCodeRef>();
+    for (const ref of [...own, ...wanted]) {
+      const key = codeKey(ref);
+      if (!known.has(key)) {
+        added.set(key, ref);
+      }
+    }
+    return [...added.values()];
+  }
+
+  /**
+   * Say which codes arrived, and never wait for the answer (plan 0062, section
+   * 5).
+   *
+   * Outside the transaction and after it, so a broker that is slow or down costs
+   * the profile save nothing. Grouped by country because a discovery run is asked
+   * about a place, and "postal code 08001" without one names two.
+   */
+  private announceCodes(added: readonly PostalCodeRef[]): void {
+    const byCountry = new Map<string, string[]>();
+    for (const ref of added) {
+      const codes = byCountry.get(ref.country) ?? [];
+      codes.push(ref.postalCode);
+      byCountry.set(ref.country, codes);
+    }
+    for (const [country, codes] of byCountry) {
+      this.geography.announceAdded(country, codes);
     }
   }
 
@@ -605,6 +912,13 @@ export class ProfileService {
    * decides what a code looks like. Duplicates are dropped rather than refused,
    * because the unique index would turn a client sending the same code twice
    * into a 500 and the user's intent is unambiguous either way.
+   *
+   * **`NEARBY` is refused rather than ignored** (plan 0062, section 2). It is not
+   * a thing the user says, it is a thing we concluded, and a request that states
+   * it has misunderstood the model badly enough that quietly rewriting it to
+   * `TYPED` would hide the mistake rather than fix it. The cap counts these rows
+   * and only these rows: they are the user's own codes, and the derived ones are
+   * a set nobody sized.
    */
   private checkPostalCodes(
     inputs: ProfilePostalCodeInput[] | undefined
@@ -625,6 +939,16 @@ export class ProfileService {
           },
         });
       }
+      if (
+        input.source !== undefined &&
+        input.source !== ProfilePostalCodeSource.TYPED &&
+        input.source !== ProfilePostalCodeSource.DEVICE
+      ) {
+        throw new ValidationException(
+          'A nearby postal code is one we worked out, not one you can add',
+          { details: { postalCodes: 'source must be TYPED or DEVICE' } }
+        );
+      }
       if (seen.has(code)) {
         continue;
       }
@@ -633,6 +957,9 @@ export class ProfileService {
       rows.push({
         postalCode: code,
         label: label ? label.slice(0, PROFILE_LIMITS.labelMaxLength) : null,
+        country: this.checkCountry(input.country),
+        source: input.source ?? ProfilePostalCodeSource.TYPED,
+        expandNearby: input.expandNearby ?? false,
       });
     }
     if (rows.length > PROFILE_LIMITS.maxPostalCodes) {
@@ -642,6 +969,26 @@ export class ProfileService {
       );
     }
     return rows;
+  }
+
+  /**
+   * Two letters, lowercase, or the one country we ship (plan 0062, section 1).
+   *
+   * Lowercased rather than refused for case, because the centroid table stores
+   * `es` and a client sending `ES` means the same country. A country we hold no
+   * centroids for is not refused either: it costs the user their neighbours and
+   * nothing else, and telling somebody their country does not exist because our
+   * dataset stops at the Pyrenees would be a worse answer than an empty
+   * expansion.
+   */
+  private checkCountry(country: string | undefined): string {
+    const value = (country ?? DEFAULT_POSTAL_CODE_COUNTRY).trim().toLowerCase();
+    if (value.length !== 2) {
+      throw new ValidationException('That is not a country code', {
+        details: { country: 'two letters, ISO 3166-1 alpha-2' },
+      });
+    }
+    return value;
   }
 
   /** Deduplicated on the chain, last statement winning: it is a set of chains. */

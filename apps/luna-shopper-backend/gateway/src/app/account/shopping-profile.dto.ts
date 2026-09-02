@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  DEFAULT_POSTAL_CODE_COUNTRY,
   GenerationScope,
   PROFILE_LIMITS,
+  ProfilePostalCodeSource,
 } from '@portfolio/luna-shopper/contracts';
 import { Type } from 'class-transformer';
 import {
@@ -9,6 +11,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -29,6 +32,14 @@ import {
  * slips past validation still meets the service's own rules.
  */
 
+/**
+ * One postal code of the user's own.
+ *
+ * `source` accepts `TYPED` and `DEVICE` and not `NEARBY` (plan 0062, section 2):
+ * a derived code is a thing the server concluded, never a thing the client says.
+ * Naming one that is already derived is an ordinary add and promotes it, so
+ * there is no error state here for a client to handle.
+ */
 export class ProfilePostalCodeDto {
   @ApiProperty({ maxLength: PROFILE_LIMITS.postalCodeMaxLength })
   @IsString()
@@ -46,7 +57,41 @@ export class ProfilePostalCodeDto {
   @IsString()
   @MaxLength(PROFILE_LIMITS.labelMaxLength)
   label?: string | null;
+
+  @ApiPropertyOptional({
+    default: DEFAULT_POSTAL_CODE_COUNTRY,
+    minLength: 2,
+    maxLength: 2,
+    description:
+      'ISO 3166-1 alpha-2. The centroid table is keyed on (country, postalCode), and a lookup without one searches every shipped country at once.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(2)
+  country?: string;
+
+  @ApiPropertyOptional({
+    enum: [ProfilePostalCodeSource.TYPED, ProfilePostalCodeSource.DEVICE],
+    default: ProfilePostalCodeSource.TYPED,
+    description:
+      'Whose code this is. NEARBY is a conclusion of the server’s and is refused here.',
+  })
+  @IsOptional()
+  @IsIn([ProfilePostalCodeSource.TYPED, ProfilePostalCodeSource.DEVICE])
+  source?: ProfilePostalCodeSource.TYPED | ProfilePostalCodeSource.DEVICE;
+
+  @ApiPropertyOptional({
+    description:
+      'Also add the codes near this one, marked as ours: visible, removable, and recomputed rather than maintained.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  expandNearby?: boolean;
 }
+
+/** The body of the add route; the code itself comes from the body too. */
+export class AddPostalCodeDto extends ProfilePostalCodeDto {}
 
 export class ProfileSupermarketDto {
   @ApiProperty({
@@ -143,6 +188,8 @@ export class ShoppingProfileBodyDto {
   @ApiPropertyOptional({
     type: [ProfilePostalCodeDto],
     maxItems: PROFILE_LIMITS.maxPostalCodes,
+    description:
+      'The profile’s **own** codes, TYPED and DEVICE (plan 0062). Codes derived from these are the server’s and are not stated here: a client that omits them loses nothing, and one that echoes them back promotes them. Add and remove a single code with the two routes below instead.',
   })
   @IsOptional()
   @IsArray()

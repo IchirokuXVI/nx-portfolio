@@ -1,4 +1,7 @@
-import type { GenerationScope } from '../enums/profile.enums';
+import type {
+  GenerationScope,
+  ProfilePostalCodeSource,
+} from '../enums/profile.enums';
 
 /**
  * Shopping profile message contracts (plan 0049). Core owns the profile, keyed by
@@ -27,6 +30,25 @@ export const PROFILE_PATTERNS = {
    * today.
    */
   resolveScopes: 'profiles.resolveScopes',
+  /**
+   * Add one postal code to a profile, optionally widening it (plan 0062,
+   * section 6).
+   *
+   * A row at a time rather than the replacement collection above, because a
+   * profile's postal codes are no longer all the user's: the derived ones are
+   * ours, the client never states them, and stating the set would either lose
+   * them or promote them wholesale. The three collections on `update` stay a
+   * replacement, and `postalCodes` there means **the profile's own codes**.
+   */
+  addPostalCode: 'profiles.addPostalCode',
+  /**
+   * Remove one postal code from a profile.
+   *
+   * It takes no argument saying how. Whether the row is deleted or suppressed
+   * follows from its own `source`, which the server knows and the client should
+   * not have to (plan 0062, sections 3.1 and 6).
+   */
+  removePostalCode: 'profiles.removePostalCode',
 } as const;
 
 /**
@@ -36,7 +58,28 @@ export const PROFILE_PATTERNS = {
  */
 export const PROFILE_LIMITS = {
   maxProfiles: 10,
+  /**
+   * The user's **own** codes, `TYPED` and `DEVICE` together (plan 0062).
+   *
+   * Derived rows do not count against it and could not: five codes each pulling
+   * in their neighbours is a set the user never sized, and refusing an expansion
+   * because the cap on what somebody typed had been reached would make the cap
+   * mean two different things.
+   */
   maxPostalCodes: 5,
+  /**
+   * How many neighbours one expanding code contributes, nearest first (plan
+   * 0062, section 4).
+   *
+   * A bound on top of the radius rather than instead of it. Two kilometres
+   * around a dense urban centroid can pull in a dozen codes and around a rural
+   * one none at all, so the radius alone leaves the size of the derived set to
+   * the geography of wherever the user happens to live. Section 4 already
+   * anticipates "the nearest N codes, capped by distance" once the distribution
+   * over real data can be looked at; this is that N, and tuning it is a change
+   * to the recompute's body and to nothing else.
+   */
+  maxNearbyPerPostalCode: 10,
   maxSupermarketPreferences: 100,
   maxGenerationSources: 100,
   nameMaxLength: 64,
@@ -45,11 +88,26 @@ export const PROFILE_LIMITS = {
   addressMaxLength: 200,
 } as const;
 
+/**
+ * The country a postal code is read against when nobody says (plan 0062,
+ * section 1).
+ *
+ * The centroid table is keyed on `(country, postalCode)`, and a lookup with no
+ * country searches Spain and Bolivia together, which is how `08001` becomes a
+ * neighbour of a code two thousand kilometres away. Only `es` ships today; the
+ * column exists so the day a second one does is a data change.
+ */
+export const DEFAULT_POSTAL_CODE_COUNTRY = 'es';
+
 // --- Views -----------------------------------------------------------------
 
 /**
  * One postal code the profile shops from, **stored exactly as it was typed**
  * (plan 0049, section 1.1). What it resolves to is asked per query.
+ *
+ * A code the user suppressed is **absent** from every view rather than present
+ * with a flag (plan 0062, section 6): no client has a reason to render one, and
+ * an absent row cannot be shown by accident.
  */
 export interface ProfilePostalCodeView {
   id: string;
@@ -57,6 +115,16 @@ export interface ProfilePostalCodeView {
   /** "home", "the office". Display only; nothing is derived from it. */
   label: string | null;
   position: number;
+  /** ISO 3166-1 alpha-2, lowercase. `es` unless somebody said otherwise. */
+  country: string;
+  /** Whose code this is: the user's, or one we concluded (plan 0062). */
+  source: ProfilePostalCodeSource;
+  /**
+   * Whether this code's neighbours were asked for. Meaningful on a `TYPED` or
+   * `DEVICE` row only; always false on a `NEARBY` one, which cannot expand
+   * further or the derived set would be a transitive closure over the country.
+   */
+  expandNearby: boolean;
 }
 
 /**
@@ -151,10 +219,23 @@ export interface ListShoppingProfilesRequest {
   userId: string;
 }
 
-/** One postal code as the client sends it. The id and position are core's. */
+/**
+ * One postal code as the client sends it. The id and position are core's.
+ *
+ * **Always one of the user's own**, and never a derived one: `source` accepts
+ * `TYPED` and `DEVICE` and nothing else (plan 0062, section 2). A code that
+ * happens to be derived already is promoted rather than refused (section 3.2),
+ * which is also the way back from having suppressed it.
+ */
 export interface ProfilePostalCodeInput {
   postalCode: string;
   label?: string | null;
+  /** ISO 3166-1 alpha-2. Defaults to {@link DEFAULT_POSTAL_CODE_COUNTRY}. */
+  country?: string;
+  /** `TYPED` unless the client says the device resolved it. */
+  source?: ProfilePostalCodeSource.TYPED | ProfilePostalCodeSource.DEVICE;
+  /** Whether to add the codes near this one, marked as ours. Default false. */
+  expandNearby?: boolean;
 }
 
 export interface ProfileSupermarketPreferenceInput {
@@ -213,4 +294,42 @@ export interface ShoppingProfileIdRequest {
 export interface ResolveProfileScopesRequest {
   userId: string;
   profileId?: string;
+}
+
+/**
+ * Add one postal code to a profile (plan 0062, section 2).
+ *
+ * The row at a time counterpart of `postalCodes` on the update request, and the
+ * one a client that renders derived rows must use: the replacement collection
+ * states the profile's own codes, so echoing a derived row back through it would
+ * promote it to the user's, which is not what rendering a list and saving it
+ * means.
+ *
+ * Answers the whole profile, because one add can write several rows: the parent
+ * and, with `expandNearby`, its neighbours.
+ */
+export interface AddProfilePostalCodeRequest {
+  userId: string;
+  profileId: string;
+  postalCode: string;
+  label?: string | null;
+  country?: string;
+  source?: ProfilePostalCodeSource.TYPED | ProfilePostalCodeSource.DEVICE;
+  expandNearby?: boolean;
+}
+
+/**
+ * Remove one postal code from a profile (plan 0062, sections 2 and 3.1).
+ *
+ * The code rather than the row id, so the caller does not need to have read the
+ * profile since the last recompute; `uq_profile_postal_code` is what makes that
+ * unambiguous, and it is why no country travels here. It carries no argument
+ * saying whether to delete or to suppress: a `TYPED` or `DEVICE` row is deleted
+ * and the recompute prunes whatever it was justifying, and a `NEARBY` row is
+ * suppressed, because a pure recompute would otherwise put it straight back.
+ */
+export interface RemoveProfilePostalCodeRequest {
+  userId: string;
+  profileId: string;
+  postalCode: string;
 }

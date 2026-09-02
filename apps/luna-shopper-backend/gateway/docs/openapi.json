@@ -5464,6 +5464,194 @@
         ]
       }
     },
+    "/v1/account/shopping-profiles/{id}/postal-codes": {
+      "post": {
+        "operationId": "AccountController_addPostalCode_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPostalCodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `profiles.addPostalCode` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profile.ShoppingProfileView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/v1/account/shopping-profiles/{id}/postal-codes/{postalCode}": {
+      "delete": {
+        "operationId": "AccountController_removePostalCode_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `profiles.removePostalCode` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profile.ShoppingProfileView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
     "/v1/account/shopping-profiles/{id}/default": {
       "post": {
         "operationId": "AccountController_setDefaultProfile_v1",
@@ -14545,6 +14733,26 @@
             "nullable": true,
             "maxLength": 64,
             "description": "\"home\", \"the office\". Display only; nothing is derived from it."
+          },
+          "country": {
+            "type": "string",
+            "default": "es",
+            "minLength": 2,
+            "maxLength": 2,
+            "description": "ISO 3166-1 alpha-2. The centroid table is keyed on (country, postalCode), and a lookup without one searches every shipped country at once."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "TYPED",
+              "DEVICE"
+            ],
+            "default": "TYPED",
+            "description": "Whose code this is. NEARBY is a conclusion of the server’s and is refused here."
+          },
+          "expandNearby": {
+            "type": "boolean",
+            "description": "Also add the codes near this one, marked as ours: visible, removable, and recomputed rather than maintained."
           }
         },
         "required": [
@@ -14623,6 +14831,7 @@
           },
           "postalCodes": {
             "maxItems": 5,
+            "description": "The profile’s **own** codes, TYPED and DEVICE (plan 0062). Codes derived from these are the server’s and are not stated here: a client that omits them loses nothing, and one that echoes them back promotes them. Add and remove a single code with the two routes below instead.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProfilePostalCodeDto"
@@ -14681,6 +14890,7 @@
           },
           "postalCodes": {
             "maxItems": 5,
+            "description": "The profile’s **own** codes, TYPED and DEVICE (plan 0062). Codes derived from these are the server’s and are not stated here: a client that omits them loses nothing, and one that echoes them back promotes them. Add and remove a single code with the two routes below instead.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProfilePostalCodeDto"
@@ -14701,6 +14911,44 @@
             }
           }
         }
+      },
+      "AddPostalCodeDto": {
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "label": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "\"home\", \"the office\". Display only; nothing is derived from it."
+          },
+          "country": {
+            "type": "string",
+            "default": "es",
+            "minLength": 2,
+            "maxLength": 2,
+            "description": "ISO 3166-1 alpha-2. The centroid table is keyed on (country, postalCode), and a lookup without one searches every shipped country at once."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "TYPED",
+              "DEVICE"
+            ],
+            "default": "TYPED",
+            "description": "Whose code this is. NEARBY is a conclusion of the server’s and is refused here."
+          },
+          "expandNearby": {
+            "type": "boolean",
+            "description": "Also add the codes near this one, marked as ours: visible, removable, and recomputed rather than maintained."
+          }
+        },
+        "required": [
+          "postalCode"
+        ]
       },
       "GeneratedListSourceDto": {
         "type": "object",
@@ -17052,6 +17300,14 @@
           "ADMIN",
           "USER_RECEIPT",
           "USER_REPORTED"
+        ]
+      },
+      "enums.ProfilePostalCodeSource": {
+        "type": "string",
+        "enum": [
+          "TYPED",
+          "DEVICE",
+          "NEARBY"
         ]
       },
       "enums.SettlementOutcome": {
@@ -19718,13 +19974,27 @@
           "position": {
             "type": "integer",
             "minimum": 0
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2
+          },
+          "source": {
+            "$ref": "#/components/schemas/enums.ProfilePostalCodeSource"
+          },
+          "expandNearby": {
+            "type": "boolean"
           }
         },
         "required": [
           "id",
           "postalCode",
           "label",
-          "position"
+          "position",
+          "country",
+          "source",
+          "expandNearby"
         ],
         "additionalProperties": false
       },
