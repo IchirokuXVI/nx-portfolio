@@ -2,12 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  ItemSourceMatch,
   ItemSourceRefStatus,
+  PriceSourceKind,
+  UnitOfMeasure,
   type ItemView,
+  type SupermarketItemBatchEntry,
 } from '@portfolio/luna-shopper/contracts';
 import {
   MercadonaClient,
+  type MercadonaLang,
   type MercadonaListProduct,
+  type MercadonaProduct,
 } from '@portfolio/luna-shopper/mercadona';
 import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
@@ -88,17 +94,40 @@ export class CatalogDiscoveryRunner {
         break;
       }
     }
-    await context.setTotalPlanned(products.length);
+    // TEMPORARY (catalog seeding): the walk is cheap and the detail phase is not,
+    // so the filter runs here, after the tree, and costs no extra requests.
+    const only = new Set(settings.onlyCategoryIds);
+    const planned = only.size
+      ? products.filter((p) =>
+          p.categoryPath.some((node) => node.id !== undefined && only.has(node.id))
+        )
+      : products;
+    if (only.size) {
+      this.logger.warn(
+        `HARVEST_ONLY_CATEGORY_IDS is set: ${planned.length} of ${products.length} product(s) will be processed`
+      );
+    }
+    await context.setTotalPlanned(planned.length);
     this.logger.log(
-      `Run ${context.runId}: ${products.length} product(s) in warehouse ${warehouse}`
+      `Run ${context.runId}: ${planned.length} product(s) in warehouse ${warehouse}`
     );
+
+    // TEMPORARY (catalog seeding): with HARVEST_AUTO_IMPORT the run also creates
+    // an Item per product and writes its price, so the whole assortment lands in
+    // catalog in one pass. The English name comes from this same detail fetch,
+    // which is why the language list widens instead of a second pass being made.
+    const autoImport = settings.autoImport;
+    const priceEntries: SupermarketItemBatchEntry[] = [];
+    const seenEans = new Set<string>();
+
+    const langs: MercadonaLang[] = autoImport ? ['es', 'en'] : ['es'];
 
     // --- Phase 2: detail per product, on the worker pool -------------------
     // EAN and brand exist only on the detail endpoint (section 2.5), which is
     // the whole reason this phase exists and the whole reason it is expensive.
     await context.setStage(
       'DETAIL',
-      `Fetching detail for ${products.length} product(s)`
+      `Fetching detail for ${planned.length} product(s)`
     );
 
     const index = new ItemMatchIndex(await this.loadCatalogItems());
@@ -111,12 +140,14 @@ export class CatalogDiscoveryRunner {
     const seenAt = new Date();
 
     await runWorkerPool({
-      items: products,
+      items: planned,
       workers: source.workers,
       signal: context.signal,
       handle: async (listProduct) => {
-        const detail = await client.fetchProduct(listProduct.externalId, ['es'], {
-          categoryPath: listProduct.categoryPath.map((name) => ({ name })),
+        const detail = await client.fetchProduct(listProduct.externalId, langs, {
+          // The nodes, ids included: `category` is resolved from this, and
+          // section 5.6 splits cheese from cured meat by level 2 id.
+          categoryPath: listProduct.categoryPath,
           observedAt: seenAt,
         });
 
@@ -158,6 +189,18 @@ export class CatalogDiscoveryRunner {
           seenAt
         );
 
+        if (autoImport) {
+          await this.autoImport(
+            input,
+            detail,
+            listProduct,
+            refByExternalId,
+            priceEntries,
+            seenEans,
+            seenAt
+          );
+        }
+
         await context.report({ processed: 1, ...outcome });
       },
       onError: async (error, listProduct) => {
@@ -171,7 +214,125 @@ export class CatalogDiscoveryRunner {
       },
     });
 
+    if (autoImport) {
+      await this.writePrices(context, input, priceEntries);
+    }
+
     await context.flush();
+  }
+
+  /**
+   * TEMPORARY (catalog seeding). Create the catalog `Item` for one product and
+   * queue its price, so a single run leaves catalog fully populated.
+   *
+   * This is the bulk twin of `sourceEntry.createItem`, and it keeps that path's
+   * rules: the EAN decides identity, `imageUrl` is never taken from the chain
+   * (section 5.7), and the ref it writes is the owner's own link. What it drops
+   * is the review step, which is the entire point of section 6.2, so this is
+   * expected to be deleted once the catalog has been seeded and dumped.
+   */
+  private async autoImport(
+    input: CatalogDiscoveryInput,
+    detail: MercadonaProduct,
+    listProduct: MercadonaListProduct,
+    refByExternalId: Map<string, ItemSourceRef>,
+    priceEntries: SupermarketItemBatchEntry[],
+    seenEans: Set<string>,
+    seenAt: Date
+  ): Promise<void> {
+    // Section 5.6: two products (foil, cling film) are `size_format: 'm'`, which
+    // has no UnitOfMeasure. The plan's recommendation is not to import them.
+    if (listProduct.sizeFormat === 'm') {
+      return;
+    }
+
+    const existing = refByExternalId.get(detail.externalId);
+    let itemId = existing?.itemId;
+
+    if (!itemId) {
+      // EAN is unique in catalog, and one assortment really does repeat one:
+      // the second occurrence would be refused by the database anyway.
+      if (detail.ean && seenEans.has(detail.ean)) {
+        return;
+      }
+      let item: ItemView;
+      try {
+        item = await this.catalog.createItem({
+          name: { es: detail.name.es, en: detail.name.en ?? detail.name.es },
+          brand: detail.brand,
+          ean: detail.ean,
+          unitSize: detail.unitSize,
+          imageUrl: null,
+          sku: null,
+          category: detail.category,
+          defaultUnit: detail.unit ?? UnitOfMeasure.UNIT,
+        });
+      } catch (error) {
+        // Catalog refuses a second item with an EAN it already holds, and this
+        // assortment really does repeat a few. That is the rule working, not a
+        // failure of the run, so the product is skipped and counted nowhere.
+        this.logger.warn(
+          `Auto import skipped ${detail.externalId} (${detail.ean ?? 'no ean'}): ${String(error)}`
+        );
+        return;
+      }
+      itemId = item.id;
+      if (detail.ean) {
+        seenEans.add(detail.ean);
+      }
+      const ref = await this.refs.save(
+        this.refs.create({
+          itemId,
+          supermarketId: input.supermarketId,
+          externalId: detail.externalId,
+          externalUrl: detail.sourceUrl,
+          matchedBy: ItemSourceMatch.MANUAL,
+          status: ItemSourceRefStatus.ACTIVE,
+          confidence: 1,
+          lastSeenAt: seenAt,
+          lastResolvedAt: seenAt,
+        })
+      );
+      refByExternalId.set(detail.externalId, ref);
+    }
+
+    priceEntries.push({
+      itemId,
+      price: detail.price,
+      currency: detail.currency,
+      unitPrice: detail.unitPrice,
+      unitPriceLabel: detail.unitPriceLabel,
+      available: true,
+      priceObservedAt: seenAt.toISOString(),
+    });
+  }
+
+  /**
+   * TEMPORARY (catalog seeding). The same batched write `REFRESH` makes, so the
+   * prices are recorded as OFFICIAL_API and stay refreshable. Writing them as a
+   * platform admin through catalog instead would mark them ADMIN, and section
+   * 6.5 would then forbid any later fetch from ever correcting them.
+   */
+  private async writePrices(
+    context: RunContext,
+    input: CatalogDiscoveryInput,
+    entries: SupermarketItemBatchEntry[]
+  ): Promise<void> {
+    if (!input.priceScopeId || entries.length === 0) {
+      return;
+    }
+    await context.setStage('WRITE', `Writing ${entries.length} price(s)`);
+    for (let i = 0; i < entries.length; i += 200) {
+      const result = await this.catalog.upsertPrices(
+        input.priceScopeId,
+        entries.slice(i, i + 200),
+        PriceSourceKind.OFFICIAL_API
+      );
+      this.logger.log(
+        `Run ${context.runId}: prices ${result.created} created, ` +
+          `${result.updated} updated, ${result.skipped?.length ?? 0} skipped`
+      );
+    }
   }
 
   /**

@@ -61,6 +61,22 @@ export const harvesterValidationSchema = Joi.object({
   /** A run fails outright once this fraction of its planned work has failed. */
   HARVEST_FAILURE_RATIO: Joi.number().min(0).max(1).default(0.25),
 
+  /**
+   * TEMPORARY (catalog seeding): create a catalog `Item` for every product a
+   * CATALOG_DISCOVERY run sees, and write its price, instead of leaving the
+   * assortment in the review queue. This exists to seed the catalog once, so it
+   * can be dumped and restored into staging and production; the review queue in
+   * section 6.2 is the real design and this flag is expected to be deleted.
+   */
+  HARVEST_AUTO_IMPORT: Joi.boolean().default(false),
+
+  /**
+   * TEMPORARY (catalog seeding): restrict a run to these level 2 category ids,
+   * so the import can be proved on a handful of products covering the awkward
+   * cases before it is turned loose on 4,233. Empty means the whole assortment.
+   */
+  HARVEST_ONLY_CATEGORY_IDS: Joi.string().allow('').default(''),
+
   MERCADONA_ENABLED: Joi.boolean().default(false),
   MERCADONA_BASE_URL: Joi.string().allow('').default(''),
   OVERPASS_URL: Joi.string().allow('').default(''),
@@ -84,6 +100,10 @@ export interface HarvesterConfig {
   defaultMaxRequestsPerSecond: number;
   staleAfterSeconds: number;
   failureRatio: number;
+  /** TEMPORARY (catalog seeding). See HARVEST_AUTO_IMPORT above. */
+  autoImport: boolean;
+  /** TEMPORARY (catalog seeding). Level 2 category ids, empty for all. */
+  onlyCategoryIds: number[];
   mercadonaEnabled: boolean;
   mercadonaBaseUrl: string | undefined;
   overpassUrl: string | undefined;
@@ -131,6 +151,11 @@ export const harvesterConfiguration = registerAs(
     ),
     staleAfterSeconds: Number(process.env.HARVEST_STALE_AFTER ?? 900),
     failureRatio: Number(process.env.HARVEST_FAILURE_RATIO ?? 0.25),
+    autoImport: parseBoolean(process.env.HARVEST_AUTO_IMPORT, false),
+    onlyCategoryIds: (process.env.HARVEST_ONLY_CATEGORY_IDS ?? '')
+      .split(',')
+      .map((id) => Number(id.trim()))
+      .filter((id) => Number.isFinite(id) && id > 0),
     mercadonaEnabled: parseBoolean(process.env.MERCADONA_ENABLED, false),
     mercadonaBaseUrl: optional(process.env.MERCADONA_BASE_URL),
     overpassUrl: optional(process.env.OVERPASS_URL),
