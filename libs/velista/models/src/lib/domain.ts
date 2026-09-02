@@ -379,8 +379,6 @@ export interface CatalogItem {
 export interface ProductGroup {
   readonly id: string;
   readonly name: LocalizedName;
-  /** How many products it carries, which is what the composer row says it adds. */
-  readonly itemCount: number;
 }
 
 /**
@@ -396,7 +394,14 @@ export type CatalogSuggestion =
   | {
       readonly kind: 'group';
       readonly group: ProductGroup;
-      /** The group's products, which choosing it attaches to the line whole. */
+      /**
+       * The group's products, which choosing it attaches to the line whole.
+       *
+       * The one place the size of a group is stated, and therefore what the row
+       * says it will add. `ProductGroup` used to carry an `itemCount` beside it;
+       * nothing on the wire ever set it, so every group row offered to add zero
+       * products while attaching none.
+       */
       readonly itemIds: readonly string[];
     }
   | { readonly kind: 'item'; readonly item: CatalogItem };

@@ -541,7 +541,6 @@ export function toProductGroup(raw: unknown): ProductGroup | null {
   return {
     id,
     name: toLocalizedName(raw['name']),
-    itemCount: numOr(raw['itemCount'], 0),
   };
 }
 

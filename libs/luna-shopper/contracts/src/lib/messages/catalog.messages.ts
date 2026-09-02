@@ -430,6 +430,19 @@ export interface ProductGroupOfferView {
   group: ProductGroupView;
   cheapestItem: ItemView | null;
   offer: ItemOfferView | null;
+  /**
+   * The group's members, which choosing it in the composer copies onto the line
+   * whole (plan 0048, section 1.1).
+   *
+   * It is here, on the suggestion itself, because that copy is **one tap**: the
+   * row says how many products it adds before it is chosen, and choosing it adds
+   * the line. A client that had to fetch the members first could say neither.
+   *
+   * Capped at `LINE_ITEM_SET_MAX`, so what a suggestion offers is always
+   * something a line can hold. A group past that cap is a curation problem, and
+   * a suggestion that 400s on choosing is not the place to report it.
+   */
+  itemIds: string[];
 }
 
 /**
