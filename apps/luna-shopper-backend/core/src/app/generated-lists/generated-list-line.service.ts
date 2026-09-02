@@ -333,7 +333,7 @@ export class GeneratedListLineService {
       listId: targetListId,
       content: line.content,
       quantity,
-      itemIds: line.itemId ? [line.itemId] : [],
+      itemIds: await this.promotedItemIds(line),
     });
     const list = await this.listAccess.getList(targetListId);
 
@@ -358,6 +358,48 @@ export class GeneratedListLineService {
     );
 
     return { line: created, zoneId: list.zoneId, quantity };
+  }
+
+  /**
+   * The products a promoted line names (plan 0065).
+   *
+   * A basket line's product identity is two fields, not one: the pick, which is
+   * the single product somebody means to buy today, and the option rows behind
+   * it, which are what the line is **about**. A zone line's `itemIds` is a set
+   * of candidates (plan 0007, a household wants milk rather than a SKU), which
+   * is the same concept under another name in another service, so the promotion
+   * carries the whole set rather than the pick alone.
+   *
+   * The pick leads where there is one, and that ordering is load bearing rather
+   * than decorative: `GeneratedListService.resolvePick` takes `options[0]` when
+   * a later run composes a basket from this list, so leading with the pick is
+   * what makes the next trip default to the product this trip actually bought.
+   *
+   * The case this exists for is the ordinary one. A group suggestion attaches
+   * its whole member set as options and leaves the pick null on purpose (plan
+   * 0055, section 3), so that the row can still ask "which one did you get?" at
+   * the shelf, and the dropdown leads with groups. Such a line used to reach a
+   * household's list naming no product at all, which the client draws as `Not
+   * linked to a product`. A line carrying a pick and no options is the shape
+   * everything promoted before this plan, and it still promotes naming that one
+   * product.
+   *
+   * There is no truncation branch and none should be invented: a basket line
+   * holds at most `GENERATED_LIST_LIMITS.maxOptions`, which is 50, and a zone
+   * line accepts `LINE_ITEM_SET_MAX`, which is 100, so the smaller cap always
+   * fits inside the larger. Dropping products from a household's list with
+   * nothing to say about it is not something this may do.
+   */
+  private async promotedItemIds(line: GeneratedListLine): Promise<string[]> {
+    const options = await this.options.find({
+      where: { generatedListLineId: line.id },
+      order: { position: 'ASC' },
+    });
+    const itemIds = options.map((option) => option.itemId);
+    if (!line.itemId) {
+      return itemIds;
+    }
+    return [line.itemId, ...itemIds.filter((itemId) => itemId !== line.itemId)];
   }
 
   /**
