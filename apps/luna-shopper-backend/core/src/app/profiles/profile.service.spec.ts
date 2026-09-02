@@ -385,8 +385,8 @@ describe('ProfileService', () => {
       const selector = await service.resolveScopes({ userId: USER });
 
       expect(selector.profileId).toBeTruthy();
-      // Nothing in it yet, which is what the gateway turns into
-      // CATALOG_SCOPE_REQUIRED rather than into everything.
+      // Nothing in it yet, which is what the gateway turns into a read with no
+      // scopes: the whole catalog, with no price on any of it (plan 0069).
       expect(selector.empty).toBe(true);
     });
 

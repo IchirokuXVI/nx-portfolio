@@ -32,8 +32,11 @@ import {
   type ProductGroupOfferPage,
   type ProductGroupPage,
   type ProductGroupView,
+  type ShopChainSummariesView,
+  type ShopPage,
   type SupermarketItemPage,
   type SupermarketItemView,
+  type SupermarketLocationChainSummariesView,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
   type SupermarketLocationView,
@@ -57,12 +60,13 @@ import {
   CreateProductGroupDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
-  ListLocationsQueryDto,
   ListProductGroupsQueryDto,
   LookupItemsDto,
   PriceScopedQueryDto,
   SearchItemsQueryDto,
   SearchOffersQueryDto,
+  SearchShopsQueryDto,
+  ShopQueryDto,
   SuggestQueryDto,
   UpdateItemDto,
   UpdatePriceScopeDto,
@@ -94,6 +98,15 @@ export const SUGGEST_SCHEMA = hoistContractSchema(
  * it (plan 0049, sections 3.1 and 5).
  */
 const SCOPE_SCHEMA = hoistContractSchema(CATALOG_SCHEMA_IDS.catalogScopeView);
+
+/**
+ * The franchise buttons (plan 0068, section 3.1). Hoisted like the two above it
+ * because the row is assembled here, from catalog's counts and core's refusals,
+ * so no broker subject answers with it.
+ */
+const SHOP_SUMMARY_SCHEMA = hoistContractSchema(
+  CATALOG_SCHEMA_IDS.shopChainSummariesView
+);
 
 /**
  * The three ways a query says where the caller shops (plan 0049, section 3),
@@ -214,31 +227,26 @@ export class CatalogSupermarketsController {
   }
 
   /**
-   * A chain's shops, minus the ones the caller has switched off (plan 0064,
-   * section 3).
+   * Every shop of one chain, nationwide, newest first.
    *
-   * The refusals live in core and the shops live in catalog, so this is the
-   * gateway resolving and passing, exactly as it does for a priced read. It
-   * costs one extra round trip, and `includeExcluded` skips even that for the
-   * screen that edits the refusals and therefore has to see them.
+   * **The owner's read, and it applies nobody's refusals.** The shopper's read
+   * of the same table is `GET /v1/catalog/shops` (plan 0068), which is narrowed
+   * to the caller's postal codes and knows what they have switched off; this one
+   * is how the chain itself is administered, and filtering it by whoever happens
+   * to be looking would hide rows from the person maintaining them.
    */
   @Get(':id/locations')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.list)
-  async listLocations(
+  listLocations(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
-    @Query() query: ListLocationsQueryDto
+    @Query() query: CatalogListQueryDto
   ): Promise<SupermarketLocationPage> {
-    const excludedSupermarketLocationIds = query.includeExcluded
-      ? []
-      : await this.scopes.refusedLocations(user.userId, query.profileId);
-
     return this.nats.send<SupermarketLocationPage>(
       SUPERMARKET_LOCATION_PATTERNS.list,
       {
         userId: user.userId,
         supermarketId: id,
-        excludedSupermarketLocationIds,
         cursor: query.cursor,
         limit: query.limit,
       }
@@ -311,6 +319,109 @@ export class CatalogLocationsController {
   }
 }
 
+/**
+ * The shops in the caller's postal codes (plan 0068), which is what
+ * `apps/velista/plans/0059` draws.
+ *
+ * **`shops` rather than `locations`, and the word is doing work.**
+ * {@link CatalogLocationsController} is the owner surface for one location by
+ * id: it is administered, one row at a time, by the app owner. This is the same
+ * table browsed, by a shopper, keyed on the one axis a shopper has, which is
+ * where they are. Distance is deliberately not that axis (plan 0068, section
+ * 3.3): a profile can hold Córdoba and Madrid, so there is no single centre to
+ * sort by, and the postal code is the one thing both services already agree on.
+ *
+ * Both routes resolve and pass, like every priced read since plan 0049: core
+ * says what the caller wants, catalog says what that means, and the gateway is
+ * the only place that holds both.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/shops', version: '1' })
+export class CatalogShopsController {
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
+
+  /**
+   * One row per chain with a shop in the caller's codes (plan 0068, section
+   * 3.1): the franchise buttons, ready to draw.
+   *
+   * The row's three states come from two services. Catalog counts, because only
+   * catalog knows which shop belongs to which chain; core says which chains the
+   * caller refused outright, which is a statement about the brand that covers
+   * shops it has not opened yet; and this method is where they meet.
+   */
+  @Get('summary')
+  @ApiOkResponse({
+    description:
+      'Every chain with at least one shop in your postal codes: how many it has there, how many of those you have refused, and whether you have refused the chain itself.',
+    schema: componentRef(SHOP_SUMMARY_SCHEMA),
+  })
+  async summary(
+    @AuthUser() user: CurrentUser,
+    @Query() query: ShopQueryDto
+  ): Promise<ShopChainSummariesView> {
+    const selection = await this.scopes.forShops(user.userId, {
+      postalCodes: query.postalCode,
+      profileId: query.profileId,
+    });
+    const summaries =
+      await this.nats.send<SupermarketLocationChainSummariesView>(
+        SUPERMARKET_LOCATION_PATTERNS.summarizeByChain,
+        {
+          userId: user.userId,
+          postalCodes: selection.postalCodes,
+          excludedSupermarketIds: selection.excludedSupermarketIds,
+          excludedSupermarketLocationIds:
+            selection.excludedSupermarketLocationIds,
+          includeExcluded: query.includeExcluded ?? false,
+        }
+      );
+
+    const refusedChains = new Set(selection.excludedSupermarketIds);
+    return {
+      chains: summaries.chains.map((chain) => ({
+        ...chain,
+        excludedChain: refusedChains.has(chain.supermarketId),
+      })),
+    };
+  }
+
+  /**
+   * The shops themselves (plan 0068, section 3.2): a franchise's, or a typed
+   * word's across all of them.
+   *
+   * A page rather than the whole set, unlike the summary above: a dense city
+   * holds hundreds of shops in a profile's codes and the screen scrolls them.
+   */
+  @Get()
+  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.search)
+  async search(
+    @AuthUser() user: CurrentUser,
+    @Query() query: SearchShopsQueryDto
+  ): Promise<ShopPage> {
+    const selection = await this.scopes.forShops(user.userId, {
+      postalCodes: query.postalCode,
+      profileId: query.profileId,
+    });
+    return this.nats.send<ShopPage>(SUPERMARKET_LOCATION_PATTERNS.search, {
+      userId: user.userId,
+      postalCodes: selection.postalCodes,
+      supermarketId: query.supermarketId,
+      query: query.query,
+      includeExcluded: query.includeExcluded ?? false,
+      excludedSupermarketIds: selection.excludedSupermarketIds,
+      excludedSupermarketLocationIds: selection.excludedSupermarketLocationIds,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+}
+
 @ApiTags('catalog')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
@@ -339,14 +450,15 @@ export class CatalogItemsController {
    * Ranked products (plan 0048, section 3), scoped to where the caller shops
    * (plan 0049, section 3).
    *
-   * **Sending no selector no longer means everything.** The caller's default (or
-   * named) profile is resolved for them, and a profile that holds neither a
-   * postal code nor a chain is answered with `catalog_scope_required` rather
-   * than with the whole catalog or with an empty page.
+   * **Sending no selector resolves the caller's profile**, default or named,
+   * rather than meaning everything. A profile that holds neither a postal code
+   * nor a chain resolves to no scopes, and the page comes back ranked with every
+   * price field null (plan 0069, section 2): the catalog is readable whether or
+   * not anything can be priced. `GET /v1/catalog/scope` is where a client learns
+   * which of the three priceless states it is in.
    */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
-  @ApiProblemResponses({ scopeRequired: true })
   async search(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchItemsQueryDto
@@ -375,7 +487,6 @@ export class CatalogItemsController {
    */
   @Get('offers')
   @ApiContractResponse(ITEM_PATTERNS.searchOffers)
-  @ApiProblemResponses({ scopeRequired: true })
   async searchOffers(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchOffersQueryDto
@@ -608,7 +719,6 @@ export class CatalogProductGroupsController {
    */
   @Get(':id/items')
   @ApiContractResponse(ITEM_PATTERNS.search)
-  @ApiProblemResponses({ scopeRequired: true })
   async items(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -660,14 +770,13 @@ export class CatalogSuggestController {
       'The dropdown, in the order it is to be drawn: every matching group first, then the individual products. One ordered array and not two lists, because the rule it carries is an ordering.',
     schema: componentRef(SUGGEST_SCHEMA),
   })
-  @ApiProblemResponses({ scopeRequired: true })
   async suggest(
     @AuthUser() user: CurrentUser,
     @Query() query: SuggestQueryDto
   ): Promise<CatalogSuggestResponse> {
     // Resolved once and passed to both halves, so the two reads cannot quote
-    // prices from different places, and so an empty profile refuses the whole
-    // dropdown rather than half of it.
+    // prices from different places, and so a caller with no scopes gets one
+    // priceless dropdown rather than half a priced one.
     const common = {
       userId: user.userId,
       query: query.q,
@@ -717,9 +826,16 @@ export class CatalogSuggestController {
  *
  * - **which scopes** its results came from, and by which rung of the ladder, so
  *   it can say "prices shown for Madrid" when `approximate` is set;
- * - **which postal codes nobody serves**, which is what turns an empty search
- *   into "no chain we know reaches 12345" rather than "there is nothing";
+ * - **which postal codes nobody serves**, which is what turns a page of unpriced
+ *   products into "no chain we know reaches 12345" rather than "there is
+ *   nothing";
  * - **which profile** answered, when the caller named none.
+ *
+ * Since plan 0069 it is also the only place the three priceless states are told
+ * apart, and it cannot fail: no scopes with no `coverage` is a caller who has
+ * said nothing, no scopes with `coverage` rows all unserved is an area we do not
+ * know yet, and no scopes with a served row is a caller who has refused
+ * everywhere they could shop. No error code could ever have expressed the third.
  *
  * It resolves exactly as a search does and shares its cache, so calling both is
  * one resolution and not two.
@@ -738,7 +854,6 @@ export class CatalogScopeController {
       'The scopes this caller shops at, the reason for each, and whether every postal code they gave is served by anybody we know.',
     schema: componentRef(SCOPE_SCHEMA),
   })
-  @ApiProblemResponses({ scopeRequired: true })
   describe(
     @AuthUser() user: CurrentUser,
     @Query() query: PriceScopedQueryDto

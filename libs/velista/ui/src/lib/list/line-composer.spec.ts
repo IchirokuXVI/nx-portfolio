@@ -1,6 +1,9 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type { RecordedAudio } from '@portfolio/velista/models';
+import type {
+  CatalogSuggestion,
+  RecordedAudio,
+} from '@portfolio/velista/models';
 import {
   AUDIO_CAPTURE,
   AudioRecorder,
@@ -536,5 +539,108 @@ describe('LineComposer, one slot and the empty field decides', () => {
 
     await press(fixture);
     expect(spoken).toHaveLength(1);
+  });
+});
+
+/**
+ * The panel is put down by a click on the page, and the row it is pinned above is
+ * what it is put down by everything except.
+ *
+ * The exception is the whole of the rule: the panel covers a list somebody may want
+ * to look at, so tapping a line has to close it, while the field, the stepper and
+ * the send button are the row they are still using to fill it. Both halves are the
+ * host element, so neither can drift from the other.
+ */
+describe('LineComposer, putting the suggestions down', () => {
+  const OFFERED: readonly CatalogSuggestion[] = [
+    {
+      kind: 'item',
+      item: {
+        id: 'item-oat',
+        name: { es: 'Bebida de avena', en: 'Oat drink' },
+        brand: 'Oatly',
+        productGroupId: null,
+      },
+    },
+  ];
+
+  async function offering() {
+    const { fixture } = await render();
+    fixture.componentRef.setInput('suggestions', OFFERED);
+    type(fixture, 'oat');
+    return fixture;
+  }
+
+  function drawn(fixture: ComponentFixture<LineComposer>): boolean {
+    return host(fixture).querySelector('ul.suggestions') !== null;
+  }
+
+  function clickOn(fixture: ComponentFixture<LineComposer>, target: Element) {
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fixture.detectChanges();
+  }
+
+  function find(
+    fixture: ComponentFixture<LineComposer>,
+    selector: string
+  ): Element {
+    const found = host(fixture).querySelector(selector);
+    if (found === null) {
+      throw new Error(`there is no ${selector} to click`);
+    }
+    return found;
+  }
+
+  it('closes on a click anywhere else on the page', async () => {
+    const fixture = await offering();
+    expect(drawn(fixture)).toBe(true);
+
+    // A line of the list the panel is drawn over. Anything outside the host is the
+    // same gesture: this is not the row I am typing into.
+    clickOn(fixture, document.body);
+
+    expect(drawn(fixture)).toBe(false);
+  });
+
+  it('stays up for a click on the field it belongs to', async () => {
+    const fixture = await offering();
+
+    clickOn(fixture, find(fixture, 'input.field'));
+
+    expect(drawn(fixture)).toBe(true);
+  });
+
+  it('stays up for a click on the quantity', async () => {
+    const fixture = await offering();
+
+    // Setting the number and choosing the product are one gesture, so the control
+    // that sets it cannot be the control that takes the products away.
+    clickOn(fixture, find(fixture, 'lib-quantity-stepper .step'));
+
+    expect(drawn(fixture)).toBe(true);
+  });
+
+  it('stays up for a click on a suggestion, which is what chooses it', async () => {
+    const fixture = await offering();
+    const chosen: { content: string }[] = [];
+    fixture.componentInstance.submitted.subscribe((one) => chosen.push(one));
+
+    clickOn(fixture, find(fixture, 'button.suggestion'));
+
+    // The dismissal must not race the choice: were the panel closed by the click
+    // that lands on one of its own rows, choosing would be a coin toss.
+    expect(chosen).toHaveLength(1);
+  });
+
+  it('comes back on the next keystroke', async () => {
+    const fixture = await offering();
+    clickOn(fixture, document.body);
+    expect(drawn(fixture)).toBe(false);
+
+    // Typing is asking again. A panel that stayed shut until the field was emptied
+    // would be a dropdown somebody had broken for the rest of a sentence.
+    type(fixture, 'oat m');
+
+    expect(drawn(fixture)).toBe(true);
   });
 });

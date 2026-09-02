@@ -250,11 +250,15 @@ export interface ShoppingProfileListResult {
  * What the caller said about where they shop, before catalog says what it means
  * (plan 0049, sections 1.1 and 2.1).
  *
- * `empty` is the one field a caller must branch on: a profile holding no postal
- * code and no included chain has said nothing at all, and section 3 answers that
- * with `CATALOG_SCOPE_REQUIRED` rather than with everything or with nothing.
- * A profile holding only *exclusions* is empty too, for the same reason: "not
- * DIA" is not a place.
+ * `empty` says a profile holds no postal code and no included chain, so it has
+ * said nothing at all. A profile holding only *exclusions* is empty too, for the
+ * same reason: "not DIA" is not a place.
+ *
+ * It is worth knowing and no longer a reason to refuse a read. Since plan 0069
+ * the gateway resolves an empty profile to no scopes and the catalog answers
+ * unpriced; the field survives because the answer is arrived at without a round
+ * trip to catalog, and because a client still wants to say "you have not told us
+ * where you shop".
  */
 export interface ProfileScopeSelector {
   profileId: string;
@@ -272,6 +276,10 @@ export interface ProfileScopeSelector {
    * It does **not** contribute to `empty`. A profile that has only refused
    * things has still said nothing about where it shops, and "not that DIA" is no
    * more a place than "not DIA" is.
+   *
+   * Always present, empty when the profile refuses nothing. Plan 0068 declared
+   * it optional while this plan was in flight and read absent as none; now that
+   * the rows exist, the shop reads take it as it comes.
    */
   excludedSupermarketLocationIds: string[];
   empty: boolean;

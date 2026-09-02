@@ -1,4 +1,8 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  IntersectionType,
+} from '@nestjs/swagger';
 import {
   ITEM_LOOKUP_LIMITS,
   ItemCategory,
@@ -498,53 +502,6 @@ export class CatalogListQueryDto extends PageQueryDto {
 }
 
 /**
- * A query string carries no types, so a flag arrives as `"true"` or as nothing.
- *
- * Only the two spellings a client would actually send are honoured, and anything
- * else is left alone for `@IsBoolean` to refuse: quietly reading an unrecognized
- * value as false would turn a typo into a silently different answer.
- */
-const asBoolean = ({ value }: { value: unknown }) => {
-  if (value === 'true' || value === true) {
-    return true;
-  }
-  if (value === 'false' || value === false) {
-    return false;
-  }
-  return value;
-};
-
-/**
- * A chain's shops (plan 0064, section 3).
- *
- * **The caller's refusals apply unless the caller says otherwise.** A shop
- * somebody has switched off is not somewhere to be offered, so filtering is the
- * default and the flag is how the one screen that needs the whole list asks for
- * it: the page that *edits* the refusals has to draw a shop that is switched
- * off, and a read that hid it could not be used to switch it back on.
- */
-export class ListLocationsQueryDto extends CatalogListQueryDto {
-  @ApiPropertyOptional({
-    format: 'uuid',
-    description:
-      'Apply this profile of yours rather than your default one. Somebody else’s profile is not found.',
-  })
-  @IsOptional()
-  @IsUUID()
-  profileId?: string;
-
-  @ApiPropertyOptional({
-    type: Boolean,
-    description:
-      'List the shops you have switched off as well as the ones you have not. For the screen that edits those choices; every other caller wants the default.',
-  })
-  @IsOptional()
-  @Transform(asBoolean)
-  @IsBoolean()
-  includeExcluded?: boolean;
-}
-
-/**
  * The same orders plus `relevance` (plan 0048, section 3).
  *
  * A sibling of {@link CatalogListQueryDto} rather than a subclass that widens
@@ -575,6 +532,19 @@ const asArray = ({ value }: { value: unknown }) =>
   value === undefined || Array.isArray(value) ? value : [value];
 
 /**
+ * A flag as a query string spells it: `?flag=true`, or bare `?flag`, which
+ * arrives as an empty string and means the caller set it. Anything else is
+ * handed on untouched, so `@IsBoolean` refuses it rather than reading it as
+ * false, which is what a typo deserves.
+ */
+const asBoolean = ({ value }: { value: unknown }) => {
+  if (value === '' || value === 'true' || value === true) {
+    return true;
+  }
+  return value === 'false' || value === false ? false : value;
+};
+
+/**
  * Where the caller shops, for the reads that return items or prices (plan 0048
  * section 3.1, and plan 0049 section 3).
  *
@@ -586,9 +556,12 @@ const asArray = ({ value }: { value: unknown }) =>
  * - Nothing at all, optionally with `profileId`: the caller's default (or named)
  *   shopping profile is resolved for them.
  *
- * **Saying nothing no longer means everything.** A caller whose profile holds
- * neither a postal code nor a chain is answered with `catalog_scope_required`,
- * which the client renders as an onboarding step rather than as a failure.
+ * **Saying nothing no longer means everything**, and it is not an error either.
+ * A caller whose profile holds neither a postal code nor a chain resolves to no
+ * scopes, and the read answers with the catalog ranked as usual and every price
+ * field null (plan 0069, section 2). `GET /v1/catalog/scope` is what tells a
+ * client whether that is because nothing was said, because nobody serves the
+ * area, or because every shop in it was refused.
  */
 export class PriceScopedQueryDto extends SearchOrderQueryDto {
   @ApiPropertyOptional({
@@ -691,6 +664,84 @@ export class SuggestQueryDto extends PriceScopedQueryDto {
   @IsString()
   @MaxLength(120)
   q?: string;
+}
+
+/**
+ * Where the caller is looking for a shop (plan 0068, section 2).
+ *
+ * Two ways to say it, and they are not exclusive: `postalCode` states the codes
+ * outright, which is what a screen showing a code the user has not saved yet
+ * needs; anything else resolves the named or default profile. **The refusals
+ * always come from the profile**, whichever way the codes were named, because a
+ * caller trying a code out is still the same person who said they will not go
+ * to that DIA.
+ *
+ * Saying nothing is not an error here, unlike on a priced read: somebody in the
+ * middle of filling their profile in gets an empty answer rather than
+ * `catalog_scope_required`.
+ */
+export class ShopQueryDto {
+  @ApiPropertyOptional({
+    name: 'postalCode',
+    type: [String],
+    description:
+      'Repeatable. The codes to look in, instead of the ones on your profile.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(MAX_SELECTORS)
+  @IsString({ each: true })
+  @MaxLength(16, { each: true })
+  postalCode?: string[];
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Look as this profile of yours rather than as your default one. Somebody else’s profile is not found.',
+  })
+  @IsOptional()
+  @IsUUID()
+  profileId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop.',
+  })
+  @IsOptional()
+  @Transform(asBoolean)
+  @IsBoolean()
+  includeExcluded?: boolean;
+}
+
+/**
+ * The page of shops (plan 0068, section 3.2): the same selector, plus one chain
+ * and one typed word, both optional and both narrowing.
+ *
+ * Composed rather than subclassed because it needs the fields of two DTOs, and
+ * restating a page’s `cursor` and `limit` here would be a second place for the
+ * page size cap to be wrong.
+ */
+export class SearchShopsQueryDto extends IntersectionType(
+  ShopQueryDto,
+  PageQueryDto
+) {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Only this chain’s shops. What tapping a franchise asks.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Matched against the shop’s name, its chain’s name in any language, its address, its city and its postal code.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
 }
 
 export class CreateProductGroupDto {

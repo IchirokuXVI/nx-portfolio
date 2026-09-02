@@ -6,10 +6,7 @@ import {
   type ProfileScopeSelector,
   type ResolvedScopesView,
 } from '@portfolio/luna-shopper/contracts';
-import {
-  CatalogScopeRequiredException,
-  RedisService,
-} from '@portfolio/luna-shopper/platform';
+import { RedisService } from '@portfolio/luna-shopper/platform';
 import { NatsClient } from '../messaging/nats-client';
 
 /**
@@ -43,6 +40,30 @@ export interface ScopeQuery {
   priceScopeIds?: string[];
   postalCodes?: string[];
   supermarketIds?: string[];
+  profileId?: string;
+}
+
+/**
+ * Who the caller shops as, for the two shop reads of plan 0068, section 2.
+ *
+ * The postal codes and the refusals, and nothing resolved: a shop is a place and
+ * a price scope is not, so this stops one call short of
+ * {@link CatalogScopeView}.
+ */
+export interface ShopperSelection {
+  /** The profile the refusals came from, or null when the caller has none. */
+  profileId: string | null;
+  /** The codes to look in: the caller's own if they stated any, else the profile's. */
+  postalCodes: string[];
+  excludedSupermarketIds: string[];
+  excludedSupermarketLocationIds: string[];
+}
+
+/**
+ * What a shop read says about who is asking: the codes, or a profile of theirs.
+ */
+export interface ShopQuery {
+  postalCodes?: string[];
   profileId?: string;
 }
 
@@ -88,12 +109,12 @@ export class ScopeResolutionService {
   /**
    * The scopes a catalog read runs against.
    *
-   * With `explicitScopeIds`, the caller has already said where they shop and
+   * With explicit scope ids, the caller has already said where they shop and
    * nothing is resolved. Otherwise the named or default profile is, and a
-   * profile holding neither a postal code nor a chain **fails** with
-   * `CATALOG_SCOPE_REQUIRED` (section 3): it does not fall back to everything,
-   * and it does not answer an empty page, because an empty page reads as "there
-   * is nothing", which is a different and false statement.
+   * profile holding neither a postal code nor a chain resolves to **no scopes**
+   * (plan 0069, section 2). That is not a failure and never was: a scope is how
+   * a price gets attached to a product, so having none is a statement about
+   * prices and never about products, and the read below proceeds unpriced.
    */
   async forRead(userId: string, query: ScopeQuery): Promise<string[]> {
     const { priceScopeIds } = await this.describe(userId, query);
@@ -140,29 +161,38 @@ export class ScopeResolutionService {
   }
 
   /**
-   * The shops this caller has switched off (plan 0064, section 3).
+   * The postal codes and refusals a shop read runs with (plan 0068, section 2).
    *
-   * For the reads that offer a shop rather than price one, which need the
-   * refusals without needing the scopes. **Deliberately not the cached path
-   * above**: that one throws `CATALOG_SCOPE_REQUIRED` for a profile that has
-   * said nothing, which is the right answer when the question is "what do prices
-   * cost here" and the wrong one when it is "which shops are there". A profile
-   * with no postal code still has opinions, and a person filling one in should
-   * see their shops rather than an onboarding error.
+   * **Not {@link describe}, deliberately.** That one resolves postal codes into
+   * price scopes, and a shop is a place rather than a price, so this stops a
+   * call short of it: one round trip instead of two, and no scope ladder climbed
+   * to answer a question about geography. It also answers for a profile that has
+   * said nothing, which is precisely the question somebody in the middle of
+   * filling their profile in has to be able to ask.
    *
-   * One round trip to core and no caching. The alternative is a second cache
-   * keyed the same way as the scope one and invalidated by the same writes,
-   * which is a copy of a mechanism to save a call that happens once per screen.
+   * **Stated codes replace the profile's, and never its refusals.** A screen
+   * asking about a code the user has not saved yet is still that user, so what
+   * they have refused still holds; the codes are the only half they are
+   * overriding.
+   *
+   * Uncached, unlike the scope ladder: a resolution here is one round trip
+   * rather than two, it is made once per screen rather than once per keystroke,
+   * and caching it would put a minute of staleness between refusing a shop and
+   * seeing it go.
    */
-  async refusedLocations(
-    userId: string,
-    profileId?: string
-  ): Promise<string[]> {
+  async forShops(userId: string, query: ShopQuery): Promise<ShopperSelection> {
     const selector = await this.nats.send<ProfileScopeSelector>(
       PROFILE_PATTERNS.resolveScopes,
-      { userId, profileId }
+      { userId, profileId: query.profileId }
     );
-    return selector.excludedSupermarketLocationIds;
+    const stated = query.postalCodes ?? [];
+
+    return {
+      profileId: selector.profileId,
+      postalCodes: stated.length > 0 ? stated : selector.postalCodes,
+      excludedSupermarketIds: selector.excludedSupermarketIds,
+      excludedSupermarketLocationIds: selector.excludedSupermarketLocationIds,
+    };
   }
 
   /**
@@ -204,13 +234,24 @@ export class ScopeResolutionService {
     );
 
     if (selector.empty) {
+      // No scopes, no coverage, and no round trip to catalog: a selector with
+      // nothing positive in it resolves to exactly this, so asking would spend a
+      // call to be told what is already known. The pair of empties is the answer
+      // a client reads as "you have not told us where you shop" (plan 0069,
+      // section 3), told apart from "you have refused everywhere you could shop"
+      // by `coverage` carrying rows there and none here.
+      //
       // Deliberately not cached: the next thing this user does is fill the
       // profile in, and the read after that must not be answered from a minute
       // old "you have said nothing".
-      throw new CatalogScopeRequiredException(
-        'Add a postal code or choose a supermarket first',
-        { details: { profileId: selector.profileId } }
-      );
+      return {
+        priceScopeIds: [],
+        scopes: [],
+        coverage: [],
+        approximate: false,
+        profileId: selector.profileId,
+        explicit: false,
+      };
     }
 
     const resolved = await this.askCatalog({

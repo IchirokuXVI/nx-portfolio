@@ -65,16 +65,13 @@ interface CacheEntry {
  * admit what the coarser one refused.
  *
  * A caller who refuses **every** shop that serves them resolves to no scopes at
- * all, and the read that follows answers an empty page rather than the whole
- * catalog. That is not new and not this axis's doing: refusing every chain has
- * always done exactly the same thing, because a chain with no rung one scope is
- * not a candidate for rungs two and three either. Plan 0064 section 3 describes
- * that state as "every product and no prices" instead, which is a different rule
- * from the one plan 0049 shipped in `item.service`, where an **empty** scope set
- * is an explicable empty page and an **absent** one is the unscoped listing.
- * Changing which of those an exhausted exclusion produces is a change to plan
- * 0049's rule, for both axes at once, and belongs to whichever plan decides to
- * make it rather than to this one.
+ * all, and since plan 0069 that is the whole catalog with no prices on it rather
+ * than an empty page. Refusing every chain has always resolved to the same
+ * nothing, because a chain with no rung one scope is not a candidate for rungs
+ * two and three either, so both axes end in the state plan 0064 section 3
+ * describes. Which of the three a caller is in is read from `coverage`: rows
+ * here and no scopes means they refused everywhere, and no rows at all means
+ * they never said where they shop.
  *
  * ## What the answer carries beyond the ids
  *

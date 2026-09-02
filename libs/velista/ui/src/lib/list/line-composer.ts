@@ -4,12 +4,12 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   input,
   output,
   signal,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -141,6 +141,18 @@ export type LineComposerButton = 'add' | 'record';
   templateUrl: './line-composer.html',
   styleUrl: './line-composer.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    // Dismissal, the shape `AppBar`, `LineRow` and `ListViewers` already use: a
+    // document listener that closes when the click landed outside this host.
+    //
+    // **The host is the exception list**, and it is the right one by construction:
+    // the panel, the field, the stepper and the send button are all inside it, so a
+    // click on the row the person is typing into cannot take away the list they are
+    // typing to fill, and a click on a suggestion is not dismissal racing the choice.
+    // Everything else on the page, which is the lines the panel is covering, closes
+    // it.
+    '(document:click)': 'closeOnOutsideClick($event.target)',
+  },
 })
 export class LineComposer {
   /** Whether a submit is in flight. The field stays usable; only the button waits. */
@@ -274,6 +286,33 @@ export class LineComposer {
 
   private readonly _field = viewChild<ElementRef<HTMLInputElement>>('field');
 
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /**
+   * Whether the panel has been waved away for the words currently in the field.
+   *
+   * Presentation state and this component's own, exactly as `AppBar`'s menu is: the
+   * container still holds the suggestions it fetched, and asking it to forget them
+   * because somebody tapped a line would be a page rewriting its own data to change
+   * what a panel looks like.
+   *
+   * It is cleared by the next keystroke, in {@link onInput}. Dismissal is about the
+   * offer that is up, not about the field: somebody who taps away and then types
+   * another letter is asking again, and a panel that stayed shut until the field was
+   * emptied would be a dropdown that can be broken for the rest of a sentence.
+   */
+  private readonly _dismissed = signal(false);
+
+  /**
+   * Whether the panel is drawn.
+   *
+   * The list decides on its own whether it has anything to draw, so this is only the
+   * dismissal. Two separate questions, kept separate: "there is nothing to offer" and
+   * "the offer was declined" look the same on screen and are not the same state, and
+   * collapsing them is how a dismissal ends up surviving the next query.
+   */
+  protected readonly suggestionsShown = computed(() => !this._dismissed());
+
   /**
    * The reader's language, for the catalog's two-language product names.
    *
@@ -375,7 +414,28 @@ export class LineComposer {
   onInput(event: Event): void {
     const typed = (event.target as HTMLInputElement).value;
     this.content.set(typed);
+    // Typing is asking again. See `_dismissed`.
+    this._dismissed.set(false);
     this.queryChanged.emit(typed);
+  }
+
+  /**
+   * A click landed somewhere on the page. Close the panel unless it was ours.
+   *
+   * `click` and not `pointerdown`, which is what every other dismissal in this app
+   * listens for and matters more here than elsewhere: a suggestion is chosen on
+   * click, and closing on the press that precedes it would be a panel racing the row
+   * somebody is pressing.
+   */
+  protected closeOnOutsideClick(target: EventTarget | null): void {
+    if (this._dismissed()) {
+      return;
+    }
+
+    const host = this._host.nativeElement;
+    if (target === null || !host.contains(target as Node)) {
+      this._dismissed.set(true);
+    }
   }
 
   /**
