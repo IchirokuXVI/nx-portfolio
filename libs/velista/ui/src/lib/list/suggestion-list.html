@@ -7,7 +7,7 @@
   the free text row keeps it reachable by way of its own control rather than through an
   empty list.
 -->
-@if (suggestions().length > 0 || asWritten() !== null) {
+@if (rows().length > 0 || asWritten() !== null) {
   <!--
     `above` is opaque and opens at its last row, which is what a panel drawn over
     somebody's shopping list has to be. Stated by the caller through `placement`,
@@ -20,7 +20,13 @@
     class="suggestions"
     role="listbox"
   >
-    @for (suggestion of suggestions(); track $index) {
+    <!--
+      `rows`, not `suggestions`: a panel that opens at its bottom is read from the
+      bottom, so the server's ranking is drawn upward there and downward everywhere
+      else. Which way round is decided in the component, once, rather than by anything
+      here.
+    -->
+    @for (suggestion of rows(); track $index) {
       <li role="none">
         <!--
           `aria-selected="false"` on every row, always. Nothing here is ever selected:

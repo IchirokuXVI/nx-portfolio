@@ -3,7 +3,9 @@
 // Where it goes relative to its field is the **caller's**, not this component's: the
 // composer is pinned to the bottom with the keyboard under it, so its list grows
 // upward over the lines, and the line page's sits under the field where there is
-// nothing in the way. Both get the same rows, in the same order.
+// nothing in the way. Both get the same rows and the same ranking; the one that grows
+// upward is read from the bottom, so it is drawn from the bottom too, which the
+// component decides in `rows`.
 //
 // The caller says which through `placement`, and the one that grows over the page is
 // the one that has to be opaque. See `.suggestions.above`.
@@ -74,7 +76,7 @@
 }
 
 // A group is the answer most people want, so it is the one that stands out: tinted,
-// badged, and at the top where the server put it.
+// badged, and at whichever end of the panel the server's best answer sits at.
 .suggestion.group {
   background: var(--app-action-quiet-bg);
 }

@@ -36,6 +36,15 @@ function suggestions(count: number): readonly CatalogSuggestion[] {
   }));
 }
 
+/** The names in a set of suggestions, for asserting the caller's own array is intact. */
+function offeredNames(offered: readonly CatalogSuggestion[]): string[] {
+  return offered.map((suggestion) =>
+    suggestion.kind === 'item'
+      ? suggestion.item.name.en
+      : suggestion.group.name.en
+  );
+}
+
 /**
  * Give an element a scroll position, which jsdom otherwise reports as zero on
  * everything because it lays nothing out.
@@ -94,9 +103,18 @@ function panel(fixture: ComponentFixture<SuggestionList>): HTMLElement {
   return found;
 }
 
-/** The rows themselves, in the order the server put them in. */
+/** The rows themselves, top to bottom as they are drawn. */
 function rows(fixture: ComponentFixture<SuggestionList>): HTMLElement[] {
   return [...panel(fixture).querySelectorAll<HTMLElement>('button.suggestion')];
+}
+
+/** The name on every row, top to bottom, which is what pins the drawn order. */
+function names(fixture: ComponentFixture<SuggestionList>): string[] {
+  return rows(fixture).map(
+    (row) =>
+      row.querySelector<HTMLElement>('.suggestion-name')?.textContent?.trim() ??
+      ''
+  );
 }
 
 /** Every size drawn, as the translation key the testing translator hands back. */
@@ -163,6 +181,59 @@ describe('SuggestionList, where it goes is the caller’s', () => {
     // Scrolling a list that grows downward to its end would hide the top of the
     // server's ranking behind the worst answers in it.
     expect(drawn.scrollTop).toBe(0);
+  });
+});
+
+/**
+ * Which end of the server's ranking sits nearest the field, which is decided by the
+ * placement and by nothing else.
+ *
+ * The panel over the composer opens at its **last** row, so the row nearest the field
+ * is the one everybody sees first and the list climbs away from there. Drawn top to
+ * bottom, that put the server's best answer at the far end of a list that usually
+ * needs scrolling, which is the defect this pins. The ranking itself is untouched: it
+ * is the same order, read the way the panel is read.
+ */
+describe('SuggestionList, which end of the ranking is nearest the field', () => {
+  it('climbs away from the field when it is placed above, best answer first', async () => {
+    const fixture = await render(suggestions(3), 'above', 'olive oil');
+
+    // Read from the bottom: the free text row, then the server's first suggestion
+    // directly above it, then the rest of the ranking climbing away.
+    expect(names(fixture)).toEqual([
+      'Product 2',
+      'Product 1',
+      'Product 0',
+      'list.add.asWritten',
+    ]);
+  });
+
+  it('keeps the free text row last when there is nothing to offer above it', async () => {
+    const fixture = await render([], 'above', 'olive oil');
+
+    expect(names(fixture)).toEqual(['list.add.asWritten']);
+  });
+
+  it('reads straight down when it is placed below, where the field is above it', async () => {
+    const fixture = await render(suggestions(3), 'below');
+
+    expect(names(fixture)).toEqual(['Product 0', 'Product 1', 'Product 2']);
+  });
+
+  it('leaves the caller’s array alone rather than reversing it in place', async () => {
+    // `reverse` mutates, and the array handed in belongs to whoever fetched it. A
+    // component that reversed it in place would flip the caller's own copy once per
+    // render and settle on whichever parity the last pass left behind.
+    const offered = suggestions(3);
+    const fixture = await render(offered, 'above');
+
+    expect(names(fixture)).toEqual(['Product 2', 'Product 1', 'Product 0']);
+    expect(fixture.componentInstance.suggestions()).toBe(offered);
+    expect(offeredNames(offered)).toEqual([
+      'Product 0',
+      'Product 1',
+      'Product 2',
+    ]);
   });
 });
 
