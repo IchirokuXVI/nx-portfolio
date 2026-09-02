@@ -191,6 +191,7 @@
                 (open)="openLine(line)"
                 (reopen)="reopenLine(line)"
                 (settle)="settleLine(line)"
+                [awaitingApproval]="pendingTargets().has(line.id)"
                 [busy]="isBusy(line)"
                 [canReopen]="canReopen"
                 [line]="line"

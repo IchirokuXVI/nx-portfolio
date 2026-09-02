@@ -941,6 +941,15 @@
       "submit": "Registrarlo",
       "cancel": "Cancelar"
     },
+    "units": {
+      "open": "Cambiar lo que ha pedido cada lista",
+      "title": "{{name}}"
+    },
+    "send": {
+      "open": "Enviar a una lista de la compra",
+      "title": "{{name}}",
+      "pending": "Esperando a que esa lista lo acepte"
+    },
     "people": {
       "title": "En esta lista",
       "open": "Ver quién está en esta lista",
@@ -1027,6 +1036,13 @@
       "gone": "Esta lista ya no está",
       "tooFast": "Demasiado rápido. Inténtalo dentro de un momento",
       "failed": "No se ha guardado. Inténtalo de nuevo",
+      "staleLine_one": "Otra persona ha cambiado esta línea. Ahora pone {{count}}",
+      "staleLine_other": "Otra persona ha cambiado esta línea. Ahora pone {{count}}",
+      "belowSettled_one": "Ya se ha comprado uno para esta lista",
+      "belowSettled_other": "Ya se han comprado {{count}} para esta lista",
+      "basketFinished": "Esta lista está terminada, así que no se puede cambiar",
+      "notSendable": "Solo se puede enviar a una lista de la compra una línea añadida aquí",
+      "alreadySent": "Esta línea ya se ha enviado a una lista de la compra",
       "reference": "ref {{correlationId}}"
     },
     "status": {

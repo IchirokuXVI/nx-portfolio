@@ -634,7 +634,14 @@ describe('SettleSheet: a line with nothing left to settle', () => {
 
     // Both of the reported controls, gone. Not disabled: a control you may not use is
     // not drawn (`0030`), and a dimmed "Got all 0" would still be a wrong sentence.
-    expect(control(fixture, '.actions')).toBeNull();
+    //
+    // `:not(.lists)` because velista `0055` and `0056` added a second group with the
+    // same layout class, and it is drawn over a finished line **on purpose**: sending
+    // a line that was already bought puts what happened onto a household's list, and
+    // raising a finished line's contribution is a correction of the record rather
+    // than a purchase. What this assertion is about is the settle targets, so it says
+    // so rather than counting every group on the pane.
+    expect(control(fixture, '.actions:not(.lists)')).toBeNull();
     expect(control(fixture, '.primary')).toBeNull();
   });
 

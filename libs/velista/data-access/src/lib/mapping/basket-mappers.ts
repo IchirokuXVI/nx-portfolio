@@ -1,9 +1,17 @@
 import {
+  BASKET_LINE_KINDS,
+  BASKET_ORIGIN_UNAVAILABLE_REASONS,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
+  type BasketBindResult,
   type BasketLine,
   type BasketLineOrigin,
+  type BasketLineOriginDetail,
+  type BasketLineOrigins,
+  type BasketLineTarget,
   type BasketLinkPreview,
+  type BasketOriginCandidate,
+  type BasketOriginQuantityResult,
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketProduct,
@@ -177,11 +185,225 @@ export function toBasketLine(raw: unknown): BasketLine | null {
       raw['lastOutcome'] === 'BOUGHT' || raw['lastOutcome'] === 'NOT_AVAILABLE'
         ? raw['lastOutcome']
         : null,
+    // Absent on a basket served by a backend from before luna `0055`, where every
+    // line was composed by a run, so `DERIVED` is both the fallback for a value this
+    // build does not know and the truth for an older server. Not gated by the all or
+    // nothing rule, unlike the two fields below it: every reader is told what kind of
+    // line they are looking at, and what is withheld is which household it touches.
+    kind: oneOf(raw['origin'], BASKET_LINE_KINDS, 'DERIVED'),
   };
 
-  return 'origins' in raw
-    ? { ...line, origins: mapArray(raw['origins'], toBasketLineOrigin) }
-    : line;
+  const withOrigins =
+    'origins' in raw
+      ? { ...line, origins: mapArray(raw['origins'], toBasketLineOrigin) }
+      : line;
+
+  // An `in` check for `origins`' reason and not for its convenience. Absent is a
+  // reader who may not have it, and null is a line that has been sent nowhere; the
+  // send control is offered over the second and never over the first, so collapsing
+  // them would draw it for a guest.
+  return 'targetListId' in raw
+    ? { ...withOrigins, targetListId: nullableStr(raw['targetListId']) }
+    : withOrigins;
+}
+
+/**
+ * From `LineOriginDetail`: one list already on a line, with everything the units
+ * sheet draws (velista `0055`).
+ *
+ * The four ids are required and the two names are not, which is the same split
+ * {@link toBasketLineOrigin} makes and for the same reason: a row with half an
+ * identity cannot be written back to, while a row with no name is a list deleted
+ * since the run and still has a number worth showing.
+ */
+function toBasketLineOriginDetail(raw: unknown): BasketLineOriginDetail | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const originId = str(raw['originId']);
+  const listId = str(raw['listId']);
+  const lineId = str(raw['lineId']);
+  const zoneId = str(raw['zoneId']);
+
+  if (
+    originId === null ||
+    listId === null ||
+    lineId === null ||
+    zoneId === null
+  ) {
+    return null;
+  }
+
+  return {
+    originId,
+    listId,
+    lineId,
+    zoneId,
+    listName: nullableStr(raw['listName']),
+    zoneName: nullableStr(raw['zoneName']),
+    contributed: numOr(raw['contributed'], 0),
+    listQuantity: numOr(raw['listQuantity'], 0),
+    settledHere: numOr(raw['settledHere'], 0),
+    // False unless the server said otherwise, which is the safe direction: a row
+    // this build could not read the flag on draws no editor rather than one whose
+    // every write the gateway refuses.
+    writable: raw['writable'] === true,
+  };
+}
+
+/**
+ * From `OriginCandidate`: a list holding the same thing that is not on the line.
+ *
+ * **`unavailable` is absent when the candidate is adoptable**, which is the one
+ * place in this file where absence is folded onto null rather than kept apart from
+ * it. There are only two answers here, "you may take this" and a reason you may not,
+ * and the wire spends a key on the first rather than a value; the model spends a
+ * value, so the sheet has one field to branch on.
+ */
+function toBasketOriginCandidate(raw: unknown): BasketOriginCandidate | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const listId = str(raw['listId']);
+  const lineId = str(raw['lineId']);
+  const zoneId = str(raw['zoneId']);
+
+  if (listId === null || lineId === null || zoneId === null) {
+    return null;
+  }
+
+  const unavailable = raw['unavailable'];
+
+  return {
+    listId,
+    lineId,
+    zoneId,
+    listName: nullableStr(raw['listName']),
+    zoneName: nullableStr(raw['zoneName']),
+    listQuantity: numOr(raw['listQuantity'], 0),
+    content: strOr(raw['content'], ''),
+    matchedOnText: raw['matchedOnText'] === true,
+    // A reason this build has never heard of still means "not adoptable", so it
+    // reads as `CLAIMED`, the one that says least about why. Offering the row anyway
+    // would be a control the server refuses.
+    unavailable:
+      unavailable === null || unavailable === undefined
+        ? null
+        : oneOf(unavailable, BASKET_ORIGIN_UNAVAILABLE_REASONS, 'CLAIMED'),
+  };
+}
+
+/**
+ * From `msg.generatedList.lineOrigins.response` (`GET .../lines/:lineId/origins`).
+ *
+ * Null only when the line id is unreadable, because the sheet is about one line and
+ * a report that cannot say which is not one. Both arrays degrade to empty, which is a
+ * real state on both sides: a line whose lists were all taken off it, and a basket
+ * whose zones hold nothing else like it.
+ */
+export function toBasketLineOrigins(raw: unknown): BasketLineOrigins | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const lineId = str(raw['lineId']);
+  return lineId === null
+    ? null
+    : {
+        lineId,
+        origins: mapArray(raw['origins'], toBasketLineOriginDetail),
+        candidates: mapArray(raw['candidates'], toBasketOriginCandidate),
+      };
+}
+
+/**
+ * From `msg.generatedList.setOriginQuantity.response` (`POST .../origins`).
+ *
+ * `origin` is **null on purpose** rather than dropped: a contribution set to zero
+ * takes the list off the line, and the sheet has to remove the row rather than leave
+ * it drawn at its old number. So a null answer is applied and only an unreadable
+ * line refuses the whole result.
+ */
+export function toBasketOriginQuantityResult(
+  raw: unknown
+): BasketOriginQuantityResult | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const line = toBasketLine(raw['line']);
+  return line === null
+    ? null
+    : {
+        line,
+        origin: toBasketLineOriginDetail(raw['origin']),
+        listQuantity: numOr(raw['listQuantity'], 0),
+      };
+}
+
+/**
+ * From `LineTarget`: one list this line could be sent to (velista `0056`).
+ *
+ * `fromRun` defaults to false, which only costs the picker its ordering: a list the
+ * run drew from that this build failed to read the flag on falls in with the rest
+ * rather than disappearing from the picker altogether.
+ */
+export function toBasketLineTarget(raw: unknown): BasketLineTarget | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const listId = str(raw['listId']);
+  const zoneId = str(raw['zoneId']);
+
+  return listId === null || zoneId === null
+    ? null
+    : {
+        listId,
+        zoneId,
+        listName: nullableStr(raw['listName']),
+        zoneName: nullableStr(raw['zoneName']),
+        fromRun: raw['fromRun'] === true,
+      };
+}
+
+/**
+ * From `msg.generatedList.bindLine.response` (`POST .../lines/:lineId/target`).
+ *
+ * The line, the list it went to, and whether it is waiting. `pendingApproval` reads
+ * as false unless the server said true, and that is the direction that costs least:
+ * a row that fails to say "waiting for that list to approve it" is quieter than one
+ * that says it about a line already on the household's list.
+ */
+export function toBasketBindResult(raw: unknown): BasketBindResult | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const line = toBasketLine(raw['line']);
+  const listId = str(raw['listId']);
+  const zoneId = str(raw['zoneId']);
+  const createdLineId = str(raw['createdLineId']);
+
+  if (
+    line === null ||
+    listId === null ||
+    zoneId === null ||
+    createdLineId === null
+  ) {
+    return null;
+  }
+
+  return {
+    line,
+    listId,
+    zoneId,
+    createdLineId,
+    quantity: numOr(raw['quantity'], 0),
+    pendingApproval: raw['pendingApproval'] === true,
+  };
 }
 
 /**

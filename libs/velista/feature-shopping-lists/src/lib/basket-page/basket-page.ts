@@ -216,6 +216,14 @@ export class BasketPage {
   protected readonly canReopen = BASKET_REOPEN_AVAILABLE;
 
   /**
+   * Which lines were sent to a list that has not accepted them yet (`0056`).
+   *
+   * From the store rather than from the lines, because no field of a line carries
+   * it. See `BasketStore.pendingTargets` for the gap it stands in for.
+   */
+  protected readonly pendingTargets = this._store.pendingTargets;
+
+  /**
    * The faces along the top: **who has this basket open right now**.
    *
    * `0048` section 4 is the change. This used to be built from the participant
