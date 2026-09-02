@@ -1,4 +1,3 @@
-import type { LocalizedName } from './shopping-profile';
 import type {
   CommentTranscription,
   LineApprovalStatus,
@@ -9,6 +8,7 @@ import type {
   ZoneRole,
   ZoneStatus,
 } from './enums';
+import type { LocalizedName } from './shopping-profile';
 
 /**
  * The app's own domain models (rule D4, plan 0004 section 4.1).
@@ -334,6 +334,20 @@ export interface LineSettlement {
    */
   readonly settledByUserId: string | null;
   readonly settledAt: Date;
+  /**
+   * When this settlement was taken back, or null if it still stands (luna `0054`,
+   * section 3.3).
+   *
+   * A reopen does **not** delete the settlements it undoes: a settlement is an append
+   * (`0047` section 3), and that does not change. So a reverted row is excluded from
+   * every consumption total on the server and is **still served by the history**,
+   * marked, because "somebody said they got this and then took it back" is a truer
+   * history than a gap, and reconciling two people's trips is the whole reason to open
+   * that pane.
+   *
+   * Null for every row written before that plan.
+   */
+  readonly revertedAt: Date | null;
 }
 
 /**

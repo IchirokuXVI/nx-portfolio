@@ -47,14 +47,24 @@
   color: var(--app-text-secondary);
   cursor: pointer;
 
-  &:hover {
-    background: var(--app-surface-raised);
-    color: var(--app-text-primary);
-  }
-
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The two **actions** in the bar react to a pointer. The way out of the bar does
+// not, and that is the whole of plan 0052 section 9: the `page.back` mixin in
+// `_list-page.scss`, `_zone-page.scss`, `_account-page.scss` and
+// `_install-page.scss` sets a focus ring and stops, and every hand written back
+// control in the app does the same. This one shared its rule with `.share` and
+// `.people` and inherited a hover from them, so the basket's was the one back
+// control in the product that lit up under a cursor.
+.share,
+.people {
+  &:hover {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
   }
 }
 
@@ -108,6 +118,20 @@
   cursor: pointer;
 }
 
+// The bubble needs an edge, and it had none (plan 0052, section 3).
+//
+// It was filled `--app-surface-sunken` on a bar whose background is
+// `--app-surface-ground`, and those two are **one step apart on the ramp** in both
+// themes: `--app-ink-900` on `--app-ink-950` in dark, `--app-neutral-100` on
+// `--app-neutral-50` in light. At `--app-avatar-sm` that is a circle you have to
+// look for. The guests were the giveaway: `guest-ring` gave them a dashed edge, so
+// the only faces on the row that could be found were the ones marked as guests.
+//
+// So the fill moves one further step away from what it sits on, to
+// `--app-surface-raised`, and a solid subtle border is drawn on top of it. Solid
+// subtle against the guest ring's dashed strong is a **bigger** difference than
+// nothing against dashed strong, so marking a guest gets easier rather than harder,
+// which is what `0044` section 7 asks of the ring.
 .face {
   display: flex;
   align-items: center;
@@ -115,9 +139,12 @@
   inline-size: var(--app-avatar-sm);
   block-size: var(--app-avatar-sm);
   margin-inline-start: calc(var(--app-space-2) * -1);
+  border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-radius-full);
-  background: var(--app-surface-sunken);
-  // A ring in the page's own background, so overlapping faces stay separable.
+  background: var(--app-surface-raised);
+  // A ring in the page's own background, so overlapping faces stay separable. It
+  // sits outside the border rather than replacing it, so the two do not fight: one
+  // separates a face from the bar, the other separates it from the face beside it.
   box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-surface-ground);
   font-size: var(--app-text-2xs);
   text-transform: uppercase;

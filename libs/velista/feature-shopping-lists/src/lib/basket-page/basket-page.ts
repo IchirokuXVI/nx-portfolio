@@ -11,7 +11,11 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
+import {
+  BASKET_REOPEN_AVAILABLE,
+  BasketStore,
+  SessionStore,
+} from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, type BasketLine } from '@portfolio/velista/models';
 import {
   appPath,
@@ -117,8 +121,17 @@ export class BasketPage {
     () => this._store.me()?.kind === 'OWNER'
   );
 
-  /** The reader's own participant id, so their own edits read as "you". */
+  /** The reader's own participant id, so their own edits can be named. */
   protected readonly meId = computed(() => this._store.me()?.id ?? null);
+
+  /**
+   * The reader's own account name, handed down to every row.
+   *
+   * Read once here rather than in {@link BasketLineRow}, which is constructed once per
+   * line: the page already holds the session, and the caption on a line the reader
+   * settled themselves is the one thing on the row the basket alone cannot name.
+   */
+  protected readonly ownName = computed(() => this._session.username());
 
   protected readonly products = computed(
     () => this._store.basket()?.products ?? new Map()
@@ -169,6 +182,17 @@ export class BasketPage {
 
   /** Whether this participant has been removed while the phone was in their hand. */
   protected readonly revoked = this._store.revoked;
+
+  /**
+   * Whether a finished row's status control may be pressed (plan 0052, section 10).
+   *
+   * A build constant and not state, so it is read once here and handed down rather
+   * than imported by the row, which is constructed once per line. While it is false a
+   * finished line's glyph is a state indicator instead of a button: it says what the
+   * line is, and does not offer an act that would 404 against a backend without luna
+   * `0054`'s route.
+   */
+  protected readonly canReopen = BASKET_REOPEN_AVAILABLE;
 
   /**
    * The faces along the top: **who has this basket open right now**.
@@ -250,6 +274,47 @@ export class BasketPage {
     void this._router.navigate(sheetSegments('lines', line.id, 'settle'), {
       relativeTo: this._route,
     });
+  }
+
+  /**
+   * The row's status control, settling direction: the whole outstanding amount.
+   *
+   * The same body the sheet's primary button sends, so the two gestures cannot
+   * allocate differently. It does not open the allocation pane and it asks nothing
+   * about zones: the system allocates oldest origin first exactly as it does when the
+   * sheet sends the same body (plan 0052, section 6.4).
+   */
+  protected settleLine(line: BasketLine): void {
+    void this._toggle(line, () =>
+      this._store.settle(line.id, { outcome: 'BOUGHT' })
+    );
+  }
+
+  /** The other direction: a finished line back to fully outstanding. */
+  protected reopenLine(line: BasketLine): void {
+    void this._toggle(line, () => this._store.reopen(line.id));
+  }
+
+  /**
+   * Run a row write, and open the sheet on it if it has something to report.
+   *
+   * **The row cannot draw a skipped origin report**, because it is a paragraph and a
+   * row is three short lines. So a write that comes back with `skippedCount > 0` opens
+   * the settle sheet on that line, which is where `0051` section 6.4's sentence
+   * already lives and where the person can read it beside what they were doing.
+   *
+   * A failure needs no branch here. It has already moved `BasketStore.state` or is a
+   * transient the next refresh resolves, and the row is drawn from the store either
+   * way; the sheet is where a failure gets a sentence, and the person opens it.
+   */
+  private async _toggle(
+    line: BasketLine,
+    write: () => Promise<{ skippedCount: number } | null>
+  ): Promise<void> {
+    const result = await write();
+    if (result !== null && result.skippedCount > 0) {
+      this.openLine(line);
+    }
   }
 
   protected openPeople(): void {

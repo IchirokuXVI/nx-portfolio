@@ -72,6 +72,10 @@ export function toBasketParticipant(raw: unknown): BasketParticipant | null {
     id,
     kind: oneOf(raw['kind'], PARTICIPANT_KINDS, PARTICIPANT_KIND_FALLBACK),
     displayName: nullableStr(raw['displayName']),
+    // Absent on a basket served by a backend before luna `0054`, and absent for a
+    // guest, who has no account. Both read as null and both fall through to the same
+    // place, which is what lets the two sides ship in either order.
+    username: nullableStr(raw['username']),
     guestNumber:
       typeof raw['guestNumber'] === 'number' ? raw['guestNumber'] : null,
     userId: nullableStr(raw['userId']),

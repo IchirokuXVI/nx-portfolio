@@ -14,6 +14,7 @@ import {
 import {
   BasketStore,
   LINE_SERVICE,
+  SessionStore,
   type LineServiceI,
 } from '@portfolio/velista/data-access';
 import {
@@ -33,7 +34,12 @@ import {
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
-import { participantName } from '../basket-labels';
+import {
+  basketErrorKey,
+  correlationIdOf,
+  type BasketOperation,
+} from '../basket-error-copy';
+import { participantName, touchedCaption } from '../basket-labels';
 import { basketPath } from '../basket-paths';
 
 /**
@@ -149,6 +155,12 @@ export class SettleSheet {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
+  /**
+   * The account, for the one name the basket does not carry: the reader's own.
+   *
+   * Null for a guest, who has no account and whose own row the server does name.
+   */
+  private readonly _session = inject(SessionStore);
 
   /** The basket underneath, which is where closing this sheet goes. */
   private readonly _generatedListId = generatedListIdOf(this._route);
@@ -156,7 +168,17 @@ export class SettleSheet {
   private readonly _lineId = this._route.snapshot.paramMap.get('lineId') ?? '';
   private readonly _pane = signal<Pane>('settle');
   private readonly _busy = signal(false);
-  private readonly _failed = signal(false);
+  /**
+   * Which act failed, or null if none has (plan 0052, section 7.2).
+   *
+   * An **operation and not a boolean**, which is the whole of the change. This was
+   * `_failed: signal(false)` and drew one sentence, `basket.settle.failed`, for every
+   * failure the screen can suffer: the backend said something specific and the screen
+   * said "That did not save. Try again." `forbidden` and `conflict` each mean several
+   * things here, so the copy is keyed on the code **and** what was being attempted,
+   * and this is the second half of that key.
+   */
+  private readonly _failedOp = signal<BasketOperation | null>(null);
   private readonly _result = signal<BasketSettleResult | null>(null);
 
   private readonly _history = signal<readonly SettlementRowVm[]>([]);
@@ -168,8 +190,27 @@ export class SettleSheet {
 
   protected readonly pane = this._pane.asReadonly();
   protected readonly busy = this._busy.asReadonly();
-  protected readonly failed = this._failed.asReadonly();
   protected readonly result = this._result.asReadonly();
+
+  /**
+   * What to say about the last failure, or null when there has not been one.
+   *
+   * The code comes from {@link BasketStore.error}, which already holds the last
+   * failure and is already exposed, and the operation from {@link _failedOp}. The
+   * server's own `message` is deliberately not used: the gateway's catalog gives every
+   * code one message, so it reads identically for every conflict in the product.
+   */
+  protected readonly errorKey = computed<string | null>(() => {
+    const operation = this._failedOp();
+    return operation === null
+      ? null
+      : basketErrorKey(this._store.error(), operation);
+  });
+
+  /** The support reference, drawn beside a failure that has one. */
+  protected readonly correlationId = computed<string | null>(() =>
+    this._failedOp() === null ? null : correlationIdOf(this._store.error())
+  );
   protected readonly seesZoneData = this._store.seesZoneData;
   protected readonly history = this._history.asReadonly();
   protected readonly historyState = this._historyState.asReadonly();
@@ -185,6 +226,45 @@ export class SettleSheet {
   protected readonly outstanding = computed(() => {
     const line = this.line();
     return line === null ? 0 : outstanding(line);
+  });
+
+  /**
+   * Whether this line has nothing left to settle (plan 0052, section 7.1).
+   *
+   * A finished line is still tappable, deliberately: `0043` section 3.2 keeps it in
+   * place so somebody can look at what they bought. So this sheet opens on one, and
+   * every settle target on it was a control that could not work. The plural rule
+   * picked `all_other` for a count of zero and the button read **"Got all 0"**, and
+   * pressing either it or "They had none" sent a settle that core refuses, because
+   * `generated-list-settle.service.ts` throws when `outstanding === 0`.
+   *
+   * **A control you may not use is not drawn** (`0030`), so this is what the settle
+   * pane branches its targets on rather than a disabled state.
+   */
+  protected readonly finished = computed(
+    () => this.line() !== null && this.outstanding() === 0
+  );
+
+  /**
+   * What happened to this line, in one sentence, for a finished one.
+   *
+   * The **same** sentence `touchedCaption` composes for the row, so the sheet and the
+   * row underneath it cannot disagree about what a person did. Null for a line nobody
+   * has touched, which a finished line never is, and for one that was edited rather
+   * than settled.
+   */
+  protected readonly whatHappened = computed<string | null>(() => {
+    const line = this.line();
+    return line === null
+      ? null
+      : touchedCaption(
+          line,
+          this._store.participantsById(),
+          this._translator,
+          this._locale(),
+          this._store.me()?.id ?? null,
+          this._session.username()
+        );
   });
 
   /**
@@ -331,15 +411,21 @@ export class SettleSheet {
   /** Swap the pick. Anybody may, guests included: options are catalog data. */
   protected async choose(itemId: string): Promise<void> {
     this._busy.set(true);
+    this._failedOp.set(null);
     const changed = await this._store.setPick(this._lineId, itemId);
     this._busy.set(false);
-    if (changed !== null) {
-      this._pane.set('settle');
+    if (changed === null) {
+      // A refused swap used to say **nothing at all**: the pane simply stayed where
+      // it was and the person tapped the same option again. It reports now, like
+      // every other act on this sheet.
+      this._failedOp.set('basket.pick');
+      return;
     }
+    this._pane.set('settle');
   }
 
   protected openPane(pane: Pane): void {
-    this._failed.set(false);
+    this._failedOp.set(null);
     if (pane === 'history') {
       // Read on the way in rather than with the basket: most people settle a line and
       // never ask what happened to it, and this is one request per origin.
@@ -596,6 +682,18 @@ export class SettleSheet {
    * A settle made from a basket carries **no user id at all** when a guest made it
    * (backend `0051`), and the row draws the neutral phrase for that, which is right:
    * the person genuinely has no account to be named by.
+   *
+   * ## The reader's own row is named here, not in `toSettlementRow`
+   *
+   * `SettlementRowVm.who` is null for a `mine` row by construction, and the pane used
+   * to draw `basket.history.you` for one. Plan 0052 section 2.1 names the reader
+   * instead, for the reason the row caption does: this screen is read on other
+   * people's phones.
+   *
+   * The **shared** function is deliberately left alone. It also serves the line page
+   * and the line detail sheet (`libs/velista/models/src/lib/line-detail-view.ts`),
+   * which are **zone** screens, where "You" is correct and is not part of this report.
+   * So the override lives here, where the account and the locale already are.
    */
   private _toRow(settlement: {
     id: string;
@@ -607,7 +705,7 @@ export class SettleSheet {
     const locale = this._locale();
     const byUserId = this._byUserId();
 
-    return toSettlementRow(
+    const row = toSettlementRow(
       settlement,
       {
         nameOf: (userId) => {
@@ -621,6 +719,17 @@ export class SettleSheet {
       },
       null
     );
+
+    if (!row.mine) {
+      return row;
+    }
+
+    // A `mine` row means an account settled it and that account is the reader's, so
+    // there is normally a username to use. Where there is not, `who` stays null and
+    // the template falls back to "You" rather than to "Someone", which would be the
+    // one wrong thing to call the person reading it.
+    const own = this._session.username()?.trim();
+    return own === undefined || own === '' ? row : { ...row, who: own };
   }
 
   /**
@@ -660,12 +769,16 @@ export class SettleSheet {
     body: Parameters<BasketStore['settle']>[1]
   ): Promise<void> {
     this._busy.set(true);
-    this._failed.set(false);
+    this._failedOp.set(null);
     const result = await this._store.settle(this._lineId, body);
     this._busy.set(false);
 
     if (result === null) {
-      this._failed.set(true);
+      // Named rather than flagged, so the sentence can be the one the failure
+      // actually deserves: a `conflict` here is somebody else finishing this line
+      // between the sheet opening and the tap landing, which is the ordinary case
+      // when two people work one list in a shop.
+      this._failedOp.set('basket.settle');
       return;
     }
 
