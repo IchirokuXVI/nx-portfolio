@@ -7,7 +7,10 @@ import {
   UserKind,
   UsernamePropagation,
 } from '../lib/enums/auth.enums';
-import { ParticipantKind } from '../lib/enums/generated-list.enums';
+import {
+  OriginUnavailableReason,
+  ParticipantKind,
+} from '../lib/enums/generated-list.enums';
 import {
   CommentTranscription,
   LineApprovalStatus,
@@ -46,6 +49,8 @@ export const ENUM_IDS = {
   listResolutionBranch: schemaId('enums/ListResolutionBranch'),
   /** Who is acting on a shared basket (plan 0051, section 3). */
   participantKind: schemaId('enums/ParticipantKind'),
+  /** Why a matching list cannot be adopted into a basket line (plan 0057, section 3.2). */
+  originUnavailableReason: schemaId('enums/OriginUnavailableReason'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -64,4 +69,8 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.assistantRole, Object.values(AssistantRole)),
   enumOf(ENUM_IDS.listResolutionBranch, Object.values(ListResolutionBranch)),
   enumOf(ENUM_IDS.participantKind, Object.values(ParticipantKind)),
+  enumOf(
+    ENUM_IDS.originUnavailableReason,
+    Object.values(OriginUnavailableReason)
+  ),
 ];

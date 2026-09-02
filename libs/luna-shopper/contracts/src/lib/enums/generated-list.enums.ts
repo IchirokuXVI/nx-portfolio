@@ -95,3 +95,24 @@ export enum ParticipantKind {
   REGISTERED = 'REGISTERED',
   GUEST = 'GUEST',
 }
+
+/**
+ * Why a list holding the same thing cannot be put into a basket line (plan 0057,
+ * section 3.2).
+ *
+ * A candidate carrying one of these is **served rather than filtered out**, which
+ * is the one place this codebase deliberately answers with something the caller
+ * cannot act on. "The parents' house also wants milk and somebody else is already
+ * buying it" is a fact worth knowing while standing in a dairy aisle, and it is a
+ * fact about lists this reader has already been found entitled to. Velista draws
+ * it as a caption with no control beside it, so the **control** is absent and the
+ * information is present, which is what keeps plan 0030's rule intact.
+ */
+export enum OriginUnavailableReason {
+  /** Another active basket of the owner's already carries it (plan 0050, section 3). */
+  CLAIMED = 'CLAIMED',
+  /** Its `approvalStatus` is not `APPROVED`, so a run would not have taken it either. */
+  NOT_APPROVED = 'NOT_APPROVED',
+  /** Its quantity is already zero, so this basket would be asking for nothing. */
+  SETTLED = 'SETTLED',
+}

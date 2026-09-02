@@ -70,10 +70,11 @@ export function toGeneratedLineView(
  * and it is why this is a separate mapper rather than a flag on
  * {@link toGeneratedLineView}.
  *
- * The attribution is always present, for everybody. "Who got the bread" is the
- * question in a shop where four people are working one list (velista `0044`,
- * section 4.3), and a participant id names a person on this basket without
- * naming anything outside it.
+ * Both attributions are always present, for everybody. "Who got the bread" and
+ * "who put this here" are the two questions a shop where four people are working
+ * one list actually asks (velista `0044`, section 4.3; plan 0055, section 4),
+ * and a participant id names a person on this basket without naming anything
+ * outside it.
  */
 export function toBasketLineView(
   row: GeneratedListLine,
@@ -93,6 +94,10 @@ export function toBasketLineView(
     itemId: row.itemId,
     options: children.options.map((option) => option.itemId),
     position: row.position,
+    // Written once and never afterwards, which is why it is a second field and
+    // not a reuse of the one below (plan 0055, section 4): that one becomes
+    // whoever settles the line, and then nobody can say who typed it.
+    createdByParticipantId: row.createdByParticipantId,
     lastEditedByParticipantId: row.lastEditedByParticipantId,
     lastEditedAt: row.lastEditedAt?.toISOString() ?? null,
     // Not derivable from the numbers: NOT_AVAILABLE closes the outstanding

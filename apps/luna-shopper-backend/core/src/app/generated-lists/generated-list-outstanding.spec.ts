@@ -7,8 +7,8 @@ import {
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  BasketFinishedException,
-  OutstandingMovedException,
+  GeneratedListFinishedException,
+  StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type { DataSource } from 'typeorm';
@@ -501,7 +501,7 @@ describe('a stale client is refused rather than inverted (section 3.2)', () => {
 
     // The line stands at 3 outstanding; this client last saw 5.
     await expect(move(harness, 4, 5)).rejects.toBeInstanceOf(
-      OutstandingMovedException
+      StaleQuantityException
     );
     expect(harness.settlements).toHaveLength(0);
     expect(harness.basketLine.quantity).toBe(5);
@@ -515,7 +515,7 @@ describe('a stale client is refused rather than inverted (section 3.2)', () => {
     const harness = build({ quantity: 5, settledQuantity: 2 });
 
     await expect(move(harness, 4, 5)).rejects.toBeInstanceOf(
-      OutstandingMovedException
+      StaleQuantityException
     );
     // Had it been applied as a raise, the basket would ask for six.
     expect(harness.basketLine.quantity).toBe(5);
@@ -579,10 +579,10 @@ describe('the floor, the ceiling and the finished basket (section 5)', () => {
     });
 
     await expect(move(raising, 6, 5)).rejects.toBeInstanceOf(
-      BasketFinishedException
+      GeneratedListFinishedException
     );
     await expect(move(lowering, 3, 5)).rejects.toBeInstanceOf(
-      BasketFinishedException
+      GeneratedListFinishedException
     );
     expect(raising.basketLine.quantity).toBe(5);
     expect(lowering.settlements).toHaveLength(0);

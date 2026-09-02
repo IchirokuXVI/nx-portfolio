@@ -11,18 +11,22 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   AUTH_PATTERNS,
   GENERATED_LIST_SHARING_PATTERNS,
   GENERATED_LIST_SHARING_SCHEMA_IDS,
   ITEM_PATTERNS,
+  type AddGeneratedListParticipantLineRequest,
+  type CatalogSuggestResponse,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
   type GeneratedListBasketResult,
+  type GeneratedListBasketScope,
   type GeneratedListBasketView,
   type GeneratedListJoinCoreResult,
   type GeneratedListJoinResult,
+  type GeneratedListLineOriginsResult,
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
@@ -31,15 +35,20 @@ import {
   type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
   type GetGeneratedListBasketRequest,
+  type GetGeneratedListLineOriginsRequest,
   type GetItemsRequest,
   type GetItemsResult,
+  type ItemPage,
   type ItemView,
   type JoinGeneratedListRequest,
   type MintParticipantTokenRequest,
   type MintParticipantTokenResult,
   type ParticipantTokenResult,
+  type ProductGroupOfferPage,
   type ReopenGeneratedListLineRequest,
   type SetGeneratedListLineOutstandingRequest,
+  type SetGeneratedListOriginQuantityRequest,
+  type SetGeneratedListOriginQuantityResult,
   type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
   type UserProfileView,
@@ -48,20 +57,31 @@ import { ForbiddenException } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { SUGGEST_SCHEMA } from '../catalog/catalog.controller';
+import { ScopeResolutionService } from '../catalog/scope-resolution.service';
 import {
   ApiComposedResponse,
   ApiContractResponse,
   ApiProblemResponses,
+  componentRef,
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  AddGeneratedListParticipantLineDto,
+  BasketSuggestQueryDto,
   EnsureShareLinkDto,
   JoinGeneratedListDto,
   RevokeShareLinkDto,
   SetGeneratedListLineOutstandingDto,
+  SetGeneratedListOriginQuantityDto,
   SetGeneratedListPickDto,
   SettleGeneratedListLineDto,
 } from './generated-list-sharing.dto';
+import {
+  PARTICIPANT_THROTTLE_LIMITS,
+  ParticipantThrottle,
+  ParticipantThrottlerGuard,
+} from './participant-throttler.guard';
 import { Participant, ParticipantGuard } from './participant.guard';
 
 /**
@@ -323,7 +343,12 @@ export class ShareLinkController {
 @UseGuards(ParticipantGuard)
 @Controller({ path: 'generated-lists', version: '1' })
 export class GeneratedListParticipantController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    // Plan 0055, section 5.1: the run's profile turned into scope ids, through
+    // the same resolver and the same cache an account holder's search uses.
+    private readonly scopes: ScopeResolutionService
+  ) {}
 
   /**
    * The basket itself, as this participant may see it (section 5).
@@ -389,6 +414,170 @@ export class GeneratedListParticipantController {
       return found.items;
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Put a line in the basket, as any live participant (plan 0055, section 3).
+   *
+   * The gesture the basket could not make. `POST /v1/generated-lists/:id/lines`
+   * on the owner's account surface resolves a basket by `ownerUserId`, so a
+   * guest holding a perfectly valid session gets a not found from it; this one
+   * resolves nothing by user, exactly as the basket read does.
+   *
+   * The line is created `ADDED` with no target, so it changes nothing any
+   * household shares, which is what makes it safe to hand to somebody who
+   * arrived through a forwarded link.
+   *
+   * ## Why it is under `basket` and not at `:id/lines`
+   *
+   * Plan 0055 section 3 names `POST /v1/generated-lists/:id/lines`, and that
+   * path is **already taken** by the owner's own add on
+   * `GeneratedListController`. Nest matches a method and path to the first
+   * controller registered for it, so a second handler there would never be
+   * reached and every guest would meet the account guard instead: the feature
+   * would be shipped and unreachable, with nothing failing to say so.
+   *
+   * `basket` is the segment the participant surface already reads through
+   * (`GET :id/basket`), so this is that surface's write rather than a new idea:
+   * the basket is what a participant holds, and its lines are what they may put
+   * something in.
+   */
+  @Post(':id/basket/lines')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.addLine, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    finishedBasket: true,
+  })
+  addLine(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Body() dto: AddGeneratedListParticipantLineDto
+  ): Promise<GeneratedListBasketLineView> {
+    const req: AddGeneratedListParticipantLineRequest = {
+      generatedListId: id,
+      participantId: participant.participantId,
+      content: dto.content,
+      quantity: dto.quantity,
+      itemId: dto.itemId,
+      options: dto.options,
+    };
+    return this.nats.send<GeneratedListBasketLineView>(
+      GENERATED_LIST_SHARING_PATTERNS.addLine,
+      req
+    );
+  }
+
+  /**
+   * Search the catalog through the basket (plan 0055, section 5).
+   *
+   * Composed here for the same reason {@link productsOf} is: every catalog route
+   * needs an account token and the reader may be a guest who has none. Section
+   * 5.2 says catalog items and product groups are public product facts, so a
+   * guest is entitled to them; this is how they get them without opening a
+   * second public catalog surface.
+   *
+   * ## The scope is the run's, never the caller's
+   *
+   * Core answers what the basket was composed against and catalog turns it into
+   * scope ids: the split plan 0049 section 2.1 draws, reached by somebody with
+   * no profile of their own. A registered participant's own profile is refused
+   * as firmly as a guest's absent one, because it would rank a stranger's basket
+   * by a different city's shops.
+   *
+   * ## It fails empty, never loudly
+   *
+   * A dropdown is an offer, and free text has been first class since plan 0043.
+   * Adding a line must never fail because a search did, so every failure below
+   * answers `{ suggestions: [] }`.
+   */
+  @Get(':id/catalog/suggest')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.suggest)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiOkResponse({
+    description:
+      'The dropdown, in the order it is to be drawn: every matching group first, then the individual products. The same body /v1/catalog/suggest answers, field for field.',
+    schema: componentRef(SUGGEST_SCHEMA),
+  })
+  @ApiProblemResponses({ auth: true, notFound: true })
+  async suggest(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Query() query: BasketSuggestQueryDto
+  ): Promise<CatalogSuggestResponse> {
+    const scope = await this.nats.send<GeneratedListBasketScope>(
+      GENERATED_LIST_SHARING_PATTERNS.searchScope,
+      { generatedListId: id, participantId: participant.participantId }
+    );
+
+    const common = {
+      userId: scope.ownerUserId,
+      query: query.q,
+      priceScopeIds: await this.priceScopesOf(scope),
+      limit: query.limit,
+    };
+    const [groups, items] = await Promise.all([
+      this.nats
+        .send<ProductGroupOfferPage>(ITEM_PATTERNS.searchOffers, common)
+        .catch(
+          () => ({ items: [], nextCursor: null }) as ProductGroupOfferPage
+        ),
+      this.nats
+        .send<ItemPage>(ITEM_PATTERNS.search, common)
+        .catch(() => ({ items: [], nextCursor: null }) as ItemPage),
+    ]);
+
+    return {
+      suggestions: [
+        ...groups.items.map((group) => ({
+          kind: 'group' as const,
+          group,
+          item: null,
+        })),
+        ...items.items.map((item) => ({
+          kind: 'item' as const,
+          group: null,
+          item,
+        })),
+      ],
+    };
+  }
+
+  /**
+   * The scopes this basket's search is priced at, or none (section 5.1).
+   *
+   * **Undefined and not an empty array**, which is the difference between an
+   * unscoped search and no search at all: catalog answers an empty array with an
+   * empty page, and answers an absent one with products carrying no prices. A
+   * dropdown that names the right thing without a price beats one that will not
+   * open, so every way of having no scope lands on undefined here.
+   *
+   * Resolved through the same service and the same Redis cache the owner's own
+   * searches use, keyed by that owner and that profile, so a basket search costs
+   * nothing extra while they are shopping and picks up a profile edit as soon as
+   * they make one.
+   */
+  private async priceScopesOf(
+    scope: GeneratedListBasketScope
+  ): Promise<string[] | undefined> {
+    if (!scope.profileId) {
+      return undefined;
+    }
+    try {
+      return await this.scopes.forRead(scope.ownerUserId, {
+        profileId: scope.profileId,
+      });
+    } catch {
+      // A profile emptied or deleted since the run, which the shopper in the
+      // aisle can neither see nor fix. Section 5.3's rule applies to the whole
+      // route: it fails empty, never loudly.
+      return undefined;
     }
   }
 
@@ -485,9 +674,11 @@ export class GeneratedListParticipantController {
    * them would refuse the gesture the feature is named for.
    *
    * Two ways to be refused with a state rather than a fault, and they are told
-   * apart by code: `outstanding_moved` when somebody else moved the line while
-   * it was on screen, so the client refetches rather than correcting anything,
-   * and `basket_finished` when the basket is `COMPLETED` or `ARCHIVED`.
+   * apart by code: `stale_quantity` when somebody else moved the line while it
+   * was on screen, so the client refetches rather than correcting anything, and
+   * `generated_list_finished` when the basket is `COMPLETED` or `ARCHIVED`.
+   * Both are plan 0057's and plan 0055's codes respectively, reused rather than
+   * doubled: one sentence per state, wherever the state is met.
    */
   @Post(':id/lines/:lineId/outstanding')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOutstanding, {
@@ -498,8 +689,8 @@ export class GeneratedListParticipantController {
     body: true,
     notFound: true,
     conflict: true,
-    outstandingMoved: true,
-    basketFinished: true,
+    staleQuantity: true,
+    finishedBasket: true,
   })
   setOutstanding(
     @Participant() participant: GeneratedListParticipantContext,
@@ -551,6 +742,100 @@ export class GeneratedListParticipantController {
       GENERATED_LIST_SHARING_PATTERNS.reopenLine,
       req
     );
+  }
+
+  /**
+   * What a basket line is made of, and what else could go into it (plan 0057,
+   * section 3).
+   *
+   * Refused here for a participant who does not pass plan 0051 section 5.2, and
+   * refused again in core on the same question asked of its own tables. Unlike
+   * the basket read, there is no redacted projection to fall back to: every field
+   * of an origin and of a candidate names a zone or a list, so a guest gets
+   * nothing rather than less. That is not a degraded experience, it is section
+   * 6.1's sentence — a guest must never have to know which household a tin of
+   * tomatoes belongs to.
+   *
+   * The reopen above takes no such check, and the difference is the whole of
+   * section 5.2: that one **touches** zone lines without naming any, and this one
+   * is nothing but names.
+   */
+  @Get(':id/lines/:lineId/origins')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.lineOrigins)
+  @ApiProblemResponses({ auth: true, notFound: true })
+  lineOrigins(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string
+  ): Promise<GeneratedListLineOriginsResult> {
+    this.requireZoneData(participant);
+    const req: GetGeneratedListLineOriginsRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+    };
+    return this.nats.send<GeneratedListLineOriginsResult>(
+      GENERATED_LIST_SHARING_PATTERNS.lineOrigins,
+      req
+    );
+  }
+
+  /**
+   * Set one list's contribution: edit an origin, or adopt a new one (plan 0057,
+   * section 5).
+   *
+   * **Nothing here is a purchase.** The reel on the row above means "bought" when
+   * it goes down; this number is what a household wants, and lowering it is that
+   * household changing its mind. So no settlement is written, no bought indicator
+   * moves, and the response deliberately has nowhere to put either.
+   *
+   * `POST` rather than `PUT` on a collection URL, because the write is an upsert
+   * addressed by the body rather than by the path: the same request adopts a list
+   * that was not in the run and edits one that was.
+   */
+  @Post(':id/lines/:lineId/origins')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, body: true, notFound: true })
+  setOriginQuantity(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: SetGeneratedListOriginQuantityDto
+  ): Promise<SetGeneratedListOriginQuantityResult> {
+    this.requireZoneData(participant);
+    const req: SetGeneratedListOriginQuantityRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+      // The body names the zone line and the path names the basket line, so the
+      // two `lineId`s are separated here rather than in a message where nothing
+      // sits beside them to say which is which.
+      sourceListId: dto.listId,
+      sourceLineId: dto.lineId,
+      quantity: dto.quantity,
+      from: dto.from,
+    };
+    return this.nats.send<SetGeneratedListOriginQuantityResult>(
+      GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity,
+      req
+    );
+  }
+
+  /**
+   * Plan 0051 section 5.2's all or nothing rule, at the gateway.
+   *
+   * Both origin routes are refused rather than answered with less, for the reason
+   * the allocation sheet is refused above: naming source lists is naming zone
+   * data, and here there is nothing else in the answer.
+   */
+  private requireZoneData(participant: GeneratedListParticipantContext): void {
+    if (!participant.seesZoneData) {
+      throw new ForbiddenException(
+        'Seeing where a line came from needs write access to every source list'
+      );
+    }
   }
 
   /** Who else is on this basket, for the shop screen. */

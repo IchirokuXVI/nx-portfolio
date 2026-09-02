@@ -112,36 +112,47 @@ export class CatalogScopeRequiredException extends DomainException {
 }
 
 /**
- * The basket line moved between the caller reading it and acting on it (plan
- * 0056, section 3.2).
+ * The basket is over, and the write asked to change it (plan 0055, section 3.3).
  *
- * Renders as 409 beside {@link ConflictException} and stays distinguishable from
- * it by code. The difference is what the client does next: a conflict is a state
- * that refuses the act, and this is an act that would still be applied and might
- * now mean the opposite of what was intended, so the only honest answer is to
- * show the number as it stands and let the person decide again.
- *
- * It carries **no number**, deliberately. The envelope drops
- * {@link DomainException.details} on the way out (`problem-factory.ts` fills
- * `errors` from its own input, and only a throttler's wait is lifted specially),
- * so a current value put there would reach nobody. The recovery is a refetch of
- * the basket, which is what the client has to do anyway: the line's whole state
- * moved, not just this one number.
+ * A `COMPLETED` or `ARCHIVED` basket takes no new lines. Kept apart from
+ * `conflict` and from `validation_failed` by its own code for the reason plan
+ * 0054 section 4 gives: a client that cannot tell a state it can explain from a
+ * bug it cannot will show the wrong sentence for both, and "this basket is
+ * finished" is a sentence the shopper can act on.
  */
-export class OutstandingMovedException extends DomainException {
-  readonly code = ERROR_CODES.OUTSTANDING_MOVED;
+export class GeneratedListFinishedException extends DomainException {
+  readonly code = ERROR_CODES.GENERATED_LIST_FINISHED;
 }
 
 /**
- * The basket is `COMPLETED` or `ARCHIVED` and takes no more writes (plan 0055,
- * section 3.3).
+ * The number being moved is not where the caller believed it started (plan 0057,
+ * section 5).
  *
- * Renders as 409, and exists apart from {@link ConflictException} so a client can
- * say "this shopping list is finished" rather than the one sentence every other
- * conflict on the same route also gets.
+ * Renders as 409 beside {@link ConflictException} and stays apart from it by
+ * code, because the client's reaction is not "that failed" but "refetch and
+ * redraw the control where the number actually is". The message names the
+ * current value through `messageArgs.current`, so the person is told what
+ * happened rather than that something did.
  */
-export class BasketFinishedException extends DomainException {
-  readonly code = ERROR_CODES.BASKET_FINISHED;
+export class StaleQuantityException extends DomainException {
+  readonly code = ERROR_CODES.STALE_QUANTITY;
+}
+
+/**
+ * A contribution was set below what this basket has already bought against it
+ * (plan 0057, section 5.2).
+ *
+ * The floor travels in `messageArgs.floor` and is therefore in the translated
+ * message, which is the point: two units of the flat's milk having been bought
+ * means the flat cannot retroactively have wanted one, and the client should be
+ * able to say so with the number in it.
+ *
+ * Note the floor is per origin and per basket rather than a comparison against
+ * the zone line, which may legitimately be lower already because somebody
+ * settled it from the list page.
+ */
+export class BelowSettledException extends DomainException {
+  readonly code = ERROR_CODES.BELOW_SETTLED;
 }
 
 /**

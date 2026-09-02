@@ -10,10 +10,10 @@ import {
   type SetGeneratedListLineOutstandingRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  BasketFinishedException,
   ForbiddenException,
+  GeneratedListFinishedException,
   NotFoundException,
-  OutstandingMovedException,
+  StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, Repository } from 'typeorm';
@@ -116,7 +116,7 @@ export class GeneratedListOutstandingService {
       // Both directions, with its own code rather than a bare conflict, so the
       // screen can say "this shopping list is finished" instead of "that did not
       // work" (section 5, and plan 0055 section 3.3).
-      throw new BasketFinishedException('This basket is finished');
+      throw new GeneratedListFinishedException('This basket is finished');
     }
 
     const line = await this.lines.findOne({
@@ -139,8 +139,13 @@ export class GeneratedListOutstandingService {
 
     const current = outstandingOf(line);
     if (req.from !== current) {
-      throw new OutstandingMovedException(
-        'This line has moved since you read it'
+      // The number as it now stands travels in the message (plan 0057,
+      // section 5), which is the one channel that reaches the client: the
+      // envelope drops `details`. The recovery is still a refetch, because the
+      // whole line moved and not only this one field.
+      throw new StaleQuantityException(
+        'This line has moved since you read it',
+        { messageArgs: { current } }
       );
     }
 
@@ -199,8 +204,9 @@ export class GeneratedListOutstandingService {
       }
       const held = outstandingOf(locked);
       if (held !== current) {
-        throw new OutstandingMovedException(
-          'This line has moved since you read it'
+        throw new StaleQuantityException(
+          'This line has moved since you read it',
+          { messageArgs: { current: held } }
         );
       }
 

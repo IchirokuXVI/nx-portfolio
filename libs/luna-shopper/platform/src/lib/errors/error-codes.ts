@@ -48,31 +48,37 @@ export const ERROR_CODES = {
    */
   CATALOG_SCOPE_REQUIRED: 'catalog_scope_required',
   /**
-   * The basket line moved under the caller between reading it and acting on it
-   * (plan 0056, section 3.2).
+   * The basket is `COMPLETED` or `ARCHIVED`, and the write asked to change it
+   * (plan 0055, section 3.3).
    *
-   * Named for **what happened** rather than for the field that carried it,
-   * because the client's recovery is a refetch and not a correction: nobody can
-   * fix `from`, they can only look again at a number somebody else has changed.
-   *
-   * Its own code rather than {@link CONFLICT} because the two ask the reader for
-   * different things. A conflict on this surface is a state that refuses the act
-   * outright ("this line is already finished"); this is an act that would still
-   * be valid, and might mean the **opposite** of what was intended, which is the
-   * inversion section 3.2 exists to make impossible.
+   * Its own code rather than a `validation_failed` for the reason plan 0054
+   * section 4 gives: a client that cannot tell a state it can explain from a bug
+   * it cannot will show the wrong sentence for both. Nothing about the request
+   * was malformed, and no field of it is at fault; the trip is over.
    */
-  OUTSTANDING_MOVED: 'outstanding_moved',
+  GENERATED_LIST_FINISHED: 'generated_list_finished',
   /**
-   * The basket is `COMPLETED` or `ARCHIVED`, so it takes no more writes (plan
-   * 0055, section 3.3, and plan 0056, section 5).
+   * The number this write was moving is not where the caller believed it started
+   * (plan 0057, section 5; plan 0056, section 3.2).
    *
-   * Distinct from {@link CONFLICT} for the reason plan 0054 section 4 gave when
-   * it split "this line is already finished" off `validation_failed`: a client
-   * that cannot tell a state it can explain from a bug it cannot will show the
-   * wrong sentence for both. The line and the basket being finished are two
-   * different sentences.
+   * Its own code and not a `conflict`, because the client's reaction is
+   * particular: refetch and redraw the control at the number as it now stands,
+   * rather than show a failure. Two phones in one shop dragging one line is the
+   * ordinary case this exists for, and a gesture whose meaning depends on where
+   * it started must be refused rather than reinterpreted.
    */
-  BASKET_FINISHED: 'basket_finished',
+  STALE_QUANTITY: 'stale_quantity',
+  /**
+   * A contribution was set below what this basket has already bought against it
+   * (plan 0057, section 5.2).
+   *
+   * The message names the floor, so the client can say the number rather than
+   * only that it failed. Distinct from {@link STALE_QUANTITY} because nothing
+   * moved underneath the caller: the number they sent is simply lower than a
+   * purchase that has already happened, and two units of the flat's milk having
+   * been bought means the flat cannot retroactively have wanted one.
+   */
+  BELOW_SETTLED: 'below_settled',
   INTERNAL: 'internal',
 } as const;
 
@@ -117,13 +123,15 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // which is the whole reason the code exists: the client branches on it to open
   // the profile page rather than to show a field error.
   [ERROR_CODES.CATALOG_SCOPE_REQUIRED]: HttpStatus.BAD_REQUEST,
-  // 409 beside `conflict`, and told apart from it by code. Both are a well
-  // formed request the current state refuses; this one adds that the state moved
-  // *since the caller read it*, which is why the client refetches rather than
-  // rephrasing anything.
-  [ERROR_CODES.OUTSTANDING_MOVED]: HttpStatus.CONFLICT,
-  // 409 under the same rule: the basket is finished, which is a state and not a
-  // fault in the request.
-  [ERROR_CODES.BASKET_FINISHED]: HttpStatus.CONFLICT,
+  // 409 rather than 400. The request was well formed and the caller is allowed
+  // to make it; what refuses it is the state of the basket, which is what a
+  // conflict is. It stays distinguishable from a plain `conflict` by its code,
+  // which is what lets velista say "this basket is finished".
+  [ERROR_CODES.GENERATED_LIST_FINISHED]: HttpStatus.CONFLICT,
+  // Both are 409 for the same reason and stay apart from it, and from each
+  // other, by code: the request was well formed, and what it conflicts with is
+  // state that moved or state that has already happened.
+  [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,
+  [ERROR_CODES.BELOW_SETTLED]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

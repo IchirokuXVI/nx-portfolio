@@ -6959,6 +6959,196 @@
         ]
       }
     },
+    "/v1/generated-lists/{id}/basket/lines": {
+      "post": {
+        "operationId": "GeneratedListParticipantController_addLine_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddGeneratedListParticipantLineDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.basket.addLine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/catalog/suggest": {
+      "get": {
+        "operationId": "GeneratedListParticipantController_suggest_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "What the shopper has typed. The composer asks after three characters.",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The dropdown, in the order it is to be drawn: every matching group first, then the individual products. The same body /v1/catalog/suggest answers, field for field.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.CatalogSuggestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
     "/v1/generated-lists/{id}/lines/{lineId}/pick": {
       "post": {
         "operationId": "GeneratedListParticipantController_setPick_v1",
@@ -7238,7 +7428,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.\n\n`outstanding_moved` — Somebody else changed this line. Check it and try again.\n\n`basket_finished` — This shopping list is finished, so it cannot be changed.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`generated_list_finished` — This basket is finished, so it cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7327,6 +7517,180 @@
           },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/lines/{lineId}/origins": {
+      "get": {
+        "operationId": "GeneratedListParticipantController_lineOrigins_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.lineOrigins` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.generatedList.lineOrigins.response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      },
+      "post": {
+        "operationId": "GeneratedListParticipantController_setOriginQuantity_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGeneratedListOriginQuantityDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.setOriginQuantity` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.generatedList.setOriginQuantity.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14328,6 +14692,37 @@
           }
         }
       },
+      "AddGeneratedListParticipantLineDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "What to buy, as the shopper typed it."
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 9999,
+            "description": "How many. Defaults to one; zero is not an add."
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The product this line means, when the composer offered one and the shopper took it. Absent for a free text line, which has been first class since plan 0043."
+          },
+          "options": {
+            "description": "The products the pick may be switched between: what a product group suggestion attaches.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
       "SetGeneratedListPickDto": {
         "type": "object",
         "properties": {
@@ -14412,11 +14807,44 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100000,
-            "description": "What the client believed was outstanding when the control was picked up. A mismatch is refused with `outstanding_moved` rather than applied, because somebody else moving the line can invert what the gesture meant: refetch and show the number as it stands."
+            "description": "What the client believed was outstanding when the control was picked up. A mismatch is refused with `stale_quantity` rather than applied, because somebody else moving the line can invert what the gesture meant: refetch and show the number as it stands."
           }
         },
         "required": [
           "outstanding",
+          "from"
+        ]
+      },
+      "SetGeneratedListOriginQuantityDto": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The zone list whose contribution is being set. It must be one the basket’s owner and you both hold write access on."
+          },
+          "lineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it."
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "What this list should contribute. Zero takes the list off the line, releases its claim and lowers its own line by what it had contributed. No settlement is written and no bought indicator is set."
+          },
+          "from": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "The contribution you believed this list had, which is 0 for an adoption. A mismatch is refused with `stale_quantity` rather than applied: two people editing one split must not silently overwrite each other’s arithmetic."
+          }
+        },
+        "required": [
+          "listId",
+          "lineId",
+          "quantity",
           "from"
         ]
       },
@@ -16372,6 +16800,14 @@
           "CANCELLED"
         ]
       },
+      "enums.OriginUnavailableReason": {
+        "type": "string",
+        "enum": [
+          "CLAIMED",
+          "NOT_APPROVED",
+          "SETTLED"
+        ]
+      },
       "enums.ParticipantKind": {
         "type": "string",
         "enum": [
@@ -16475,6 +16911,12 @@
             "type": "integer",
             "minimum": 0
           },
+          "createdByParticipantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "lastEditedByParticipantId": {
             "type": [
               "string",
@@ -16522,6 +16964,7 @@
           "itemId",
           "options",
           "position",
+          "createdByParticipantId",
           "lastEditedByParticipantId",
           "lastEditedAt",
           "lastOutcome"
@@ -16629,6 +17072,67 @@
         ],
         "additionalProperties": false
       },
+      "generated-list-sharing.LineOriginDetail": {
+        "type": "object",
+        "properties": {
+          "originId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zoneName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contributed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "listQuantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledHere": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "writable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "originId",
+          "listId",
+          "lineId",
+          "zoneId",
+          "listName",
+          "zoneName",
+          "contributed",
+          "listQuantity",
+          "settledHere",
+          "writable"
+        ],
+        "additionalProperties": false
+      },
       "generated-list-sharing.LinkPreview": {
         "type": "object",
         "properties": {
@@ -16648,6 +17152,59 @@
         },
         "required": [
           "joinable"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.OriginCandidate": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zoneName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "listQuantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "content": {
+            "type": "string"
+          },
+          "matchedOnText": {
+            "type": "boolean"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/enums.OriginUnavailableReason"
+          }
+        },
+        "required": [
+          "listId",
+          "lineId",
+          "zoneId",
+          "listName",
+          "zoneName",
+          "listQuantity",
+          "content",
+          "matchedOnText"
         ],
         "additionalProperties": false
       },
@@ -18520,6 +19077,38 @@
         ],
         "additionalProperties": false
       },
+      "msg.generatedList.lineOrigins.response": {
+        "type": "object",
+        "properties": {
+          "generatedListId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "origins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.LineOriginDetail"
+            }
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.OriginCandidate"
+            }
+          }
+        },
+        "required": [
+          "generatedListId",
+          "lineId",
+          "origins",
+          "candidates"
+        ],
+        "additionalProperties": false
+      },
       "msg.generatedList.participant.revoke.response": {
         "type": "object",
         "properties": {
@@ -18530,6 +19119,34 @@
         },
         "required": [
           "id"
+        ],
+        "additionalProperties": false
+      },
+      "msg.generatedList.setOriginQuantity.response": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/generated-list-sharing.LineOriginDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "listQuantity": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "line",
+          "origin",
+          "listQuantity"
         ],
         "additionalProperties": false
       },
@@ -18617,8 +19234,9 @@
               "not_configured",
               "client_too_old",
               "catalog_scope_required",
-              "outstanding_moved",
-              "basket_finished",
+              "generated_list_finished",
+              "stale_quantity",
+              "below_settled",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

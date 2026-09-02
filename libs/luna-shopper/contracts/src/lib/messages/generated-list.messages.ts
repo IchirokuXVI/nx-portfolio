@@ -69,6 +69,17 @@ export const GENERATED_LIST_LIMITS = {
   nameMaxLength: 120,
   contentMaxLength: 500,
   maxQuantity: 9999,
+  /**
+   * How many products one line may offer to switch between (plan 0055,
+   * section 7).
+   *
+   * The only unbounded array on a write plan 0055 makes reachable by anybody
+   * holding a link, and therefore the one cap section 7 would otherwise have
+   * left to be discovered. A generated line carries the options its origins
+   * named and a composer suggestion carries a product group's members; neither
+   * is anywhere near this, so it bounds the insert without bounding the feature.
+   */
+  maxOptions: 50,
 } as const;
 
 // --- Views -----------------------------------------------------------------

@@ -5,6 +5,7 @@ import {
   LINE_QUANTITY_MAX,
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
+import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -19,8 +20,18 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
+
+/**
+ * The longest search term the composer may send (plan 0055, section 5).
+ *
+ * The same hundred and twenty characters `catalog/suggest` accepts, because the
+ * plan asks for the same answer field for field and a term one route would
+ * refuse and the other would run is not the same route twice.
+ */
+export const BASKET_SUGGEST_QUERY_MAX_LENGTH = 120;
 
 /**
  * Request bodies for sharing a basket (plan 0051).
@@ -79,6 +90,59 @@ export class SetGeneratedListPickDto {
   })
   @IsUUID()
   itemId!: string;
+}
+
+/**
+ * Set one list's contribution to a basket line (plan 0057, section 5).
+ *
+ * `listId` and `lineId` name the **zone** line, not the basket line: the basket
+ * line is already in the path. They keep the plan's own names here, where the
+ * body is read beside the URL and the pairing is obvious, and are forwarded to
+ * core as `sourceListId` and `sourceLineId`, where nothing sits beside them to
+ * make the difference obvious.
+ *
+ * **This buys nothing.** The same control one screen up means "bought"; this one
+ * means what a household wants, and the response carries neither settlement refs
+ * nor a skip report so a client cannot read one into the other.
+ */
+export class SetGeneratedListOriginQuantityDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The zone list whose contribution is being set. It must be one the basket’s owner and you both hold write access on.',
+  })
+  @IsUUID()
+  listId!: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it.',
+  })
+  @IsUUID()
+  lineId!: string;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'What this list should contribute. Zero takes the list off the line, releases its claim and lowers its own line by what it had contributed. No settlement is written and no bought indicator is set.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  quantity!: number;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'The contribution you believed this list had, which is 0 for an adoption. A mismatch is refused with `stale_quantity` rather than applied: two people editing one split must not silently overwrite each other’s arithmetic.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  from!: number;
 }
 
 export class GeneratedListAllocationDto {
@@ -141,6 +205,89 @@ export class SettleGeneratedListLineDto {
 }
 
 /**
+ * Put a line in the basket, as any live participant (plan 0055, section 3).
+ *
+ * ## No `targetListId`, and that is the field's absence doing work
+ *
+ * The owner's own `AddGeneratedListLineDto` has one, and this deliberately does
+ * not. A body that named a target would be asking a household's shopping list
+ * for a line, which is a gesture with a list picker in front of it and which
+ * plan `0058` owns. With `forbidNonWhitelisted` on the global pipe, sending one
+ * is refused by name rather than dropped, so a client that tries learns which
+ * field was wrong instead of watching its target vanish.
+ */
+export class AddGeneratedListParticipantLineDto {
+  @ApiProperty({
+    maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
+    description: 'What to buy, as the shopper typed it.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(GENERATED_LIST_LIMITS.contentMaxLength)
+  content!: string;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description: 'How many. Defaults to one; zero is not an add.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  quantity?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The product this line means, when the composer offered one and the shopper took it. Absent for a free text line, which has been first class since plan 0043.',
+  })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'The products the pick may be switched between: what a product group suggestion attaches.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(GENERATED_LIST_LIMITS.maxOptions)
+  @IsUUID(undefined, { each: true })
+  options?: string[];
+}
+
+/**
+ * Searching the catalog through a basket (plan 0055, section 5).
+ *
+ * A query and a size, and deliberately no scope selector: `catalog/suggest`
+ * takes postal codes, supermarkets and a profile because its caller has an
+ * account to own them, and the scope here is the **run's** rather than the
+ * caller's (section 5.1). A guest naming where to price a stranger's basket is
+ * not a thing to accept and ignore.
+ */
+export class BasketSuggestQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'What the shopper has typed. The composer asks after three characters.',
+    maxLength: BASKET_SUGGEST_QUERY_MAX_LENGTH,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(BASKET_SUGGEST_QUERY_MAX_LENGTH)
+  q?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: MAX_PAGE_SIZE })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PAGE_SIZE)
+  limit?: number;
+}
+
+/**
  * Move what is still to get on a basket line (plan 0056, section 3).
  *
  * **Two absolute numbers rather than a signed delta**, which deviates from plan
@@ -171,7 +318,7 @@ export class SetGeneratedListLineOutstandingDto {
     minimum: 0,
     maximum: LINE_QUANTITY_MAX,
     description:
-      'What the client believed was outstanding when the control was picked up. A mismatch is refused with `outstanding_moved` rather than applied, because somebody else moving the line can invert what the gesture meant: refetch and show the number as it stands.',
+      'What the client believed was outstanding when the control was picked up. A mismatch is refused with `stale_quantity` rather than applied, because somebody else moving the line can invert what the gesture meant: refetch and show the number as it stands.',
   })
   @IsInt()
   @Min(0)

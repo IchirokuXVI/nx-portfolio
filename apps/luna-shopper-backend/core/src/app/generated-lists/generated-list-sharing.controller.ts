@@ -2,10 +2,13 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   GENERATED_LIST_SHARING_PATTERNS,
+  type AddGeneratedListParticipantLineRequest,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
+  type GeneratedListBasketScope,
   type GeneratedListBasketView,
   type GeneratedListJoinCoreResult,
+  type GeneratedListLineOriginsResult,
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
@@ -15,6 +18,7 @@ import {
   type GeneratedListShareLinkView,
   type GeneratedListShareRequest,
   type GetGeneratedListBasketRequest,
+  type GetGeneratedListLineOriginsRequest,
   type JoinGeneratedListRequest,
   type ListParticipantsRequest,
   type PreviewShareLinkRequest,
@@ -23,10 +27,13 @@ import {
   type RevokeParticipantRequest,
   type RevokeShareLinkRequest,
   type SetGeneratedListLineOutstandingRequest,
+  type SetGeneratedListOriginQuantityRequest,
+  type SetGeneratedListOriginQuantityResult,
   type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
+import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
@@ -50,7 +57,8 @@ export class GeneratedListSharingController {
     private readonly settle: GeneratedListSettleService,
     private readonly reopenService: GeneratedListReopenService,
     private readonly outstanding: GeneratedListOutstandingService,
-    private readonly basket: GeneratedListBasketService
+    private readonly basket: GeneratedListBasketService,
+    private readonly origins: GeneratedListOriginsService
   ) {}
 
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
@@ -183,5 +191,67 @@ export class GeneratedListSharingController {
     @Payload() req: SetGeneratedListPickRequest
   ): Promise<GeneratedListBasketLineView> {
     return this.basket.setPick(req);
+  }
+
+  /**
+   * Put a line in the basket, as any live participant (plan 0055, section 3).
+   *
+   * Distinct from `generatedList.addLine`, which resolves a basket by its
+   * owner's id and so cannot answer the guest in the aisle who remembers the
+   * milk. The line is created `ADDED` with no target, so it changes nothing any
+   * household shares.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.addLine)
+  addLine(
+    @Payload() req: AddGeneratedListParticipantLineRequest
+  ): Promise<GeneratedListBasketLineView> {
+    return this.basket.addLine(req);
+  }
+
+  /**
+   * Where a search inside this basket is priced (plan 0055, section 5.1).
+   *
+   * Core says what the run was composed against and catalog says what that
+   * means today, which is plan 0049 section 2.1's split reached by a caller who
+   * may hold no account.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.searchScope)
+  searchScope(
+    @Payload() req: GetGeneratedListBasketRequest
+  ): Promise<GeneratedListBasketScope> {
+    return this.basket.searchScope(req);
+  }
+
+  /**
+   * What a basket line is made of, and what else could go into it (plan 0057,
+   * section 3).
+   *
+   * Refused outright for a reader who does not pass plan 0051 section 5.2 rather
+   * than redacted, which is the one place this surface differs from the rest of
+   * itself: every field of an origin and of a candidate names a zone or a list,
+   * so there would be nothing left after the redaction.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.lineOrigins)
+  lineOrigins(
+    @Payload() req: GetGeneratedListLineOriginsRequest
+  ): Promise<GeneratedListLineOriginsResult> {
+    return this.origins.lineOrigins(req);
+  }
+
+  /**
+   * Set one list's contribution, editing an origin or adopting a new one (plan
+   * 0057, section 5).
+   *
+   * **The one operation here that changes a household's own list without buying
+   * anything.** The settle beside it lowers a zone line because units were
+   * bought; this lowers one because the household changed its mind, and the two
+   * are kept apart down to the response shape: this writes no settlement, sets no
+   * bought indicator, and answers with neither settlement refs nor a skip report.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity)
+  setOriginQuantity(
+    @Payload() req: SetGeneratedListOriginQuantityRequest
+  ): Promise<SetGeneratedListOriginQuantityResult> {
+    return this.origins.setOriginQuantity(req);
   }
 }

@@ -84,7 +84,7 @@ import {
  * it in the contracts library is what keeps its two halves referencing the same
  * `ProductGroupOfferView` and `ItemView` the messages already publish.
  */
-const SUGGEST_SCHEMA = hoistContractSchema(
+export const SUGGEST_SCHEMA = hoistContractSchema(
   CATALOG_SCHEMA_IDS.catalogSuggestResponse
 );
 

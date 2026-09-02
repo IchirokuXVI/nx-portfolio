@@ -25,17 +25,11 @@ export interface ProblemResponseOptions {
   conflict?: boolean;
   /**
    * The route moves a number the caller read first, so the state can have moved
-   * under them (plan 0056, section 3.2). A 409 beside `conflict`, told apart by
-   * code because the client's recovery is a refetch rather than a correction.
+   * under them (plan 0057, section 5, and plan 0056, section 3.2). A 409 beside
+   * `conflict`, told apart by code because the client's reaction is particular:
+   * refetch and redraw the control at the number as it now stands.
    */
-  outstandingMoved?: boolean;
-  /**
-   * The route writes to a basket, so it can be refused because that basket is
-   * `COMPLETED` or `ARCHIVED` (plan 0055, section 3.3). A 409 beside `conflict`,
-   * and distinct from it so a client can say "this list is finished" rather than
-   * the one sentence every other conflict on the same route gets.
-   */
-  basketFinished?: boolean;
+  staleQuantity?: boolean;
   /**
    * The global throttler guard covers every route, so 429 is documented by
    * default; pass `false` for the handful that carry `@SkipThrottle()`.
@@ -54,6 +48,16 @@ export interface ProblemResponseOptions {
    * apart by `code` and a client branches on it to open the profile page.
    */
   scopeRequired?: boolean;
+  /**
+   * The route writes to a basket that may be over, so it can answer 409 with a
+   * code the client tells apart from a plain conflict (plan 0055, section 3.3).
+   *
+   * Documented separately from `conflict` for the same reason `scopeRequired` is
+   * documented separately from `body`: they share a status and are told apart by
+   * `code`, and this is the one a client turns into "this basket is finished"
+   * rather than into a retry.
+   */
+  finishedBasket?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -112,17 +116,17 @@ export function ApiProblemResponses(
   if (options.conflict) {
     codes.push(ERROR_CODES.CONFLICT);
   }
-  if (options.outstandingMoved) {
-    codes.push(ERROR_CODES.OUTSTANDING_MOVED);
-  }
-  if (options.basketFinished) {
-    codes.push(ERROR_CODES.BASKET_FINISHED);
+  if (options.staleQuantity) {
+    codes.push(ERROR_CODES.STALE_QUANTITY);
   }
   if (options.notConfigured) {
     codes.push(ERROR_CODES.NOT_CONFIGURED);
   }
   if (options.scopeRequired) {
     codes.push(ERROR_CODES.CATALOG_SCOPE_REQUIRED);
+  }
+  if (options.finishedBasket) {
+    codes.push(ERROR_CODES.GENERATED_LIST_FINISHED);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);
@@ -131,9 +135,10 @@ export function ApiProblemResponses(
 
   // Grouped by status before anything is applied, so a status with several codes
   // is documented once with all of them (see `problem`). This is what lets
-  // `scopeRequired` be declared beside `body` — both are 400s, and before the
-  // grouping the second of the two replaced the first rather than adding to it,
-  // so the route had to choose which of its own 400s to publish.
+  // `scopeRequired` sit beside `body`, and `finishedBasket` and `staleQuantity`
+  // beside `conflict`: they share a status, and before the grouping the later of
+  // two declarations replaced the earlier rather than adding to it, so a route
+  // had to choose which of its own 409s to publish and hide the rest.
   const byStatus = new Map<HttpStatus, ErrorCode[]>();
   for (const code of codes) {
     const status = ERROR_STATUS[code];
