@@ -148,6 +148,12 @@ export interface DiscoveredPlaceView {
   street: string | null;
   city: string | null;
   postalCode: string | null;
+  /**
+   * The country the run that found it was searching, not an OSM tag (plan 0061,
+   * section 4). It reaches catalog on import, where it keys the centroid lookup
+   * that fills the postcode two thirds of these places lack.
+   */
+  country: string | null;
   website: string | null;
   openingHours: string | null;
   tags: Record<string, string>;

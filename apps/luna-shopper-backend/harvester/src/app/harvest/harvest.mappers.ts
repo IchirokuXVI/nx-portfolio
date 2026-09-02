@@ -88,6 +88,7 @@ export function toDiscoveredPlaceView(
     street: row.street,
     city: row.city,
     postalCode: row.postalCode,
+    country: row.country,
     website: row.website,
     openingHours: row.openingHours,
     tags: row.tags,

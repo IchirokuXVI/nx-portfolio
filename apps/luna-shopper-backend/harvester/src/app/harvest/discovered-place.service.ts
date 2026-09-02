@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DiscoveredPlaceStatus,
+  PostalCodeSource,
   PriceScopeKind,
   type DiscoveredPlaceGroup,
   type DiscoveredPlaceGroupsResult,
@@ -175,8 +176,14 @@ export class DiscoveredPlaceService {
       label: place.name ? { en: place.name, es: place.name } : null,
       address: place.street,
       city: place.city,
-      country: null,
+      // The run's own country, which used to be discarded and hardcoded null
+      // here (plan 0061, section 4). Catalog needs it to key the centroid
+      // lookup that fills the postcode two thirds of these places lack.
+      country: place.country,
       postalCode: place.postalCode,
+      // A tag OSM gave us, so it is the source's and never overridden. A place
+      // with no tag sends nothing and catalog derives one, or does not.
+      postalCodeSource: place.postalCode ? PostalCodeSource.SOURCE : undefined,
       latitude: place.latitude,
       longitude: place.longitude,
       externalRef: place.externalRef,

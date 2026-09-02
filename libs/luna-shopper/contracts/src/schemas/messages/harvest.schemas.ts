@@ -193,6 +193,9 @@ const discoveredPlaceView = object(
     street: nullableString(),
     city: nullableString(),
     postalCode: nullableString(),
+    // The run's own country, not an OSM tag: it keys the centroid lookup that
+    // fills the postcode on import (plan 0061, section 4).
+    country: nullableString(),
     website: nullableString(),
     openingHours: nullableString(),
     tags: stringMap(),
@@ -214,6 +217,7 @@ const discoveredPlaceView = object(
     'street',
     'city',
     'postalCode',
+    'country',
     'website',
     'openingHours',
     'tags',

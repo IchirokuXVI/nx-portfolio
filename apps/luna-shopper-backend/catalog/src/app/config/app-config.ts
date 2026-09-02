@@ -1,6 +1,10 @@
 import { registerAs } from '@nestjs/config';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
+import {
+  DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
+  postalCodeDeriveMaxMetres,
+} from './postal-code-derivation';
 import { readKey } from './read-key';
 
 /**
@@ -22,6 +26,9 @@ export const LOG_LEVELS = [
 
 export const catalogValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3004),
+  POSTAL_CODE_DERIVE_MAX_METRES: Joi.number()
+    .positive()
+    .default(DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES),
   NATS_URL: Joi.string().required(),
   CATALOG_DB_URL: Joi.string().required(),
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
@@ -46,6 +53,8 @@ export interface CatalogConfig {
   authJwtPublicKey: string;
   platformAdminUserIds: string[];
   logLevel: (typeof LOG_LEVELS)[number];
+  /** The bound on a derived postal code (plan 0061, section 4). */
+  postalCodeDeriveMaxMetres: number;
 }
 
 function parseAdminIds(raw?: string): string[] {
@@ -67,5 +76,6 @@ export const catalogConfiguration = registerAs(
     ),
     platformAdminUserIds: parseAdminIds(process.env.PLATFORM_ADMIN_USER_IDS),
     logLevel: process.env.LOG_LEVEL as CatalogConfig['logLevel'],
+    postalCodeDeriveMaxMetres: postalCodeDeriveMaxMetres(),
   })
 );

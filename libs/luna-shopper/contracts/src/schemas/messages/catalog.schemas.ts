@@ -1,5 +1,6 @@
 import {
   ItemCategory,
+  PostalCodeSource,
   PriceScopeKind,
   PriceSourceKind,
   UnitOfMeasure,
@@ -41,6 +42,7 @@ export const CATALOG_SCHEMA_IDS = {
   unitOfMeasure: schemaId('enums/UnitOfMeasure'),
   priceScopeKind: schemaId('enums/PriceScopeKind'),
   priceSourceKind: schemaId('enums/PriceSourceKind'),
+  postalCodeSource: schemaId('enums/PostalCodeSource'),
   localizedText: schemaId('catalog/LocalizedText'),
   localizedSynonyms: schemaId('catalog/LocalizedSynonyms'),
   productGroupView: schemaId('catalog/ProductGroupView'),
@@ -175,6 +177,11 @@ const supermarketLocationView = object(
     city: nullableString(),
     country: nullableString(),
     postalCode: nullableString(),
+    // Plan 0061, section 5: null wherever the code is, DERIVED where catalog
+    // took the nearest centroid rather than being told.
+    postalCodeSource: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.postalCodeSource), { type: 'null' }],
+    },
     latitude: numberOrNull(),
     longitude: numberOrNull(),
     externalRef: nullableString(),
@@ -189,6 +196,7 @@ const supermarketLocationView = object(
     'city',
     'country',
     'postalCode',
+    'postalCodeSource',
     'latitude',
     'longitude',
     'externalRef',
@@ -432,6 +440,10 @@ const locationFields = {
   city: nullableString(),
   country: nullableString(),
   postalCode: nullableString(),
+  // Plan 0061, section 5: what the caller is claiming about the code it sent.
+  // Absent means MANUAL, and a request that sends no code at all gets DERIVED
+  // or nothing, neither of which a caller may claim.
+  postalCodeSource: ref(CATALOG_SCHEMA_IDS.postalCodeSource),
   latitude: numberOrNull(),
   longitude: numberOrNull(),
   externalRef: nullableString(),
@@ -937,6 +949,7 @@ export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
   enumOf(CATALOG_SCHEMA_IDS.priceScopeKind, Object.values(PriceScopeKind)),
   enumOf(CATALOG_SCHEMA_IDS.priceSourceKind, Object.values(PriceSourceKind)),
+  enumOf(CATALOG_SCHEMA_IDS.postalCodeSource, Object.values(PostalCodeSource)),
   localizedText,
   localizedSynonyms,
   supermarketView,
