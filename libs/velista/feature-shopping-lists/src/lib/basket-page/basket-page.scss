@@ -1,9 +1,19 @@
 @use '../basket-shared' as shared;
 
+// A screen tall page, so the composer at the end of it is at the bottom of the
+// screen rather than under the last line of a two line basket (plan 0053, section 6).
+//
+// `block-size: 100%` alone cannot do that: standalone there is no definite height
+// above this host for the percentage to resolve against, so it degrades to `auto`
+// and the page is as tall as what is in it. The minimum is the viewport less the one
+// inset between the two, `.app-main`'s bottom safe area. Mounted in the shell the
+// percentage does resolve and is already at least this, so the minimum never binds.
+// The list page's host says the same thing for the same reason.
 :host {
   display: flex;
   flex-direction: column;
   block-size: 100%;
+  min-block-size: calc(100dvh - var(--app-safe-bottom));
 }
 
 .page {
@@ -17,6 +27,48 @@
   // the bar floated a little way down the screen instead of closing a header.
   // The notch inset stays on the bar itself, which is what has to clear it.
   padding-block-start: 0;
+  // This column is the scroll and the composer sits **below** it, so the field is
+  // not something to scroll to. `min-block-size` goes back to zero because the
+  // mixin's `100%` would make the column as tall as the host on its own and push
+  // the composer off the bottom of it.
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  // **No bottom safe area padding**, which is the one way this differs from the
+  // shared mixin: the composer is pinned below this column and owns that inset
+  // itself, so keeping it here would leave a gap the height of a home indicator
+  // between the last line and the field. The inset is still applied once, by
+  // `.app-main`, for the finished basket that draws no composer at all.
+  padding-block-end: var(--app-space-5);
+}
+
+// Always at the bottom of the screen, which is what makes the field reachable with
+// a thumb no matter how long the basket is. The same treatment, and the same
+// reasoning, as the list page's dock.
+//
+// Sticky rather than fixed. Fixed would take it out of the flow and leave the last
+// line of a full basket underneath it forever, with no honest way to reserve the
+// space, since the composer's height is one row of text plus whatever the safe area
+// inset is on this device. Sticky keeps the box in the flow.
+//
+// It is also what keeps a footer off a sheet (plan 0040). A sheet is fixed to the
+// viewport at its own stacking order, well above this one, so the composer is
+// covered by the sheet and its scrim rather than floating a text field over the
+// settle controls.
+.composer-dock {
+  display: block;
+  position: sticky;
+  inset-block-end: 0;
+  // Above the rows it floats over. The composer paints its own surface, so without
+  // a stacking order a row's own raised background can show through it.
+  z-index: 1;
+}
+
+lib-line-composer {
+  // A component host is an inline box until something says otherwise. Set here
+  // rather than on the component, so nothing else that renders a composer changes
+  // shape because this page needed it in a dock.
+  display: block;
 }
 
 // The destination bar, laid out the way the history's is: the same padding, the
@@ -47,14 +99,24 @@
   color: var(--app-text-secondary);
   cursor: pointer;
 
-  &:hover {
-    background: var(--app-surface-raised);
-    color: var(--app-text-primary);
-  }
-
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The two **actions** in the bar react to a pointer. The way out of the bar does
+// not, and that is the whole of plan 0052 section 9: the `page.back` mixin in
+// `_list-page.scss`, `_zone-page.scss`, `_account-page.scss` and
+// `_install-page.scss` sets a focus ring and stops, and every hand written back
+// control in the app does the same. This one shared its rule with `.share` and
+// `.people` and inherited a hover from them, so the basket's was the one back
+// control in the product that lit up under a cursor.
+.share,
+.people {
+  &:hover {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
   }
 }
 
@@ -108,6 +170,20 @@
   cursor: pointer;
 }
 
+// The bubble needs an edge, and it had none (plan 0052, section 3).
+//
+// It was filled `--app-surface-sunken` on a bar whose background is
+// `--app-surface-ground`, and those two are **one step apart on the ramp** in both
+// themes: `--app-ink-900` on `--app-ink-950` in dark, `--app-neutral-100` on
+// `--app-neutral-50` in light. At `--app-avatar-sm` that is a circle you have to
+// look for. The guests were the giveaway: `guest-ring` gave them a dashed edge, so
+// the only faces on the row that could be found were the ones marked as guests.
+//
+// So the fill moves one further step away from what it sits on, to
+// `--app-surface-raised`, and a solid subtle border is drawn on top of it. Solid
+// subtle against the guest ring's dashed strong is a **bigger** difference than
+// nothing against dashed strong, so marking a guest gets easier rather than harder,
+// which is what `0044` section 7 asks of the ring.
 .face {
   display: flex;
   align-items: center;
@@ -115,9 +191,12 @@
   inline-size: var(--app-avatar-sm);
   block-size: var(--app-avatar-sm);
   margin-inline-start: calc(var(--app-space-2) * -1);
+  border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-radius-full);
-  background: var(--app-surface-sunken);
-  // A ring in the page's own background, so overlapping faces stay separable.
+  background: var(--app-surface-raised);
+  // A ring in the page's own background, so overlapping faces stay separable. It
+  // sits outside the border rather than replacing it, so the two do not fight: one
+  // separates a face from the bar, the other separates it from the face beside it.
   box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-surface-ground);
   font-size: var(--app-text-2xs);
   text-transform: uppercase;

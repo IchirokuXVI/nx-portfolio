@@ -37,6 +37,7 @@ import {
 import {
   DataSource,
   In,
+  IsNull,
   Repository,
   type DeepPartial,
   type EntityManager,
@@ -231,11 +232,18 @@ export class LineService {
     // connection, so two queries issued at once on it are serialised by the driver
     // anyway; on the pooled path the pair is two connections briefly held, which is
     // exactly what the paragraph above is about.
+    // Both halves skip a settlement somebody took back (plan 0054,
+    // section 3.3), matching the bulk query one file over: a reopened line has
+    // to stop reporting the purchase and stop reporting the outcome.
     const boughtCount = await repo.count({
-      where: { lineId, outcome: SettlementOutcome.BOUGHT },
+      where: {
+        lineId,
+        outcome: SettlementOutcome.BOUGHT,
+        revertedAt: IsNull(),
+      },
     });
     const latest = await repo.findOne({
-      where: { lineId },
+      where: { lineId, revertedAt: IsNull() },
       order: { settledAt: 'DESC', id: 'DESC' },
     });
 

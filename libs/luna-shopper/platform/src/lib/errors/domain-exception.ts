@@ -112,6 +112,50 @@ export class CatalogScopeRequiredException extends DomainException {
 }
 
 /**
+ * The basket is over, and the write asked to change it (plan 0055, section 3.3).
+ *
+ * A `COMPLETED` or `ARCHIVED` basket takes no new lines. Kept apart from
+ * `conflict` and from `validation_failed` by its own code for the reason plan
+ * 0054 section 4 gives: a client that cannot tell a state it can explain from a
+ * bug it cannot will show the wrong sentence for both, and "this basket is
+ * finished" is a sentence the shopper can act on.
+ */
+export class GeneratedListFinishedException extends DomainException {
+  readonly code = ERROR_CODES.GENERATED_LIST_FINISHED;
+}
+
+/**
+ * The number being moved is not where the caller believed it started (plan 0057,
+ * section 5).
+ *
+ * Renders as 409 beside {@link ConflictException} and stays apart from it by
+ * code, because the client's reaction is not "that failed" but "refetch and
+ * redraw the control where the number actually is". The message names the
+ * current value through `messageArgs.current`, so the person is told what
+ * happened rather than that something did.
+ */
+export class StaleQuantityException extends DomainException {
+  readonly code = ERROR_CODES.STALE_QUANTITY;
+}
+
+/**
+ * A contribution was set below what this basket has already bought against it
+ * (plan 0057, section 5.2).
+ *
+ * The floor travels in `messageArgs.floor` and is therefore in the translated
+ * message, which is the point: two units of the flat's milk having been bought
+ * means the flat cannot retroactively have wanted one, and the client should be
+ * able to say so with the number in it.
+ *
+ * Note the floor is per origin and per basket rather than a comparison against
+ * the zone line, which may legitimately be lower already because somebody
+ * settled it from the list page.
+ */
+export class BelowSettledException extends DomainException {
+  readonly code = ERROR_CODES.BELOW_SETTLED;
+}
+
+/**
  * Too many attempts. Carries the wait so the client can count it down (plan 0021,
  * section 2.2). The seconds travel in {@link DomainException.details} under
  * {@link RETRY_AFTER_SECONDS_DETAIL}, and the exception filter lifts them onto the

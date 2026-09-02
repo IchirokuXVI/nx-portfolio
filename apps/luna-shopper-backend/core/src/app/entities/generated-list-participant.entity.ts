@@ -70,6 +70,28 @@ export class GeneratedListParticipant extends BaseEntity {
   @Column({ type: 'varchar', length: 40, nullable: true })
   displayName!: string | null;
 
+  /**
+   * The account holder's own name, for an `OWNER` or a `REGISTERED` row (plan
+   * 0054, section 2).
+   *
+   * **Written from what the gateway was told, never read out of auth.** Core
+   * owns no usernames and plan 0018 section 9 forbids it reaching for one, so
+   * this arrives on the message that creates the row exactly as
+   * `CreateZoneRequest.username` does.
+   *
+   * A column beside {@link displayName} rather than a value written into it,
+   * because they are different facts: one is unverified text typed on an
+   * unauthenticated link and the other is an account's own name, and merging
+   * them would make a guest's typed "Dani" indistinguishable from an account
+   * called Dani. A registered participant who types a name anyway keeps both,
+   * and the typed one wins on screen, because they said it on purpose.
+   *
+   * A snapshot taken at join time, as a zone membership's is: renaming an
+   * account does not rename the person on baskets they have already joined.
+   */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  username!: string | null;
+
   /** Monotonic per basket, so "Guest 2" means the same person all trip. */
   @Column({ type: 'int', nullable: true })
   guestNumber!: number | null;

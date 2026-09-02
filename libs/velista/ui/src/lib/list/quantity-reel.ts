@@ -98,8 +98,8 @@ import {
     '[attr.tabindex]': '0',
     '[attr.aria-label]': 'label()',
     '[attr.aria-valuenow]': 'shown()',
-    '[attr.aria-valuemin]': 'min',
-    '[attr.aria-valuemax]': 'max',
+    '[attr.aria-valuemin]': 'min()',
+    '[attr.aria-valuemax]': 'max()',
     // `readonly` rather than `disabled`: the number is real and worth reading, and
     // this caller may simply not set it.
     '[attr.aria-readonly]': 'readonly() ? "true" : null',
@@ -140,12 +140,56 @@ export class QuantityReel {
   readonly readonly = input(false);
 
   /**
+   * The lowest number the reel will go to.
+   *
+   * An input rather than the constant it defaults to, because the same control now
+   * counts two different things. A line's quantity floors at zero, which is the
+   * household saying it is stocked; a contribution to a line floors at what has
+   * **already been bought** against that list, and dragging under it is refused by
+   * the server. A control that could reach a number the server refuses is a gesture
+   * that fails after it has already happened on screen.
+   */
+  readonly min = input(LINE_QUANTITY_MIN);
+
+  /** The highest number it will go to. See {@link min} for why it is an input. */
+  readonly max = input(LINE_QUANTITY_MAX);
+
+  /**
    * One settled adjustment, as a signed delta, when the overlay closes.
    *
    * Never zero: a gesture that ended where it started emits nothing, because there is
    * nothing to tell the server and a delta of zero is a 400.
    */
   readonly committed = output<number>();
+
+  /**
+   * The number under the thumb while the overlay is open, and null once it closes.
+   *
+   * What a caller draws a caption or a running total from: "buying 20 instead of 5"
+   * has to be said **while the thumb is still moving**, and the delta on
+   * {@link committed} arrives a beat after the gesture is over.
+   *
+   * Null the moment the overlay closes, however it closed: a flush, a blur, a
+   * {@link close}, or the settled value arriving from elsewhere. Null means "nothing
+   * is being previewed", so the caption goes away rather than freezing at the last
+   * number a finger was over.
+   */
+  readonly preview = output<number | null>();
+
+  /**
+   * The same commit as {@link committed}, in absolute numbers.
+   *
+   * `from` is where the run started and `to` is where it ended, which is what the
+   * two writes behind this control actually take: `{ outstanding: to, from }` and
+   * `{ quantity: to, from }`. Both refuse a `from` that no longer matches, because
+   * a gesture whose meaning depends on where it started must not be applied to a
+   * number that moved underneath it.
+   *
+   * Emitted beside the delta rather than instead of it. The list page's row still
+   * sends a delta and is not part of either plan, and a control that changed what it
+   * emitted would be a change to that screen made in passing.
+   */
+  readonly committedTo = output<{ from: number; to: number }>();
 
   /**
    * The overlay closed on its own, having waited out {@link QUANTITY_REEL_IDLE_MS}.
@@ -194,15 +238,12 @@ export class QuantityReel {
    * a bounce to explain it (section 4).
    */
   readonly previous = computed(() =>
-    this.shown() > LINE_QUANTITY_MIN ? this.shown() - 1 : null
+    this.shown() > this.min() ? this.shown() - 1 : null
   );
 
   readonly next = computed(() =>
-    this.shown() < LINE_QUANTITY_MAX ? this.shown() + 1 : null
+    this.shown() < this.max() ? this.shown() + 1 : null
   );
-
-  readonly min = LINE_QUANTITY_MIN;
-  readonly max = LINE_QUANTITY_MAX;
 
   constructor() {
     // A settled value arriving from elsewhere ends a gesture that is no longer about
@@ -216,6 +257,15 @@ export class QuantityReel {
           this._pending.set(null);
         }
       });
+    });
+
+    // The pending value, out loud, for whoever is drawing a caption from it. An
+    // effect rather than an emit at each of the five places `_pending` is written,
+    // because the five would eventually be six and the one that forgot would leave a
+    // caption reading a number the thumb had already left.
+    effect(() => {
+      const pending = this._pending();
+      untracked(() => this.preview.emit(pending));
     });
 
     this._destroyRef.onDestroy(() => {
@@ -452,10 +502,14 @@ export class QuantityReel {
     const delta = settled - this._startedFrom;
     if (delta !== 0) {
       this.committed.emit(delta);
+      // Beside it, never instead of it. The two say the same thing to two different
+      // kinds of caller: one sends a delta, and one sends where it started and where
+      // it ended, because the server refuses a start that no longer matches.
+      this.committedTo.emit({ from: this._startedFrom, to: settled });
     }
   }
 
   private _clamp(value: number): number {
-    return Math.min(LINE_QUANTITY_MAX, Math.max(LINE_QUANTITY_MIN, value));
+    return Math.min(this.max(), Math.max(this.min(), value));
   }
 }

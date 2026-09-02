@@ -12,9 +12,21 @@
       asked which household a tin of tomatoes belongs to.
     -->
     @case ('settle') {
-      <p class="outstanding">
-        {{ 'basket.line.outstanding' | rokuT: { count: outstanding() } }}
-      </p>
+      <!--
+        What is left, or what happened. A finished line is still tappable on purpose
+        (plan 0043, section 3.2), so this sheet opens on one, and "0 outstanding" is
+        a true sentence that answers the wrong question: the person opened it to see
+        what they bought.
+      -->
+      @if (finished()) {
+        @if (whatHappened(); as caption) {
+          <p class="happened">{{ caption }}</p>
+        }
+      } @else {
+        <p class="outstanding">
+          {{ 'basket.line.outstanding' | rokuT: { count: outstanding() } }}
+        </p>
+      }
 
       @if (productName(); as product) {
         <div class="product">
@@ -35,57 +47,111 @@
         </div>
       }
 
-      <div class="actions">
-        <button
-          (click)="settleAll()"
-          [disabled]="busy()"
-          class="primary"
-          type="button"
-        >
-          {{ 'basket.settle.all' | rokuT: { count: outstanding() } }}
-        </button>
+      <!--
+        **Nothing to settle means no settle target** (plan 0052, section 7.1).
 
-        @if (outstanding() > 1) {
+        This whole group used to be drawn unconditionally, so a finished line offered
+        two buttons that both failed: the plural rule picked `all_other` for a count
+        of zero and the primary read "Got all 0", and pressing either it or "They had
+        none" sent a settle core refuses, because `generated-list-settle.service.ts`
+        throws when `outstanding === 0`.
+
+        A control you may not use is not drawn (`0030`). The partial and allocate
+        controls were already conditional on `outstanding() > 1` and would have gone
+        with it anyway; the two that were not are the two that were reported. What
+        stays on a finished line is the product and its change control, because
+        swapping the pick is a correction of the record and is still allowed, and the
+        history control, for a reader entitled to it.
+      -->
+      @if (!finished()) {
+        <div class="actions">
           <button
-            (click)="openPane('quantity')"
+            (click)="settleAll()"
             [disabled]="busy()"
-            class="secondary"
+            class="primary"
             type="button"
           >
-            {{ 'basket.settle.some' | rokuT }}
+            {{ 'basket.settle.all' | rokuT: { count: outstanding() } }}
           </button>
-        }
 
-        <!--
-          Only for a reader who holds WRITE on every source list. A control you
-          may not use is not drawn (section 4.1), and the server refuses an
-          allocation from anybody else regardless of what is on screen.
-        -->
-        @if (seesZoneData() && allocationRows().length > 1) {
+          @if (outstanding() > 1) {
+            <button
+              (click)="openPane('quantity')"
+              [disabled]="busy()"
+              class="secondary"
+              type="button"
+            >
+              {{ 'basket.settle.some' | rokuT }}
+            </button>
+          }
+
+          <!--
+            Only for a reader who holds WRITE on every source list. A control you
+            may not use is not drawn (section 4.1), and the server refuses an
+            allocation from anybody else regardless of what is on screen.
+          -->
+          @if (seesZoneData() && allocationRows().length > 1) {
+            <button
+              (click)="openPane('allocate')"
+              [disabled]="busy()"
+              class="secondary"
+              type="button"
+            >
+              {{ 'basket.allocate.open' | rokuT }}
+            </button>
+          }
+
+          <!--
+            Deliberately last and visually apart from the settle targets, which are
+            the ones a thumb reaches for: this closes the line without claiming
+            anything was bought (section 7).
+          -->
           <button
-            (click)="openPane('allocate')"
+            (click)="settleNone()"
             [disabled]="busy()"
-            class="secondary"
+            class="quiet"
             type="button"
           >
-            {{ 'basket.allocate.open' | rokuT }}
+            {{ 'basket.settle.none' | rokuT }}
           </button>
-        }
+        </div>
+      }
 
-        <!--
-          Deliberately last and visually apart from the settle targets, which are
-          the ones a thumb reaches for: this closes the line without claiming
-          anything was bought (section 7).
-        -->
-        <button
-          (click)="settleNone()"
-          [disabled]="busy()"
-          class="quiet"
-          type="button"
-        >
-          {{ 'basket.settle.none' | rokuT }}
-        </button>
-      </div>
+      <!--
+        The two sheets about this line's **lists**, rather than about buying it
+        (velista 0055 and 0056). Outside the `!finished()` block on purpose: sending
+        a line that was already bought still puts what happened onto a household's
+        list, and raising a finished line's contribution is a correction of the
+        record rather than a purchase.
+
+        Their own group, below the settle targets, because they are not settle
+        targets: the thumb reaching for the big button must not find one of these.
+      -->
+      @if (canEditUnits() || canSendToList()) {
+        <div class="actions lists">
+          @if (canEditUnits()) {
+            <button
+              (click)="openUnits()"
+              [disabled]="busy()"
+              class="secondary"
+              type="button"
+            >
+              {{ 'basket.units.open' | rokuT }}
+            </button>
+          }
+
+          @if (canSendToList()) {
+            <button
+              (click)="openSendToList()"
+              [disabled]="busy()"
+              class="secondary"
+              type="button"
+            >
+              {{ 'basket.send.open' | rokuT }}
+            </button>
+          }
+        </div>
+      }
 
       <!--
         What happened to this line, for a reader entitled to it (plan 0049, section
@@ -109,41 +175,24 @@
       <p class="pane-title">{{ 'basket.settle.someTitle' | rokuT }}</p>
 
       <!--
-        `spinbutton` rather than a number input: the value is bounded by what is
-        outstanding, and the two buttons beside it are the primary way in on a
-        phone. The keyboard path comes with the role.
+        **The same reel the row uses** (plan 0054, section 6), where this drew its
+        own spinbutton with a copy of `QuantityReel`'s key table beside a comment
+        saying it matched. There is one number control in this product and one
+        keyboard path through it, and a copy that no longer exists cannot drift.
+
+        Bounded at one and at what is outstanding, because this asks how many of
+        the line were bought: zero is "they had none", which is the button below
+        and an outcome rather than a quantity.
       -->
-      <div class="stepper">
-        <button
-          (click)="step(-1)"
-          [attr.aria-label]="'basket.settle.fewer' | rokuT"
-          [disabled]="typed() <= 1"
-          class="step"
-          type="button"
-        >
-          &minus;
-        </button>
-        <span
-          (keydown)="onKeydown($event)"
-          [attr.aria-label]="'basket.settle.quantity' | rokuT"
-          [attr.aria-valuemax]="outstanding()"
-          [attr.aria-valuemin]="1"
-          [attr.aria-valuenow]="typed()"
-          class="stepper-value"
-          role="spinbutton"
-          tabindex="0"
-        >
-          {{ typed() }}
-        </span>
-        <button
-          (click)="step(1)"
-          [attr.aria-label]="'basket.settle.more' | rokuT"
-          [disabled]="typed() >= outstanding()"
-          class="step"
-          type="button"
-        >
-          +
-        </button>
+      <div class="quantity-control">
+        <lib-quantity-reel
+          (committedTo)="typed.set($event.to)"
+          (preview)="onQuantityPreview($event)"
+          [label]="'basket.settle.quantity' | rokuT"
+          [max]="quantityMax()"
+          [min]="1"
+          [value]="typed()"
+        />
       </div>
 
       <div class="actions">
@@ -306,16 +355,29 @@
                     without buying anything, and a row that said "got 0" would be
                     reporting a purchase that never happened.
                   -->
+                  <!--
+                    **The reader is named here too** (plan 0052, section 2.1). This
+                    drew "You" for a `mine` row, and the pane is read on other
+                    people's phones like everything else on this screen.
+
+                    `who` is filled with the reader's own account name in `_toRow`,
+                    so both branches read it the same way. `row.mine` survives only
+                    as the fallback for an account with no name to give, where
+                    "Someone" would be the one wrong thing to call the person
+                    holding the phone.
+                  -->
                   <span class="history-what">
                     @if (row.outcome === 'BOUGHT') {
                       {{
                         'basket.history.bought'
                           | rokuT
                             : {
-                                who: row.mine
-                                  ? ('basket.history.you' | rokuT)
-                                  : row.who ||
-                                    ('basket.history.someone' | rokuT),
+                                who:
+                                  row.who ||
+                                  ((row.mine
+                                    ? 'basket.history.you'
+                                    : 'basket.history.someone'
+                                  ) | rokuT),
                                 count: row.quantity,
                               }
                       }}
@@ -324,14 +386,30 @@
                         'basket.history.none'
                           | rokuT
                             : {
-                                who: row.mine
-                                  ? ('basket.history.you' | rokuT)
-                                  : row.who ||
-                                    ('basket.history.someone' | rokuT),
+                                who:
+                                  row.who ||
+                                  ((row.mine
+                                    ? 'basket.history.you'
+                                    : 'basket.history.someone'
+                                  ) | rokuT),
                               }
                       }}
                     }
                   </span>
+                  <!--
+                    A reverted settlement **stays in the history, marked** (plan
+                    0052, section 8). It does not disappear: the whole reason to
+                    open this pane is to reconcile two people's trips, and a
+                    purchase that was taken back is part of that.
+
+                    A quiet qualifier and never a strikethrough, which reads as
+                    deleted rather than as reversed.
+                  -->
+                  @if (row.reverted) {
+                    <span class="history-reverted">
+                      {{ 'basket.history.reverted' | rokuT }}
+                    </span>
+                  }
                   <span class="history-when">{{ row.when }}</span>
                 </li>
               }
@@ -356,9 +434,25 @@
     }
   }
 
-  @if (failed()) {
+  <!--
+    What actually went wrong (plan 0052, section 7.2).
+
+    This drew one sentence, `basket.settle.failed`, for every failure the screen can
+    suffer: the backend said something specific and the screen said "That did not
+    save." `basket-error-copy.ts` keys the copy on the code **and** the operation,
+    because `forbidden` and `conflict` each mean several things here.
+
+    The correlation id rides along on the generic sentence only, since that is the one
+    a person may have to quote to somebody: the named sentences are already the answer.
+  -->
+  @if (errorKey(); as key) {
     <p aria-live="assertive" class="failed" role="alert">
-      {{ 'basket.settle.failed' | rokuT }}
+      {{ key | rokuT }}
+      @if (correlationId(); as reference) {
+        <span class="reference">
+          {{ 'basket.error.reference' | rokuT: { correlationId: reference } }}
+        </span>
+      }
     </p>
   }
 

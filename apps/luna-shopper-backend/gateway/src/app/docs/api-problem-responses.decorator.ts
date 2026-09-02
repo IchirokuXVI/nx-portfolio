@@ -1,4 +1,4 @@
-import { applyDecorators } from '@nestjs/common';
+import { applyDecorators, HttpStatus } from '@nestjs/common';
 import { ApiResponse } from '@nestjs/swagger';
 import {
   ERROR_CODES,
@@ -24,6 +24,13 @@ export interface ProblemResponseOptions {
   /** The route can collide with the current state (a 409). */
   conflict?: boolean;
   /**
+   * The route moves a number the caller read first, so the state can have moved
+   * under them (plan 0057, section 5, and plan 0056, section 3.2). A 409 beside
+   * `conflict`, told apart by code because the client's reaction is particular:
+   * refetch and redraw the control at the number as it now stands.
+   */
+  staleQuantity?: boolean;
+  /**
    * The global throttler guard covers every route, so 429 is documented by
    * default; pass `false` for the handful that carry `@SkipThrottle()`.
    */
@@ -41,15 +48,37 @@ export interface ProblemResponseOptions {
    * apart by `code` and a client branches on it to open the profile page.
    */
   scopeRequired?: boolean;
+  /**
+   * The route writes to a basket that may be over, so it can answer 409 with a
+   * code the client tells apart from a plain conflict (plan 0055, section 3.3).
+   *
+   * Documented separately from `conflict` for the same reason `scopeRequired` is
+   * documented separately from `body`: they share a status and are told apart by
+   * `code`, and this is the one a client turns into "this basket is finished"
+   * rather than into a retry.
+   */
+  finishedBasket?: boolean;
 }
 
 const problemName = hoistProblemDetails();
 
-/** One documented error status, always the house envelope (plan 0004, section 2). */
-function problem(code: ErrorCode) {
+/**
+ * One documented status, always the house envelope (plan 0004, section 2), and
+ * **every code that can produce it**.
+ *
+ * Several codes per status rather than one, because Swagger keeps the last
+ * `@ApiResponse` applied to a status and silently drops the rest: a route that
+ * can answer `conflict`, `outstanding_moved` and `basket_finished` would
+ * otherwise document one of the three and hide the two a client actually
+ * branches on (plan 0056, section 7). Each is named with its own message, so the
+ * document says what the code means as well as that it exists.
+ */
+function problem(status: HttpStatus, codes: readonly ErrorCode[]) {
   return ApiResponse({
-    status: ERROR_STATUS[code],
-    description: `\`${code}\` — ${resolveErrorMessage(code)}`,
+    status,
+    description: codes
+      .map((code) => `\`${code}\` — ${resolveErrorMessage(code)}`)
+      .join('\n\n'),
     content: {
       [PROBLEM_JSON_CONTENT_TYPE]: { schema: componentRef(problemName) },
     },
@@ -87,20 +116,41 @@ export function ApiProblemResponses(
   if (options.conflict) {
     codes.push(ERROR_CODES.CONFLICT);
   }
+  if (options.staleQuantity) {
+    codes.push(ERROR_CODES.STALE_QUANTITY);
+  }
   if (options.notConfigured) {
     codes.push(ERROR_CODES.NOT_CONFIGURED);
   }
-  if (options.scopeRequired && !options.body) {
-    // Only when `body` did not already document the 400. Two `@ApiResponse`
-    // decorators on one status keep the last one applied, so declaring both
-    // would replace the validation description rather than add to it, and the
-    // envelope they point at is the same schema either way.
+  if (options.scopeRequired) {
     codes.push(ERROR_CODES.CATALOG_SCOPE_REQUIRED);
+  }
+  if (options.finishedBasket) {
+    codes.push(ERROR_CODES.GENERATED_LIST_FINISHED);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);
   }
   codes.push(ERROR_CODES.INTERNAL);
 
-  return applyDecorators(...codes.map(problem));
+  // Grouped by status before anything is applied, so a status with several codes
+  // is documented once with all of them (see `problem`). This is what lets
+  // `scopeRequired` sit beside `body`, and `finishedBasket` and `staleQuantity`
+  // beside `conflict`: they share a status, and before the grouping the later of
+  // two declarations replaced the earlier rather than adding to it, so a route
+  // had to choose which of its own 409s to publish and hide the rest.
+  const byStatus = new Map<HttpStatus, ErrorCode[]>();
+  for (const code of codes) {
+    const status = ERROR_STATUS[code];
+    const listed = byStatus.get(status);
+    if (listed) {
+      listed.push(code);
+    } else {
+      byStatus.set(status, [code]);
+    }
+  }
+
+  return applyDecorators(
+    ...[...byStatus].map(([status, group]) => problem(status, group))
+  );
 }

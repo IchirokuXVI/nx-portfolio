@@ -891,11 +891,21 @@
       "free": "No product chosen",
       "busy": "Saving"
     },
+    "outstanding": {
+      "label": "{{name}}, still to get",
+      "bought_one": "{{count}} bought",
+      "bought_other": "{{count}} bought",
+      "buying": "buying {{next}} instead of {{current}}"
+    },
     "touched": {
       "got": "{{name}} got it",
       "gotSome": "{{name}} got {{count}}",
       "none": "{{name}} says they had none",
       "you": "you"
+    },
+    "added": {
+      "by": "Added by {{name}}",
+      "announced": "{{content}} added"
     },
     "from": {
       "one": "from {{first}}",
@@ -936,6 +946,48 @@
       "over": "That is more than you got",
       "submit": "Record it",
       "cancel": "Cancel"
+    },
+    "units": {
+      "open": "Change what each list asked for",
+      "title": "{{name}}",
+      "notBuying": "Changing these changes what each list wants. Nothing here is marked as bought.",
+      "buying_one": "Buying {{count}}",
+      "buying_other": "Buying {{count}}",
+      "extra": "{{lists}} for these lists, plus {{extra}} extra",
+      "lists": "Lists that want this",
+      "listWants": "the list asks for {{count}}",
+      "noAccess": "you can no longer change this list",
+      "others_one": "1 other list wants this",
+      "others_other": "{{count}} other lists want this",
+      "claimed": "somebody is already buying this for that list",
+      "notApproved": "that list has not agreed to this line yet",
+      "settled": "that list does not want any right now",
+      "byName": "matched by name: “{{content}}”",
+      "loading": "Reading the lists",
+      "failed": "The lists could not be read",
+      "retry": "Try again",
+      "empty": "No list is asking for this",
+      "close": "Done"
+    },
+    "send": {
+      "open": "Send to a shopping list",
+      "title": "{{name}}",
+      "pending": "Waiting for that list to approve it",
+      "loading": "Loading your lists",
+      "loadFailed": "Your lists would not load",
+      "retry": "Try again",
+      "empty": "There is no list you can send this to",
+      "fromThisBasket": "From this basket",
+      "searchLabel": "Search your lists",
+      "matches_one": "{{count}} list",
+      "matches_other": "{{count}} lists",
+      "warning": "This adds “{{content}}” to {{list}}. It cannot be taken back out from here.",
+      "confirm": "Send it",
+      "cancel": "Cancel",
+      "close": "Close",
+      "done": "Added to {{list}}.",
+      "waiting": "Added to {{list}}. It is waiting for someone there to approve it.",
+      "noneOutstanding": "Added to {{list}} with none outstanding. Nothing was recorded as bought there."
     },
     "people": {
       "title": "On this list",
@@ -1001,7 +1053,7 @@
       "failed": "That did not work. Try again."
     },
     "history": {
-      "open": "What happened to this line",
+      "open": "Show line history",
       "title": "What happened here",
       "loading": "Loading what happened",
       "failed": "That would not load",
@@ -1013,7 +1065,32 @@
       "none": "{{who}} says they had none",
       "someone": "Someone",
       "you": "You",
-      "close": "Close"
+      "close": "Close",
+      "reverted": "Taken back"
+    },
+    "error": {
+      "alreadyFinished": "Somebody already finished this line",
+      "accessChanged": "Your access to one of the lists behind this line has changed",
+      "ownerOnly": "Only whoever made this list can do that",
+      "gone": "This list is no longer here",
+      "tooFast": "That was too quick. Try again in a moment",
+      "failed": "That did not save. Try again",
+      "staleLine_one": "Somebody else changed this line. It says {{count}} now",
+      "staleLine_other": "Somebody else changed this line. It says {{count}} now",
+      "belowSettled_one": "One of these has already been bought for this list",
+      "belowSettled_other": "{{count}} of these have already been bought for this list",
+      "basketFinished": "This list is finished, so it cannot be changed",
+      "notSendable": "Only a line added here can be sent to a shopping list",
+      "alreadySent": "This line has already been sent to a shopping list",
+      "reference": "ref {{correlationId}}"
+    },
+    "status": {
+      "got": "Mark {{name}} as got",
+      "rest": "Mark the rest of {{name}} as got",
+      "undoGot": "{{name}} is got. Undo it",
+      "undoNone": "{{name}} was not available. Undo it",
+      "isGot": "{{name}} is got",
+      "isNone": "{{name}} was not available"
     }
   },
   "getList": {

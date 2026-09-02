@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "properties": {
+    "store": { "type": "string", "nullable": true },
+    "storeAddress": { "type": "string", "nullable": true },
+    "storeVatId": { "type": "string", "nullable": true },
+    "datetime": { "type": "string", "nullable": true },
+    "currency": { "type": "string", "nullable": true },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rawText": { "type": "string" },
+          "isDepartment": { "type": "boolean" },
+          "quantity": { "type": "number", "nullable": true },
+          "unit": {
+            "type": "string",
+            "enum": ["UNIT", "KG", "L", "OTHER"],
+            "nullable": true
+          },
+          "unitPrice": { "type": "number", "nullable": true },
+          "discount": { "type": "number", "nullable": true },
+          "lineTotal": { "type": "number", "nullable": true }
+        },
+        "required": ["rawText", "isDepartment", "lineTotal"]
+      }
+    },
+    "receiptDiscount": { "type": "number", "nullable": true },
+    "subtotal": { "type": "number", "nullable": true },
+    "taxTotal": { "type": "number", "nullable": true },
+    "total": { "type": "number", "nullable": true },
+    "paymentMethod": { "type": "string", "nullable": true },
+    "truncated": { "type": "boolean" }
+  },
+  "required": ["lines", "total", "truncated"]
+}

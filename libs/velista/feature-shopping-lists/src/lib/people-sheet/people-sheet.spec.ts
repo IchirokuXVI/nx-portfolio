@@ -33,6 +33,7 @@ function participant(
     id: 'p2',
     kind: 'GUEST',
     displayName: 'Marc',
+    username: null,
     guestNumber: 1,
     userId: null,
     joinedAt: null,
@@ -45,7 +46,7 @@ function participant(
   };
 }
 
-async function render(person: BasketParticipant) {
+async function render(person: BasketParticipant, inspect = true) {
   TestBed.resetTestingModule();
 
   const me = participant({
@@ -115,9 +116,11 @@ async function render(person: BasketParticipant) {
   const fixture = TestBed.createComponent(PeopleSheet);
   fixture.detectChanges();
 
-  // Open the detail pane, which is the only place either fact is drawn.
-  fixture.componentInstance['inspect'](person);
-  fixture.detectChanges();
+  if (inspect) {
+    // Open the detail pane, which is the only place either fact is drawn.
+    fixture.componentInstance['inspect'](person);
+    fixture.detectChanges();
+  }
 
   return fixture;
 }
@@ -147,5 +150,52 @@ describe('PeopleSheet: a missing join time', () => {
     const [joined] = facts(fixture);
     expect(joined).not.toContain('basket.people');
     expect(joined).toContain('2026');
+  });
+});
+
+/**
+ * Plan 0052, section 2.1: the reader is named, and marked.
+ *
+ * The reader here is the owner, `me`, whose row core creates with no `displayName` at
+ * all, so their account name is the only thing that can name it. The other row is a
+ * guest called Marc.
+ */
+describe('PeopleSheet: naming the reader', () => {
+  const names = (fixture: Awaited<ReturnType<typeof render>>) =>
+    [...(fixture.nativeElement as HTMLElement).querySelectorAll('.person')].map(
+      (row) => ({
+        name: row.querySelector('.person-name')?.textContent?.trim() ?? '',
+        you: row.querySelector('.you-tag')?.textContent?.trim() ?? null,
+        guest: row.querySelector('.guest-tag')?.textContent?.trim() ?? null,
+      })
+    );
+
+  it('draws the reader’s own name rather than the word "You"', async () => {
+    // The sheet is read on other people's phones over a trolley, so a row labelled
+    // "You" changes meaning depending on whose hand the device is in.
+    const fixture = await render(participant(), false);
+
+    const [mine] = names(fixture);
+    expect(mine.name).toBe('Ana');
+  });
+
+  it('keeps a marker beside it, so the reader can still find themselves', async () => {
+    // The name replaces the word and does not simply delete it: a list of four names
+    // with nothing saying which is yours is a worse sheet than the one reported.
+    const fixture = await render(participant(), false);
+
+    const [mine, other] = names(fixture);
+    expect(mine.you).toBe('basket.people.you');
+    expect(other.you).toBeNull();
+  });
+
+  it('leaves the guest mark exactly where it was', async () => {
+    // `0051`'s ring and word are untouched by this: a name makes somebody nameable
+    // and never verified, and two guests can still both be called Dani.
+    const fixture = await render(participant(), false);
+
+    const [mine, other] = names(fixture);
+    expect(other.guest).toBe('basket.people.guest');
+    expect(mine.guest).toBeNull();
   });
 });

@@ -1,0 +1,173 @@
+<lib-sheet-shell
+  (dismiss)="close()"
+  [dismissible]="!busy()"
+  labelledBy="line-list-title"
+>
+  <!-- The line in the reader's own words, which is what they typed in the aisle. -->
+  <h2 class="title" id="line-list-title">{{ title() }}</h2>
+
+  @if (result() === null) {
+    @switch (loadState()) {
+      @case ('failed') {
+        <p class="failed">{{ 'basket.send.loadFailed' | rokuT }}</p>
+        <button (click)="load()" class="secondary" type="button">
+          {{ 'basket.send.retry' | rokuT }}
+        </button>
+      }
+
+      @case ('loaded') {
+        @if (noTargets()) {
+          <p class="hint">{{ 'basket.send.empty' | rokuT }}</p>
+        } @else {
+          <!--
+            A search only once there are more than a screenful. Labelled rather
+            than placeholder only: a placeholder disappears the moment somebody
+            types, and it is the one label on this sheet a person comes back to
+            after looking away at a shelf.
+          -->
+          @if (searchable()) {
+            <div class="search">
+              <label class="search-label" for="line-list-search">
+                {{ 'basket.send.searchLabel' | rokuT }}
+              </label>
+              <input
+                (input)="search($any($event.target).value)"
+                [value]="query()"
+                autocomplete="off"
+                class="search-field"
+                id="line-list-search"
+                type="search"
+              />
+              <!--
+                The count, politely, so somebody typing hears how far they have
+                narrowed it without leaving the field. Rendered from the moment the
+                field is, because a live region created together with its first
+                content is one some readers never announce.
+              -->
+              <p aria-live="polite" class="matches" role="status">
+                {{ 'basket.send.matches' | rokuT: { count: matchCount() } }}
+              </p>
+            </div>
+          }
+
+          <!--
+            One question with one answer, so one radio group, and native radios so
+            the arrow keys, the roving focus and the single selection come with the
+            role rather than being reimplemented on buttons.
+
+            The headings inside it are **real headings** (section 6), so a reader
+            moving by heading reaches "From this basket" first, which is where the
+            answer usually is.
+          -->
+          <div aria-labelledby="line-list-title" class="picker" role="radiogroup">
+            @for (group of groups(); track group.key) {
+              <h3 class="group-heading">{{ group.heading }}</h3>
+
+              <ul class="targets">
+                @for (target of group.targets; track target.listId) {
+                  <li>
+                    <label class="target">
+                      <input
+                        (change)="choose(target.listId)"
+                        [checked]="chosenListId() === target.listId"
+                        [disabled]="busy()"
+                        [value]="target.listId"
+                        class="target-radio"
+                        name="send-target"
+                        type="radio"
+                      />
+                      <span class="target-text">
+                        <span class="target-name">
+                          {{ target.listName || ('basket.unnamed' | rokuT) }}
+                        </span>
+                        <!--
+                          Only in the run's own group, whose rows come from several
+                          zones and are the only ones a heading does not already
+                          place. Under a zone heading it would print the same word
+                          twice on every row.
+                        -->
+                        @if (group.showZone) {
+                          <span class="target-zone">
+                            {{ target.zoneName || ('vocabulary.zone' | rokuT) }}
+                          </span>
+                        }
+                      </span>
+                    </label>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        }
+      }
+
+      @default {
+        <p class="hint">{{ 'basket.send.loading' | rokuT }}</p>
+      }
+    }
+  }
+
+  <!--
+    The one thing the sheet is saying, in one polite region that outlives what it
+    says (section 6).
+
+    Before the commit it is the one way warning, under the chosen list and above the
+    button, so it is heard before the button rather than after the tap. After the
+    commit it is which of the three things happened. Two regions would race, and a
+    region drawn only when it has something to say is one some readers never
+    announce.
+
+    Text, never a colour or an icon alone.
+  -->
+  <p
+    [class.is-empty]="sayKey() === null"
+    [class.is-outcome]="result() !== null"
+    aria-live="polite"
+    class="say"
+    role="status"
+  >
+    @if (sayKey(); as key) {
+      {{ key | rokuT: sayParams() }}
+    }
+  </p>
+
+  @if (result() === null) {
+    <!--
+      Absent until a list is chosen, rather than disabled. The whole gesture is
+      somebody saying which list, so there is nothing for this button to mean until
+      they have.
+    -->
+    @if (chosen() !== null) {
+      <button
+        (click)="confirm()"
+        [disabled]="busy()"
+        class="primary"
+        type="button"
+      >
+        {{ 'basket.send.confirm' | rokuT }}
+      </button>
+    }
+
+    <!--
+      A refused bind, said specifically, with the sheet left open: the reader is one
+      tap from choosing a different list, and closing the sheet under them would take
+      that away along with the sentence explaining why.
+    -->
+    @if (errorKey(); as key) {
+      <p aria-live="assertive" class="failed" role="alert">
+        {{ key | rokuT }}
+        @if (correlationId(); as reference) {
+          <span class="reference">
+            {{ 'basket.error.reference' | rokuT: { correlationId: reference } }}
+          </span>
+        }
+      </p>
+    }
+  }
+
+  <button (click)="close()" class="quiet" type="button">
+    {{
+      (result() === null ? 'basket.send.cancel' : 'basket.send.close') | rokuT
+    }}
+  </button>
+</lib-sheet-shell>

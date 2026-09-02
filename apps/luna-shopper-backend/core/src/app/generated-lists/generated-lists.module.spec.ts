@@ -4,6 +4,7 @@ import { ListsModule } from '../lists/lists.module';
 import { ProfileService } from '../profiles/profile.service';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
+import { GeneratedListBindService } from './generated-list-bind.service';
 import { GeneratedListService } from './generated-list.service';
 import { GeneratedListsModule } from './generated-lists.module';
 
@@ -26,6 +27,8 @@ describe('GeneratedListsModule wiring', () => {
     (Reflect.getMetadata('imports', module as object) as unknown[]) ?? [];
   const exportsOf = (module: unknown): unknown[] =>
     (Reflect.getMetadata('exports', module as object) as unknown[]) ?? [];
+  const providersOf = (module: unknown): unknown[] =>
+    (Reflect.getMetadata('providers', module as object) as unknown[]) ?? [];
 
   it('imports the three modules its services are constructed from', () => {
     const imports = importsOf(GeneratedListsModule);
@@ -49,6 +52,16 @@ describe('GeneratedListsModule wiring', () => {
 
   it('can reach ProfileService, which resolves a run to its sources', () => {
     expect(exportsOf(ProfilesModule)).toContain(ProfileService);
+  });
+
+  it('provides the bind service, which the sharing controller injects', () => {
+    // Plan 0058's two message patterns are declared on a controller that takes
+    // this in its constructor, so a missing provider is core refusing to start
+    // rather than a route that answers wrongly. That is the right failure and it
+    // is still one worth catching in a second rather than in CI's stack.
+    expect(providersOf(GeneratedListsModule)).toContain(
+      GeneratedListBindService
+    );
   });
 
   it('exports the basket service, which account deletion reaches for', () => {

@@ -891,11 +891,21 @@
       "free": "Sin producto elegido",
       "busy": "Guardando"
     },
+    "outstanding": {
+      "label": "{{name}}, aún por conseguir",
+      "bought_one": "{{count}} comprado",
+      "bought_other": "{{count}} comprados",
+      "buying": "comprando {{next}} en vez de {{current}}"
+    },
     "touched": {
       "got": "{{name}} lo consiguió",
       "gotSome": "{{name}} consiguió {{count}}",
       "none": "{{name}} dice que no había",
       "you": "tú"
+    },
+    "added": {
+      "by": "Añadido por {{name}}",
+      "announced": "{{content}} añadido"
     },
     "from": {
       "one": "de {{first}}",
@@ -936,6 +946,48 @@
       "over": "Eso es más de lo que has conseguido",
       "submit": "Registrarlo",
       "cancel": "Cancelar"
+    },
+    "units": {
+      "open": "Cambiar lo que ha pedido cada lista",
+      "title": "{{name}}",
+      "notBuying": "Cambiar esto cambia lo que quiere cada lista. Aquí no se marca nada como comprado.",
+      "buying_one": "Se compra {{count}}",
+      "buying_other": "Se compran {{count}}",
+      "extra": "{{lists}} para estas listas y {{extra}} de más",
+      "lists": "Listas que quieren esto",
+      "listWants": "la lista pide {{count}}",
+      "noAccess": "ya no puedes cambiar esta lista",
+      "others_one": "Otra lista quiere esto",
+      "others_other": "Otras {{count}} listas quieren esto",
+      "claimed": "alguien ya está comprando esto para esa lista",
+      "notApproved": "esa lista todavía no ha aceptado esta línea",
+      "settled": "esa lista no quiere ninguno ahora mismo",
+      "byName": "coincide por el nombre: «{{content}}»",
+      "loading": "Leyendo las listas",
+      "failed": "No se han podido leer las listas",
+      "retry": "Reintentar",
+      "empty": "Ninguna lista pide esto",
+      "close": "Listo"
+    },
+    "send": {
+      "open": "Enviar a una lista de la compra",
+      "title": "{{name}}",
+      "pending": "Esperando a que esa lista lo acepte",
+      "loading": "Cargando tus listas",
+      "loadFailed": "Tus listas no se han podido cargar",
+      "retry": "Reintentar",
+      "empty": "No hay ninguna lista a la que puedas enviar esto",
+      "fromThisBasket": "De esta compra",
+      "searchLabel": "Buscar entre tus listas",
+      "matches_one": "{{count}} lista",
+      "matches_other": "{{count}} listas",
+      "warning": "Esto añade «{{content}}» a {{list}}. No se puede sacar de ahí desde aquí.",
+      "confirm": "Enviarlo",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "done": "Añadido a {{list}}.",
+      "waiting": "Añadido a {{list}}. Está esperando a que alguien de ahí lo apruebe.",
+      "noneOutstanding": "Añadido a {{list}} sin nada pendiente. Ahí no se ha registrado ninguna compra."
     },
     "people": {
       "title": "En esta lista",
@@ -1001,7 +1053,7 @@
       "failed": "No ha funcionado. Inténtalo de nuevo."
     },
     "history": {
-      "open": "Qué ha pasado con esta línea",
+      "open": "Ver el historial de la línea",
       "title": "Qué ha pasado aquí",
       "loading": "Cargando lo que ha pasado",
       "failed": "Esto no se ha podido cargar",
@@ -1013,7 +1065,32 @@
       "none": "{{who}} dice que no tenían",
       "someone": "Alguien",
       "you": "Tú",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "reverted": "Deshecho"
+    },
+    "error": {
+      "alreadyFinished": "Alguien ya ha terminado esta línea",
+      "accessChanged": "Tu acceso a una de las listas de esta línea ha cambiado",
+      "ownerOnly": "Esto solo lo puede hacer quien hizo la lista",
+      "gone": "Esta lista ya no está",
+      "tooFast": "Demasiado rápido. Inténtalo dentro de un momento",
+      "failed": "No se ha guardado. Inténtalo de nuevo",
+      "staleLine_one": "Otra persona ha cambiado esta línea. Ahora pone {{count}}",
+      "staleLine_other": "Otra persona ha cambiado esta línea. Ahora pone {{count}}",
+      "belowSettled_one": "Ya se ha comprado uno para esta lista",
+      "belowSettled_other": "Ya se han comprado {{count}} para esta lista",
+      "basketFinished": "Esta lista está terminada, así que no se puede cambiar",
+      "notSendable": "Solo se puede enviar a una lista de la compra una línea añadida aquí",
+      "alreadySent": "Esta línea ya se ha enviado a una lista de la compra",
+      "reference": "ref {{correlationId}}"
+    },
+    "status": {
+      "got": "Marcar {{name}} como conseguido",
+      "rest": "Marcar el resto de {{name}} como conseguido",
+      "undoGot": "{{name}} está conseguido. Deshacerlo",
+      "undoNone": "{{name}} no estaba disponible. Deshacerlo",
+      "isGot": "{{name}} está conseguido",
+      "isNone": "{{name}} no estaba disponible"
     }
   },
   "getList": {

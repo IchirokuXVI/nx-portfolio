@@ -39,5 +39,10 @@ import { ScopeResolutionService } from './scope-resolution.service';
   // Plan 0049: every read that returns items or prices resolves where the caller
   // shops first, from an explicit selector or from their profile.
   providers: [ScopeResolutionService],
+  // Exported for the basket's own search (plan 0055, section 5.1), which
+  // resolves the **run's** profile rather than the caller's and must share this
+  // resolver's Redis cache and its invalidation rather than growing a second
+  // answer to the same question.
+  exports: [ScopeResolutionService],
 })
 export class GatewayCatalogModule {}

@@ -3,7 +3,11 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
+  signal,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -11,8 +15,19 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH, type BasketLine } from '@portfolio/velista/models';
+import {
+  BASKET_REOPEN_AVAILABLE,
+  BasketStore,
+  SessionStore,
+} from '@portfolio/velista/data-access';
+import {
+  APP_BASE_PATH,
+  outstanding,
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MIN_CHARS,
+  type BasketLine,
+  type CatalogSuggestion,
+} from '@portfolio/velista/models';
 import {
   appPath,
   PageNavigation,
@@ -20,11 +35,13 @@ import {
 } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
+  LineComposer,
   OfflineIcon,
   PersonIcon,
   ShareIcon,
 } from '@portfolio/velista/ui';
-import { participantInitials } from '../basket-labels';
+import { basketErrorKey } from '../basket-error-copy';
+import { outstandingCaption, participantInitials } from '../basket-labels';
 import { BasketLineRow } from '../basket-line-row/basket-line-row';
 import { BASKET_PATHS } from '../basket-paths';
 
@@ -41,6 +58,7 @@ import { BASKET_PATHS } from '../basket-paths';
  * | --- | --- | --- | --- |
  * | lines, quantities, outstanding | yes | yes | yes |
  * | settle, partial submit, swap the product | yes | yes | yes |
+ * | the composer, and the catalog behind it | yes | yes | yes |
  * | which list a line came from | yes | yes | no |
  * | the allocation sheet | yes | yes | no |
  * | another participant's device and join time | yes | yes | no |
@@ -55,6 +73,14 @@ import { BASKET_PATHS } from '../basket-paths';
  * alone, and the allocation pane, which the settle sheet draws on
  * `seesZoneData`. Both are also refused server side, so a template mistake is a
  * cosmetic bug rather than a disclosure.
+ *
+ * **The composer is the one row of that table with no reader-shaped condition on
+ * it at all** (plan 0053, section 2), and that is worth stating rather than
+ * inferring from a missing `@if`. The list page draws its field from certainty,
+ * because `myPermissions` arrives with the list; here a line added has no target
+ * list, so it changes nothing shared and there is no permission to read. What it
+ * does branch on is the basket: a finished one takes no lines, so it draws no
+ * field.
  *
  * ## No back arrow for a guest
  *
@@ -76,6 +102,7 @@ import { BASKET_PATHS } from '../basket-paths';
   imports: [
     BasketLineRow,
     ChevronLeftIcon,
+    LineComposer,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
@@ -117,8 +144,17 @@ export class BasketPage {
     () => this._store.me()?.kind === 'OWNER'
   );
 
-  /** The reader's own participant id, so their own edits read as "you". */
+  /** The reader's own participant id, so their own edits can be named. */
   protected readonly meId = computed(() => this._store.me()?.id ?? null);
+
+  /**
+   * The reader's own account name, handed down to every row.
+   *
+   * Read once here rather than in {@link BasketLineRow}, which is constructed once per
+   * line: the page already holds the session, and the caption on a line the reader
+   * settled themselves is the one thing on the row the basket alone cannot name.
+   */
+  protected readonly ownName = computed(() => this._session.username());
 
   protected readonly products = computed(
     () => this._store.basket()?.products ?? new Map()
@@ -169,6 +205,56 @@ export class BasketPage {
 
   /** Whether this participant has been removed while the phone was in their hand. */
   protected readonly revoked = this._store.revoked;
+
+  /**
+   * Whether a finished row's status control may be pressed (plan 0052, section 10).
+   *
+   * A build constant and not state, so it is read once here and handed down rather
+   * than imported by the row, which is constructed once per line. While it is false a
+   * finished line's glyph is a state indicator instead of a button: it says what the
+   * line is, and does not offer an act that would 404 against a backend without luna
+   * `0054`'s route.
+   */
+  protected readonly canReopen = BASKET_REOPEN_AVAILABLE;
+
+  /**
+   * What the last move of a row's number came to, for the live region.
+   *
+   * **One region for the whole basket**, which is the same choice the composer's
+   * announcement makes and for the same reason: a polite region reads whatever the
+   * node last held, so four people working one list collapse into one sentence
+   * instead of talking over each other for the length of a trip.
+   */
+  protected readonly outstandingSaid = signal('');
+
+  /**
+   * The one refusal a row is still showing, and which row it belongs to.
+   *
+   * One at a time across the whole screen. A sentence about a race is worth reading
+   * for as long as the number it corrects is on screen and no longer: it is cleared
+   * the moment any row starts another move.
+   */
+  private readonly _notice = signal<{
+    readonly lineId: string;
+    readonly key: string;
+    readonly count: number;
+  } | null>(null);
+
+  /** The notice for this row, or null. Identity is stable, so the row is not redrawn. */
+  protected noticeFor(
+    line: BasketLine
+  ): { readonly key: string; readonly count: number } | null {
+    const notice = this._notice();
+    return notice !== null && notice.lineId === line.id ? notice : null;
+  }
+
+  /**
+   * Which lines were sent to a list that has not accepted them yet (`0056`).
+   *
+   * From the store rather than from the lines, because no field of a line carries
+   * it. See `BasketStore.pendingTargets` for the gap it stands in for.
+   */
+  protected readonly pendingTargets = this._store.pendingTargets;
 
   /**
    * The faces along the top: **who has this basket open right now**.
@@ -252,6 +338,116 @@ export class BasketPage {
     });
   }
 
+  /**
+   * The row's status control, settling direction: the whole outstanding amount.
+   *
+   * The same body the sheet's primary button sends, so the two gestures cannot
+   * allocate differently. It does not open the allocation pane and it asks nothing
+   * about zones: the system allocates oldest origin first exactly as it does when the
+   * sheet sends the same body (plan 0052, section 6.4).
+   */
+  protected settleLine(line: BasketLine): void {
+    void this._toggle(line, () =>
+      this._store.settle(line.id, { outcome: 'BOUGHT' })
+    );
+  }
+
+  /** The other direction: a finished line back to fully outstanding. */
+  protected reopenLine(line: BasketLine): void {
+    void this._toggle(line, () => this._store.reopen(line.id));
+  }
+
+  /**
+   * Run a row write, and open the sheet on it if it has something to report.
+   *
+   * **The row cannot draw a skipped origin report**, because it is a paragraph and a
+   * row is three short lines. So a write that comes back with `skippedCount > 0` opens
+   * the settle sheet on that line, which is where `0051` section 6.4's sentence
+   * already lives and where the person can read it beside what they were doing.
+   *
+   * A failure needs no branch here. It has already moved `BasketStore.state` or is a
+   * transient the next refresh resolves, and the row is drawn from the store either
+   * way; the sheet is where a failure gets a sentence, and the person opens it.
+   */
+  private async _toggle(
+    line: BasketLine,
+    write: () => Promise<{ skippedCount: number } | null>
+  ): Promise<void> {
+    const result = await write();
+    if (result !== null && result.skippedCount > 0) {
+      this.openLine(line);
+    }
+  }
+
+  /**
+   * The row's reel was let go: one call, whichever direction it went (plan 0054).
+   *
+   * **The client never decides whether the drag was a purchase or a raise.** Backend
+   * `0056` section 3 makes that decision on numbers only it can see, and a client
+   * that decided would get it wrong exactly when two phones are moving one line. So
+   * this sends where the gesture ended and where it believed it began, and the
+   * answer is a settle result in both directions: a raise answers `skippedCount: 0`,
+   * so the skip reporting comes across unchanged and needs no branch.
+   */
+  protected async setOutstanding(
+    line: BasketLine,
+    change: { from: number; to: number }
+  ): Promise<void> {
+    // Whatever the last move of any row came to, gone before this one starts: one
+    // sentence at a time across the whole basket, and a stale refusal sitting under
+    // a row somebody has since moved again would be a lie about the present.
+    this._notice.set(null);
+
+    const result = await this._store.setOutstanding(
+      line.id,
+      change.to,
+      change.from
+    );
+
+    if (result === null) {
+      this._reportOutstanding(line);
+      return;
+    }
+
+    // The same sentence the caption showed under the thumb, so a reader who could
+    // not see it still learns which of the two happened (section 7).
+    this._say(
+      outstandingCaption(
+        change.from,
+        change.to,
+        this._translator,
+        this._locale()
+      ) ?? ''
+    );
+
+    if (result.skippedCount > 0) {
+      this.openLine(line);
+    }
+  }
+
+  /**
+   * Say what went wrong, once, on the row it went wrong on.
+   *
+   * The count is read back off the store rather than off the line this was called
+   * with, and that is the whole of the stale answer: `BasketStore.setOutstanding`
+   * refetches before it returns null, so by now the row's number is the true one and
+   * "it says 3 now" is a sentence worth saying. Every other failure gets its own
+   * sentence the same way, because a failure with no sentence is the defect
+   * `basket-error-copy.ts` exists to close (plan 0052, section 7).
+   */
+  private _reportOutstanding(line: BasketLine): void {
+    const key = basketErrorKey(this._store.error(), 'basket.outstanding');
+    const found = this.lines().find((row) => row.id === line.id);
+    const count = outstanding(found ?? line);
+
+    this._notice.set({ lineId: line.id, key, count });
+    this._say(this._translator.t(key, undefined, this._locale(), { count }));
+  }
+
+  private _say(sentence: string): void {
+    this.outstandingSaid.set(sentence);
+  }
+
   protected openPeople(): void {
     void this._router.navigate(sheetSegments('people'), {
       relativeTo: this._route,
@@ -266,6 +462,146 @@ export class BasketPage {
 
   protected retry(): void {
     void this._store.refresh();
+  }
+
+  // --- The composer (plan 0053) ---------------------------------------------
+
+  /**
+   * Whether the field at the bottom is drawn, and it is drawn for **everybody**.
+   *
+   * That is the unusual part of this screen and not a relaxation of `0030`. The list
+   * page draws its composer from certainty, because `myPermissions` arrives with the
+   * list and somebody without `WRITE` never sees a field. The basket inverts it:
+   * every participant may add a line, guests included, so there is no permission to
+   * read and no branch to write. A line added here has no target list, so it changes
+   * nothing shared, names no zone and claims no zone line — it is a note on the list
+   * somebody is carrying, and the gate that matters is on binding it to a
+   * household's list.
+   *
+   * The one absence is a **finished basket**, where the server refuses the add and a
+   * field that cannot submit is the invitation `0038` section 2.1 refuses to draw.
+   */
+  protected readonly canAdd = this._store.takesLines;
+
+  /** Whether an add is in flight. The field stays usable; only the button waits. */
+  protected readonly adding = this._store.adding;
+
+  /**
+   * What the composer offers under the field, in the **server's** order.
+   *
+   * Never re-sorted here, for the reason written on `CatalogApi.suggest`: the client
+   * holds none of the prices, scopes or synonyms that decided it.
+   */
+  protected readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
+
+  /**
+   * The newest line to arrive, announced politely and once.
+   *
+   * One region rather than one per line, which is what makes it bearable when four
+   * people add at the same time: a polite region reads whatever the node last held,
+   * so simultaneous adds collapse into one sentence (section 8).
+   */
+  protected readonly announcement = computed(
+    () => this._store.lastAdded()?.content ?? ''
+  );
+
+  private readonly _composer = viewChild(LineComposer);
+
+  /** The last thing typed, which the effect below watches. */
+  private readonly _query = signal('');
+
+  protected onComposerQuery(query: string): void {
+    this._query.set(query);
+  }
+
+  /**
+   * Ask the catalog, at most once per {@link SUGGEST_DEBOUNCE_MS} of quiet.
+   *
+   * **Identical in behaviour to the list page's, deliberately**: somebody who has
+   * used velista's list screen must not have to learn a second search. The container
+   * owns the debounce, the three character floor and the sequence number, and the
+   * composer emits raw keystrokes and knows nothing about requests (rule D1).
+   *
+   * The sequence number is what makes this correct rather than merely debounced: two
+   * requests can be in flight when somebody types through the beat and they can
+   * answer out of order, so an older answer must not replace a newer one. Comparing
+   * against the query the effect was started for is not enough, since the same text
+   * can be typed twice.
+   *
+   * The request goes to the **participant surface**, because the reader may hold no
+   * account token, and it is scoped to the run's own shopping profile rather than to
+   * the reader's, so the ranking is the basket's. Both of those are the store's and
+   * the gateway's business, not this page's.
+   */
+  private _suggestSeq = 0;
+
+  private readonly _suggestEffect = effect((onCleanup) => {
+    const query = this._query().trim();
+
+    if (query.length < SUGGEST_MIN_CHARS) {
+      // Cleared synchronously rather than after the debounce: a dropdown that
+      // lingered over a field somebody has just emptied is offering matches for
+      // nothing.
+      untracked(() => this.suggestions.set([]));
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const seq = (this._suggestSeq += 1);
+      void this._store.suggest(query).then((found) => {
+        if (seq === this._suggestSeq) {
+          this.suggestions.set(found);
+        }
+      });
+    }, SUGGEST_DEBOUNCE_MS);
+
+    onCleanup(() => clearTimeout(timer));
+  });
+
+  /**
+   * Add a line, from the field or from a suggestion.
+   *
+   * **Not optimistic**, which is the opposite of the list page and is the whole of
+   * section 7: four people are working this basket at once, and a row that appeared
+   * locally and then reordered when the server answered is a row somebody might tap
+   * in between. `BasketStore` appends when the server answers, and the socket carries
+   * the same line to everybody else.
+   *
+   * ## What a suggestion attaches
+   *
+   * The composer hands down `itemIds`: one product for an item suggestion, a group's
+   * whole set for a group one. Both become `options`, which is what the line may be
+   * switched between; the **pick** is set only where exactly one product was
+   * attached, because that is the case where somebody chose a product rather than a
+   * kind of thing. A group leaves the pick unset, so the row offers "which one did
+   * you get?" at the shelf, which is where that question belongs.
+   *
+   * A failed add puts the text back in the field. Losing six characters is nothing;
+   * losing the item somebody just remembered in an aisle is the failure this screen
+   * cannot afford.
+   */
+  protected async add(entry: {
+    content: string;
+    quantity: number;
+    itemIds?: readonly string[];
+  }): Promise<void> {
+    const itemIds = entry.itemIds ?? [];
+    const line = await this._store.addLine({
+      content: entry.content,
+      quantity: entry.quantity,
+      ...(itemIds.length === 1 ? { itemId: itemIds[0] } : {}),
+      ...(itemIds.length > 0 ? { options: itemIds } : {}),
+    });
+
+    // The dropdown goes with the words that produced it, whichever way the add
+    // went. Clearing it here rather than in the composer keeps the two from
+    // disagreeing about whether a list is open.
+    this._query.set('');
+    this.suggestions.set([]);
+
+    if (line === null) {
+      this._composer()?.restore(entry.content);
+    }
   }
 
   /**

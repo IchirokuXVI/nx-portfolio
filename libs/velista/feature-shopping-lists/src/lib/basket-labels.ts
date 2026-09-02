@@ -30,12 +30,18 @@ import {
 export type NameableParticipant = Pick<
   BasketParticipant,
   'kind' | 'displayName' | 'guestNumber'
->;
+> & {
+  /**
+   * Optional rather than picked, because a {@link BasketPresenceEntry} does not have
+   * one: luna `0054` puts the username on the participant view and not on the presence
+   * broadcast, which carries the least it can. A face with no username falls through
+   * exactly as it did before, so the two callers keep sharing one pair of functions.
+   */
+  readonly username?: string | null;
+};
 
 /** What a caller can tell these functions that the basket itself does not carry. */
 export interface ParticipantNameOptions {
-  /** Render the reader's own name as "you", for a caption that reads as a sentence. */
-  readonly you?: boolean;
   /**
    * The reader's own account username, for their own row.
    *
@@ -69,6 +75,28 @@ export interface ParticipantNameOptions {
  * The number is what a guest has and an account holder does not, so it is what the
  * fallback branches on. A `GUEST` with neither is `Guest`; anybody else is named by
  * their account where the reader has it and by what they are otherwise.
+ *
+ * ## "Owner" and "Member" are the last resort, and they stay
+ *
+ * `0051` added those two, correctly, as the honest thing to say about somebody the
+ * reader had not been given a name for, and they replaced a worse bug where the owner
+ * was listed on their own basket as "Guest". But a role is still a place where a
+ * person belongs, and the reason one was reached at all is a **backend absence**: core
+ * created an owner's row with a null name, and the join screen sent nothing for a
+ * signed in joiner. Luna `0054` section 2 carries the account holder's username on the
+ * participant, so {@link NameableParticipant.username} now sits between the guest
+ * number and the role word.
+ *
+ * The role fallback is **not deleted** with it, and that is deliberate. A basket
+ * generated before that plan shipped carries no username for anybody, and the fallback
+ * is what those baskets keep drawing; deleting it would make them draw an empty string.
+ *
+ * ## A name is still not an identity
+ *
+ * A username does not make somebody verified to the other people in the shop; it makes
+ * them nameable. Two guests may still both type "Dani", the participant id is still
+ * the attribution, and the guest ring and the guest tag are exactly where `0051` left
+ * them.
  */
 export function participantName(
   person: NameableParticipant | null | undefined,
@@ -79,9 +107,8 @@ export function participantName(
   if (!person) {
     return '';
   }
-  if (options.you) {
-    return translator.t('basket.touched.you', undefined, locale);
-  }
+  // Typed on purpose, so it wins. A signed in participant may still type a name on the
+  // join screen, and if they did they said it deliberately (luna `0054`, section 2.4).
   if (person.displayName !== null && person.displayName !== '') {
     return person.displayName;
   }
@@ -89,15 +116,20 @@ export function participantName(
   if (own !== undefined && own !== '') {
     return own;
   }
+  const username = person.username?.trim();
+  if (username !== undefined && username !== '') {
+    return username;
+  }
   if (person.guestNumber !== null) {
     return translator.t('basket.people.guestNumbered', undefined, locale, {
       count: person.guestNumber,
     });
   }
   if (person.kind !== 'GUEST') {
-    // Somebody with an account whose name this reader has not been given: the owner
-    // seen by a guest is the case that reaches here. What they are is the only true
-    // thing left to say about them, and it is a great deal truer than "Guest".
+    // Somebody with an account this basket carries no username for, which after luna
+    // `0054` means a basket generated before that plan shipped. What they are is the
+    // only true thing left to say about them, and it is a great deal truer than
+    // "Guest".
     return translator.t(
       person.kind === 'OWNER' ? 'basket.people.owner' : 'basket.people.member',
       undefined,
@@ -139,9 +171,14 @@ export function participantInitials(
   // A number only where the name did not come from a person: somebody who typed
   // "Dani" is `D`, and appending the number they also happen to have would label
   // them with a fact the screen otherwise never shows them by.
+  //
+  // A username counts as a person's name for exactly that reason, so it belongs in
+  // this test beside the other two. Only a guest carries a number at all, and one who
+  // has an account username is not the anonymous row the number exists to tell apart.
   const named =
     (person.displayName !== null && person.displayName !== '') ||
-    (options.ownName ?? '').trim() !== '';
+    (options.ownName ?? '').trim() !== '' ||
+    (person.username ?? '').trim() !== '';
 
   return !named && person.guestNumber !== null
     ? `${initial}${person.guestNumber}`
@@ -159,20 +196,38 @@ export function participantInitials(
  * somebody finished it, somebody got some of it, and somebody found none. The
  * last is inferred from a line that is closed with nothing settled against its
  * quantity, which is exactly what a `NOT_AVAILABLE` settle leaves behind.
+ *
+ * ## The reader is named, not called "you"
+ *
+ * This used to draw "you got it" for a line the reader had settled, and plan 0052
+ * section 2.1 takes that back. The screen is four people working one list in a shop
+ * and reading it on **each other's phones** over a trolley: "you got it" is unreadable
+ * when the phone in your hand is not yours, and it was the only caption here that
+ * changed meaning depending on who was holding the device.
+ *
+ * So the reader is named like everybody else, and {@link ParticipantNameOptions.ownName}
+ * is how: core keeps no `displayName` for an owner, so the reader's own account name is
+ * the only thing that can name their own row on a basket generated before luna `0054`.
+ * The caller passes it rather than resolving it, because this file has no account and a
+ * row component rendered once per line should not gain a `SessionStore`.
+ *
+ * @param ownName the reader's own account name, or null for a guest, who has no
+ *   account and whose own row the server does name.
  */
 export function touchedCaption(
   line: BasketLine,
   people: ReadonlyMap<string, BasketParticipant>,
   translator: RokuTranslatorService,
   locale: string,
-  meId: string | null
+  meId: string | null,
+  ownName: string | null = null
 ): string | null {
   if (line.touchedBy === null) {
     return null;
   }
 
   const name = participantName(people.get(line.touchedBy), translator, locale, {
-    you: line.touchedBy === meId,
+    ownName: line.touchedBy === meId ? ownName : null,
   });
   if (name === '') {
     return null;
@@ -198,6 +253,55 @@ export function touchedCaption(
         name,
         count: line.settled,
       });
+}
+
+/**
+ * "Who put this here", for a line nobody has touched yet (plan 0053, section 5).
+ *
+ * The question a shop asks about a row nobody recognises, and one the basket could
+ * not answer until luna `0055` wrote {@link BasketLine.createdBy}: every line came
+ * from the run, so there was nobody to name.
+ *
+ * ## It yields to {@link touchedCaption}, and does not sit beside it
+ *
+ * Null the moment anybody has touched the line, because the row has three short
+ * lines and "who got the bread" is the more urgent of the two while somebody is
+ * shopping. The **field** is still worth keeping past that point, which is the whole
+ * argument for it being a second column: `touchedBy` moves on the first settle, so
+ * after one the row could not go back to answering this. What the row does with the
+ * answer is a layout decision and this is it.
+ *
+ * Null too for every line the run composed, which is the ordinary case in a full
+ * basket and draws no caption rather than an empty one. Both nulls arrive here as
+ * the same absent id, and both mean "there is nothing to say".
+ *
+ * A guest is visibly a guest, because {@link participantName} is what names them
+ * here as it does everywhere else on this screen.
+ *
+ * @param ownName the reader's own account name, or null for a guest, exactly as
+ *   {@link touchedCaption} takes it and for the same reason.
+ */
+export function addedCaption(
+  line: BasketLine,
+  people: ReadonlyMap<string, BasketParticipant>,
+  translator: RokuTranslatorService,
+  locale: string,
+  meId: string | null,
+  ownName: string | null = null
+): string | null {
+  if (line.createdBy === null || line.touchedBy !== null) {
+    return null;
+  }
+
+  const name = participantName(people.get(line.createdBy), translator, locale, {
+    ownName: line.createdBy === meId ? ownName : null,
+  });
+  // An id this basket's participant list does not hold, which is a participant
+  // removed since the line was added. "Added by " with nothing after it is worse
+  // than nothing, and the row is complete without it.
+  return name === ''
+    ? null
+    : translator.t('basket.added.by', undefined, locale, { name });
 }
 
 /**
@@ -282,4 +386,47 @@ export function originsCaption(
 /** How many are still to get, for the settle sheet's buttons. */
 export function outstandingOf(line: BasketLine): number {
   return outstanding(line);
+}
+
+/**
+ * What a move of the outstanding number is about to do, in one short sentence
+ * (plan 0054, section 3).
+ *
+ * The whole of the row's reel is legible or not on this string. `QuantityReel`
+ * commits on release, so between the thumb landing and letting go there is a window
+ * in which the consequence can be shown rather than explained, and this is what is
+ * shown. It is not a confirmation dialog and must never become one: a dialog on a
+ * gesture done one handed over a trolley is the thing `0043` removed from the list
+ * page.
+ *
+ * The two directions say different things because they **are** different things
+ * (backend `0056`, section 1): down is units in the trolley, up is a basket deciding
+ * to carry more than the households asked for. Neither sentence says "units", and the
+ * raise says "buying N" rather than "N left", because raising a finished line is the
+ * act most likely to be misread as undoing a purchase.
+ *
+ * Null where there is nothing about to happen: no thumb down, or a gesture that came
+ * back to where it started.
+ *
+ * @param current where the run began, which is what is outstanding now
+ * @param next where the thumb is, or null when it is not down
+ */
+export function outstandingCaption(
+  current: number,
+  next: number | null,
+  translator: RokuTranslatorService,
+  locale: string
+): string | null {
+  if (next === null || next === current) {
+    return null;
+  }
+
+  return next < current
+    ? translator.t('basket.outstanding.bought', undefined, locale, {
+        count: current - next,
+      })
+    : translator.t('basket.outstanding.buying', undefined, locale, {
+        next,
+        current,
+      });
 }

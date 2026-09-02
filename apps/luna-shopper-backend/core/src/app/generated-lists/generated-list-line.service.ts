@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  GENERATED_LIST_LIMITS,
   GeneratedLineOrigin,
   RealtimeEvent,
   type AddGeneratedListLineRequest,
   type GeneratedListLineIdRequest,
   type GeneratedListLineView,
   type GeneratedListView,
+  type LineView,
   type ReorderGeneratedListLinesRequest,
   type UpdateGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -24,11 +24,34 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
+import {
+  checkContent,
+  checkOptions,
+  checkQuantity,
+  checkRoom,
+  nextPosition,
+} from './basket-line-limits';
+import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import { LineClaimService } from './line-claim.service';
 
 /** Answered for a line that is not on the basket the request named. */
 const NO_SUCH_LINE = 'Generated list line not found';
+
+/**
+ * What a write back created: the zone line, the zone it landed in, and what it
+ * asked for.
+ *
+ * Returned rather than kept, because plan 0058's caller has to tell the reader
+ * whether the household still has to approve it, and that is a property of the
+ * created line alone.
+ */
+export interface PromotedLine {
+  line: LineView;
+  zoneId: string;
+  /** The units the zone line was created with, which the origin row records. */
+  quantity: number;
+}
 
 /**
  * Editing a basket (plan 0050, section 5), and the one rule the whole plan turns
@@ -72,6 +95,11 @@ export class GeneratedListLineService {
     private readonly listAccess: ListAccessService,
     private readonly zoneLines: LineService,
     private readonly claims: LineClaimService,
+    // For the owner's participant row alone, which is what a line's authorship
+    // is recorded as (plan 0055, section 4). Every actor on a basket is a
+    // participant, including the owner adding a line from their laptop, so the
+    // two attribution columns speak one vocabulary rather than two.
+    private readonly sharing: GeneratedListSharingService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -98,9 +126,15 @@ export class GeneratedListLineService {
         ? list.defaultTargetListId
         : req.targetListId;
 
-    await this.checkRoom(list.id);
+    await checkRoom(this.lines, list.id);
 
-    const position = await this.nextPosition(list.id);
+    // The owner's own participant row, which exists from generation time and is
+    // created here if this basket predates plan 0051. A line records its author
+    // as a participant on both surfaces (plan 0055, section 4), so that null in
+    // that column keeps meaning "the run composed this" and nothing else.
+    const author = await this.sharing.ensureOwnerParticipant(list);
+
+    const position = await nextPosition(this.lines, list.id);
     const line = await this.lines.save(
       this.lines.create({
         generatedListId: list.id,
@@ -111,10 +145,11 @@ export class GeneratedListLineService {
         origin: GeneratedLineOrigin.ADDED,
         targetListId: null,
         position,
+        createdByParticipantId: author.id,
       })
     );
 
-    const optionIds = [...new Set(req.options ?? [])];
+    const optionIds = checkOptions(req.options);
     if (optionIds.length > 0) {
       await this.options.insert(
         optionIds.map((itemId, index) => ({
@@ -261,17 +296,43 @@ export class GeneratedListLineService {
    * The created line becomes the basket line's provenance row, and the basket
    * line's `origin` **stays `ADDED`**, because the history worth recording is
    * that this came from a shop rather than from the list.
+   *
+   * Reachable from the participant surface since plan 0055 as the owner's
+   * default target (section 3.2), which is their standing intent about their
+   * **own** additions: a guest's line silently promoted into a household list
+   * would be a zone write they cannot see, cannot explain and did not ask for.
+   *
+   * Since plan 0058 it is also how a named target reaches a list from the
+   * basket, and that is what {@link userId} is for. It is the account whose
+   * `WRITE` the add is checked against and whose name the created line carries,
+   * so it is the **owner** on the two paths above and the **actor** when
+   * somebody with an account binds a line: a household's list may name only
+   * accounts, and the account that said which list is the honest author. The
+   * owner's own access is checked by that caller separately, because it is the
+   * owner's access that authorizes every later settle on the origin this writes.
+   *
+   * The created line is returned rather than discarded, for one field: whether
+   * the list's ordinary rules approved it or left it `PENDING`. Nothing here
+   * decides that (plan 0037) and nothing here overrides it; a caller that has to
+   * tell a reader their line is waiting can only be told by the add itself.
    */
-  private async promote(
+  async promote(
     userId: string,
     line: GeneratedListLine,
-    targetListId: string
-  ): Promise<void> {
+    targetListId: string,
+    // The units to ask that list for, when they are not the basket line's own
+    // quantity. Plan 0058 section 4.1 binds at what is **outstanding**, because
+    // a line whose units are already bought would otherwise ask the household
+    // for things that are in the cupboard. Zero is a legitimate value and is
+    // plan 0047 section 2.2's line: known about, not currently wanted.
+    options: { quantity?: number } = {}
+  ): Promise<PromotedLine> {
+    const quantity = options.quantity ?? line.quantity;
     const created = await this.zoneLines.add({
       userId,
       listId: targetListId,
       content: line.content,
-      quantity: line.quantity,
+      quantity,
       itemIds: line.itemId ? [line.itemId] : [],
     });
     const list = await this.listAccess.getList(targetListId);
@@ -288,10 +349,15 @@ export class GeneratedListLineService {
         list.zoneId,
         targetListId,
         created.id,
-        line.quantity,
+        // The provenance row records what this list actually contributed, which
+        // is the number the zone line was created with and not the basket
+        // line's, or a settle would allocate against units nobody asked for.
+        quantity,
         created.version,
       ]
     );
+
+    return { line: created, zoneId: list.zoneId, quantity };
   }
 
   /**
@@ -337,25 +403,6 @@ export class GeneratedListLineService {
     return line;
   }
 
-  private async nextPosition(generatedListId: string): Promise<number> {
-    const max = await this.lines
-      .createQueryBuilder('l')
-      .select('COALESCE(MAX(l.position), 0)', 'max')
-      .where('l."generatedListId" = :generatedListId', { generatedListId })
-      .getRawOne<{ max: string }>();
-    return Number(max?.max ?? 0) + 1;
-  }
-
-  private async checkRoom(generatedListId: string): Promise<void> {
-    const count = await this.lines.count({ where: { generatedListId } });
-    if (count >= GENERATED_LIST_LIMITS.maxLines) {
-      throw new ValidationException(
-        `a generated list can hold at most ${GENERATED_LIST_LIMITS.maxLines} lines`,
-        { messageArgs: { field: 'content' } }
-      );
-    }
-  }
-
   /** One line changed: the owner's other devices hear it and nobody else does. */
   private async announceLine(
     userId: string,
@@ -379,49 +426,4 @@ export class GeneratedListLineService {
     this.events.emitToUsers(RealtimeEvent.GeneratedListUpdated, [userId], view);
     return view;
   }
-}
-
-/** Trimmed and capped. An empty line is not a line. */
-function checkContent(content: string): string {
-  const trimmed = content.trim();
-  if (trimmed.length === 0) {
-    throw new ValidationException('a line needs some text', {
-      messageArgs: { field: 'content' },
-    });
-  }
-  if (trimmed.length > GENERATED_LIST_LIMITS.contentMaxLength) {
-    throw new ValidationException(
-      `a line can be at most ${GENERATED_LIST_LIMITS.contentMaxLength} characters`,
-      { messageArgs: { field: 'content' } }
-    );
-  }
-  return trimmed;
-}
-
-/**
- * The bounds a basket line's quantity satisfies.
- *
- * Zero is allowed on an **edit** and not on an add, which mirrors the zone line
- * rule plan 0047 section 2.2 states: a line at zero is one the household knows
- * about and does not currently need, and adding a line you do not want is not a
- * gesture anybody makes.
- */
-function checkQuantity(
-  quantity: number,
-  opts: { allowZero?: boolean } = {}
-): number {
-  const floor = opts.allowZero ? 0 : 1;
-  if (!Number.isInteger(quantity) || quantity < floor) {
-    throw new ValidationException(
-      `a quantity must be a whole number of at least ${floor}`,
-      { messageArgs: { field: 'quantity' } }
-    );
-  }
-  if (quantity > GENERATED_LIST_LIMITS.maxQuantity) {
-    throw new ValidationException(
-      `a quantity can be at most ${GENERATED_LIST_LIMITS.maxQuantity}`,
-      { messageArgs: { field: 'quantity' } }
-    );
-  }
-  return quantity;
 }

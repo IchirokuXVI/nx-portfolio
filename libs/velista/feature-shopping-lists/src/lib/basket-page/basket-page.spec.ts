@@ -1,17 +1,28 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
+import {
+  BasketStore,
+  GatewayError,
+  SessionStore,
+} from '@portfolio/velista/data-access';
 import type {
+  BasketAddLineRequest,
+  BasketLine,
   BasketParticipant,
   BasketPresenceEntry,
+  BasketSettleResult,
+  CatalogSuggestion,
+  ErrorCode,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
+import { BasketLineRow } from '../basket-line-row/basket-line-row';
 import { BasketPage } from './basket-page';
 
 /**
@@ -42,9 +53,23 @@ interface FakeStore {
   readonly revoked: WritableSignal<boolean>;
   readonly present: WritableSignal<readonly BasketPresenceEntry[]>;
   readonly participants: WritableSignal<readonly BasketParticipant[]>;
+  readonly takesLines: WritableSignal<boolean>;
+  readonly lastAdded: WritableSignal<BasketLine | null>;
   readonly opened: string[];
+  /** Every add the page asked for, in order, so a spec can read what it sent. */
+  readonly added: BasketAddLineRequest[];
+  /** Every query the page searched for, after its own debounce and floor. */
+  readonly searched: string[];
   /** Every time the page said the shopper has gone. See the teardown test. */
   readonly leave: jest.Mock<void, []>;
+  /** The rows, writable so a spec can stand in for the refetch a refusal does. */
+  readonly lines: WritableSignal<readonly BasketLine[]>;
+  /** What the store last failed with, which is where the row's sentence comes from. */
+  readonly error: WritableSignal<unknown>;
+  /** Every move of a row's number, and what it answered (plan 0054). */
+  readonly setOutstanding: jest.Mock;
+  /** Where the page navigated, so a spec can see the settle sheet being opened. */
+  readonly navigate: jest.Mock;
 }
 
 interface Options {
@@ -56,6 +81,14 @@ interface Options {
   readonly me?: BasketParticipant | null;
   /** Their account name, which is the one name the basket itself never carries. */
   readonly username?: string | null;
+  /** Whether the basket still takes lines. False is a finished one. */
+  readonly takesLines?: boolean;
+  /** What the add answers. Null is a refusal, which puts the text back. */
+  readonly addAnswers?: BasketLine | null;
+  /** What the catalog offers under the field. */
+  readonly suggestions?: readonly CatalogSuggestion[];
+  /** The rows on the basket. Empty draws the empty state. */
+  readonly lines?: readonly BasketLine[];
 }
 
 function guest(
@@ -79,6 +112,27 @@ function owner(participantId = 'p-owner'): BasketPresenceEntry {
     displayName: null,
     guestNumber: null,
     userId: 'u-1',
+  };
+}
+
+/** The line an add answers with, which is all the page does with the answer. */
+function line(
+  content: string,
+  overrides: Partial<BasketLine> = {}
+): BasketLine {
+  return {
+    id: `line-${content}`,
+    content,
+    quantity: 1,
+    settled: 0,
+    pickId: null,
+    optionIds: [],
+    position: 0,
+    createdBy: 'p-owner',
+    touchedBy: null,
+    touchedAt: null,
+    lastOutcome: null,
+    ...overrides,
   };
 }
 
@@ -108,8 +162,24 @@ async function render(options: Options = {}): Promise<{
     revoked: signal(options.revoked ?? false),
     present: signal(options.present ?? []),
     participants: signal(options.participants ?? []),
+    takesLines: signal(options.takesLines ?? true),
+    lastAdded: signal<BasketLine | null>(null),
     opened: [],
+    added: [],
+    searched: [],
     leave: jest.fn(),
+    lines: signal<readonly BasketLine[]>(options.lines ?? []),
+    error: signal<unknown>(null),
+    // A raise and a lower both answer a settle result, so the default is the one
+    // neither has anything to report about (backend `0056`, section 3).
+    setOutstanding: jest.fn(
+      (lineId: string): Promise<BasketSettleResult | null> =>
+        Promise.resolve({
+          line: line(lineId),
+          skippedCount: 0,
+        })
+    ),
+    navigate: jest.fn().mockResolvedValue(true),
   };
 
   const paramMap = convertToParamMap({ generatedListId: 'basket-saturday' });
@@ -122,7 +192,7 @@ async function render(options: Options = {}): Promise<{
       {
         provide: Router,
         useValue: {
-          navigate: jest.fn().mockResolvedValue(true),
+          navigate: store.navigate,
           navigateByUrl: jest.fn().mockResolvedValue(true),
         },
       },
@@ -152,7 +222,8 @@ async function render(options: Options = {}): Promise<{
             products: new Map(),
           }),
           state: signal('ready'),
-          lines: signal([]),
+          lines: store.lines,
+          error: store.error,
           progress: signal({ done: 0, unavailable: 0, total: 0 }),
           busyLines: signal(new Set<string>()),
           participantsById: signal(new Map<string, BasketParticipant>()),
@@ -163,12 +234,36 @@ async function render(options: Options = {}): Promise<{
           revoked: store.revoked,
           present: store.present,
           participants: store.participants,
+          takesLines: store.takesLines,
+          adding: signal(false),
+          lastAdded: store.lastAdded,
           open: (id: string) => {
             store.opened.push(id);
             return Promise.resolve();
           },
           leave: store.leave,
+          // Session local, and empty unless a spec says otherwise: no field of a line
+          // carries whether the list it was sent to has accepted it (`0056`).
+          pendingTargets: signal(new Set<string>()),
           refresh: () => Promise.resolve(),
+          settle: () => Promise.resolve(null),
+          reopen: () => Promise.resolve(null),
+          setOutstanding: store.setOutstanding,
+          addLine: (body: BasketAddLineRequest) => {
+            store.added.push(body);
+            const answer =
+              options.addAnswers === undefined
+                ? line(body.content)
+                : options.addAnswers;
+            if (answer !== null) {
+              store.lastAdded.set(answer);
+            }
+            return Promise.resolve(answer);
+          },
+          suggest: (query: string) => {
+            store.searched.push(query);
+            return Promise.resolve(options.suggestions ?? []);
+          },
         },
       },
     ],
@@ -201,6 +296,41 @@ function query(
 
 function text(fixture: ComponentFixture<BasketPage>): string {
   return (fixture.nativeElement as HTMLElement).textContent ?? '';
+}
+
+function field(fixture: ComponentFixture<BasketPage>): HTMLInputElement {
+  const found = (fixture.nativeElement as HTMLElement).querySelector(
+    'lib-line-composer input.field'
+  );
+  if (found === null) {
+    throw new Error('there is no composer to type into');
+  }
+  return found as HTMLInputElement;
+}
+
+/** Type, and let the composer hear it, exactly as a keyboard does. */
+function typeInto(fixture: ComponentFixture<BasketPage>, typed: string): void {
+  const input = field(fixture);
+  input.value = typed;
+  input.dispatchEvent(new Event('input'));
+  fixture.detectChanges();
+}
+
+/** Submit the composer, the way the phone keyboard's Go key does. */
+async function submit(fixture: ComponentFixture<BasketPage>): Promise<void> {
+  const form = (fixture.nativeElement as HTMLElement).querySelector(
+    'lib-line-composer form.composer'
+  );
+  if (form === null) {
+    throw new Error('there is no composer to submit');
+  }
+  form.dispatchEvent(new Event('submit'));
+  // The add is a promise the page awaits before it decides whether to put the text
+  // back, so the assertion has to come after the microtasks it queued. Drained by
+  // hand rather than through `whenStable`, which hangs in a zoneless spec.
+  await Promise.resolve();
+  await Promise.resolve();
+  fixture.detectChanges();
 }
 
 describe('the basket header, live', () => {
@@ -344,6 +474,127 @@ describe('the basket header, live', () => {
     });
   });
 
+  /**
+   * Plan 0053: the composer at the bottom of the basket.
+   *
+   * The claims worth a test are the ones a template mistake would quietly break:
+   * that it is drawn for **everybody** rather than for a reader who passes a rule,
+   * that it is absent on a basket the server would refuse, that it never offers a
+   * microphone, and that a refused add does not swallow what somebody typed while
+   * standing in an aisle.
+   */
+  describe('adding a line in the aisle', () => {
+    it('is drawn for a guest, who holds no account at all', async () => {
+      // The inversion of `0030`, and the one row of this screen's table with no
+      // reader-shaped condition on it: a line added here has no target list, so
+      // there is no permission to read and no branch to write.
+      const { fixture } = await render({
+        me: participant(guest('p-1', 1)),
+      });
+
+      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+      // And still no share control, which is the owner's alone. The two are
+      // independent, which is the whole point of asserting them together.
+      expect(query(fixture, '.share')).toBeNull();
+    });
+
+    it('is absent on a finished basket, never disabled', async () => {
+      // The server refuses the add, and a field that cannot submit is the
+      // invitation plan 0038 section 2.1 refuses to draw.
+      const { fixture } = await render({ takesLines: false });
+
+      expect(query(fixture, 'lib-line-composer')).toBeNull();
+    });
+
+    it('never offers a microphone', async () => {
+      // A recording goes to the list scoped assistant, which a basket has no
+      // equivalent of: offering a microphone with nowhere to send its audio is
+      // worse than offering nothing (section 3).
+      const { fixture } = await render();
+
+      expect(query(fixture, 'lib-mic-icon')).toBeNull();
+      expect(query(fixture, 'lib-plus-icon')).not.toBeNull();
+    });
+
+    it('sends what was typed, with its quantity', async () => {
+      const { fixture, store } = await render();
+
+      typeInto(fixture, 'Batteries');
+      await submit(fixture);
+
+      expect(store.added).toEqual([{ content: 'Batteries', quantity: 1 }]);
+      // Free text stays first class: nothing is attached, and no product is
+      // insisted on (section 4).
+      expect(store.added[0].itemId).toBeUndefined();
+      expect(store.added[0].options).toBeUndefined();
+    });
+
+    it('leaves the typed text in the field when the add fails', async () => {
+      // Losing six characters is nothing; losing the item somebody just remembered
+      // in an aisle is the failure this screen cannot afford (section 7).
+      const { fixture } = await render({ addAnswers: null });
+
+      typeInto(fixture, 'Batteries');
+      await submit(fixture);
+
+      expect(field(fixture).value).toBe('Batteries');
+    });
+
+    it('clears the field when the add lands', async () => {
+      // The other half of the one above, and the reason it is a separate test: a
+      // composer that never cleared would pass the restore assertion for free.
+      const { fixture } = await render();
+
+      typeInto(fixture, 'Batteries');
+      await submit(fixture);
+
+      expect(field(fixture).value).toBe('');
+    });
+
+    it('announces the new line politely, and says nothing before one arrives', async () => {
+      const { fixture } = await render();
+
+      const region = query(fixture, '.composer-dock [aria-live]');
+      expect(region?.getAttribute('aria-live')).toBe('polite');
+      expect(region?.textContent?.trim()).toBe('');
+
+      typeInto(fixture, 'Batteries');
+      await submit(fixture);
+
+      expect(
+        query(fixture, '.composer-dock [aria-live]')?.textContent?.trim()
+      ).not.toBe('');
+    });
+
+    describe('the typeahead', () => {
+      beforeEach(() => jest.useFakeTimers());
+      afterEach(() => jest.useRealTimers());
+
+      it('asks for nothing under three characters', async () => {
+        const { fixture, store } = await render();
+
+        typeInto(fixture, 'ba');
+        jest.advanceTimersByTime(1000);
+
+        expect(store.searched).toEqual([]);
+      });
+
+      it('asks once for a run of keystrokes, and for the last of them', async () => {
+        // The debounce and the sequence number are the container's, exactly as they
+        // are on the list page: somebody who has used velista's list screen must
+        // not have to learn a second search.
+        const { fixture, store } = await render();
+
+        typeInto(fixture, 'bat');
+        typeInto(fixture, 'batt');
+        typeInto(fixture, 'batte');
+        jest.advanceTimersByTime(1000);
+
+        expect(store.searched).toEqual(['batte']);
+      });
+    });
+  });
+
   it('opens the basket it was routed to', async () => {
     const { store } = await render();
 
@@ -366,5 +617,152 @@ describe('the basket header, live', () => {
     fixture.destroy();
 
     expect(store.leave).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The number on the row, once it has been let go (plan 0054).
+ *
+ * The page is where the gesture becomes a request, and there are only three things
+ * it has to get right: it sends both numbers, it opens the sheet when the write had
+ * something to report that a row cannot draw, and it says one sentence when the
+ * write was refused. The gesture itself is the row's spec and the reel's.
+ */
+describe('the number on a row', () => {
+  /** The row component, which is what a gesture reaches the page through. */
+  function row(fixture: ComponentFixture<BasketPage>): BasketLineRow {
+    return fixture.debugElement.query(By.directive(BasketLineRow))
+      .componentInstance as BasketLineRow;
+  }
+
+  /** Let the page await the write, then draw what came back. */
+  async function settleWrites(
+    fixture: ComponentFixture<BasketPage>
+  ): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  const milk = () => line('Milk', { quantity: 5 });
+
+  it('sends where the gesture ended and where it believed it began', async () => {
+    // `from` is not decoration: without it a stale gesture is applied as the
+    // opposite act, which is the one thing this message must never do (backend
+    // `0056`, section 3.2).
+    const { fixture, store } = await render({ lines: [milk()] });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(store.setOutstanding).toHaveBeenCalledWith('line-Milk', 3, 5);
+  });
+
+  it('says which of the two happened, once, in the live region', async () => {
+    // The same sentence the caption showed under the thumb, so a reader who could
+    // not see it still learns whether they recorded a purchase or raised a target
+    // (section 7).
+    const { fixture } = await render({ lines: [milk()] });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(query(fixture, '.said')?.textContent).toContain(
+      'basket.outstanding.bought'
+    );
+  });
+
+  it('opens the sheet when an origin was missed', async () => {
+    // A skipped origin report is a paragraph and a row is three short lines, so it
+    // goes where the sentence for it already lives (plan 0052, section 6.4). A raise
+    // answers `skippedCount: 0`, so this needs no branch on direction.
+    const { fixture, store } = await render({ lines: [milk()] });
+    store.setOutstanding.mockResolvedValue({
+      line: milk(),
+      skippedCount: 1,
+    });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'lines', 'line-Milk', 'settle'],
+      expect.anything()
+    );
+  });
+
+  it('tells the row what the line says now when somebody else moved it', async () => {
+    // Section 4.1. The store refetches before it answers, so the count in the
+    // sentence is the true one; a refusal that only said "that did not work" would
+    // send somebody dragging again into the same race.
+    const { fixture, store } = await render({ lines: [milk()] });
+    store.setOutstanding.mockImplementation(() => {
+      store.error.set(
+        new GatewayError({
+          code: 'stale_quantity' as ErrorCode,
+          status: 409,
+          correlationId: 'ref-1',
+        })
+      );
+      store.lines.set([line('Milk', { quantity: 3 })]);
+      return Promise.resolve(null);
+    });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(row(fixture).notice()?.key).toBe('basket.error.staleLine');
+    expect(row(fixture).notice()?.count).toBe(3);
+    expect(query(fixture, '.said')?.textContent).toContain(
+      'basket.error.staleLine'
+    );
+  });
+
+  it('gives every other failure a sentence of its own', async () => {
+    // A failure with no sentence is the defect `basket-error-copy.ts` exists to
+    // close: somebody in a shop performed this on purpose and is waiting on it.
+    const { fixture, store } = await render({ lines: [milk()] });
+    store.setOutstanding.mockImplementation(() => {
+      store.error.set(
+        new GatewayError({
+          code: 'forbidden',
+          status: 403,
+          correlationId: 'ref-2',
+        })
+      );
+      return Promise.resolve(null);
+    });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+
+    expect(row(fixture).notice()?.key).toBe('basket.error.accessChanged');
+  });
+
+  it('clears the last refusal before the next move goes out', async () => {
+    // One sentence at a time across the whole basket. A refusal left under a row
+    // somebody has since moved again is a claim about the present that nothing is
+    // checking.
+    const { fixture, store } = await render({ lines: [milk()] });
+    store.setOutstanding.mockImplementation(() => {
+      store.error.set(
+        new GatewayError({
+          code: 'forbidden',
+          status: 403,
+          correlationId: 'ref-3',
+        })
+      );
+      return Promise.resolve(null);
+    });
+
+    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    await settleWrites(fixture);
+    expect(row(fixture).notice()).not.toBeNull();
+
+    store.setOutstanding.mockResolvedValue({ line: milk(), skippedCount: 0 });
+    row(fixture).outstanding.emit({ from: 5, to: 4 });
+    await settleWrites(fixture);
+
+    expect(row(fixture).notice()).toBeNull();
   });
 });

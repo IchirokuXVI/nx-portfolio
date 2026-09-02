@@ -37,16 +37,17 @@ import {
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
+  toParticipantView,
+  toShareLinkView,
+} from './generated-list-sharing.mappers';
+import {
   BASKET_SOURCE_LISTS_SQL,
   NEXT_GUEST_NUMBER_SQL,
   WRITABLE_AMONG_SQL,
   type BasketSourceListRow,
   type WritableAmongRow,
 } from './generated-list-sharing.sql';
-import {
-  toParticipantView,
-  toShareLinkView,
-} from './generated-list-sharing.mappers';
+import { WRITABLE_LISTS_SQL, type WritableListRow } from './generated-list.sql';
 
 /**
  * Sharing a basket with people who have no account (plan 0051, sections 3, 4, 5
@@ -99,7 +100,10 @@ export class GeneratedListSharingService {
     req: EnsureShareLinkRequest
   ): Promise<GeneratedListShareLinkView> {
     const list = await this.loadOwned(req.userId, req.generatedListId);
-    const owner = await this.ensureOwnerParticipant(list);
+    // Sharing is where the owner's row is minted, so it is where their account
+    // name arrives, and an owner row that predates plan 0054 is backfilled here
+    // (section 2.3).
+    const owner = await this.ensureOwnerParticipant(list, req.username);
 
     const live = await this.liveLink(list.id);
     if (live) {
@@ -253,7 +257,9 @@ export class GeneratedListSharingService {
     if (!link || !this.linkAccepts(link)) {
       return { joinable: false };
     }
-    const list = await this.lists.findOne({ where: { id: link.generatedListId } });
+    const list = await this.lists.findOne({
+      where: { id: link.generatedListId },
+    });
     if (!list || !this.listAccepts(list)) {
       return { joinable: false };
     }
@@ -294,8 +300,12 @@ export class GeneratedListSharingService {
 
     // The owner opening their own link is the owner, not a second identity.
     if (req.userId && req.userId === list.ownerUserId) {
-      const owner = await this.ensureOwnerParticipant(list);
-      return { generatedListId: list.id, participant: this.view(owner), sessionSecret: null };
+      const owner = await this.ensureOwnerParticipant(list, req.username);
+      return {
+        generatedListId: list.id,
+        participant: this.view(owner),
+        sessionSecret: null,
+      };
     }
 
     if (req.userId) {
@@ -306,9 +316,17 @@ export class GeneratedListSharingService {
         if (existing.revokedAt) {
           // Rejoining a link you were thrown off is not a way back on. Section
           // 3.4's per participant revoke would mean nothing if it were.
-          throw new UnauthorizedException('This link is no longer available to you');
+          throw new UnauthorizedException(
+            'This link is no longer available to you'
+          );
         }
         existing.lastSeenAt = new Date();
+        // Filled in when it is missing and left alone when it is not (plan
+        // 0054, section 2.4). A name already on the row is a snapshot taken when
+        // they joined, and somebody who has since renamed their account keeps
+        // the old one on baskets they are already on; a null is a row from
+        // before the plan, which is repair rather than a rename.
+        existing.username ??= normalizeUsername(req.username);
         await this.participants.save(existing);
         return {
           generatedListId: list.id,
@@ -319,20 +337,25 @@ export class GeneratedListSharingService {
     }
 
     const displayName = normalizeDisplayName(req.displayName);
-    const sessionSecret = req.userId ? null : randomBytes(32).toString('base64url');
+    const sessionSecret = req.userId
+      ? null
+      : randomBytes(32).toString('base64url');
 
     const participant = await this.dataSource.transaction(async (manager) => {
       // Serializes concurrent joins on this basket, which is what lets the guest
       // number below be a `max + 1` rather than a sequence (see the SQL).
-      await manager.query(`SELECT id FROM "generated_lists" WHERE id = $1 FOR UPDATE`, [
-        list.id,
-      ]);
+      await manager.query(
+        `SELECT id FROM "generated_lists" WHERE id = $1 FOR UPDATE`,
+        [list.id]
+      );
 
       const total = await manager.count(GeneratedListParticipant, {
         where: { generatedListId: list.id, revokedAt: IsNull() },
       });
       if (total >= GENERATED_LIST_SHARING_LIMITS.maxParticipants) {
-        throw new ConflictException('This basket already has as many people as it takes');
+        throw new ConflictException(
+          'This basket already has as many people as it takes'
+        );
       }
 
       let guestNumber: number | null = null;
@@ -351,6 +374,9 @@ export class GeneratedListSharingService {
           kind: req.userId ? ParticipantKind.REGISTERED : ParticipantKind.GUEST,
           userId: req.userId ?? null,
           displayName,
+          // A guest never carries one however the message was filled in: there
+          // is no account behind them for it to be the name of.
+          username: req.userId ? normalizeUsername(req.username) : null,
           guestNumber,
           sessionSecretHash: sessionSecret ? hashSecret(sessionSecret) : null,
           userAgent: normalizeUserAgent(req.userAgent),
@@ -559,11 +585,55 @@ export class GeneratedListSharingService {
     if (listIds.length === 0) {
       return new Set();
     }
-    const rows = await this.lists.query<WritableAmongRow[]>(WRITABLE_AMONG_SQL, [
-      userId,
-      [...listIds],
-    ]);
+    const rows = await this.lists.query<WritableAmongRow[]>(
+      WRITABLE_AMONG_SQL,
+      [userId, [...listIds]]
+    );
     return new Set(rows.map((row) => row.listId));
+  }
+
+  /**
+   * Every list **both** these people may write right now (plan 0057, section
+   * 4.1; plan 0058, section 3.1).
+   *
+   * The scope behind both pickers on this surface, and it lives here rather than
+   * on either of them because they must not be allowed to disagree about it: one
+   * offers a list to adopt and the other offers a list to bind into, and both
+   * end in a provenance row that every later settle acts on.
+   *
+   * For the overwhelming case, where the actor **is** the owner, it is their
+   * entire writable set across every zone they are in, which is exactly what
+   * both plans ask for: a list from a zone the run never drew from qualifies,
+   * and so does a zone the run never heard of.
+   *
+   * The intersection bites only on a registered co-shopper, and it is plan 0051
+   * section 6.4 that puts it there. **A settle is authorized by the owner's
+   * access.** A row created against a list the owner cannot write is one every
+   * subsequent settle skips and reports, for the life of the basket: the
+   * household would see the line and never see it bought, and the shopper would
+   * get a skip report they cannot act on. Lifting it needs that security rule to
+   * become per origin, which plan 0057 section 8 records as one decision for
+   * both plans rather than two.
+   */
+  async writableIntersection(
+    ownerUserId: string,
+    actorUserId: string
+  ): Promise<WritableListRow[]> {
+    const owned = await this.lists.query<WritableListRow[]>(
+      WRITABLE_LISTS_SQL,
+      [ownerUserId]
+    );
+    if (actorUserId === ownerUserId) {
+      return owned;
+    }
+    const actors = new Set(
+      (
+        await this.lists.query<WritableListRow[]>(WRITABLE_LISTS_SQL, [
+          actorUserId,
+        ])
+      ).map((row) => row.listId)
+    );
+    return owned.filter((row) => actors.has(row.listId));
   }
 
   /** The distinct zone lists a basket's provenance rows point at. */
@@ -587,6 +657,20 @@ export class GeneratedListSharingService {
   async listParticipants(
     req: ListParticipantsRequest
   ): Promise<GeneratedListParticipantListResult> {
+    // The second place a name can reach the owner's row (plan 0054,
+    // section 2.3). The share sheet reads this, and it reads it whether or not
+    // anybody has pressed share, so an owner who has never minted a link is
+    // still named on the screen that lists them. Only the account authenticated
+    // route carries a `userId`, so the participant surface never lands here.
+    if (req.userId) {
+      const owned = await this.lists.findOne({
+        where: { id: req.generatedListId, ownerUserId: req.userId },
+      });
+      if (owned) {
+        await this.ensureOwnerParticipant(owned, req.username);
+      }
+    }
+
     const rows = await this.participants.find({
       where: { generatedListId: req.generatedListId, revokedAt: IsNull() },
       order: { joinedAt: 'ASC' },
@@ -617,12 +701,24 @@ export class GeneratedListSharingService {
    * so two concurrent first shares cannot mint two owner rows.
    */
   async ensureOwnerParticipant(
-    list: GeneratedList
+    list: GeneratedList,
+    username?: string | null
   ): Promise<GeneratedListParticipant> {
+    const name = normalizeUsername(username);
     const existing = await this.participants.findOne({
       where: { generatedListId: list.id, userId: list.ownerUserId },
     });
     if (existing) {
+      // The backfill plan 0054 section 2.3 asks for, and it is the same lazy
+      // repair this method already is: an owner row minted before that plan has
+      // no name, nothing else can supply one, and the two calls that carry a
+      // name are the two an owner makes on their own basket. Only a null is
+      // filled, so a name taken at join time is never quietly replaced by a
+      // later one (section 2.4).
+      if (name && !existing.username) {
+        existing.username = name;
+        await this.participants.save(existing);
+      }
       return existing;
     }
     try {
@@ -633,6 +729,7 @@ export class GeneratedListSharingService {
           kind: ParticipantKind.OWNER,
           userId: list.ownerUserId,
           displayName: null,
+          username: name,
           guestNumber: null,
           sessionSecretHash: null,
           userAgent: null,
@@ -740,7 +837,9 @@ export class GeneratedListSharingService {
     return toShareLinkView(link, participantCount);
   }
 
-  private view(participant: GeneratedListParticipant): GeneratedListParticipantView {
+  private view(
+    participant: GeneratedListParticipant
+  ): GeneratedListParticipantView {
     return toParticipantView(participant, false);
   }
 
@@ -771,6 +870,23 @@ function hashSecret(raw: string): string {
  * so a guest who submits whitespace gets "Guest N" like anybody who skipped it.
  */
 function normalizeDisplayName(raw: string | undefined): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.slice(0, GENERATED_LIST_SHARING_LIMITS.displayNameMaxLength);
+}
+
+/**
+ * An account's own name, trimmed and capped to the same width a typed one has
+ * (plan 0054, section 2.3).
+ *
+ * Empty is **no** name rather than an empty one, for the reason
+ * {@link normalizeDisplayName} says so: a row carrying an empty string would
+ * draw a nameless face rather than falling back to whatever the client draws
+ * when there is nothing to show.
+ */
+function normalizeUsername(raw: string | null | undefined): string | null {
   const trimmed = raw?.trim();
   if (!trimmed) {
     return null;

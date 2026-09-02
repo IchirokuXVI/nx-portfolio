@@ -1,4 +1,9 @@
-import type { ParticipantKind, SettlementOutcome } from './enums';
+import type {
+  BasketLineKind,
+  BasketOriginUnavailableReason,
+  ParticipantKind,
+  SettlementOutcome,
+} from './enums';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -40,6 +45,25 @@ export interface BasketParticipant {
   kind: ParticipantKind;
   /** Null when a guest skipped the prompt; the screen renders `Guest N`. */
   displayName: string | null;
+  /**
+   * The account holder's own name, as it stood when they joined (luna `0054`,
+   * section 2).
+   *
+   * Null for a guest, who has no account to take one from. **A separate field from
+   * {@link displayName} and not a value written into it**, because they are different
+   * facts: one is unverified text typed on an unauthenticated link and the other is an
+   * account's own name, and `0051` section 3.5 rests on being able to tell them apart.
+   * A guest typing "Dani" must not be indistinguishable from an account called Dani.
+   *
+   * A **snapshot**, like a zone membership's: somebody who renames their account keeps
+   * the old name on baskets they have already joined, because the alternative is a
+   * join at read time on the one screen that is refetched every time anybody settles
+   * anything.
+   *
+   * Null on a basket generated before that plan shipped, which is what the role word
+   * fallback in `participantName` still exists to draw.
+   */
+  username: string | null;
   /** Monotonic per basket, so the fallback label is stable. Guests only. */
   guestNumber: number | null;
   /** Set for `OWNER` and `REGISTERED`, null for a `GUEST`. */
@@ -138,6 +162,23 @@ export interface BasketLine {
   optionIds: readonly string[];
   position: number;
   /**
+   * Who **put this line here**, as a participant id, written once and never
+   * afterwards (luna `0055`, section 4).
+   *
+   * A separate field from {@link BasketLine.touchedBy} rather than a reading of
+   * it, because that one moves: the moment anybody settles the line, or edits its
+   * quantity, or swaps its product, `touchedBy` becomes them. "Who put this here"
+   * is the question a shop asks about a line nobody recognises, and after one
+   * settle the other field can no longer answer it.
+   *
+   * Null for every line the run composed, which is honest rather than missing: a
+   * derived line was put there by the generation, and the person who ran it is the
+   * owner, who is already named on the basket. Null too on a basket served by a
+   * backend from before that plan, which reads the same way and draws the same
+   * nothing.
+   */
+  createdBy: string | null;
+  /**
    * Who last edited or settled this line, as a participant id.
    *
    * An id and never a name, for {@link BasketParticipant.displayName}'s reason.
@@ -157,6 +198,189 @@ export interface BasketLine {
   lastOutcome: SettlementOutcome | null;
   /** Absent for a reader who does not pass the rule, rather than empty. */
   origins?: readonly BasketLineOrigin[];
+  /**
+   * Where this line came from (`origin` on the wire).
+   *
+   * `DERIVED` when the run composed it out of the zone lists it drew from, `ADDED`
+   * when somebody typed it into the basket in an aisle. It falls back to `DERIVED`
+   * when the wire omits it, which is a backend from before luna `0055`, and that
+   * reads correctly: every line such a backend serves was composed by a run.
+   *
+   * Not optional, unlike {@link origins} and {@link targetListId}, because it is not
+   * redacted. Every reader is told what kind of line they are looking at; what is
+   * gated is which household it touches.
+   */
+  kind: BasketLineKind;
+  /**
+   * The zone list this line was sent to, once somebody has sent it (`targetListId`).
+   *
+   * Three states, and they are three because the row and the send sheet each read a
+   * different pair of them. **Absent** is zone data withheld from a reader who does
+   * not pass the rule, exactly as {@link origins} is. **Null** is a line that has
+   * been sent nowhere, which is where every `ADDED` line starts and is the one state
+   * the send control is offered over. A **list id** is a line already bound, which
+   * cannot be bound again.
+   *
+   * Mapped with an `in` check for that reason: collapsing absent onto null would
+   * offer a guest a control the server refuses, and offer it on a line that may
+   * already be bound.
+   */
+  targetListId?: string | null;
+}
+
+/**
+ * One list already on a basket line, with everything the units sheet draws
+ * (velista `0055`; `LineOriginDetail` on the wire).
+ *
+ * Zone data throughout, so the whole read is refused to anybody who does not pass the
+ * all or nothing rule. A guest never learns that a tin of tomatoes is on a
+ * household's list, let alone how many of it that household wanted.
+ *
+ * It is **not** a {@link BasketLineOrigin} with more fields, though it holds the same
+ * origin. That one is what the basket read carries on every line, kept to the four ids
+ * and a quantity because it is drawn on every row; this is what one sheet asks for
+ * about one line, and it costs a request and a join per list to compose.
+ */
+export interface BasketLineOriginDetail {
+  originId: string;
+  listId: string;
+  lineId: string;
+  zoneId: string;
+  /** Null where the list no longer has a name to give, meaning it was deleted. */
+  listName: string | null;
+  /** The group it sits in, for the reader who has two lists called "Food". */
+  zoneName: string | null;
+  /** What this list put into the basket line (`contributed`). */
+  contributed: number;
+  /** What the zone line asks for now (`listQuantity`). */
+  listQuantity: number;
+  /**
+   * How many of this line's units this basket has already bought against this list,
+   * which is the **floor** a contribution cannot go under (`settledHere`).
+   *
+   * Two of the flat's milk having been bought means the flat cannot retroactively
+   * have wanted one, and the server refuses that with `below_settled` rather than
+   * quietly unbuying something.
+   */
+  settledHere: number;
+  /** Whether the basket owner still holds `WRITE` on the list. */
+  writable: boolean;
+}
+
+/**
+ * A list holding the same thing that is **not** on the line yet (`OriginCandidate`).
+ *
+ * What makes the units sheet an editor rather than a report: the run matched what it
+ * could, and this is everything it did not take, so somebody can put a household back
+ * on a line the generation missed.
+ */
+export interface BasketOriginCandidate {
+  listId: string;
+  lineId: string;
+  zoneId: string;
+  listName: string | null;
+  zoneName: string | null;
+  listQuantity: number;
+  /** That list's own wording of the line, which is often not this basket's. */
+  content: string;
+  /**
+   * Whether the run reached this one on normalized text alone.
+   *
+   * The last resort of the matcher, so it is the one class of candidate that can be
+   * wrong: "butter" and "peanut butter" normalize apart, but a shorter pair may not.
+   * The sheet says so rather than presenting a text match as an identity.
+   */
+  matchedOnText: boolean;
+  /** Null when it can be adopted, which is the ordinary case. */
+  unavailable: BasketOriginUnavailableReason | null;
+}
+
+/** What `GET .../lines/:lineId/origins` answers: what is on, and what could be. */
+export interface BasketLineOrigins {
+  lineId: string;
+  origins: readonly BasketLineOriginDetail[];
+  candidates: readonly BasketOriginCandidate[];
+}
+
+/**
+ * Setting how many of a line are still to get (velista `0054`).
+ *
+ * **Absolute rather than a delta, and `from` is why.** Two phones in one shop moving
+ * one line is the ordinary case, and a gesture whose meaning depends on where it
+ * started must be refused rather than reinterpreted: raising the outstanding amount
+ * buys more, lowering it records a purchase, and applying either against a number
+ * that moved underneath inverts what somebody meant. A mismatch answers
+ * `stale_quantity` and the screen redraws at the number as it stands.
+ */
+export interface BasketOutstandingRequest {
+  /** How many are still to get after this. Zero finishes the line. */
+  outstanding: number;
+  /** What the control believed was outstanding when it was picked up. */
+  from: number;
+}
+
+/**
+ * Setting what one list contributes to a line (velista `0055`).
+ *
+ * The same `from` bargain as {@link BasketOutstandingRequest}, and for a sharper
+ * reason: two people editing one split must not silently overwrite each other's
+ * arithmetic. `from` is 0 for a candidate being adopted, which has contributed
+ * nothing yet.
+ */
+export interface BasketOriginQuantityRequest {
+  listId: string;
+  /** The zone line: an existing origin of this basket line, or one being adopted. */
+  lineId: string;
+  /** What this list should contribute. Zero takes the list off the line. */
+  quantity: number;
+  from: number;
+}
+
+/** What one contribution write did. */
+export interface BasketOriginQuantityResult {
+  line: BasketLine;
+  /** Null when the contribution was set to zero and the origin dropped. */
+  origin: BasketLineOriginDetail | null;
+  /** The zone line's own quantity after the write. */
+  listQuantity: number;
+}
+
+/**
+ * One list this line could be sent to (velista `0056`; `LineTarget` on the wire).
+ *
+ * Every list both the reader and the basket's owner can write, because the owner's
+ * access is what authorizes every later settle against it.
+ */
+export interface BasketLineTarget {
+  listId: string;
+  zoneId: string;
+  listName: string | null;
+  zoneName: string | null;
+  /**
+   * Whether the run drew from this list, which is what the picker draws first.
+   *
+   * Somebody adding bread in an aisle almost always means the list the basket came
+   * from, and ordering by it is the difference between a picker and a form.
+   */
+  fromRun: boolean;
+}
+
+/** What sending a line to a list did. */
+export interface BasketBindResult {
+  line: BasketLine;
+  listId: string;
+  zoneId: string;
+  /** The zone line the bind created, which is a real line on somebody's list. */
+  createdLineId: string;
+  /** What that line asks for: the outstanding amount, which may be zero. */
+  quantity: number;
+  /**
+   * True when the list does not accept lines automatically and this one is waiting.
+   *
+   * The one thing the row has to say afterwards, because a line waiting for approval
+   * is not yet on the household's list in the way the person who sent it expects.
+   */
+  pendingApproval: boolean;
 }
 
 /** How far this line has got, which is what the row's indicator draws. */
@@ -281,6 +505,42 @@ export interface BasketShareLink {
   expiresAt: Date | null;
   /** How many people arrived through it, so the sheet can say so. */
   participantCount: number;
+}
+
+/**
+ * What one add asks for (velista `0053`; luna `0055`, section 3).
+ *
+ * **No `targetListId`**, and its absence is the design rather than an omission: a
+ * line added here has no target, so it changes nothing any household shares, which
+ * is what makes the gesture safe to hand to somebody who arrived on a forwarded
+ * link. Binding one to a list is a separate gesture with a list picker in front of
+ * it, and the server refuses the field on this surface outright.
+ */
+export interface BasketAddLineRequest {
+  content: string;
+  /** Defaults to one at the server. A line you do not want is not a gesture. */
+  quantity?: number;
+  /** The pick: the exact product this line means, when one was chosen. */
+  itemId?: string;
+  /** The products the pick may be switched between: what a group attaches. */
+  options?: readonly string[];
+}
+
+/**
+ * Whether this basket still takes lines, which is what decides the composer.
+ *
+ * The server refuses an add to a basket that is finished, and a field that cannot
+ * submit is the invitation `0038` section 2.1 refuses to draw. So the question is
+ * asked here once and the page has no second reading of it.
+ *
+ * **It names the live statuses rather than the finished ones**, which is the safe
+ * direction and the same one the server's own `LIVE_GENERATED_LIST_STATUSES` takes.
+ * A status this build has never heard of costs a composer; the other way round it
+ * would draw a field over a basket the server considers closed, and every line
+ * typed into it would come back refused.
+ */
+export function basketTakesLines(status: string): boolean {
+  return status === 'DRAFT' || status === 'ACTIVE';
 }
 
 /** What one settling act asked for. The three gestures of section 4.2. */

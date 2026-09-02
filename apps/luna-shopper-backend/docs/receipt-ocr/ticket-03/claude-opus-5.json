@@ -1,0 +1,69 @@
+{
+  "store": "GRUPO EMPRESARIAL EL JAMON, S.L.",
+  "storeAddress": "C/ RONDA, 5, 14013-CORDOBA, CORDOBA",
+  "storeVatId": "B21053848",
+  "datetime": "2026-07-17T20:52:00",
+  "currency": "EUR",
+  "lines": [
+    {
+      "rawText": "ESPETEC ELIGES",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.1,
+      "discount": null,
+      "lineTotal": 2.1
+    },
+    {
+      "rawText": "QUESO EL JAM\"N",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 3.0,
+      "discount": null,
+      "lineTotal": 3.0
+    },
+    {
+      "rawText": "IBERITOS 250G",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.29,
+      "discount": null,
+      "lineTotal": 2.29
+    },
+    {
+      "rawText": "MINI BISCOTES",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.76,
+      "discount": null,
+      "lineTotal": 0.76
+    },
+    {
+      "rawText": "FONTVELLA 1|5L",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.38,
+      "discount": null,
+      "lineTotal": 0.38
+    },
+    {
+      "rawText": "FONTVELLA 1|5L",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.76,
+      "discount": null,
+      "lineTotal": 0.76
+    }
+  ],
+  "receiptDiscount": null,
+  "subtotal": null,
+  "taxTotal": 0.68,
+  "total": 9.29,
+  "paymentMethod": "TARJETA VISA",
+  "truncated": false
+}

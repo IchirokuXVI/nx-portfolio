@@ -16,6 +16,17 @@
   color: var(--app-action-quiet-fg);
 }
 
+// What happened, where "0 outstanding" used to be (plan 0052, section 7.1).
+//
+// Quieter than the count it replaces, and that is the point of the difference: the
+// count is a thing still to do and takes the accent, this is a record of something
+// already done and takes muted copy.
+.happened {
+  margin: var(--app-space-1) 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
 .pane-title {
   margin: var(--app-space-2) 0 0;
   font-size: var(--app-text-base);
@@ -71,6 +82,15 @@
   margin-block-start: var(--app-space-2);
 }
 
+// The two sheets about this line's lists, set apart from the settle targets above
+// them by a rule and a wider gap. They are not things to buy with, and a thumb
+// travelling to the big button must not arrive at one of these instead.
+.actions.lists {
+  margin-block-start: var(--app-space-4);
+  padding-block-start: var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
 .primary {
   @include shared.primary-button;
 }
@@ -103,53 +123,15 @@
   }
 }
 
-// --- The stepper ------------------------------------------------------------
+// --- How many ---------------------------------------------------------------
 
-.stepper {
+// The reel draws itself, so this only puts it where the stepper used to sit:
+// centred, with the same air above and below, so the pane does not jump for
+// somebody who knew where the number was.
+.quantity-control {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: var(--app-space-4);
   margin-block: var(--app-space-5);
-}
-
-.step {
-  @include shared.tap-target;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  // `--app-button-height` and not `--app-control-height`: the latter *is* the 44
-  // minimum, and these two want to be larger than it. They are the controls a
-  // thumb hunts for while the other hand is holding a trolley.
-  inline-size: var(--app-button-height);
-  block-size: var(--app-button-height);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-full);
-  background: var(--app-surface-raised);
-  font-family: inherit;
-  font-size: var(--app-text-xl);
-  color: var(--app-text-primary);
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-}
-
-.stepper-value {
-  min-inline-size: 3ch;
-  font-size: var(--app-text-3xl);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-primary);
-  text-align: center;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-    border-radius: var(--app-radius-sm);
-  }
 }
 
 // --- The options ------------------------------------------------------------
@@ -259,11 +241,26 @@
   color: var(--app-status-danger-fg);
 }
 
+// The support reference, on its own line under the sentence. Quiet and monospaced,
+// because it is a string somebody copies rather than reads.
+.reference {
+  display: block;
+  margin-block-start: var(--app-space-1);
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
 // --- What happened to this line ---------------------------------------------
 
 // The way into the history, from the settle pane. A link rather than a button
 // shape: it goes somewhere to read rather than doing anything to the line, and
 // three button shaped controls above it are already competing for the thumb.
+//
+// **Not underlined** (plan 0052, section 8). It is a button, it is already drawn in
+// `--app-action-quiet-fg` against secondary copy, it is already a full width row
+// with a 44px target, and nothing else in this app underlines a control. The rule
+// was borrowed from the shape of a hyperlink for something that is not one.
 .link {
   @include shared.tap-target;
 
@@ -278,8 +275,17 @@
   font-family: inherit;
   font-size: var(--app-text-sm);
   color: var(--app-action-quiet-fg);
-  text-decoration: underline;
   cursor: pointer;
+}
+
+// "Taken back", beside the sentence it qualifies. Muted rather than struck
+// through: the settle happened, and somebody undid it, which is a different fact
+// from it never having happened (plan 0052, section 8).
+.history-reverted {
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-text-muted);
 }
 
 .history {

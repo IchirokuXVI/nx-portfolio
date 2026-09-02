@@ -693,6 +693,26 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.SettleSheet
                   ),
               }),
+              // The two sheets a line's settle sheet leads on to, and they are
+              // children of the **basket** rather than of it: a sheet has no
+              // children, so the only place a sheet over a sheet can be declared is
+              // beside the one it was opened from. Each names the settle sheet's URL
+              // as what it dismisses onto, which is what keeps one gesture one
+              // screen back.
+              sheet({
+                path: 'lines/:lineId/units',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.LineUnitsSheet
+                  ),
+              }),
+              sheet({
+                path: 'lines/:lineId/list',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.LineListSheet
+                  ),
+              }),
               sheet({
                 path: 'people',
                 loadComponent: () =>

@@ -1,31 +1,44 @@
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  BasketAddLineRequest,
+  BasketBindResult,
   BasketLine,
+  BasketLineOrigins,
+  BasketLineTarget,
   BasketLinkPreview,
+  BasketOriginQuantityRequest,
+  BasketOriginQuantityResult,
+  BasketOutstandingRequest,
   BasketParticipant,
   BasketSession,
   BasketSettleRequest,
   BasketSettleResult,
   BasketShareLink,
   BasketView,
+  CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { anonymous, operation } from '../auth/http-context';
 import {
+  toBasketBindResult,
   toBasketLine,
+  toBasketLineOrigins,
+  toBasketLineTarget,
   toBasketLinkPreview,
+  toBasketOriginQuantityResult,
   toBasketParticipant,
   toBasketSession,
   toBasketSettleResult,
   toBasketShareLink,
   toBasketView,
 } from '../mapping/basket-mappers';
-import { mapArray } from '../mapping/primitives';
+import { toCatalogSuggestion } from '../mapping/mappers';
+import { isRecord, mapArray } from '../mapping/primitives';
 import { required } from '../mapping/required';
-import { BasketSessionStore } from './basket-session-store';
 import type { BasketServiceI } from './basket-service';
+import { BasketSessionStore } from './basket-session-store';
 
 /**
  * The header a guest presents their session secret on.
@@ -135,6 +148,127 @@ export class BasketApi implements BasketServiceI {
     return required(toBasketSettleResult(answer), 'basket.settle');
   }
 
+  async reopen(
+    generatedListId: string,
+    lineId: string
+  ): Promise<BasketSettleResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/reopen`,
+        {},
+        // The same participant credential as the settle, because it is the same
+        // authorization: any live participant may reopen a line, guests included
+        // (luna `0054`, section 3.5).
+        this._participantOptions(generatedListId, 'basket.reopen')
+      )
+    );
+
+    return required(toBasketSettleResult(answer), 'basket.reopen');
+  }
+
+  /**
+   * Say how many are still to get (velista `0054`).
+   *
+   * The participant credential, like every other write on this surface: the gesture
+   * is made in an aisle by whoever is holding the phone, which is very often not the
+   * person who wrote the list.
+   */
+  async setOutstanding(
+    generatedListId: string,
+    lineId: string,
+    body: BasketOutstandingRequest
+  ): Promise<BasketSettleResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/outstanding`,
+        body,
+        this._participantOptions(generatedListId, 'basket.outstanding')
+      )
+    );
+
+    return required(toBasketSettleResult(answer), 'basket.outstanding');
+  }
+
+  /**
+   * Which lists are on this line, and which could be (velista `0055`).
+   *
+   * The same participant credential, and the server is what refuses it to a guest.
+   * There is no check here, on purpose: a client side gate would be a second answer
+   * to a question the gateway already answers per request, against the database, and
+   * the two would eventually disagree.
+   */
+  async getLineOrigins(
+    generatedListId: string,
+    lineId: string
+  ): Promise<BasketLineOrigins> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        `${this._line(generatedListId, lineId)}/origins`,
+        this._participantOptions(generatedListId, 'basket.origins')
+      )
+    );
+
+    return required(toBasketLineOrigins(body), 'basket.origins');
+  }
+
+  /** Set what one list contributes to this line (velista `0055`). */
+  async setOriginQuantity(
+    generatedListId: string,
+    lineId: string,
+    body: BasketOriginQuantityRequest
+  ): Promise<BasketOriginQuantityResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/origins`,
+        body,
+        this._participantOptions(generatedListId, 'basket.setOriginQuantity')
+      )
+    );
+
+    return required(
+      toBasketOriginQuantityResult(answer),
+      'basket.setOriginQuantity'
+    );
+  }
+
+  /** The lists this line could be sent to (velista `0056`). */
+  async getLineTargets(
+    generatedListId: string,
+    lineId: string
+  ): Promise<readonly BasketLineTarget[]> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        `${this._line(generatedListId, lineId)}/targets`,
+        this._participantOptions(generatedListId, 'basket.targets')
+      )
+    );
+
+    return isRecord(body) ? mapArray(body['targets'], toBasketLineTarget) : [];
+  }
+
+  /**
+   * Send this line to a shopping list (velista `0056`).
+   *
+   * The path is `target` and the read beside it is `targets`, which is the ordinary
+   * singular and plural rather than a typo: one is the list of candidates and the
+   * other is the one that was chosen.
+   */
+  async bindLine(
+    generatedListId: string,
+    lineId: string,
+    listId: string
+  ): Promise<BasketBindResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/target`,
+        { listId },
+        this._participantOptions(generatedListId, 'basket.bindLine')
+      )
+    );
+
+    return required(toBasketBindResult(answer), 'basket.bindLine');
+  }
+
   async setPick(
     generatedListId: string,
     lineId: string,
@@ -149,6 +283,82 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketLine(body), 'basket.setPick');
+  }
+
+  /**
+   * Put a line in the basket, as whichever kind of participant is holding it.
+   *
+   * `basket/lines` and not `lines`: the second is the **owner's** add on the account
+   * surface, resolved by `ownerUserId`, and a guest with a perfectly valid session
+   * gets a not found from it. See {@link BasketServiceI.addLine}.
+   *
+   * The optional fields are **omitted rather than sent undefined**, which is
+   * `LineApi.addLine`'s rule and matters more here: the server validates `itemId` as
+   * a uuid and `options` as an array of them, so a key present and empty is a
+   * refusal where an absent one is a free text line.
+   */
+  async addLine(
+    generatedListId: string,
+    body: BasketAddLineRequest
+  ): Promise<BasketLine> {
+    const request: Record<string, unknown> = { content: body.content };
+    if (body.quantity !== undefined) {
+      request['quantity'] = body.quantity;
+    }
+    if (body.itemId !== undefined) {
+      request['itemId'] = body.itemId;
+    }
+    if (body.options !== undefined && body.options.length > 0) {
+      request['options'] = [...body.options];
+    }
+
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._basket(generatedListId)}/basket/lines`,
+        request,
+        this._participantOptions(generatedListId, 'basket.addLine')
+      )
+    );
+
+    return required(toBasketLine(answer), 'basket.addLine');
+  }
+
+  /**
+   * The catalog, searched through the basket rather than through an account.
+   *
+   * No scope goes out with it, and that is the route's design rather than an
+   * omission on this side: the ranking is the **run's**, which the gateway resolves
+   * from the basket's own snapshot. A guest naming where to price a stranger's
+   * basket is not a thing the server accepts.
+   *
+   * **Empty rather than thrown**, exactly as `CatalogApi.suggest` is: a dropdown is
+   * an offer, and the one thing this must never do is make adding a line fail
+   * because a search did.
+   */
+  async suggest(
+    generatedListId: string,
+    query: string
+  ): Promise<readonly CatalogSuggestion[]> {
+    try {
+      const body = await firstValueFrom(
+        this._http.get<unknown>(
+          `${this._basket(generatedListId)}/catalog/suggest`,
+          {
+            ...this._participantOptions(generatedListId, 'basket.suggest'),
+            params: new HttpParams().set('q', query),
+          }
+        )
+      );
+
+      // The order is the server's and is never re-sorted here, for the reason
+      // written on `CatalogApi.suggest`: the client holds none of the prices,
+      // scopes or synonyms that decided it.
+      return isRecord(body)
+        ? mapArray(body['suggestions'], toCatalogSuggestion)
+        : [];
+    } catch {
+      return [];
+    }
   }
 
   async listParticipants(

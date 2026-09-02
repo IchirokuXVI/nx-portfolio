@@ -1,0 +1,514 @@
+{
+  "lines": [
+    {
+      "rawText": "rotuladores pizarra BISMARK 4 uni",
+      "isDepartment": false,
+      "lineTotal": 1.29,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.29
+    },
+    {
+      "rawText": "atún claro aceite de oliva ALTEZA de",
+      "isDepartment": false,
+      "lineTotal": 6.87,
+      "quantity": 3,
+      "unit": "UNIT",
+      "unitPrice": 2.29
+    },
+    {
+      "rawText": "Azúcar moreno sin refinar ALTEZA de",
+      "isDepartment": false,
+      "lineTotal": 1.79,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.79
+    },
+    {
+      "rawText": "Bizcocho horneado COBRAN RUBIN 4 un",
+      "isDepartment": false,
+      "lineTotal": 1.35,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.35
+    },
+    {
+      "rawText": "BOMBÓN LA MERENGUINA turrón 3x100 g",
+      "isDepartment": false,
+      "lineTotal": 3.75,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 3.75
+    },
+    {
+      "rawText": "Bote redondo salsa GREAT PLASTIC 6.",
+      "isDepartment": false,
+      "lineTotal": 3.12,
+      "quantity": 4,
+      "unit": "UNIT",
+      "unitPrice": 0.78
+    },
+    {
+      "rawText": "Budin de cerdo PROLONGO -kg-",
+      "isDepartment": false,
+      "lineTotal": 1.11,
+      "quantity": 0.14,
+      "unit": "KG",
+      "unitPrice": 7.9
+    },
+    {
+      "rawText": "Búlgaros al cacao ALTEZA 5 ud 175 g",
+      "isDepartment": false,
+      "lineTotal": 1.19,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.19
+    },
+    {
+      "rawText": "Cabeza de jabalí SUPREMA PICKEN con",
+      "isDepartment": false,
+      "lineTotal": 6.96,
+      "quantity": 0.51,
+      "unit": "KG",
+      "unitPrice": 13.9
+    },
+    {
+      "rawText": "Café cápsulas MARCILLA TASSIMO con",
+      "isDepartment": false,
+      "lineTotal": 5.75,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 5.75
+    },
+    {
+      "rawText": "Caramelos de miel RESPIRAL 150 g",
+      "isDepartment": false,
+      "lineTotal": 1.76,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.76
+    },
+    {
+      "rawText": "Carpeta cartón A4 4 anillas BISMARK",
+      "isDepartment": false,
+      "lineTotal": 2.59,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.59
+    },
+    {
+      "rawText": "Champiñón laminado 250 g.",
+      "isDepartment": false,
+      "lineTotal": 1.69,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.69
+    },
+    {
+      "rawText": "Champú purificante PANTENE 300 ml",
+      "isDepartment": false,
+      "lineTotal": 7.5,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 3.75
+    },
+    {
+      "rawText": "Chocolate MILKA Caramelo 100 g",
+      "isDepartment": false,
+      "lineTotal": 1.86,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.86
+    },
+    {
+      "rawText": "Chorizo 100% de pollo ALPICO vela -",
+      "isDepartment": false,
+      "lineTotal": 2.01,
+      "quantity": 0.13,
+      "unit": "KG",
+      "unitPrice": 15.45
+    },
+    {
+      "rawText": "Chorizo extra Pamplona ALTEZA -kg-",
+      "isDepartment": false,
+      "lineTotal": 0.84,
+      "quantity": 0.085,
+      "unit": "KG",
+      "unitPrice": 9.9
+    },
+    {
+      "rawText": "Cocktail supreme EL VALLE 85 g",
+      "isDepartment": false,
+      "lineTotal": 1.5,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 0.75
+    },
+    {
+      "rawText": "Comida perro TANDY pollo tarrina 30",
+      "isDepartment": false,
+      "lineTotal": 4.32,
+      "quantity": 6,
+      "unit": "UNIT",
+      "unitPrice": 0.72
+    },
+    {
+      "rawText": "Cono helado ALTEZA nata 6x120 ml",
+      "isDepartment": false,
+      "lineTotal": 2.09,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.09
+    },
+    {
+      "rawText": "Coquitos EL CARTUJANO 115 g",
+      "isDepartment": false,
+      "lineTotal": 1.9,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 0.95
+    },
+    {
+      "rawText": "Croissants rellenos ALTEZA crema ca",
+      "isDepartment": false,
+      "lineTotal": 5.04,
+      "quantity": 3,
+      "unit": "UNIT",
+      "unitPrice": 1.68
+    },
+    {
+      "rawText": "Desodorante calzado PALC 125 ml",
+      "isDepartment": false,
+      "lineTotal": 1.69,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.69
+    },
+    {
+      "rawText": "Desodorante invisible CROWE Man 200",
+      "isDepartment": false,
+      "lineTotal": 1.55,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.55
+    },
+    {
+      "rawText": "Flan de huevo ALTEZA al baño María",
+      "isDepartment": false,
+      "lineTotal": 1.59,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.59
+    },
+    {
+      "rawText": "Flan de vainilla ALTEZA 4x100 g",
+      "isDepartment": false,
+      "lineTotal": 0.73,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.73
+    },
+    {
+      "rawText": "Frutería CASH2",
+      "isDepartment": true,
+      "lineTotal": 1.34
+    },
+    {
+      "rawText": "Frutería CASH2",
+      "isDepartment": true,
+      "lineTotal": 0.93
+    },
+    {
+      "rawText": "Frutería CASH2",
+      "isDepartment": true,
+      "lineTotal": 3.65
+    },
+    {
+      "rawText": "Funda multituladro t/f BISMARK cris",
+      "isDepartment": false,
+      "lineTotal": 0.66,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.66
+    },
+    {
+      "rawText": "Galletas mini Simpsons ARLUY chocol",
+      "isDepartment": false,
+      "lineTotal": 2.74,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.74
+    },
+    {
+      "rawText": "Galletas rellenas chocolate ALTEZA",
+      "isDepartment": false,
+      "lineTotal": 1.29,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.29
+    },
+    {
+      "rawText": "Gominolas nega surtidas ALTEZA azúc",
+      "isDepartment": false,
+      "lineTotal": 0.69,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.69
+    },
+    {
+      "rawText": "Huevos clase L 63/73 g ALTEZA galli",
+      "isDepartment": false,
+      "lineTotal": 13.17,
+      "quantity": 3,
+      "unit": "UNIT",
+      "unitPrice": 4.39
+    },
+    {
+      "rawText": "Integrales MONDAT 8 ud 360 g",
+      "isDepartment": false,
+      "lineTotal": 1.98,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 0.99
+    },
+    {
+      "rawText": "Lejía gel ACE protección no salpica",
+      "isDepartment": false,
+      "lineTotal": 1.99,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.99
+    },
+    {
+      "rawText": "Mascarilla capilar ELVIVE Hidra Hia",
+      "isDepartment": false,
+      "lineTotal": 4.1,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 4.1
+    },
+    {
+      "rawText": "Mortadela siciliana ELPOZO -kg-",
+      "isDepartment": false,
+      "lineTotal": 1.09,
+      "quantity": 0.185,
+      "unit": "KG",
+      "unitPrice": 5.9
+    },
+    {
+      "rawText": "Pack 2 cintas adhesivas BISMARK 20",
+      "isDepartment": false,
+      "lineTotal": 0.75,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.75
+    },
+    {
+      "rawText": "Pan de molde 100% integral ALTEZA 4",
+      "isDepartment": false,
+      "lineTotal": 0.78,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.78
+    },
+    {
+      "rawText": "Pan sandwich styles ALTEZA 10 cerea",
+      "isDepartment": false,
+      "lineTotal": 1.12,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.12
+    },
+    {
+      "rawText": "Paté PAMPLONICA 3x80 g",
+      "isDepartment": false,
+      "lineTotal": 4.02,
+      "quantity": 3,
+      "unit": "UNIT",
+      "unitPrice": 1.34
+    },
+    {
+      "rawText": "Paté de campaña ALTEZA 160 g",
+      "isDepartment": false,
+      "lineTotal": 0.92,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.92
+    },
+    {
+      "rawText": "Paté de morcilla y piñones CAZORLA",
+      "isDepartment": false,
+      "lineTotal": 1.38,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.38
+    },
+    {
+      "rawText": "Pechuga de pavo braseada ELPOZO 195",
+      "isDepartment": false,
+      "lineTotal": 3.48,
+      "quantity": 0.25,
+      "unit": "KG",
+      "unitPrice": 13.9
+    },
+    {
+      "rawText": "Perlas de perfume LENOR UNSTOPPABLE",
+      "isDepartment": false,
+      "lineTotal": 8.3,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 8.3
+    },
+    {
+      "rawText": "Picos artesanos HNOS.GUERRA con ajo",
+      "isDepartment": false,
+      "lineTotal": 2.12,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.12
+    },
+    {
+      "rawText": "Queso rallado fundido hilo ALTEZA e",
+      "isDepartment": false,
+      "lineTotal": 1.09,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.09
+    },
+    {
+      "rawText": "Quita pelos mascotas NOBLEZA colad",
+      "isDepartment": false,
+      "lineTotal": 3.63,
+      "quantity": 3,
+      "unit": "UNIT",
+      "unitPrice": 1.21
+    },
+    {
+      "rawText": "Quitamanchas oxi activo PLUS MAX ro",
+      "isDepartment": false,
+      "lineTotal": 1.75,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.75
+    },
+    {
+      "rawText": "Recambio A-4 4 anillas PACSA cuadro",
+      "isDepartment": false,
+      "lineTotal": 2.48,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.48
+    },
+    {
+      "rawText": "Recambio antimosquitos SELEX 33 ml",
+      "isDepartment": false,
+      "lineTotal": 3.2,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 1.6
+    },
+    {
+      "rawText": "Revuelto pasarratos SAGACOR 500 g",
+      "isDepartment": false,
+      "lineTotal": 2.3,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.3
+    },
+    {
+      "rawText": "Rollitos de maíz blue heat TAKIS 13",
+      "isDepartment": false,
+      "lineTotal": 2.15,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.15
+    },
+    {
+      "rawText": "Rotulador pizarra BISMARK negro",
+      "isDepartment": false,
+      "lineTotal": 0.75,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.75
+    },
+    {
+      "rawText": "Sal yodada fina CHALUPA 1 kg",
+      "isDepartment": false,
+      "lineTotal": 0.34,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.34
+    },
+    {
+      "rawText": "Salchichón a la pimienta SOLn extra",
+      "isDepartment": false,
+      "lineTotal": 1.94,
+      "quantity": 0.15,
+      "unit": "KG",
+      "unitPrice": 12.9
+    },
+    {
+      "rawText": "Snack pincky DULCESOL relleno nata",
+      "isDepartment": false,
+      "lineTotal": 0.99,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.99
+    },
+    {
+      "rawText": "Tarta al whisky DHUL 2x80 g",
+      "isDepartment": false,
+      "lineTotal": 3.78,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 1.89
+    },
+    {
+      "rawText": "Tiras de bacon ahumado ELPOZO Famil",
+      "isDepartment": false,
+      "lineTotal": 1.45,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.45
+    },
+    {
+      "rawText": "Tomate entero ALTEZA pelado lata 78",
+      "isDepartment": false,
+      "lineTotal": 1.36,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.36
+    },
+    {
+      "rawText": "Tomate frito ALTEZA brik 350 g",
+      "isDepartment": false,
+      "lineTotal": 0.98,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 0.49
+    },
+    {
+      "rawText": "Yatekomo Yakisoba classic GALLINA B",
+      "isDepartment": false,
+      "lineTotal": 3.04,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 1.52
+    },
+    {
+      "rawText": "Yogur líquido NESTLE piña-coco 900",
+      "isDepartment": false,
+      "lineTotal": 1.16,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.16
+    }
+  ],
+  "total": 154.67,
+  "truncated": false,
+  "currency": "EUR",
+  "datetime": "2026-08-21T16:35:30",
+  "paymentMethod": "tarjeta",
+  "store": "Deza Calidad, S.A.",
+  "storeAddress": "P.Las Quemadas, 116 14014 - Córdoba"
+}

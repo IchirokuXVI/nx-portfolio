@@ -61,6 +61,29 @@ export const ERROR_CATALOG: Record<
     en: 'Add a postal code or choose a supermarket to see prices.',
     es: 'Añade un código postal o elige un supermercado para ver precios.',
   },
+  // Phrased as a fact about the trip rather than as a failure of the tap, so the
+  // shopper is told what is true instead of that something went wrong (plan
+  // 0055, section 3.3).
+  // Phrased about the basket rather than about adding, because more than one
+  // write meets this state: plan 0055 refuses an add and plan 0056 refuses a
+  // move of what is outstanding, in either direction. One code with one sentence
+  // that is true of every one of them beats a sentence that is exact for the
+  // first caller and wrong for the second.
+  [ERROR_CODES.GENERATED_LIST_FINISHED]: {
+    en: 'This basket is finished, so it cannot be changed.',
+    es: 'Esta cesta está terminada, así que no se puede modificar.',
+  },
+  // Both carry their number in the message rather than only in a code, because
+  // the client's job is to say it: "somebody else moved this, it is 3 now" is
+  // actionable and "that failed" is not (plan 0057, sections 5 and 5.2).
+  [ERROR_CODES.STALE_QUANTITY]: {
+    en: 'Somebody else changed this while you were looking at it. It is {current} now.',
+    es: 'Alguien más cambió esto mientras lo mirabas. Ahora es {current}.',
+  },
+  [ERROR_CODES.BELOW_SETTLED]: {
+    en: 'This basket has already bought {floor}, so it cannot go below that.',
+    es: 'Esta cesta ya ha comprado {floor}, así que no puede bajar de ahí.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

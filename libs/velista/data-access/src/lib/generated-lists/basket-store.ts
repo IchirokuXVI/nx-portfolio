@@ -6,17 +6,25 @@ import {
   signal,
 } from '@angular/core';
 import {
+  basketTakesLines,
   outstanding,
+  type BasketAddLineRequest,
+  type BasketBindResult,
   type BasketLine,
+  type BasketLineOrigins,
+  type BasketLineTarget,
   type BasketLoad,
+  type BasketOriginQuantityRequest,
+  type BasketOriginQuantityResult,
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketSettleRequest,
   type BasketSettleResult,
   type BasketShareLink,
   type BasketView,
+  type CatalogSuggestion,
 } from '@portfolio/velista/models';
-import { hasResponse } from '../errors';
+import { GatewayError, hasResponse } from '../errors';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
 import { BasketSocket } from './basket-socket';
@@ -30,6 +38,36 @@ import { BasketSocket } from './basket-socket';
  * on the same reasoning and the same order of delay.
  */
 const REFRESH_DEBOUNCE_MS = 1500;
+
+/**
+ * The names on a batch of origins, candidates or targets, keyed by list id.
+ *
+ * The **same** composition `toBasketView` gives the basket's own `listNames`, so a
+ * household adopted onto a line reads exactly as one the run drew from: "Weekly shop
+ * · Flat 3B", because a list alone is ambiguous when two households both keep one
+ * called "Groceries". A row with no name at all is skipped rather than given an
+ * empty string, which is what a list deleted since the run looks like, and the
+ * caption falls back for it.
+ */
+function namesOf(
+  rows: readonly {
+    listId: string;
+    listName: string | null;
+    zoneName: string | null;
+  }[]
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+  for (const row of rows) {
+    if (row.listName === null || row.listName === '') {
+      continue;
+    }
+    names.set(
+      row.listId,
+      row.zoneName ? `${row.listName} · ${row.zoneName}` : row.listName
+    );
+  }
+  return names;
+}
 
 /**
  * One shared basket, as the screen in a shop reads and changes it (plan 0044).
@@ -84,6 +122,15 @@ export class BasketStore {
   private readonly _link = signal<BasketShareLink | null>(null);
   private readonly _busyLines = signal<ReadonlySet<string>>(new Set());
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
+  private readonly _lastAdded = signal<BasketLine | null>(null);
+  /** Whether an add is in flight, so the composer's button can wait on it. */
+  private readonly _adding = signal(false);
+  /** See {@link pendingTargets}. Session local, and cleared with the basket. */
+  private readonly _pendingTargets = signal<ReadonlySet<string>>(new Set());
+  /** See {@link rememberListNames}. Session local, and cleared with the basket. */
+  private readonly _learnedNames = signal<ReadonlyMap<string, string>>(
+    new Map()
+  );
 
   /** Which basket this store is about, once it has been told. */
   private _id: string | null = null;
@@ -113,6 +160,17 @@ export class BasketStore {
             return;
           }
           this.apply(event.line);
+          return;
+
+        case 'generatedList.lineAdded':
+          if (event.generatedListId !== this._id) {
+            return;
+          }
+          // Its own case and not a fold into the two above, which is the whole
+          // reason the server gave it its own name: `apply` merges by id and does
+          // nothing at all for a line the basket does not hold, so an append that
+          // arrived as `lineUpdated` would be silently dropped.
+          this.append(event.line);
           return;
 
         case 'generatedList.participantJoined':
@@ -169,6 +227,15 @@ export class BasketStore {
   readonly busyLines = this._busyLines.asReadonly();
 
   /**
+   * Whether an add is in flight.
+   *
+   * The composer's field stays usable while this is true and only its button waits,
+   * which is what the run property in `0038` actually needs: somebody remembering
+   * three things in an aisle types the second while the first is on its way.
+   */
+  readonly adding = this._adding.asReadonly();
+
+  /**
    * Whether this basket is live, which the screen says out loud.
    *
    * A live basket and a refetching one look identical while nobody else is shopping,
@@ -208,6 +275,27 @@ export class BasketStore {
   );
 
   /**
+   * Whether this basket still takes lines, which is what draws the composer.
+   *
+   * False before anything has loaded, which is the safe direction and the same one
+   * {@link seesZoneData} takes: a field drawn for a frame over a basket that turns
+   * out to be finished is an invitation that cannot be honoured.
+   */
+  readonly takesLines = computed(() =>
+    basketTakesLines(this._basket()?.status ?? '')
+  );
+
+  /**
+   * The most recent line to arrive, however it arrived, for the page's live region.
+   *
+   * One signal rather than a queue, and that is what makes the announcement right
+   * when four people add at once: a polite region reads whatever the node last held,
+   * so simultaneous adds collapse into one sentence instead of talking over each
+   * other for the length of a shopping trip (plan 0053, section 8).
+   */
+  readonly lastAdded = this._lastAdded.asReadonly();
+
+  /**
    * Whether this reader may see zone data, as the **server** decided on the last
    * read (backend `0051`, section 5.2).
    *
@@ -224,9 +312,31 @@ export class BasketStore {
    * lines carry no `origins` at all: the caption is gated on both sides at once,
    * so neither alone has to be got right.
    */
-  readonly listNames = computed<ReadonlyMap<string, string>>(
-    () => this._basket()?.listNames ?? new Map()
-  );
+  readonly listNames = computed<ReadonlyMap<string, string>>(() => {
+    const learned = this._learnedNames();
+    const served = this._basket()?.listNames ?? new Map<string, string>();
+    if (learned.size === 0) {
+      return served;
+    }
+    // The learned names go in **first**, so the basket's own overwrite them on a
+    // shared key. This map fills a gap in what the server names and never corrects
+    // it; when the gateway names every origin's list the merge is a no-op and both
+    // it and `rememberListNames` can go. See that method for the gap in full.
+    return new Map([...learned, ...served]);
+  });
+
+  /**
+   * Lines whose bound zone line is waiting for its list to approve it.
+   *
+   * **A stopgap for a backend gap, and session local.** `GeneratedListLineOriginView`
+   * carries no approval state, so after a reload the row cannot say a bound line is
+   * waiting (velista `0056`, section 5.1). What this holds is what *this* session's
+   * own bind was told, which is exactly the case where somebody is standing there
+   * waiting to be told something, and is honestly empty everywhere else rather than
+   * guessing. When the view carries the state the row reads the line instead and this
+   * goes.
+   */
+  readonly pendingTargets = this._pendingTargets.asReadonly();
 
   /** Everybody on the basket, for the presence row and for attribution. */
   readonly participants = computed<readonly BasketParticipant[]>(
@@ -318,6 +428,13 @@ export class BasketStore {
     this._link.set(null);
     this._present.set([]);
     this._busyLines.set(new Set());
+    this._lastAdded.set(null);
+    this._adding.set(false);
+    // Both stopgaps are about **this** basket and this session, so they go with it.
+    // Carrying either into the next basket would caption its rows with a household
+    // from the last one, or say a line of it is waiting for approval.
+    this._pendingTargets.set(new Set());
+    this._learnedNames.set(new Map());
     this._state.set('loading');
     this._error.set(null);
   }
@@ -368,6 +485,25 @@ export class BasketStore {
   }
 
   /**
+   * Take a finished line back to fully outstanding (luna `0054`, section 3).
+   *
+   * The other direction of the row's status control, and it goes through the same
+   * {@link _write} as {@link settle} so the row is busy while the request is out and
+   * `aria-busy` is already handled.
+   *
+   * It answers the same shape for the same reason: an origin whose line has been
+   * deleted since cannot have its units put back, so a reopen can report a skip
+   * exactly as a settle can, and the caller has to be told something did not land.
+   */
+  async reopen(lineId: string): Promise<BasketSettleResult | null> {
+    return this._write(lineId, async (id) => {
+      const result = await this._service.reopen(id, lineId);
+      this.apply(result.line);
+      return result;
+    });
+  }
+
+  /**
    * Swap a line's pick to another of its options.
    *
    * Available to everybody, guests included: the options are catalog products and
@@ -379,6 +515,93 @@ export class BasketStore {
       this.apply(line);
       return line;
     });
+  }
+
+  /**
+   * Put a line in the basket (velista `0053`; luna `0055`, section 3).
+   *
+   * **Drawn from the server's answer and never optimistically**, which is the
+   * opposite of the choice on the list page, and the difference is the reader: four
+   * people are working this basket at once, and a row that appeared locally and then
+   * reordered when the server answered is a row somebody might tap in between. The
+   * wait is not felt while typing, because {@link adding} leaves the field alive and
+   * only the button waits.
+   *
+   * The socket carries the same line to everybody else through
+   * `generatedList.lineAdded`, and {@link append} is what both paths go through, so
+   * the person who typed it and the person standing next to them get the same row by
+   * the same route.
+   *
+   * **Null on failure**, and the caller has something to do with it: the text is
+   * still theirs to put back in the field. Losing six characters is nothing; losing
+   * the item somebody just remembered in an aisle is the failure this screen cannot
+   * afford (section 7).
+   */
+  async addLine(body: BasketAddLineRequest): Promise<BasketLine | null> {
+    const id = this._id;
+    if (id === null) {
+      return null;
+    }
+
+    this._adding.set(true);
+    try {
+      const line = await this._service.addLine(id, body);
+      this.append(line);
+      return line;
+    } catch (error) {
+      this._fail(id, error);
+      return null;
+    } finally {
+      this._adding.set(false);
+    }
+  }
+
+  /**
+   * What the composer offers under the field, in the server's order.
+   *
+   * On the store rather than reached for directly by the page, unlike the list
+   * page's catalog search: this one is **scoped to the basket**, so the id is part
+   * of the question, and the store is what already holds it. Nothing here debounces
+   * or counts characters, which stay the page's, for rule D1's reason.
+   *
+   * Empty on failure, because the service is: a dropdown is an offer, and the one
+   * thing this must never do is make adding a line fail because a search did.
+   */
+  async suggest(query: string): Promise<readonly CatalogSuggestion[]> {
+    const id = this._id;
+    return id === null ? [] : this._service.suggest(id, query);
+  }
+
+  /**
+   * Put a line on the end of the basket, from wherever it came.
+   *
+   * **Idempotent by id**, which is not decoration: the add answers a line and the
+   * basket's own room broadcasts the same one, so the person who typed it appends it
+   * twice unless one of the two is a no-op. A refetch landing between the two does
+   * the same thing from the other direction.
+   *
+   * A line already held is merged rather than ignored, on {@link apply}'s reasoning:
+   * the broadcast is redacted to the least privileged reader in the room, so the copy
+   * that arrives second may know less than the copy already on screen.
+   */
+  append(line: BasketLine): void {
+    const held = this._basket();
+    if (held === null) {
+      // Nothing to append to. The read that is on its way carries this line, so
+      // dropping it here costs nothing and inventing a basket around it would put a
+      // one line screen in front of somebody for a moment.
+      return;
+    }
+
+    if (held.lines.some((row) => row.id === line.id)) {
+      this.apply(line);
+      return;
+    }
+
+    this._basket.set({ ...held, lines: [...held.lines, line] });
+    // Set only for a line that was genuinely new, so the announcement follows what
+    // changed on screen rather than what arrived on the wire.
+    this._lastAdded.set(line);
   }
 
   /**
@@ -407,6 +630,171 @@ export class BasketStore {
             : held
         ),
       };
+    });
+  }
+
+  /**
+   * Say how many of a line are still to get (velista `0054`).
+   *
+   * Through {@link _write}, so the row is busy while the request is out, and it
+   * answers the same {@link BasketSettleResult} a settle does because the downward
+   * move genuinely is one: it can skip an origin whose access has gone, and the
+   * caller has to be told something did not land.
+   *
+   * ## The one thing this does that no other write here does
+   *
+   * **A `stale_quantity` refetches before it returns.** That code means the number
+   * this gesture was moving is not where the control believed it started, which is
+   * two phones in one shop dragging one line, and the honest answer is not a
+   * sentence saying so over a stale number: it is the number as it now stands, with
+   * the sentence beside it. So the refresh is awaited **before** null goes back, and
+   * the caller can read the true amount off the line the moment it has it.
+   */
+  async setOutstanding(
+    lineId: string,
+    outstanding: number,
+    from: number
+  ): Promise<BasketSettleResult | null> {
+    return this._write(lineId, async (id) => {
+      const result = await this._service.setOutstanding(id, lineId, {
+        outstanding,
+        from,
+      });
+      this.apply(result.line);
+      return result;
+    });
+  }
+
+  /**
+   * Which lists are on a line, and which could be (velista `0055`).
+   *
+   * A **read**, so it does not go through {@link _write}: nothing about the basket
+   * changes, and marking the row busy would grey a line somebody is still allowed to
+   * settle while a sheet is opening over it.
+   *
+   * Null on failure, with the failure recorded the way every other one is, so the
+   * sheet draws the sentence its own operation deserves.
+   *
+   * It also feeds {@link rememberListNames}, which is the stopgap for a backend gap:
+   * the basket read names only the run's **source** lists, so a household adopted
+   * onto a line here has an origin the row's "from" caption cannot name.
+   */
+  async loadLineOrigins(lineId: string): Promise<BasketLineOrigins | null> {
+    const id = this._id;
+    if (id === null) {
+      return null;
+    }
+
+    try {
+      const answer = await this._service.getLineOrigins(id, lineId);
+      this.rememberListNames(
+        namesOf([...answer.origins, ...answer.candidates])
+      );
+      return answer;
+    } catch (error) {
+      this._fail(id, error);
+      return null;
+    }
+  }
+
+  /**
+   * Set what one list contributes to a line (velista `0055`).
+   *
+   * Through {@link _write}, and it refetches on a `stale_quantity` for
+   * {@link setOutstanding}'s reason: the sheet redraws the row at the contribution
+   * as it now stands rather than arguing with a number that moved.
+   *
+   * The origin that comes back is remembered by name, because an **adopted** list is
+   * exactly the one the basket read does not name.
+   */
+  async setOriginQuantity(
+    lineId: string,
+    body: BasketOriginQuantityRequest
+  ): Promise<BasketOriginQuantityResult | null> {
+    return this._write(lineId, async (id) => {
+      const result = await this._service.setOriginQuantity(id, lineId, body);
+      this.apply(result.line);
+      if (result.origin !== null) {
+        this.rememberListNames(namesOf([result.origin]));
+      }
+      return result;
+    });
+  }
+
+  /**
+   * The lists this line could be sent to (velista `0056`).
+   *
+   * A read, like {@link loadLineOrigins}, and every target is remembered by name for
+   * the same reason: the list somebody sends a line to is very often not one the run
+   * drew from, so the basket read cannot name it and the row would caption an origin
+   * with nothing after it.
+   */
+  async loadLineTargets(
+    lineId: string
+  ): Promise<readonly BasketLineTarget[] | null> {
+    const id = this._id;
+    if (id === null) {
+      return null;
+    }
+
+    try {
+      const targets = await this._service.getLineTargets(id, lineId);
+      this.rememberListNames(namesOf(targets));
+      return targets;
+    } catch (error) {
+      this._fail(id, error);
+      return null;
+    }
+  }
+
+  /**
+   * Send a line to a shopping list (velista `0056`).
+   *
+   * Through {@link _write}, and the answer's line is folded in, which is what turns
+   * the send control off: a bound line has a `targetListId` and cannot be sent twice.
+   *
+   * `pendingApproval` is recorded in {@link pendingTargets} rather than read off the
+   * line afterwards, because no field of the line carries it. See that signal for
+   * what that costs and when it can go.
+   */
+  async bindLine(
+    lineId: string,
+    listId: string
+  ): Promise<BasketBindResult | null> {
+    return this._write(lineId, async (id) => {
+      const result = await this._service.bindLine(id, lineId, listId);
+      this.apply(result.line);
+      if (result.pendingApproval) {
+        this._pendingTargets.update((held) => new Set(held).add(lineId));
+      }
+      return result;
+    });
+  }
+
+  /**
+   * Learn a list's name from somewhere other than the basket read.
+   *
+   * **A stopgap, and it is written down as one.** `sourceNames` on the basket is
+   * built from the run's own snapshot, so it names the lists the run drew from and
+   * nothing else. A line adopted onto a household the run missed (`0055`) or sent to
+   * one (`0056`) therefore has an origin whose list the row cannot name, and the
+   * "from" caption would draw a word and then stop.
+   *
+   * The names are merged **under** the basket's own, so a key both know keeps the
+   * server's answer: this map is only ever filling a gap, never correcting one. When
+   * the gateway names every origin's list the merge becomes a no-op and this method
+   * and its signal can be deleted together, with nothing else changing shape.
+   */
+  rememberListNames(names: ReadonlyMap<string, string>): void {
+    if (names.size === 0) {
+      return;
+    }
+    this._learnedNames.update((held) => {
+      const next = new Map(held);
+      for (const [listId, name] of names) {
+        next.set(listId, name);
+      }
+      return next;
     });
   }
 
@@ -473,6 +861,16 @@ export class BasketStore {
    * Returns null rather than throwing when the write fails: the caller is a sheet
    * that has to close or stay open, and every failure this can suffer is already
    * reflected in {@link state} or is a transient the next refresh resolves.
+   *
+   * ## One failure is refetched before the caller hears about it
+   *
+   * `stale_quantity` says the number this write was moving is not where the control
+   * believed it started, which is two phones in one shop working one line. Every
+   * screen that can raise it has the same answer: redraw at the number as it now
+   * stands and say so beside it. So the refresh is awaited **here**, before null goes
+   * back, and the caller can read the true amount off the line the moment it has it.
+   * Doing it in each caller would be the same three lines in two sheets, and the one
+   * that forgot would draw a sentence over a stale number.
    */
   private async _write<T>(
     lineId: string,
@@ -488,6 +886,12 @@ export class BasketStore {
       return await send(id);
     } catch (error) {
       this._fail(id, error);
+      if (error instanceof GatewayError && error.code === 'stale_quantity') {
+        await this.refresh();
+        // `_fail` recorded the error and `refresh` sets `state` back to ready, so
+        // what the caller reads is the true line beside a failure it can name.
+        this._error.set(error);
+      }
       return null;
     } finally {
       this._busyLines.update((busy) => {

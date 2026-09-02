@@ -319,6 +319,9 @@ describe('contract schemas', () => {
             quantity: 2,
             settledByUserId: 'u',
             settledAt: '2026-01-01T00:00:00.000Z',
+            // Standing, which is every settlement a settle writes (plan 0054,
+            // section 3.3). Only a basket reopen sets it.
+            revertedAt: null,
           },
         }).valid
       ).toBe(true);
@@ -339,9 +342,80 @@ describe('contract schemas', () => {
               quantity: 0,
               settledByUserId: 'u',
               settledAt: '2026-01-01T00:00:00.000Z',
+              revertedAt: null,
             },
           ],
           nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('generatedList.participant.list response names an account (plan 0054, section 2)', () => {
+      // The two names are separate fields, and both are required: a registered
+      // participant who typed nothing on the join screen still has an account
+      // name, which is what stops a screen drawing a role where a name belongs.
+      expect(
+        validateMessageResponse('generatedList.participant.list', {
+          participants: [
+            {
+              id: 'p',
+              kind: 'REGISTERED',
+              displayName: null,
+              username: 'Swift Sail',
+              guestNumber: null,
+              userId: 'u',
+              joinedAt: '2026-01-01T00:00:00.000Z',
+              lastSeenAt: '2026-01-01T00:00:00.000Z',
+              shareLinkId: 'sl',
+            },
+            // A guest has no account behind them, so both a null typed name and
+            // a null username, and the number is what the screen falls back to.
+            {
+              id: 'p2',
+              kind: 'GUEST',
+              displayName: null,
+              username: null,
+              guestNumber: 2,
+              userId: null,
+              joinedAt: '2026-01-01T00:00:00.000Z',
+              lastSeenAt: '2026-01-01T00:00:00.000Z',
+              shareLinkId: 'sl',
+            },
+          ],
+        }).valid
+      ).toBe(true);
+    });
+
+    it('generatedList.reopenLine answers a line and a count and nothing else (plan 0054, section 3.5)', () => {
+      expect(
+        validateMessageRequest('generatedList.reopenLine', {
+          generatedListId: 'gl',
+          lineId: 'gll',
+          participantId: 'p',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('generatedList.reopenLine', {
+          line: {
+            id: 'gll',
+            content: 'milk',
+            quantity: 2,
+            // Back to outstanding, which is the whole of the act.
+            settledQuantity: 0,
+            itemId: null,
+            options: [],
+            position: 0,
+            // Null because the run composed this line, which is what null in
+            // that column means (plan 0055, section 4). Reopening does not
+            // touch it: who put a line here is written once.
+            createdByParticipantId: null,
+            lastEditedByParticipantId: 'p',
+            lastEditedAt: '2026-01-01T00:00:00.000Z',
+            // The settle that said so has been taken back, so the row stops
+            // captioning it (plan 0054, section 3.3).
+            lastOutcome: null,
+          },
+          skippedCount: 0,
         }).valid
       ).toBe(true);
     });

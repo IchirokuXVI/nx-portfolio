@@ -454,6 +454,9 @@ export function toLineSettlement(raw: unknown): LineSettlement | null {
     quantity: numOr(raw['quantity'], 0),
     settledByUserId: nullableStr(raw['settledByUserId']),
     settledAt,
+    // Absent against a backend before luna `0054`, which reads as null: a history
+    // with nothing marked is exactly what a deployment that cannot revert produces.
+    revertedAt: date(raw['revertedAt']),
   };
 }
 

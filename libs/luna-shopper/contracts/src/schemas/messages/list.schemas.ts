@@ -206,6 +206,11 @@ const lineSettlementView = object(
     quantity: integer({ minimum: 0 }),
     settledByUserId: nonEmptyString(),
     settledAt: string({ format: 'date-time' }),
+    // Null while the settlement stands, and set once somebody took it back
+    // (plan 0054, section 3.3). The row is kept and served either way: a
+    // reverted settlement is excluded from every total and still appears in the
+    // history, marked.
+    revertedAt: nullableString(),
   },
   [
     'id',
@@ -216,6 +221,7 @@ const lineSettlementView = object(
     'quantity',
     'settledByUserId',
     'settledAt',
+    'revertedAt',
   ]
 );
 

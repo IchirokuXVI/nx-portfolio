@@ -54,6 +54,10 @@
   }
 }
 
+// The same edge the page's face row gains (plan 0052, section 3), and the fill is
+// **not** moved with it. This bubble sits inside a sheet panel, whose background is
+// already `--app-surface-raised`, so `--app-surface-sunken` is the step away from
+// what it sits on here; raising it would be a step back towards the panel.
 .avatar {
   display: flex;
   align-items: center;
@@ -61,6 +65,7 @@
   flex: none;
   inline-size: var(--app-avatar-md);
   block-size: var(--app-avatar-md);
+  border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-radius-full);
   background: var(--app-surface-sunken);
   font-size: var(--app-text-xs);
@@ -83,7 +88,12 @@
   overflow-wrap: anywhere;
 }
 
-.guest-tag {
+// Two chips, one shape. The guest tag qualifies a name with what somebody is; the
+// "you" tag qualifies it with which of them is holding the phone (plan 0052,
+// section 2.1). They are the same kind of word about the same kind of row, so they
+// take the same treatment and can sit beside each other on a guest's own row.
+.guest-tag,
+.you-tag {
   flex: none;
   padding: 0 var(--app-space-2);
   border-radius: var(--app-chip-radius);

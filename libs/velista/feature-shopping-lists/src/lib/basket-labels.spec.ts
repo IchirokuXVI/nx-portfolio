@@ -1,6 +1,7 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import type { BasketLine, BasketParticipant } from '@portfolio/velista/models';
 import {
+  addedCaption,
   originsCaption,
   participantInitials,
   participantName,
@@ -26,6 +27,7 @@ function person(over: Partial<BasketParticipant> = {}): BasketParticipant {
     id: 'p-1',
     kind: 'GUEST',
     displayName: null,
+    username: null,
     guestNumber: 2,
     userId: null,
     joinedAt: null,
@@ -63,6 +65,7 @@ function line(over: Partial<BasketLine> = {}): BasketLine {
     pickId: null,
     optionIds: [],
     position: 0,
+    createdBy: null,
     touchedBy: null,
     touchedAt: null,
     lastOutcome: null,
@@ -98,12 +101,16 @@ describe('participantName', () => {
     expect(one.id).not.toBe(two.id);
   });
 
-  it('says "you" about the reader themselves', () => {
+  it('never says "you" about the reader, because the phone may not be theirs', () => {
+    // Plan 0052 section 2.1. `ParticipantNameOptions.you` is deleted rather than
+    // left unused: four people work one list in a shop and read it on each other's
+    // phones, so "you" was the one label here whose meaning depended on whose hand
+    // the device was in. The reader is named like everybody else.
     expect(
       participantName(person({ displayName: 'Ana' }), translator, 'en', {
-        you: true,
+        ownName: 'Daniel',
       })
-    ).toBe('basket.touched.you');
+    ).toBe('Ana');
   });
 
   it('is empty for somebody who is not on the basket', () => {
@@ -128,6 +135,55 @@ describe('participantName', () => {
     expect(
       participantName(owner(), translator, 'en', { ownName: 'Daniel' })
     ).toBe('Daniel');
+  });
+
+  it('prefers the username the basket carries over the role word', () => {
+    // Plan 0052 section 2.2. "Owner" is a role where a person belongs, and the only
+    // reason it was reached was that core wrote the row with a null name. Luna 0054
+    // carries the account holder's username, and this is what it is for.
+    expect(participantName(owner({ username: 'marc' }), translator, 'en')).toBe(
+      'marc'
+    );
+  });
+
+  it('prefers a typed name over the username', () => {
+    // A signed in participant may still type a name on the join screen, and if they
+    // did they said it on purpose (luna 0054, section 2.4).
+    expect(
+      participantName(
+        owner({ username: 'marc', displayName: 'Marc at the shop' }),
+        translator,
+        'en'
+      )
+    ).toBe('Marc at the shop');
+  });
+
+  it('prefers the reader’s own account name over the username on their row', () => {
+    // Both name the same person and `ownName` is the fresher of the two: the username
+    // on a participant is a snapshot taken at join time, so somebody who has since
+    // renamed their account would otherwise read their old name on their own row.
+    expect(
+      participantName(owner({ username: 'marc' }), translator, 'en', {
+        ownName: 'Daniel',
+      })
+    ).toBe('Daniel');
+  });
+
+  it('still gives a guest with no username their number', () => {
+    // The fallback order is not disturbed by the new field: a guest has no account
+    // and `Guest N` is still what tells two unnamed ones apart.
+    expect(participantName(person(), translator, 'en')).toBe(
+      'basket.people.guestNumbered:{"count":2}'
+    );
+  });
+
+  it('keeps the role word for a basket generated before the username existed', () => {
+    // **The fallback is not deleted with the field's arrival** (section 2.2). A basket
+    // made before luna 0054 shipped carries no username for anybody, and this is what
+    // those baskets keep drawing; without it they would draw an empty string.
+    expect(participantName(owner({ username: null }), translator, 'en')).toBe(
+      'basket.people.owner'
+    );
   });
 });
 
@@ -258,16 +314,136 @@ describe('touchedCaption', () => {
     ).toBeNull();
   });
 
-  it('says "you" when the reader is the one who touched it', () => {
+  it('names the reader rather than calling them "you"', () => {
+    // Plan 0052 section 2.1, and the reason is the screen: this row is read on other
+    // people's phones over a trolley, so "you got it" was the one caption here whose
+    // meaning depended on whose hand the device was in.
+    //
+    // The reader here is `p-1`, whose row carries a typed name, and that name is what
+    // is drawn: the caption reads identically whoever is holding the phone, which is
+    // the whole of the report.
     expect(
       touchedCaption(
         line({ settled: 3, touchedBy: 'p-1', lastOutcome: 'BOUGHT' }),
         people,
         translator,
         'en',
-        'p-1'
+        'p-1',
+        'Daniel'
       )
-    ).toBe('basket.touched.got:{"name":"basket.touched.you"}');
+    ).toBe('basket.touched.got:{"name":"Marc"}');
+  });
+
+  it('names the reader from their account, not from the row they touched', () => {
+    // The owner's row carries no `displayName` at all, so without their account name
+    // there is nothing on the basket to name them with: the caption fell through to
+    // "Owner got it", a role where a person's name belongs.
+    const unnamed = new Map([['p-owner', owner()]]);
+
+    expect(
+      touchedCaption(
+        line({ settled: 3, touchedBy: 'p-owner', lastOutcome: 'BOUGHT' }),
+        unnamed,
+        translator,
+        'en',
+        'p-owner',
+        'Daniel'
+      )
+    ).toBe('basket.touched.got:{"name":"Daniel"}');
+  });
+
+  it('names somebody else by their own name, never by the reader’s', () => {
+    // `ownName` is the **reader's**, so it must reach only the reader's own row. A
+    // caption that applied it to whoever touched the line would put the person
+    // holding the phone's name on somebody else's purchase.
+    expect(
+      touchedCaption(
+        line({ settled: 3, touchedBy: 'p-1', lastOutcome: 'BOUGHT' }),
+        people,
+        translator,
+        'en',
+        'p-someone-else',
+        'Daniel'
+      )
+    ).toBe('basket.touched.got:{"name":"Marc"}');
+  });
+});
+
+/**
+ * Plan 0053, section 5: who put this here.
+ *
+ * The question a shop asks about a row nobody recognises. It is a second field
+ * rather than a reading of `touchedBy`, because that one moves on the first settle;
+ * what the row does with it is to yield to the more urgent sentence once anybody
+ * has touched the line.
+ */
+describe('addedCaption', () => {
+  const people = new Map<string, BasketParticipant>([
+    ['p-1', person({ id: 'p-1', displayName: 'Dani' })],
+    ['p-owner', owner()],
+  ]);
+
+  it('names whoever put the line there', () => {
+    expect(
+      addedCaption(
+        line({ createdBy: 'p-1' }),
+        people,
+        translator,
+        'en',
+        'p-someone-else'
+      )
+    ).toBe('basket.added.by:{"name":"Dani"}');
+  });
+
+  it('draws nothing for a line the run composed', () => {
+    // Which is every line in a basket nobody has typed into, so the ordinary
+    // basket looks exactly as it did before this plan.
+    expect(addedCaption(line(), people, translator, 'en', null)).toBeNull();
+  });
+
+  it('yields the moment somebody has touched the line', () => {
+    // "Who got the bread" is the more urgent of the two while somebody is
+    // shopping, and the row has three short lines. The field is still worth
+    // keeping past that point, which is why it is a second column.
+    expect(
+      addedCaption(
+        line({ createdBy: 'p-1', touchedBy: 'p-owner' }),
+        people,
+        translator,
+        'en',
+        null
+      )
+    ).toBeNull();
+  });
+
+  it('names the reader by their own account, like everybody else', () => {
+    // The owner's participant row carries no display name at all, so their own
+    // account name is the only thing that can name it. "You added this" is not
+    // drawn, for plan 0052 section 2.1's reason: the phone is often not yours.
+    expect(
+      addedCaption(
+        line({ createdBy: 'p-owner' }),
+        people,
+        translator,
+        'en',
+        'p-owner',
+        'Daniel'
+      )
+    ).toBe('basket.added.by:{"name":"Daniel"}');
+  });
+
+  it('draws nothing for somebody this basket no longer holds', () => {
+    // A participant removed since the line was added. "Added by " with nothing
+    // after it is worse than nothing, and the row is complete without it.
+    expect(
+      addedCaption(
+        line({ createdBy: 'p-gone' }),
+        people,
+        translator,
+        'en',
+        null
+      )
+    ).toBeNull();
   });
 });
 
