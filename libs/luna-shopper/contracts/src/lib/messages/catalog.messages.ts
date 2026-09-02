@@ -579,11 +579,10 @@ export interface GetItemsRequest {
    * Price the results at these scopes (plan 0066, section 2). Absent leaves
    * `bestOffer` absent, as it always was.
    *
-   * **Absent and empty are the same here**, which is not the convention
-   * {@link SearchItemsRequest} keeps. Search has to tell an admin listing
-   * everything from a user who shops nowhere, because the two want different
-   * result sets. A lookup by id returns the same items either way, so the only
-   * question is whether a price is attached, and one branch answers it.
+   * **Absent and empty are the same here.** A lookup by id returns the same
+   * items either way, so the only question is whether a price is attached, and
+   * one branch answers it. Plan 0069 made that the rule for every catalog read
+   * rather than this one's exception.
    */
   priceScopeIds?: string[];
 }
@@ -609,13 +608,13 @@ export interface SearchItemsRequest extends PageQuery {
   /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *
-   * **Absent and empty are different since plan 0049, section 3.** Absent is an
-   * unscoped read, which still ranks and quotes no price; that is what the admin
-   * surface does and it is not reachable from the gateway any more, because every
-   * gateway catalog read either carries scopes or resolves the caller's profile.
-   * An **empty array** is a caller who said where they shop and reached no chain
-   * we know, and it answers with an empty page: listing the global product table
-   * would answer a question they did not ask.
+   * **Absent and empty are the same answer since plan 0069, section 2**: the
+   * catalog is ranked and paged as usual and every price field comes back null.
+   * They were different for a while, an empty array answering an empty page, and
+   * that read as "there is no milk" to somebody who had merely refused every
+   * shop near them. A scope is how a price gets attached to a product, so having
+   * none says nothing about which products exist. Which of the three priceless
+   * states the caller is in is read from `coverage` on the scope view.
    */
   priceScopeIds?: string[];
 }
@@ -624,9 +623,8 @@ export interface SearchItemsRequest extends PageQuery {
  * Rank groups for a bare word, and price each one (plan 0048, section 3).
  *
  * It takes the same scope set as {@link SearchItemsRequest} and reads it the same
- * way: absent ranks unscoped and quotes no price, an empty array is a caller
- * whose place reached no chain and answers with an empty page (plan 0049,
- * section 3).
+ * way: with scopes or without, it ranks and pages, and without them every price
+ * field is null (plan 0069, section 2).
  */
 export interface SearchOffersRequest extends PageQuery {
   userId: string;
@@ -797,9 +795,11 @@ export interface ListPriceScopesRequest extends PageQuery {
 
 /**
  * "These postal codes, these chains, not those chains." Every field is optional
- * and a request with nothing positive in it resolves to nothing, which the
- * gateway never sends: an empty selector is `CATALOG_SCOPE_REQUIRED` (section 3),
- * decided where the profile is known rather than here.
+ * and a request with nothing positive in it resolves to nothing: no scopes, and
+ * no `coverage` either, since coverage is one row per postal code asked about.
+ * The gateway short circuits that case rather than sending it, because the
+ * answer is known without a round trip, and it is a legitimate answer rather
+ * than a failure (plan 0069, section 2).
  */
 export interface ResolvePriceScopesRequest {
   userId: string;

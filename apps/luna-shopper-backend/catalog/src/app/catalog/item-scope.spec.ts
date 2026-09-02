@@ -5,18 +5,19 @@ import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
 
 /**
- * The one rule plan 0049 section 3 adds to the catalog service itself: **absent
- * and empty scopes are different things.**
+ * The one rule plan 0069 leaves the catalog service: **absent and empty scopes
+ * are the same read.** Both rank, both page, and neither quotes a price.
  *
- * Absent is an unscoped read, which is what the admin surface does and what
- * every existing spec exercises. An empty array is a caller who said where they
- * shop and reached no chain we know, and it answers with an empty page rather
- * than with the global product table, because listing everything would answer a
- * question they did not ask.
+ * Plan 0049 section 3 made them different, an empty array answering an empty
+ * page on the grounds that listing everything answers a question the caller did
+ * not ask. What that actually produced was a shopper who switched off four
+ * chains, typed "milk", and was told there is no milk. A scope is how a price
+ * gets attached to a product; it says nothing about which products exist, so
+ * this file now asserts the branch is gone rather than which side of it a
+ * request takes.
  *
  * Everything about how the search itself ranks belongs to plan 0048 and lives in
- * `item.service.spec.ts` beside `catalog-search.integration.spec.ts`; this file
- * is only about which of the two branches a request takes.
+ * `item.service.spec.ts` beside `catalog-search.integration.spec.ts`.
  */
 function build() {
   const query = jest.fn(async () => [] as Item[]);
@@ -46,55 +47,88 @@ function build() {
     {} as unknown as ProductGroupService,
     {} as unknown as PlatformAdminService
   );
-  return { service, items, groups, query, getMany };
+  return { service, items, groups, prices, query, getMany };
 }
 
-describe('a scoped catalog read that resolved to nothing', () => {
-  it('answers an empty page rather than the whole catalog', async () => {
-    const { service, query, getMany } = build();
+describe('a catalog read whose scopes resolved to nothing', () => {
+  it('ranks the catalog rather than short circuiting to an empty page', async () => {
+    const { service, query } = build();
 
-    const page = await service.search({
+    await service.search({
       userId: 'user-1',
       query: 'milk',
       priceScopeIds: [],
     });
 
-    expect(page).toEqual({ items: [], nextCursor: null });
-    // Not merely empty: it never asked. An empty page produced by a query that
-    // matched nothing would be indistinguishable from this one to a reader of
-    // the response and completely different in cost.
-    expect(query).not.toHaveBeenCalled();
-    expect(getMany).not.toHaveBeenCalled();
+    // The point of the whole change: it asks. An empty page here read as "there
+    // is no milk" to somebody who had only refused every shop near them.
+    expect(query).toHaveBeenCalled();
+  });
+
+  it('quotes no price when there is no scope to quote from', async () => {
+    const { service, prices } = build();
+
+    await service.search({
+      userId: 'user-1',
+      query: 'milk',
+      priceScopeIds: [],
+    });
+
+    // Ranked and paged, but the price table is never opened: with no scopes
+    // there is nothing to attach, which is the only thing an empty scope set
+    // ever meant.
+    expect(prices.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('lists rather than refusing when there is no query either', async () => {
+    const { service, getMany } = build();
+
+    await service.search({ userId: 'user-1', priceScopeIds: [] });
+
+    expect(getMany).toHaveBeenCalled();
   });
 
   it('does the same for the group search the composer runs', async () => {
     const { service, groups } = build();
 
-    const page = await service.searchOffers({
+    await service.searchOffers({
       userId: 'user-1',
       query: 'milk',
       priceScopeIds: [],
     });
 
-    expect(page).toEqual({ items: [], nextCursor: null });
-    expect(groups.query).not.toHaveBeenCalled();
-  });
-
-  it('still lists when the scopes are absent rather than empty', async () => {
-    const { service, getMany } = build();
-
-    await service.search({ userId: 'user-1' });
-
-    // The unscoped read plan 0048 shipped, unchanged: it ranks, it quotes no
-    // price, and it is how the admin surface lists the catalog.
-    expect(getMany).toHaveBeenCalled();
-  });
-
-  it('still ranks groups when the scopes are absent', async () => {
-    const { service, groups } = build();
-
-    await service.searchOffers({ userId: 'user-1', query: 'milk' });
-
     expect(groups.query).toHaveBeenCalled();
+  });
+
+  it('reads empty scopes exactly as it reads absent ones', async () => {
+    const empty = build();
+    const absent = build();
+
+    await empty.service.search({
+      userId: 'user-1',
+      query: 'milk',
+      priceScopeIds: [],
+    });
+    await absent.service.search({ userId: 'user-1', query: 'milk' });
+
+    // Same SQL, same parameters: the two ways of having no scopes are one branch
+    // now, and this is the assertion that keeps them one.
+    expect(empty.query.mock.calls).toEqual(absent.query.mock.calls);
+  });
+
+  it('reads empty group scopes exactly as it reads absent ones', async () => {
+    const empty = build();
+    const absent = build();
+
+    await empty.service.searchOffers({
+      userId: 'user-1',
+      query: 'milk',
+      priceScopeIds: [],
+    });
+    await absent.service.searchOffers({ userId: 'user-1', query: 'milk' });
+
+    expect((empty.groups.query as jest.Mock).mock.calls).toEqual(
+      (absent.groups.query as jest.Mock).mock.calls
+    );
   });
 });

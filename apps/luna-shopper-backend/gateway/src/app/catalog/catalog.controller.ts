@@ -321,14 +321,15 @@ export class CatalogItemsController {
    * Ranked products (plan 0048, section 3), scoped to where the caller shops
    * (plan 0049, section 3).
    *
-   * **Sending no selector no longer means everything.** The caller's default (or
-   * named) profile is resolved for them, and a profile that holds neither a
-   * postal code nor a chain is answered with `catalog_scope_required` rather
-   * than with the whole catalog or with an empty page.
+   * **Sending no selector resolves the caller's profile**, default or named,
+   * rather than meaning everything. A profile that holds neither a postal code
+   * nor a chain resolves to no scopes, and the page comes back ranked with every
+   * price field null (plan 0069, section 2): the catalog is readable whether or
+   * not anything can be priced. `GET /v1/catalog/scope` is where a client learns
+   * which of the three priceless states it is in.
    */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
-  @ApiProblemResponses({ scopeRequired: true })
   async search(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchItemsQueryDto
@@ -357,7 +358,6 @@ export class CatalogItemsController {
    */
   @Get('offers')
   @ApiContractResponse(ITEM_PATTERNS.searchOffers)
-  @ApiProblemResponses({ scopeRequired: true })
   async searchOffers(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchOffersQueryDto
@@ -590,7 +590,6 @@ export class CatalogProductGroupsController {
    */
   @Get(':id/items')
   @ApiContractResponse(ITEM_PATTERNS.search)
-  @ApiProblemResponses({ scopeRequired: true })
   async items(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -642,14 +641,13 @@ export class CatalogSuggestController {
       'The dropdown, in the order it is to be drawn: every matching group first, then the individual products. One ordered array and not two lists, because the rule it carries is an ordering.',
     schema: componentRef(SUGGEST_SCHEMA),
   })
-  @ApiProblemResponses({ scopeRequired: true })
   async suggest(
     @AuthUser() user: CurrentUser,
     @Query() query: SuggestQueryDto
   ): Promise<CatalogSuggestResponse> {
     // Resolved once and passed to both halves, so the two reads cannot quote
-    // prices from different places, and so an empty profile refuses the whole
-    // dropdown rather than half of it.
+    // prices from different places, and so a caller with no scopes gets one
+    // priceless dropdown rather than half a priced one.
     const common = {
       userId: user.userId,
       query: query.q,
@@ -699,9 +697,16 @@ export class CatalogSuggestController {
  *
  * - **which scopes** its results came from, and by which rung of the ladder, so
  *   it can say "prices shown for Madrid" when `approximate` is set;
- * - **which postal codes nobody serves**, which is what turns an empty search
- *   into "no chain we know reaches 12345" rather than "there is nothing";
+ * - **which postal codes nobody serves**, which is what turns a page of unpriced
+ *   products into "no chain we know reaches 12345" rather than "there is
+ *   nothing";
  * - **which profile** answered, when the caller named none.
+ *
+ * Since plan 0069 it is also the only place the three priceless states are told
+ * apart, and it cannot fail: no scopes with no `coverage` is a caller who has
+ * said nothing, no scopes with `coverage` rows all unserved is an area we do not
+ * know yet, and no scopes with a served row is a caller who has refused
+ * everywhere they could shop. No error code could ever have expressed the third.
  *
  * It resolves exactly as a search does and shares its cache, so calling both is
  * one resolution and not two.
@@ -720,7 +725,6 @@ export class CatalogScopeController {
       'The scopes this caller shops at, the reason for each, and whether every postal code they gave is served by anybody we know.',
     schema: componentRef(SCOPE_SCHEMA),
   })
-  @ApiProblemResponses({ scopeRequired: true })
   describe(
     @AuthUser() user: CurrentUser,
     @Query() query: PriceScopedQueryDto

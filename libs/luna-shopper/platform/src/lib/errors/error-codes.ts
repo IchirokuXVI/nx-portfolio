@@ -36,18 +36,6 @@ export const ERROR_CODES = {
    */
   CLIENT_TOO_OLD: 'client_too_old',
   /**
-   * A catalog read that returns items or prices arrived with no scope selector,
-   * and the caller's shopping profile holds neither a postal code nor a chain
-   * (plan 0049, section 3).
-   *
-   * Its own code and not a `validation_failed`, because the frontend renders it
-   * as an **onboarding step** rather than as a failure: it sends the user to the
-   * profile page to say where they shop. The two answers it deliberately is not:
-   * everything, which nobody asked for, and an empty page, which reads as "there
-   * is nothing" and is a different and false statement.
-   */
-  CATALOG_SCOPE_REQUIRED: 'catalog_scope_required',
-  /**
    * The basket is `COMPLETED` or `ARCHIVED`, and the write asked to change it
    * (plan 0055, section 3.3).
    *
@@ -119,10 +107,6 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // be perfectly authorised; what is wrong is the software that sent it, and
   // "Upgrade Required" is the one status that says exactly that.
   [ERROR_CODES.CLIENT_TOO_OLD]: UPGRADE_REQUIRED,
-  // 400, sharing a status with validation and staying distinguishable by code,
-  // which is the whole reason the code exists: the client branches on it to open
-  // the profile page rather than to show a field error.
-  [ERROR_CODES.CATALOG_SCOPE_REQUIRED]: HttpStatus.BAD_REQUEST,
   // 409 rather than 400. The request was well formed and the caller is allowed
   // to make it; what refuses it is the state of the basket, which is what a
   // conflict is. It stays distinguishable from a plain `conflict` by its code,
