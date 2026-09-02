@@ -124,6 +124,22 @@ export const SUGGEST_MIN_CHARS = 3;
 export const SUGGEST_DEBOUNCE_MS = 200;
 
 /**
+ * How many suggestions of **each kind** the dropdown asks the catalog for.
+ *
+ * The server's limit is per kind rather than a total, because the response
+ * interleaves two reads (groups, then items) and a caller asking for ten wants ten
+ * of each to choose from rather than a split it cannot predict. So this is half of
+ * what can arrive: ten groups and ten items, twenty rows at the very most.
+ *
+ * Ten and not the server's default of twenty, which produced up to forty rows in a
+ * panel that shows four at a time. A dropdown somebody has to scroll through for
+ * half a minute is not offering a choice, it is asking for one, and the rows past
+ * the first handful are the ones the ranking already decided were the worst
+ * answers.
+ */
+export const SUGGEST_LIMIT_PER_KIND = 10;
+
+/**
  * `AddCommentDto.body`.
  *
  * Longer than a line, because a line is a thing to buy and a comment is a sentence

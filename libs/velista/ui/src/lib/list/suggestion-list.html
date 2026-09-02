@@ -8,7 +8,18 @@
   empty list.
 -->
 @if (suggestions().length > 0 || asWritten() !== null) {
-  <ul [attr.aria-label]="label() | rokuT" class="suggestions" role="listbox">
+  <!--
+    `above` is opaque and opens at its last row, which is what a panel drawn over
+    somebody's shopping list has to be. Stated by the caller through `placement`,
+    because the direction this list grows in is the caller's and always was.
+  -->
+  <ul
+    [attr.aria-label]="label() | rokuT"
+    [class.above]="placement() === 'above'"
+    #panel
+    class="suggestions"
+    role="listbox"
+  >
     @for (suggestion of suggestions(); track $index) {
       <li role="none">
         <!--

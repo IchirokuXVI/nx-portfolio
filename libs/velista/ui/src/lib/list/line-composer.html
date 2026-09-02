@@ -86,12 +86,20 @@
     screen telling somebody their shopping list is wrong. The free text row below is
     always the last one, so there is always something to press.
   -->
-  <lib-suggestion-list
-    (chose)="choose($event)"
-    (choseAsWritten)="submit()"
-    [asWritten]="canSubmit() ? content() : null"
-    [suggestions]="suggestions()"
-  />
+  <!--
+    Waved away by a click anywhere on the page that is not this row and not the panel
+    itself, and back on the next keystroke. A dropdown pinned over somebody's list
+    with no way to put it down is a screen you have to type your way out of.
+  -->
+  @if (suggestionsShown()) {
+    <lib-suggestion-list
+      (chose)="choose($event)"
+      (choseAsWritten)="submit()"
+      [asWritten]="canSubmit() ? content() : null"
+      [placement]="'above'"
+      [suggestions]="suggestions()"
+    />
+  }
 
   <!--
   A form, so Enter on the field submits without a keydown handler and the phone's
