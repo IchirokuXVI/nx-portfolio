@@ -1,8 +1,4 @@
-export {
-  EL_JAMON_ITEMS,
-  MERCADONA_AUTHORED,
-  SUPERCASH_ITEMS,
-} from './authored';
+export { EL_JAMON_ITEMS, SUPERCASH_ITEMS } from './authored';
 export { REFERENCE_GROUPS } from './groups';
 export {
   groupId,
@@ -12,15 +8,10 @@ export {
   supermarketId,
   supermarketItemId,
 } from './ids';
-export { MERCADONA_ASSIGNMENTS } from './mercadona';
+export { MERCADONA_ITEMS } from './mercadona';
 export {
   seedReferenceCatalog,
   type ReferenceSeedReport,
 } from './seed-reference-catalog';
 export { REFERENCE_STORES } from './stores';
-export type {
-  AuthoredItem,
-  HarvestedAssignment,
-  ReferenceGroup,
-  ReferenceStore,
-} from './types';
+export type { AuthoredItem, ReferenceGroup, ReferenceStore } from './types';

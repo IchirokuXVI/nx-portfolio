@@ -11,8 +11,8 @@ Three things at once, from one dataset:
    thing you can put on a shopping list or search for. This plan gives every one
    of them a friendly name and a group.
 2. **Test data that is always there.** A developer starting a stack, and staging
-   after a deploy, get a catalog with real products in it rather than the two
-   item demo world.
+   after a deploy, get a catalog with real products and real prices in it rather
+   than the two item demo world.
 3. **The start of the production catalog.** The same rows, behind a switch that
    is off until someone turns it on.
 
@@ -36,86 +36,103 @@ group, which is the un-normalized catalog with better spelling. `Chorizo` and
 `Salchichón` are two groups because you would say which you meant; every brand
 and size of chorizo is one.
 
-162 groups came out of it. Two that the obvious taxonomy demanded turned out to
+160 groups came out of it. Two that the obvious taxonomy demanded turned out to
 have no members and were deleted rather than kept: there is no plain `custard`,
 because the only natillas anyone bought is the +Proteínas one, and no `nougat`,
 because both times a receipt says `TURRÓN` it is turrón **ice cream**. A group
 with no members describes a catalog nothing here holds, and the spec fails on
 one.
 
-## 3. Mercadona: assignment, not creation
+## 3. What lands: the receipts, and only the receipts
 
-109 of the 117 Mercadona products already exist, because a discovery run
-harvested 4,196 of them. The seed does not create these and does not price them.
-It sets `productGroupId`, which is the one thing a harvest cannot work out for
-itself.
+**239 products.** 116 Mercadona, 16 El Jamón, 107 SuperCash — one per distinct
+receipt line, minus the two anchovy grades that are one product bought twice.
+
+That number is the design. The alternative was Mercadona's whole assortment, and
+it is the wrong answer twice over: a developer does not need 4,196 products to
+click through, and getting them would mean either an eighteen minute harvest per
+database or a three megabyte dump living in the repository. The products actually
+bought are a better fixture than the assortment, because a basket built from them
+is a basket somebody really filled.
+
+**Every one carries its receipt price**, as `USER_RECEIPT`, with the date it was
+observed. That is the only price these products have in a database that has never
+run a discovery, which is most of them.
+
+## 4. Mercadona works two ways, decided per product by EAN
+
+Mercadona is the one chain a harvest run also produces, so its 117 entries have
+to behave sensibly whether or not one has happened. The seed decides per product,
+by looking the barcode up:
+
+- **Nothing has this EAN.** The entry becomes the product: created with its
+  normalized name and priced from the receipt. This is a fresh database, and it
+  gets a small, real Mercadona catalog.
+- **A harvested row already has it.** That row _is_ the product, so only its
+  `productGroupId` is set. Its `OFFICIAL_WEB` price stands: it is newer than an
+  August receipt, and `supermarket_items` holds exactly one row per item per
+  scope, so writing the receipt price over it would destroy the better number
+  rather than add to it.
 
 **Keyed on EAN, never on the item's uuid.** The uuids belong to whichever
 database ran the discovery, so a mapping written against one developer's catalog
-matches nothing in another's and nothing at all in staging. The barcode is what
-the entity itself calls "the only identifier that joins a product across chains",
-all 109 have one, and it survives a re-harvest. Proved against a copy of a real
-harvest: 108 assignments, 108 matched, none missed.
+matches nothing in another's. The barcode is what the entity itself calls "the
+only identifier that joins a product across chains", and it survives a
+re-harvest.
 
-**The prices are deliberately not written.** A harvested row already carries an
-`OFFICIAL_WEB` price fresher than an August receipt, and `supermarket_items`
-holds exactly one row per item per scope. Writing the receipt price would not add
-an observation, it would destroy the better one. This is the schema deciding, not
-a preference: there is nowhere to put a second price, so the better one stays.
+`uq_items_ean` is UNIQUE where not null, which is what makes this a lookup rather
+than an insert — and what fixes an ordering: **a catalog dump is restored before
+this seed, never after.** Restoring one on top would try to insert a second row
+for a barcode the seed already owns.
 
-How the matching was done, since the file cannot show it: each till abbreviation
-was scored against all 4,196 harvested names by token overlap, and the receipt's
-own price had to agree before a match was accepted. 100 of 109 agree to the cent.
-The nine that do not are weighed products, where the receipt's figure is per
-kilogram and the catalog's `price` is for one fish; they agree against
-`unitPrice`. That is what resolved the fish counter, where the names are useless
-and the €/kg is exact: `TRUCHA ARCO IRIS` at 7,95 is _Trucha abierta en libro con
-cabeza_ at 7,95.
+Eight Mercadona products have no EAN here, because no harvest carries them at
+all. Five are a variant the snapshot holds under another flavour, which is
+ordinary staleness. `CABALLA ESTORNINO` is the other kind: the website sells four
+tinned mackerels and no fresh one, because the fish counter is not something a
+website sells.
 
-Eight Mercadona products matched nothing and are authored instead. Five are a
-variant the snapshot holds under another flavour, which is ordinary staleness.
-`CABALLA ESTORNINO` is the other kind: the website sells four tinned mackerels
-and no fresh one, because the fish counter is not something a website sells.
+How the 109 barcodes were matched, since the file cannot show it: each till
+abbreviation was scored against all 4,196 harvested names by token overlap, and
+the receipt's own price had to agree before a match was accepted. 100 of 109
+agree to the cent. The nine that do not are weighed products, where the receipt's
+figure is per kilogram and the catalog's `price` is for one fish; they agree
+against `unitPrice`. That is what resolved the fish counter, where the names are
+useless and the €/kg is exact: `TRUCHA ARCO IRIS` at 7,95 is _Trucha abierta en
+libro con cabeza_ at 7,95.
 
-## 4. El Jamón and SuperCash: creation, with names
+## 5. El Jamón and SuperCash
 
-Neither chain has a storefront a harvester can read, so every product is authored
-and every price came off a receipt as `USER_RECEIPT`. Both get one `STORE` scope
-with one location, which is exactly the case the scope entity describes for "a
-chain with no obtainable data".
+Neither chain has a storefront a harvester can read, so every one of their
+products is authored and every price came off a receipt. Both get one `STORE`
+scope with one location, which is exactly the case the scope entity describes for
+"a chain with no obtainable data".
 
-135 items in total (8 + 19 + 108). The normalization is the point: `GARBANZA
-FRASC` becomes Chickpeas in a Jar, `BOCADIT.CODAN` becomes Filled Mini Buns. A
-spec asserts no item kept the till's own shouty string as its name.
+The normalization is the point: `GARBANZA FRASC` becomes Chickpeas in a Jar,
+`BOCADIT.CODAN` becomes Filled Mini Buns. A spec asserts no item kept the till's
+own shouty string as its name.
 
-**Four lines are not products, and are kept anyway.** El Jamón prints
-`CARNICERIA`, `CHARCUTERIA` and `PANADERIA`, and SuperCash prints `Fruteria
-CASH2`: the counter rang the sale up and what was bought is recorded nowhere on
-the ticket. They get a group that says so. Inventing a cut of meat would store a
-guess as a fact, and dropping them would make a basket silently short of €5,97.
+**Four receipt lines are deliberately absent.** El Jamón prints `CARNICERIA`,
+`CHARCUTERIA` and `PANADERIA`, and SuperCash prints `Fruteria CASH2`: the counter
+rang the sale up and what was bought is recorded nowhere on the ticket. A catalog
+is a list of things you can buy again, and "whatever the butcher handed over on
+the 28th" is not one of them.
 
-## 5. Ids are derived, not written
+## 6. Ids are derived, not written
 
-139 groups, 135 items, two chains and their scopes and locations is far past the
-size where hand-written uuid constants are checkable. Every id is `uuidv5(kind +
-slug, fixed namespace)`, which makes the seed idempotent by primary key with no
-lookup table: `groupId('milk')` is the same uuid in every database, this week and
-next.
+160 groups, 239 products, three chains and their scopes and locations is far past
+the size where hand-written uuid constants are checkable. Every id is
+`uuidv5(kind + slug, fixed namespace)`, which makes the seed idempotent by
+primary key with no lookup table: `groupId('milk')` is the same uuid in every
+database, this week and next.
 
-The namespace is fixed forever. Changing it renames every row, which to a
-database is 274 deletions and 274 insertions, and any shopping line pointing at
-an old id would point at nothing.
+The namespace is fixed forever. Changing it renames every row, and any shopping
+line pointing at an old id would point at nothing.
 
-## 6. Running it
+## 7. Running it
 
 The seeder never deletes. That is the one way it differs from the demo world
 seeder, which owns its whole graph and clears it: this one lives in a database
-that may also hold 4,196 harvested products and every list built on them.
-
-It degrades in three independent pieces. Groups always land. El Jamón and
-SuperCash always land. The Mercadona assignment matches whatever is there and
-reports what is not, so a developer who has never run a discovery still gets the
-groups and both receipt chains.
+that may also hold a full harvest and every list built on top of it.
 
 **It refuses to overwrite a price whose source is `ADMIN`.** Plan 0038 section
 6.5 is the rule, and it bites harder here than anywhere: this runs on every boot,
@@ -129,28 +146,53 @@ restart.
 | Staging    | Helm hook Job, `referenceSeed.enabled: true`                |
 | Production | the same Job, off until someone turns it on                 |
 
-The staging and production difference is deliberate. A `pre-upgrade` hook runs on
-every deploy, and a job that rewrites 274 rows each time a micro-frontend ships is
-not something to inherit without deciding. Seeding production is: set the flag,
-deploy, confirm, set it back.
-
 In the dev stack a failure is reported and does not stop `up`. A database that
 came up and migrated is usable without the seed, and refusing to finish over it
 would be the tail wagging the dog.
 
-## 7. What staging actually gets
+## 8. Seeding production, once
 
-Worth being explicit, because the harvester is off there and that decides it. No
-harvest means no Mercadona products, so the EAN assignment matches nothing and
-says so. What lands is 162 groups and two chains with 135 products: a complete
-catalog for El Jamón and SuperCash, an empty one for Mercadona. That is the
-honest consequence of not running discovery in staging, not a fault in the seed.
+Production's flag is off, and that is deliberate rather than an oversight: a
+`pre-upgrade` hook fires on **every** deploy, and a job that rewrites the
+reference catalog each time a micro-frontend ships is not something to inherit
+without deciding. Seeding it is therefore an explicit, ordered operation.
 
-## 8. What this is not
+1. **Decide whether the full Mercadona assortment is going too.** If it is,
+   restore the catalog dump first — `k8s/catalog-seed/README.md` has the
+   procedure. Order matters and is not negotiable: the dump must land before this
+   seed, because both write products keyed on the same barcodes and
+   `uq_items_ean` will refuse the second one. If it is not, skip this step and
+   production gets the 239 receipt products, which is a complete and honest
+   catalog on its own.
+2. **Staging first, always.** Set `referenceSeed.enabled: true` in
+   `values.staging.yaml` (it already is), deploy, and read the Job's log. It
+   prints what it created, adopted and left alone.
+3. **Turn it on for production**: `referenceSeed.enabled: true` in
+   `values.production.yaml`, then deploy a release as usual. The Job runs once,
+   on the `pre-upgrade` hook, before any new pod takes traffic.
+4. **Check it landed**, in the catalog database:
+
+   ```sh
+   kubectl exec -n nx-portfolio luna-shopper-backend-catalog-db-0 \
+     -- psql -U luna_catalog -d luna_catalog \
+     -c 'select count(*) from product_groups' \
+     -c 'select count(*) from items where "productGroupId" is not null'
+   ```
+
+5. **Turn it back off** and leave it off. Nothing is lost by doing so: the rows
+   are already there, and the seed is idempotent if it is ever needed again.
+
+Steps 3 and 5 are two deploys. That is the cost of not having a job that rewrites
+catalog rows on every release, and it is worth paying once.
+
+## 9. What this is not
 
 - **Not a receipt reader.** Backlog 0008 is that. Everything here was transcribed
   once, by hand, and checked against the totals. Nothing in the app parses a
   ticket.
+- **Not the Mercadona assortment.** 116 products, not 4,196. The assortment
+  travels as a dump when it is wanted, by a separate and already documented
+  procedure.
 - **Not `ItemPrice`.** Still one price per item per scope, one source winning by
   overwriting, no history. The provenance columns are what make the multi-source
   model possible later, not a piece of it.

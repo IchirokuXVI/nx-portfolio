@@ -13,158 +13,23 @@ const {
   PANTRY,
   PERSONAL_CARE,
   PRODUCE,
-  SEAFOOD,
   SNACKS,
 } = ItemCategory;
 
 /**
- * The eight Mercadona products the harvest does not carry (plan 0067, section
- * 4.1).
- *
- * Every one was bought on a receipt and every one failed to match, and the two
- * reasons are worth separating. Five are a variant of something the snapshot
- * does hold under a different scent or flavour, which is the ordinary staleness
- * of a catalog snapshot against a shop. `CABALLA ESTORNINO` is the other kind:
- * the online catalog carries four tinned mackerels and no fresh one, because the
- * fish counter is not something the website sells.
- */
-export const MERCADONA_AUTHORED: AuthoredItem[] = [
-  {
-    slug: 'papel-aluminio',
-    name: { en: 'Aluminium Foil', es: 'Papel de aluminio' },
-    group: 'aluminium-foil',
-    category: HOUSEHOLD,
-    defaultUnit: UNIT,
-    brand: 'Bosque Verde',
-    receipt: 'PAPEL ALUMINIO',
-    price: 2.3,
-    observedAt: '2026-05-21',
-  },
-  {
-    slug: 'frankfurt-viena-pavo',
-    name: { en: 'Turkey Vienna Sausages', es: 'Salchichas Viena de pavo' },
-    group: 'vienna-sausages',
-    category: MEAT,
-    defaultUnit: KILOGRAM,
-    brand: 'Hacendado',
-    receipt: 'FRANKFURT VIENA PAVO',
-    price: 1.5,
-    observedAt: '2026-08-27',
-  },
-  {
-    slug: 'friegasuelos-tropical',
-    name: { en: 'Tropical Floor Cleaner', es: 'Friegasuelos tropical' },
-    group: 'floor-cleaner',
-    category: HOUSEHOLD,
-    defaultUnit: LITER,
-    brand: 'Bosque Verde',
-    receipt: 'FRIEGASUELO TROPICAL',
-    price: 0.95,
-    observedAt: '2026-08-13',
-  },
-  {
-    slug: 'choco-swing',
-    name: { en: 'Swing Chocolate Bar', es: 'Chocolate Swing' },
-    group: 'milk-chocolate',
-    category: SNACKS,
-    defaultUnit: KILOGRAM,
-    brand: 'Hacendado',
-    receipt: 'CHOCO SWING',
-    price: 3.95,
-    observedAt: '2026-05-21',
-  },
-  {
-    slug: 'colgador-wc-dalia',
-    name: { en: 'Dahlia Toilet Rim Block', es: 'Colgador WC dalia' },
-    group: 'toilet-rim-block',
-    category: HOUSEHOLD,
-    defaultUnit: UNIT,
-    brand: 'Bosque Verde',
-    receipt: 'COLGADOR WC DALIA',
-    price: 1.3,
-    observedAt: '2026-06-17',
-  },
-  {
-    slug: 'fussion-avellana',
-    name: {
-      en: 'Hazelnut Filled Chocolate',
-      es: 'Chocolate Fussion de avellana',
-    },
-    group: 'filled-chocolate',
-    category: SNACKS,
-    defaultUnit: KILOGRAM,
-    brand: 'Hacendado',
-    receipt: 'FUSSION AVELLANA',
-    price: 1.75,
-    observedAt: '2026-06-17',
-  },
-  {
-    slug: 'cerveza-clasica-pet',
-    name: { en: 'Lager Bottle Pack', es: 'Cerveza clásica en botella' },
-    group: 'lager',
-    category: BEVERAGES,
-    defaultUnit: LITER,
-    brand: 'Steinburg',
-    receipt: 'CERVEZA CLASICA PET',
-    price: 5.4,
-    observedAt: '2026-08-13',
-  },
-  {
-    slug: 'caballa-estornino',
-    name: { en: 'Fresh Mackerel', es: 'Caballa estornino' },
-    group: 'mackerel',
-    category: SEAFOOD,
-    defaultUnit: KILOGRAM,
-    receipt: 'CABALLA ESTORNINO',
-    price: 3.95,
-    observedAt: '2026-08-27',
-    perKilo: true,
-  },
-];
-
-/**
- * El Jamón, 19 products (plan 0067, section 4.2).
+ * El Jamón, 16 products (plan 0067, section 4.2).
  *
  * This is the store whose receipt names most need the exercise: `GARBANZA
- * FRASC` and `BOCADIT.CODAN` are not names anybody would search for, and three
- * lines are not products at all. `CARNICERIA`, `CHARCUTERIA` and `PANADERIA`
- * are the counter that rang the sale up, so what was actually bought is not
- * recorded anywhere on the ticket. They are kept, against a group that says so,
- * rather than dropped: the money was spent and a basket that silently omits
- * €5.97 of meat is a worse answer than one that admits it does not know which
- * cut.
+ * FRASC` and `BOCADIT.CODAN` are not names anybody would search for.
+ *
+ * Three of its receipt lines are **not here**, and that is the deliberate part.
+ * `CARNICERIA`, `CHARCUTERIA` and `PANADERIA` are the counter that rang the sale
+ * up, not a product: what was bought is recorded nowhere on the ticket. A
+ * catalog is a list of things you can buy again, and "whatever the butcher
+ * handed over on the 28th" is not one of them. The receipt total still knows the
+ * money was spent; the catalog does not have to invent a product to hold it.
  */
 export const EL_JAMON_ITEMS: AuthoredItem[] = [
-  {
-    slug: 'carniceria',
-    name: { en: 'Butcher Counter Purchase', es: 'Compra de carnicería' },
-    group: 'butcher-counter',
-    category: MEAT,
-    defaultUnit: UNIT,
-    receipt: 'CARNICERIA',
-    price: 5.97,
-    observedAt: '2026-08-28',
-  },
-  {
-    slug: 'charcuteria',
-    name: { en: 'Deli Counter Purchase', es: 'Compra de charcutería' },
-    group: 'butcher-counter',
-    category: MEAT,
-    defaultUnit: UNIT,
-    receipt: 'CHARCUTERIA',
-    price: 0.91,
-    observedAt: '2026-08-28',
-  },
-  {
-    slug: 'panaderia',
-    name: { en: 'Bakery Rolls', es: 'Pan de panadería' },
-    group: 'bread-rolls',
-    category: BAKERY,
-    defaultUnit: UNIT,
-    receipt: 'PANADERIA',
-    price: 0.33,
-    observedAt: '2026-07-25',
-  },
   {
     slug: 'judias-findus',
     name: { en: 'Frozen Green Beans', es: 'Judías verdes congeladas' },
@@ -336,7 +201,7 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
 ];
 
 /**
- * SuperCash, 108 products (plan 0067, section 4.3).
+ * SuperCash, 107 products (plan 0067, section 4.3).
  *
  * The till prints a readable name already, so normalizing here is mostly
  * pulling the brand out of the description and dropping the pack size, which is
@@ -345,8 +210,8 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
  * `Laca de uñas E.LLORCA nº NNN` rows stay eight items, because they are eight
  * different colours and one group already says they are the same purchase.
  *
- * `Fruteria CASH2` is SuperCash's counter line, and gets the same treatment as
- * El Jamón's: a named unknown rather than a silent hole.
+ * `Fruteria CASH2` is left out for the same reason as El Jamón's three counter
+ * lines: it names the counter, not what came off it.
  */
 export const SUPERCASH_ITEMS: AuthoredItem[] = [
   {
@@ -914,16 +779,6 @@ export const SUPERCASH_ITEMS: AuthoredItem[] = [
     receipt: 'Frutas+leche ALTEZA caribe 6x200 ml',
     price: 1.16,
     observedAt: '2026-08-28',
-  },
-  {
-    slug: 'fruteria-cash2',
-    name: { en: 'Greengrocer Counter Purchase', es: 'Compra de frutería' },
-    group: 'greengrocer-counter',
-    category: PRODUCE,
-    defaultUnit: UNIT,
-    receipt: 'Fruteria CASH2',
-    price: 1.34,
-    observedAt: '2026-08-21',
   },
   {
     slug: 'funda-multitaladro',

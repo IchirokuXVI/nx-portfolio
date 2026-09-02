@@ -278,19 +278,11 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
       es: ['torreznos', 'torreznillos', 'cortezas'],
     },
   },
-  {
-    slug: 'butcher-counter',
-    name: { en: 'Butcher Counter', es: 'Carnicería' },
-    referenceUnit: UnitOfMeasure.KILOGRAM,
-    // The one group that is deliberately a department. El Jamón's till prints
-    // `CARNICERIA` with no product behind it, so the receipt records a purchase
-    // whose identity is genuinely unknown; inventing a cut would be a guess
-    // stored as a fact.
-    synonyms: {
-      en: ['butcher', 'meat counter'],
-      es: ['carnicería', 'charcutería'],
-    },
-  },
+  // No `butcher-counter` group, and none for the greengrocer either. Four
+  // receipt lines name the counter that rang the sale up rather than anything
+  // that came off it — `CARNICERIA`, `CHARCUTERIA`, `PANADERIA`, `Fruteria
+  // CASH2` — and a department is not a thing you can buy again, which is the
+  // only test a group here has to pass.
 
   // --- Dairy, eggs and desserts -------------------------------------------
   {
@@ -1394,19 +1386,6 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
     synonyms: {
       en: ['tape', 'sellotape', 'adhesive tape'],
       es: ['cinta adhesiva', 'celo'],
-    },
-  },
-
-  // --- Counters without a product ------------------------------------------
-  {
-    slug: 'greengrocer-counter',
-    name: { en: 'Greengrocer Counter', es: 'Frutería' },
-    referenceUnit: UnitOfMeasure.KILOGRAM,
-    // As with the butcher counter: SuperCash prints `Fruteria CASH2` and the
-    // fruit itself is not on the receipt at all.
-    synonyms: {
-      en: ['greengrocer', 'fruit counter'],
-      es: ['frutería', 'fruta'],
     },
   },
 ];

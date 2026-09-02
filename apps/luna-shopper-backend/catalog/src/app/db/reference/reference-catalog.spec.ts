@@ -1,8 +1,7 @@
 import { groupId, itemId, supermarketItemId } from './ids';
 import {
   EL_JAMON_ITEMS,
-  MERCADONA_ASSIGNMENTS,
-  MERCADONA_AUTHORED,
+  MERCADONA_ITEMS,
   REFERENCE_GROUPS,
   REFERENCE_STORES,
   SUPERCASH_ITEMS,
@@ -10,7 +9,7 @@ import {
 import type { AuthoredItem } from './types';
 
 const ALL_ITEMS: [string, AuthoredItem[]][] = [
-  ['mercadona', MERCADONA_AUTHORED],
+  ['mercadona', MERCADONA_ITEMS],
   ['el-jamon', EL_JAMON_ITEMS],
   ['supercash', SUPERCASH_ITEMS],
 ];
@@ -39,10 +38,7 @@ describe('reference catalog', () => {
      * necessary and turned out to have nothing in them.
      */
     it('gives every group at least one member', () => {
-      const used = new Set([
-        ...EVERY_ITEM.map(({ it }) => it.group),
-        ...MERCADONA_ASSIGNMENTS.map((a) => a.group),
-      ]);
+      const used = new Set([...EVERY_ITEM.map(({ it }) => it.group)]);
       const orphans = REFERENCE_GROUPS.map((g) => g.slug).filter(
         (s) => !used.has(s)
       );
@@ -51,10 +47,9 @@ describe('reference catalog', () => {
 
     it('assigns every product to a group that exists', () => {
       const known = new Set(REFERENCE_GROUPS.map((g) => g.slug));
-      const unknown = [
-        ...EVERY_ITEM.map(({ it }) => it.group),
-        ...MERCADONA_ASSIGNMENTS.map((a) => a.group),
-      ].filter((g) => !known.has(g));
+      const unknown = EVERY_ITEM.map(({ it }) => it.group).filter(
+        (g) => !known.has(g)
+      );
       expect(unknown).toEqual([]);
     });
 
@@ -101,25 +96,31 @@ describe('reference catalog', () => {
     });
   });
 
-  describe('mercadona assignments', () => {
-    it('names each EAN once, so no product is assigned two groups', () => {
-      const eans = MERCADONA_ASSIGNMENTS.map((a) => a.ean);
+  describe('barcodes', () => {
+    it('claims each EAN once', () => {
+      // `uq_items_ean` is UNIQUE where not null, so a repeated barcode is not a
+      // duplicate row, it is an insert that fails.
+      const eans = EVERY_ITEM.map(({ it }) => it.ean).filter(Boolean);
       expect(new Set(eans).size).toBe(eans.length);
     });
 
-    it('carries an EAN that looks like one', () => {
-      for (const a of MERCADONA_ASSIGNMENTS)
-        expect(a.ean).toMatch(/^\d{8,14}$/);
+    it('carries EANs that look like barcodes', () => {
+      for (const { it } of EVERY_ITEM) {
+        if (it.ean) expect(it.ean).toMatch(/^\d{8,14}$/);
+      }
     });
 
-    it('creates no item of its own', () => {
-      // These products exist because a harvest run created them. If the
-      // reference catalog ever authored one of the same names it would be a
-      // second row for one product, which is the thing the EAN key exists to
-      // prevent.
-      const authored = new Set(EVERY_ITEM.map(({ it }) => it.receipt));
-      const both = MERCADONA_ASSIGNMENTS.filter((a) => authored.has(a.receipt));
-      expect(both).toEqual([]);
+    it('gives barcodes only to Mercadona', () => {
+      // The join to a harvest is a Mercadona affair; nothing harvests El Jamón
+      // or SuperCash, so a barcode there would be a claim nothing can check.
+      for (const it of [...EL_JAMON_ITEMS, ...SUPERCASH_ITEMS]) {
+        expect(it.ean).toBeUndefined();
+      }
+    });
+
+    it('knows the eight Mercadona products no harvest carries', () => {
+      const withoutEan = MERCADONA_ITEMS.filter((it) => !it.ean);
+      expect(withoutEan).toHaveLength(8);
     });
   });
 
@@ -157,9 +158,11 @@ describe('reference catalog', () => {
       }
     });
 
-    it('does not redeclare Mercadona', () => {
-      // It comes from the harvest, with its own warehouse scopes. A second one
-      // here would be a second chain with the same name and different prices.
+    it('leaves Mercadona to the seeder', () => {
+      // Mercadona is not here because it is the one chain that may already
+      // exist: the seeder looks it up by brand key and only creates it when no
+      // harvest has. Declaring it beside El Jamón would make that a second
+      // chain with the same name and different prices.
       expect(REFERENCE_STORES.map((s) => s.slug)).not.toContain('mercadona');
     });
   });

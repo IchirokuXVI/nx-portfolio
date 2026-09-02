@@ -125,14 +125,17 @@ lunaShopperBackend:
   # The reference catalog, off (plan 0067), and this is a deliberate difference
   # from staging rather than an oversight.
   #
-  # The normalized groups are meant to be production's starting catalog, so this
-  # will be turned on once — but a Job on `pre-upgrade` runs on every deploy, and
-  # what is appropriate for seeding an empty catalog is not appropriate as a
-  # standing job that rewrites 274 rows each time a micro-frontend ships. The
-  # seed is idempotent and preserves hand-entered prices, so a re-run is not
-  # destructive; it is simply not something to inherit without deciding.
+  # It is meant to be production's starting catalog, so this gets turned on
+  # once — but the Job runs on `pre-upgrade`, which fires on every deploy, and a
+  # standing job that rewrites catalog rows each time a micro-frontend ships is
+  # not something to inherit without deciding. The seed is idempotent and
+  # preserves hand-entered prices, so a re-run is not destructive; it is simply
+  # not free, and not automatic.
   #
-  # To seed production: set this true, deploy, confirm, set it false again.
+  # Section 8 of plan 0067 is the ordered procedure. In short: staging first,
+  # then set this true, deploy, verify, set it false again. If the full Mercadona
+  # assortment is going too, restore the dump BEFORE the seed, never after —
+  # `uq_items_ean` will refuse the second writer.
   referenceSeed:
     enabled: false
 

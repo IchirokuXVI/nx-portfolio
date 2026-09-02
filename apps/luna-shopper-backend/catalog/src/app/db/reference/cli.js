@@ -30,8 +30,8 @@ require('./seed-reference-catalog')
     await dataSource.destroy();
     console.log(
       `[seed-reference] ${r.groups} group(s), ${r.stores} store(s), ` +
-        `${r.items} item(s), ${r.prices} price(s); ` +
-        `${r.assigned} harvested row(s) grouped, ${r.unmatched} not carried here, ` +
+        `${r.items} product(s) created, ${r.prices} price(s) written; ` +
+        `${r.adopted} product(s) already harvested and only grouped, ` +
         `${r.preserved} hand-entered price(s) left alone`
     );
   })
