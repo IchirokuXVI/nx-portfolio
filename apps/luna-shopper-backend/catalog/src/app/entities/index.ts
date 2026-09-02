@@ -1,4 +1,5 @@
 import { Item } from './item.entity';
+import { PostalCodePoint } from './postal-code-point.entity';
 import { PriceScope } from './price-scope.entity';
 import { ProductGroup } from './product-group.entity';
 import { SupermarketItem } from './supermarket-item.entity';
@@ -8,6 +9,7 @@ import { Supermarket } from './supermarket.entity';
 
 export { BaseEntity } from './base.entity';
 export { Item } from './item.entity';
+export { PostalCodePoint } from './postal-code-point.entity';
 export { PriceScope } from './price-scope.entity';
 export { ProductGroup } from './product-group.entity';
 export { SupermarketItem } from './supermarket-item.entity';
@@ -25,4 +27,7 @@ export const CATALOG_ENTITIES = [
   Item,
   SupermarketItem,
   SupermarketLocationItem,
+  // Reference data, loaded by a migration and never written by a service
+  // (plan 0060, section 2).
+  PostalCodePoint,
 ];

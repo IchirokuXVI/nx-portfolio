@@ -912,3 +912,80 @@ export type ProductGroupOrder = (typeof PRODUCT_GROUP_ORDERS)[number];
 
 export const SUPERMARKET_ORDERS = ['name', 'created', 'updated'] as const;
 export type SupermarketOrder = (typeof SUPERMARKET_ORDERS)[number];
+
+// --- Postal code geography (plan 0060) --------------------------------------
+
+/**
+ * Two reads over the postal code centroids catalog ships (plan 0060,
+ * sections 5 and 7).
+ *
+ * **Internal to the backend.** Nothing user facing calls either directly: core
+ * asks `nearby` when it widens a profile (plan 0062), and `nearest` reaches a
+ * device through a core route that plan 0058 defines. A gateway route here
+ * would be a geocoding service nobody asked for, so there is none, and neither
+ * request carries a `userId`.
+ *
+ * Both answer from a shipped table, not a network: no rate limit, no third
+ * party, and a device's coordinates never leave our own process.
+ */
+export const POSTAL_CODE_PATTERNS = {
+  /** Which postal code is this point in, if any centroid is close enough. */
+  nearest: 'postalCode.nearest',
+  /** Which postal codes have their centroid within a radius of this one. */
+  nearby: 'postalCode.nearby',
+} as const;
+
+/** A postal code and how far its centroid is from what was asked about. */
+export interface PostalCodeDistanceView {
+  postalCode: string;
+  distanceMetres: number;
+}
+
+export interface ResolveNearestPostalCodeRequest {
+  /** ISO 3166-1 alpha-2, lowercase. Only `es` ships today. */
+  country: string;
+  latitude: number;
+  longitude: number;
+  /**
+   * Beyond this the answer is null rather than a confident wrong code (plan
+   * 0060, section 6): the nearest centroid to somebody at the edge of a large
+   * rural code may belong to the neighbouring one. Configuration, not a
+   * constant; plan 0062 owns the default.
+   */
+  maxDistanceMetres: number;
+}
+
+/**
+ * **Approximate**: a centroid, never a boundary. A client shows the resolved
+ * code for confirmation rather than adopting it silently.
+ */
+export interface NearestPostalCodeView {
+  country: string;
+  nearest: PostalCodeDistanceView | null;
+}
+
+export interface ListNearbyPostalCodesRequest {
+  /** ISO 3166-1 alpha-2, lowercase. */
+  country: string;
+  /** The code to measure from; the answer never includes it. */
+  postalCode: string;
+  radiusMetres: number;
+}
+
+/**
+ * Centroid to centroid, so two adjacent codes whose centres sit further apart
+ * than the radius are neighbours in reality and not here. Acceptable for
+ * widening a net a little, unacceptable as a statement about geography.
+ */
+export interface NearbyPostalCodesView {
+  country: string;
+  postalCode: string;
+  /**
+   * Whether the code asked about is in the table at all. An unknown code gets
+   * an empty answer too, and a caller that wants to tell "nothing within 2 km"
+   * from "we have no idea where this is" reads this.
+   */
+  known: boolean;
+  /** Nearest first, never the code asked about. Empty when nothing is in range. */
+  postalCodes: PostalCodeDistanceView[];
+}

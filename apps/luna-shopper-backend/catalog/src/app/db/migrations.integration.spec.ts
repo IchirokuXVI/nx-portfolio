@@ -51,9 +51,38 @@ describeIntegration('catalog schema (real Postgres)', () => {
       'supermarket_location_items',
       // Plan 0048.
       'product_groups',
+      // Plan 0060.
+      'postal_code_points',
     ]) {
       expect(names.has(table)).toBe(true);
     }
+  });
+
+  it('ships the postal code centroids, loaded by the migration and not by a seed (plan 0060, section 4)', async () => {
+    // The whole point of loading through a migration is that a fresh database
+    // has the rows with no step beyond migration:run. Roughly eleven thousand
+    // Spanish codes; a count near zero means the dataset module was not
+    // bundled, which is the failure the plan's section 4 exists to prevent.
+    const [{ count }] = await dataSource.query(
+      `SELECT count(*)::int AS "count" FROM "postal_code_points" WHERE "country" = 'es'`
+    );
+    expect(count).toBeGreaterThan(10_000);
+
+    const [cordoba] = await dataSource.query(
+      `SELECT "latitude", "longitude" FROM "postal_code_points"
+       WHERE "country" = 'es' AND "postalCode" = '14013'`
+    );
+    expect(cordoba.latitude).toBeCloseTo(37.89, 1);
+    expect(cordoba.longitude).toBeCloseTo(-4.77, 1);
+
+    // The bounding box read is what the btree index is for.
+    const indexes = await dataSource.query(
+      `SELECT indexname FROM pg_indexes WHERE tablename = 'postal_code_points'`
+    );
+    const names = new Set(
+      indexes.map((i: { indexname: string }) => i.indexname)
+    );
+    expect(names.has('ix_postal_code_points_geo')).toBe(true);
   });
 
   it('carries the search columns, their indexes and pg_trgm (plan 0048, section 2)', async () => {

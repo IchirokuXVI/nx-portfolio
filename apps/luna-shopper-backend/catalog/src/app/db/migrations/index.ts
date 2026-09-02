@@ -2,6 +2,7 @@ import { InitialCatalogSchema1756000500000 } from './1756000500000-InitialCatalo
 import { PriceScopesAndSourceProvenance1756100000000 } from './1756100000000-PriceScopesAndSourceProvenance';
 import { CatalogSearchAndProductGroups1756200000000 } from './1756200000000-CatalogSearchAndProductGroups';
 import { SupermarketDefaultScope1756300000000 } from './1756300000000-SupermarketDefaultScope';
+import { PostalCodePoints1756400000000 } from './1756400000000-PostalCodePoints';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -17,4 +18,5 @@ export const CATALOG_MIGRATIONS = [
   PriceScopesAndSourceProvenance1756100000000,
   CatalogSearchAndProductGroups1756200000000,
   SupermarketDefaultScope1756300000000,
+  PostalCodePoints1756400000000,
 ];

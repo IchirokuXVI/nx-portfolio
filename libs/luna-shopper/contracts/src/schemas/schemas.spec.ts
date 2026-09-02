@@ -3,6 +3,7 @@ import { RealtimeEvent } from '../lib/events/realtime.events';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ITEM_PATTERNS,
+  POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
@@ -63,6 +64,7 @@ describe('contract schemas', () => {
       ...Object.values(SUPERMARKET_ITEM_PATTERNS),
       ...Object.values(SUPERMARKET_LOCATION_ITEM_PATTERNS),
       ...Object.values(PRICE_SCOPE_PATTERNS),
+      ...Object.values(POSTAL_CODE_PATTERNS),
       ...Object.values(HARVEST_PATTERNS),
       ...Object.values(DISCOVERED_PLACE_PATTERNS),
       ...Object.values(ITEM_SOURCE_REF_PATTERNS),
