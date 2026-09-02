@@ -139,12 +139,34 @@ export class LinePage {
    * again. Nothing waits for it: the chips draw with no names until it lands.
    */
   private readonly _loadNames = effect(() => {
-    const itemIds = this._line()?.itemIds ?? [];
+    const itemIds = this._itemIds();
     untracked(() => void this._itemNames.ensure(itemIds));
   });
 
   private readonly _line = computed(() =>
     this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
+  );
+
+  /**
+   * The line's product set, compared by value.
+   *
+   * `LineStore` replaces the whole `Line` object on every write to it, and one edit is
+   * more than one write: the optimistic patch, the server's row and the realtime echo
+   * of that same change each land separately, as do a quantity adjustment, a claim and
+   * a settlement. Keyed on the object, the two reads below woke for all of them, and
+   * the "also on" read is one request per product, so adding a product to a line
+   * carrying eight asked twenty seven times over for an answer that had changed once.
+   *
+   * So the effects that care about *which* products the line carries watch this rather
+   * than the line, and a write that leaves the set alone wakes neither. Compared by
+   * value because the array is rebuilt with the row.
+   */
+  private readonly _itemIds = computed<readonly string[]>(
+    () => this._line()?.itemIds ?? [],
+    {
+      equal: (a, b) =>
+        a.length === b.length && a.every((itemId, i) => itemId === b[i]),
+    }
   );
 
   private readonly _permissions = computed(
@@ -236,19 +258,20 @@ export class LinePage {
   readonly alsoOn = signal<AlsoOnVm | null>(null);
 
   private readonly _loadAlsoOn = effect(() => {
-    const line = this._line();
+    const itemIds = this._itemIds();
     const listId = this.listId();
 
     untracked(() => {
       // A line with no product has no question to ask, and the server refuses it
       // rather than answering empty. Asking anyway would turn a legitimate absence
-      // into an error in the console.
-      if (line === undefined || line.itemIds.length === 0) {
+      // into an error in the console. A line that has not loaded yet reads the same
+      // way, and gains its products the moment it does.
+      if (itemIds.length === 0) {
         this.alsoOn.set(null);
         return;
       }
 
-      void this._resolveAlsoOn(line.itemIds, listId);
+      void this._resolveAlsoOn(itemIds, listId);
     });
   });
 
@@ -262,11 +285,7 @@ export class LinePage {
     // this is an indicator, and a partial answer is more useful than none. What it must
     // never do is become null-because-it-failed on top of an answer it already has.
     const answers = await Promise.all(
-      itemIds.map((itemId) =>
-        this._lineService
-          .listsHoldingItem(itemId, { excludeListId: listId })
-          .catch(() => null)
-      )
+      itemIds.map((itemId) => this._askAbout(itemId, listId))
     );
 
     if (seq !== this._alsoOnSeq) {
@@ -301,6 +320,41 @@ export class LinePage {
   }
 
   private _alsoOnSeq = 0;
+
+  /**
+   * One product's answer, asked once for the visit.
+   *
+   * The union is rebuilt whenever the set changes, and the ordinary way it changes is a
+   * product being added: the products already on the line are unaffected by that, so
+   * re-asking for them is a request per product for an answer this page is holding.
+   * With the set watched by value above, adding a product to a line carrying eight is
+   * one request rather than twenty seven.
+   *
+   * Safe to keep because the section is a snapshot of the visit by design: it is held
+   * by nothing, nothing invalidates it, and the page is the only thing that would
+   * (section 5). A **failure is not kept**, though, so the next change to the set
+   * retries rather than leaving the section a product short for the rest of the visit.
+   * The list is part of the key because it is what the answer leaves out.
+   */
+  private readonly _answers = new Map<string, Promise<AlsoOnVm | null>>();
+
+  private _askAbout(itemId: string, listId: string): Promise<AlsoOnVm | null> {
+    const key = `${listId} ${itemId}`;
+    const held = this._answers.get(key);
+    if (held !== undefined) {
+      return held;
+    }
+
+    const answer = this._lineService
+      .listsHoldingItem(itemId, { excludeListId: listId })
+      .catch(() => {
+        this._answers.delete(key);
+        return null;
+      });
+
+    this._answers.set(key, answer);
+    return answer;
+  }
 
   /**
    * The next page of one history, appended (section 4).
