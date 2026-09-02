@@ -872,6 +872,52 @@
       "retry": "Inténtalo de nuevo",
       "save": "No se ha guardado. Inténtalo de nuevo",
       "delete": "No se pudo completar. Inténtalo de nuevo"
+    },
+    "shops": {
+      "open": "Elige tus tiendas"
+    }
+  },
+  "shops": {
+    "title": "Supermercados",
+    "loading": "Cargando las tiendas cerca de ti",
+    "other": "Otras tiendas",
+    "search": {
+      "label": "Buscar una tienda",
+      "placeholder": "Cadena, calle, ciudad o código postal",
+      "results_one": "{{count}} tienda coincide",
+      "results_other": "{{count}} tiendas coinciden"
+    },
+    "chain": {
+      "count_one": "{{count}} tienda",
+      "count_other": "{{count}} tiendas",
+      "exclude": "Excluir esta marca",
+      "include": "Incluir esta marca",
+      "excludeAll": "Excluir estas marcas",
+      "includeAll": "Incluir estas marcas",
+      "hint": "Excluir la marca también cubre las tiendas que abra más adelante. Apagar tiendas sueltas no"
+    },
+    "state": {
+      "chain": "Marca excluida",
+      "some": "{{count}} de {{total}} apagadas"
+    },
+    "row": {
+      "excluded": "Apagada",
+      "chainExcluded": "Marca apagada"
+    },
+    "empty": {
+      "noCodes": {
+        "title": "Este perfil aún no tiene código postal",
+        "body": "Buscamos tiendas en los códigos postales desde los que compras, así que no hay nada que mostrar hasta que añadas uno.",
+        "action": "Añadir un código postal"
+      },
+      "noShops": "Todavía no tenemos supermercados para ese código postal",
+      "noMatch": "Ninguna tienda coincide con eso. Prueba con una cadena, una calle o una ciudad",
+      "missing": "No hemos encontrado ese perfil",
+      "toProfiles": "Tus perfiles"
+    },
+    "error": {
+      "load": "No hemos podido leer las tiendas",
+      "save": "No se ha guardado. Inténtalo otra vez"
     }
   },
   "basket": {

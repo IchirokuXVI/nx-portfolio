@@ -510,6 +510,29 @@ export const AppShellRoutes: Route[] = [
             ],
           },
           {
+            // The screen that picks the shops (plan 0059). A page of its own for the
+            // reasons `account/profiles` below is one, and **not a child of it** for the
+            // same reason that page is not a child of `account`: the profiles page
+            // renders its children into a sheet outlet at the bottom of its own scroll,
+            // so a child route here would draw the whole thing under the profile rows
+            // instead of instead of them.
+            //
+            // Declared **before** `account/profiles`, which is a prefix of it. The
+            // router would backtrack to this one anyway once that page's sheet children
+            // declined the remainder, and the comment below says why that is not good
+            // enough: stating the order makes it a decision rather than a piece of luck
+            // about how backtracking works.
+            //
+            // The profile is in the URL rather than taken from the store's selection,
+            // because this page is deep linkable and a selection is not.
+            path: 'account/profiles/:profileId/supermarkets',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-account').then(
+                (m) => m.SupermarketsPage
+              ),
+          },
+          {
             // Shopping profiles (plan 0046). A page of its own and **not a child of
             // `account`**, which is what the path might suggest: `account` renders its
             // sheets into an outlet at the bottom of its own scroll, so a child route

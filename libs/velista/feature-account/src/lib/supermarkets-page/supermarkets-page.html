@@ -1,0 +1,228 @@
+<lib-app-bar
+  (openAssistant)="openAssistant()"
+  [connected]="connected()"
+  [homeUrl]="homeUrl()"
+  [signedIn]="true"
+/>
+
+<main class="page">
+  <!--
+    A destination's back, and its fallback is doing real work rather than satisfying a
+    rule: this page is deep linkable, so a cold arrival has nothing to pop onto.
+  -->
+  <button
+    (click)="back()"
+    [attr.aria-label]="'account.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+
+  <h1 class="title">{{ 'shops.title' | rokuT }}</h1>
+
+  @switch (profileState()) {
+    @case ('loading') {
+      <div aria-live="polite" class="skeleton" role="status">
+        <span aria-hidden="true" class="skeleton-field"></span>
+        <span aria-hidden="true" class="skeleton-card"></span>
+        <span class="visually-hidden">{{ 'shops.loading' | rokuT }}</span>
+      </div>
+    }
+
+    @case ('failed') {
+      <p class="failed">
+        <span>{{ 'profiles.error.load' | rokuT }}</span>
+        <button (click)="retry()" class="quiet" type="button">
+          {{ 'profiles.error.retry' | rokuT }}
+        </button>
+      </p>
+    }
+
+    @default {
+      @if (missing()) {
+        <!-- A stale link rather than a failure: the profile is somebody else's or gone. -->
+        <p class="failed">
+          <span>{{ 'shops.empty.missing' | rokuT }}</span>
+          <button (click)="openProfiles()" class="quiet" type="button">
+            {{ 'shops.empty.toProfiles' | rokuT }}
+          </button>
+        </p>
+      } @else if (noPostalCodes()) {
+        <!--
+          The first empty state, and the only one that offers an action: the profile says
+          nowhere, so the screen cannot be drawn at all and the way to fix it is the page
+          that holds the codes.
+        -->
+        <section class="empty">
+          <h2 class="empty-title">{{ 'shops.empty.noCodes.title' | rokuT }}</h2>
+          <p class="empty-body">{{ 'shops.empty.noCodes.body' | rokuT }}</p>
+          <button (click)="openProfiles()" class="primary" type="button">
+            {{ 'shops.empty.noCodes.action' | rokuT }}
+          </button>
+        </section>
+      } @else {
+        <!--
+          The search bar, always: on load, before anything is picked, and still there
+          after a franchise is chosen. It searches **across** franchises, because
+          somebody typing "Ronda de los Tejares" is looking for a shop and not for a
+          shop of a particular brand.
+        -->
+        <div class="search">
+          <label class="field-label" for="shops-search">
+            {{ 'shops.search.label' | rokuT }}
+          </label>
+          <span class="search-field">
+            <lib-search-icon class="search-glyph" />
+            <input
+              (input)="onQuery($event)"
+              [placeholder]="'shops.search.placeholder' | rokuT"
+              [value]="typed()"
+              autocapitalize="none"
+              autocomplete="off"
+              class="search-input"
+              enterkeyhint="search"
+              id="shops-search"
+              type="search"
+            />
+          </span>
+        </div>
+
+        @switch (state()) {
+          @case ('loading') {
+            <div aria-live="polite" class="skeleton" role="status">
+              <span aria-hidden="true" class="skeleton-field"></span>
+              <span aria-hidden="true" class="skeleton-card"></span>
+              <span class="visually-hidden">{{ 'shops.loading' | rokuT }}</span>
+            </div>
+          }
+
+          @case ('failed') {
+            <p class="failed">
+              <span>{{ 'shops.error.load' | rokuT }}</span>
+              <button (click)="retry()" class="quiet" type="button">
+                {{ 'profiles.error.retry' | rokuT }}
+              </button>
+            </p>
+          }
+
+          @default {
+            @if (noShops()) {
+              <!--
+                The second empty state: we have never looked, or nobody has imported what
+                we found. No estimate and no promise, because a discovery run fills a
+                review queue and an admin decides, and nothing in the system can say when.
+              -->
+              <section class="empty">
+                <p class="empty-body">{{ 'shops.empty.noShops' | rokuT }}</p>
+              </section>
+            } @else {
+              <lib-franchise-buttons
+                (select)="select($event)"
+                [chains]="chains()"
+                [openKey]="selection()"
+              />
+
+              @if (searching()) {
+                <!--
+                  The count, announced. A search that silently empties the screen is
+                  indistinguishable from one that broke (section 7).
+                -->
+                <p aria-live="polite" class="result-count" role="status">
+                  {{ 'shops.search.results' | rokuT: { count: matches() } }}
+                </p>
+
+                @if (matches() === 0) {
+                  <!--
+                    The third empty state, and distinct from the second: somebody who
+                    cannot find Lidl needs to know whether Lidl is missing or their
+                    spelling is.
+                  -->
+                  <section class="empty">
+                    <p class="empty-body">
+                      {{ 'shops.empty.noMatch' | rokuT }}
+                    </p>
+                  </section>
+                } @else {
+                  <lib-shop-list
+                    (toggle)="toggle($event)"
+                    [grouped]="false"
+                    [groups]="flat()"
+                  />
+                }
+              } @else if (selection() !== null) {
+                <section class="franchise">
+                  <div class="franchise-head">
+                    <h2 class="franchise-title">
+                      @if (otherOpen()) {
+                        {{ 'shops.other' | rokuT }}
+                      } @else {
+                        {{ openName() }}
+                      }
+                    </h2>
+
+                    <!--
+                      The brand control, on the franchise rather than on each postal code
+                      group. It writes the **chain** exclusion, so it reads as excluding
+                      the brand and never as ticking every row: deselecting every shop by
+                      hand is a different thing, and lets a shop that opens next month
+                      arrive switched on.
+                    -->
+                    @if (chainExcluded()) {
+                      <button
+                        (click)="setChainExcluded(false)"
+                        class="quiet"
+                        type="button"
+                      >
+                        @if (otherOpen()) {
+                          {{ 'shops.chain.includeAll' | rokuT }}
+                        } @else {
+                          {{ 'shops.chain.include' | rokuT }}
+                        }
+                      </button>
+                    } @else {
+                      <button
+                        (click)="setChainExcluded(true)"
+                        class="quiet"
+                        type="button"
+                      >
+                        @if (otherOpen()) {
+                          {{ 'shops.chain.excludeAll' | rokuT }}
+                        } @else {
+                          {{ 'shops.chain.exclude' | rokuT }}
+                        }
+                      </button>
+                    }
+                  </div>
+
+                  <p class="hint">{{ 'shops.chain.hint' | rokuT }}</p>
+
+                  @if (shopState() === 'failed') {
+                    <p class="failed">
+                      <span>{{ 'shops.error.load' | rokuT }}</span>
+                      <button (click)="retry()" class="quiet" type="button">
+                        {{ 'profiles.error.retry' | rokuT }}
+                      </button>
+                    </p>
+                  } @else {
+                    <lib-shop-list
+                      (toggle)="toggle($event)"
+                      [groups]="groups()"
+                    />
+                  }
+                </section>
+              }
+
+              <!--
+                The credit, wherever the shops are. It is an obligation rather than a
+                nicety: this data is ODbL, and the counts on the buttons are the data as
+                surely as the rows are.
+              -->
+              <lib-attribution-note [derived]="derivedCodes()" />
+            }
+          }
+        }
+      }
+    }
+  }
+</main>

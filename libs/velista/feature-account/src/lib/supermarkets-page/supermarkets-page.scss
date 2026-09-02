@@ -1,0 +1,199 @@
+@use '../account-page' as page;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include page.page;
+}
+
+.back {
+  @include page.back;
+}
+
+.back-glyph {
+  @include page.back-glyph;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+// Visually hidden, and never `display: none`: a region that is not rendered is not
+// announced.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.field-label {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+
+  &:has(.search-input:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.search-glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.search-input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: var(--app-control-height);
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  // Rule T3: anything under 16px makes iOS Safari zoom the viewport on focus.
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  // The ring is drawn by the wrapper, which is the thing that looks like the field.
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.result-count {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.franchise {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.franchise-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+.franchise-title {
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+// An empty state is a panel rather than a line of grey text, because for a long time
+// after launch the second one is the ordinary case rather than an edge.
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  padding: var(--app-space-6);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+.empty-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.empty-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+.primary {
+  @include page.primary-action;
+}
+
+.quiet {
+  @include page.quiet-action;
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.skeleton-field,
+.skeleton-card {
+  display: block;
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+}
+
+.skeleton-field {
+  block-size: var(--app-control-height);
+}
+
+.skeleton-card {
+  block-size: var(--app-space-11);
+}
+
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-4);
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}

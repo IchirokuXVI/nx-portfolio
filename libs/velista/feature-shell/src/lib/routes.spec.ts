@@ -611,6 +611,51 @@ describe('AppShellRoutes', () => {
     });
   });
 
+  describe('the supermarkets page (plan 0059)', () => {
+    const path = 'account/profiles/:profileId/supermarkets';
+    const supermarkets = pages.find((route) => route.path === path);
+
+    it('is a page of its own, not a child of the profiles page', () => {
+      // The profiles page renders its children into a sheet outlet at the bottom of its
+      // own scroll, so a child here would draw a whole page under the profile rows
+      // rather than instead of them.
+      const profiles = pages.find((route) => route.path === 'account/profiles');
+
+      expect(supermarkets).toBeDefined();
+      expect(profiles?.children?.map((route) => route.path)).not.toContain(
+        ':profileId/supermarkets'
+      );
+    });
+
+    it('is declared before `account/profiles`, whose prefix it shares', () => {
+      // The router would backtrack to it anyway once the profiles page's sheet children
+      // declined the remainder. Stating the order makes the match a decision rather than
+      // a piece of luck about how backtracking works.
+      const paths = pages.map((route) => route.path);
+
+      expect(paths.indexOf(path)).toBeLessThan(
+        paths.indexOf('account/profiles')
+      );
+      expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('names the profile in the URL', () => {
+      // Deep linkable, so the profile cannot come from a store's selection: a link
+      // opened cold has nothing selected.
+      expect(path).toContain(':profileId');
+    });
+
+    it('is authenticated, and guarded by nothing else', () => {
+      expect(supermarkets?.canActivate).toHaveLength(1);
+      expect(supermarkets?.canMatch).toBeUndefined();
+    });
+
+    it('draws no sheet of its own, and stays lazy', () => {
+      expect(supermarkets?.children).toBeUndefined();
+      expect(supermarkets?.loadComponent).toBeDefined();
+    });
+  });
+
   /**
    * The shared basket and its join screen (plan 0044).
    *
