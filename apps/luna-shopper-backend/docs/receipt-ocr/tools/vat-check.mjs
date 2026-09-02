@@ -91,8 +91,15 @@ for (const group of groups) {
 }
 
 console.log('');
-if (grossSum === total) {
-  console.log(`  groups gross to ${EUR(grossSum)} == total ${EUR(total)}   OK`);
+// Each group's tax is rounded to the cent independently, so with three groups the
+// grosses can miss the printed total by a cent or two without anything being
+// wrong. Ticket 9 misses by exactly 0.01 and its reading is perfect.
+const drift = Math.abs(grossSum - total);
+if (drift <= groups.length) {
+  console.log(
+    `  groups gross to ${EUR(grossSum)} == total ${EUR(total)}   OK` +
+      (drift > 0 ? `   (${drift}c of per-group rounding)` : '')
+  );
 } else {
   console.log(
     `  groups gross to ${EUR(grossSum)} but total is ${EUR(total)}   OFF BY ${EUR(grossSum - total)}`

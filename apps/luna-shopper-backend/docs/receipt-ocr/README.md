@@ -281,7 +281,29 @@ here: `gemini-3.6-flash` took 25.9 s to answer `OK` to a text-only prompt, and
 11 s to read a whole receipt. Do not read these latencies as model speed; read them
 as "this tier is not for interactive use".
 
-## 9. Where it stands after five tickets
+## 9. Where it stands after six tickets
+
+**Ticket 9, the deliberate stress case, is the one that justifies the whole
+approach.** A heavily curled 41 line photograph where the numeric columns sit
+visibly higher than their descriptions. Gemini 3.5 Flash-Lite read all 41 line
+totals exactly. Gemini 3.1 Flash-Lite **associated every description with the next
+line's numbers, from line 2 to line 40**, so 38 of 41 lines carried the wrong price
+and every one of them was individually plausible: a real product from that receipt
+paired with a real amount from that receipt.
+
+Nothing about any single line looked wrong. Sampling would not have found it; a
+human skimming the output would not have found it. `validate.mjs` found it
+instantly, because dropping line 2's 4.20 and duplicating line 41's 2.78 leaves the
+lines summing to 110.37 against a printed 111.79.
+
+**The reason the checksum works is that its two sides fail independently.** Both
+models read the total correctly even while one had every line shifted, because the
+total sits in the flat lower third of the photograph and the corrupted lines are in
+the curl. A systematic corruption of the lines cannot corrupt the total to match.
+
+Without that check, this reading would have written 38 wrong prices into catalog
+and 38 wrong lines into a basket, silently. That is the single strongest result in
+this corpus.
 
 **It is viable, and ticket 5 is why.** A 64 line receipt from a supermarket the
 prompt had never seen, in a format that shares almost nothing with the first four —
@@ -328,12 +350,17 @@ Haiku 4.5 and 3.6 Flash were dropped after ticket 3, so their ranges cover ticke
 model did not.** On ticket 4 it was the only reader to produce a wrong normalized
 key. It is not the production reader; it is what to escalate to when a check fails.
 
-**The pick is no longer obvious.** 3.1 Flash-Lite was clean through four small
-tickets and half the price, then produced the only money error in the corpus on the
-first large one. 3.5 Flash-Lite makes more letter-level mistakes but got ticket 5's
-money exactly right. Small-ticket performance did not predict large-ticket
-performance, which is a reason to keep both until more of the big receipts are read
-rather than to crown either now.
+**The pick inverted, and it is now 3.5 Flash-Lite.** 3.1 Flash-Lite was clean
+through four small tickets at half the price, then produced **both** money errors in
+the corpus, on both large receipts. 3.5 Flash-Lite makes more letter-level mistakes
+on clear text but got the money exactly right on ticket 5 and on all 41 lines of
+ticket 9, the worst photograph here.
+
+Small-ticket accuracy did not predict large-ticket accuracy; it inverted. And the
+two failure kinds are not equal: 3.5 Flash-Lite's mistakes are in product text,
+which is recoverable and which the alias table tolerates as long as it is stable,
+while 3.1 Flash-Lite's are in money, which is silent and unrecoverable. Pin the one
+whose errors the checker can see.
 
 **Cost scales with basket size, not image size.** Input is 1593 tokens on every
 ticket regardless of length; output ran ~600 tokens on an 8 line receipt and ~5000
@@ -402,11 +429,18 @@ None is made yet, deliberately, so the corpus stays comparable across tickets.
   `paymentMethod` too. "Read only the receipt; ignore the card payment slip
   entirely" is a one-line fix for a class of error the checker cannot see.
 
-**Caveat: five tickets is enough to say it transfers, not enough to say how well.**
-Ticket 5 settles generality across chains and scale. Still untested: a multibuy
-discount, a loyalty deduction, a returned item, and a badly photographed large
-receipt. Ticket 9 is large and heavily curled, and is the remaining test most likely
-to change the picture.
+**Caveat: six tickets settle transfer and the bad-photo case, not the edge cases.**
+Ticket 5 settles generality across chains and scale; ticket 9 settles what happens
+when the photograph is genuinely bad, and the answer is that it is survivable only
+because the extraction is checked. Still untested: a multibuy discount, a loyalty
+deduction, and a returned or refunded item — all three change the sign or the
+arithmetic of a line, which is exactly where a checksum built on "lines sum to
+total" needs re-examining. Tickets 6, 7, 8 and 10 remain.
+
+**And the operational rule ticket 9 implies:** a receipt that fails the checksum
+gets re-read with the other model before anything is written; if the two still
+disagree, ask the user to retake the photograph flat rather than to correct 38
+lines.
 
 ## 10. Layout
 

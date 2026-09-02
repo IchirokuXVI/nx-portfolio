@@ -1,0 +1,339 @@
+{
+  "lines": [
+    {
+      "rawText": "agua mineral natural FONT NATURA 5",
+      "isDepartment": false,
+      "lineTotal": 5.64,
+      "quantity": 6,
+      "unit": "UNIT",
+      "unitPrice": 0.94
+    },
+    {
+      "rawText": "Ambientador AIR WICK DECORSPHERE MAN",
+      "isDepartment": false,
+      "lineTotal": 1.35,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.35
+    },
+    {
+      "rawText": "Bizcocho horneado CODAN RUSTIK 4 ud",
+      "isDepartment": false,
+      "lineTotal": 0.6,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.6
+    },
+    {
+      "rawText": "Budin de cerdo PROLONGO -kg-",
+      "isDepartment": false,
+      "lineTotal": 1.19,
+      "quantity": 0.1,
+      "unit": "KG",
+      "unitPrice": 5.95
+    },
+    {
+      "rawText": "Bolleros al cacao ALTEZA 5 ud 175 g",
+      "isDepartment": false,
+      "lineTotal": 0.97,
+      "quantity": 0.1,
+      "unit": "KG",
+      "unitPrice": 13.9
+    },
+    {
+      "rawText": "Cabeza de jabali Suprema PICKEN con",
+      "isDepartment": false,
+      "lineTotal": 2.85,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.85
+    },
+    {
+      "rawText": "Café cápsulas GIMOKA descafeinado 1",
+      "isDepartment": false,
+      "lineTotal": 1.49,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.49
+    },
+    {
+      "rawText": "Champiñón bandeja 300 g.",
+      "isDepartment": false,
+      "lineTotal": 1.03,
+      "quantity": 0.1,
+      "unit": "KG",
+      "unitPrice": 7.9
+    },
+    {
+      "rawText": "Chopped pork CAMPOFR=0 -kg-",
+      "isDepartment": false,
+      "lineTotal": 0.89,
+      "quantity": 0.1,
+      "unit": "KG",
+      "unitPrice": 9.9
+    },
+    {
+      "rawText": "Chorizo extra Pamplona ALTEZA -kg-",
+      "isDepartment": false,
+      "lineTotal": 1.44,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 0.72
+    },
+    {
+      "rawText": "Comida perro TANDY buey tarrina 300",
+      "isDepartment": false,
+      "lineTotal": 5.76,
+      "quantity": 8,
+      "unit": "UNIT",
+      "unitPrice": 0.72
+    },
+    {
+      "rawText": "Comida perro TANDY pollo tarrina 30",
+      "isDepartment": false,
+      "lineTotal": 1.89,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.89
+    },
+    {
+      "rawText": "Cono helado ALTEZA vainilla y caram",
+      "isDepartment": false,
+      "lineTotal": 0.95,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.95
+    },
+    {
+      "rawText": "Coquitos EL CARTUJANO 115 g",
+      "isDepartment": false,
+      "lineTotal": 2.69,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.69
+    },
+    {
+      "rawText": "Crema de jamón york queso IBERITOS",
+      "isDepartment": false,
+      "lineTotal": 0.69,
+      "quantity": 0.1,
+      "unit": "KG",
+      "unitPrice": 5.75
+    },
+    {
+      "rawText": "Fiambre paleta Sándwich ELPOZO -kg-",
+      "isDepartment": false,
+      "lineTotal": 1.87,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.87
+    },
+    {
+      "rawText": "Fregona microfibra AZMARK doble pañ",
+      "isDepartment": false,
+      "lineTotal": 2.64,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.64
+    },
+    {
+      "rawText": "Friegasuelos insecticida AGERUL aro",
+      "isDepartment": false,
+      "lineTotal": 2.63,
+      "quantity": null,
+      "unit": null,
+      "unitPrice": null
+    },
+    {
+      "rawText": "Fruteria CASH2",
+      "isDepartment": true,
+      "lineTotal": 2.46,
+      "quantity": null,
+      "unit": null,
+      "unitPrice": null
+    },
+    {
+      "rawText": "Fruteria CASH2",
+      "isDepartment": true,
+      "lineTotal": 1.82,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.82
+    },
+    {
+      "rawText": "Gel de baño TULIPAN NEGRO fresa y n",
+      "isDepartment": false,
+      "lineTotal": 0.68,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.68
+    },
+    {
+      "rawText": "Harina de trigo ALTEZA 1 kg",
+      "isDepartment": false,
+      "lineTotal": 7.78,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 3.89
+    },
+    {
+      "rawText": "Huevos clase L 63/73 g ALTEZA galli",
+      "isDepartment": false,
+      "lineTotal": 6.8,
+      "quantity": 10,
+      "unit": "UNIT",
+      "unitPrice": 0.68
+    },
+    {
+      "rawText": "Ice coffee ALTEZA capuccino 250 ml",
+      "isDepartment": false,
+      "lineTotal": 6.35,
+      "quantity": 0.3,
+      "unit": "KG",
+      "unitPrice": 24.9
+    },
+    {
+      "rawText": "Jamón serrano deshuesado JUAN DEL V",
+      "isDepartment": false,
+      "lineTotal": 1.75,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.75
+    },
+    {
+      "rawText": "Laca de uñas E.LLORCA nº 396 8 ml",
+      "isDepartment": false,
+      "lineTotal": 1.49,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.49
+    },
+    {
+      "rawText": "Mayonesa MUSA 225 ml",
+      "isDepartment": false,
+      "lineTotal": 2.5,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.5
+    },
+    {
+      "rawText": "Miniconos surtidos ALTEZA 12x30 ml",
+      "isDepartment": false,
+      "lineTotal": 0.8,
+      "quantity": 0.1,
+      "unit": "KG",
+      "unitPrice": 5.9
+    },
+    {
+      "rawText": "Mortadela siciliana ELPOZO -kg-",
+      "isDepartment": false,
+      "lineTotal": 2.1,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.1
+    },
+    {
+      "rawText": "Patatas fritas EL ABUELO ANTONIO 28",
+      "isDepartment": false,
+      "lineTotal": 4.02,
+      "quantity": 3,
+      "unit": "UNIT",
+      "unitPrice": 1.34
+    },
+    {
+      "rawText": "Paté PAMPLONICA 3x80 g",
+      "isDepartment": false,
+      "lineTotal": 1.08,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.08
+    },
+    {
+      "rawText": "Paté de pollo CASA TARRADELLAS 125",
+      "isDepartment": false,
+      "lineTotal": 2.38,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.38
+    },
+    {
+      "rawText": "Paté ibérico IBERITOS 250 g",
+      "isDepartment": false,
+      "lineTotal": 3.48,
+      "quantity": 0.2,
+      "unit": "KG",
+      "unitPrice": 13.9
+    },
+    {
+      "rawText": "Pechuga de pavo braseada ELPOZO 195",
+      "isDepartment": false,
+      "lineTotal": 7.9,
+      "quantity": 0.4,
+      "unit": "KG",
+      "unitPrice": 17.75
+    },
+    {
+      "rawText": "Queso de oveja viejo ARQUESPAL Rese",
+      "isDepartment": false,
+      "lineTotal": 7.61,
+      "quantity": 0.4,
+      "unit": "KG",
+      "unitPrice": 16.9
+    },
+    {
+      "rawText": "Queso mezcla semicurado GARC=A BAQU",
+      "isDepartment": false,
+      "lineTotal": 2.3,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 2.3
+    },
+    {
+      "rawText": "Revuelto pasarratos SAGACOR 500 g",
+      "isDepartment": false,
+      "lineTotal": 2.96,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 1.48
+    },
+    {
+      "rawText": "Salchichas de pollo y pavo AIA Wudy",
+      "isDepartment": false,
+      "lineTotal": 0.99,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.99
+    },
+    {
+      "rawText": "Snack Zebra DULCESOL relleno de cac",
+      "isDepartment": false,
+      "lineTotal": 0.99,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 0.99
+    },
+    {
+      "rawText": "Snack pincky DULCESOL relleno nata",
+      "isDepartment": false,
+      "lineTotal": 2.78,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 1.39
+    },
+    {
+      "rawText": "Tisana SUSAR=N Adelgasana cola caba",
+      "isDepartment": false,
+      "lineTotal": 2.78,
+      "quantity": 2,
+      "unit": "UNIT",
+      "unitPrice": 1.39
+    }
+  ],
+  "total": 111.79,
+  "truncated": true,
+  "currency": "EUR",
+  "datetime": "2026-08-14T16:21:07",
+  "paymentMethod": "tarjeta",
+  "store": "Super Cash",
+  "storeAddress": "P.Las Quemadas 116 14014 - Córdoba"
+}
