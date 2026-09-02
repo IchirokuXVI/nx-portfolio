@@ -12,6 +12,7 @@ import {
 import { EL_JAMON_ITEMS, SUPERCASH_ITEMS } from './authored';
 import { REFERENCE_GROUPS } from './groups';
 import {
+  MERCADONA_SUPERMARKET_ID,
   groupId,
   itemId,
   locationId,
@@ -201,7 +202,8 @@ async function seedMercadona(
       '';
     if (!scopeId) return;
   } else {
-    const id = supermarketId('mercadona');
+    // The shared id, not a derived one: see MERCADONA_SUPERMARKET_ID.
+    const id = MERCADONA_SUPERMARKET_ID;
     scopeId = priceScopeId('mercadona');
     await repo.upsert(
       [
@@ -258,23 +260,45 @@ async function seedMercadona(
   const eans = MERCADONA_ITEMS.map((i) => i.ean).filter(
     (e): e is string => !!e
   );
-  const harvested = await m
+  const found = await m
     .getRepository(Item)
     .find({ where: { ean: In(eans) }, select: { id: true, ean: true } });
-  const byEan = new Map(harvested.map((h) => [h.ean as string, h.id]));
+  const byEan = new Map(found.map((h) => [h.ean as string, h.id]));
 
+  /**
+   * A row carrying one of these barcodes belongs to a harvest only if its id is
+   * not the one this seed would have given it.
+   *
+   * Matching on the barcode alone is not enough, and the difference is not
+   * theoretical: on the second run every product this seed created on the first
+   * is found by EAN and looks exactly like a harvested one. Treating it as
+   * harvested means never writing its price again, which is invisible until
+   * something deletes those prices — and the demo world seeder does, because it
+   * clears Mercadona by id and the delete cascades through the scope. The
+   * database was then left with 108 permanently unpriced products.
+   */
+  const isHarvested = (it: AuthoredItem, id: string) =>
+    id !== itemId('mercadona', it.slug);
+
+  const adopt: AuthoredItem[] = [];
+  const mine: AuthoredItem[] = [];
   for (const it of MERCADONA_ITEMS) {
     const existing = it.ean ? byEan.get(it.ean) : undefined;
-    if (existing) {
-      await m
-        .getRepository(Item)
-        .update({ id: existing }, { productGroupId: groupId(it.group) });
-      report.adopted++;
-    }
+    if (existing && isHarvested(it, existing)) adopt.push(it);
+    else mine.push(it);
   }
 
-  const fresh = MERCADONA_ITEMS.filter((it) => !(it.ean && byEan.has(it.ean)));
-  await writeItems(m, 'mercadona', scopeId, fresh, report);
+  for (const it of adopt) {
+    await m
+      .getRepository(Item)
+      .update(
+        { id: byEan.get(it.ean as string) },
+        { productGroupId: groupId(it.group) }
+      );
+    report.adopted++;
+  }
+
+  await writeItems(m, 'mercadona', scopeId, mine, report);
 }
 
 /**

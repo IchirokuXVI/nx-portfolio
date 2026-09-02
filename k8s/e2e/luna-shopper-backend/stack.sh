@@ -300,20 +300,33 @@ up() {
   done
 
   # The reference catalog (plan 0067), on every up rather than once: it is the
-  # test data a developer expects to find already there, and it is idempotent by
+  # data a developer expects to find already there, and it is idempotent by
   # derived id, so running it again rewrites the same rows instead of adding
   # more. It goes after the migrations because it writes through the entities and
   # needs the schema they describe.
+  #
+  # **Not in CI**, and that is a correctness rule rather than a saving. The e2e
+  # suite asserts against the demo world, which `global-setup.ts` seeds after
+  # this script has finished, and the two overlap on exactly one row:
+  # `uq_supermarkets_external_brand_key` permits a single Mercadona, so whichever
+  # of them writes second is refused and the suite dies in global setup. Even
+  # without the constraint they should not share a database — 239 extra products
+  # under a search test is a way to fail for reasons that have nothing to do with
+  # the change under test.
   #
   # A failure here is reported and does not stop the stack. The seed is a
   # convenience, and a database that came up and migrated is still usable
   # without it; refusing to finish `up` over it would be the tail wagging the
   # dog.
-  echo "==> seeding the reference catalog"
-  npx nx run luna-shopper-backend-catalog:seed:reference ||
-    echo "==> WARNING: the reference catalog seed failed; the stack is still up" >&2
+  if [[ -z "${CI:-}" && "${LUNA_REFERENCE_SEED:-1}" != "0" ]]; then
+    echo "==> seeding the reference catalog"
+    npx nx run luna-shopper-backend-catalog:seed:reference ||
+      echo "==> WARNING: the reference catalog seed failed; the stack is still up" >&2
+  else
+    echo "==> skipping the reference catalog seed (CI, or LUNA_REFERENCE_SEED=0)"
+  fi
 
-  echo "==> stack is up, migrated and seeded"
+  echo "==> stack is up and migrated"
 }
 
 # Bring up ONLY what a profile adds, naming its services explicitly.

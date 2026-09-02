@@ -1,4 +1,10 @@
-import { groupId, itemId, supermarketItemId } from './ids';
+import { demoWorld } from '@portfolio/luna-shopper/test-fixtures';
+import {
+  MERCADONA_SUPERMARKET_ID,
+  groupId,
+  itemId,
+  supermarketItemId,
+} from './ids';
 import {
   EL_JAMON_ITEMS,
   MERCADONA_ITEMS,
@@ -156,6 +162,19 @@ describe('reference catalog', () => {
         expect(s.location.postalCode).toMatch(/^\d{5}$/);
         expect(s.location.country).toBe('ES');
       }
+    });
+
+    it('means the same Mercadona row as the demo world', () => {
+      // `uq_supermarkets_external_brand_key` allows exactly one row with
+      // Q377705, so the two seeders have to agree on which. If the demo world
+      // ever renumbers its Mercadona this fails here rather than as a unique
+      // violation in whichever seeder happens to run second.
+      expect(MERCADONA_SUPERMARKET_ID).toBe(
+        demoWorld.catalog.supermarkets[0].id
+      );
+      expect(demoWorld.catalog.supermarkets[0].externalBrandKey).toBe(
+        'Q377705'
+      );
     });
 
     it('leaves Mercadona to the seeder', () => {
