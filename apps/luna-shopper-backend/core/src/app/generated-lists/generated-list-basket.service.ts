@@ -1,15 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  GeneratedLineOrigin,
+  ParticipantKind,
   RealtimeEvent,
+  isLiveGeneratedList,
+  type AddGeneratedListParticipantLineRequest,
   type GeneratedListBasketLineView,
+  type GeneratedListBasketScope,
   type GeneratedListBasketView,
+  type GeneratedListLineAddedEvent,
   type GeneratedListLineMovedEvent,
   type GeneratedListSourceName,
   type GetGeneratedListBasketRequest,
   type SetGeneratedListPickRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  GeneratedListFinishedException,
   NotFoundException,
   UnauthorizedException,
   ValidationException,
@@ -19,9 +26,18 @@ import {
   GeneratedList,
   GeneratedListLine,
   GeneratedListLineOption,
+  GeneratedListParticipant,
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import {
+  checkContent,
+  checkOptions,
+  checkQuantity,
+  checkRoom,
+  nextPosition,
+} from './basket-line-limits';
+import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { toBasketView } from './generated-list.mappers';
 import { GeneratedListService } from './generated-list.service';
@@ -66,6 +82,10 @@ export class GeneratedListBasketService {
     private readonly shoppingLists: Repository<ShoppingList>,
     private readonly generated: GeneratedListService,
     private readonly sharing: GeneratedListSharingService,
+    // For the owner's default target alone (plan 0055, section 3.2). The write
+    // back belongs to the service that owns plan 0050 section 5's rule, and
+    // reimplementing it here would drift from it the first time it changed.
+    private readonly lineWrites: GeneratedListLineService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -196,8 +216,151 @@ export class GeneratedListBasketService {
   }
 
   /**
+   * Put a line in the basket, as any live participant (plan 0055, section 3).
+   *
+   * The gesture the basket could not make: every write on this surface until now
+   * settled a line that was already there or swapped its product, and creating
+   * one was on the owner's account surface, resolved by `ownerUserId`, which
+   * cannot answer a guest at all. A guest in an aisle who remembers the milk is
+   * exactly the reader the shared basket exists for.
+   *
+   * ## What makes it safe to hand to a stranger
+   *
+   * The line is created `ADDED` with `targetListId` null, so it lives in the
+   * basket and nowhere else: it names no zone, claims no zone line, and emits no
+   * zone event. The rule plan 0050 section 5 protects is that a basket never
+   * changes a shared list unless somebody says which one, and a line with no
+   * target changes nothing shared. The disclosure runs the other way too, which
+   * is the half worth stating: a guest typing "batteries" tells the basket
+   * nothing about any household, and the line they created carries no list name
+   * for anybody to read.
+   *
+   * ## The basket's default target is the owner's, and only the owner's
+   *
+   * `defaultTargetListId` is the owner saying "everything I add today also goes
+   * in the flat list", and it is their standing intent about **their own**
+   * additions. A guest's line silently promoted into a household list would be a
+   * zone write the guest cannot see, cannot explain and did not ask for, made
+   * under the owner's access: precisely the accident plan 0050 section 5 exists
+   * to prevent, arriving through the back door. A registered participant is in
+   * the same position, and the honest way for their line to reach a list is plan
+   * `0058`, which is a gesture with a list picker in front of it.
+   */
+  async addLine(
+    req: AddGeneratedListParticipantLineRequest
+  ): Promise<GeneratedListBasketLineView> {
+    const { list, participant, seesZoneData } = await this.resolve(req);
+
+    if (!isLiveGeneratedList(list.status)) {
+      // Its own code rather than a validation failure (section 3.3): a client
+      // that cannot tell a state it can explain from a bug it cannot will show
+      // the wrong sentence for both, and "this basket is finished" is a sentence
+      // the shopper can act on.
+      throw new GeneratedListFinishedException(
+        'This basket is finished, so nothing more can be added to it'
+      );
+    }
+
+    const content = checkContent(req.content);
+    const quantity = checkQuantity(req.quantity ?? 1);
+    const optionIds = checkOptions(req.options);
+    await checkRoom(this.lines, list.id);
+
+    const position = await nextPosition(this.lines, list.id);
+    const line = await this.lines.save(
+      this.lines.create({
+        generatedListId: list.id,
+        content,
+        quantity,
+        settledQuantity: 0,
+        itemId: req.itemId ?? null,
+        origin: GeneratedLineOrigin.ADDED,
+        // Never from the request, which has no `targetListId` to offer, and
+        // never from the basket's default for anybody but the owner below.
+        targetListId: null,
+        position,
+        // Written once and never afterwards (section 4). Without it the first
+        // person to settle this line becomes the only person it names, and
+        // "who put this here" stops having an answer.
+        createdByParticipantId: participant.id,
+      })
+    );
+
+    if (optionIds.length > 0) {
+      await this.options.insert(
+        optionIds.map((itemId, index) => ({
+          generatedListLineId: line.id,
+          itemId,
+          position: index,
+        }))
+      );
+    }
+
+    if (
+      participant.kind === ParticipantKind.OWNER &&
+      list.defaultTargetListId
+    ) {
+      // Through the ordinary write back (plan 0050, section 5), so the owner's
+      // `WRITE` is checked at this moment and the zone list hears the ordinary
+      // `line.added`. Reached only here, so a guest's add cannot take this
+      // branch however the basket is configured.
+      await this.lineWrites.promote(
+        list.ownerUserId,
+        line,
+        list.defaultTargetListId
+      );
+    }
+
+    const view = await this.generated.basketLineViewFor(line, seesZoneData);
+    // Its own event rather than a second `lineUpdated`, because a client
+    // receiving that one has to decide whether to replace a row or append one
+    // (section 8). Redacted to the least privileged reader in the room like
+    // every broadcast there, which costs nothing on a line with no origins.
+    const announcement: GeneratedListLineAddedEvent = {
+      generatedListId: list.id,
+      line: await this.generated.basketLineViewFor(line, false),
+    };
+    this.events.emitToGeneratedList(
+      RealtimeEvent.GeneratedListLineAdded,
+      list.id,
+      announcement
+    );
+
+    return view;
+  }
+
+  /**
+   * Where a search inside this basket is priced (plan 0055, section 5.1).
+   *
+   * Core answers what the **run** was composed against, and catalog answers what
+   * that means today: the split plan 0049 section 2.1 already draws for an
+   * account holder's own search, applied to a reader who may hold no account.
+   *
+   * The three candidate scopes, and why this is the one: the caller's own
+   * default profile is refused because a guest has none and a registered
+   * participant's would rank a stranger's basket by a different city's shops;
+   * the run's snapshot is what the basket was composed against and is already
+   * stored; and no scope at all is the fallback when the snapshot names no
+   * profile. The snapshot exists for exactly this class of question, and ranking
+   * a search inside a basket is plan 0050 section 1's "explain a three week old
+   * basket to the person looking at it" applied live.
+   */
+  async searchScope(
+    req: GetGeneratedListBasketRequest
+  ): Promise<GeneratedListBasketScope> {
+    // Resolved rather than read straight off the row, so a revoked participant
+    // cannot use the basket as an open catalog proxy after being thrown out.
+    const { list } = await this.resolve(req);
+    return {
+      ownerUserId: list.ownerUserId,
+      profileId: list.sourceSnapshot.profileId,
+    };
+  }
+
+  /**
    * The basket and what this participant may see of it.
    *
+
    * `seesZoneData` is asked here rather than taken from the gateway's context,
    * even though the guard has just computed it. Section 5.2 insists the question
    * is answered at request time from core's own access tables, and a value that
@@ -206,7 +369,11 @@ export class GeneratedListBasketService {
   private async resolve(req: {
     generatedListId: string;
     participantId: string;
-  }): Promise<{ list: GeneratedList; seesZoneData: boolean }> {
+  }): Promise<{
+    list: GeneratedList;
+    participant: GeneratedListParticipant;
+    seesZoneData: boolean;
+  }> {
     const list = await this.lists.findOne({
       where: { id: req.generatedListId },
     });
@@ -226,6 +393,10 @@ export class GeneratedListBasketService {
       throw new UnauthorizedException('Not a participant of this basket');
     }
 
-    return { list, seesZoneData: await this.sharing.seesZoneData(participant) };
+    return {
+      list,
+      participant,
+      seesZoneData: await this.sharing.seesZoneData(participant),
+    };
   }
 }

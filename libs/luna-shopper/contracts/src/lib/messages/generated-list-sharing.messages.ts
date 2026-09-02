@@ -116,6 +116,29 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * exactly who wants another brand.
    */
   setPick: 'generatedList.setPick',
+  /**
+   * Put a line in the basket, as any live participant (plan 0055, section 3).
+   *
+   * Distinct from `generatedList.addLine`, which resolves a basket by its
+   * owner's id and therefore cannot answer the guest in the aisle who remembers
+   * the milk. It is the same distinction `basketGet` draws against
+   * `generatedList.get`, and it is the whole of plan 0055's first half.
+   *
+   * The line is created `ADDED` with no target, so it lives in the basket and
+   * nowhere else. That is what makes it safe to hand to a stranger: it names no
+   * zone, claims no zone line, and emits no zone event.
+   */
+  addLine: 'generatedList.basket.addLine',
+  /**
+   * Where a search inside this basket should be priced (plan 0055, section 5.1).
+   *
+   * Core answers what the **run** was composed against and catalog answers what
+   * that means today, which is the split plan 0049 section 2.1 already draws for
+   * an account holder's own search. The caller's own profile is deliberately not
+   * consulted: a guest has none, and a registered participant's would rank a
+   * stranger's basket by a different city's shops.
+   */
+  searchScope: 'generatedList.basket.searchScope',
 } as const;
 
 /**
@@ -766,6 +789,22 @@ export interface GeneratedListBasketLineView {
   options: string[];
   position: number;
   /**
+   * Who **put this line here**, written once and never afterwards (plan 0055,
+   * section 4).
+   *
+   * A second field beside {@link lastEditedByParticipantId} rather than a reuse
+   * of it, because they answer different questions and that one moves: the
+   * moment anybody settles the line, or edits its quantity, or swaps its
+   * product, `lastEditedBy` becomes them. "Who put this on the list" is the
+   * question a shop full of people actually asks about a line nobody
+   * recognises, and after one settle the other column can no longer answer it.
+   *
+   * Null for every line the run composed, which is honest rather than missing: a
+   * `DERIVED` line was put there by the generation, and the person who ran the
+   * generation is the owner, who is already named on the basket.
+   */
+  createdByParticipantId: string | null;
+  /**
    * Who last edited or settled this line, so the row can say who got the bread
    * (plan 0044, section 4.3).
    *
@@ -904,6 +943,88 @@ export interface SetGeneratedListPickRequest {
   lineId: string;
   participantId: string;
   itemId: string;
+}
+
+/**
+ * Put a line in the basket, as any live participant (plan 0055, section 3).
+ *
+ * ## Why a guest may do this at all
+ *
+ * Because the alternative is worse and because it costs nothing. The rule plan
+ * 0050 section 5 protects is that **a basket never changes a shared list unless
+ * somebody says which one**, and an added line has no target, so it changes
+ * nothing shared. It is a note the shopper wrote on the list they are carrying,
+ * and the household sees it only if somebody with an account and the access
+ * binds it later, which is plan `0058`.
+ *
+ * The disclosure runs the other way too: a guest typing "batteries" tells the
+ * basket nothing about any household, and the line they created carries no list
+ * name for anybody to read.
+ *
+ * ## No `userId`, and no `targetListId`
+ *
+ * The participant id is the whole of the identity, exactly as it is for
+ * {@link GetGeneratedListBasketRequest}. A target list is **refused on this
+ * surface** rather than accepted and ignored: binding a basket line to a
+ * shopping list is a gesture with a list picker in front of it, and plan `0058`
+ * owns it.
+ */
+export interface AddGeneratedListParticipantLineRequest {
+  generatedListId: string;
+  /** The actor, resolved from their credential by the gateway's guard. */
+  participantId: string;
+  content: string;
+  /** Defaults to one. A line you do not want is not a gesture anybody makes. */
+  quantity?: number;
+  /** The pick, when the composer offered one and the shopper took it. */
+  itemId?: string;
+  /** The product set a group suggestion attaches (plan 0048, section 1.1). */
+  options?: string[];
+}
+
+/**
+ * Where a search inside a basket is priced (plan 0055, section 5.1).
+ *
+ * What **core** can answer, which is what the run was composed against; catalog
+ * turns it into scope ids, and the gateway is what asks both. The same split
+ * plan 0049 section 2.1 draws, applied to a reader who may hold no account.
+ *
+ * ## Why the owner is named
+ *
+ * The snapshot's profile is the **owner's**, so it can only be resolved as them,
+ * and the search that follows runs as the basket's own account would have run
+ * it. It is a gateway-internal value and reaches no client: nothing on the
+ * participant surface has ever carried a user id, and section 5.2's whole point
+ * is that a guest learns no household's business from a catalog read.
+ */
+export interface GeneratedListBasketScope {
+  /** The account the basket belongs to, for the reads the gateway makes next. */
+  ownerUserId: string;
+  /**
+   * The run's profile, or null when the snapshot named none.
+   *
+   * Null is section 5.1's third row rather than an error: the search runs
+   * unscoped, so it answers with products and no prices. A dropdown that names
+   * the right thing without a price beats one that refuses to open.
+   */
+  profileId: string | null;
+}
+
+/**
+ * A line was **added** to a basket (plan 0055, section 8), on the basket's own
+ * room.
+ *
+ * Its own event rather than a {@link GeneratedListLineMovedEvent}, because a
+ * client receiving one would have to decide whether to replace a row or append
+ * one, and that decision is exactly what the event name is for.
+ *
+ * Redacted to the least privileged reader in the room like everything else
+ * broadcast there, and it costs nothing here: an `ADDED` line has no origins and
+ * no target, so a guest's projection of it is the whole of it.
+ */
+export interface GeneratedListLineAddedEvent {
+  generatedListId: string;
+  line: GeneratedListBasketLineView;
 }
 
 // --- Presence --------------------------------------------------------------

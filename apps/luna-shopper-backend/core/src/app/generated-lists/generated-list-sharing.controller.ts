@@ -2,8 +2,10 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   GENERATED_LIST_SHARING_PATTERNS,
+  type AddGeneratedListParticipantLineRequest,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
+  type GeneratedListBasketScope,
   type GeneratedListBasketView,
   type GeneratedListJoinCoreResult,
   type GeneratedListLinkPreview,
@@ -165,5 +167,34 @@ export class GeneratedListSharingController {
     @Payload() req: SetGeneratedListPickRequest
   ): Promise<GeneratedListBasketLineView> {
     return this.basket.setPick(req);
+  }
+
+  /**
+   * Put a line in the basket, as any live participant (plan 0055, section 3).
+   *
+   * Distinct from `generatedList.addLine`, which resolves a basket by its
+   * owner's id and so cannot answer the guest in the aisle who remembers the
+   * milk. The line is created `ADDED` with no target, so it changes nothing any
+   * household shares.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.addLine)
+  addLine(
+    @Payload() req: AddGeneratedListParticipantLineRequest
+  ): Promise<GeneratedListBasketLineView> {
+    return this.basket.addLine(req);
+  }
+
+  /**
+   * Where a search inside this basket is priced (plan 0055, section 5.1).
+   *
+   * Core says what the run was composed against and catalog says what that
+   * means today, which is plan 0049 section 2.1's split reached by a caller who
+   * may hold no account.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.searchScope)
+  searchScope(
+    @Payload() req: GetGeneratedListBasketRequest
+  ): Promise<GeneratedListBasketScope> {
+    return this.basket.searchScope(req);
   }
 }

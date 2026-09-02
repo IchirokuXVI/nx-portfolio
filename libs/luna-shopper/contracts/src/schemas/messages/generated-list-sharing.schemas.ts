@@ -1,4 +1,5 @@
 import { GENERATED_LIST_SHARING_PATTERNS } from '../../lib/messages/generated-list-sharing.messages';
+import { GENERATED_LIST_LIMITS } from '../../lib/messages/generated-list.messages';
 import {
   array,
   boolean,
@@ -80,8 +81,14 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   sourceName: schemaId('generated-list-sharing/SourceName'),
   basketRequest: schemaId('msg/generatedList.basket.get/request'),
   setPickRequest: schemaId('msg/generatedList.setPick/request'),
+  /** Put a line in the basket as any live participant (plan 0055, section 3). */
+  addLineRequest: schemaId('msg/generatedList.basket.addLine/request'),
+  /** Where a search inside this basket is priced (plan 0055, section 5.1). */
+  basketScope: schemaId('generated-list-sharing/BasketScope'),
   /** What the basket's room hears when a line is settled or its pick swapped. */
   lineMovedEvent: schemaId('generated-list-sharing/LineMovedEvent'),
+  /** What it hears when a line is added, which is an append and not a replace. */
+  lineAddedEvent: schemaId('generated-list-sharing/LineAddedEvent'),
 } as const;
 
 const shareLinkView = object(
@@ -281,6 +288,9 @@ const basketLineView = object(
     itemId: nullableString(),
     options: array(nonEmptyString()),
     position: integer({ minimum: 0 }),
+    // Who put the line here (plan 0055, section 4), written once. Null on every
+    // line the run composed, which is honest rather than missing.
+    createdByParticipantId: nullableString(),
     // Who got the bread (velista 0044, section 4.3). An id and never a name:
     // two guests can both type "Dani".
     lastEditedByParticipantId: nullableString(),
@@ -303,6 +313,7 @@ const basketLineView = object(
     'itemId',
     'options',
     'position',
+    'createdByParticipantId',
     'lastEditedByParticipantId',
     'lastEditedAt',
     'lastOutcome',
@@ -416,6 +427,35 @@ const lineMovedEvent = object(
   ['generatedListId', 'line']
 );
 
+/**
+ * The basket room's append event (plan 0055, section 8).
+ *
+ * The same two fields as {@link lineMovedEvent} and a different name on purpose:
+ * a client receiving one would otherwise have to decide whether to replace a row
+ * or append one, and that decision is what the event name is for.
+ */
+const lineAddedEvent = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.lineAddedEvent,
+  {
+    generatedListId: nonEmptyString(),
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+  },
+  ['generatedListId', 'line']
+);
+
+/**
+ * Where a search inside a basket is priced (plan 0055, section 5.1).
+ *
+ * `profileId` is nullable because a run that named its sources outright has no
+ * profile behind it, and that is section 5.1's third row rather than an error:
+ * the search runs unscoped and answers with products and no prices.
+ */
+const basketScope = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.basketScope,
+  { ownerUserId: nonEmptyString(), profileId: nullableString() },
+  ['ownerUserId', 'profileId']
+);
+
 // --- Requests --------------------------------------------------------------
 
 const shareRequest = object(
@@ -479,6 +519,31 @@ const setPickRequest = object(
     itemId: nonEmptyString(),
   },
   ['generatedListId', 'lineId', 'participantId', 'itemId']
+);
+
+/**
+ * Put a line in the basket as any live participant (plan 0055, section 3).
+ *
+ * **No `userId` and no `targetListId`.** The participant id is the whole of the
+ * identity, and binding a basket line to a shopping list is plan `0058`'s
+ * gesture, refused here rather than accepted and ignored.
+ */
+const addLineRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.addLineRequest,
+  {
+    generatedListId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    content: nonEmptyString({
+      maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
+    }),
+    quantity: integer({
+      minimum: 1,
+      maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    }),
+    itemId: nonEmptyString(),
+    options: array(nonEmptyString()),
+  },
+  ['generatedListId', 'participantId', 'content']
 );
 
 const joinRequest = object(
@@ -614,6 +679,9 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   lineMovedEvent,
   basketRequest,
   setPickRequest,
+  addLineRequest,
+  basketScope,
+  lineAddedEvent,
 ];
 
 export const generatedListSharingMessageContracts: Record<
@@ -679,5 +747,16 @@ export const generatedListSharingMessageContracts: Record<
     // The same shape a settle answers with, and for the same reason: both move
     // one line, and the screen updates one row from either.
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.addLine]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.addLineRequest,
+    // The shape the basket read already serves, so the client appends what it
+    // already knows how to draw (plan 0055, section 8).
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.searchScope]: {
+    // The participant surface's one request shape: a basket and who is asking.
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.basketRequest,
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketScope,
   },
 };

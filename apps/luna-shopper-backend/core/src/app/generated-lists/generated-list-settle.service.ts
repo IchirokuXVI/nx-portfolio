@@ -276,9 +276,27 @@ export class GeneratedListSettleService {
       }
 
       // NOT_AVAILABLE closes the outstanding amount rather than settling units
-      // (section 6.1): it is an outcome, not a quantity.
+      // (plan 0051, section 6.1): it is an outcome, not a quantity.
+      //
+      // A BOUGHT with no eligible origin advances by what the settle asked for,
+      // which is plan 0055 section 6's fix and not a special case bolted on.
+      // `applied` is a sum over the origins the allocation reached, so a line
+      // that reaches none leaves it at zero: the units never land, the line
+      // stays outstanding forever, and every settle on it writes nothing at all.
+      // No such line existed before plan 0055, because every line came from the
+      // run; section 3 creates them by the dozen.
+      //
+      // No `LineSettlement` is written on that branch, and that is correct
+      // rather than a shortcut: a settlement is a **zone fact** (plan 0047,
+      // section 3.1), and there is no zone line for this purchase to be a fact
+      // about. Nothing enters any household's consumption history until plan
+      // `0058` binds the line to a list.
       const advance =
-        req.outcome === SettlementOutcome.NOT_AVAILABLE ? outstanding : applied;
+        req.outcome === SettlementOutcome.NOT_AVAILABLE
+          ? outstanding
+          : eligible.length === 0
+            ? units
+            : applied;
 
       line.settledQuantity = Math.min(
         line.quantity,

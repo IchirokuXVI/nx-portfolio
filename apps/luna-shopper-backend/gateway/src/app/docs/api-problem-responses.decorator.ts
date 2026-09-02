@@ -41,6 +41,16 @@ export interface ProblemResponseOptions {
    * apart by `code` and a client branches on it to open the profile page.
    */
   scopeRequired?: boolean;
+  /**
+   * The route writes to a basket that may be over, so it can answer 409 with a
+   * code the client tells apart from a plain conflict (plan 0055, section 3.3).
+   *
+   * Documented separately from `conflict` for the same reason `scopeRequired` is
+   * documented separately from `body`: they share a status and are told apart by
+   * `code`, and this is the one a client turns into "this basket is finished"
+   * rather than into a retry.
+   */
+  finishedBasket?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -96,6 +106,12 @@ export function ApiProblemResponses(
     // would replace the validation description rather than add to it, and the
     // envelope they point at is the same schema either way.
     codes.push(ERROR_CODES.CATALOG_SCOPE_REQUIRED);
+  }
+  if (options.finishedBasket && !options.conflict) {
+    // Only when `conflict` did not already document the 409, for the reason
+    // given above `scopeRequired`: two `@ApiResponse` on one status keep the
+    // last, so declaring both replaces a description rather than adding to it.
+    codes.push(ERROR_CODES.GENERATED_LIST_FINISHED);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);
