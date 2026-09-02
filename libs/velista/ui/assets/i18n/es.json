@@ -948,7 +948,22 @@
     "send": {
       "open": "Enviar a una lista de la compra",
       "title": "{{name}}",
-      "pending": "Esperando a que esa lista lo acepte"
+      "pending": "Esperando a que esa lista lo acepte",
+      "loading": "Cargando tus listas",
+      "loadFailed": "Tus listas no se han podido cargar",
+      "retry": "Reintentar",
+      "empty": "No hay ninguna lista a la que puedas enviar esto",
+      "fromThisBasket": "De esta compra",
+      "searchLabel": "Buscar entre tus listas",
+      "matches_one": "{{count}} lista",
+      "matches_other": "{{count}} listas",
+      "warning": "Esto añade «{{content}}» a {{list}}. No se puede sacar de ahí desde aquí.",
+      "confirm": "Enviarlo",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "done": "Añadido a {{list}}.",
+      "waiting": "Añadido a {{list}}. Está esperando a que alguien de ahí lo apruebe.",
+      "noneOutstanding": "Añadido a {{list}} sin nada pendiente. Ahí no se ha registrado ninguna compra."
     },
     "people": {
       "title": "En esta lista",

@@ -1,10 +1,218 @@
 @use '../basket-shared' as shared;
 
 .title {
-  margin: 0 0 var(--app-space-2);
+  margin: 0;
   font-family: var(--app-font-display);
   font-weight: 400;
   font-size: var(--app-text-xl);
   line-height: var(--app-leading-heading);
   color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+.hint {
+  margin: var(--app-space-2) 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+// --- The search -------------------------------------------------------------
+
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin-block: var(--app-space-4) var(--app-space-3);
+}
+
+.search-label {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.search-field {
+  @include shared.field;
+}
+
+// The count is for a screen reader first: it is the only way somebody typing hears
+// how far they have narrowed the list without leaving the field. Drawn as well,
+// quietly, because a sighted reader benefits from the same fact and a region that
+// is not rendered is not announced either.
+.matches {
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+// --- The picker -------------------------------------------------------------
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-2);
+}
+
+// A real heading, so a reader moving by heading reaches "From this basket" first.
+// Small and quiet, because it groups rather than competing with the sheet's title.
+.group-heading {
+  margin: var(--app-space-3) 0 0;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-text-muted);
+}
+
+.targets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// The whole row is the label, so the tap target is the row and not the dot: this is
+// read one handed, and a 14px radio is not something a thumb aims at in an aisle.
+.target {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--app-border-strong);
+  }
+
+  // The ring goes on the row, because the row is what the control looks like. The
+  // radio itself is where focus lands, so the ring is drawn from it.
+  &:has(.target-radio:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  // Checked is a border **and** the radio's own filled dot, never colour alone.
+  &:has(.target-radio:checked) {
+    border-color: var(--app-action-bg);
+  }
+}
+
+.target-radio {
+  flex: none;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+}
+
+.target-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.target-name {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.target-zone {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  overflow-wrap: anywhere;
+}
+
+// --- What the sheet is saying -----------------------------------------------
+
+// The one region, which is why it stays in the flow with nothing in it: the element
+// outlives the sentence so the sentence is announced when it arrives.
+.say {
+  margin: var(--app-space-4) 0 var(--app-space-2);
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-status-attention-bg);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+
+  // Nothing to say: no box, no spacing, and still in the tree.
+  &.is-empty {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+  }
+
+  // Afterwards it is a record of something that happened rather than a warning
+  // about something about to, so it drops the attention treatment.
+  &.is-outcome {
+    border-color: var(--app-border-subtle);
+    background: var(--app-surface-sunken);
+  }
+}
+
+// --- The controls -----------------------------------------------------------
+
+.primary {
+  @include shared.primary-button;
+
+  margin-block-start: var(--app-space-2);
+}
+
+.secondary {
+  @include shared.secondary-button;
+
+  margin-block-start: var(--app-space-3);
+}
+
+.quiet {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  margin-block-start: var(--app-space-2);
+  padding: var(--app-space-2);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--app-text-secondary);
+  }
+}
+
+.failed {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-status-danger-fg);
+}
+
+// The support reference, on its own line under the sentence. Quiet and monospaced,
+// because it is a string somebody copies rather than reads.
+.reference {
+  display: block;
+  margin-block-start: var(--app-space-1);
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
 }
