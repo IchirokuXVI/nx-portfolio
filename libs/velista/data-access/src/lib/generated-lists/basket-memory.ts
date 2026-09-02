@@ -14,6 +14,7 @@ import {
   type BasketOriginQuantityResult,
   type BasketOutstandingRequest,
   type BasketParticipant,
+  type BasketPriceScope,
   type BasketProduct,
   type BasketSession,
   type BasketSettleRequest,
@@ -21,6 +22,7 @@ import {
   type BasketShareLink,
   type BasketView,
   type CatalogSuggestion,
+  type ProductOffer,
 } from '@portfolio/velista/models';
 import { CatalogMemory } from '../catalog/catalog-memory';
 import { GatewayError } from '../errors';
@@ -32,6 +34,32 @@ const LIVE_SECRET = '9f2k4tqvb1xz8mq7';
 /** The basket every read here is about. */
 const BASKET_ID = 'basket-saturday';
 
+/** The one scope the mock prices against: Mercadona's Córdoba warehouse. */
+const SCOPE_MERCADONA = 'scope-mercadona-cordoba';
+
+/**
+ * A price on a product, for the pick sheet to have something to compare.
+ *
+ * The pick on the milk line is Hacendado, which is **not** the cheapest here on
+ * purpose: the sheet's whole point is showing that the default was chosen by
+ * insertion order and the cheaper option is one tap away (velista `0062`,
+ * section 5.2). The third milk carries no price, which is the mix section 5.3
+ * draws, and the eggs are priced so the row caption has a number on it.
+ */
+const offer = (
+  price: number,
+  unitPrice: number | null,
+  unitPriceLabel: string | null
+): ProductOffer => ({
+  price,
+  currency: 'EUR',
+  unitPrice,
+  unitPriceLabel,
+  observedAt: new Date('2026-09-01T06:00:00.000Z'),
+  sourceKind: 'OFFICIAL_WEB',
+  priceScopeId: SCOPE_MERCADONA,
+});
+
 const PRODUCTS: readonly BasketProduct[] = [
   {
     id: 'item-milk-hacendado',
@@ -42,6 +70,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Hacendado',
     size: 1,
     unit: 'LITER',
+    offer: offer(0.95, 0.95, 'EUR/L'),
   },
   {
     id: 'item-milk-pascual',
@@ -49,6 +78,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Pascual',
     size: 1,
     unit: 'LITER',
+    offer: offer(0.89, 0.89, 'EUR/L'),
   },
   {
     id: 'item-milk-central',
@@ -59,6 +89,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Central Lechera Asturiana',
     size: 1,
     unit: 'LITER',
+    offer: null,
   },
   {
     id: 'item-eggs',
@@ -66,6 +97,24 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Hacendado',
     size: 12,
     unit: 'UNIT',
+    offer: offer(2.85, 0.24, 'EUR/ud'),
+  },
+];
+
+/** The scope those offers name, with its shops for a reader who passes the rule. */
+const SCOPES: readonly BasketPriceScope[] = [
+  {
+    priceScopeId: SCOPE_MERCADONA,
+    supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+    locations: [
+      {
+        id: 'loc-tejares',
+        label: null,
+        address: 'Ronda de los Tejares 32',
+        city: 'Córdoba',
+        postalCode: '14008',
+      },
+    ],
   },
 ];
 
@@ -477,6 +526,15 @@ export class BasketMemory implements BasketServiceI {
       me: this.me,
       seesZoneData: this.seesZoneData,
       products: new Map(PRODUCTS.map((product) => [product.id, product])),
+      // The chain reaches everybody and the shops reach only a reader who
+      // passes the rule (backend `0066`, section 5), redacted here exactly as
+      // the gateway redacts them: to an empty array, never to an absent key.
+      scopes: new Map(
+        SCOPES.map((scope) => [
+          scope.priceScopeId,
+          this.seesZoneData ? scope : { ...scope, locations: [] },
+        ])
+      ),
       listNames: this.seesZoneData
         ? new Map([
             ['list-weekly', 'Weekly shop · Flat 3B'],

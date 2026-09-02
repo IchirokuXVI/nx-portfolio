@@ -308,3 +308,27 @@ export type GenerationScope = (typeof GENERATION_SCOPES)[number];
  * either, which is a sheet that draws nothing ticked and a submit that refuses.
  */
 export const GENERATION_SCOPE_FALLBACK: GenerationScope = 'ALL';
+
+/**
+ * Where a price came from (backend `0038`; `PriceSourceKind` on the wire).
+ *
+ * Read for one distinction only: `ADMIN` is a number somebody typed in by hand,
+ * and the pick sheet says so rather than passing it off as the chain's own
+ * figure (velista `0062`, section 5.4). Everything else is drawn the same way.
+ */
+export const PRICE_SOURCE_KINDS = [
+  'OFFICIAL_API',
+  'OFFICIAL_WEB',
+  'OFFICIAL_LEAFLET',
+  'ADMIN',
+  'USER_RECEIPT',
+  'USER_REPORTED',
+  'UNKNOWN',
+] as const;
+export type PriceSourceKind = (typeof PRICE_SOURCE_KINDS)[number];
+
+/**
+ * A kind this build has never heard of. It is not `ADMIN`, which is the only
+ * value that changes a sentence, so an unknown source reads as the chain's own.
+ */
+export const PRICE_SOURCE_KIND_FALLBACK: PriceSourceKind = 'UNKNOWN';

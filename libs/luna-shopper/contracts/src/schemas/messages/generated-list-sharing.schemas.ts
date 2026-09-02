@@ -80,6 +80,12 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   basketResult: schemaId('generated-list-sharing/BasketResult'),
   /** One source list, named, for the "from" caption on a row. */
   sourceName: schemaId('generated-list-sharing/SourceName'),
+  /** One price scope an offer names, described for a person (plan 0066). */
+  basketPriceScopeView: schemaId('generated-list-sharing/BasketPriceScopeView'),
+  /** One shop of such a scope, gated by section 5 of that plan. */
+  basketScopeLocationView: schemaId(
+    'generated-list-sharing/BasketScopeLocationView'
+  ),
   basketRequest: schemaId('msg/generatedList.basket.get/request'),
   setPickRequest: schemaId('msg/generatedList.setPick/request'),
   /** Put a line in the basket as any live participant (plan 0055, section 3). */
@@ -421,6 +427,10 @@ const basketResult = object(
     sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),
     sourceNames: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.sourceName)),
     products: array(ref(CATALOG_SCHEMA_IDS.itemView)),
+    // Plan 0066, section 4: one entry per scope id any product's `bestOffer`
+    // names. Required and possibly empty, never absent: nothing about it is
+    // redacted as a whole, only the shops inside each entry are.
+    scopes: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketPriceScopeView)),
   },
   [
     'id',
@@ -432,7 +442,45 @@ const basketResult = object(
     'me',
     'seesZoneData',
     'products',
+    'scopes',
   ]
+);
+
+/**
+ * One shop of a price scope, as much of it as the pick sheet draws (plan 0066,
+ * section 4). Everything but the id is nullable, because the harvester places
+ * stores from OpenStreetMap and a store there can have a name and no street.
+ */
+const basketScopeLocationView = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.basketScopeLocationView,
+  {
+    supermarketLocationId: nonEmptyString(),
+    label: { anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }] },
+    address: nullableString(),
+    city: nullableString(),
+    postalCode: nullableString(),
+  },
+  ['supermarketLocationId', 'label', 'address', 'city', 'postalCode']
+);
+
+/**
+ * A price scope described for a person (plan 0066, section 4).
+ *
+ * `locations` is required and **empty for a reader who may not have them**
+ * (section 5), which is also what a scope catalog cannot place answers with. One
+ * shape for both, so the client has nothing to branch on.
+ */
+const basketPriceScopeView = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.basketPriceScopeView,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    locations: array(
+      ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketScopeLocationView)
+    ),
+  },
+  ['priceScopeId', 'supermarketId', 'supermarketName', 'locations']
 );
 
 /**
@@ -964,6 +1012,8 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   basketLineView,
   basketView,
   basketResult,
+  basketScopeLocationView,
+  basketPriceScopeView,
   sourceName,
   lineMovedEvent,
   basketRequest,

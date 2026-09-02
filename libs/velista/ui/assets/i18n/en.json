@@ -936,7 +936,11 @@
       "title": "Which one did you get?",
       "hint": "Any of these counts as this line. Pick the one in your trolley.",
       "current": "Chosen",
-      "none": "This line names no product"
+      "none": "This line names no product",
+      "cheapest": "Cheapest",
+      "noPrice": "No price",
+      "asOf": "Prices from {{when}}",
+      "asOfTyped": "Prices from {{when}}, entered by hand"
     },
     "allocate": {
       "open": "Split between lists",

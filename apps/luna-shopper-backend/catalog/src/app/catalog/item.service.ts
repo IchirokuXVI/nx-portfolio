@@ -198,6 +198,19 @@ export class ItemService {
    * It exists so the basket screen can name every line's pick and every option
    * behind it in one round trip. Without it, twenty lines with three options each
    * would be sixty {@link get} calls to draw one page.
+   *
+   * ## Priced when asked (plan 0066, section 2)
+   *
+   * With `priceScopeIds` every item carries `bestOffer`: the cheapest of its rows
+   * across exactly those scopes, or **null** when it has none there, so a caller
+   * can tell "not priced at your shops" from "this read quotes no prices".
+   * Absent and empty scopes are the same answer here, unlike {@link search}: a
+   * lookup by id returns the same items either way, so the only question is
+   * whether a price is attached.
+   *
+   * Cheapest **by price, not by unit price** (section 2.1). The price is what the
+   * till charges; ranking by unit price is the better answer to "which milk is
+   * cheaper" and belongs to backlog 0004 with the threshold that makes it usable.
    */
   async getMany(req: GetItemsRequest): Promise<GetItemsResult> {
     const ids = [...new Set(req.ids)].slice(0, ITEM_LOOKUP_LIMITS.maxIds);
@@ -205,9 +218,23 @@ export class ItemService {
       return { items: [] };
     }
     const rows = await this.items.find({ where: { id: In(ids) } });
-    // An arrow rather than a bare reference: `map` passes the index as the
-    // second argument, which `toItemView` reads as `bestOffer`.
-    return { items: rows.map((row) => toItemView(row)) };
+    const scopeIds = req.priceScopeIds ?? [];
+    if (scopeIds.length === 0) {
+      // An arrow rather than a bare reference: `map` passes the index as the
+      // second argument, which `toItemView` reads as `bestOffer`.
+      return { items: rows.map((row) => toItemView(row)) };
+    }
+    const offers = await this.offersFor(
+      rows.map((row) => row.id),
+      scopeIds,
+      'price'
+    );
+    return {
+      items: rows.map((row) => ({
+        ...toItemView(row),
+        bestOffer: offers.get(row.id) ?? null,
+      })),
+    };
   }
 
   /**
@@ -431,19 +458,27 @@ export class ItemService {
    * The cheapest price each of these items has at these scopes.
    *
    * `DISTINCT ON` rather than a group by with a self join: one pass, and the
-   * ordering inside it is the definition of cheapest. Unit price first because
+   * ordering inside it is the definition of cheapest, which is the one thing the
+   * two callers disagree on. {@link search} ranks by **unit price** first because
    * that is the field whose only purpose is comparison (plan 0038, section 2.4),
    * then the shelf price for a product whose source published no unit price at
-   * all, which would otherwise never be quotable.
+   * all, which would otherwise never be quotable. {@link getMany} ranks by
+   * **price** first (plan 0066, section 2.1): it quotes what the till charges for
+   * one product, and a unit price ranking there would be half of backlog 0004.
    */
   private async offersFor(
     itemIds: string[],
-    priceScopeIds?: string[]
+    priceScopeIds?: string[],
+    rank: 'unitPrice' | 'price' = 'unitPrice'
   ): Promise<Map<string, ItemOfferView>> {
     const offers = new Map<string, ItemOfferView>();
     if (itemIds.length === 0 || !priceScopeIds || priceScopeIds.length === 0) {
       return offers;
     }
+    const [first, second] =
+      rank === 'price'
+        ? ['si."price"', 'si."unitPrice"']
+        : ['si."unitPrice"', 'si."price"'];
     const rows = await this.prices
       .createQueryBuilder('si')
       .distinctOn(['si."itemId"'])
@@ -453,8 +488,8 @@ export class ItemService {
       })
       .andWhere('si."available"')
       .orderBy('si."itemId"', 'ASC')
-      .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
-      .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
+      .addOrderBy(first, 'ASC', 'NULLS LAST')
+      .addOrderBy(second, 'ASC', 'NULLS LAST')
       .getMany();
     for (const row of rows) {
       offers.set(row.itemId, toItemOfferView(row));

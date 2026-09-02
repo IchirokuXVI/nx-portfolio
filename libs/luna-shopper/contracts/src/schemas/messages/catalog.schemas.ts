@@ -459,6 +459,8 @@ const listLocationsRequest = object(
   {
     userId: nonEmptyString(),
     supermarketId: nonEmptyString(),
+    // Plan 0066, section 4: only the shops that sell at this scope.
+    priceScopeId: nonEmptyString(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -527,7 +529,13 @@ const itemIdRequest = object(
  */
 const getItemsRequest = object(
   CATALOG_SCHEMA_IDS.getItemsRequest,
-  { ids: array(nonEmptyString()) },
+  {
+    ids: array(nonEmptyString()),
+    // Plan 0066: price the lookup at these scopes. Absent and empty both mean
+    // "do not price", unlike search, because a lookup by id answers the same
+    // items either way.
+    priceScopeIds: array(nonEmptyString()),
+  },
   ['ids']
 );
 

@@ -3,6 +3,8 @@ import {
   BASKET_ORIGIN_UNAVAILABLE_REASONS,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
+  PRICE_SOURCE_KIND_FALLBACK,
+  PRICE_SOURCE_KINDS,
   type BasketBindResult,
   type BasketLine,
   type BasketLineOrigin,
@@ -14,11 +16,14 @@ import {
   type BasketOriginQuantityResult,
   type BasketParticipant,
   type BasketPresenceEntry,
+  type BasketPriceScope,
   type BasketProduct,
   type BasketSession,
   type BasketSettleResult,
   type BasketShareLink,
   type BasketView,
+  type ProductOffer,
+  type ScopeLocation,
 } from '@portfolio/velista/models';
 import { toLocalizedName } from './mappers';
 import {
@@ -407,12 +412,48 @@ export function toBasketBindResult(raw: unknown): BasketBindResult | null {
 }
 
 /**
+ * From catalog's `ItemOfferView` (velista `0062`, section 3).
+ *
+ * Null for anything that is not an offer, which is the ordinary case: absent
+ * on a read that priced nothing, null on a product with no price at the run's
+ * scopes, and both draw the same nothing. The scope id is the one thing
+ * required, because an offer that cannot say where it came from cannot be
+ * resolved against {@link BasketView.scopes}; a price without one would still
+ * be a number, and it is dropped rather than drawn unplaceable, so that the
+ * pick sheet never says "cheapest" about a figure it cannot account for.
+ */
+function toProductOffer(raw: unknown): ProductOffer | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const priceScopeId = str(raw['priceScopeId']);
+  if (priceScopeId === null) {
+    return null;
+  }
+
+  return {
+    price: typeof raw['price'] === 'number' ? raw['price'] : null,
+    currency: nullableStr(raw['currency']),
+    unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
+    unitPriceLabel: nullableStr(raw['unitPriceLabel']),
+    observedAt: date(raw['priceObservedAt']),
+    sourceKind: oneOf(
+      raw['priceSourceKind'],
+      PRICE_SOURCE_KINDS,
+      PRICE_SOURCE_KIND_FALLBACK
+    ),
+    priceScopeId,
+  };
+}
+
+/**
  * From catalog's `ItemView`, kept to what a row and the swap sheet draw.
  *
- * `bestOffer` is deliberately not read. Backend `0050` resolves a pick to the
- * first option added rather than the cheapest, and `0044` section 9 keeps prices
- * out of scope until a second chain is harvested, so a price on this screen would
- * be a number nothing behind it computed.
+ * `bestOffer` is read since velista `0062`: the cheapest price at the run's
+ * scopes, or null. What is still **not** read into anything is a claim about the
+ * pick, which backend `0050` resolves to the first option added rather than the
+ * cheapest; the sheet marks the cheapest option and leaves the pick alone.
  */
 function toBasketProduct(raw: unknown): BasketProduct | null {
   if (!isRecord(raw)) {
@@ -428,6 +469,48 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         brand: nullableStr(raw['brand']),
         size: typeof raw['unitSize'] === 'number' ? raw['unitSize'] : null,
         unit: nullableStr(raw['defaultUnit']),
+        offer: toProductOffer(raw['bestOffer']),
+      };
+}
+
+/** From `BasketScopeLocationView`: one shop, as much of it as the sheet draws. */
+function toScopeLocation(raw: unknown): ScopeLocation | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['supermarketLocationId']);
+  return id === null
+    ? null
+    : {
+        id,
+        label: isRecord(raw['label']) ? toLocalizedName(raw['label']) : null,
+        address: nullableStr(raw['address']),
+        city: nullableStr(raw['city']),
+        postalCode: nullableStr(raw['postalCode']),
+      };
+}
+
+/**
+ * From `BasketPriceScopeView` (velista `0062`, section 3).
+ *
+ * `locations` degrades to empty rather than absent, and that is the model's
+ * own rule and not a mapper's shortcut: a reader the server withheld the shops
+ * from and a scope catalog cannot place both draw the chain alone, and nothing
+ * anywhere branches on which it was.
+ */
+function toBasketPriceScope(raw: unknown): BasketPriceScope | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const priceScopeId = str(raw['priceScopeId']);
+  return priceScopeId === null
+    ? null
+    : {
+        priceScopeId,
+        supermarketName: toLocalizedName(raw['supermarketName']),
+        locations: mapArray(raw['locations'], toScopeLocation),
       };
 }
 
@@ -464,6 +547,15 @@ export function toBasketView(raw: unknown): BasketView | null {
       mapArray(raw['products'], toBasketProduct).map((product) => [
         product.id,
         product,
+      ])
+    ),
+    // Empty when the key is missing, which is a backend from before luna `0066`
+    // or a gateway that priced the read and could not name the scopes. An offer
+    // whose scope is not in here resolves to no place and is still a price.
+    scopes: new Map(
+      mapArray(raw['scopes'], toBasketPriceScope).map((scope) => [
+        scope.priceScopeId,
+        scope,
       ])
     ),
     // Empty rather than absent, because a Map has no third state and the caption

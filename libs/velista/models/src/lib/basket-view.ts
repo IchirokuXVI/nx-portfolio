@@ -2,6 +2,7 @@ import type {
   BasketLineKind,
   BasketOriginUnavailableReason,
   ParticipantKind,
+  PriceSourceKind,
   SettlementOutcome,
 } from './enums';
 import type { LocalizedName } from './shopping-profile';
@@ -118,13 +119,43 @@ export interface BasketLineOrigin {
 }
 
 /**
+ * What one product costs, at the cheapest scope this basket was priced against
+ * (velista `0062`, section 3; `ItemOfferView` on the wire).
+ *
+ * A fact and not a recommendation. The pick is still the first option added
+ * and not the cheapest, so a row quoting this is quoting what its product
+ * costs, and the pick sheet is where two of them are put next to each other.
+ */
+export interface ProductOffer {
+  /** In {@link currency}. Null is a scope that carries the product with no price on it. */
+  readonly price: number | null;
+  readonly currency: string | null;
+  /** The source's own figure, never recomputed here. Null when it published none. */
+  readonly unitPrice: number | null;
+  /** "EUR/L", "EUR/lv". Text for a human, not a unit to parse. */
+  readonly unitPriceLabel: string | null;
+  /** Without it a price has no age. */
+  readonly observedAt: Date | null;
+  readonly sourceKind: PriceSourceKind;
+  /** Which scope quoted it. Opaque, and resolved against {@link BasketView.scopes}. */
+  readonly priceScopeId: string;
+}
+
+/**
  * A product a line may mean: its pick, or one of the options behind it.
  *
- * **No price, deliberately.** Backend `0050` resolves the pick to the first
- * option added rather than the cheapest, because core holds no prices and the
- * harvester is off outside development, and `0044` section 9 puts prices out of
- * scope until a second chain is harvested. A "best price" badge over a pick that
- * was chosen by insertion order would be a lie the mock cannot authorize.
+ * ## The price, and what it is not
+ *
+ * {@link offer} is the cheapest price at the run's scopes, and it is **null
+ * wherever nothing was harvested there**, which is every product in staging and
+ * production, where the harvester is off on purpose. No layout may depend on it
+ * existing: a row with a price and a row without are the same shape.
+ *
+ * **The pick is still the first option added and not the cheapest.** Backend
+ * `0050` resolves it by insertion order and `0066` section 6 keeps it that way,
+ * so nothing here marks the pick as the best buy. What the pick sheet does
+ * instead is mark which option *is* the cheapest, so a shopper can see that the
+ * default is not it and change it in one tap.
  */
 export interface BasketProduct {
   id: string;
@@ -140,6 +171,41 @@ export interface BasketProduct {
   /** e.g. `1` with {@link BasketProduct.unit} `LITER`. Null when catalog does not know. */
   size: number | null;
   unit: string | null;
+  /** The cheapest price at the run's scopes, or null where there is none. */
+  readonly offer: ProductOffer | null;
+}
+
+/**
+ * One price scope the basket was priced against, described for a person
+ * (velista `0062`, section 3; `BasketPriceScopeView` on the wire).
+ *
+ * A scope is the set of stores a chain charges the same in: the right key for a
+ * price and not something to show anybody, so a row resolves the id here and
+ * draws the chain, and the pick sheet draws the shop too when there is one.
+ */
+export interface BasketPriceScope {
+  readonly priceScopeId: string;
+  /** Both locales, resolved with `inLocale` where drawn. Never flattened in the mapper. */
+  readonly supermarketName: LocalizedName;
+  /**
+   * The shops. **Empty for a reader the server withheld them from**, per
+   * backend `0066` section 5, and empty for a scope whose stores catalog cannot
+   * place. Both draw the chain and no address, and no control anywhere is
+   * offered over the distinction, which is why this is an empty array and not
+   * an optional field like `origins`: a second representable state would exist
+   * only to be collapsed at every call site.
+   */
+  readonly locations: readonly ScopeLocation[];
+}
+
+/** One shop of a scope, as much of it as the pick sheet draws. */
+export interface ScopeLocation {
+  readonly id: string;
+  /** The shop's own name, both locales. Null where catalog has none. */
+  readonly label: LocalizedName | null;
+  readonly address: string | null;
+  readonly city: string | null;
+  readonly postalCode: string | null;
 }
 
 /**
@@ -441,6 +507,15 @@ export interface BasketView {
   seesZoneData: boolean;
   /** Every product any line names, by id. Empty when catalog was unreachable. */
   products: ReadonlyMap<string, BasketProduct>;
+  /**
+   * The scopes the products' offers name, by scope id (velista `0062`).
+   *
+   * A map for the same reason {@link products} is one: a row resolves an id and
+   * should not scan an array. Empty when nothing is priced, and empty too when
+   * the gateway priced the read but could not name the scopes; an offer whose
+   * scope is not here resolves to no place and is still a price.
+   */
+  readonly scopes: ReadonlyMap<string, BasketPriceScope>;
   /** Which lists the run drew from. Absent unless {@link seesZoneData}. */
   sources?: readonly { zoneId: string; listId: string }[];
   /**

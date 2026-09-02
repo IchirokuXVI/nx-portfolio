@@ -17,9 +17,14 @@ import {
   GENERATED_LIST_SHARING_PATTERNS,
   GENERATED_LIST_SHARING_SCHEMA_IDS,
   ITEM_PATTERNS,
+  SUPERMARKET_LOCATION_PATTERNS,
+  SUPERMARKET_PATTERNS,
   type AddGeneratedListParticipantLineRequest,
+  type BasketPriceScopeView,
+  type BasketScopeLocationView,
   type BindGeneratedListLineRequest,
   type BindGeneratedListLineResult,
+  type CatalogScopeView,
   type CatalogSuggestResponse,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
@@ -45,6 +50,8 @@ import {
   type ItemPage,
   type ItemView,
   type JoinGeneratedListRequest,
+  type ListSupermarketLocationsRequest,
+  type ListSupermarketsRequest,
   type MintParticipantTokenRequest,
   type MintParticipantTokenResult,
   type ParticipantTokenResult,
@@ -55,9 +62,14 @@ import {
   type SetGeneratedListOriginQuantityResult,
   type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
+  type SupermarketLocationPage,
+  type SupermarketPage,
   type UserProfileView,
 } from '@portfolio/luna-shopper/contracts';
-import { ForbiddenException } from '@portfolio/luna-shopper/platform';
+import {
+  ForbiddenException,
+  MAX_PAGE_SIZE,
+} from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -379,25 +391,48 @@ export class GeneratedListParticipantController {
       req
     );
 
-    return { ...basket, products: await this.productsOf(basket) };
+    // Plan 0066, section 3: the scopes the run was composed against, resolved
+    // exactly as the suggest route resolves them and never from the reader.
+    // Every way of having none lands on null, and the read proceeds unpriced.
+    const resolved = await this.resolvedScopesOf(id, participant);
+    const products = await this.productsOf(
+      basket,
+      resolved?.view.priceScopeIds
+    );
+    const scopes = resolved
+      ? await this.scopesOf(
+          products,
+          resolved.ownerUserId,
+          resolved.view,
+          basket.seesZoneData
+        )
+      : [];
+
+    return { ...basket, products, scopes };
   }
 
   /**
-   * The products every line names, in one catalog round trip.
+   * The products every line names, in one catalog round trip, priced at the
+   * run's scopes when there are any (plan 0066, section 3).
    *
    * Composed here rather than fetched by the client because every catalog route
    * needs an account token and the reader may be a guest who has none. Section
    * 6.1 says a line's options are catalog products and never zone data, so a
    * guest is entitled to the names; this is how they get them without opening a
-   * second public catalog surface.
+   * second public catalog surface. The price reaches the same reader for the
+   * same reason: what a tin of tomatoes costs at a chain is a product fact and
+   * not a fact about anybody's household (plan 0066, section 5).
    *
    * A catalog that is unreachable costs the captions and not the screen: the
    * lines, their quantities and what is outstanding are the basket, and a shopper
    * standing in an aisle is better served by a list with unnamed picks than by an
-   * error page.
+   * error page. Failing to price is not failing to read, either (section 3.1):
+   * no scopes means no prices, and nothing on this path may turn a missing price
+   * into a failed screen.
    */
   private async productsOf(
-    basket: GeneratedListBasketView
+    basket: GeneratedListBasketView,
+    priceScopeIds: string[] | undefined
   ): Promise<ItemView[]> {
     const ids = [
       ...new Set(
@@ -410,7 +445,10 @@ export class GeneratedListParticipantController {
       return [];
     }
 
-    const req: GetItemsRequest = { ids };
+    const req: GetItemsRequest =
+      priceScopeIds && priceScopeIds.length > 0
+        ? { ids, priceScopeIds }
+        : { ids };
     try {
       const found = await this.nats.send<GetItemsResult>(
         ITEM_PATTERNS.getMany,
@@ -420,6 +458,125 @@ export class GeneratedListParticipantController {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * What each scope an offer names **is** (plan 0066, section 4): the chain for
+   * everybody, and the shops only for a reader who passes the all or nothing
+   * rule (section 5).
+   *
+   * One entry per scope id that appears on any `bestOffer`, and no others. The
+   * scope to chain mapping comes off the same resolution that priced the read,
+   * which is cached beside it; the chain names are one `supermarket.list`, and
+   * the shops one `supermarketLocation.list` per scope, which is per chain and
+   * never per line: a basket of thirty lines across two chains describes two
+   * scopes.
+   *
+   * ## The shops are the owner's geography
+   *
+   * "Cheapest at Mercadona" is what a shopper needs in order to act, and they
+   * are standing in the shop. A street address tells somebody who found a
+   * forwarded link which neighbourhood the owner lives in, which is the kind of
+   * disclosure plan 0051 spent a whole plan refusing to make by accident. So
+   * `locations` is populated only when `seesZoneData` is true and is an empty
+   * array otherwise, the shape the client already handles for a scope whose
+   * stores catalog cannot place. One condition, in one composition, and the one
+   * line to revisit if the owner is ever given a say in it.
+   *
+   * ## It fails empty
+   *
+   * A chain that cannot be named answers no scopes at all rather than an entry
+   * with a blank name. The prices still travel; the client draws them with no
+   * place, which is a smaller answer and still the answer to "how much".
+   */
+  private async scopesOf(
+    products: ItemView[],
+    userId: string,
+    resolved: CatalogScopeView,
+    seesZoneData: boolean
+  ): Promise<BasketPriceScopeView[]> {
+    const referenced = [
+      ...new Set(
+        products.flatMap((product) =>
+          product.bestOffer ? [product.bestOffer.priceScopeId] : []
+        )
+      ),
+    ];
+    if (referenced.length === 0) {
+      return [];
+    }
+
+    try {
+      const chains = await this.nats.send<SupermarketPage>(
+        SUPERMARKET_PATTERNS.list,
+        { userId, limit: MAX_PAGE_SIZE } satisfies ListSupermarketsRequest
+      );
+      const chainById = new Map(chains.items.map((c) => [c.id, c]));
+
+      const views = await Promise.all(
+        referenced.map(
+          async (priceScopeId): Promise<BasketPriceScopeView | null> => {
+            const scope = resolved.scopes.find(
+              (s) => s.priceScopeId === priceScopeId
+            );
+            const chain = scope
+              ? chainById.get(scope.supermarketId)
+              : undefined;
+            if (!scope || !chain) {
+              // A scope the resolution did not name, or a chain the listing did
+              // not: neither should happen, and an entry that cannot say which
+              // chain it is would be worse than none.
+              return null;
+            }
+            return {
+              priceScopeId,
+              supermarketId: chain.id,
+              supermarketName: chain.name,
+              locations: seesZoneData
+                ? await this.locationsOf(userId, chain.id, priceScopeId)
+                : [],
+            };
+          }
+        )
+      );
+      return views.filter(
+        (view): view is BasketPriceScopeView => view !== null
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * The shops of one scope, kept to what the pick sheet draws.
+   *
+   * One page at the largest size, which is the whole scope for any chain we
+   * harvest today: a scope is a warehouse's catchment, not a country. Once plan
+   * 0064 ships, a shop the run's profile has switched off is filtered out here,
+   * so it is never offered as the place to go and buy something.
+   */
+  private async locationsOf(
+    userId: string,
+    supermarketId: string,
+    priceScopeId: string
+  ): Promise<BasketScopeLocationView[]> {
+    const req: ListSupermarketLocationsRequest = {
+      userId,
+      supermarketId,
+      priceScopeId,
+      limit: MAX_PAGE_SIZE,
+    };
+    const page = await this.nats.send<SupermarketLocationPage>(
+      SUPERMARKET_LOCATION_PATTERNS.list,
+      req
+    );
+    return page.items.map((location) => ({
+      supermarketLocationId: location.id,
+      label: location.label,
+      address: location.address,
+      city: location.city,
+      postalCode: location.postalCode,
+    }));
   }
 
   /**
@@ -524,7 +681,7 @@ export class GeneratedListParticipantController {
     const common = {
       userId: scope.ownerUserId,
       query: query.q,
-      priceScopeIds: await this.priceScopesOf(scope),
+      priceScopeIds: (await this.describeScopes(scope))?.priceScopeIds,
       limit: query.limit,
     };
     const [groups, items] = await Promise.all([
@@ -555,7 +712,8 @@ export class GeneratedListParticipantController {
   }
 
   /**
-   * The scopes this basket's search is priced at, or none (section 5.1).
+   * The resolution this basket's reads are priced at, or none (section 5.1):
+   * the scope ids, and since plan 0066 which chain each belongs to.
    *
    * **Undefined and not an empty array**, which is the difference between an
    * unscoped search and no search at all: catalog answers an empty array with an
@@ -568,14 +726,18 @@ export class GeneratedListParticipantController {
    * nothing extra while they are shopping and picks up a profile edit as soon as
    * they make one.
    */
-  private async priceScopesOf(
+  private async describeScopes(
     scope: GeneratedListBasketScope
-  ): Promise<string[] | undefined> {
+  ): Promise<CatalogScopeView | undefined> {
     if (!scope.profileId) {
       return undefined;
     }
     try {
-      return await this.scopes.forRead(scope.ownerUserId, {
+      // `describe` rather than `forRead`: the same cached pair of round trips,
+      // and the whole view carries which chain each scope belongs to, which is
+      // what the basket read needs to name a price's place (plan 0066, section
+      // 4) without a third catalog call.
+      return await this.scopes.describe(scope.ownerUserId, {
         profileId: scope.profileId,
       });
     } catch {
@@ -583,6 +745,40 @@ export class GeneratedListParticipantController {
       // aisle can neither see nor fix. Section 5.3's rule applies to the whole
       // route: it fails empty, never loudly.
       return undefined;
+    }
+  }
+
+  /**
+   * The scopes the basket read is priced at, and whose they are (plan 0066,
+   * section 3).
+   *
+   * **The scope is the run's and never the reader's.** Core is asked what the
+   * basket was composed against and the answer names the owner and the run's
+   * profile; the participant is used only to authorize that question. A
+   * registered participant's own profile is refused as firmly as a guest's
+   * absent one: pricing somebody else's basket against your own shops answers a
+   * question nobody asked, and quietly tells the owner's guests where the guest
+   * shops.
+   *
+   * Every branch that cannot produce a scope set produces **null**, and the read
+   * proceeds unpriced (section 3.1): a run scoped by hand names no profile, a
+   * profile with no postal code and no chain throws `CATALOG_SCOPE_REQUIRED`, a
+   * profile since deleted, core slow, Redis down. A basket in an aisle is worth
+   * more than a price.
+   */
+  private async resolvedScopesOf(
+    generatedListId: string,
+    participant: GeneratedListParticipantContext
+  ): Promise<{ ownerUserId: string; view: CatalogScopeView } | null> {
+    try {
+      const scope = await this.nats.send<GeneratedListBasketScope>(
+        GENERATED_LIST_SHARING_PATTERNS.searchScope,
+        { generatedListId, participantId: participant.participantId }
+      );
+      const view = await this.describeScopes(scope);
+      return view ? { ownerUserId: scope.ownerUserId, view } : null;
+    } catch {
+      return null;
     }
   }
 

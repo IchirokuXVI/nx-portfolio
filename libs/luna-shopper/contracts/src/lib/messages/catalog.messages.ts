@@ -447,6 +447,12 @@ export interface SupermarketLocationIdRequest {
 export interface ListSupermarketLocationsRequest extends PageQuery {
   userId: string;
   supermarketId: string;
+  /**
+   * Only the shops that sell at this scope (plan 0066, section 4). A price is
+   * keyed by scope and a scope is not a place, so this is how a price is turned
+   * into somewhere to go. Absent lists the whole chain, as before.
+   */
+  priceScopeId?: string;
 }
 
 // --- Item requests ---------------------------------------------------------
@@ -522,6 +528,17 @@ export const ITEM_LOOKUP_LIMITS = {
 export interface GetItemsRequest {
   /** At most {@link ITEM_LOOKUP_LIMITS.maxIds}. Duplicates are harmless. */
   ids: string[];
+  /**
+   * Price the results at these scopes (plan 0066, section 2). Absent leaves
+   * `bestOffer` absent, as it always was.
+   *
+   * **Absent and empty are the same here**, which is not the convention
+   * {@link SearchItemsRequest} keeps. Search has to tell an admin listing
+   * everything from a user who shops nowhere, because the two want different
+   * result sets. A lookup by id returns the same items either way, so the only
+   * question is whether a price is attached, and one branch answers it.
+   */
+  priceScopeIds?: string[];
 }
 
 /**

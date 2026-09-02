@@ -17170,6 +17170,35 @@
         ],
         "additionalProperties": false
       },
+      "generated-list-sharing.BasketPriceScopeView": {
+        "type": "object",
+        "properties": {
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketName": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.BasketScopeLocationView"
+            }
+          }
+        },
+        "required": [
+          "priceScopeId",
+          "supermarketId",
+          "supermarketName",
+          "locations"
+        ],
+        "additionalProperties": false
+      },
       "generated-list-sharing.BasketResult": {
         "type": "object",
         "properties": {
@@ -17222,6 +17251,12 @@
             "items": {
               "$ref": "#/components/schemas/catalog.ItemView"
             }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.BasketPriceScopeView"
+            }
           }
         },
         "required": [
@@ -17233,7 +17268,53 @@
           "participants",
           "me",
           "seesZoneData",
-          "products"
+          "products",
+          "scopes"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.BasketScopeLocationView": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "supermarketLocationId",
+          "label",
+          "address",
+          "city",
+          "postalCode"
         ],
         "additionalProperties": false
       },
