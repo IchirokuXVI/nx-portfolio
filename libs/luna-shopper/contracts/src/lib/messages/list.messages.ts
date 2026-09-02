@@ -668,6 +668,23 @@ export interface LineSettlementView {
   settledByUserId: string | null;
   /** ISO 8601 UTC. */
   settledAt: string;
+  /**
+   * When somebody took this settlement back, or null while it stands (plan
+   * 0054, section 3.3).
+   *
+   * A reopen does not delete the row. A reverted settlement is **excluded from
+   * every consumption total** and is **still served here, marked**, because
+   * "somebody said they got this and then took it back" is a truer history than
+   * a gap. The alternative, a compensating row with a negative quantity, would
+   * make every existing sum over `quantity` wrong until it was taught about
+   * signs; a nullable timestamp changes each of those by one `WHERE` clause.
+   *
+   * Null on every row written before that plan, and on every row a settle
+   * writes. Who reverted it is a participant id and is deliberately not served,
+   * for the reason {@link settledByUserId} explains: it is meaningless to a zone
+   * reader who cannot resolve it.
+   */
+  revertedAt: string | null;
 }
 
 /**

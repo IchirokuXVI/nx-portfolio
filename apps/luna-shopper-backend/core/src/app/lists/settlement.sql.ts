@@ -21,6 +21,11 @@ import { READABLE_LIST } from '../zones/zone-summary.sql';
  * the `EXISTS` is a primary key lookup on `shopping_lists` and an index lookup on
  * the membership, evaluated only for the rows the item index already found.
  *
+ * Reverted rows are **not** filtered out, which is the other half of plan 0054
+ * section 3.3: this is a history rather than a total, and a purchase somebody
+ * took back is served marked so a reader sees what happened rather than a gap.
+ * The totals that must exclude them do it in their own queries.
+ *
  * The cursor is the boundary row's **own** sort key, read back by id rather than
  * carried in the token. An ISO timestamp in a cursor is milliseconds and a
  * `timestamptz` is microseconds, so a token carrying the value skips or repeats
@@ -37,7 +42,8 @@ export const ITEM_SETTLEMENTS_SQL = `
          s."outcome",
          s."quantity",
          s."settledByUserId",
-         s."settledAt"
+         s."settledAt",
+         s."revertedAt"
   FROM "line_settlements" s
   WHERE s."itemId" = $1
     AND EXISTS (
@@ -72,6 +78,11 @@ export const ITEM_SETTLEMENTS_SQL = `
  * A line with no settlements produces **no row at all**, which is what makes
  * {@link NO_LINE_SETTLEMENTS} the default rather than a fallback: never bought,
  * and nothing to report.
+ *
+ * `revertedAt IS NULL` is plan 0054 section 3.3 in one clause, and it applies to
+ * both indicators rather than only the count. A reopened `NOT_AVAILABLE` has to
+ * stop saying the shop had none, which is exactly what the most recent outcome
+ * would keep saying if the reverted row were still the newest one here.
  */
 export const LINE_SETTLEMENT_SUMMARY_SQL = `
   SELECT s."lineId",
@@ -80,6 +91,7 @@ export const LINE_SETTLEMENT_SUMMARY_SQL = `
            AS "lastOutcome"
   FROM "line_settlements" s
   WHERE s."lineId" = ANY($1::uuid[])
+    AND s."revertedAt" IS NULL
   GROUP BY s."lineId"
 `;
 

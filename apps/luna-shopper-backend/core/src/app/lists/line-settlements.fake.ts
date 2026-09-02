@@ -22,12 +22,38 @@ export interface FakeLineSettlements {
     create(data: Partial<LineSettlement>): Partial<LineSettlement>;
     save(row: Partial<LineSettlement>): Promise<Partial<LineSettlement>>;
     count(options: {
-      where: { lineId: string; outcome?: SettlementOutcome };
+      where: {
+        lineId: string;
+        outcome?: SettlementOutcome;
+        revertedAt?: unknown;
+      };
     }): Promise<number>;
     findOne(options: {
-      where: { lineId: string };
+      where: { lineId: string; revertedAt?: unknown };
     }): Promise<Partial<LineSettlement> | null>;
+    find(options: {
+      where: {
+        generatedListLineId?: string;
+        lineId?: string;
+        revertedAt?: unknown;
+      };
+    }): Promise<Partial<LineSettlement>[]>;
   };
+}
+
+/**
+ * The one `FindOperator` this table is read with is `IsNull()`, on `revertedAt`
+ * (plan 0054, section 3.3), so the fake reads the key's presence rather than
+ * interpreting the operator: a query that mentions it wants the rows that still
+ * stand. A second operator would need real handling, and this returns the wrong
+ * rows rather than pretending otherwise, which is what would make the spec that
+ * introduced it fail.
+ */
+function standing(
+  row: Partial<LineSettlement>,
+  where: { revertedAt?: unknown }
+): boolean {
+  return where.revertedAt === undefined || !row.revertedAt;
 }
 
 export function fakeLineSettlements(
@@ -52,6 +78,17 @@ export function fakeLineSettlements(
     repo: {
       create: (data) => ({ ...data }),
       async save(row) {
+        // An update in place when the row is already here, which is what
+        // TypeORM's `save` does and what a reopen relies on: marking a
+        // settlement reverted must not append a second copy of it (plan 0054,
+        // section 3.3).
+        const existing = rows.findIndex(
+          (candidate) => row.id !== undefined && candidate.id === row.id
+        );
+        if (existing >= 0) {
+          rows[existing] = { ...rows[existing], ...row };
+          return rows[existing];
+        }
         const stored = {
           ...row,
           id: row.id ?? `s${rows.length + 1}`,
@@ -64,11 +101,23 @@ export function fakeLineSettlements(
         return rows.filter(
           (row) =>
             row.lineId === where.lineId &&
-            (where.outcome === undefined || row.outcome === where.outcome)
+            (where.outcome === undefined || row.outcome === where.outcome) &&
+            standing(row, where)
         ).length;
       },
       async findOne({ where }) {
-        return newestFirst(where.lineId)[0] ?? null;
+        return (
+          newestFirst(where.lineId).find((row) => standing(row, where)) ?? null
+        );
+      },
+      async find({ where }) {
+        return rows.filter(
+          (row) =>
+            (where.lineId === undefined || row.lineId === where.lineId) &&
+            (where.generatedListLineId === undefined ||
+              row.generatedListLineId === where.generatedListLineId) &&
+            standing(row, where)
+        );
       },
     },
   };
