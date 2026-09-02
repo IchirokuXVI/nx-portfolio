@@ -47,6 +47,32 @@ export const ERROR_CODES = {
    * is nothing" and is a different and false statement.
    */
   CATALOG_SCOPE_REQUIRED: 'catalog_scope_required',
+  /**
+   * The basket line moved under the caller between reading it and acting on it
+   * (plan 0056, section 3.2).
+   *
+   * Named for **what happened** rather than for the field that carried it,
+   * because the client's recovery is a refetch and not a correction: nobody can
+   * fix `from`, they can only look again at a number somebody else has changed.
+   *
+   * Its own code rather than {@link CONFLICT} because the two ask the reader for
+   * different things. A conflict on this surface is a state that refuses the act
+   * outright ("this line is already finished"); this is an act that would still
+   * be valid, and might mean the **opposite** of what was intended, which is the
+   * inversion section 3.2 exists to make impossible.
+   */
+  OUTSTANDING_MOVED: 'outstanding_moved',
+  /**
+   * The basket is `COMPLETED` or `ARCHIVED`, so it takes no more writes (plan
+   * 0055, section 3.3, and plan 0056, section 5).
+   *
+   * Distinct from {@link CONFLICT} for the reason plan 0054 section 4 gave when
+   * it split "this line is already finished" off `validation_failed`: a client
+   * that cannot tell a state it can explain from a bug it cannot will show the
+   * wrong sentence for both. The line and the basket being finished are two
+   * different sentences.
+   */
+  BASKET_FINISHED: 'basket_finished',
   INTERNAL: 'internal',
 } as const;
 
@@ -91,5 +117,13 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // which is the whole reason the code exists: the client branches on it to open
   // the profile page rather than to show a field error.
   [ERROR_CODES.CATALOG_SCOPE_REQUIRED]: HttpStatus.BAD_REQUEST,
+  // 409 beside `conflict`, and told apart from it by code. Both are a well
+  // formed request the current state refuses; this one adds that the state moved
+  // *since the caller read it*, which is why the client refetches rather than
+  // rephrasing anything.
+  [ERROR_CODES.OUTSTANDING_MOVED]: HttpStatus.CONFLICT,
+  // 409 under the same rule: the basket is finished, which is a state and not a
+  // fault in the request.
+  [ERROR_CODES.BASKET_FINISHED]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

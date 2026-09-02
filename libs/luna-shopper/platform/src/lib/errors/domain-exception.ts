@@ -112,6 +112,39 @@ export class CatalogScopeRequiredException extends DomainException {
 }
 
 /**
+ * The basket line moved between the caller reading it and acting on it (plan
+ * 0056, section 3.2).
+ *
+ * Renders as 409 beside {@link ConflictException} and stays distinguishable from
+ * it by code. The difference is what the client does next: a conflict is a state
+ * that refuses the act, and this is an act that would still be applied and might
+ * now mean the opposite of what was intended, so the only honest answer is to
+ * show the number as it stands and let the person decide again.
+ *
+ * It carries **no number**, deliberately. The envelope drops
+ * {@link DomainException.details} on the way out (`problem-factory.ts` fills
+ * `errors` from its own input, and only a throttler's wait is lifted specially),
+ * so a current value put there would reach nobody. The recovery is a refetch of
+ * the basket, which is what the client has to do anyway: the line's whole state
+ * moved, not just this one number.
+ */
+export class OutstandingMovedException extends DomainException {
+  readonly code = ERROR_CODES.OUTSTANDING_MOVED;
+}
+
+/**
+ * The basket is `COMPLETED` or `ARCHIVED` and takes no more writes (plan 0055,
+ * section 3.3).
+ *
+ * Renders as 409, and exists apart from {@link ConflictException} so a client can
+ * say "this shopping list is finished" rather than the one sentence every other
+ * conflict on the same route also gets.
+ */
+export class BasketFinishedException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_FINISHED;
+}
+
+/**
  * Too many attempts. Carries the wait so the client can count it down (plan 0021,
  * section 2.2). The seconds travel in {@link DomainException.details} under
  * {@link RETRY_AFTER_SECONDS_DETAIL}, and the exception filter lifts them onto the

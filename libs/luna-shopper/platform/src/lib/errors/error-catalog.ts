@@ -61,6 +61,17 @@ export const ERROR_CATALOG: Record<
     en: 'Add a postal code or choose a supermarket to see prices.',
     es: 'Añade un código postal o elige un supermercado para ver precios.',
   },
+  // Phrased as news about the line rather than as a fault, because it is news:
+  // somebody else in the shop moved this number while it was on screen (plan
+  // 0056, section 3.2), and the reader's next act is to look at it again.
+  [ERROR_CODES.OUTSTANDING_MOVED]: {
+    en: 'Somebody else changed this line. Check it and try again.',
+    es: 'Otra persona ha cambiado esta línea. Compruébala e inténtalo de nuevo.',
+  },
+  [ERROR_CODES.BASKET_FINISHED]: {
+    en: 'This shopping list is finished, so it cannot be changed.',
+    es: 'Esta lista de la compra está terminada, así que no se puede cambiar.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

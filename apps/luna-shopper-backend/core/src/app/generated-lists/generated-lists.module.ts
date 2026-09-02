@@ -17,6 +17,7 @@ import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
@@ -78,6 +79,9 @@ import { LineClaimModule } from './line-claim.module';
     // own for the same reason: it is the other operation here that reaches a
     // zone list, with its own transaction and its own announcements.
     GeneratedListReopenService,
+    // Moving what is still to get (plan 0056). Small, because only the raise is
+    // new: lowering calls the settle above it rather than settling its own way.
+    GeneratedListOutstandingService,
     GeneratedListBasketService,
   ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets

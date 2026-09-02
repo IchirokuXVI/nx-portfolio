@@ -7165,6 +7165,114 @@
         ]
       }
     },
+    "/v1/generated-lists/{id}/lines/{lineId}/outstanding": {
+      "post": {
+        "operationId": "GeneratedListParticipantController_setOutstanding_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGeneratedListLineOutstandingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.setOutstanding` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.SettleResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.\n\n`outstanding_moved` — Somebody else changed this line. Check it and try again.\n\n`basket_finished` — This shopping list is finished, so it cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
     "/v1/generated-lists/{id}/lines/{lineId}/reopen": {
       "post": {
         "operationId": "GeneratedListParticipantController_reopen_v1",
@@ -14291,6 +14399,27 @@
           "outcome"
         ]
       },
+      "SetGeneratedListLineOutstandingDto": {
+        "type": "object",
+        "properties": {
+          "outstanding": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "How many are still to get after this. Above the current amount the basket will buy more and nothing is settled; below it, the difference was bought. Zero finishes the line, exactly as “got all” does."
+          },
+          "from": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "What the client believed was outstanding when the control was picked up. A mismatch is refused with `outstanding_moved` rather than applied, because somebody else moving the line can invert what the gesture meant: refetch and show the number as it stands."
+          }
+        },
+        "required": [
+          "outstanding",
+          "from"
+        ]
+      },
       "LocalizedTextDto": {
         "type": "object",
         "properties": {
@@ -18488,6 +18617,8 @@
               "not_configured",
               "client_too_old",
               "catalog_scope_required",
+              "outstanding_moved",
+              "basket_finished",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
