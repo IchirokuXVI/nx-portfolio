@@ -96,22 +96,37 @@ Every ticket in this folder is v2; ticket 1 was re-read under it.
 
 This is the part that changes the design, and none of it is about model quality.
 
-**Counter departments are not products.** A butcher or deli counter weighs
-something and the till prints `CARNICERIA` and a price. There is no product name,
-no quantity and no unit. On ticket 1 that is two lines of five, and 6.88 EUR of
-11.48 EUR: **60% of the basket by value is unmatchable to any catalog product by
-any technique**, because the information is not on the paper. No better model, no
-better prompt and no alias table changes that.
+**Counter departments are not products, on that ticket.** A butcher or deli
+counter weighs something and the till prints `CARNICERIA` and a price. There is no
+product name, no quantity and no unit. On ticket 1 that is two lines of five, and
+6.88 EUR of 11.48 EUR, 60% of the basket by value.
 
-So the line schema carries `isDepartment`, decided at extraction time, and:
+**But the detail is not lost, it is on a second ticket.** The counter prints its
+own ticket for what it weighed, and the shopper carries both. So a department line
+is not permanently opaque; it is a pointer to a companion ticket that has the
+product, the weight and the price per kilo. Several of the photographs in this
+corpus are those companion tickets, which is also why the corpus has more tickets
+than shopping trips.
 
-- **Catalog prices:** department lines are skipped. There is nothing to attach a
-  price to.
-- **Basket reconcile:** they become opaque lines, a description and a price with
-  no `itemId`, added but never used to correct a quantity.
+That changes the shape of the feature rather than the schema. `isDepartment` still
+gets decided at extraction time, and:
 
-Receipt coverage of the catalog will therefore be much patchier than a line count
-suggests, and that should be measured per chain before anyone promises otherwise.
+- **Catalog prices:** department lines are skipped. There is nothing on this ticket
+  to attach a price to. The companion ticket, scanned separately, is where the
+  price actually comes from.
+- **Basket reconcile:** ignore them for now and **tell the user**. A department line
+  means "there is another ticket for this", so the useful behavior is a notice
+  ("this receipt has a 5.97 EUR butcher line; scan that counter's ticket to add what
+  it was"), not a silent opaque line and not a guess.
+
+This is the argument for **scanning several tickets into one basket** as the normal
+case rather than the exception, which the consecutive invoice numbers on tickets 1
+and 2 already pointed at from a different direction.
+
+Receipt coverage of the catalog is therefore better than a single ticket suggests
+and worse than a line count suggests, and it depends on whether the shopper kept
+the counter tickets. It should be measured per chain before anyone promises a
+number.
 
 **One photo can hold two documents.** A receipt paid by card is usually printed
 attached to the card slip, which repeats the total (`Venta 16,20`) and carries its
@@ -241,46 +256,68 @@ here: `gemini-3.6-flash` took 25.9 s to answer `OK` to a text-only prompt, and
 11 s to read a whole receipt. Do not read these latencies as model speed; read them
 as "this tier is not for interactive use".
 
-## 9. Where it stands after two tickets
+## 9. Where it stands after three tickets
 
-**Accuracy is not the differentiator. Every reader got every number right on both
-tickets.** Ten readings, ten `BALANCED`. `isDepartment` was unanimous. The alias
-key came back verbatim from all five, mangled characters included.
+**Money is solved. Text is not.** Fifteen readings, fourteen `BALANCED` and one
+`MISMATCH` that was the checker correctly catching a derived subtotal. Every reader
+got every line, quantity, unit price and total right on all three tickets, and
+`isDepartment` was unanimous.
 
-That means model choice is decided by cost, latency and the unconstrained fields:
+Everything still open is in the fields arithmetic cannot see:
 
-| Model                 | Per 1000 tickets | Reproducible quirk                                |
-| --------------------- | ---------------- | ------------------------------------------------- |
-| Gemini 3.1 Flash-Lite | $0.87 - $1.18    | none seen; sometimes leaves `unit` null           |
-| Gemini 3.5 Flash-Lite | $1.27 - $1.80    | drops `taxTotal` on both tickets                  |
-| Claude Haiku 4.5      | $3.04 - $3.85    | misreads the minute (19:30 for 19:36), twice      |
-| Gemini 3.6 Flash      | $5.22 - $9.20    | normalizes verbatim fields (`EFECTIVO` to `cash`) |
-| Claude Opus 5         | $31.10 - $35.15  | none seen                                         |
+| Model                 | Per 1000 tickets | Reproducible quirk                                                |
+| --------------------- | ---------------- | ----------------------------------------------------------------- |
+| Gemini 3.1 Flash-Lite | $0.87 - $1.32    | none seen; sometimes leaves `unit` null                           |
+| Gemini 3.5 Flash-Lite | $1.27 - $2.06    | letter-level misreads (`FONRVELLA`, `JAMUN`); unstable `taxTotal` |
+| Claude Haiku 4.5      | $3.04 - $4.14    | reads the card slip instead of the receipt; wrong minute twice    |
+| Gemini 3.6 Flash      | $5.22 - $11.09   | normalizes verbatim fields; heavy thinking spend                  |
+| Claude Opus 5         | $31.10 - $36.60  | none seen                                                         |
 
-**Opus 5 costs about 30x Gemini 3.1 Flash-Lite and returned nothing the cheap model
-did not.** On this evidence it is not the production reader; it is the thing to
-escalate to when the checker says the arithmetic did not close.
+**Opus 5 costs about 30x Gemini 3.1 Flash-Lite and has returned nothing the cheap
+model did not.** It is not the production reader; it is what to escalate to when the
+checker says the arithmetic did not close.
 
-**Cross-model agreement catches what arithmetic cannot.** Haiku's 19:30 is invisible
-to `validate.mjs` (a timestamp has no checksum) but obvious against four readers
-saying 19:36. Two cheap models disagreeing on an unconstrained field is a cheaper
-and better signal than one expensive model asserting it alone: two Flash-Lite reads
-cost about $2 per thousand together, still a fifteenth of one Opus read.
+**Gemini 3.1 Flash-Lite is the pick.** Cheapest, no quirk observed in three tickets,
+and the only one that has never taken a value off the card slip.
 
-**The shape this suggests**, to be confirmed over the remaining eight tickets:
+**Cross-model agreement catches what arithmetic cannot.** Haiku's `19:30` and its
+`Debit Mastercard` are both invisible to `validate.mjs` and both obvious against
+four readers disagreeing. Two cheap reads cost about $2 per thousand together,
+still a fifteenth of one Opus read, which makes disagreement the cheapest
+confidence signal available for the unconstrained fields.
 
-1. Read with Gemini 3.1 Flash-Lite.
+**Pin one model, and pin it for consistency rather than accuracy.** Ticket 3 showed
+five readers producing four spellings of one product and three distinct normalized
+keys for another. A model that misreads a word the same way every time still builds
+one working alias; rotating models builds several broken ones.
+
+**The shape this suggests**, to be confirmed over the remaining seven tickets:
+
+1. Read with Gemini 3.1 Flash-Lite, always the same model.
 2. Run `validate.mjs`. If it balances and nothing else is odd, accept.
 3. If it does not balance, read again with a second model and compare.
 4. If they still disagree, that receipt goes to the user to confirm.
 
-**Caveat, and it is a real one: two tickets is not evidence of accuracy.** Both are
-from the same chain, on the same day, and neither has a weighed item, a
-multibuy discount, a loyalty deduction, a returned item or a faded print. Those are
-where extraction actually gets hard, and nothing here has tested them yet. What
-these two tickets do establish is that the easy case is comfortably solved by the
-cheapest tier, and that the interesting problems are in the receipts rather than in
-the models.
+### Two v3 changes ticket 3 argues for
+
+Neither is made yet, deliberately, so the corpus stays comparable across tickets.
+
+- **Name the authoritative document.** The prompt says "a supermarket till receipt"
+  and never says what to do when the photo holds the receipt _and_ its card slip.
+  Two readers took `datetime` from the slip and one took `paymentMethod` from it
+  too. Saying "read only the receipt; ignore the card payment slip entirely" is a
+  one-line fix for a class of error the checker cannot see.
+- **Capture the tax breakdown.** A `taxBreakdown` array of `{ rate, base, tax }`
+  is a second independent checksum over the same money. On ticket 3 the tax block
+  as read grosses up to 9.67 against a 9.29 total, and the checker is blind to it
+  because `schema.json` only keeps a scalar `taxTotal`.
+
+**Caveat, still real: three tickets is not evidence of accuracy.** All three are the
+same chain, and none has a weighed item, a multibuy discount, a loyalty deduction,
+a returned item or badly faded print. Those are where extraction gets hard. What
+these three establish is that the easy case is comfortably solved by the cheapest
+tier, and that every interesting problem so far has been in the receipts rather
+than in the models.
 
 ## 10. Layout
 

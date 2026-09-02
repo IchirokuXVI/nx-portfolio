@@ -91,21 +91,29 @@ the second most expensive option here despite a mid-tier rate.
 deli counters weigh something and the till prints only the counter name and a
 price. There is no product, no quantity and no unit.
 
-That is two of five lines, and **6.88 EUR of 11.48 EUR — 60% of this basket by
-value — is unmatchable to any catalog product by any technique.** No better model,
-no better prompt, no alias table. The information is not on the paper.
+That is two of five lines, and **6.88 EUR of 11.48 EUR, 60% of this basket by
+value, that this ticket cannot match to any catalog product.** No better model and
+no better prompt changes it: the information is not on this piece of paper.
+
+**It is on another piece of paper.** The counter prints its own ticket for what it
+weighed, with the product, the weight and the price per kilo, and the shopper
+carries both. So a department line is a **pointer to a companion ticket**, not a
+dead end, and the corpus contains some of those companion tickets.
 
 Consequences:
 
-- **Catalog prices:** skipped entirely. There is nothing to attach a price to.
-- **Basket reconcile:** they become opaque lines. A description and a price, no
-  `itemId`, added to the basket but never used to correct a quantity, because
-  "5.97 EUR of meat" has no quantity to correct against.
+- **Catalog prices:** skipped on this ticket. The companion ticket is where the
+  price for that meat actually comes from, and it is scanned separately.
+- **Basket reconcile:** ignore the line for now and **notify the user**. "This
+  receipt has a 5.97 EUR butcher line; scan that counter's ticket to add what it
+  was" is useful. A silent opaque line that can never be corrected is not, because
+  "5.97 EUR of meat" has no quantity to reconcile against.
 
-The practical warning is about expectations: receipt coverage of the catalog will
-be far patchier than a line count suggests, and how patchy is a property of the
-chain and of how the shopper shops. It should be measured per chain before anyone
-promises a coverage number.
+The practical consequence is that **one basket is fed by several tickets**, which
+the consecutive invoice numbers on tickets 1 and 2 already suggested from a
+different direction. Coverage then depends on whether the shopper kept the counter
+tickets, which is a property of the chain and of the shopper, and should be
+measured per chain before anyone promises a number.
 
 ## Prompt bugs this ticket exposed
 
