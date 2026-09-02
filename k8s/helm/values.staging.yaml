@@ -89,6 +89,20 @@ lunaShopperBackend:
   harvester:
     enabled: false
 
+  # The reference catalog, on (plan 0067). This is what staging is for: a
+  # deployed environment with real products in it to click through, and the
+  # normalized groups are what the search and the basket composer are exercised
+  # against.
+  #
+  # It is worth being clear about what staging gets, because the harvester is off
+  # here and that decides it. No harvest means no Mercadona products, so the
+  # EAN assignment matches nothing and reports it; what lands is the 162 groups
+  # and the two receipt-priced chains with their 135 products. That is a complete
+  # catalog for El Jamón and SuperCash and an empty one for Mercadona, which is
+  # the honest consequence of not running discovery here rather than a fault.
+  referenceSeed:
+    enabled: true
+
   # No backups in staging. It is disposable by design, and a restore drill is
   # rehearsed here by restoring a PRODUCTION dump into it (plan 0005, section 6),
   # which needs no CronJob of its own.

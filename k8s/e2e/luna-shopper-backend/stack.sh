@@ -299,7 +299,21 @@ up() {
     npx nx run "luna-shopper-backend-$svc:migration:run"
   done
 
-  echo "==> stack is up and migrated"
+  # The reference catalog (plan 0067), on every up rather than once: it is the
+  # test data a developer expects to find already there, and it is idempotent by
+  # derived id, so running it again rewrites the same rows instead of adding
+  # more. It goes after the migrations because it writes through the entities and
+  # needs the schema they describe.
+  #
+  # A failure here is reported and does not stop the stack. The seed is a
+  # convenience, and a database that came up and migrated is still usable
+  # without it; refusing to finish `up` over it would be the tail wagging the
+  # dog.
+  echo "==> seeding the reference catalog"
+  npx nx run luna-shopper-backend-catalog:seed:reference ||
+    echo "==> WARNING: the reference catalog seed failed; the stack is still up" >&2
+
+  echo "==> stack is up, migrated and seeded"
 }
 
 # Bring up ONLY what a profile adds, naming its services explicitly.

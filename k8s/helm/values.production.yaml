@@ -122,6 +122,20 @@ lunaShopperBackend:
   harvester:
     enabled: false
 
+  # The reference catalog, off (plan 0067), and this is a deliberate difference
+  # from staging rather than an oversight.
+  #
+  # The normalized groups are meant to be production's starting catalog, so this
+  # will be turned on once — but a Job on `pre-upgrade` runs on every deploy, and
+  # what is appropriate for seeding an empty catalog is not appropriate as a
+  # standing job that rewrites 274 rows each time a micro-frontend ships. The
+  # seed is idempotent and preserves hand-entered prices, so a re-run is not
+  # destructive; it is simply not something to inherit without deciding.
+  #
+  # To seed production: set this true, deploy, confirm, set it false again.
+  referenceSeed:
+    enabled: false
+
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
   backups:

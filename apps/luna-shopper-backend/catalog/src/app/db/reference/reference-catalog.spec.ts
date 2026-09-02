@@ -1,0 +1,166 @@
+import { groupId, itemId, supermarketItemId } from './ids';
+import {
+  EL_JAMON_ITEMS,
+  MERCADONA_ASSIGNMENTS,
+  MERCADONA_AUTHORED,
+  REFERENCE_GROUPS,
+  REFERENCE_STORES,
+  SUPERCASH_ITEMS,
+} from './index';
+import type { AuthoredItem } from './types';
+
+const ALL_ITEMS: [string, AuthoredItem[]][] = [
+  ['mercadona', MERCADONA_AUTHORED],
+  ['el-jamon', EL_JAMON_ITEMS],
+  ['supercash', SUPERCASH_ITEMS],
+];
+const EVERY_ITEM = ALL_ITEMS.flatMap(([store, items]) =>
+  items.map((it) => ({ store, it }))
+);
+
+describe('reference catalog', () => {
+  describe('groups', () => {
+    it('has a unique slug per group', () => {
+      const slugs = REFERENCE_GROUPS.map((g) => g.slug);
+      expect(new Set(slugs).size).toBe(slugs.length);
+    });
+
+    it('names every group in both locales', () => {
+      for (const g of REFERENCE_GROUPS) {
+        expect(g.name.en?.trim()).toBeTruthy();
+        expect(g.name.es?.trim()).toBeTruthy();
+      }
+    });
+
+    /**
+     * The rule the demo world states and this set is large enough to break: a
+     * group with no members describes a catalog nothing here holds. It has
+     * already caught two, `custard` and `nougat`, both of which looked obviously
+     * necessary and turned out to have nothing in them.
+     */
+    it('gives every group at least one member', () => {
+      const used = new Set([
+        ...EVERY_ITEM.map(({ it }) => it.group),
+        ...MERCADONA_ASSIGNMENTS.map((a) => a.group),
+      ]);
+      const orphans = REFERENCE_GROUPS.map((g) => g.slug).filter(
+        (s) => !used.has(s)
+      );
+      expect(orphans).toEqual([]);
+    });
+
+    it('assigns every product to a group that exists', () => {
+      const known = new Set(REFERENCE_GROUPS.map((g) => g.slug));
+      const unknown = [
+        ...EVERY_ITEM.map(({ it }) => it.group),
+        ...MERCADONA_ASSIGNMENTS.map((a) => a.group),
+      ].filter((g) => !known.has(g));
+      expect(unknown).toEqual([]);
+    });
+
+    it('lists synonyms in both locales, so either language finds the group', () => {
+      for (const g of REFERENCE_GROUPS) {
+        expect(g.synonyms.en.length).toBeGreaterThan(0);
+        expect(g.synonyms.es.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  describe('authored items', () => {
+    it('has a unique slug within its store', () => {
+      for (const [store, items] of ALL_ITEMS) {
+        const slugs = items.map((i) => i.slug);
+        expect(`${store}:${new Set(slugs).size}`).toBe(
+          `${store}:${slugs.length}`
+        );
+      }
+    });
+
+    it('normalizes the name away from what the till printed', () => {
+      // The whole point of the exercise: no item may keep the receipt's own
+      // shouty abbreviation as its Spanish name.
+      for (const { it } of EVERY_ITEM) {
+        expect(it.name.es).not.toBe(it.receipt);
+        expect(it.name.en).not.toBe(it.receipt);
+        expect(it.name.en).not.toBe(it.name.en.toUpperCase());
+      }
+    });
+
+    it('carries a positive price and the date it was seen', () => {
+      for (const { it } of EVERY_ITEM) {
+        expect(it.price).toBeGreaterThan(0);
+        expect(it.observedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(Number.isNaN(Date.parse(it.observedAt))).toBe(false);
+      }
+    });
+
+    it('prices a per kilo product in kilograms', () => {
+      for (const { it } of EVERY_ITEM) {
+        if (it.perKilo) expect(it.defaultUnit).toBe('KILOGRAM');
+      }
+    });
+  });
+
+  describe('mercadona assignments', () => {
+    it('names each EAN once, so no product is assigned two groups', () => {
+      const eans = MERCADONA_ASSIGNMENTS.map((a) => a.ean);
+      expect(new Set(eans).size).toBe(eans.length);
+    });
+
+    it('carries an EAN that looks like one', () => {
+      for (const a of MERCADONA_ASSIGNMENTS)
+        expect(a.ean).toMatch(/^\d{8,14}$/);
+    });
+
+    it('creates no item of its own', () => {
+      // These products exist because a harvest run created them. If the
+      // reference catalog ever authored one of the same names it would be a
+      // second row for one product, which is the thing the EAN key exists to
+      // prevent.
+      const authored = new Set(EVERY_ITEM.map(({ it }) => it.receipt));
+      const both = MERCADONA_ASSIGNMENTS.filter((a) => authored.has(a.receipt));
+      expect(both).toEqual([]);
+    });
+  });
+
+  describe('derived ids', () => {
+    it('is stable across runs', () => {
+      expect(groupId('greek-yogurt')).toBe(groupId('greek-yogurt'));
+      expect(groupId('greek-yogurt')).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      );
+    });
+
+    it('separates the same slug in different stores', () => {
+      // El Jamón and SuperCash both sell a pâté; they are not one product.
+      expect(itemId('el-jamon', 'pate-125g')).not.toBe(
+        itemId('supercash', 'pate-125g')
+      );
+    });
+
+    it('gives every row across the whole set a distinct id', () => {
+      const ids = [
+        ...REFERENCE_GROUPS.map((g) => groupId(g.slug)),
+        ...EVERY_ITEM.map(({ store, it }) => itemId(store, it.slug)),
+        ...EVERY_ITEM.map(({ store, it }) => supermarketItemId(store, it.slug)),
+      ];
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+  });
+
+  describe('stores', () => {
+    it('describes one priced location per chain', () => {
+      for (const s of REFERENCE_STORES) {
+        expect(s.scopeKind).toBe('STORE');
+        expect(s.location.postalCode).toMatch(/^\d{5}$/);
+        expect(s.location.country).toBe('ES');
+      }
+    });
+
+    it('does not redeclare Mercadona', () => {
+      // It comes from the harvest, with its own warehouse scopes. A second one
+      // here would be a second chain with the same name and different prices.
+      expect(REFERENCE_STORES.map((s) => s.slug)).not.toContain('mercadona');
+    });
+  });
+});
