@@ -9,6 +9,7 @@ export * from './lib/browser-facade';
 export * from './lib/connection-state';
 export * from './lib/install-state';
 export * from './lib/install-store';
+export * from './lib/money';
 export * from './lib/notification-tone';
 export * from './lib/page-navigation';
 export * from './lib/platform-providers';

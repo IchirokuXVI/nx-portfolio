@@ -936,7 +936,11 @@
       "title": "¿Cuál has cogido?",
       "hint": "Cualquiera de estos cuenta para esta línea. Elige el que llevas en el carro.",
       "current": "Elegido",
-      "none": "Esta línea no nombra ningún producto"
+      "none": "Esta línea no nombra ningún producto",
+      "cheapest": "Más barato",
+      "noPrice": "Sin precio",
+      "asOf": "Precios de {{when}}",
+      "asOfTyped": "Precios de {{when}}, introducidos a mano"
     },
     "allocate": {
       "open": "Repartir entre listas",

@@ -15,11 +15,14 @@ import {
 import type {
   BasketLine,
   BasketParticipant,
+  BasketPriceScope,
+  BasketProduct,
   BasketSettleResult,
   BasketView,
   LineSettlement,
   Page,
   ParticipantKind,
+  ProductOffer,
 } from '@portfolio/velista/models';
 import {
   provideVelistaTesting,
@@ -123,6 +126,10 @@ interface World {
   readonly pageSize?: number;
   /** The reader's own account name, or null for somebody with no name to give. */
   readonly ownName?: string | null;
+  /** The products the lines name, for the pick pane (velista `0062`). */
+  readonly products?: ReadonlyMap<string, BasketProduct>;
+  /** The scopes those products' offers name, as the server described them. */
+  readonly scopes?: ReadonlyMap<string, BasketPriceScope>;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -147,7 +154,8 @@ function storeDouble(world: World) {
     participants: world.participants ?? [me],
     me,
     seesZoneData: world.seesZoneData ?? true,
-    products: new Map(),
+    products: world.products ?? new Map(),
+    scopes: world.scopes ?? new Map(),
     listNames: new Map(),
   });
 
@@ -1065,5 +1073,234 @@ describe('SettleSheet: the two sheets this one leads on to', () => {
     });
 
     expect(entries(fixture)).toEqual(['basket.units.open']);
+  });
+});
+
+/**
+ * The pick sheet's prices, places and the cheapest mark (velista `0062`,
+ * section 5).
+ *
+ * Assertions are on the option view model where a key interpolates, and on the
+ * rendered rows where the question is what is drawn and in what order. The
+ * fixture's cheapest option is deliberately **last**, so that a sheet which
+ * sorted by price would fail the order test rather than pass it by accident.
+ */
+describe('SettleSheet: a price and a place on every option', () => {
+  const offer = (
+    price: number | null,
+    overrides: Partial<ProductOffer> = {}
+  ): ProductOffer => ({
+    price,
+    currency: 'EUR',
+    unitPrice: price,
+    unitPriceLabel: 'EUR/L',
+    observedAt: new Date('2026-09-01T06:00:00.000Z'),
+    sourceKind: 'OFFICIAL_WEB',
+    priceScopeId: 'scope-a',
+    ...overrides,
+  });
+
+  const product = (
+    id: string,
+    name: string,
+    offerOf: ProductOffer | null
+  ): [string, BasketProduct] => [
+    id,
+    {
+      id,
+      name: { en: name, es: name },
+      brand: null,
+      size: 1,
+      unit: 'LITER',
+      offer: offerOf,
+    },
+  ];
+
+  /** Three milks in the line's order; the pick is first, the cheapest is last. */
+  const products = (): ReadonlyMap<string, BasketProduct> =>
+    new Map([
+      product('i-hacendado', 'Hacendado', offer(0.95)),
+      product('i-central', 'Central Lechera', offer(1.15)),
+      product('i-pascual', 'Pascual', offer(0.89)),
+    ]);
+
+  const scope = (
+    locations: BasketPriceScope['locations']
+  ): ReadonlyMap<string, BasketPriceScope> =>
+    new Map([
+      [
+        'scope-a',
+        {
+          priceScopeId: 'scope-a',
+          supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+          locations,
+        },
+      ],
+    ]);
+
+  const milkLine = () =>
+    line({
+      pickId: 'i-hacendado',
+      optionIds: ['i-hacendado', 'i-central', 'i-pascual'],
+    });
+
+  async function renderPane(world: World) {
+    const rendered = await render(world);
+    rendered.fixture.componentInstance['openPane']('product');
+    rendered.fixture.detectChanges();
+    return rendered;
+  }
+
+  const rows = (fixture: ComponentFixture<SettleSheet>) =>
+    Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '.option'
+      )
+    );
+
+  it('marks the cheapest and not the pick when they differ, and keeps the order', async () => {
+    const { fixture } = await renderPane({
+      lines: [milkLine()],
+      products: products(),
+      scopes: scope([]),
+    });
+
+    const drawn = rows(fixture);
+    expect(
+      drawn.map((row) => row.querySelector('.option-name')?.textContent?.trim())
+    ).toEqual(['Hacendado', 'Central Lechera', 'Pascual']);
+    expect(
+      drawn.map((row) => row.querySelector('.option-chosen') !== null)
+    ).toEqual([true, false, false]);
+    expect(
+      drawn.map((row) => row.querySelector('.option-cheapest') !== null)
+    ).toEqual([false, false, true]);
+  });
+
+  it('draws no cheapest mark when only one option is priced', async () => {
+    const one = new Map([
+      product('i-hacendado', 'Hacendado', offer(0.95)),
+      product('i-central', 'Central Lechera', null),
+      product('i-pascual', 'Pascual', null),
+    ]);
+
+    const { fixture } = await renderPane({
+      lines: [milkLine()],
+      products: one,
+      scopes: scope([]),
+    });
+
+    // On one priced option the mark says nothing and looks like a
+    // recommendation (section 5.2). The unpriced neighbours do say they are
+    // unpriced, because here the blank is conspicuous (section 5.3).
+    expect(fixture.nativeElement.querySelector('.option-cheapest')).toBeNull();
+    expect(
+      rows(fixture).map((row) => row.querySelector('.is-unknown') !== null)
+    ).toEqual([false, true, true]);
+  });
+
+  it('draws nothing about price when no option is priced', async () => {
+    const none = new Map([
+      product('i-hacendado', 'Hacendado', null),
+      product('i-central', 'Central Lechera', null),
+      product('i-pascual', 'Pascual', null),
+    ]);
+
+    const { fixture } = await renderPane({
+      lines: [milkLine()],
+      products: none,
+      scopes: new Map(),
+    });
+
+    // Staging and production, where the harvester is off: exactly today's pane.
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).not.toContain('option-price');
+    expect(html).not.toContain('basket.product.noPrice');
+    expect(html).not.toContain('basket.product.cheapest');
+    expect(fixture.nativeElement.querySelector('.prices-as-of')).toBeNull();
+  });
+
+  it('draws the chain alone for a scope with no locations', async () => {
+    // The guest's view and the unplaceable scope's view at once, which is the
+    // point of them being one state. No branch on who is reading.
+    const { fixture } = await renderPane({
+      meKind: 'GUEST',
+      seesZoneData: false,
+      lines: [milkLine()],
+      products: products(),
+      scopes: scope([]),
+    });
+
+    const places = rows(fixture).map((row) =>
+      row
+        .querySelector('.option-brand')
+        ?.textContent?.replace(/\s+/g, ' ')
+        .trim()
+    );
+    expect(places).toEqual(['Mercadona', 'Mercadona', 'Mercadona']);
+  });
+
+  it('draws the chain and the first shop when the scope carries one', async () => {
+    const { fixture } = await renderPane({
+      lines: [milkLine()],
+      products: products(),
+      scopes: scope([
+        {
+          id: 'loc-1',
+          label: null,
+          address: 'Ronda de los Tejares 32',
+          city: 'Córdoba',
+          postalCode: '14008',
+        },
+        {
+          id: 'loc-2',
+          label: null,
+          address: 'Avenida de Cádiz 9',
+          city: 'Córdoba',
+          postalCode: '14013',
+        },
+      ]),
+    });
+
+    const place = rows(fixture)[0]
+      .querySelector('.option-brand')
+      ?.textContent?.replace(/\s+/g, ' ')
+      .trim();
+    // The first and not an enumeration: four addresses on each of eleven
+    // options is a wall.
+    expect(place).toBe('Mercadona · Ronda de los Tejares 32');
+    expect(place).not.toContain('Cádiz');
+  });
+
+  it('names the oldest price and says when one was typed in by hand', async () => {
+    const mixed = new Map([
+      product(
+        'i-hacendado',
+        'Hacendado',
+        offer(0.95, { observedAt: new Date('2026-09-01T06:00:00.000Z') })
+      ),
+      product(
+        'i-central',
+        'Central Lechera',
+        offer(1.15, {
+          observedAt: new Date('2026-08-20T06:00:00.000Z'),
+          sourceKind: 'ADMIN',
+        })
+      ),
+      product('i-pascual', 'Pascual', offer(0.89)),
+    ]);
+
+    const { fixture } = await renderPane({
+      lines: [milkLine()],
+      products: mixed,
+      scopes: scope([]),
+    });
+
+    // The key and its argument rather than a sentence: the testing translator
+    // does not interpolate, so the view model is what is asserted.
+    const asOf = fixture.componentInstance['pricesAsOf']();
+    expect(asOf?.key).toBe('basket.product.asOfTyped');
+    expect(asOf?.when).toContain('2026');
+    expect(asOf?.when).toMatch(/Aug/);
   });
 });

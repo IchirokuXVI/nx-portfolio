@@ -17,9 +17,9 @@ import {
 import { randomUUID } from 'node:crypto';
 import { Repository } from 'typeorm';
 import { Supermarket, SupermarketLocation } from '../entities';
+import { toSupermarketLocationView } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import { PriceScopeService } from './price-scope.service';
-import { toSupermarketLocationView } from './catalog.mappers';
 
 interface LocationCursor {
   value: string;
@@ -133,9 +133,7 @@ export class SupermarketLocationService {
     return toSupermarketLocationView(await this.locations.save(row));
   }
 
-  async delete(
-    req: SupermarketLocationIdRequest
-  ): Promise<{ id: string }> {
+  async delete(req: SupermarketLocationIdRequest): Promise<{ id: string }> {
     this.admin.requireAdmin(req.userId);
     const result = await this.locations.delete({
       id: req.supermarketLocationId,
@@ -149,7 +147,9 @@ export class SupermarketLocationService {
   async get(
     req: SupermarketLocationIdRequest
   ): Promise<SupermarketLocationView> {
-    return toSupermarketLocationView(await this.load(req.supermarketLocationId));
+    return toSupermarketLocationView(
+      await this.load(req.supermarketLocationId)
+    );
   }
 
   async list(
@@ -164,6 +164,11 @@ export class SupermarketLocationService {
       .orderBy('l.createdAt', 'DESC')
       .addOrderBy('l.id', 'DESC')
       .take(limit + 1);
+    if (req.priceScopeId) {
+      // Plan 0066, section 4: the shops that sell at one scope, which is how a
+      // price keyed by scope becomes somewhere a person can go.
+      qb.andWhere('l."priceScopeId" = :scope', { scope: req.priceScopeId });
+    }
     if (cursor) {
       qb.andWhere('(l."createdAt", l.id) < (:cv, :cid)', {
         cv: cursor.value,
