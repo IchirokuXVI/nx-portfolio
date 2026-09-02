@@ -949,7 +949,25 @@
     },
     "units": {
       "open": "Cambiar lo que ha pedido cada lista",
-      "title": "{{name}}"
+      "title": "{{name}}",
+      "notBuying": "Cambiar esto cambia lo que quiere cada lista. Aquí no se marca nada como comprado.",
+      "buying_one": "Se compra {{count}}",
+      "buying_other": "Se compran {{count}}",
+      "extra": "{{lists}} para estas listas y {{extra}} de más",
+      "lists": "Listas que quieren esto",
+      "listWants": "la lista pide {{count}}",
+      "noAccess": "ya no puedes cambiar esta lista",
+      "others_one": "Otra lista quiere esto",
+      "others_other": "Otras {{count}} listas quieren esto",
+      "claimed": "alguien ya está comprando esto para esa lista",
+      "notApproved": "esa lista todavía no ha aceptado esta línea",
+      "settled": "esa lista no quiere ninguno ahora mismo",
+      "byName": "coincide por el nombre: «{{content}}»",
+      "loading": "Leyendo las listas",
+      "failed": "No se han podido leer las listas",
+      "retry": "Reintentar",
+      "empty": "Ninguna lista pide esto",
+      "close": "Listo"
     },
     "send": {
       "open": "Enviar a una lista de la compra",

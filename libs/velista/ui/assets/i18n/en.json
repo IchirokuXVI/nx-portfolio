@@ -949,7 +949,25 @@
     },
     "units": {
       "open": "Change what each list asked for",
-      "title": "{{name}}"
+      "title": "{{name}}",
+      "notBuying": "Changing these changes what each list wants. Nothing here is marked as bought.",
+      "buying_one": "Buying {{count}}",
+      "buying_other": "Buying {{count}}",
+      "extra": "{{lists}} for these lists, plus {{extra}} extra",
+      "lists": "Lists that want this",
+      "listWants": "the list asks for {{count}}",
+      "noAccess": "you can no longer change this list",
+      "others_one": "1 other list wants this",
+      "others_other": "{{count}} other lists want this",
+      "claimed": "somebody is already buying this for that list",
+      "notApproved": "that list has not agreed to this line yet",
+      "settled": "that list does not want any right now",
+      "byName": "matched by name: “{{content}}”",
+      "loading": "Reading the lists",
+      "failed": "The lists could not be read",
+      "retry": "Try again",
+      "empty": "No list is asking for this",
+      "close": "Done"
     },
     "send": {
       "open": "Send to a shopping list",

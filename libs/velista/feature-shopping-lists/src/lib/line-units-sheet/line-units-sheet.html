@@ -1,3 +1,191 @@
-<lib-sheet-shell (dismiss)="close()" labelledBy="line-units-title">
+<lib-sheet-shell
+  (dismiss)="close()"
+  [dismissible]="busy().size === 0"
+  labelledBy="line-units-title"
+>
   <h2 class="title" id="line-units-title">{{ title() }}</h2>
+
+  <!--
+    The single most important line of copy on this screen (section 5).
+
+    Permanent, and neither a warning nor a colour. The identical control one screen up
+    means "bought", so the sheet says in words what it is not, and the reels below it
+    carry no caption on the drag, which is the second half of the same message.
+  -->
+  <p class="not-buying">{{ 'basket.units.notBuying' | rokuT }}</p>
+
+  <!--
+    What this basket will buy, at the top rather than under the rows, so it stays
+    visible while a thumb is on a reel at the bottom (section 4.1).
+
+    One polite region for both sentences. Politeness is what coalesces it: a screen
+    reader queues these and drops the ones a later value has already superseded, so a
+    thumb travelling seven units announces where it landed rather than every number on
+    the way.
+  -->
+  <p aria-live="polite" class="total" role="status">
+    <span class="total-value">
+      {{ 'basket.units.buying' | rokuT: { count: total() } }}
+    </span>
+    @if (extra() > 0) {
+      <span class="total-extra">
+        {{
+          'basket.units.extra' | rokuT: { lists: listsWant(), extra: extra() }
+        }}
+      </span>
+    }
+  </p>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="hint">{{ 'basket.units.loading' | rokuT }}</p>
+    }
+
+    @case ('failed') {
+      <p class="failed">{{ 'basket.units.failed' | rokuT }}</p>
+      <button (click)="retry()" class="secondary" type="button">
+        {{ 'basket.units.retry' | rokuT }}
+      </button>
+    }
+
+    @case ('loaded') {
+      @if (empty()) {
+        <!--
+          Reachable by URL even though the settle sheet draws no way in for a line with
+          nothing to show. A sheet that drew an empty list would read as a failure.
+        -->
+        <p class="hint">{{ 'basket.units.empty' | rokuT }}</p>
+      }
+
+      @if (rows().length > 0) {
+        <ul [attr.aria-label]="'basket.units.lists' | rokuT" class="rows">
+          @for (row of rows(); track row.key) {
+            <ng-container
+              [ngTemplateOutlet]="unitsRow"
+              [ngTemplateOutletContext]="{ $implicit: row }"
+            />
+          }
+        </ul>
+      }
+
+      <!--
+        The lists that are not in, closed by default (section 4.3).
+
+        A real disclosure with its count in its accessible name, because the common case
+        is a line that is exactly what it looks like and an expanded section of lists
+        nobody is thinking about is four rows of noise over a trolley.
+      -->
+      @if (others().length > 0) {
+        <button
+          (click)="toggleOthers()"
+          [attr.aria-expanded]="othersOpen()"
+          class="disclosure"
+          type="button"
+        >
+          {{ 'basket.units.others' | rokuT: { count: others().length } }}
+        </button>
+
+        @if (othersOpen()) {
+          <ul class="rows others">
+            @for (row of others(); track row.key) {
+              <ng-container
+                [ngTemplateOutlet]="unitsRow"
+                [ngTemplateOutletContext]="{ $implicit: row }"
+              />
+            }
+          </ul>
+        }
+      }
+    }
+  }
+
+  <button (click)="close()" class="quiet" type="button">
+    {{ 'basket.units.close' | rokuT }}
+  </button>
 </lib-sheet-shell>
+
+<!--
+  One row, drawn the same whether the list is already in or could be.
+
+  A template rather than two copies of thirty lines: the two collections differ in what
+  a row starts at and in what may stop it, and both of those are already decided in the
+  view model. A reader is not meant to be able to tell the markup apart either.
+-->
+<ng-template #unitsRow let-row>
+  <li class="row">
+    <span class="row-label">
+      <span class="row-name">{{ row.label }}</span>
+
+      <!-- Only where another row carries the same name, which is when it is needed. -->
+      @if (row.zoneName) {
+        <span class="row-zone">{{ row.zoneName }}</span>
+      }
+
+      <!--
+        What the list itself asks for now, when it differs from what it put in. The
+        basket is a snapshot and this is the one screen where the snapshot and the live
+        list are both in front of somebody: showing what was taken without showing what
+        is wanted is how a number that looks right gets set (section 4.2).
+      -->
+      @if (row.listQuantity !== row.contributed) {
+        <span class="row-wants">
+          {{ 'basket.units.listWants' | rokuT: { count: row.listQuantity } }}
+        </span>
+      }
+
+      <!--
+        A match the run made on normalized text alone, marked so the reader confirms it
+        rather than trusting it. The run is deliberately conservative about text matches
+        and a sheet that offered "milk" as "whole milk" without saying so would be that
+        conservatism read backwards.
+      -->
+      @if (row.matchedOnText) {
+        <span class="row-matched">
+          {{ 'basket.units.byName' | rokuT: { content: row.matchedOnText } }}
+        </span>
+      }
+
+      <!--
+        Why there is no control, in the row's own words and never by colour or position
+        alone (section 7). The fact stays and the control goes, which is `0030` intact.
+      -->
+      @if (row.reason) {
+        <span class="row-reason">{{ row.reason | rokuT }}</span>
+      }
+
+      <!--
+        What the last write on this row came to. On the row rather than on the sheet,
+        because one write per row means the row that failed is the row that can say so
+        (section 6).
+      -->
+      @if (row.notice; as notice) {
+        <span aria-live="polite" class="row-notice" role="status">
+          {{ notice.key | rokuT: notice.values }}
+        </span>
+      }
+    </span>
+
+    @if (row.reason === null) {
+      <!--
+        No caption on the drag, unlike the row's reel one screen up, and the absence is
+        deliberate (section 5): the gesture that narrates a purchase and the gesture that
+        does not are told apart by whether they narrate one.
+      -->
+      <lib-quantity-reel
+        (committedTo)="commit(row, $event)"
+        (preview)="onPreview(row, $event)"
+        [label]="row.reelLabel"
+        [max]="reelMax"
+        [min]="reelMin"
+        [readonly]="busy().has(row.key)"
+        [value]="row.shown"
+      />
+    } @else if (row.contributed > 0) {
+      <!--
+        The numbers stay. A row nobody may move still says what this list put in, which
+        is the information half of the rule the missing reel is the control half of.
+      -->
+      <span class="row-number">{{ row.contributed }}</span>
+    }
+  </li>
+</ng-template>
