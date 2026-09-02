@@ -12,6 +12,7 @@ import {
   type GeneratedListParticipantContext,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
+import type { ShopperSelection } from '../catalog/scope-resolution.service';
 import { GeneratedListParticipantController } from './generated-list-sharing.controller';
 
 /**
@@ -92,6 +93,31 @@ const offer = (itemId: string, priceScopeId: string, price: number) => ({
   priceSourceKind: PriceSourceKind.OFFICIAL_WEB,
 });
 
+/** A Mercadona shop in the scope every offer below comes from. */
+const location = (id: string, address: string) => ({
+  id,
+  supermarketId: 'mercadona',
+  priceScopeId: SCOPE_A,
+  label: null,
+  address,
+  city: 'Córdoba',
+  country: 'ES',
+  postalCode: '14008',
+  latitude: null,
+  longitude: null,
+  externalRef: null,
+  externalProvider: null,
+});
+
+/** The shop of that scope, as the basket names it. */
+const named = (id: string, address: string) => ({
+  supermarketLocationId: id,
+  label: null,
+  address,
+  city: 'Córdoba',
+  postalCode: '14008',
+});
+
 /** The resolution the run's profile reaches: two scopes, one chain each. */
 const resolution = (): CatalogScopeView => ({
   priceScopeIds: [SCOPE_A, SCOPE_B],
@@ -125,7 +151,17 @@ interface World {
   readonly resolves?: CatalogScopeView;
   /** The run's profile, null for a run scoped by hand. */
   readonly profileId?: string | null;
+  /** What the run's profile refuses (plan 0064), or a throw. */
+  readonly refuses?: ShopperSelection | 'throws';
 }
+
+/** Refusing nothing, which is the default every test but two runs with. */
+const refusesNothing = (): ShopperSelection => ({
+  profileId: PROFILE,
+  postalCodes: ['14008'],
+  excludedSupermarketIds: [],
+  excludedSupermarketLocationIds: [],
+});
 
 function build(world: World = {}) {
   const calls: { subject: string; payload: unknown }[] = [];
@@ -161,20 +197,8 @@ function build(world: World = {}) {
       case SUPERMARKET_LOCATION_PATTERNS.list:
         return {
           items: [
-            {
-              id: 'loc-tejares',
-              supermarketId: 'mercadona',
-              priceScopeId: SCOPE_A,
-              label: null,
-              address: 'Ronda de los Tejares 32',
-              city: 'Córdoba',
-              country: 'ES',
-              postalCode: '14008',
-              latitude: null,
-              longitude: null,
-              externalRef: null,
-              externalProvider: null,
-            },
+            location('loc-tejares', 'Ronda de los Tejares 32'),
+            location('loc-lagartijo', 'Avenida del Gran Capitán 5'),
           ],
           nextCursor: null,
         };
@@ -184,10 +208,16 @@ function build(world: World = {}) {
   });
 
   const describe = jest.fn(async () => world.resolves ?? resolution());
+  const forShops = jest.fn(async (): Promise<ShopperSelection> => {
+    if (world.refuses === 'throws') {
+      throw new Error('core slow');
+    }
+    return world.refuses ?? refusesNothing();
+  });
 
   const controller = new GeneratedListParticipantController(
     { send } as never,
-    { describe } as never
+    { describe, forShops } as never
   );
 
   const lookups = () =>
@@ -201,7 +231,7 @@ function build(world: World = {}) {
       .filter((call) => call.subject === SUPERMARKET_LOCATION_PATTERNS.list)
       .map((call) => call.payload as { priceScopeId?: string; userId: string });
 
-  return { controller, send, describe, lookups, locationReads };
+  return { controller, send, describe, forShops, lookups, locationReads };
 }
 
 describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
@@ -308,13 +338,8 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
     expect(result.scopes).toHaveLength(1);
     expect(result.scopes[0].supermarketName.en).toBe('Mercadona');
     expect(result.scopes[0].locations).toEqual([
-      {
-        supermarketLocationId: 'loc-tejares',
-        label: null,
-        address: 'Ronda de los Tejares 32',
-        city: 'Córdoba',
-        postalCode: '14008',
-      },
+      named('loc-tejares', 'Ronda de los Tejares 32'),
+      named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
     ]);
     // The shops of the one scope the offers name, read as the owner.
     expect(locationReads()).toEqual([
@@ -332,6 +357,89 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
     );
 
     expect(result.scopes.map((scope) => scope.priceScopeId)).toEqual([SCOPE_A]);
+  });
+
+  it("never names a shop the run's profile switched off (section 4)", async () => {
+    const { controller, forShops } = build({
+      seesZoneData: true,
+      refuses: {
+        ...refusesNothing(),
+        excludedSupermarketLocationIds: ['loc-tejares'],
+      },
+    });
+
+    const result = await controller.getBasket(
+      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+      BASKET_ID
+    );
+
+    // The refusals are the run's, asked for by the run's profile, exactly as
+    // the prices are.
+    expect(forShops).toHaveBeenCalledWith(OWNER, { profileId: PROFILE });
+    expect(result.scopes[0].locations).toEqual([
+      named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
+    ]);
+  });
+
+  it('hides every shop of a chain refused whole (plan 0064, section 2.1)', async () => {
+    const { controller, locationReads } = build({
+      seesZoneData: true,
+      refuses: {
+        ...refusesNothing(),
+        excludedSupermarketIds: ['mercadona'],
+      },
+    });
+
+    const result = await controller.getBasket(
+      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+      BASKET_ID
+    );
+
+    // The chain still names the price, because the price is real and came from
+    // a resolution made before the chain was refused. Its shops are not
+    // fetched and then dropped: never asked for.
+    expect(result.scopes[0].supermarketName.en).toBe('Mercadona');
+    expect(result.scopes[0].locations).toEqual([]);
+    expect(locationReads()).toEqual([]);
+  });
+
+  it('does not ask what a guest, who sees no shops, has refused', async () => {
+    const { controller, forShops } = build({ seesZoneData: false });
+
+    await controller.getBasket(participant(), BASKET_ID);
+
+    expect(forShops).not.toHaveBeenCalled();
+  });
+
+  it('keeps the shops when the refusals cannot be read', async () => {
+    const { controller } = build({ seesZoneData: true, refuses: 'throws' });
+
+    const result = await controller.getBasket(
+      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+      BASKET_ID
+    );
+
+    // A preference that cannot be applied is not a disclosure: `seesZoneData`
+    // already decided this reader may see the shops, so core being slow costs
+    // an excluded shop staying on the list rather than costing the address.
+    expect(result.scopes[0].locations).toHaveLength(2);
+  });
+
+  it('asks for no refusals when the run names no profile', async () => {
+    const { controller, forShops } = build({
+      seesZoneData: true,
+      profileId: null,
+    });
+
+    const result = await controller.getBasket(
+      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+      BASKET_ID
+    );
+
+    // Naming none would resolve the owner's default profile, whose opinions
+    // about shops are not the ones this basket was composed against.
+    expect(forShops).not.toHaveBeenCalled();
+    expect(result.scopes).toEqual([]);
   });
 
   it('keeps the prices when the scopes cannot be named', async () => {

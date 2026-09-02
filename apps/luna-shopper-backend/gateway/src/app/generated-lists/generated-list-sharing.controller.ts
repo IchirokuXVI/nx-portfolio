@@ -135,6 +135,26 @@ async function resolveUsername(
 }
 
 /**
+ * What a profile refuses, as the basket read applies it (plans 0064 and 0066,
+ * section 4): the shops one by one, and the chains whole.
+ *
+ * The ids only. It is `ShopperSelection` with the postal codes taken off,
+ * because a basket is priced at scopes that were resolved when it was composed
+ * and nothing here re-resolves them: the refusals govern which of a scope's
+ * shops may be named, not which scopes there are.
+ */
+interface ShopRefusalIds {
+  supermarketIds: readonly string[];
+  supermarketLocationIds: readonly string[];
+}
+
+/** Refusing nothing, which is what every branch that cannot ask lands on. */
+const NO_REFUSALS: ShopRefusalIds = {
+  supermarketIds: [],
+  supermarketLocationIds: [],
+};
+
+/**
  * The owner's share sheet (plan 0051, section 3).
  *
  * Account authenticated throughout, and every route resolves the basket by the
@@ -483,6 +503,15 @@ export class GeneratedListParticipantController {
    * stores catalog cannot place. One condition, in one composition, and the one
    * line to revisit if the owner is ever given a say in it.
    *
+   * ## A shop the profile switched off is never offered
+   *
+   * Plan 0066 section 4 wrote the filter as a no op until plan 0064 shipped the
+   * per location preference. It has, so the refusals are read once per basket
+   * and applied to every scope's shops: a store the run's profile excludes is
+   * never named as the place to go and buy something, which is the whole point
+   * of having switched it off. Read only for a reader who is going to see the
+   * shops at all, so a guest's basket costs nothing extra.
+   *
    * ## It fails empty
    *
    * A chain that cannot be named answers no scopes at all rather than an entry
@@ -507,10 +536,19 @@ export class GeneratedListParticipantController {
     }
 
     try {
-      const chains = await this.nats.send<SupermarketPage>(
-        SUPERMARKET_PATTERNS.list,
-        { userId, limit: MAX_PAGE_SIZE } satisfies ListSupermarketsRequest
-      );
+      // The refusals are fetched beside the chain names rather than after them:
+      // neither needs the other, and a basket read is made often enough that one
+      // round trip of latency is worth not spending. `refusalsOf` never throws,
+      // so it cannot take the chain names down with it.
+      const [chains, refused] = await Promise.all([
+        this.nats.send<SupermarketPage>(SUPERMARKET_PATTERNS.list, {
+          userId,
+          limit: MAX_PAGE_SIZE,
+        } satisfies ListSupermarketsRequest),
+        seesZoneData
+          ? this.refusalsOf(userId, resolved.profileId)
+          : NO_REFUSALS,
+      ]);
       const chainById = new Map(chains.items.map((c) => [c.id, c]));
 
       const views = await Promise.all(
@@ -528,13 +566,25 @@ export class GeneratedListParticipantController {
               // chain it is would be worse than none.
               return null;
             }
+            // Plan 0064, section 2.1: a refused chain hides every one of its
+            // shops, whatever their own rows say. Resolution has already dropped
+            // such a chain's scopes, so this only catches a resolution cached
+            // either side of the refusal, and the price it carries still gets
+            // its chain name.
+            const refusedChain = refused.supermarketIds.includes(chain.id);
             return {
               priceScopeId,
               supermarketId: chain.id,
               supermarketName: chain.name,
-              locations: seesZoneData
-                ? await this.locationsOf(userId, chain.id, priceScopeId)
-                : [],
+              locations:
+                seesZoneData && !refusedChain
+                  ? await this.locationsOf(
+                      userId,
+                      chain.id,
+                      priceScopeId,
+                      refused.supermarketLocationIds
+                    )
+                  : [],
             };
           }
         )
@@ -551,14 +601,28 @@ export class GeneratedListParticipantController {
    * The shops of one scope, kept to what the pick sheet draws.
    *
    * One page at the largest size, which is the whole scope for any chain we
-   * harvest today: a scope is a warehouse's catchment, not a country. Once plan
-   * 0064 ships, a shop the run's profile has switched off is filtered out here,
-   * so it is never offered as the place to go and buy something.
+   * harvest today: a scope is a warehouse's catchment, not a country. A shop the
+   * run's profile has switched off is dropped here, so it is never offered as
+   * the place to go and buy something (plan 0066, section 4, now that plan 0064
+   * has shipped the preference it was waiting on).
+   *
+   * **Filtered here rather than by catalog**, which is the one thing worth
+   * saying about where this sits. `supermarketLocation.list` applies no refusals
+   * on purpose (plan 0068): it is the owner's read of one chain, and the reads
+   * that are a shopper's read of their neighbourhood are the ones that take
+   * them. This composition is the shopper's, so it is the gateway that resolves
+   * the profile's refusals and applies them, exactly as it does for the two
+   * shop reads.
+   *
+   * A scope whose shops are all refused answers an empty array, which is the
+   * shape section 4.1 already makes the client handle for a scope whose stores
+   * catalog cannot place.
    */
   private async locationsOf(
     userId: string,
     supermarketId: string,
-    priceScopeId: string
+    priceScopeId: string,
+    excludedLocationIds: readonly string[]
   ): Promise<BasketScopeLocationView[]> {
     const req: ListSupermarketLocationsRequest = {
       userId,
@@ -570,13 +634,54 @@ export class GeneratedListParticipantController {
       SUPERMARKET_LOCATION_PATTERNS.list,
       req
     );
-    return page.items.map((location) => ({
-      supermarketLocationId: location.id,
-      label: location.label,
-      address: location.address,
-      city: location.city,
-      postalCode: location.postalCode,
-    }));
+    const refused = new Set(excludedLocationIds);
+    return page.items
+      .filter((location) => !refused.has(location.id))
+      .map((location) => ({
+        supermarketLocationId: location.id,
+        label: location.label,
+        address: location.address,
+        city: location.city,
+        postalCode: location.postalCode,
+      }));
+  }
+
+  /**
+   * What the run's profile refuses, for the shops half of the answer (plan
+   * 0064).
+   *
+   * `forShops` rather than the resolution beside it: the scope view says which
+   * warehouses a price may come from and says nothing about which shops a person
+   * will walk into, and those are the two different questions plan 0068 section
+   * 2 separated. It is the run's profile that is asked, for the same reason the
+   * prices are the run's: the reader may be a guest, or a registered participant
+   * whose own profile refuses a different set of shops in a different city.
+   *
+   * **It never throws.** A refusal that cannot be read is a preference that
+   * cannot be applied, and a preference is not the privacy boundary here:
+   * `seesZoneData` already decided whether this reader may see any shop at all.
+   * So core being slow costs an excluded shop staying on the list for a minute,
+   * rather than costing a shopper in an aisle the only address they were given.
+   */
+  private async refusalsOf(
+    userId: string,
+    profileId: string | null
+  ): Promise<ShopRefusalIds> {
+    if (!profileId) {
+      // A run scoped by hand has no profile to have refused anything. Naming it
+      // would resolve the owner's *default* profile, which is a different set of
+      // opinions than the one this basket was composed against.
+      return NO_REFUSALS;
+    }
+    try {
+      const selection = await this.scopes.forShops(userId, { profileId });
+      return {
+        supermarketIds: selection.excludedSupermarketIds,
+        supermarketLocationIds: selection.excludedSupermarketLocationIds,
+      };
+    } catch {
+      return NO_REFUSALS;
+    }
   }
 
   /**
