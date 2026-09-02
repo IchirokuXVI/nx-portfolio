@@ -1,9 +1,12 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   inject,
   input,
   output,
+  viewChild,
+  type ElementRef,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -42,6 +45,12 @@ import { BasketIcon, PlusIcon, ProductIcon } from '../icons/icons';
  * page is **attaching a catalog product** to a line that already exists, and there is
  * no such thing as attaching a product that is not in the catalog, so it passes null
  * and the row is absent rather than present and refusing.
+ *
+ * ## Where it goes is the caller's, and {@link placement} is how it says so
+ *
+ * The rows are identical on both screens. What differs is the direction the list
+ * grows in, and two things follow from that direction which are not decoration. See
+ * {@link placement}.
  */
 @Component({
   selector: 'lib-suggestion-list',
@@ -67,6 +76,29 @@ export class SuggestionList {
   /** The label above the list, for a screen reader. Each caller names its own. */
   readonly label = input('list.add.suggestions');
 
+  /**
+   * Where this list sits relative to the field it belongs to.
+   *
+   * `'below'`, the default, is the line page's: inline under a search field with
+   * nothing in the way, growing downward on the page's own ground.
+   *
+   * `'above'` is the composer's: pinned to the bottom of the screen with the
+   * keyboard under it, so the list grows **upward over the lines**. Two things
+   * follow from that and neither is a style anybody may tune away:
+   *
+   * - **It is opaque.** It covers rows of somebody's shopping list, and a
+   *   transparent panel over them is two lists of words in the same place. It was
+   *   exactly that until this input existed.
+   * - **It opens at its last row.** The rows nearest the field are the ones under
+   *   the thumb, and the last of them is the free text row, which is the one that is
+   *   always there and always works. A panel that opened at the top of a scrolling
+   *   list hid it behind rows the catalog merely offered.
+   *
+   * The ordering is untouched by either. The server's ranking is drawn top to bottom
+   * in both placements, and only which end of it the panel is scrolled to differs.
+   */
+  readonly placement = input<'below' | 'above'>('below');
+
   readonly chose = output<CatalogSuggestion>();
 
   /** The free text row was pressed. Only reachable when {@link asWritten} is set. */
@@ -81,6 +113,42 @@ export class SuggestionList {
    * screen until something evicts the cache.
    */
   private readonly _locale = inject(RokuLocaleStore).locale;
+
+  /** The scrolling panel, absent while there is nothing to offer. */
+  private readonly _panel = viewChild<ElementRef<HTMLElement>>('panel');
+
+  constructor() {
+    // Opened at its last row, for `'above'` only, and re-opened there on every new
+    // set of results: a panel that grows upward is read from the bottom, and the row
+    // at the bottom is the one that always works.
+    //
+    // `afterRenderEffect` because the rows have to be in the DOM before the panel can
+    // be measured, and because it runs in the browser and never on the server (plan
+    // 0001, D2). It is the shape the assistant column and the comments sheet already
+    // use to follow their own newest entry.
+    //
+    // Both inputs are read, so a set of results that arrives one keystroke after the
+    // last one re-anchors rather than leaving the panel wherever the previous list
+    // happened to be scrolled to. There is no "unless they scrolled up" exception
+    // here, unlike the comments sheet: this list is replaced wholesale by every
+    // keystroke, so a scroll position from a query nobody is typing any more is not a
+    // place anybody chose to be.
+    afterRenderEffect(() => {
+      if (this.placement() !== 'above') {
+        return;
+      }
+
+      this.suggestions();
+      this.asWritten();
+
+      const panel = this._panel()?.nativeElement;
+      if (panel === undefined) {
+        return;
+      }
+
+      panel.scrollTop = panel.scrollHeight;
+    });
+  }
 
   /** One suggestion's name, in the reader's language. */
   nameOf(suggestion: CatalogSuggestion): string {

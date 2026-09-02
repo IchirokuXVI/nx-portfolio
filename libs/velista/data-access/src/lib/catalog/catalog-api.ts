@@ -1,6 +1,10 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import type { CatalogItem, CatalogSuggestion } from '@portfolio/velista/models';
+import {
+  SUGGEST_LIMIT_PER_KIND,
+  type CatalogItem,
+  type CatalogSuggestion,
+} from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
@@ -24,7 +28,14 @@ export class CatalogApi implements CatalogServiceI {
     query: string,
     options?: { profileId?: string; signal?: AbortSignal }
   ): Promise<readonly CatalogSuggestion[]> {
-    let params = new HttpParams().set('q', query);
+    // **Asked for here rather than left to the server's default**, which is twenty
+    // per kind and therefore up to forty rows in a panel that shows four at a time.
+    // It is stated once, in the one place every screen's dropdown goes through, so
+    // no page has to remember it and no two pages can disagree about how long a
+    // dropdown is.
+    let params = new HttpParams()
+      .set('q', query)
+      .set('limit', SUGGEST_LIMIT_PER_KIND);
     if (options?.profileId !== undefined) {
       params = params.set('profileId', options.profileId);
     }
