@@ -22,13 +22,14 @@ const BASE =
   process.env.GEMINI_BASE_URL ||
   'https://generativelanguage.googleapis.com/v1beta';
 
-const DEFAULT_MODELS = [
-  'gemini-3.7-flash',
-  'gemini-3.6-flash',
-  'gemini-3.5-flash-lite',
-  'gemini-3.1-flash-lite',
-  'gemini-2.5-flash-lite',
-];
+/**
+ * The two readers kept after ticket 4. Deliberately not every model that the
+ * models endpoint lists: `gemini-2.5-flash-lite` answers 404 ("no longer
+ * available to new users") and `gemini-3.7-flash` accepts a request and never
+ * responds, on a two-word text prompt as readily as on a receipt. Name any other
+ * model explicitly on the command line if you want to re-test one.
+ */
+const DEFAULT_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'];
 
 const MIME = {
   '.jpg': 'image/jpeg',

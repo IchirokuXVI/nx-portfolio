@@ -97,9 +97,14 @@ Every ticket in this folder is v2; ticket 1 was re-read under it.
 This is the part that changes the design, and none of it is about model quality.
 
 **Counter departments are not products, on that ticket.** A butcher or deli
-counter weighs something and the till prints `CARNICERIA` and a price. There is no
-product name, no quantity and no unit. On ticket 1 that is two lines of five, and
-6.88 EUR of 11.48 EUR, 60% of the basket by value.
+counter weighs something and the till prints `CARNICERIA` and a price, with no
+product name. On ticket 1 that is two lines of five, and 6.88 EUR of 11.48 EUR,
+60% of the basket by value.
+
+They are not always quantity-less: ticket 4's `PANADERIA 6 × 0.33 = 1.98` is six
+bread rolls counted at the bakery counter, with a real quantity and a real unit
+price. Only the product name is missing, which is enough to block a catalog match
+and not enough to block a useful notice.
 
 **But the detail is not lost, it is on a second ticket.** The counter prints its
 own ticket for what it weighed, and the shopper carries both. So a department line
@@ -256,29 +261,37 @@ here: `gemini-3.6-flash` took 25.9 s to answer `OK` to a text-only prompt, and
 11 s to read a whole receipt. Do not read these latencies as model speed; read them
 as "this tier is not for interactive use".
 
-## 9. Where it stands after three tickets
+## 9. Where it stands after four tickets
 
-**Money is solved. Text is not.** Fifteen readings, fourteen `BALANCED` and one
-`MISMATCH` that was the checker correctly catching a derived subtotal. Every reader
-got every line, quantity, unit price and total right on all three tickets, and
-`isDepartment` was unanimous.
+**The line total is solved. The rest is not, and the checker's silence is not
+evidence.** Eighteen readings; every reader got every line, quantity, unit price
+and total right on all four tickets, and `isDepartment` was unanimous throughout.
+
+Ticket 4 is the one that matters, because **every reader made the same error there
+and `validate.mjs` reported `BALANCED` anyway.** The tax block was misread, and the
+line-versus-total sum cannot see the tax block. A clean run of the checker means
+"the lines add up", not "the reading is right", and the difference had not shown up
+before ticket 4 because nothing was testing the rest.
 
 Everything still open is in the fields arithmetic cannot see:
 
-| Model                 | Per 1000 tickets | Reproducible quirk                                                |
-| --------------------- | ---------------- | ----------------------------------------------------------------- |
-| Gemini 3.1 Flash-Lite | $0.87 - $1.32    | none seen; sometimes leaves `unit` null                           |
-| Gemini 3.5 Flash-Lite | $1.27 - $2.06    | letter-level misreads (`FONRVELLA`, `JAMUN`); unstable `taxTotal` |
-| Claude Haiku 4.5      | $3.04 - $4.14    | reads the card slip instead of the receipt; wrong minute twice    |
-| Gemini 3.6 Flash      | $5.22 - $11.09   | normalizes verbatim fields; heavy thinking spend                  |
-| Claude Opus 5         | $31.10 - $36.60  | none seen                                                         |
+| Model                 | Per 1000 tickets | Reproducible quirk                                               | Status  |
+| --------------------- | ---------------- | ---------------------------------------------------------------- | ------- |
+| Gemini 3.1 Flash-Lite | $0.87 - $1.50    | none; sometimes leaves `unit` null, shortens `paymentMethod`     | kept    |
+| Gemini 3.5 Flash-Lite | $1.27 - $2.39    | letter-level misreads (`FONRVELLA`, `JAMUN`); derives `subtotal` | kept    |
+| Claude Opus 5         | $31.10 - $39.15  | guessed a letter for an illegible glyph (ticket 4)               | kept    |
+| Claude Haiku 4.5      | $3.04 - $4.14    | reads the card slip instead of the receipt; wrong minute twice   | dropped |
+| Gemini 3.6 Flash      | $5.22 - $11.09   | normalizes verbatim fields; heavy thinking spend                 | dropped |
 
-**Opus 5 costs about 30x Gemini 3.1 Flash-Lite and has returned nothing the cheap
-model did not.** It is not the production reader; it is what to escalate to when the
-checker says the arithmetic did not close.
+Haiku 4.5 and 3.6 Flash were dropped after ticket 3, so their ranges cover tickets
+1 to 3 only.
 
-**Gemini 3.1 Flash-Lite is the pick.** Cheapest, no quirk observed in three tickets,
-and the only one that has never taken a value off the card slip.
+**Opus 5 costs about 26x Gemini 3.1 Flash-Lite and has returned nothing the cheap
+model did not.** On ticket 4 it was the only reader to produce a wrong normalized
+key. It is not the production reader; it is what to escalate to when a check fails.
+
+**Gemini 3.1 Flash-Lite is the pick.** Cheapest, no quirk seen in four tickets, and
+the only reader that has never taken a value off the card slip.
 
 **Cross-model agreement catches what arithmetic cannot.** Haiku's `19:30` and its
 `Debit Mastercard` are both invisible to `validate.mjs` and both obvious against
@@ -298,26 +311,36 @@ one working alias; rotating models builds several broken ones.
 3. If it does not balance, read again with a second model and compare.
 4. If they still disagree, that receipt goes to the user to confirm.
 
-### Two v3 changes ticket 3 argues for
+### Three v3 changes the corpus now argues for
 
-Neither is made yet, deliberately, so the corpus stays comparable across tickets.
+None is made yet, deliberately, so the corpus stays comparable across tickets.
 
+- **Capture the tax breakdown**, as `taxBreakdown: [{ rate, base, tax }]`. This is
+  no longer a nice-to-have. A Spanish receipt is tax inclusive, so every line
+  belongs to exactly one VAT group and each group's gross is the sum of its own
+  lines: the block **partitions the lines**, which is a far stronger constraint than
+  a second total. `tools/vat-check.mjs` shows what that buys. On ticket 4 it proved
+  the 4% figures wrong (no subset of lines can reach 3.80), localized the error to
+  that one group, and derived what it had to be (gross 3.08, base 2.96, tax 0.12).
+  It is the only thing in the pipeline that caught a real error on that ticket, and
+  `schema.json` currently throws the data away.
+- **Never substitute an illegible character.** Ticket 4 made the rule precise:
+  omission normalizes correctly, substitution does not. `BOCAT"N` and `BOCAT N`
+  both normalize to `BOCATN180G`, but a guessed letter survives normalization and
+  mints a permanent second key. Both key splits in the corpus so far came from a
+  reader guessing (3.5 Flash-Lite's `JAMUN` on ticket 3, and Opus 5's `PATR` on
+  ticket 4). The prompt should say: if a character is illegible, leave it out.
 - **Name the authoritative document.** The prompt says "a supermarket till receipt"
   and never says what to do when the photo holds the receipt _and_ its card slip.
-  Two readers took `datetime` from the slip and one took `paymentMethod` from it
-  too. Saying "read only the receipt; ignore the card payment slip entirely" is a
-  one-line fix for a class of error the checker cannot see.
-- **Capture the tax breakdown.** A `taxBreakdown` array of `{ rate, base, tax }`
-  is a second independent checksum over the same money. On ticket 3 the tax block
-  as read grosses up to 9.67 against a 9.29 total, and the checker is blind to it
-  because `schema.json` only keeps a scalar `taxTotal`.
+  On ticket 3 two readers took `datetime` from the slip and one took
+  `paymentMethod` too. "Read only the receipt; ignore the card payment slip
+  entirely" is a one-line fix for a class of error the checker cannot see.
 
-**Caveat, still real: three tickets is not evidence of accuracy.** All three are the
-same chain, and none has a weighed item, a multibuy discount, a loyalty deduction,
-a returned item or badly faded print. Those are where extraction gets hard. What
-these three establish is that the easy case is comfortably solved by the cheapest
-tier, and that every interesting problem so far has been in the receipts rather
-than in the models.
+**Caveat, still real: four tickets is not evidence of accuracy.** All four are the
+same chain, and none has a weighed item, a multibuy discount, a loyalty deduction
+or a returned item. Ticket 5 is the first from a different supermarket and the
+first large one; ticket 9 is large and badly photographed. Those are the tests that
+will actually decide this.
 
 ## 10. Layout
 
@@ -328,7 +351,8 @@ receipt-ocr/
     prompt.txt           the prompt every reader gets (v2)
     schema.json          the response schema every reader gets (v2)
     run-gemini.mjs       runs one image across several Gemini models
-    validate.mjs         the arithmetic checker
+    validate.mjs         the arithmetic checker (lines against the total)
+    vat-check.mjs        the second checksum (the tax block against the lines)
     cost.mjs             measured and computed cost per model
   ticket-NN/
     receipt.jpg          the photograph as taken

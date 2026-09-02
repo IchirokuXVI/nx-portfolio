@@ -121,6 +121,14 @@ MISMATCH  gemini-3.5-flash-lite.json   6 lines (0 dept, 0) sum 9.29 total 9.29
 A rule violation that exposes a real inconsistency is a good argument for capturing
 the field properly rather than for forbidding it harder.
 
+**Resolved by ticket 4.** `tools/vat-check.mjs`, written for that ticket, runs the
+check this section wished for. Against ticket 1 the tax block reconciles exactly,
+which confirms the semantics (base plus tax equals the group's gross, and the groups
+gross to the total). Against tickets 3 and 4 it fails in the same place both times,
+the 4% group, on the two most creased photographs. So the receipts are fine and the
+reading of that one figure is not: here the 4% group's true gross is
+`9.29 - 5.91 = 3.38` (base 3.25, tax 0.13), read as 3.62 and 0.14.
+
 ## The card slip contaminated two fields
 
 Ticket 2 established that the photo holds two documents that disagree. Here that
