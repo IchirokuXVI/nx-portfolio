@@ -972,7 +972,22 @@
     "send": {
       "open": "Send to a shopping list",
       "title": "{{name}}",
-      "pending": "Waiting for that list to approve it"
+      "pending": "Waiting for that list to approve it",
+      "loading": "Loading your lists",
+      "loadFailed": "Your lists would not load",
+      "retry": "Try again",
+      "empty": "There is no list you can send this to",
+      "fromThisBasket": "From this basket",
+      "searchLabel": "Search your lists",
+      "matches_one": "{{count}} list",
+      "matches_other": "{{count}} lists",
+      "warning": "This adds “{{content}}” to {{list}}. It cannot be taken back out from here.",
+      "confirm": "Send it",
+      "cancel": "Cancel",
+      "close": "Close",
+      "done": "Added to {{list}}.",
+      "waiting": "Added to {{list}}. It is waiting for someone there to approve it.",
+      "noneOutstanding": "Added to {{list}} with none outstanding. Nothing was recorded as bought there."
     },
     "people": {
       "title": "On this list",
