@@ -1,5 +1,6 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
   RokuLocaleStore,
@@ -24,6 +25,7 @@ import {
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
+import { QuantityReel } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { SettleSheet } from './settle-sheet';
 
@@ -805,5 +807,115 @@ describe('SettleSheet: a settlement that was taken back', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.history-reverted')
     ).toBeNull();
+  });
+});
+
+/**
+ * The quantity pane, which is now the same control as the row (plan 0054, section 6).
+ *
+ * It drew its own spinbutton with a copy of `QuantityReel`'s key table beside a
+ * comment saying it matched. There is one number control in this product and one
+ * keyboard path through it, and a copy that no longer exists cannot drift.
+ *
+ * The three buttons are untouched and are asserted elsewhere. "They had none" in
+ * particular has no representation on a reel at all: it is an outcome and not a
+ * quantity, and a number dragged to zero must never be able to mean the shop had
+ * none.
+ */
+describe('SettleSheet: how many did you get', () => {
+  /** Open the pane the way the settle pane's own control does. */
+  function openQuantity(fixture: ComponentFixture<SettleSheet>): void {
+    const buttons = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button')
+    );
+    const some = buttons.find((button) =>
+      (button.textContent ?? '').includes('basket.settle.some')
+    );
+    if (some === undefined) {
+      throw new Error('the settle pane offers no way to give a number');
+    }
+    some.click();
+    fixture.detectChanges();
+  }
+
+  function reel(fixture: ComponentFixture<SettleSheet>): QuantityReel {
+    return fixture.debugElement.query(By.directive(QuantityReel))
+      .componentInstance as QuantityReel;
+  }
+
+  function reelEl(fixture: ComponentFixture<SettleSheet>): HTMLElement {
+    return (fixture.nativeElement as HTMLElement).querySelector(
+      'lib-quantity-reel'
+    ) as HTMLElement;
+  }
+
+  /**
+   * Move the reel, and put it away afterwards.
+   *
+   * The close is what stops the idle timer, which would otherwise outlive the spec
+   * and commit into a component that is no longer there.
+   */
+  function move(fixture: ComponentFixture<SettleSheet>, by: number): void {
+    const key = by > 0 ? 'ArrowUp' : 'ArrowDown';
+    for (let step = 0; step < Math.abs(by); step += 1) {
+      reelEl(fixture).dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true })
+      );
+    }
+    fixture.detectChanges();
+  }
+
+  it('draws the reel, bounded by what is outstanding', async () => {
+    // One at the bottom because zero is "they had none", which is the button below
+    // and an outcome rather than a quantity.
+    const { fixture } = await render();
+    openQuantity(fixture);
+
+    expect(reelEl(fixture)).not.toBeNull();
+    expect(reelEl(fixture).getAttribute('aria-valuemin')).toBe('1');
+    expect(reelEl(fixture).getAttribute('aria-valuemax')).toBe('4');
+    expect(reelEl(fixture).getAttribute('aria-valuenow')).toBe('1');
+  });
+
+  it('names the number the same way the pane always did', async () => {
+    const { fixture } = await render();
+    openQuantity(fixture);
+
+    expect(reelEl(fixture).getAttribute('aria-label')).toContain(
+      'basket.settle.quantity'
+    );
+  });
+
+  it('records the number under the thumb, without waiting for the idle beat', async () => {
+    // "Record it" has to agree with the number above it the moment somebody reads
+    // both. A button whose label lagged the control by a second would be asking
+    // somebody in a shop to wait and find out.
+    const { fixture, store } = await render();
+    openQuantity(fixture);
+
+    move(fixture, 2);
+
+    const submit = (fixture.nativeElement as HTMLElement).querySelector(
+      '.primary'
+    ) as HTMLButtonElement;
+    submit.click();
+    reel(fixture).close();
+    await fixture.whenStable();
+
+    expect(store.settle).toHaveBeenCalledWith(LINE_ID, {
+      outcome: 'BOUGHT',
+      quantity: 3,
+    });
+  });
+
+  it('follows the reel when it is let go, too', async () => {
+    const { fixture } = await render();
+    openQuantity(fixture);
+
+    move(fixture, 1);
+    reel(fixture).close();
+    fixture.detectChanges();
+
+    expect(reelEl(fixture).getAttribute('aria-valuenow')).toBe('2');
   });
 });

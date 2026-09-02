@@ -6,6 +6,8 @@ import {
   inject,
   input,
   output,
+  signal,
+  viewChild,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -15,7 +17,9 @@ import {
 import {
   basketLineState,
   inLocale,
+  LINE_QUANTITY_MAX,
   outstanding,
+  QUANTITY_REEL_CLICK_SHIELD_MS,
   type BasketLine,
   type BasketParticipant,
   type BasketProduct,
@@ -24,11 +28,13 @@ import {
   CheckFilledIcon,
   CircleIcon,
   HalfCircleIcon,
+  QuantityReel,
   SlashCircleIcon,
 } from '@portfolio/velista/ui';
 import {
   addedCaption,
   originsCaption,
+  outstandingCaption,
   quantityCaption,
   touchedCaption,
 } from '../basket-labels';
@@ -59,6 +65,20 @@ export type BasketStatusGlyph = 'wanted' | 'partly' | 'bought' | 'unavailable';
  * control, whose accessible name is the act it performs, and the body, which is the
  * control this component always was, with the composed label it always had.
  *
+ * ## The number is the control (plan 0054)
+ *
+ * The trailing number stopped being a readout and became a `QuantityReel` bound to
+ * what is still to get. Dragging it **down** records that many bought; dragging it
+ * **up** says this basket will buy more than the households asked for. That
+ * asymmetry is backend `0056` section 1's rule and not this component's, and one
+ * call carries both directions: the client never decides which of the two a gesture
+ * was, because two phones moving one line is exactly when it would decide wrongly.
+ *
+ * The row still opens the sheet on a tap. The reel is a separate target inside it
+ * and takes the drag, the words take the tap, and `line-row` on the list page has
+ * lived with that arrangement since `0043`, so it is an interaction somebody has
+ * already met.
+ *
  * The status control is drawn for **everybody**. Every participant may settle and
  * every participant may reopen (luna `0054`, section 3.5), so there is no reader for
  * whom it is drawn and refused, and no `@if` guarding it. That is the same absence
@@ -86,6 +106,7 @@ export type BasketStatusGlyph = 'wanted' | 'partly' | 'bought' | 'unavailable';
     CircleIcon,
     HalfCircleIcon,
     NgTemplateOutlet,
+    QuantityReel,
     RokuTranslatorPipe,
     SlashCircleIcon,
   ],
@@ -136,6 +157,23 @@ export class BasketLineRow {
    */
   readonly canReopen = input(false);
 
+  /**
+   * A sentence about the **last move of the number on this row**, or null.
+   *
+   * A key and the count it takes, rather than a rendered string, because the page
+   * that owns the failure has no business composing copy and this component already
+   * holds the translator. The count is the true number after the store refetched,
+   * which is the whole of the stale answer: "somebody else changed this line, it
+   * says 3 now" is only worth saying if the 3 is right (plan 0054, section 4.1).
+   *
+   * Held by the page and not here, because there is one of these at a time across
+   * the whole basket and a row is constructed once per line.
+   */
+  readonly notice = input<{
+    readonly key: string;
+    readonly count: number;
+  } | null>(null);
+
   readonly open = output<void>();
 
   /**
@@ -152,8 +190,136 @@ export class BasketLineRow {
   /** Take this line back to fully outstanding (luna `0054`, section 3). */
   readonly reopen = output<void>();
 
+  /**
+   * The reel was let go somewhere other than where it started (plan 0054).
+   *
+   * Absolute numbers in both halves rather than a delta, and `from` is not
+   * decoration: a stale gesture would invert its own meaning, so the server refuses
+   * a write whose origin no longer matches instead of applying it as the opposite
+   * act (backend `0056`, section 3.2). What the move **means** is the server's to
+   * decide and never this row's.
+   */
+  readonly outstanding = output<{ from: number; to: number }>();
+
   protected readonly state = computed(() => basketLineState(this.line()));
-  protected readonly outstanding = computed(() => outstanding(this.line()));
+
+  /**
+   * How many are still to get, which is what the reel is bound to.
+   *
+   * Not called `outstanding`: the output that reports a move of it has that name,
+   * and it belongs to the thing a caller listens for rather than to a number they
+   * could read off the line themselves.
+   */
+  protected readonly stillToGet = computed(() => outstanding(this.line()));
+
+  /**
+   * What the reel shows while a write is out.
+   *
+   * The basket is not optimistic (plan 0053, section 7), so the line still says the
+   * old number until the server answers. Showing it would snap the reel back to
+   * where the gesture started for as long as the request takes, which on a shop's
+   * connection is long enough to be read as the gesture having failed. Consulted
+   * only while {@link busy}, so a value left behind by a refused write is never
+   * drawn: the row goes back to what the line now says, which is what section 4.1
+   * asks for.
+   */
+  private readonly _sent = signal<number | null>(null);
+
+  protected readonly shownOutstanding = computed(() =>
+    this.busy() ? (this._sent() ?? this.stillToGet()) : this.stillToGet()
+  );
+
+  /**
+   * The ceiling, which is on the **resulting quantity** and not on this number.
+   *
+   * Backend `0056` section 5: a partly settled line cannot be raised past the same
+   * limit an unsettled one has, so what is already bought comes off the top.
+   */
+  protected readonly ceiling = computed(
+    () => LINE_QUANTITY_MAX - this.line().settled
+  );
+
+  /** What the reel is counting: how many are still to get, not how many to buy. */
+  protected readonly reelLabel = computed(() =>
+    this._translator.t('basket.outstanding.label', undefined, this._locale(), {
+      name: this.line().content,
+    })
+  );
+
+  /** Where the thumb is, while it is down. Null the moment the overlay closes. */
+  private readonly _preview = signal<number | null>(null);
+
+  /**
+   * What the gesture is about to do, said while the thumb is still down.
+   *
+   * The confirmation is this caption and letting go is the commit, which is section
+   * 3 and is not negotiable into a dialog: a dialog on a gesture done one handed
+   * over a trolley is the thing `0043` took off the list page.
+   */
+  protected readonly caption = computed(() =>
+    outstandingCaption(
+      this.stillToGet(),
+      this._preview(),
+      this._translator,
+      this._locale()
+    )
+  );
+
+  private readonly _reel = viewChild(QuantityReel);
+
+  /**
+   * Until when a tap on the words is the end of a reel gesture rather than a tap.
+   *
+   * The same beat `line-row` keeps for the same reason: the overlay closes on its
+   * own after an idle window, and a finger already falling towards the row does not
+   * stop when the thing under it disappears.
+   */
+  private _deafUntil = 0;
+
+  protected onReelAutoClosed(): void {
+    this._deafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
+  }
+
+  protected onPreview(next: number | null): void {
+    this._preview.set(next);
+  }
+
+  /**
+   * The reel was let go. Report it, and hold the number it landed on.
+   *
+   * The preview is cleared here rather than waited for: the reel emits its own null
+   * a beat later, and a caption that outlived the gesture by a frame would flicker
+   * under the number the request is already about.
+   */
+  protected onCommitted(change: { from: number; to: number }): void {
+    this._preview.set(null);
+    this._sent.set(change.to);
+    this.outstanding.emit(change);
+  }
+
+  /**
+   * A tap on the words, which opens the sheet, unless it was really about the reel.
+   *
+   * Two cases and both are `line-row`'s. An open overlay is dismissed by the tap
+   * that lands beside it rather than opening a screen over the number somebody was
+   * reading; and a tap inside the beat after the overlay closed itself is the tail
+   * of that gesture, so it does nothing at all.
+   */
+  protected onBody(): void {
+    const reel = this._reel();
+    if (reel?.open()) {
+      // Closed here rather than left to the blur. A tap on a span that cannot take
+      // focus moves focus nowhere, which is the ordinary case on a touch screen.
+      reel.close();
+      return;
+    }
+
+    if (Date.now() < this._deafUntil) {
+      return;
+    }
+
+    this.open.emit();
+  }
 
   /** Which of the four shapes to draw. See {@link BasketStatusGlyph}. */
   protected readonly statusGlyph = computed<BasketStatusGlyph>(() => {

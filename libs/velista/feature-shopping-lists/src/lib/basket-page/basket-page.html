@@ -189,6 +189,7 @@
             <li>
               <lib-basket-line-row
                 (open)="openLine(line)"
+                (outstanding)="setOutstanding(line, $event)"
                 (reopen)="reopenLine(line)"
                 (settle)="settleLine(line)"
                 [busy]="isBusy(line)"
@@ -196,6 +197,7 @@
                 [line]="line"
                 [listNames]="listNames()"
                 [meId]="meId()"
+                [notice]="noticeFor(line)"
                 [ownName]="ownName()"
                 [people]="participantsById()"
                 [products]="products()"
@@ -207,6 +209,16 @@
     }
   }
 </main>
+
+<!--
+  What the last move of a row's number came to, said once (plan 0054, section 7).
+
+  Outside every `@case` on purpose: a live region has to be in the document before
+  the text lands in it, or the change nothing was listening to is not announced. One
+  for the whole basket rather than one per row, so four people settling lines at
+  once collapse into one sentence and the latest wins.
+-->
+<p aria-live="polite" class="visually-hidden said">{{ outstandingSaid() }}</p>
 
 <!--
   The composer, at the bottom of the basket, in the same place the list page's sits

@@ -21,7 +21,6 @@ import {
   APP_BASE_PATH,
   inLocale,
   outstanding,
-  QUANTITY_REEL_PAGE_STEP,
   toSettlementRow,
   type BasketLine,
   type BasketParticipant,
@@ -33,7 +32,7 @@ import {
   generatedListIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
-import { SheetShell } from '@portfolio/velista/ui';
+import { QuantityReel, SheetShell } from '@portfolio/velista/ui';
 import {
   basketErrorKey,
   correlationIdOf,
@@ -55,28 +54,6 @@ type Pane = 'settle' | 'quantity' | 'product' | 'allocate' | 'history';
 
 /** How the settlement history's read has got on. Four states, not two booleans. */
 type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
-
-/**
- * How far each key moves the spinbutton, matching `QuantityReel`'s own table.
- *
- * The page step is **imported rather than repeated**, so the two controls cannot
- * drift into paging by different amounts: a person who learns the gesture on the
- * list page should find it does the same thing here.
- *
- * `Home` and `End` carry a step of zero because they are absolute rather than
- * relative; the handler reads the key for those two, and this map only says that
- * they are keys it handles at all.
- */
-const STEP_FOR: Readonly<Record<string, number>> = {
-  ArrowUp: 1,
-  ArrowRight: 1,
-  ArrowDown: -1,
-  ArrowLeft: -1,
-  PageUp: QUANTITY_REEL_PAGE_STEP,
-  PageDown: -QUANTITY_REEL_PAGE_STEP,
-  Home: 0,
-  End: 0,
-};
 
 /**
  * Settling one line: the whole amount, a number, or per household (plan 0044,
@@ -135,7 +112,7 @@ const STEP_FOR: Readonly<Record<string, number>> = {
  */
 @Component({
   selector: 'lib-settle-sheet',
-  imports: [RokuTranslatorPipe, SheetShell],
+  imports: [QuantityReel, RokuTranslatorPipe, SheetShell],
   templateUrl: './settle-sheet.html',
   styleUrl: './settle-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -268,13 +245,41 @@ export class SettleSheet {
   });
 
   /**
-   * What the stepper holds, for the partial submit.
+   * What the reel holds, for the partial submit.
    *
    * Starts at one rather than at the outstanding amount: somebody who wanted the
-   * whole amount pressed the other button, so the number they are about to type
-   * is by definition a smaller one.
+   * whole amount pressed the other button, so the number they are about to give is
+   * by definition a smaller one.
+   *
+   * It follows the reel's `preview` as well as its commit, so "Record it" reads the
+   * number under the thumb straight away rather than after the reel's idle beat. A
+   * button whose label disagreed with the number above it for a second would be
+   * asking somebody in a shop to wait and find out.
    */
   protected readonly typed = signal(1);
+
+  /**
+   * The reel's ceiling: what is outstanding, and never less than its floor.
+   *
+   * A finished line has nothing outstanding, and the settle pane draws no way into
+   * this one for exactly that reason (`finished`), so the floor here is a guard
+   * against an impossible range rather than a case somebody can reach.
+   */
+  protected readonly quantityMax = computed(() =>
+    Math.max(1, this.outstanding())
+  );
+
+  /**
+   * The number under the thumb, while it is down.
+   *
+   * Null means the overlay closed, and the reel is showing {@link typed} again, so
+   * there is nothing to copy across.
+   */
+  protected onQuantityPreview(next: number | null): void {
+    if (next !== null) {
+      this.typed.set(next);
+    }
+  }
 
   /** The picked product's name, for the line under the title. */
   protected readonly productName = computed<string | null>(() => {
@@ -446,46 +451,6 @@ export class SettleSheet {
       next.set(listId, Math.max(0, quantity));
       return next;
     });
-  }
-
-  protected step(by: number): void {
-    const max = this.outstanding();
-    this.typed.update((n) => Math.min(Math.max(1, n + by), Math.max(1, max)));
-  }
-
-  /**
-   * The keyboard half of the `spinbutton`, matching `QuantityReel`'s exactly.
-   *
-   * Plan 0044 section 7 asks for `0043`'s reel and spinbutton **unchanged**, and
-   * the spinbutton half is what this is: the same keys, the same directions, the
-   * same page step. The reel itself is deliberately not reused, because it is a
-   * different question. It reports a signed **delta** on the line's own quantity
-   * and is bounded by `LINE_QUANTITY_MIN..MAX`; this asks for an absolute number
-   * of things bought, bounded by what is outstanding. Making the reel serve both
-   * would have meant changing it, which is the one thing that section forbids.
-   *
-   * `ArrowUp` and `ArrowRight` increase, which is what the role requires and what
-   * every native spinbutton does, however much the reel's own left-to-right drag
-   * suggests otherwise.
-   */
-  protected onKeydown(event: KeyboardEvent): void {
-    const step = STEP_FOR[event.key];
-    if (step === undefined) {
-      return;
-    }
-    // The arrow keys scroll a sheet otherwise, which would move the control out
-    // from under the person using it.
-    event.preventDefault();
-
-    if (event.key === 'Home') {
-      this.typed.set(1);
-      return;
-    }
-    if (event.key === 'End') {
-      this.typed.set(Math.max(1, this.outstanding()));
-      return;
-    }
-    this.step(step);
   }
 
   /**
