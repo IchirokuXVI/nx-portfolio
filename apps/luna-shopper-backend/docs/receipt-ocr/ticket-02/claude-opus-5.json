@@ -1,0 +1,33 @@
+{
+  "store": "GRUPO EMPRESARIAL EL JAMON, S.L.",
+  "storeAddress": "C/ RONDA, 5, 14013-CORDOBA, CORDOBA",
+  "storeVatId": "B21053848",
+  "datetime": "2026-08-28T19:36:00",
+  "currency": "EUR",
+  "lines": [
+    {
+      "rawText": "MEZCLA CAPICUA",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 14.25,
+      "discount": null,
+      "lineTotal": 14.25
+    },
+    {
+      "rawText": "COLETERO",
+      "isDepartment": false,
+      "quantity": 1,
+      "unit": "UNIT",
+      "unitPrice": 1.95,
+      "discount": null,
+      "lineTotal": 1.95
+    }
+  ],
+  "receiptDiscount": null,
+  "subtotal": null,
+  "taxTotal": 1.64,
+  "total": 16.2,
+  "paymentMethod": "TARJETA VISA",
+  "truncated": false
+}

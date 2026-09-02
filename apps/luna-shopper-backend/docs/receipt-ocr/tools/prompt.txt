@@ -1,0 +1,28 @@
+You are reading a photograph of a supermarket till receipt (Spain unless the receipt says otherwise).
+
+Return ONLY the JSON object described by the schema. Rules:
+
+1. `rawText` is the PRODUCT DESCRIPTION COLUMN ONLY, copied character for character,
+   uppercase and mangled characters and all. It must NOT contain the quantity, the unit
+   price, the line total or any other numeric column, and it must not contain the column
+   whitespace that separates them. Never clean it up, expand abbreviations or translate it.
+   Correct: "JUD=AS FINDUS". Wrong: "JUD=AS FINDUS 1 1.99 1.99".
+2. Numbers are numbers, not strings. Use a dot as the decimal separator even though the
+   receipt uses a comma.
+3. If a value is not printed on the receipt, use null. Never infer, never compute a missing
+   number from the others, never round to make a total balance. A null is a correct answer;
+   an invented number is not. In particular, if no subtotal line is printed, `subtotal` is
+   null: do not derive it from the total and the tax.
+4. `datetime` is ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), converted from whatever format the
+   receipt prints. Spanish receipts print DD/MM/YYYY, so 28/08/2026 is 2026-08-28.
+5. Weighed items usually print over two lines (a weight and a price per kilo, then the
+   total). Fold them into ONE line: quantity = the weight, unit = KG, unitPrice = the price
+   per kilo.
+6. A discount or promotion that applies to one line goes in that line's `discount` as a
+   positive number. A whole-receipt discount goes in `receiptDiscount`.
+7. `isDepartment` is true when the line names a shop counter or department rather than a
+   product: CARNICERIA, CHARCUTERIA, PESCADERIA, PANADERIA, FRUTERIA and the like. These
+   are weighed at a counter and the till prints only the department, so the line can never
+   identify a specific product. Everything else is false.
+8. If the photo is cut off, blurred or unreadable in part, set `truncated` true and still
+   return every line you can read.
