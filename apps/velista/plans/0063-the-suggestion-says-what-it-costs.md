@@ -42,10 +42,12 @@ plan whose subject was the basket. It is the whole subject of this one.
 | `CatalogItem` carries an offer            | `libs/velista/models`               |
 | `toProductOffer` moves and is exported    | `data-access`, `mappers`            |
 | `toCatalogItem` reads `bestOffer`         | `data-access`, `mappers`            |
-| The price on a suggestion row             | `libs/velista/ui`, `SuggestionList` |
+| The group suggestion carries an offer     | `libs/velista/models`, `mappers`    |
+| The price on an item row                  | `libs/velista/ui`, `SuggestionList` |
+| "Best price" on a group row               | `libs/velista/ui`, one new key      |
 
-One component, one mapper, two model files. **No new request, no new option on an existing request,
-no new store method, no new component and no new translation key.** All three screens change because
+One component, one mapper, two model files and one translation key. **No new request, no new option
+on an existing request, no new store method and no new component.** All three screens change because
 all three already share the one component, which is the reason `0047` section 2 extracted it.
 
 ## 2. Which price, and why it needs no arithmetic
@@ -67,8 +69,11 @@ wrong: ranking or quoting by price per litre "would produce a screen recommendin
 because it is cheaper per litre while the shopper wanted one bottle."
 
 `bestOffer` is the cheapest of that product's prices across the scopes the caller was resolved to,
-which is section 7's subject. Cheapest **of that one product**, never of a set: nothing here compares
-two products and nothing here recommends one.
+which is section 7's subject. Cheapest **of that one product**, never of a set: on an item row
+nothing here compares two products and nothing here recommends one.
+
+**A group row is the one row this section does not govern**, because a group has named no packet.
+What it quotes, and why it is labelled rather than bare, is section 6.6.
 
 ## 3. Prices are not a state the screen can rely on
 
@@ -121,7 +126,28 @@ backlog `0004` exists" paragraph, which is now false, and gains the sentence tha
 this is narrower than `ItemView` on purpose, and it carries the one price the row draws rather than
 every price field the wire has.
 
-`ProductGroup` gains nothing. Section 6.2.
+### 4.3 The group suggestion carries an offer, and `ProductGroup` does not
+
+```ts
+| {
+    readonly kind: 'group';
+    readonly group: ProductGroup;
+    readonly itemIds: readonly string[];
+    /**
+     * The group's cheapest way to buy, at the reader's scopes, or null.
+     *
+     * On the variant and not on {@link ProductGroup}, for the reason `itemIds`
+     * is: a group's identity is its name, and what it costs is an answer to a
+     * question asked with a set of scopes. A group read anywhere else has no
+     * offer to carry, and a field that is null on every other read is a field
+     * nothing can trust.
+     */
+    readonly offer: ProductOffer | null;
+  }
+```
+
+`ProductGroup` itself gains nothing, which is the same call `itemIds` already made and for the same
+reason. Section 6.6 is what draws it.
 
 ## 5. The mapper
 
@@ -149,8 +175,18 @@ moved rather than copied:
   promise `CatalogItem`'s old comment warned against: they are drawn today, by the pick sheet, off
   the same interface. Narrowing the shared offer for one caller would fork it.
 
-`toCatalogSuggestion` changes not at all. It already delegates the item half to `toCatalogItem`, and
-the group half stays as it is.
+`toCatalogSuggestion` gains one line in its group branch, `offer: toProductOffer(raw['offer'])`,
+reading the raw `ProductGroupOfferView` it has already narrowed. Two names are worth being careful
+about while writing it:
+
+- The wire calls the group's price **`offer`** and an item's **`bestOffer`**. They are the same
+  `ItemOfferView` shape and one mapper reads both, but the keys are not the same string and a
+  copy paste between the two branches produces a null that looks like an unpriced catalog.
+- The group branch's existing local variable is already named `offer`, for the whole
+  `ProductGroupOfferView`. It is renamed to `groupOffer` in passing, so the line that reads the price
+  off it does not read `offer['offer']`.
+
+`cheapestItem` is not read. Section 6.6 draws the number and not the member it belongs to.
 
 ## 6. The row
 
@@ -227,33 +263,91 @@ the pick sheet. The typeahead draws neither, for two reasons and either would be
   on the screen where lines get written invites the reading that the app is steering the list toward
   a shop, which is a whole feature with a threshold the user has to set, and it is backlog `0004`.
 
-### 6.6 A group row quotes nothing
+### 6.6 A group row says "Best price"
 
-`ProductGroupOfferView` carries `cheapestItem` and `offer`, so the cheapest member's price is on the
-wire for group rows too. It is not read and `ProductGroup` does not grow a field.
+A group row draws its price too, and it draws it **labelled**, on the same note line, after the
+message that is already there:
 
-A group row's message is "this adds N products", which is what its note line says today, and choosing
-it attaches all of them. A price under that would be one member's price on a row that adds every
-member, which is `0062` section 4.1's rule about a line with options and no pick, arriving one screen
-earlier: quoting a number for a product nobody has chosen, on a row whose entire message is that the
-choice has not been made.
+```
+🧺  Leche                                                grupo
+    adds its 4 products · Best price: 1,05 €
 
-It also keeps the distinction the list works hardest to make. A group and an item are told apart
-three ways already, by glyph, tint and badge, because nobody has been taught what a basket outline
-means here. A price on items only is a fourth, and it costs nothing.
+🧺  Aceite de oliva                                      grupo
+    adds its 6 products
+```
+
+`ProductGroupOfferView` carries `cheapestItem` and `offer`, and `offer` is the price this draws.
+Where it is null, which is every group in a cluster with the harvester off and any group none of
+whose members is priced at the reader's scopes, the note line is exactly the sentence it is today.
+
+The label is not decoration. An item row's number is the price of the thing that row adds, and a
+bare number under a group would read the same way while meaning something else: a group adds several
+products and no single price among them is what the row costs. "Best price" says the number is the
+floor rather than the total, which is the one sentence that makes the two kinds of row readable in
+one list.
+
+#### What the number is
+
+**The price of the group's most economical member, which is not always its smallest number.**
+`item.searchOffers` picks the group's offer with `ORDER BY unitPrice ASC NULLS LAST, price ASC`, so
+the member it lands on is the cheapest **per litre or per kilo**, and `offer.price` is that member's
+own packet price. A six pack that wins on price per litre therefore quotes the six pack's price, and
+that figure can be larger than a single carton's.
+
+This is deliberate on the server's side and it is right for a group: a group is a **kind** of thing
+rather than a packet, so "the best price for milk" is the most economical way to buy milk. Section 2
+governs items, where somebody has named a packet and must be quoted that packet; a group has named
+no packet, so there is nothing for section 2 to hold to.
+
+The row does not name the member, and section 12 keeps it out. `cheapestItem` is on the wire, so it
+is one mapper line away if the label turns out to raise the question more often than it answers it.
+
+#### Both halves on one line, in this order
+
+The note line stays one line, so a priced group row and an unpriced one are the same height, which is
+section 3's rule and would be broken by a second element under the first.
+
+One line means the note can truncate on a narrow screen, and the order decides which half is lost.
+"adds its 4 products" comes first. That sentence exists to stop a row quietly attaching four products
+to somebody's list, which is a surprise the first three times, and losing it would reintroduce the
+thing it was written to prevent. Losing the price is section 3's ordinary state anyway: it is what
+every row in staging and production shows.
 
 ### 6.7 How the component formats it
 
-`SuggestionList` gains one method beside `nameOf` and `sizeOf`:
+`SuggestionList` gains two methods beside `nameOf` and `sizeOf`, one per kind of row, because the two
+notes are different in kind and not only in content: an item's note is **data** (a brand and a
+number), and a group's is **copy** with data interpolated into it.
 
 ```ts
-/** The note under the name: the brand, the price, or both, or nothing. */
+/** An item's note: the brand, the price, or both, or nothing. */
 noteOf(suggestion: CatalogSuggestion): string | null;
+
+/** A group's price, as a key and the money to put in it, or null when unpriced. */
+bestPriceOf(suggestion: CatalogSuggestion): { key: string; args: { price: string } } | null;
 ```
 
-It returns the joined string, or null when the row has neither brand nor price, and the template
-draws one element or none. The two states are then structurally the same shape rather than the same
-shape by careful styling.
+`noteOf` returns the joined string, or null when the row has neither brand nor price, and the
+template draws one element or none.
+
+`bestPriceOf` returns the `{ key, args }` shape `sizeOf` already returns, and the template pipes it
+through `rokuT` exactly as it pipes `sizeOf`. **The component never translates**, because nothing in
+velista injects `ROKU_TRANSLATOR` into a component and this plan is not the place to start: every
+translated string in this component reaches the template as a key and is rendered by the pipe. What
+the method does is format the money and decide whether there is anything to say at all.
+
+The two halves of a group's note are joined by the separator the app already uses, written in the
+template between the two piped expressions rather than in a component method. That is the one place
+this plan puts a separator in markup, and the reason is that both halves here are copy, so there is
+no string for a method to have joined.
+
+Money is formatted with `formatMoney` from `@portfolio/velista/platform`, which `0062` section 3.1
+added and specced. Its doc says it is called in a selector and never in a template, and this is the
+documented shape of that rule rather than an exception to it: **the string is built in the component,
+in a method, and the template calls the method.** This component has no store and no view model. It
+is handed models and resolves the reader's language itself, from `RokuLocaleStore`, which is exactly
+what `nameOf` and `sizeOf` already do and why they exist as methods. A price built in a template
+expression would be the thing the rule forbids.
 
 Money is formatted with `formatMoney` from `@portfolio/velista/platform`, which `0062` section 3.1
 added and specced. Its doc says it is called in a selector and never in a template, and this is the
@@ -305,30 +399,53 @@ What is required is that **no component acquires a `kind === 'GUEST'` check whil
 
 ## 9. Copy
 
-**No new translation keys.** The note line is a brand and a formatted number joined by the separator
-the app already uses, both of them data. `0062` section 7 made the same call about its place line and
-for the same reason.
+**One new key**, for the group row's label, in both locales:
+
+| Key                  | English                 | Spanish                   |
+| -------------------- | ----------------------- | ------------------------- |
+| `list.add.bestPrice` | `Best price: {{price}}` | `Mejor precio: {{price}}` |
+
+`{{price}}` arrives already formatted, from `formatMoney`, so the key interpolates a string and never
+a number. A key that interpolated the number would format it with i18next's own rules rather than
+with the reader's language as `RokuLocaleStore` holds it, which is the whole reason `formatMoney`
+exists.
+
+**An item row takes no key**, and that difference is section 6.7's: its note is a brand and a
+formatted number, both data, joined by the separator the app already uses. `0062` section 7 made the
+same call about its place line and for the same reason.
 
 `list.add.groupAdds`, `list.add.groupBadge`, `list.add.asWritten` and the size keys are untouched.
+`groupAdds` in particular keeps its wording, including its lower case opening, because it is still
+the first half of the sentence and the label follows it.
 
 ## 10. Tests
 
 - `mappers.spec.ts`: `toCatalogItem` maps a whole `bestOffer`; an absent `bestOffer` yields a null
   offer; a `bestOffer` whose `price` is null yields an offer with a null price rather than a null
   offer, which is the distinction section 5 keeps; `toCatalogSuggestion` carries the offer through on
-  an item and adds nothing to a group.
+  an item and on a group.
+- `mappers.spec.ts`, the two keys: a group suggestion whose raw half carries `offer` maps to an offer,
+  and a group suggestion carrying `bestOffer` instead maps to null. The second is the copy paste
+  section 5 warns about, and it is the assertion that would have caught it.
 - `basket-mappers.spec.ts` needs no new case and must keep passing unchanged. That is the assertion
   that moving `toProductOffer` moved a function and not a behaviour.
 - `suggestion-list.spec.ts`: a priced item renders brand and money on one note line; an unpriced item
   renders exactly the brand it renders today; a priced item with no brand renders the money alone; an
-  item with neither renders no note element at all; a group whose wire offer was priced renders its
-  "adds N" note and no price; the size badge is unchanged in every one of those.
+  item with neither renders no note element at all; the size badge is unchanged in every one of
+  those.
+- `suggestion-list.spec.ts`, the group row: a priced group renders its "adds N" note **and** the
+  `list.add.bestPrice` key, in that order, on one note element; an unpriced group renders the note it
+  renders today and no second expression; a priced group's note element is the same element and the
+  same count of them as an unpriced group's, which is section 6.6's one line rule asserted rather
+  than described.
+- The group's price is asserted on **`bestPriceOf`'s return**, not on rendered text: the key
+  interpolates and the testing translator does not. `args.price` is the money string, so that
+  assertion also covers the formatting without going through the DOM.
 - `suggestion-list.spec.ts`: the row order is untouched by any of this, asserted against a fixture
   whose cheapest row is not its first. The `above` placement's reversal is the panel's, from the
   suggestion order fix, and no price may ever influence it.
-- Assert on the string `noteOf` returns rather than on rendered text wherever a key interpolates. The
-  brand and the price are plain data and safe to read off the DOM, the group note is not, and the
-  testing translator does not interpolate.
+- An item's note is safe to read off the DOM, since a brand and a formatted number are plain data
+  and no key interpolates. Everything on a group row goes through a key and none of it is.
 - `money.spec.ts` gains nothing. `formatMoney` is already specced and this plan only calls it.
 
 ## 11. Verifying it
@@ -336,13 +453,22 @@ for the same reason.
 The same two runs `0062` asked for, and the second is the one that matters most:
 
 1. Against a slot with the seeded Mercadona catalog, all three typeaheads show prices, and a search
-   for "leche" shows several sizes of one milk whose prices differ in the direction their sizes do.
+   for "leche" shows several sizes of one milk whose prices differ in the direction their sizes do,
+   with the "leche" **group** above them carrying its own labelled best price. Check that group's
+   number against the products under it, since section 6.6 says it may be larger than the smallest of
+   them and that is the state most likely to be reported as a bug.
+   The seeded catalog has one chain, so a profile covering Mercadona is what makes any of this
+   appear at all.
 2. Against a stack with no prices at all, all three typeaheads look **untouched**. Not "degraded
    gracefully": identical to today, because that is what staging and production are.
 
 ## 12. Out of scope
 
-- **Unit price, a place, and a price on a group row.** Sections 6.4, 6.5 and 6.6.
+- **Unit price on a row, and a place on any row.** Sections 6.4 and 6.5.
+- **Naming the member a group's best price belongs to.** `cheapestItem` is on the wire and section
+  6.6 does not read it. The row has one note line, the label already spends part of it, and a brand
+  and a size after that is the row's whole width for a product the row does not add. If the label
+  turns out to raise the question more than it answers it, that is one mapper line and one key.
 - **Reordering, or marking one row cheapest.** The order is the server's ranking and is never
   re sorted, which `toCatalogSuggestion`'s comment, `0053` section 4 and `0062` section 5.2 all state
   already. A cheapest mark additionally needs a comparable set, and a set of search results is not
