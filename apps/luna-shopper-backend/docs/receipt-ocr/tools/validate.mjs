@@ -20,6 +20,21 @@ const EPS = 0.02;
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const round2 = (v) => Math.round(v * 100) / 100;
 
+/**
+ * Half of the last decimal place the quantity was printed to, which is how far
+ * the true quantity can sit from the printed one.
+ *
+ * An integer gets zero: `2` means two of them, not "between 1.5 and 2.5", so an
+ * integer line is still checked exactly. `0.1` gets 0.05. The decimals are
+ * counted off the value as read, which is the only record of how the till
+ * printed it.
+ */
+function quantitySlack(q) {
+  if (Number.isInteger(q)) return 0;
+  const decimals = String(q).split('.')[1]?.length ?? 0;
+  return 0.5 * 10 ** -decimals;
+}
+
 export function check(receipt) {
   const problems = [];
   const lines = receipt.lines ?? [];
@@ -31,11 +46,22 @@ export function check(receipt) {
     const disc = num(line.discount) ?? 0;
     if (q === null || up === null || lt === null) return;
 
+    // A weighed line's quantity is a ROUNDED DISPLAY VALUE, so q * up does not
+    // equal the line total and is not meant to. Super Cash prints kg to one
+    // decimal: `0'1 x 13'90 = 0'90` is a correct line for 0.0647 kg. Checking it
+    // strictly flags every weighed line on that chain as an error.
+    //
+    // So the quantity is treated as an interval. `0.1` printed to one decimal
+    // means [0.05, 0.15), and the line passes if the printed total falls in the
+    // range that interval allows. An integer quantity has no slack and is
+    // checked exactly, which is where a real transposition still gets caught.
+    const slack = quantitySlack(q) * up;
     const expected = round2(q * up - disc);
-    if (Math.abs(expected - lt) > EPS) {
+    if (Math.abs(expected - lt) > EPS + slack) {
       const label = (line.rawText ?? '').slice(0, 26);
       problems.push(
-        `line ${i + 1} "${label}": ${q} x ${up} - ${disc} = ${expected}, printed ${lt}`
+        `line ${i + 1} "${label}": ${q} x ${up} - ${disc} = ${expected}, printed ${lt}` +
+          (slack > 0 ? ` (rounding allows +/-${round2(slack)})` : '')
       );
     }
   });

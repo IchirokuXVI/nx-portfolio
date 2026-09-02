@@ -44,17 +44,25 @@ Two things make that trustworthy rather than hopeful:
 `responseSchema`, so the model fills a shape rather than writing prose somebody
 then parses.
 
-**A deterministic checker the model never sees.** `tools/validate.mjs` is plain
-arithmetic. A till receipt carries its own checksum: the lines have to sum to the
-total, and each line's quantity times its unit price has to equal its line total.
-A hallucinated number does not accidentally satisfy a sum. So every extraction
-gets a confidence signal with **no labelled ground truth and no human**, which is
-what makes the volume affordable.
+**Two deterministic checkers the model never sees**, both plain arithmetic. A till
+receipt carries its own checksums, so an extraction can be scored with **no
+labelled ground truth and no human**, which is what makes the volume affordable.
 
-Its limits are exact and worth stating: **it catches invented money and nothing
+- `tools/validate.mjs` sums the lines against the total, and checks each line's
+  quantity against its unit price and line total — exactly for an integer quantity,
+  and as an interval for a fractional one, because a weighed quantity is printed
+  rounded (section 4). On ticket 5 it caught a single misread line in 64.
+- `tools/vat-check.mjs` reads the tax block against the lines. Because a Spanish
+  receipt is tax inclusive, each VAT group's gross is the sum of its own lines, so
+  the block **partitions** the lines rather than merely restating the total. On
+  ticket 4 that caught an error every reader made and `validate.mjs` passed.
+
+Their limits are exact and worth stating: **they catch invented money and nothing
 else.** A misread timestamp and a misread product name are unconstrained by
-anything on the paper. The timestamp matters, because `observedAt` drives the
-14 day eligibility window in backlog `0001` section 2.4.
+anything on the paper, and on ticket 4 all three readers passed `validate.mjs`
+while sharing a real error. A clean run means "the money adds up", not "the reading
+is right". The timestamp matters, because `observedAt` drives the 14 day
+eligibility window in backlog `0001` section 2.4.
 
 ## 3. Method
 
@@ -132,6 +140,18 @@ Receipt coverage of the catalog is therefore better than a single ticket suggest
 and worse than a line count suggests, and it depends on whether the shopper kept
 the counter tickets. It should be measured per chain before anyone promises a
 number.
+
+**A weighed line does not multiply out, and is not meant to.** Super Cash prints
+the weight rounded to one decimal, so `0'1 × 13'90 = 0'90` is a correct line for
+0.0647 kg. All six weighed lines on ticket 5 fail `quantity × unitPrice ==
+lineTotal`, and a strict check flags every one of them. `validate.mjs` therefore
+treats a non-integer quantity as an interval and only integers as exact.
+
+Two consequences beyond the checker. **The quantity on a weighed line is decoration**
+(a printed `0'1` covers 0.05 to 0.15 kg, a threefold range), so a weighed line
+reconciles on price and can never be reconciled on weight. And **both models
+back-solved a number to make the arithmetic work** rather than copying what was
+printed, which rule 3 forbids and the schema's shape quietly invites.
 
 **One photo can hold two documents.** A receipt paid by card is usually printed
 attached to the card slip, which repeats the total (`Venta 16,20`) and carries its
@@ -261,24 +281,42 @@ here: `gemini-3.6-flash` took 25.9 s to answer `OK` to a text-only prompt, and
 11 s to read a whole receipt. Do not read these latencies as model speed; read them
 as "this tier is not for interactive use".
 
-## 9. Where it stands after four tickets
+## 9. Where it stands after five tickets
 
-**The line total is solved. The rest is not, and the checker's silence is not
-evidence.** Eighteen readings; every reader got every line, quantity, unit price
-and total right on all four tickets, and `isDepartment` was unanimous throughout.
+**It is viable, and ticket 5 is why.** A 64 line receipt from a supermarket the
+prompt had never seen, in a format that shares almost nothing with the first four —
+apostrophe decimals, headed columns, alphabetically sorted lines, descriptions
+truncated by the till, fractional kg quantities, a differently shaped tax table —
+was read by both models with **not one line of the prompt or schema changed for
+it.**
 
-Ticket 4 is the one that matters, because **every reader made the same error there
-and `validate.mjs` reported `BALANCED` anyway.** The tax block was misread, and the
-line-versus-total sum cannot see the tax block. A clean run of the checker means
-"the lines add up", not "the reading is right", and the difference had not shown up
-before ticket 4 because nothing was testing the rest.
+That is the original question answered with evidence. A per-format parser would
+have needed a new parser for this chain; the schema-constrained model needed
+nothing. It is the difference between work that scales with the number of
+supermarkets and work that does not.
+
+The numbers on that ticket:
+
+- **Line totals agree on 63 of 64 lines (98%).** The one disagreement _was_ the
+  error: 3.1 Flash-Lite misread an `importe` as 6.96 where the till printed 0.90,
+  and `160.73 - 154.67` is exactly `6.96 - 0.90`. The checksum caught a single
+  misread line in a 64 line receipt, unaided.
+- **3.5 Flash-Lite passed both checksums**, and a full-resolution crop confirms its
+  reading is the correct one. That reverses the model ranking from tickets 1 to 4.
+- **Normalized keys agree on 54 of 64 (84%)**, and two product names are wrong in
+  both readings. Identity is the weak half; money is not.
+
+**The checker's silence is still not evidence, though.** Ticket 4 is the counter
+example: every reader misread the tax block there and `validate.mjs` reported
+`BALANCED`, because the line-versus-total sum cannot see the tax block. A clean run
+means "the lines add up", not "the reading is right".
 
 Everything still open is in the fields arithmetic cannot see:
 
 | Model                 | Per 1000 tickets | Reproducible quirk                                               | Status  |
 | --------------------- | ---------------- | ---------------------------------------------------------------- | ------- |
-| Gemini 3.1 Flash-Lite | $0.87 - $1.50    | none; sometimes leaves `unit` null, shortens `paymentMethod`     | kept    |
-| Gemini 3.5 Flash-Lite | $1.27 - $2.39    | letter-level misreads (`FONRVELLA`, `JAMUN`); derives `subtotal` | kept    |
+| Gemini 3.1 Flash-Lite | $0.87 - $7.41    | misread one `importe` on ticket 5; drops a leading numeral       | kept    |
+| Gemini 3.5 Flash-Lite | $1.27 - $13.54   | letter-level misreads (`FONRVELLA`, `JAMUN`); derives `subtotal` | kept    |
 | Claude Opus 5         | $31.10 - $39.15  | guessed a letter for an illegible glyph (ticket 4)               | kept    |
 | Claude Haiku 4.5      | $3.04 - $4.14    | reads the card slip instead of the receipt; wrong minute twice   | dropped |
 | Gemini 3.6 Flash      | $5.22 - $11.09   | normalizes verbatim fields; heavy thinking spend                 | dropped |
@@ -290,8 +328,17 @@ Haiku 4.5 and 3.6 Flash were dropped after ticket 3, so their ranges cover ticke
 model did not.** On ticket 4 it was the only reader to produce a wrong normalized
 key. It is not the production reader; it is what to escalate to when a check fails.
 
-**Gemini 3.1 Flash-Lite is the pick.** Cheapest, no quirk seen in four tickets, and
-the only reader that has never taken a value off the card slip.
+**The pick is no longer obvious.** 3.1 Flash-Lite was clean through four small
+tickets and half the price, then produced the only money error in the corpus on the
+first large one. 3.5 Flash-Lite makes more letter-level mistakes but got ticket 5's
+money exactly right. Small-ticket performance did not predict large-ticket
+performance, which is a reason to keep both until more of the big receipts are read
+rather than to crown either now.
+
+**Cost scales with basket size, not image size.** Input is 1593 tokens on every
+ticket regardless of length; output ran ~600 tokens on an 8 line receipt and ~5000
+on ticket 5's 64. A weekly shop costs about five times a corner-shop trip and is
+still under a cent and a half.
 
 **Cross-model agreement catches what arithmetic cannot.** Haiku's `19:30` and its
 `Debit Mastercard` are both invisible to `validate.mjs` and both obvious against
@@ -304,12 +351,25 @@ five readers producing four spellings of one product and three distinct normaliz
 keys for another. A model that misreads a word the same way every time still builds
 one working alias; rotating models builds several broken ones.
 
-**The shape this suggests**, to be confirmed over the remaining seven tickets:
+**The shape this suggests**, to be confirmed over the remaining five tickets:
 
-1. Read with Gemini 3.1 Flash-Lite, always the same model.
-2. Run `validate.mjs`. If it balances and nothing else is odd, accept.
-3. If it does not balance, read again with a second model and compare.
+1. Read with one pinned Flash-Lite model, always the same one.
+2. Run `validate.mjs` and `vat-check.mjs`. If both pass, accept.
+3. If either fails, read again with the other model and compare.
 4. If they still disagree, that receipt goes to the user to confirm.
+
+Reading every receipt twice costs about $21 per thousand on a large basket and
+would have caught nothing on ticket 5 that the checksum did not find for free. Spend
+the second read on the fields arithmetic cannot see, not on the money.
+
+**The largest untested risk is alias stability across visits.** An alias key does
+not need to be correct, only stable: if the pinned model reads `LA MENDOCINA` every
+time, the alias resolves every time. What breaks the design is the same model
+reading the same product differently on two different photographs. The only direct
+evidence so far is encouraging and thin — `ESPETEC ELIGES` appears on tickets 3 and
+4, different days and photographs, and both models read it identically both times —
+and the real test is to collect every product that recurs across the finished corpus
+and compare.
 
 ### Three v3 changes the corpus now argues for
 
@@ -330,17 +390,23 @@ None is made yet, deliberately, so the corpus stays comparable across tickets.
   mints a permanent second key. Both key splits in the corpus so far came from a
   reader guessing (3.5 Flash-Lite's `JAMUN` on ticket 3, and Opus 5's `PATR` on
   ticket 4). The prompt should say: if a character is illegible, leave it out.
+- **Say that a weighed quantity is a rounded display value.** On ticket 5 both
+  models back-solved a figure nobody printed — 3.1 Flash-Lite invented
+  `quantity: 0.085`, 3.5 Flash-Lite invented `unitPrice: 8.48` — to make a weighed
+  line multiply out. Rule 3 already forbids inferring, but presenting `quantity`,
+  `unitPrice` and `lineTotal` as peers implies they must agree. The prompt should
+  say: copy the printed quantity even when it does not multiply out.
 - **Name the authoritative document.** The prompt says "a supermarket till receipt"
   and never says what to do when the photo holds the receipt _and_ its card slip.
   On ticket 3 two readers took `datetime` from the slip and one took
   `paymentMethod` too. "Read only the receipt; ignore the card payment slip
   entirely" is a one-line fix for a class of error the checker cannot see.
 
-**Caveat, still real: four tickets is not evidence of accuracy.** All four are the
-same chain, and none has a weighed item, a multibuy discount, a loyalty deduction
-or a returned item. Ticket 5 is the first from a different supermarket and the
-first large one; ticket 9 is large and badly photographed. Those are the tests that
-will actually decide this.
+**Caveat: five tickets is enough to say it transfers, not enough to say how well.**
+Ticket 5 settles generality across chains and scale. Still untested: a multibuy
+discount, a loyalty deduction, a returned item, and a badly photographed large
+receipt. Ticket 9 is large and heavily curled, and is the remaining test most likely
+to change the picture.
 
 ## 10. Layout
 
