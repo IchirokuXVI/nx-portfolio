@@ -4,7 +4,12 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import type { BasketLine, BasketParticipant } from '@portfolio/velista/models';
+import {
+  LINE_QUANTITY_MAX,
+  QUANTITY_REEL_IDLE_MS,
+  type BasketLine,
+  type BasketParticipant,
+} from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { BasketLineRow } from './basket-line-row';
 
@@ -50,6 +55,8 @@ async function render(
     canReopen?: boolean;
     people?: ReadonlyMap<string, BasketParticipant>;
     listNames?: ReadonlyMap<string, string>;
+    busy?: boolean;
+    notice?: { key: string; count: number } | null;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -71,6 +78,8 @@ async function render(
   fixture.componentRef.setInput('products', new Map());
   fixture.componentRef.setInput('listNames', options.listNames ?? new Map());
   fixture.componentRef.setInput('canReopen', options.canReopen ?? false);
+  fixture.componentRef.setInput('busy', options.busy ?? false);
+  fixture.componentRef.setInput('notice', options.notice ?? null);
   fixture.detectChanges();
 
   return fixture;
@@ -96,6 +105,35 @@ const status = (fixture: Awaited<ReturnType<typeof render>>) =>
 
 const body = (fixture: Awaited<ReturnType<typeof render>>) =>
   (fixture.nativeElement as HTMLElement).querySelector('.body');
+
+const reel = (fixture: Awaited<ReturnType<typeof render>>) =>
+  (fixture.nativeElement as HTMLElement).querySelector(
+    'lib-quantity-reel'
+  ) as HTMLElement;
+
+const text = (fixture: Awaited<ReturnType<typeof render>>, selector: string) =>
+  (fixture.nativeElement as HTMLElement).querySelector(selector)?.textContent ??
+  '';
+
+/**
+ * The keyboard half of the reel, which is a real path and the one a spec can drive.
+ *
+ * jsdom has no `PointerEvent`, so the drag is stood in for by the keys the same
+ * control answers: they move the same pending value, they commit on the same idle
+ * beat, and section 7 requires them to work anyway.
+ */
+function key(fixture: Awaited<ReturnType<typeof render>>, name: string): void {
+  reel(fixture).dispatchEvent(
+    new KeyboardEvent('keydown', { key: name, bubbles: true })
+  );
+  fixture.detectChanges();
+}
+
+/** Let go: the overlay waits out its idle beat, and the close is the commit. */
+function letGo(fixture: Awaited<ReturnType<typeof render>>): void {
+  jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+  fixture.detectChanges();
+}
 
 describe('BasketLineRow: the status control', () => {
   it('offers to get the whole thing on a line nobody has touched', async () => {
@@ -266,5 +304,192 @@ describe('BasketLineRow: the row itself', () => {
     const row = (fixture.nativeElement as HTMLElement).querySelector('.row');
     expect(row?.tagName).toBe('DIV');
     expect(row?.querySelectorAll('button')).toHaveLength(2);
+  });
+});
+
+/**
+ * The number on the row is the control (plan 0054).
+ *
+ * Two things are asserted here and neither of them is the reel, which has its own
+ * spec. The first is the **sentence**: down and up are different acts, and the row
+ * has to say which one is about to happen while the thumb is still down, because
+ * that caption is the confirmation and there is deliberately no dialog behind it.
+ * The second is that the row still opens the sheet on a tap while never opening it
+ * on a gesture, which is the arrangement the whole control rests on.
+ */
+describe('BasketLineRow: the number as a control', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('names what is still to get, not how many to buy', async () => {
+    // Section 7. The reel is bound to the outstanding amount, so that is what its
+    // name says; "how many to buy" is the number underneath it.
+    const fixture = await render(line({ quantity: 5 }));
+
+    expect(reel(fixture).getAttribute('aria-label')).toContain(
+      'basket.outstanding.label'
+    );
+    expect(reel(fixture).getAttribute('aria-valuenow')).toBe('5');
+  });
+
+  it('leaves the reel out of the name on the row body', async () => {
+    // Section 7 again: the body keeps the full composed name it always had, and the
+    // reel is excluded from it rather than repeated inside it.
+    const fixture = await render(line({ quantity: 5 }));
+
+    expect(body(fixture)?.getAttribute('aria-label')).not.toContain(
+      'basket.outstanding.label'
+    );
+  });
+
+  it('caps the raise on the resulting quantity, not on the outstanding one', async () => {
+    // Backend `0056`, section 5: a partly settled line cannot be raised past the
+    // limit an unsettled one has, so what is already bought comes off the top.
+    const fixture = await render(line({ quantity: 5, settled: 2 }));
+
+    expect(reel(fixture).getAttribute('aria-valuemax')).toBe(
+      String(LINE_QUANTITY_MAX - 2)
+    );
+    expect(reel(fixture).getAttribute('aria-valuemin')).toBe('0');
+  });
+
+  it('says how many are being bought while the thumb is down', async () => {
+    const fixture = await render(line({ quantity: 5 }));
+
+    key(fixture, 'ArrowDown');
+    key(fixture, 'ArrowDown');
+
+    expect(text(fixture, '.preview')).toContain('basket.outstanding.bought');
+  });
+
+  it('says what it will buy instead, on the way up', async () => {
+    // A different sentence, because it is a different act: nothing has been bought,
+    // and this basket has decided to carry more than the households asked for.
+    const fixture = await render(line({ quantity: 5 }));
+
+    key(fixture, 'ArrowUp');
+
+    expect(text(fixture, '.preview')).toContain('basket.outstanding.buying');
+  });
+
+  it('says nothing when the gesture comes back to where it started', async () => {
+    const fixture = await render(line({ quantity: 5 }));
+
+    key(fixture, 'ArrowDown');
+    key(fixture, 'ArrowUp');
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.preview')
+    ).toBeNull();
+  });
+
+  it('reports where the run began and where it ended', async () => {
+    // Absolute numbers in both halves. `from` is what lets the server refuse a
+    // stale gesture rather than apply it as the opposite act (backend `0056`,
+    // section 3.2).
+    const fixture = await render(line({ quantity: 5 }));
+    const moves: { from: number; to: number }[] = [];
+    fixture.componentInstance.outstanding.subscribe((move) => moves.push(move));
+
+    key(fixture, 'ArrowDown');
+    key(fixture, 'ArrowDown');
+    letGo(fixture);
+
+    expect(moves).toEqual([{ from: 5, to: 3 }]);
+  });
+
+  it('raises a finished line without ever saying anything is left', async () => {
+    // Section 5, and the most likely misreading of this screen. Raising a done line
+    // adds demand and reverts no settlement, so the caption says what will be
+    // bought rather than what remains.
+    const fixture = await render(bought());
+    const moves: { from: number; to: number }[] = [];
+    fixture.componentInstance.outstanding.subscribe((move) => moves.push(move));
+
+    key(fixture, 'ArrowUp');
+
+    expect(text(fixture, '.preview')).toContain('basket.outstanding.buying');
+
+    letGo(fixture);
+
+    expect(moves).toEqual([{ from: 0, to: 1 }]);
+  });
+
+  it('is readable rather than disabled while the write is out', async () => {
+    // What the input was built for: the number is real and worth reading while it
+    // settles, and a disabled control would say something about this reader that is
+    // not true.
+    const fixture = await render(line({ quantity: 5 }), { busy: true });
+
+    expect(reel(fixture).getAttribute('aria-readonly')).toBe('true');
+  });
+
+  it('still shows how far through a partly settled line is', async () => {
+    const fixture = await render(line({ quantity: 5, settled: 2 }));
+
+    expect(text(fixture, '.progress')).toContain('basket.line.partly');
+  });
+});
+
+describe('BasketLineRow: the tap and the gesture stay apart', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('opens the sheet on a tap on the words', async () => {
+    const fixture = await render(line({ quantity: 5 }));
+    const opened: unknown[] = [];
+    fixture.componentInstance.open.subscribe(() => opened.push(1));
+
+    (body(fixture) as HTMLButtonElement).click();
+
+    expect(opened).toHaveLength(1);
+  });
+
+  it('does not open it on a tap that was really dismissing the reel', async () => {
+    // `line-row`s arrangement, for its reason: the overlay reaches over the row
+    // beside it, so the tap that puts it away must not also open a screen over the
+    // number somebody was reading. It commits what it was holding instead.
+    const fixture = await render(line({ quantity: 5 }));
+    const opened: unknown[] = [];
+    const moves: { from: number; to: number }[] = [];
+    fixture.componentInstance.open.subscribe(() => opened.push(1));
+    fixture.componentInstance.outstanding.subscribe((move) => moves.push(move));
+
+    key(fixture, 'ArrowDown');
+    (body(fixture) as HTMLButtonElement).click();
+
+    expect(opened).toHaveLength(0);
+    expect(moves).toEqual([{ from: 5, to: 4 }]);
+  });
+
+  it('does not open it on a click coming out of the reel itself', async () => {
+    const fixture = await render(line({ quantity: 5 }));
+    const opened: unknown[] = [];
+    fixture.componentInstance.open.subscribe(() => opened.push(1));
+
+    reel(fixture).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(opened).toHaveLength(0);
+  });
+});
+
+describe('BasketLineRow: what somebody else did', () => {
+  it('says the number as it now stands, in one sentence', async () => {
+    // Section 4.1. The store refetched before it answered, so by the time this is
+    // drawn the count beside it is the true one, which is the only thing that makes
+    // the sentence worth saying.
+    const fixture = await render(line({ quantity: 3 }), {
+      notice: { key: 'basket.error.staleLine', count: 3 },
+    });
+
+    expect(text(fixture, '.line-notice')).toContain('basket.error.staleLine');
+  });
+
+  it('draws nothing at all when there is nothing to report', async () => {
+    const fixture = await render(line({ quantity: 3 }));
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.line-notice')
+    ).toBeNull();
   });
 });

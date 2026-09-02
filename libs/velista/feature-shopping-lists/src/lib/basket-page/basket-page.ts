@@ -22,6 +22,7 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  outstanding,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   type BasketLine,
@@ -39,7 +40,8 @@ import {
   PersonIcon,
   ShareIcon,
 } from '@portfolio/velista/ui';
-import { participantInitials } from '../basket-labels';
+import { basketErrorKey } from '../basket-error-copy';
+import { outstandingCaption, participantInitials } from '../basket-labels';
 import { BasketLineRow } from '../basket-line-row/basket-line-row';
 import { BASKET_PATHS } from '../basket-paths';
 
@@ -216,6 +218,37 @@ export class BasketPage {
   protected readonly canReopen = BASKET_REOPEN_AVAILABLE;
 
   /**
+   * What the last move of a row's number came to, for the live region.
+   *
+   * **One region for the whole basket**, which is the same choice the composer's
+   * announcement makes and for the same reason: a polite region reads whatever the
+   * node last held, so four people working one list collapse into one sentence
+   * instead of talking over each other for the length of a trip.
+   */
+  protected readonly outstandingSaid = signal('');
+
+  /**
+   * The one refusal a row is still showing, and which row it belongs to.
+   *
+   * One at a time across the whole screen. A sentence about a race is worth reading
+   * for as long as the number it corrects is on screen and no longer: it is cleared
+   * the moment any row starts another move.
+   */
+  private readonly _notice = signal<{
+    readonly lineId: string;
+    readonly key: string;
+    readonly count: number;
+  } | null>(null);
+
+  /** The notice for this row, or null. Identity is stable, so the row is not redrawn. */
+  protected noticeFor(
+    line: BasketLine
+  ): { readonly key: string; readonly count: number } | null {
+    const notice = this._notice();
+    return notice !== null && notice.lineId === line.id ? notice : null;
+  }
+
+  /**
    * Which lines were sent to a list that has not accepted them yet (`0056`).
    *
    * From the store rather than from the lines, because no field of a line carries
@@ -344,6 +377,75 @@ export class BasketPage {
     if (result !== null && result.skippedCount > 0) {
       this.openLine(line);
     }
+  }
+
+  /**
+   * The row's reel was let go: one call, whichever direction it went (plan 0054).
+   *
+   * **The client never decides whether the drag was a purchase or a raise.** Backend
+   * `0056` section 3 makes that decision on numbers only it can see, and a client
+   * that decided would get it wrong exactly when two phones are moving one line. So
+   * this sends where the gesture ended and where it believed it began, and the
+   * answer is a settle result in both directions: a raise answers `skippedCount: 0`,
+   * so the skip reporting comes across unchanged and needs no branch.
+   */
+  protected async setOutstanding(
+    line: BasketLine,
+    change: { from: number; to: number }
+  ): Promise<void> {
+    // Whatever the last move of any row came to, gone before this one starts: one
+    // sentence at a time across the whole basket, and a stale refusal sitting under
+    // a row somebody has since moved again would be a lie about the present.
+    this._notice.set(null);
+
+    const result = await this._store.setOutstanding(
+      line.id,
+      change.to,
+      change.from
+    );
+
+    if (result === null) {
+      this._reportOutstanding(line);
+      return;
+    }
+
+    // The same sentence the caption showed under the thumb, so a reader who could
+    // not see it still learns which of the two happened (section 7).
+    this._say(
+      outstandingCaption(
+        change.from,
+        change.to,
+        this._translator,
+        this._locale()
+      ) ?? ''
+    );
+
+    if (result.skippedCount > 0) {
+      this.openLine(line);
+    }
+  }
+
+  /**
+   * Say what went wrong, once, on the row it went wrong on.
+   *
+   * The count is read back off the store rather than off the line this was called
+   * with, and that is the whole of the stale answer: `BasketStore.setOutstanding`
+   * refetches before it returns null, so by now the row's number is the true one and
+   * "it says 3 now" is a sentence worth saying. Every other failure gets its own
+   * sentence the same way, because a failure with no sentence is the defect
+   * `basket-error-copy.ts` exists to close (plan 0052, section 7).
+   */
+  private _reportOutstanding(line: BasketLine): void {
+    const key = basketErrorKey(this._store.error(), 'basket.outstanding');
+    const found = this.lines().find((row) => row.id === line.id);
+    const count = outstanding(found ?? line);
+
+    this._notice.set({ lineId: line.id, key, count });
+    this._say(this._translator.t(key, undefined, this._locale(), { count }));
+  }
+
+  private _say(sentence: string): void {
+    this.outstandingSaid.set(sentence);
   }
 
   protected openPeople(): void {

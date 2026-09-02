@@ -66,7 +66,7 @@
     visually, and a reader moving by button would otherwise hear only the content.
   -->
   <button
-    (click)="open.emit()"
+    (click)="onBody()"
     [attr.aria-label]="label()"
     class="body"
     type="button"
@@ -125,16 +125,56 @@
     }
   </button>
 
+  <!--
+    **The number, and the control** (plan 0054, section 1).
+
+    It was a readout with the outstanding count above the progress caption. It is
+    now the reel, bound to what is still to get: down records that many bought, up
+    says this basket will buy more than the households asked for, and the server
+    decides which of the two a move was (backend `0056`, section 3).
+
+    `min` is zero because zero is the whole line settled, which is what "got all"
+    already does. `max` comes off the resulting quantity rather than off this
+    number, so a partly settled line cannot be raised past the limit an unsettled
+    one has.
+
+    `readonly` while a write is out rather than disabled, which is what the input
+    was built for: the number is real and worth reading while it settles.
+
+    The two `stopPropagation`s are `line-row`'s, for the reason it has them: a drag
+    on the reel is not a tap on the line, and the row underneath must not hear it.
+  -->
   <span class="numbers">
-    @if (state() === 'partly') {
+    <lib-quantity-reel
+      (autoClosed)="onReelAutoClosed()"
+      (click)="$event.stopPropagation()"
+      (committedTo)="onCommitted($event)"
+      (pointerdown)="$event.stopPropagation()"
+      (preview)="onPreview($event)"
+      [label]="reelLabel()"
+      [max]="ceiling()"
+      [min]="0"
+      [readonly]="busy()"
+      [value]="shownOutstanding()"
+    />
+
+    <!--
+      What the gesture is about to do, while the thumb is still down, and the
+      progress caption the rest of the time. One slot, because they answer the same
+      question a moment apart and two would make the row jump as the finger lands.
+
+      `aria-hidden`: the reel above announces its own value, and the sentence is
+      said once on the commit through the page's live region instead of being read
+      out on every unit the thumb passes over.
+    -->
+    @if (caption(); as said) {
+      <span aria-hidden="true" class="preview">{{ said }}</span>
+    } @else if (state() === 'partly') {
       <!--
         Both numbers, so somebody can see what is left without arithmetic. A
         partly settled line is the whole reason settling is cumulative.
       -->
-      <span aria-hidden="true" class="outstanding">{{ outstanding() }}</span>
       <span aria-hidden="true" class="progress">{{ quantity() }}</span>
-    } @else if (quantity()) {
-      <span aria-hidden="true" class="quantity">{{ quantity() }}</span>
     }
 
     @if (busy()) {
@@ -142,6 +182,19 @@
     }
   </span>
 </div>
+
+<!--
+  What the last move of the number came to, when it did not land (plan 0054,
+  section 4.1). Under the row it is about and never a toast, which is `0012`
+  section 3.3's rule: a toast about a row is read after the row has scrolled away.
+
+  Quiet, and one sentence. Anything shorter sends somebody dragging again into the
+  same race, and anything longer is a paragraph in a shop. The announcement is the
+  page's, so this is not a live region of its own: one per row would be a dozen.
+-->
+@if (notice(); as said) {
+  <p class="line-notice">{{ said.key | rokuT: { count: said.count } }}</p>
+}
 
 <!--
   The four shapes, in one place, so the button and the static indicator cannot draw
