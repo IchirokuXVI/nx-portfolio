@@ -325,3 +325,28 @@ export class SetGeneratedListLineOutstandingDto {
   @Max(LINE_QUANTITY_MAX)
   from!: number;
 }
+
+/**
+ * Send an added basket line to a shopping list (plan 0058, section 4).
+ *
+ * `listId` names the **zone** list receiving the line; the basket line is
+ * already in the path.
+ *
+ * **One field, and deliberately no quantity.** What the created line asks for is
+ * the basket line's outstanding amount, and the server computes it (section
+ * 4.1): a shopper who has already bought three of the four batteries is asking
+ * the household for one, and a number here would let a client ask for four.
+ *
+ * There is no inverse of this request and there is not going to be one. Clearing
+ * a target does not delete the line it created (plan 0050, section 5); removing
+ * it is done on the target list, by somebody with access, as an ordinary delete.
+ */
+export class BindGeneratedListLineDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The shopping list to send this line to. Must be one both you and the basket’s owner can write right now: the owner’s access is what authorizes every later settle on it, so a list they cannot write would give the household a line it never sees bought.',
+  })
+  @IsUUID()
+  listId!: string;
+}

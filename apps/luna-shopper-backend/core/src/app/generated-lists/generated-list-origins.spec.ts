@@ -316,6 +316,17 @@ function build(
       new Set(
         listIds.filter((listId) => (writable[userId] ?? []).includes(listId))
       ),
+    // The candidate scope, shared with plan 0058's target picker so the two
+    // pickers cannot disagree about which lists qualify. Faked here rather than
+    // routed through WRITABLE_LISTS_SQL, because the raw query now belongs to
+    // the sharing service and this file fakes that service whole.
+    writableIntersection: async (ownerUserId: string, actorUserId: string) => {
+      const owned = writable[ownerUserId] ?? [];
+      const actors = new Set(writable[actorUserId] ?? []);
+      return owned
+        .filter((listId) => ownerUserId === actorUserId || actors.has(listId))
+        .map((listId) => ({ listId, zoneId: zoneOfList[listId] }));
+    },
   } as unknown as GeneratedListSharingService;
 
   const generated = {
