@@ -14,6 +14,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import { inLocale, type CatalogSuggestion } from '@portfolio/velista/models';
+import { formatMoney } from '@portfolio/velista/platform';
 import { BasketIcon, PlusIcon, ProductIcon } from '../icons/icons';
 
 /**
@@ -191,6 +192,85 @@ export class SuggestionList {
     return suggestion.kind === 'group'
       ? inLocale(suggestion.group.name, this._locale())
       : inLocale(suggestion.item.name, this._locale());
+  }
+
+  /**
+   * An item row's note line: the brand, the price after it, or one of them, or
+   * nothing at all (velista `0063`, section 6.1).
+   *
+   * One string and not two fields, so a row with a price and a row without are
+   * the same shape. The price is a suffix joined by the separator the app
+   * already uses, which is what `basket-line-row` does with the same figure, so
+   * two screens quoting a product say it the same way.
+   *
+   * **A product with no price says nothing about price**: no dash, no label, no
+   * reserved blank. The pick sheet's "No price" exception does not reach here,
+   * because that list is the comparable options of one line and this one is
+   * whatever matched three characters (section 6.3). Null when there is neither
+   * a brand nor a price, and the template then draws no note element at all.
+   *
+   * An offer whose `price` is null returns the brand alone, so the unpriced case
+   * is one branch rather than a scattering of them.
+   *
+   * The price is the price of **this packet** and is never divided by anything:
+   * the catalog holds one record per size, so the six pack row is a different
+   * row from the 1 L row and quotes its own price. `unitPrice` is on the model
+   * and deliberately not drawn (section 6.4): a second number in a place with
+   * room for one, whose whole value is a comparison this list cannot make.
+   */
+  noteOf(suggestion: CatalogSuggestion): string | null {
+    if (suggestion.kind !== 'item') {
+      return null;
+    }
+
+    const { brand, offer } = suggestion.item;
+    if (offer === null || offer.price === null) {
+      return brand;
+    }
+
+    const price = formatMoney(offer.price, offer.currency, this._locale());
+    return brand === null ? price : `${brand} · ${price}`;
+  }
+
+  /**
+   * A group row's price, as a key and the money to put in it, or null when the
+   * group has none (velista `0063`, section 6.6).
+   *
+   * **Labelled, and an item's is not.** An item row's number is the price of the
+   * thing that row adds; a group adds several products and no single price among
+   * them is what the row costs, so a bare number under a group would read like an
+   * item's and mean something else. "Best price" says the number is the floor
+   * rather than the total.
+   *
+   * What the number is: the price of the group's most economical member, which
+   * the server picks per litre or per kilo, so it is **not always the smallest
+   * number** among the products under it. That is right for a group, which is a
+   * kind of thing rather than a packet: the best price for milk is the most
+   * economical way to buy milk. The row does not name the member.
+   *
+   * The shape is `sizeOf`'s, and for the same reason: **the component never
+   * translates.** The key reaches the template and the pipe renders it. What
+   * this does is format the money, in the reader's language, and decide whether
+   * there is anything to say.
+   */
+  bestPriceOf(
+    suggestion: CatalogSuggestion
+  ): { key: string; args: { price: string } } | null {
+    if (suggestion.kind !== 'group') {
+      return null;
+    }
+
+    const offer = suggestion.offer;
+    if (offer === null || offer.price === null) {
+      return null;
+    }
+
+    return {
+      key: 'list.add.bestPrice',
+      args: {
+        price: formatMoney(offer.price, offer.currency, this._locale()),
+      },
+    };
   }
 
   /** What a group row says it will do, so choosing it is not a surprise. */

@@ -59,12 +59,31 @@
                 What choosing it will do, said before it is pressed. A group adds
                 several products at once, and a row that quietly did that would be a
                 surprise the first three times.
+
+                The best price follows it on the **same line**, so a priced group row
+                and an unpriced one are the same height. One line can truncate, and
+                this order decides which half is lost: "adds its 4 products" is what
+                stops a row quietly attaching four things to somebody's list, and
+                losing the price is the ordinary state everywhere the harvester is
+                off. The separator is written here because both halves are copy, so
+                there is no string for a method to have joined.
               -->
-              <span class="suggestion-note">{{
-                'list.add.groupAdds' | rokuT: groupSummaryArgs(suggestion)
-              }}</span>
-            } @else if (suggestion.item.brand) {
-              <span class="suggestion-note">{{ suggestion.item.brand }}</span>
+              <span class="suggestion-note"
+                >{{
+                  'list.add.groupAdds' | rokuT: groupSummaryArgs(suggestion)
+                }}
+                @if (bestPriceOf(suggestion); as best) {
+                  · {{ best.key | rokuT: best.args }}
+                }
+              </span>
+            } @else if (noteOf(suggestion); as note) {
+              <!--
+                The brand, the price, or both, joined in the component. It is the note
+                line and not the row's end because the row's end is the packet size,
+                which is the only field telling two otherwise identical rows apart and
+                may never be squeezed to make room for a thing that is usually absent.
+              -->
+              <span class="suggestion-note">{{ note }}</span>
             }
           </span>
 
