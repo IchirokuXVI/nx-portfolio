@@ -36,13 +36,23 @@ live, and it is the same expression the row's overflow reads to decide whether t
 the sheet at all, so the menu entry and the sheet behind it cannot disagree. It moves to
 match backend `0076` section 1 exactly:
 
-| Row                                  | Today      | After     |
-| ------------------------------------ | ---------- | --------- |
-| Not approved, caller holds `WRITE`   | `full`     | `full`    |
-| Approved, caller holds `MANAGE`      | `full`     | `full`    |
-| Approved, caller holds `DECIDE`      | `quantity` | `full`    |
-| Approved, caller holds `WRITE` alone | none       | `content` |
-| Anything else                        | none       | none      |
+| Row                                       | Today      | After     |
+| ----------------------------------------- | ---------- | --------- |
+| Not approved, caller holds `WRITE`        | `full`     | `full`    |
+| Approved, caller holds `MANAGE`           | `full`     | `full`    |
+| Approved, caller holds `WRITE` and `DECIDE` | `quantity` | `full`    |
+| Approved, caller holds `DECIDE` alone     | `quantity` | none      |
+| Approved, caller holds `WRITE` alone      | none       | `content` |
+| Anything else                             | none       | none      |
+
+> **Correction, after the fact.** The `DECIDE` row above said `full` without asking
+> whether the caller also holds `WRITE`, and so did test 2 below. Backend `0076` section
+> 4.1 keeps every field but the quantity behind `WRITE`, so a caller holding `DECIDE`
+> alone gets no sheet on any row, and offering one would draw a screen whose save is a
+> 403. They are not left without a control: the quantity reel is `LineRowVm.adjustable`,
+> which asks `canDecide` on its own, and approving and rejecting stay theirs. The
+> `quantity` scope is still deleted, which is what section 2.1 is about, because the row
+> that produced it now produces none rather than a mode of its own.
 
 ### 2.1 `quantity` dies and `content` replaces it
 
@@ -165,8 +175,9 @@ In `select-list-state.spec.ts`:
 
 1. `editScopeFor` returns `content` for a `WRITE` only caller on an `APPROVED` line, where
    it returned null.
-2. It returns `full` for a `DECIDE` holder on an `APPROVED` line, where it returned
-   `quantity`.
+2. It returns `full` for a caller holding `WRITE` and `DECIDE` on an `APPROVED` line,
+   where it returned `quantity`, and null for one holding `DECIDE` alone, per the
+   correction above.
 3. It returns `full` for `MANAGE` on an approved line and for `WRITE` on a pending one,
    both unchanged.
 4. It returns null for a `READ` only caller on every approval state.
