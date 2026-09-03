@@ -1,0 +1,236 @@
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { inject, Injectable } from '@angular/core';
+import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import { firstValueFrom } from 'rxjs';
+import { ApiUrl } from '../api-url';
+import { toGatewayError } from '../gateway-error';
+import type {
+  EntryQuery,
+  HarvestServiceI,
+  ItemRefQuery,
+  PageQuery,
+  PlaceGroupQuery,
+  PlaceQuery,
+  RunQuery,
+} from './harvest-service';
+
+/** Everything under `/v1/admin/harvest`, which is where all of it already is. */
+const ROOT = '/v1/admin/harvest';
+
+/**
+ * The harvester's REST surface, as the screens call it (plan 0006, section 1).
+ *
+ * Every route this file names exists today and needed nothing from the backend
+ * beyond `0073`'s guard swap. There is no `ResourceApiGateways` underneath it:
+ * these routes do not follow the collection and member convention that class
+ * encodes. A run is aborted with a POST to a sub path, a source is addressed by
+ * its supermarket rather than by its own id, and entries live under the chain
+ * they came from.
+ *
+ * Every failure leaves here as a {@link GatewayError}, so no screen above ever
+ * sees an `HttpErrorResponse` or switches on a status number. That matters more
+ * here than elsewhere: the harvester is absent in both clusters on purpose, so a
+ * failed read is an ordinary state these screens draw rather than an exception
+ * that escapes.
+ *
+ * Provided by the app layer and never at root, because it depends on the
+ * `HttpClient` carrying the bearer token.
+ */
+@Injectable()
+export class HarvestApi implements HarvestServiceI {
+  private readonly _http = inject(HttpClient);
+  private readonly _urls = inject(ApiUrl);
+
+  spawnRun(
+    input: Wire.SpawnHarvestRunDto
+  ): Promise<Wire.HarvestHarvestRunView> {
+    return this._send('post', `${ROOT}/runs`, { body: input });
+  }
+
+  listRuns(query: RunQuery): Promise<Wire.HarvestHarvestRunPage> {
+    return this._send('get', `${ROOT}/runs`, { params: toParams(query) });
+  }
+
+  readRun(id: string): Promise<Wire.HarvestHarvestRunView> {
+    return this._send('get', `${ROOT}/runs/${segment(id)}`);
+  }
+
+  abortRun(id: string): Promise<Wire.HarvestHarvestRunView> {
+    return this._send('post', `${ROOT}/runs/${segment(id)}/abort`, {
+      body: {},
+    });
+  }
+
+  listPlaces(query: PlaceQuery): Promise<Wire.HarvestDiscoveredPlacePage> {
+    return this._send('get', `${ROOT}/places`, { params: toParams(query) });
+  }
+
+  placeGroups(
+    query: PlaceGroupQuery
+  ): Promise<Wire.HarvestDiscoveredPlaceGroupsResult> {
+    return this._send('get', `${ROOT}/places/groups`, {
+      params: toParams(query),
+    });
+  }
+
+  importPlace(
+    id: string,
+    input: Wire.ImportDiscoveredPlaceDto
+  ): Promise<Wire.HarvestDiscoveredPlaceView> {
+    return this._send('post', `${ROOT}/places/${segment(id)}/import`, {
+      body: input,
+    });
+  }
+
+  rejectPlace(id: string): Promise<Wire.HarvestDiscoveredPlaceView> {
+    return this._send('post', `${ROOT}/places/${segment(id)}/reject`, {
+      body: {},
+    });
+  }
+
+  /**
+   * Entries are addressed under their chain, not under a flat collection.
+   *
+   * `supermarketId` is a path segment rather than a filter, which is why this
+   * screen asks which chain before it can ask anything else. Plan 0006 section 1
+   * lists `GET .../entries` alongside `groups`, `import` and `reject`, but those
+   * three belong to `places`: there is no grouping route for entries and no way
+   * to reject one, so this queue offers the two things that exist.
+   */
+  listEntries(query: EntryQuery): Promise<Wire.HarvestSourceCatalogEntryPage> {
+    const { supermarketId, ...rest } = query;
+    return this._send(
+      'get',
+      `${ROOT}/supermarkets/${segment(supermarketId)}/entries`,
+      { params: toParams(rest) }
+    );
+  }
+
+  createItemFromEntry(
+    supermarketId: string,
+    entryId: string,
+    input: Wire.CreateItemFromEntryDto
+  ): Promise<Wire.CatalogItemView> {
+    return this._send(
+      'post',
+      `${ROOT}/supermarkets/${segment(supermarketId)}/entries/${segment(
+        entryId
+      )}/item`,
+      { body: input }
+    );
+  }
+
+  listItemRefs(query: ItemRefQuery): Promise<Wire.HarvestItemSourceRefPage> {
+    return this._send('get', `${ROOT}/item-refs`, { params: toParams(query) });
+  }
+
+  listUnresolvedItemRefs(
+    query: ItemRefQuery
+  ): Promise<Wire.HarvestItemSourceRefPage> {
+    return this._send('get', `${ROOT}/item-refs/unresolved`, {
+      params: toParams(query),
+    });
+  }
+
+  setManualItemRef(
+    input: Wire.SetManualItemSourceRefDto
+  ): Promise<Wire.HarvestItemSourceRefView> {
+    return this._send('put', `${ROOT}/item-refs`, { body: input });
+  }
+
+  confirmItemRef(id: string): Promise<Wire.HarvestItemSourceRefView> {
+    return this._send('post', `${ROOT}/item-refs/${segment(id)}/confirm`, {
+      body: {},
+    });
+  }
+
+  rejectItemRef(id: string): Promise<Wire.HarvestItemSourceRefView> {
+    return this._send('post', `${ROOT}/item-refs/${segment(id)}/reject`, {
+      body: {},
+    });
+  }
+
+  listSources(query: PageQuery): Promise<Wire.HarvestSupermarketSourcePage> {
+    return this._send('get', `${ROOT}/sources`, { params: toParams(query) });
+  }
+
+  readSource(
+    supermarketId: string
+  ): Promise<Wire.HarvestSupermarketSourceView> {
+    return this._send('get', `${ROOT}/sources/${segment(supermarketId)}`);
+  }
+
+  upsertSource(
+    supermarketId: string,
+    input: Wire.UpsertSupermarketSourceDto
+  ): Promise<Wire.HarvestSupermarketSourceView> {
+    return this._send('put', `${ROOT}/sources/${segment(supermarketId)}`, {
+      body: input,
+    });
+  }
+
+  /**
+   * The one switch of section 3 this app is allowed to change.
+   *
+   * Per chain, and therefore application state rather than deployment
+   * configuration. `upsert` describes a chain and this starts fetching it, which
+   * the backend keeps as two routes because they are two decisions.
+   */
+  setSourceEnabled(
+    supermarketId: string,
+    enabled: boolean
+  ): Promise<Wire.HarvestSupermarketSourceView> {
+    return this._send(
+      'put',
+      `${ROOT}/sources/${segment(supermarketId)}/enabled`,
+      { body: { enabled } }
+    );
+  }
+
+  private async _send<R>(
+    method: 'get' | 'post' | 'put',
+    path: string,
+    options: { params?: HttpParams; body?: unknown } = {}
+  ): Promise<R> {
+    try {
+      return await firstValueFrom(
+        this._http.request<R>(method, this._urls.gateway(path), {
+          params: options.params,
+          body: options.body,
+        })
+      );
+    } catch (error) {
+      throw toGatewayError(error);
+    }
+  }
+}
+
+function segment(value: string): string {
+  return encodeURIComponent(value);
+}
+
+/**
+ * A query object as a query string, with absent and empty values left out.
+ *
+ * An empty filter has to disappear rather than be sent as `''`, because the
+ * harvester's DTOs validate what they are given: `status=` is not a status, and
+ * a screen whose filter is set to "any" would fail every read.
+ */
+function toParams(query: object): HttpParams {
+  let params = new HttpParams();
+
+  // `object` rather than `Record<string, unknown>`, because an interface with
+  // named properties has no index signature and so does not satisfy the record
+  // type. Every caller passes one of the query interfaces above, which are all
+  // flat bags of optional scalars.
+  for (const [name, value] of Object.entries(
+    query as Record<string, unknown>
+  )) {
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+    params = params.set(name, String(value));
+  }
+
+  return params;
+}
