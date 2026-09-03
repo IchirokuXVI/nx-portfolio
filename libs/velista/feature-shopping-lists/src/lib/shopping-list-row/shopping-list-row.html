@@ -16,6 +16,16 @@
       -->
       @if (vm.active) {
         <span class="badge">{{ 'history.status.active' | rokuT }}</span>
+      } @else if (vm.finished) {
+        <!--
+          A trip that is over, marked and never hidden (velista 0057, section 9). The
+          same slot as the badge above, because a row says one thing about where a
+          trip has got to, and quieter than it: "Shopping now" is a way back into
+          something, and this is a fact about something that has stopped.
+        -->
+        <span class="badge is-finished">
+          {{ 'history.status.finished' | rokuT }}
+        </span>
       }
     </span>
 

@@ -88,6 +88,30 @@
         <lib-share-icon class="share-glyph" />
       </button>
     }
+
+    <!--
+      The end of the trip, and it is **in the header** rather than in the footer
+      (plan 0057, section 3). The footer belongs to the line you are working on, and a
+      button that ends the whole trip must not sit a thumb's width from the control
+      that settles one line: the two are one tap apart in the muscle memory, and a
+      mis-tap on the wrong one is a screen full of controls disappearing.
+
+      A flag rather than a tick, for the same distance in the artwork: a tick is what
+      a settled line wears on this very screen.
+
+      The owner's alone, and absent rather than disabled for everybody else, which is
+      the treatment the share control beside it already gets.
+    -->
+    @if (canFinish()) {
+      <button
+        (click)="openFinish()"
+        [attr.aria-label]="'basket.finish.open' | rokuT"
+        class="finish"
+        type="button"
+      >
+        <lib-flag-icon class="finish-glyph" />
+      </button>
+    }
   </header>
 
   <!--
@@ -111,6 +135,45 @@
       <lib-offline-icon class="stale-glyph" />
       <span>{{ 'basket.notLive' | rokuT }}</span>
     </p>
+  }
+
+  <!--
+    A finished trip says so, once (section 6).
+
+    **Under** the two notes above rather than over them, which is the ordering they
+    already argue for: being removed, and not updating, are both about whether what is
+    on this screen can be trusted at all, and this is about what the screen means.
+
+    `role="status"` and drawn only while the basket is finished, so it is announced
+    when it appears rather than on every redraw and on every line that lost a control
+    (section 11). Words and not colour: the banner is a sentence, and the rows have
+    lost their controls.
+
+    **Reopen is the owner's**, on the banner, with no confirmation: nothing is
+    destroyed and the act is trivially repeatable (section 8). A guest sees the banner
+    without it, which is the whole difference between the two readers here.
+  -->
+  @if (finished()) {
+    <div class="finished" role="status">
+      <p class="finished-title">{{ 'basket.finished.title' | rokuT }}</p>
+
+      @if (isOwner()) {
+        <button
+          (click)="reopenBasket()"
+          [disabled]="statusBusy()"
+          class="finished-action"
+          type="button"
+        >
+          {{ 'basket.finished.reopen' | rokuT }}
+        </button>
+      }
+
+      @if (reopenFailed()) {
+        <p class="finished-failed" role="alert">
+          {{ 'basket.finish.failed' | rokuT }}
+        </p>
+      }
+    </div>
   }
 
   @switch (state()) {
@@ -184,6 +247,25 @@
           }
         </p>
 
+        <!--
+          Every line is settled, so the screen asks (plan 0057, section 4). The last
+          settle is not a status change and finishes nothing: this is a prompt, not a
+          lock, because the most common thing that happens after the last line is
+          remembering milk.
+
+          Here rather than over the lines, and **before** them in the tab order
+          (section 11): one quiet row where the outstanding total sits, announced
+          politely when it appears. It is not a modal and it does not steal focus.
+        -->
+        @if (allSettled()) {
+          <div class="prompt" role="status">
+            <p class="prompt-title">{{ 'basket.finish.prompt' | rokuT }}</p>
+            <button (click)="openFinish()" class="prompt-action" type="button">
+              {{ 'basket.finish.action' | rokuT }}
+            </button>
+          </div>
+        }
+
         <ul class="lines">
           @for (line of lines(); track line.id) {
             <li>
@@ -195,6 +277,7 @@
                 [awaitingApproval]="pendingTargets().has(line.id)"
                 [busy]="isBusy(line)"
                 [canReopen]="canReopen"
+                [finished]="finished()"
                 [line]="line"
                 [listNames]="listNames()"
                 [meId]="meId()"

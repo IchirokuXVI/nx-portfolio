@@ -1,0 +1,53 @@
+<lib-sheet-shell
+  (dismiss)="close()"
+  [dismissible]="!busy()"
+  [hasFooter]="true"
+  labelledBy="finish-title"
+>
+  <h2 class="title" id="finish-title">{{ 'basket.finish.title' | rokuT }}</h2>
+
+  <!--
+    What it does to everybody else, which is the half of this that cannot be seen
+    from the screen underneath: three people may still be walking around a shop.
+  -->
+  <p class="body">{{ 'basket.finish.body' | rokuT }}</p>
+
+  <!--
+    The line that earns the sheet (section 5). Those lines are not being bought, not
+    being dropped and not being recorded as anything: they stop being claimed, and
+    stay on their households' lists exactly as they are.
+
+    Absent at zero, because there is then no consequence to warn about, and part of
+    the question rather than a live region of its own: it has to be read **before**
+    the decision, not announced after somebody has already made it (section 11).
+  -->
+  @if (unsettled() > 0) {
+    <p class="warning">
+      {{ 'basket.finish.unsettled' | rokuT: { count: unsettled() } }}
+    </p>
+  }
+
+  @if (failed()) {
+    <p class="failed" role="alert">{{ 'basket.finish.failed' | rokuT }}</p>
+  }
+
+  <!--
+    Cancel first, which is the order plan 0052 section 4 settled for the sheet next
+    door and for the same reason: the panel grows upward from the bottom of the
+    viewport, so the safe answer takes the coordinates a thumb is already aimed at.
+  -->
+  <div class="footer" sheetFooter>
+    <button (click)="close()" [disabled]="busy()" class="cancel" type="button">
+      {{ 'basket.finish.cancel' | rokuT }}
+    </button>
+
+    <button
+      (click)="finish()"
+      [disabled]="busy()"
+      class="confirm"
+      type="button"
+    >
+      {{ 'basket.finish.confirm' | rokuT }}
+    </button>
+  </div>
+</lib-sheet-shell>

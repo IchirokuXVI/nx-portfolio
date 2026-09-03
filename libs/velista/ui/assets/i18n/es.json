@@ -1113,6 +1113,22 @@
       "confirm": "Revocar el enlace",
       "cancel": "Conservarlo"
     },
+    "finish": {
+      "open": "Terminar la compra",
+      "prompt": "Todo listo. ¿Terminar la compra?",
+      "action": "Terminar la compra",
+      "title": "¿Terminar la compra?",
+      "body": "Nadie podrá cambiar esta lista, tampoco las personas que están comprando contigo.",
+      "unsettled_one": "{{count}} línea se ha quedado sin resolver. Sigue en tus listas tal como está.",
+      "unsettled_other": "{{count}} líneas se han quedado sin resolver. Siguen en tus listas tal como están.",
+      "confirm": "Terminar la compra",
+      "cancel": "Cancelar",
+      "failed": "No se ha guardado. Inténtalo de nuevo"
+    },
+    "finished": {
+      "title": "Esta compra está terminada.",
+      "reopen": "Reabrir"
+    },
     "join": {
       "invited": "Te han invitado a hacer la compra",
       "people_one": "{{count}} persona está en ella",
@@ -1159,7 +1175,7 @@
       "staleLine_other": "Otra persona ha cambiado esta línea. Ahora pone {{count}}",
       "belowSettled_one": "Ya se ha comprado uno para esta lista",
       "belowSettled_other": "Ya se han comprado {{count}} para esta lista",
-      "basketFinished": "Esta lista está terminada, así que no se puede cambiar",
+      "basketFinished": "Quien hizo la lista ha terminado la compra. Ya no se puede cambiar",
       "notSendable": "Solo se puede enviar a una lista de la compra una línea añadida aquí",
       "alreadySent": "Esta línea ya se ha enviado a una lista de la compra",
       "reference": "ref {{correlationId}}"
@@ -1170,7 +1186,9 @@
       "undoGot": "{{name}} está conseguido. Deshacerlo",
       "undoNone": "{{name}} no estaba disponible. Deshacerlo",
       "isGot": "{{name}} está conseguido",
-      "isNone": "{{name}} no estaba disponible"
+      "isNone": "{{name}} no estaba disponible",
+      "isWanted": "{{name}} está aún por conseguir",
+      "isPartly": "{{name}} está conseguido en parte"
     }
   },
   "getList": {
@@ -1200,7 +1218,8 @@
     "title": "Tus listas de la compra",
     "back": "Atrás",
     "status": {
-      "active": "Comprando ahora"
+      "active": "Comprando ahora",
+      "finished": "Terminada"
     },
     "row": {
       "progress": "{{settled}} de {{total}} terminadas",

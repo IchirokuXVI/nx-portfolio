@@ -713,7 +713,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the five sheets over the basket', () => {
+    it('offers the six sheets over the basket', () => {
       // The two line sheets are children of the **basket** rather than of the settle
       // sheet they are reached from, and they have to be: a sheet has no children, so
       // the only place a sheet over a sheet can be declared is beside the one it was
@@ -726,6 +726,7 @@ describe('AppShellRoutes', () => {
           'sheet/lines/:lineId/list',
           'sheet/people',
           'sheet/share',
+          'sheet/finish',
         ]
       );
     });
@@ -737,7 +738,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(5);
+      expect(sheets).toHaveLength(6);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -851,12 +852,12 @@ describe('the sheets and their exit animation', () => {
   const sheets = all.filter(({ route }) => isSheet(route));
 
   it('addresses every sheet in the table, so none has quietly been lost', () => {
-    // Twenty seven entries rather than twenty one sheets: the entry pair, Get shopping
-    // list and the three confirms are each declared over more than one page, because
-    // a sheet has to cover the page it was opened from. A count rather than a list of
-    // paths: it fails when a sheet is deleted or stops being addressed as one, and
-    // needs no edit here when a page gains a sheet it already had elsewhere.
-    expect(sheets).toHaveLength(27);
+    // Twenty eight entries rather than twenty two sheets: the entry pair, Get
+    // shopping list and the three confirms are each declared over more than one page,
+    // because a sheet has to cover the page it was opened from. A count rather than a
+    // list of paths: it fails when a sheet is deleted or stops being addressed as
+    // one, and needs no edit here when a page gains a sheet it already had elsewhere.
+    expect(sheets).toHaveLength(28);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

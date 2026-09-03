@@ -9,8 +9,10 @@ import {
   isLiveGeneratedList,
   type CreateGeneratedListRequest,
   type GeneratedListRun,
+  type GeneratedListStatus,
   type GeneratedListSummary,
   type ShoppingListsLoad,
+  type WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
 import {
   REALTIME_CLIENT,
@@ -269,6 +271,44 @@ export class GeneratedListStore {
   }
 
   /**
+   * Finish a trip, or take it back to being one (velista `0057`, section 10).
+   *
+   * **Optimistic, unlike everything else this store writes**, and the screen is why.
+   * `create` can afford to wait because a sheet is showing a spinner over it; this is
+   * pressed on the basket screen, where the whole answer is a banner appearing and a
+   * page's worth of controls going away, and a round trip of nothing happening in a
+   * shop reads as a button that did not work. So the status is flipped here, the
+   * request goes out behind it, and a failure puts back exactly the status the row
+   * held before rather than a guess at what it should be.
+   *
+   * The flip is a no-op when the listing has never been read, which is the ordinary
+   * case for this caller: a basket opened from a link or from the dashboard card has
+   * no row here to move. The write still goes out, and the socket's
+   * `generatedList.updated` is what fills the listing in when it is next read.
+   *
+   * **False rather than a throw on failure**, matching the row writes on
+   * `BasketStore`: the caller is a page that has to decide whether to say something,
+   * not a sheet that stays open on an error.
+   */
+  async setStatus(
+    generatedListId: string,
+    status: WritableGeneratedListStatus
+  ): Promise<boolean> {
+    const before = this._lists().find((list) => list.id === generatedListId);
+    this._setStatusLocally(generatedListId, status);
+
+    try {
+      await this._service.setStatus(generatedListId, status);
+      return true;
+    } catch {
+      if (before !== undefined) {
+        this._setStatusLocally(generatedListId, before.status);
+      }
+      return false;
+    }
+  }
+
+  /**
    * Refetch the first page after a settle, once per burst.
    *
    * **Coalesced**, because a settle is not a lone event: four people working through
@@ -341,6 +381,25 @@ export class GeneratedListStore {
    * time, and an edit does not regenerate anything. A basket that is genuinely new is
    * put at the front, which is where its generation time belongs.
    */
+  /**
+   * Move one held row's status and leave everything else about it alone.
+   *
+   * Both halves of {@link setStatus} go through this, the flip and the rollback, so
+   * the two cannot disagree about what "put it back" means. Nothing happens for a
+   * basket this store is not holding, which is the ordinary case for a basket screen
+   * opened without the history ever having been read.
+   */
+  private _setStatusLocally(
+    generatedListId: string,
+    status: GeneratedListStatus
+  ): void {
+    this._lists.update((lists) =>
+      lists.map((list) =>
+        list.id === generatedListId ? { ...list, status } : list
+      )
+    );
+  }
+
   private _upsert(list: GeneratedListSummary): void {
     this._lists.update((lists) => {
       const at = lists.findIndex((candidate) => candidate.id === list.id);

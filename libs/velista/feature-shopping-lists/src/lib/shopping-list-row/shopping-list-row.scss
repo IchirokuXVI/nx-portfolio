@@ -65,6 +65,18 @@
   white-space: nowrap;
 }
 
+// A trip that is over, in the neutral pair rather than the success one.
+//
+// Green is the colour this app gives a thing you can still act on, and it is what
+// "Shopping now" wears one row up. A finished trip is neither good news nor a way
+// back into anything, so it takes the same shape in the quiet colours and is told
+// apart by the word, which is the only thing the row ever relied on (section 7).
+.is-finished {
+  border-color: var(--app-border-subtle);
+  background: var(--app-status-neutral-bg);
+  color: var(--app-status-neutral-fg);
+}
+
 .meta {
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);

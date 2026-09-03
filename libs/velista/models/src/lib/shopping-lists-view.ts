@@ -141,6 +141,23 @@ export interface ShoppingListRowVm {
    * and is derived here so no template re-derives it from an enum.
    */
   readonly active: boolean;
+  /**
+   * Whether this trip has been finished (velista `0057`, section 9).
+   *
+   * The other half of {@link active}, and a third value for the same badge rather
+   * than a second badge: a row says one thing about where a trip has got to, and the
+   * two can never both be true.
+   *
+   * `status === 'COMPLETED'` exactly, which is narrower than "not live" on purpose.
+   * `UNKNOWN` is this build's fallback for a status it does not recognise, and the
+   * one thing a history row must not do is tell somebody their shopping is over
+   * because the app could not read a word.
+   *
+   * A finished trip is **not** hidden from the listing. Hiding is what `ARCHIVED` is
+   * for, and the trip finished an hour ago is the one most likely to be opened next,
+   * to check what came home.
+   */
+  readonly finished: boolean;
 }
 
 /** How the history listing has got on. */
