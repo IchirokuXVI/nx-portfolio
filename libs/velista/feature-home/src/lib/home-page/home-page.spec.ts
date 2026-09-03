@@ -27,6 +27,7 @@ import type { GeneratedListSummary, MyZone } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  type BrowserFacade,
 } from '@portfolio/velista/platform';
 import { ShoppingListCard, ZoneCard } from '@portfolio/velista/ui';
 import { HomePage } from './home-page';
@@ -66,6 +67,10 @@ interface Options {
   generated?: FakeGeneratedListStore;
   /** User id to the name they go by in the zone, since presence carries ids alone. */
   names?: Readonly<Record<string, string>>;
+  /** Where this tab is, and what the browser can do, for the invite link tests. */
+  browser?: Partial<BrowserFacade>;
+  /** The mount, `''` standalone and `/velista` under the shell. */
+  basePath?: string;
 }
 
 /**
@@ -111,8 +116,8 @@ async function render(
     imports: [HomePage, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideRouter([]),
-      provideVelistaTesting(),
-      provideFakeBrowserFacade(options.storage),
+      provideVelistaTesting({ basePath: options.basePath }),
+      provideFakeBrowserFacade(options.storage, options.browser),
       provideFakeZoneStore(store),
       // Plan 0045: the dashboard's shopping list card reads the listing. A double, so
       // a spec states "there is one active basket" rather than driving a request.
@@ -828,6 +833,87 @@ describe('HomePage', () => {
         ['..', 'zones', 'z1', 'lists', 'list-1'],
         expect.objectContaining({ relativeTo: TestBed.inject(ActivatedRoute) })
       );
+    });
+  });
+
+  /**
+   * The link goes to somebody else, so it states no language.
+   *
+   * It used to be this session's own URL made absolute, which carried this session's
+   * locale, so a group invite sent by a Spanish reader opened in Spanish for an
+   * English one. `localeGuard` inserts the **recipient's** locale into a URL that
+   * arrives without one, which is the behaviour these tests protect.
+   */
+  describe('the invite link', () => {
+    const invited = zone({
+      id: 'z-new',
+      name: 'Flat 3B',
+      joinCode: 'HK7M2QPD',
+    });
+
+    function fakeWindow(
+      origin: string,
+      sent: { url?: string },
+      copied: string[],
+      canShare = true
+    ): Partial<BrowserFacade> {
+      const navigator = {
+        share: canShare
+          ? (data: { url: string }) => {
+              sent.url = data.url;
+              return Promise.resolve();
+            }
+          : undefined,
+        clipboard: {
+          writeText: (text: string) => {
+            copied.push(text);
+            return Promise.resolve();
+          },
+        },
+      };
+
+      return {
+        location: { origin },
+        window: { navigator },
+      } as unknown as Partial<BrowserFacade>;
+    }
+
+    it('carries no locale, so the recipient opens it in their own language', async () => {
+      const sent: { url?: string } = {};
+      const fixture = await render({
+        zones: [invited],
+        lastEntry: { kind: 'created', zoneId: 'z-new' },
+        browser: fakeWindow('https://velista.app', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://velista.app/join/HK7M2QPD');
+    });
+
+    it('keeps the mount, which is the one part of the path that is not the language', async () => {
+      const sent: { url?: string } = {};
+      const fixture = await render({
+        zones: [invited],
+        basePath: '/velista',
+        browser: fakeWindow('https://ichirokuxvi.com', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://ichirokuxvi.com/velista/join/HK7M2QPD');
+    });
+
+    it('copies the same locale free URL where there is no share sheet', async () => {
+      const copied: string[] = [];
+      const fixture = await render({
+        zones: [invited],
+        browser: fakeWindow('https://velista.app', {}, copied, false),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(copied).toEqual(['https://velista.app/join/HK7M2QPD']);
     });
   });
 });

@@ -1094,6 +1094,7 @@
       "body": "Cualquiera con el enlace puede hacer la compra, sin cuenta. Ve las líneas, nunca tus grupos.",
       "copy": "Copiar",
       "copied": "Copiado",
+      "share": "Enviar el enlace",
       "joinedWith_one": "{{count}} persona se ha unido con él",
       "joinedWith_other": "{{count}} personas se han unido con él",
       "made": "creado el {{date}}",

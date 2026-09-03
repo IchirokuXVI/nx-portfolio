@@ -32,6 +32,7 @@ import {
   appPath,
   BrowserFacade,
   PageNavigation,
+  shareUrl,
   sheetSegments,
   zoneIdOf,
 } from '@portfolio/velista/platform';
@@ -523,15 +524,20 @@ export class GroupPage {
    * The URL is absolute and is built here rather than by the card, because it is a
    * fact about where this app is deployed and not about how an invite looks. Falls
    * back to copying when the share sheet is unavailable or dismissed.
+   *
+   * **`shareUrl` and not `appPath`, because the link carries no locale.** `appPath`
+   * is where to send *this* session and therefore states this session's language;
+   * this address is read by somebody whose language this app cannot know, so the
+   * locale slot is left empty and `localeGuard` fills it with theirs on arrival. It
+   * is the same rule the shopping trip's link has always followed.
    */
   shareCode(code: string): void {
-    const origin = this._browser.location?.origin ?? '';
-    const url = `${origin}${appPath(
-      this._locale(),
+    const url = shareUrl(
+      this._browser.location?.origin ?? '',
       this._basePath,
       'join',
       code
-    )}`;
+    );
 
     const share = this._browser.window?.navigator.share;
     if (share === undefined) {

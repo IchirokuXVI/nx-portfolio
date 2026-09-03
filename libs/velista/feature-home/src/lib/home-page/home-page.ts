@@ -32,6 +32,7 @@ import {
 } from '@portfolio/velista/data-access';
 import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
+  APP_BASE_PATH,
   displayNames,
   formatGeneratedDate,
   isSameDay,
@@ -39,7 +40,11 @@ import {
   type MyZone,
   type PresenceUser,
 } from '@portfolio/velista/models';
-import { BrowserFacade, sheetSegments } from '@portfolio/velista/platform';
+import {
+  BrowserFacade,
+  shareUrl,
+  sheetSegments,
+} from '@portfolio/velista/platform';
 import {
   AppBar,
   AskedNotice,
@@ -110,6 +115,7 @@ export class HomePage {
   private readonly _browser = inject(BrowserFacade);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
+  private readonly _basePath = inject(APP_BASE_PATH);
 
   /**
    * Dismissal is session state, not persisted: `0003` requires the guest banner not to
@@ -431,14 +437,21 @@ export class HomePage {
    * not about how an invite looks. Falls back to copying when the share sheet is
    * unavailable or the person dismisses it, which is what makes the button safe to
    * offer at all (plan 0008, section 9).
+   *
+   * **`shareUrl` and not a relative navigation, because the link carries no locale.**
+   * It used to be `createUrlTree(['..', 'join', code])`, which is this session's own
+   * URL made absolute and therefore states this session's language. The person the
+   * invite is for is the one reader whose language this app cannot know, so the slot
+   * is left empty and `localeGuard` fills it with theirs on arrival. Sending a group
+   * invite in Spanish to somebody who reads English is the whole of the defect.
    */
   shareCode(code: string): void {
-    const origin = this._browser.location?.origin ?? '';
-    const url = `${origin}${this._router.serializeUrl(
-      this._router.createUrlTree(['..', 'join', code], {
-        relativeTo: this._route,
-      })
-    )}`;
+    const url = shareUrl(
+      this._browser.location?.origin ?? '',
+      this._basePath,
+      'join',
+      code
+    );
 
     const share = this._browser.window?.navigator.share;
     if (share === undefined) {

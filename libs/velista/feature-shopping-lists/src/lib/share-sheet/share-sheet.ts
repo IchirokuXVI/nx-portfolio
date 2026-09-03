@@ -20,8 +20,8 @@ import {
   generatedListIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
-import { SheetShell } from '@portfolio/velista/ui';
-import { basketPath, shareUrl } from '../basket-paths';
+import { ShareIcon, SheetShell } from '@portfolio/velista/ui';
+import { basketPath, basketShareUrl } from '../basket-paths';
 
 /** Which half of the sheet is showing: the link, or the question about revoking. */
 type Pane = 'link' | 'revoke';
@@ -57,10 +57,19 @@ type Pane = 'link' | 'revoke';
  * language is not knowable here, and `localeGuard` inserts theirs on arrival, so
  * baking the sender's in would open the app in the wrong language for exactly the
  * person it was sent to.
+ *
+ * ## Two ways to hand it over, and the second one is a phone's
+ *
+ * Copy is always there, because a URL on the clipboard goes anywhere. The share
+ * control beside it opens the operating system's own sheet, which is how a link
+ * actually reaches a group chat on the device this screen is used on, and it is
+ * drawn only where `navigator.share` exists: a button that opens nothing is worse
+ * than one that is absent. That is the treatment the invite card already gives the
+ * group's link, and this is the same act on the other kind of link.
  */
 @Component({
   selector: 'lib-share-sheet',
-  imports: [RokuTranslatorPipe, SheetShell],
+  imports: [RokuTranslatorPipe, ShareIcon, SheetShell],
   templateUrl: './share-sheet.html',
   styleUrl: './share-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -89,6 +98,16 @@ export class ShareSheet {
   /** Whether the cascade is ticked. Off by default, and it stays a second choice. */
   protected readonly cascade = signal(false);
 
+  /**
+   * Whether to offer the operating system's share sheet at all.
+   *
+   * The Web Share API is a phone's and mostly is not a desktop's. Read through
+   * `BrowserFacade` (rule D2) rather than off `navigator`, and read once: it is a
+   * fact about the browser and does not change while this sheet is open.
+   */
+  protected readonly canShare =
+    this._browser.window?.navigator.share !== undefined;
+
   /** How many people arrived through this link, for both panes' sentences. */
   protected readonly joinedCount = computed(
     () => this.link()?.participantCount ?? 0
@@ -106,7 +125,7 @@ export class ShareSheet {
     const secret = this.link()?.secret;
     return secret === undefined
       ? ''
-      : shareUrl(
+      : basketShareUrl(
           this._standaloneOrigin || this._browser.window?.location.origin || '',
           this._basePath,
           secret
@@ -133,6 +152,37 @@ export class ShareSheet {
     }
     await this._browser.window?.navigator.clipboard?.writeText(url);
     this._copied.set(true);
+  }
+
+  /**
+   * Hand the link to the operating system's share sheet.
+   *
+   * Falls back to copying when the API is missing, which is what makes the control
+   * safe to offer at all, and swallows a rejection: dismissing the system sheet
+   * rejects, and a dismissal is not a failure worth a sentence. Nothing is claimed
+   * either way, because this screen cannot know where the link went.
+   *
+   * The URL alone, as the invite card's share already does: the system sheet reads
+   * the page it is handed, and a title written here would be this app's words
+   * appearing inside somebody else's message.
+   */
+  protected async share(): Promise<void> {
+    const url = this.url();
+    if (url === '') {
+      return;
+    }
+
+    const navigator = this._browser.window?.navigator;
+    if (navigator?.share === undefined) {
+      await this.copy();
+      return;
+    }
+
+    try {
+      await navigator.share({ url });
+    } catch {
+      // Dismissed, or refused. The link is still on screen and still copyable.
+    }
   }
 
   protected askRevoke(): void {
