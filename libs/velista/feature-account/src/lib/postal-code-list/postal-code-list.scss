@@ -43,6 +43,15 @@
   border-color: var(--app-action-quiet-fg);
 }
 
+// A code the server concluded rather than one the user gave (plan 0058, section 4).
+// Dashed rather than a second colour, because the amber outline above already means
+// something else on this control and two meanings on one property is one too many. The
+// word inside the chip is what actually carries it.
+.derived {
+  border-style: dashed;
+  background: transparent;
+}
+
 .code {
   font-size: var(--app-text-sm);
   color: var(--app-text-primary);
@@ -51,6 +60,15 @@
 
 .chip-label {
   font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// "nearby", inside the chip. Smaller and quieter than the label, because it is a fact
+// about where the row came from rather than a name somebody chose.
+.chip-source {
+  font-size: var(--app-text-2xs);
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
   color: var(--app-text-muted);
 }
 
@@ -120,6 +138,30 @@
 .flag-code {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+// The expansion's own sentence, in the ordinary muted colour rather than the flag's
+// amber: codes arriving is news and not a warning.
+.added {
+  color: var(--app-text-muted);
+}
+
+// The whole row is the target, so the tap area is the option and not the box.
+.nearby {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  // On the label, because the checkbox inside it is the real control.
+  &:focus-within {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }
 
 .form {

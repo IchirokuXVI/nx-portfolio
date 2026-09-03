@@ -565,6 +565,24 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.DeleteProfileSheet
                   ),
               }),
+              sheet({
+                // Letting the device say where you shop (plan 0058, section 3).
+                //
+                // A sheet rather than a page, and the sheet exists so that what the
+                // press is about to do has somewhere to be said **before** the
+                // browser's own permission dialog appears. A control that raised that
+                // dialog straight off a page would be asking for a permission the
+                // person has not been told the purpose of.
+                //
+                // `location` and not `postal-codes/from-device`: a sheet is addressed
+                // by what it is about, and what this one is about is the device's
+                // location, which is the thing being asked for.
+                path: 'location',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-account').then(
+                    (m) => m.LocationSheet
+                  ),
+              }),
             ],
           },
           {

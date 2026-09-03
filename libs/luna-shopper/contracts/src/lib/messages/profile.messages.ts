@@ -50,6 +50,23 @@ export const PROFILE_PATTERNS = {
    */
   removePostalCode: 'profiles.removePostalCode',
   /**
+   * Turn a point a device reported into a postal code (`apps/velista/plans/0058`,
+   * section 3).
+   *
+   * The user facing half of catalog's `postalCode.nearest`, which plan 0060
+   * section 7 deliberately left without a gateway route of its own: a public
+   * lookup over the centroid table would be a geocoding service nobody asked
+   * for, so the point is only ever asked about on behalf of a signed in caller
+   * who is filling in a profile.
+   *
+   * It **writes nothing**. The coordinates arrive, they are answered, and they
+   * are not stored on the profile, in a log line or in an event, which is what
+   * makes the sentence the sheet shows before the permission prompt true. The
+   * caller adds the code it gets back through {@link PROFILE_PATTERNS.addPostalCode}
+   * with `source: DEVICE`, after a human has confirmed it.
+   */
+  resolvePostalCode: 'profiles.resolvePostalCode',
+  /**
    * Say which individual shops this profile does and does not go to (plan 0064,
    * section 5).
    *
@@ -422,6 +439,38 @@ export interface RemoveProfilePostalCodeRequest {
   userId: string;
   profileId: string;
   postalCode: string;
+}
+
+/**
+ * Where a device says it is (`apps/velista/plans/0058`, section 3.3).
+ *
+ * No `profileId`: the answer does not depend on a profile and nothing is written
+ * to one, so asking for a profile here would suggest the point had been kept
+ * against it. The `userId` is present because the route is authenticated and
+ * rate limited per caller, not because anything is stored under it.
+ */
+export interface ResolveProfilePostalCodeRequest {
+  userId: string;
+  /** ISO 3166-1 alpha-2. Defaults to {@link DEFAULT_POSTAL_CODE_COUNTRY}. */
+  country?: string;
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * The code a point resolved to, or none.
+ *
+ * **Null is an ordinary answer**, not a failure: a point further from every
+ * centroid than the configured distance gets "we don't know" rather than a
+ * confident wrong code (plan 0060, section 6). The client says so and offers
+ * typing instead.
+ *
+ * It carries no distance and no coordinates. The screen shows the code for
+ * confirmation, so a number it would not draw is a number that should not travel.
+ */
+export interface ResolvedPostalCodeView {
+  country: string;
+  postalCode: string | null;
 }
 
 /**

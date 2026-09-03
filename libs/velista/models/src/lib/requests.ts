@@ -324,27 +324,64 @@ export interface SetGlobalUsernameRequest {
  *
  * Create and edit take the same body, and the **collections are full replacements**:
  * absent leaves them alone, present makes them exactly what was sent, empty clears
- * them (backend `0049` section 6). Which is why every field here is optional and why
- * this app sends the whole postal code list to change one of them, rather than there
- * being an add and a remove route.
+ * them (backend `0049` section 6). Which is why every field here is optional.
  *
- * `generationScope`, `generationSources` and `minSavingPercent` exist on the wire and
- * are deliberately absent from this type. Plan 0046 section 9 keeps them off the page,
- * and a field that nothing renders must not be one this app can send: sending an empty
- * `generationSources` would clear a set no screen ever showed anybody.
+ * Three of the wire's fields are deliberately absent, and the absences are load
+ * bearing:
+ *
+ * - `generationScope`, `generationSources` and `minSavingPercent`, because plan 0046
+ *   section 9 keeps them off the page and a field nothing renders must not be one this
+ *   app can send: an empty `generationSources` would clear a set no screen ever showed.
+ * - `addressText`, because plan 0058 section 2 deleted the field that collected it.
+ *   The column stays in core; nothing in this app may write to it again.
+ * - **`postalCodes`, because a profile's codes are no longer all the user's**
+ *   (backend 0062). The replacement collection states the profile's *own* codes, so a
+ *   page that read a profile with derived rows and sent the list back would promote
+ *   every one of them to the user's. Codes are written one at a time through
+ *   {@link AddPostalCodeRequest} and the remove route, and this type is where that is
+ *   made impossible rather than merely avoided.
  */
 export interface WriteShoppingProfileRequest {
   readonly name?: string | null;
-  readonly addressText?: string | null;
   readonly minSavingCents?: number;
-  readonly postalCodes?: readonly {
-    readonly postalCode: string;
-    readonly label?: string | null;
-  }[];
   readonly supermarkets?: readonly {
     readonly supermarketId: string;
     readonly excluded?: boolean;
   }[];
+}
+
+/**
+ * Add one postal code, and optionally the ones near it
+ * (`POST /v1/account/shopping-profiles/:id/postal-codes`, plan 0058 sections 3 and 5).
+ *
+ * A row at a time rather than the replacement collection, for the reason on
+ * {@link WriteShoppingProfileRequest}. `source` says whose code it is and accepts only
+ * the two a person can mean: a derived code is something the server concluded, and a
+ * client that could claim one could promote its own guess to a fact about the user.
+ *
+ * `expandNearby` is the checkbox beside the add control, and its default differs by
+ * where the add came from: off for a typed code, on in the location sheet. Somebody
+ * typing one specific code has usually named the place they mean; somebody who just
+ * handed over their location has asked to be found.
+ */
+export interface AddPostalCodeRequest {
+  readonly postalCode: string;
+  readonly label?: string | null;
+  readonly source?: 'TYPED' | 'DEVICE';
+  readonly expandNearby?: boolean;
+}
+
+/**
+ * What a device's point resolved to (`POST /v1/account/postal-code-lookups`).
+ *
+ * **Null is an answer**, not a failure: the server holds centroids rather than
+ * boundaries, and a point further from every one of them than it is willing to guess
+ * across gets "we don't know" instead of a confident wrong code. The sheet says so and
+ * offers typing.
+ */
+export interface ResolvedPostalCode {
+  readonly country: string;
+  readonly postalCode: string | null;
 }
 
 /** Orders `GET /v1/zones/:id/members` accepts. Anything else is rejected by the DTO. */

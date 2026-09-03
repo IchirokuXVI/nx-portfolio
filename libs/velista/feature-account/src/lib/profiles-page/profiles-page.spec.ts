@@ -7,6 +7,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeShoppingProfileStore,
+  profilePostalCodeFor,
   provideFakeShoppingProfileStore,
   shoppingProfileFor,
   type FakeShoppingProfileOptions,
@@ -26,13 +27,7 @@ import { ProfilesPage, SCOPE_REQUIRED_PARAM } from './profiles-page';
  * that edits it. That is the direction that keeps the guarantee: the hazard is a body
  * carrying something nothing on screen decided.
  */
-const EDITED_FIELDS = new Set([
-  'name',
-  'addressText',
-  'minSavingCents',
-  'postalCodes',
-  'supermarkets',
-]);
+const EDITED_FIELDS = new Set(['name', 'minSavingCents', 'supermarkets']);
 
 const CHAINS: readonly Supermarket[] = [
   { id: 'c1', name: { en: 'Mercadona', es: 'Mercadona' } },
@@ -156,7 +151,7 @@ describe('ProfilesPage', () => {
             id: 'b',
             name: 'The office',
             isDefault: false,
-            addressText: 'Calle Mayor 12',
+            postalCodes: [profilePostalCodeFor({ postalCode: '14004' })],
           }),
         ],
       });
@@ -171,9 +166,13 @@ describe('ProfilesPage', () => {
       fixture.detectChanges();
 
       expect(store.selected()?.id).toBe('b');
-      expect(query<HTMLInputElement>(fixture, '#profiles-address')?.value).toBe(
-        'Calle Mayor 12'
-      );
+      // The chips below follow the selector: the address field that used to prove this
+      // is gone (plan 0058, section 2), and the codes are what the screen is about.
+      expect(
+        queryAll<HTMLElement>(fixture, '.code').map((chip) =>
+          chip.textContent?.trim()
+        )
+      ).toEqual(['14004']);
     });
 
     it('offers a trash once there is more than one profile', async () => {
@@ -318,31 +317,213 @@ describe('ProfilesPage', () => {
   });
 
   describe('postal codes', () => {
-    it('adds one, sending the whole list because the wire replaces it', async () => {
-      const { fixture, store } = await render();
-
-      query<HTMLButtonElement>(fixture, '.add')?.click();
+    /** Open the add form and submit one code, optionally ticking the nearby box. */
+    async function addCode(
+      fixture: ComponentFixture<ProfilesPage>,
+      postalCode: string,
+      alsoNearby = false
+    ): Promise<void> {
+      queryAll<HTMLButtonElement>(fixture, '.add')[0].click();
       fixture.detectChanges();
 
       const field = query<HTMLInputElement>(fixture, '#profiles-postal-code');
       if (field === null) {
         throw new Error('no postal code field');
       }
-      field.value = '14013';
+      field.value = postalCode;
       field.dispatchEvent(new Event('input'));
       fixture.detectChanges();
+
+      if (alsoNearby) {
+        const box = query<HTMLInputElement>(fixture, '.nearby input');
+        if (box === null) {
+          throw new Error('no nearby checkbox');
+        }
+        box.checked = true;
+        box.dispatchEvent(new Event('change'));
+        fixture.detectChanges();
+      }
 
       query<HTMLFormElement>(fixture, '.form')?.dispatchEvent(
         new Event('submit')
       );
       await Promise.resolve();
+      fixture.detectChanges();
+    }
 
-      expect(store.calls.find((call) => call.method === 'save')).toEqual(
-        expect.objectContaining({
-          field: 'postalCodes',
-          body: { postalCodes: [{ postalCode: '14013', label: null }] },
-        })
+    it('adds one row rather than sending the whole list', async () => {
+      // The replacement collection is gone: a profile's codes are no longer all the
+      // user's, and echoing the list back would promote every derived row to theirs.
+      const { fixture, store } = await render();
+
+      await addCode(fixture, '14013');
+
+      expect(
+        store.calls.find((call) => call.method === 'addPostalCode')
+      ).toEqual({
+        method: 'addPostalCode',
+        profileId: 'sp1',
+        body: { postalCode: '14013', label: null, expandNearby: false },
+      });
+    });
+
+    it('leaves the nearby box off for a typed code', async () => {
+      // Somebody typing one specific code has usually named the place they mean
+      // (plan 0058, section 5). The sheet's copy of this control starts on instead.
+      const { fixture } = await render();
+
+      queryAll<HTMLButtonElement>(fixture, '.add')[0].click();
+      fixture.detectChanges();
+
+      expect(query<HTMLInputElement>(fixture, '.nearby input')?.checked).toBe(
+        false
       );
+    });
+
+    it('sends the nearby request when the box is ticked', async () => {
+      const { fixture, store } = await render();
+
+      await addCode(fixture, '14001', true);
+
+      expect(
+        store.calls.find((call) => call.method === 'addPostalCode')
+      ).toMatchObject({ body: { expandNearby: true } });
+    });
+
+    it('says how many nearby codes arrived rather than letting the list grow silently', async () => {
+      const { fixture } = await render({ nearby: { '14001': ['14002'] } });
+
+      await addCode(fixture, '14001', true);
+
+      expect(query(fixture, '.flags')?.textContent).toContain(
+        'profiles.postal.nearbyAdded'
+      );
+    });
+
+    it('says nothing when an add brought nothing with it', async () => {
+      const { fixture } = await render();
+
+      await addCode(fixture, '14001');
+
+      expect(query(fixture, '.flags')?.textContent).not.toContain(
+        'profiles.postal.nearbyAdded'
+      );
+    });
+
+    it('removes by the code, because that is what the route takes', async () => {
+      const { fixture, store } = await render({
+        profiles: [
+          shoppingProfileFor({
+            id: 'a',
+            postalCodes: [profilePostalCodeFor({ postalCode: '14013' })],
+          }),
+        ],
+      });
+
+      query<HTMLButtonElement>(fixture, '.remove')?.click();
+      await Promise.resolve();
+
+      expect(
+        store.calls.find((call) => call.method === 'removePostalCode')
+      ).toEqual({
+        method: 'removePostalCode',
+        profileId: 'a',
+        postalCode: '14013',
+      });
+    });
+
+    it('marks a derived code as ours and removes it like any other', async () => {
+      // A derived row carries the same remove control at the same weight: two chips
+      // that look alike must not behave differently (plan 0058, section 7).
+      const { fixture, store } = await render({
+        profiles: [
+          shoppingProfileFor({
+            id: 'a',
+            postalCodes: [
+              profilePostalCodeFor({ id: 'pc1', postalCode: '14002' }),
+              profilePostalCodeFor({
+                id: 'pc2',
+                postalCode: '14003',
+                position: 1,
+                source: 'NEARBY',
+              }),
+            ],
+          }),
+        ],
+      });
+
+      const chips = queryAll<HTMLElement>(fixture, '.chip');
+      expect(chips[0].classList.contains('derived')).toBe(false);
+      expect(chips[1].classList.contains('derived')).toBe(true);
+      expect(chips[1].textContent).toContain('profiles.postal.nearbySource');
+
+      queryAll<HTMLButtonElement>(fixture, '.remove')[1].click();
+      await Promise.resolve();
+
+      expect(
+        store.calls.find((call) => call.method === 'removePostalCode')
+      ).toMatchObject({ postalCode: '14003' });
+    });
+
+    it('shows the code itself when a row has no label', async () => {
+      const { fixture } = await render({
+        profiles: [
+          shoppingProfileFor({
+            id: 'a',
+            postalCodes: [
+              profilePostalCodeFor({ postalCode: '14013', label: null }),
+            ],
+          }),
+        ],
+      });
+
+      // One chip, and the four digits once: a label falling back to the code must not
+      // draw the same string twice.
+      expect(query(fixture, '.chip')?.textContent).toContain('14013');
+      expect(query(fixture, '.chip-label')).toBeNull();
+    });
+
+    it('opens the location sheet rather than asking the device from here', async () => {
+      // The permission prompt is raised inside the sheet, after what it is for has
+      // been said (plan 0058, section 3.1). Nothing on this page touches geolocation,
+      // which is why the reader is never resolved here at all.
+      const { fixture, router } = await render();
+
+      const buttons = queryAll<HTMLButtonElement>(fixture, '.add');
+      expect(buttons[1].textContent).toContain('profiles.location.use');
+
+      buttons[1].click();
+
+      expect(router.navigate).toHaveBeenCalledWith(
+        ['sheet', 'location'],
+        expect.anything()
+      );
+    });
+
+    it('counts only the user’s own codes against the cap', async () => {
+      // Derived rows do not occupy it, so a profile carrying five neighbours still
+      // offers the add control to somebody who has typed one code.
+      const { fixture } = await render({
+        profiles: [
+          shoppingProfileFor({
+            id: 'a',
+            postalCodes: [
+              profilePostalCodeFor({ id: 'pc1', postalCode: '14001' }),
+              ...['14002', '14003', '14004', '14005', '14006'].map(
+                (postalCode, at) =>
+                  profilePostalCodeFor({
+                    id: `pc-${postalCode}`,
+                    postalCode,
+                    position: at + 1,
+                    source: 'NEARBY',
+                  })
+              ),
+            ],
+          }),
+        ],
+      });
+
+      expect(queryAll(fixture, '.add').length).toBeGreaterThan(0);
     });
 
     it('keeps an uncovered code and explains it in words', async () => {
@@ -351,7 +532,7 @@ describe('ProfilesPage', () => {
           shoppingProfileFor({
             id: 'a',
             postalCodes: [
-              { id: 'pc1', postalCode: '05631', label: null, position: 0 },
+              profilePostalCodeFor({ id: 'pc1', postalCode: '05631' }),
             ],
           }),
         ],
@@ -370,7 +551,7 @@ describe('ProfilesPage', () => {
           shoppingProfileFor({
             id: 'a',
             postalCodes: [
-              { id: 'pc1', postalCode: '05631', label: null, position: 0 },
+              profilePostalCodeFor({ id: 'pc1', postalCode: '05631' }),
             ],
           }),
         ],
@@ -546,17 +727,13 @@ describe('ProfilesPage', () => {
       expect(sent).toEqual([['name']]);
     });
 
-    it('sends only the address when the address is edited', async () => {
-      const sent = await keysSentBy((fixture) => {
-        const field = query<HTMLInputElement>(fixture, '#profiles-address');
-        if (field === null) {
-          throw new Error('no address field');
-        }
-        field.value = '12 Calle Mayor';
-        field.dispatchEvent(new Event('blur'));
-      });
+    it('has no address field at all', async () => {
+      // Plan 0058, section 2: the field was never geocoded and nothing read it, and a
+      // field that asks somebody where they live and then ignores the answer invites
+      // them to believe the app knows. The core column stays; this app cannot reach it.
+      const { fixture } = await render();
 
-      expect(sent).toEqual([['addressText']]);
+      expect(query(fixture, '#profiles-address')).toBeNull();
     });
 
     it('sends only the threshold when the threshold is edited', async () => {
@@ -573,13 +750,14 @@ describe('ProfilesPage', () => {
     });
 
     /**
-     * The postal code list is one of the two collections this page really does edit, so
-     * sending it whole is correct. What must not ride along is the other collection, or
-     * anything the page does not render at all.
+     * The postal codes leave through their own route now (plan 0058), so what this
+     * asserts is that adding one makes **no** `save` at all: a write body that could
+     * carry the collection is a write body that can one day carry the server's own
+     * derived rows back.
      */
-    it('sends only the postal codes when one is added', async () => {
+    it('makes no profile save at all when a postal code is added', async () => {
       const sent = await keysSentBy(async (fixture) => {
-        query<HTMLButtonElement>(fixture, '.add')?.click();
+        queryAll<HTMLButtonElement>(fixture, '.add')[0].click();
         fixture.detectChanges();
 
         const field = query<HTMLInputElement>(fixture, '#profiles-postal-code');
@@ -595,7 +773,7 @@ describe('ProfilesPage', () => {
         );
       });
 
-      expect(sent).toEqual([['postalCodes']]);
+      expect(sent).toEqual([]);
     });
 
     it('sends only the chains when one is excluded', async () => {
@@ -619,11 +797,6 @@ describe('ProfilesPage', () => {
       if (name !== null) {
         name.value = 'Elsewhere';
         name.dispatchEvent(new Event('blur'));
-      }
-      const address = query<HTMLInputElement>(fixture, '#profiles-address');
-      if (address !== null) {
-        address.value = '12 Calle Mayor';
-        address.dispatchEvent(new Event('blur'));
       }
       const threshold = query<HTMLInputElement>(fixture, '#profiles-threshold');
       if (threshold !== null) {

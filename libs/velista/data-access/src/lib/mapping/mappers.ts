@@ -10,6 +10,8 @@ import {
   LIST_PERMISSIONS,
   MEMBERSHIP_STATUS_FALLBACK,
   MEMBERSHIP_STATUSES,
+  POSTAL_CODE_SOURCE_FALLBACK,
+  POSTAL_CODE_SOURCES,
   SETTLEMENT_OUTCOME_FALLBACK,
   SETTLEMENT_OUTCOMES,
   UNIT_OF_MEASURE_FALLBACK,
@@ -51,6 +53,7 @@ import {
   type ProductGroup,
   type ProfileGenerationScope,
   type ProfilePostalCode,
+  type ResolvedPostalCode,
   type SessionTokens,
   type ShoppingList,
   type ShoppingListSummary,
@@ -942,6 +945,26 @@ export function toSupermarket(raw: unknown): Supermarket | null {
   return id === null ? null : { id, name: toLocalizedName(raw['name']) };
 }
 
+/**
+ * From `ResolvedPostalCodeView` (`POST /v1/account/postal-code-lookups`).
+ *
+ * A **null `postalCode` is renderable**, unlike a missing id elsewhere in this file:
+ * "we could not place you" is what the sheet draws when the point is too far from
+ * anything the server ships, and dropping the record would turn an answer into a
+ * failure. What is not renderable is a body with no country at all, which is a
+ * response this app cannot reason about.
+ */
+export function toResolvedPostalCode(raw: unknown): ResolvedPostalCode | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const country = str(raw['country']);
+  return country === null
+    ? null
+    : { country, postalCode: nullableStr(raw['postalCode']) };
+}
+
 /** From `ProfilePostalCodeView`. */
 function toProfilePostalCode(raw: unknown): ProfilePostalCode | null {
   if (!isRecord(raw)) {
@@ -952,8 +975,8 @@ function toProfilePostalCode(raw: unknown): ProfilePostalCode | null {
   const postalCode = str(raw['postalCode']);
 
   // The code itself is required and is not defaulted to the empty string: a chip with
-  // no code is a chip nobody can act on, and the page sends the whole list back on the
-  // next edit, so an invented empty code would become one the server refuses.
+  // no code is a chip nobody can act on, and every write names a code, so an invented
+  // empty one would become a request the server refuses.
   return id === null || postalCode === null
     ? null
     : {
@@ -961,6 +984,13 @@ function toProfilePostalCode(raw: unknown): ProfilePostalCode | null {
         postalCode,
         label: nullableStr(raw['label']),
         position: numOr(raw['position'], 0),
+        // Whose code this is (plan 0058, section 4). An unrecognised source reads as
+        // the user's own, for the reason on `POSTAL_CODE_SOURCE_FALLBACK`.
+        source: oneOf(
+          raw['source'],
+          POSTAL_CODE_SOURCES,
+          POSTAL_CODE_SOURCE_FALLBACK
+        ),
       };
 }
 
@@ -1000,7 +1030,6 @@ export function toShoppingProfile(raw: unknown): ShoppingProfile | null {
     name: nullableStr(raw['name']),
     isDefault: raw['isDefault'] === true,
     position: numOr(raw['position'], 0),
-    addressText: nullableStr(raw['addressText']),
     minSavingCents: numOr(raw['minSavingCents'], 0),
     postalCodes: mapArray(raw['postalCodes'], toProfilePostalCode),
     // `supermarkets` on the wire, `chains` here, because the preference names the

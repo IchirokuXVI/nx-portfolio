@@ -302,12 +302,18 @@ function build(
         })
       )
     ),
+    // The point lookup (`apps/velista/plans/0058`). Null beyond the configured
+    // distance, which is the server saying it does not know rather than failing.
+    nearest: jest.fn(async (_country: string, latitude: number) =>
+      latitude > 60 ? null : '14001'
+    ),
     announceAdded: jest.fn(),
   } as unknown as PostalCodeClient;
 
   const config = {
     getOrThrow: () => ({
       nearbyRadius: { defaultMetres: 2000, byCountry: {} },
+      locationMaxDistanceMetres: 10000,
     }),
   } as unknown as ConfigService;
 
@@ -1177,6 +1183,86 @@ describe('ProfileService', () => {
         [USER],
         expect.anything()
       );
+    });
+  });
+
+  /**
+   * Turning a device's point into a postal code (`apps/velista/plans/0058`,
+   * section 3).
+   *
+   * The one profile message that writes nothing, which is what most of these
+   * assert: nothing is stored, nothing is emitted, and the answer is a code the
+   * caller is about to show somebody for confirmation.
+   */
+  describe('resolvePostalCode', () => {
+    const profile = () => [{ id: 'p1', isDefault: true }];
+
+    it('answers the code catalog placed the point in', async () => {
+      const { service } = build(profile());
+
+      await expect(
+        service.resolvePostalCode({
+          userId: USER,
+          latitude: 37.88,
+          longitude: -4.78,
+        })
+      ).resolves.toEqual({ country: 'es', postalCode: '14001' });
+    });
+
+    it('answers null rather than a confident wrong code', async () => {
+      // Beyond the configured distance the honest answer is that we do not know:
+      // the table holds centroids and not boundaries.
+      const { service } = build(profile());
+
+      await expect(
+        service.resolvePostalCode({
+          userId: USER,
+          latitude: 64.13,
+          longitude: -21.9,
+        })
+      ).resolves.toEqual({ country: 'es', postalCode: null });
+    });
+
+    it('asks against the configured distance and the default country', async () => {
+      const { service, geography } = build(profile());
+
+      await service.resolvePostalCode({
+        userId: USER,
+        latitude: 37.88,
+        longitude: -4.78,
+      });
+
+      expect(geography.nearest).toHaveBeenCalledWith('es', 37.88, -4.78, 10000);
+    });
+
+    it('writes nothing and tells nobody', async () => {
+      // Section 3.3: the coordinates are answered and forgotten. No row moves, no
+      // event goes out, and no profile is touched.
+      const { service, events, readCodes, read } = build(profile());
+      const before = JSON.stringify(read());
+
+      await service.resolvePostalCode({
+        userId: USER,
+        latitude: 37.88,
+        longitude: -4.78,
+      });
+
+      expect(readCodes()).toEqual([]);
+      expect(events.emitToUsers).not.toHaveBeenCalled();
+      expect(JSON.stringify(read())).toBe(before);
+    });
+
+    it('refuses a country that is not two letters', async () => {
+      const { service } = build(profile());
+
+      await expect(
+        service.resolvePostalCode({
+          userId: USER,
+          country: 'esp',
+          latitude: 37.88,
+          longitude: -4.78,
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
     });
   });
 });

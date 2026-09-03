@@ -5,6 +5,7 @@ export * from './lib/chain-preference-list/chain-preference-list';
 export * from './lib/delete-account-sheet/delete-account-sheet';
 export * from './lib/delete-profile-sheet/delete-profile-sheet';
 export * from './lib/franchise-buttons/franchise-buttons';
+export * from './lib/location-sheet/location-sheet';
 export * from './lib/postal-code-list/postal-code-list';
 export * from './lib/profile-selector/profile-selector';
 export * from './lib/profiles-page/profiles-page';

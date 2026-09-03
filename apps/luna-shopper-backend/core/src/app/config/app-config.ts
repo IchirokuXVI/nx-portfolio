@@ -6,6 +6,7 @@ import {
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
 import { parseDurationMs } from './duration';
+import { DEFAULT_LOCATION_MAX_DISTANCE_METRES } from './location-max-distance';
 import {
   DEFAULT_NEARBY_RADIUS_METRES,
   parseRadiusByCountry,
@@ -112,6 +113,16 @@ export const coreValidationSchema = Joi.object({
     .default(DEFAULT_NEARBY_RADIUS_METRES),
   PROFILE_NEARBY_RADIUS_BY_COUNTRY: Joi.string().allow('').default(''),
 
+  /**
+   * How far a device may be from a centroid and still be placed in that code
+   * (`apps/velista/plans/0058`, section 3). Beyond it the answer is "we don't
+   * know" and the screen offers typing instead.
+   */
+  PROFILE_LOCATION_MAX_DISTANCE_METRES: Joi.number()
+    .integer()
+    .min(0)
+    .default(DEFAULT_LOCATION_MAX_DISTANCE_METRES),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -155,6 +166,8 @@ export interface CoreConfig {
   };
   /** The radius a postal code brings its neighbours from (plan 0062). */
   nearbyRadius: NearbyRadiusConfig;
+  /** How far a device may be from the code it is placed in (velista plan 0058). */
+  locationMaxDistanceMetres: number;
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -216,6 +229,10 @@ export const coreConfiguration = registerAs(
         process.env.PROFILE_NEARBY_RADIUS_BY_COUNTRY
       ),
     },
+    locationMaxDistanceMetres: Number(
+      process.env.PROFILE_LOCATION_MAX_DISTANCE_METRES ??
+        DEFAULT_LOCATION_MAX_DISTANCE_METRES
+    ),
     logLevel: process.env.LOG_LEVEL as CoreConfig['logLevel'],
   })
 );

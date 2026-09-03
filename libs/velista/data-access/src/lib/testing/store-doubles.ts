@@ -1,5 +1,6 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  AddPostalCodeRequest,
   CatalogItem,
   Comment,
   GeneratedListSummary,
@@ -13,6 +14,8 @@ import type {
   PresenceEditor,
   PresenceUser,
   ProfileLoad,
+  ProfilePostalCode,
+  ResolvedPostalCode,
   SessionTokens,
   SettlementOutcome,
   ShoppingListsLoad,
@@ -1490,10 +1493,29 @@ export function shoppingProfileFor(
     name: null,
     isDefault: true,
     position: 0,
-    addressText: null,
     minSavingCents: 0,
     postalCodes: [],
     chains: [],
+    ...overrides,
+  };
+}
+
+/**
+ * A `ProfilePostalCode`, defaulting to one the user typed (plan 0058, section 4).
+ *
+ * `TYPED` is the default because it is the ordinary row: a spec about a derived chip
+ * says `source: 'NEARBY'` and thereby says what it is about, and every other spec gets
+ * a chip with no story attached.
+ */
+export function profilePostalCodeFor(
+  overrides: Partial<ProfilePostalCode> = {}
+): ProfilePostalCode {
+  return {
+    id: 'pc1',
+    postalCode: '14001',
+    label: null,
+    position: 0,
+    source: 'TYPED',
     ...overrides,
   };
 }
@@ -1511,6 +1533,21 @@ export interface FakeShoppingProfileOptions {
   readonly createFails?: boolean;
   /** Whether `remove` fails rather than deleting. */
   readonly removeFails?: boolean;
+  /**
+   * The codes an expansion finds, by the code that brings them (plan 0058, section 5).
+   *
+   * Stated by the spec rather than invented here, because how many neighbours a code
+   * has is a fact about geography that only the server holds: a fake that guessed would
+   * be asserting its own guess.
+   */
+  readonly nearby?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * What a device point resolves to, or null for "we don't know".
+   *
+   * Undefined means the lookup **throws**, which is the third case and a different one:
+   * a server that could not be asked is not a server saying it cannot place you.
+   */
+  readonly resolvesTo?: string | null;
 }
 
 /** One recorded call to a faked `ShoppingProfileStore`. */
@@ -1523,6 +1560,26 @@ export type ShoppingProfileCall =
       readonly profileId: string;
       readonly field: ProfileField;
       readonly body: WriteShoppingProfileRequest;
+    }
+  | {
+      readonly method: 'addPostalCode';
+      readonly profileId: string;
+      readonly body: AddPostalCodeRequest;
+    }
+  | {
+      readonly method: 'removePostalCode';
+      readonly profileId: string;
+      readonly postalCode: string;
+    }
+  | {
+      /**
+       * The point, recorded so a spec can assert it appears **here and nowhere else**
+       * (plan 0058, section 3.3). It is on the call and not on any profile this fake
+       * holds, which is the shape the acceptance criterion is about.
+       */
+      readonly method: 'resolvePostalCode';
+      readonly latitude: number;
+      readonly longitude: number;
     }
   | { readonly method: 'makeDefault'; readonly profileId: string }
   | { readonly method: 'remove'; readonly profileId: string }
@@ -1555,6 +1612,7 @@ export function fakeShoppingProfileStore(
   const saves = signal<ReadonlyMap<string, FieldSaveState>>(new Map());
   const failing = new Set<ProfileField>(options.failing ?? []);
   const unserved = new Set(options.unserved ?? []);
+  const nearbyAdded = signal(0);
   let minted = 0;
 
   const selected = computed<ShoppingProfile | null>(() => {
@@ -1631,6 +1689,10 @@ export function fakeShoppingProfileStore(
 
     isUnserved: (postalCode: string): boolean => unserved.has(postalCode),
 
+    nearbyAdded: nearbyAdded.asReadonly(),
+
+    acknowledgeNearby: () => nearbyAdded.set(0),
+
     successorOf,
 
     load: async () => {
@@ -1663,6 +1725,118 @@ export function fakeShoppingProfileStore(
     },
 
     save,
+
+    /**
+     * Add one code, and the neighbours the spec said it brings (plan 0058, section 5).
+     *
+     * It reports `nearbyAdded` from those neighbours rather than from a count it was
+     * handed, so a screen that says "we added three" is saying it about three chips a
+     * spec can also see in the list.
+     */
+    addPostalCode: async (
+      profileId: string,
+      body: AddPostalCodeRequest
+    ): Promise<'saved' | 'failed'> => {
+      calls.push({ method: 'addPostalCode', profileId, body });
+
+      if (failing.has('postalCodes')) {
+        setSave(`${profileId}:postalCodes`, 'failed');
+        return 'failed';
+      }
+
+      const profile = profiles().find((held) => held.id === profileId);
+      if (profile === undefined) {
+        return 'failed';
+      }
+
+      const kept = profile.postalCodes.filter(
+        (code) => code.postalCode !== body.postalCode
+      );
+      const added =
+        body.expandNearby === true
+          ? (options.nearby?.[body.postalCode] ?? []).filter(
+              (code) =>
+                code !== body.postalCode &&
+                !kept.some((existing) => existing.postalCode === code)
+            )
+          : [];
+
+      const next: ProfilePostalCode[] = [
+        ...kept,
+        profilePostalCodeFor({
+          id: `pc-${body.postalCode}`,
+          postalCode: body.postalCode,
+          label: body.label ?? null,
+          position: kept.length,
+          source: body.source ?? 'TYPED',
+        }),
+        ...added.map((code, at) =>
+          profilePostalCodeFor({
+            id: `pc-${code}`,
+            postalCode: code,
+            position: kept.length + 1 + at,
+            source: 'NEARBY',
+          })
+        ),
+      ];
+
+      profiles.update((held) =>
+        held.map((entry) =>
+          entry.id === profileId ? { ...entry, postalCodes: next } : entry
+        )
+      );
+      setSave(`${profileId}:postalCodes`, 'idle');
+      nearbyAdded.set(added.length);
+
+      return 'saved';
+    },
+
+    /** Remove one code by the code itself, whoever it belongs to. */
+    removePostalCode: async (
+      profileId: string,
+      postalCode: string
+    ): Promise<'saved' | 'failed'> => {
+      calls.push({ method: 'removePostalCode', profileId, postalCode });
+
+      if (failing.has('postalCodes')) {
+        setSave(`${profileId}:postalCodes`, 'failed');
+        return 'failed';
+      }
+
+      profiles.update((held) =>
+        held.map((profile) =>
+          profile.id === profileId
+            ? {
+                ...profile,
+                postalCodes: profile.postalCodes.filter(
+                  (code) => code.postalCode !== postalCode
+                ),
+              }
+            : profile
+        )
+      );
+      setSave(`${profileId}:postalCodes`, 'idle');
+      return 'saved';
+    },
+
+    /**
+     * Answer a point with a code, with null, or by throwing.
+     *
+     * The three are the three the sheet has to draw, and they are chosen by the spec
+     * rather than derived from the coordinates: this fake models no geography.
+     */
+    resolvePostalCode: async (
+      latitude: number,
+      longitude: number
+    ): Promise<ResolvedPostalCode> => {
+      calls.push({ method: 'resolvePostalCode', latitude, longitude });
+
+      if (options.resolvesTo === undefined) {
+        throw new Error('the lookup could not be made');
+      }
+
+      return { country: 'es', postalCode: options.resolvesTo };
+    },
 
     /**
      * The real store's chain write, through this fake's own `save`.

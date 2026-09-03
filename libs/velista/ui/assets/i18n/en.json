@@ -833,11 +833,6 @@
       "label": "Name",
       "hint": "Until you name it, it shows as {{name}}"
     },
-    "address": {
-      "label": "Address",
-      "optional": "Optional",
-      "placeholder": "Street and number"
-    },
     "postal": {
       "label": "Postal codes",
       "add": "Add postal code",
@@ -846,7 +841,22 @@
       "submit": "Add",
       "remove": "Remove {{code}}",
       "full": "You can keep up to {{count}} postal codes",
-      "uncovered": "No supermarket we know reaches this code yet"
+      "uncovered": "No supermarket we know reaches this code yet",
+      "nearby": "Also add nearby codes",
+      "nearbySource": "nearby",
+      "nearbyAdded": "We also added {{count}} nearby codes"
+    },
+    "location": {
+      "title": "Use my location",
+      "explain": "Your device tells us where it is, we turn that into a postal code, and we keep the postal code. The position itself is not stored.",
+      "use": "Use my location",
+      "resolved": "We think you are in",
+      "confirm": "Add this code",
+      "refused": "This browser is not allowed to share your location, and only you can change that in its settings. You can type your postal code instead.",
+      "unplaceable": "We could not work out which postal code that is. You can type it instead.",
+      "unavailable": "Your device could not say where it is. You can try again, or type your postal code.",
+      "failed": "We could not look that up. Please try again.",
+      "typeInstead": "Type it instead"
     },
     "chains": {
       "label": "Supermarkets",

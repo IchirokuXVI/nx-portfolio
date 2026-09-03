@@ -17,6 +17,8 @@ import {
   type ProfileScopeSelector,
   type ProfileSupermarketPreferenceInput,
   type RemoveProfilePostalCodeRequest,
+  type ResolvedPostalCodeView,
+  type ResolveProfilePostalCodeRequest,
   type ResolveProfileScopesRequest,
   type SetProfileLocationPreferencesRequest,
   type ShoppingProfileIdRequest,
@@ -95,6 +97,9 @@ export class ProfileService {
   /** How far a code reaches for its neighbours, per country (plan 0062, section 4). */
   private readonly nearbyRadius: CoreConfig['nearbyRadius'];
 
+  /** How far a device may be from the code it is placed in (velista plan 0058). */
+  private readonly locationMaxDistanceMetres: number;
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ShoppingProfile)
@@ -111,7 +116,9 @@ export class ProfileService {
     private readonly geography: PostalCodeClient,
     config: ConfigService
   ) {
-    this.nearbyRadius = config.getOrThrow<CoreConfig>('core').nearbyRadius;
+    const core = config.getOrThrow<CoreConfig>('core');
+    this.nearbyRadius = core.nearbyRadius;
+    this.locationMaxDistanceMetres = core.locationMaxDistanceMetres;
   }
 
   /**
@@ -340,6 +347,39 @@ export class ProfileService {
     this.announceCodes(added);
     await this.announce(req.userId);
     return this.viewFor(profile);
+  }
+
+  /**
+   * Which postal code a device's point is in (`apps/velista/plans/0058`,
+   * section 3).
+   *
+   * **The one profile message that writes nothing.** It touches no row, names no
+   * profile and emits no event: the coordinates arrive, catalog answers a code
+   * from the table it ships, and the answer goes back. Nothing keeps the point,
+   * which is the whole of section 3.3 and the reason the screen may promise
+   * before the browser's prompt that we keep the code and not the position.
+   *
+   * It is authenticated all the same, and that is not a contradiction. Signing in
+   * is what stops this being a public geocoder (plan 0060, section 7); it is not a
+   * claim that the caller's account is involved in the answer.
+   *
+   * **Null is an answer.** A point further from every centroid than the configured
+   * distance is "we don't know" rather than the nearest code anyway, because the
+   * table holds centroids and not boundaries and the caller is about to show what
+   * comes back to a person as a fact about where they live.
+   */
+  async resolvePostalCode(
+    req: ResolveProfilePostalCodeRequest
+  ): Promise<ResolvedPostalCodeView> {
+    const country = this.checkCountry(req.country);
+    const postalCode = await this.geography.nearest(
+      country,
+      req.latitude,
+      req.longitude,
+      this.locationMaxDistanceMetres
+    );
+
+    return { country, postalCode };
   }
 
   /**

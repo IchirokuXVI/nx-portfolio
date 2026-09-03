@@ -833,11 +833,6 @@
       "label": "Nombre",
       "hint": "Hasta que le pongas nombre, aparece como {{name}}"
     },
-    "address": {
-      "label": "Dirección",
-      "optional": "Opcional",
-      "placeholder": "Calle y número"
-    },
     "postal": {
       "label": "Códigos postales",
       "add": "Añadir código postal",
@@ -846,7 +841,22 @@
       "submit": "Añadir",
       "remove": "Quitar {{code}}",
       "full": "Puedes guardar hasta {{count}} códigos postales",
-      "uncovered": "Ningún supermercado que conozcamos llega aún a este código"
+      "uncovered": "Ningún supermercado que conozcamos llega aún a este código",
+      "nearby": "Añadir también los códigos cercanos",
+      "nearbySource": "cercano",
+      "nearbyAdded": "También añadimos {{count}} códigos cercanos"
+    },
+    "location": {
+      "title": "Usar mi ubicación",
+      "explain": "Tu dispositivo nos dice dónde está, lo convertimos en un código postal y guardamos el código postal. La posición en sí no se guarda.",
+      "use": "Usar mi ubicación",
+      "resolved": "Creemos que estás en",
+      "confirm": "Añadir este código",
+      "refused": "Este navegador no tiene permiso para compartir tu ubicación, y solo tú puedes cambiarlo en sus ajustes. Puedes escribir tu código postal.",
+      "unplaceable": "No hemos podido averiguar qué código postal es. Puedes escribirlo.",
+      "unavailable": "Tu dispositivo no ha podido decir dónde está. Puedes intentarlo otra vez o escribir tu código postal.",
+      "failed": "No hemos podido consultarlo. Inténtalo otra vez.",
+      "typeInstead": "Escribirlo"
     },
     "chains": {
       "label": "Supermercados",

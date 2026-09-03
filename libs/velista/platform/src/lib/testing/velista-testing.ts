@@ -7,6 +7,12 @@ import {
   type AppBrand,
 } from '@portfolio/velista/models';
 import { BrowserFacade } from '../browser-facade';
+import {
+  GEOLOCATION_READER,
+  type GeolocationReaderI,
+  type LocationOutcome,
+  type LocationPermission,
+} from '../geolocation-reader';
 import { VELISTA_PLATFORM_PROVIDERS } from '../platform-providers';
 
 /**
@@ -126,6 +132,56 @@ export function fakeBrowserFacade(
     removeStorage: (key: string) => void storage.delete(key),
     ...overrides,
   } as unknown as BrowserFacade;
+}
+
+/**
+ * A `GeolocationReaderI` double, with the calls it was given (plan 0058, section 3.5).
+ *
+ * `reads` is what proves the acceptance criterion that **the prompt never fires on
+ * load**: a spec renders the page and asserts the count is still zero. That is a fact
+ * about a call rather than about a browser dialog, which is the only form in which it
+ * can be asserted at all.
+ *
+ * The defaults are the happy path, so a spec about denial, about a device that cannot
+ * place itself, or about a timeout says so and says nothing else.
+ */
+export function fakeGeolocationReader(
+  options: {
+    readonly permission?: LocationPermission;
+    readonly outcome?: LocationOutcome;
+  } = {}
+) {
+  const state = {
+    /** How many times {@link GeolocationReaderI.read} was called. */
+    reads: 0,
+    /** How many times the permission was asked about, which prompts nobody. */
+    queries: 0,
+  };
+
+  const reader: GeolocationReaderI = {
+    permission: async () => {
+      state.queries++;
+      return options.permission ?? 'prompt';
+    },
+    read: async () => {
+      state.reads++;
+      return (
+        options.outcome ?? {
+          state: 'located',
+          point: { latitude: 37.88, longitude: -4.78 },
+        }
+      );
+    },
+  };
+
+  return { reader, state };
+}
+
+/** {@link fakeGeolocationReader} as a provider, bound to its token. */
+export function provideFakeGeolocationReader(
+  fake = fakeGeolocationReader()
+): Provider {
+  return { provide: GEOLOCATION_READER, useValue: fake.reader };
 }
 
 /** {@link fakeBrowserFacade} as a provider, which is how specs usually want it. */

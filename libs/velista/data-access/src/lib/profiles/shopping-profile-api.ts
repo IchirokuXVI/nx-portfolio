@@ -1,8 +1,10 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  AddPostalCodeRequest,
   CatalogScope,
   ProfileGenerationScope,
+  ResolvedPostalCode,
   ShoppingProfile,
   Supermarket,
   WriteShoppingProfileRequest,
@@ -14,6 +16,7 @@ import {
   toCatalogScope,
   toPage,
   toProfileGenerationScope,
+  toResolvedPostalCode,
   toShoppingProfile,
   toSupermarket,
 } from '../mapping/mappers';
@@ -129,6 +132,68 @@ export class ShoppingProfileApi implements ShoppingProfileServiceI {
     return required(toShoppingProfile(body), 'profiles.update');
   }
 
+  /**
+   * One code, and optionally its neighbours (plan 0058, section 5).
+   *
+   * The answer is the whole profile rather than the row, because one add can write
+   * several: the code and, with `expandNearby`, whatever the server found near it.
+   */
+  async addPostalCode(
+    profileId: string,
+    request: AddPostalCodeRequest
+  ): Promise<ShoppingProfile> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(this._postalCodes(profileId), request, {
+        context: operation('profiles.addPostalCode'),
+      })
+    );
+
+    return required(toShoppingProfile(body), 'profiles.addPostalCode');
+  }
+
+  /**
+   * Remove one code by the code itself.
+   *
+   * Encoded like every other path segment this class builds. A postal code is digits
+   * today and the field is free text on the wire, so the escaping is not decoration.
+   */
+  async removePostalCode(
+    profileId: string,
+    postalCode: string
+  ): Promise<ShoppingProfile> {
+    const body = await firstValueFrom(
+      this._http.delete<unknown>(
+        `${this._postalCodes(profileId)}/${encodeURIComponent(postalCode)}`,
+        { context: operation('profiles.removePostalCode') }
+      )
+    );
+
+    return required(toShoppingProfile(body), 'profiles.removePostalCode');
+  }
+
+  /**
+   * A point, once (plan 0058, section 3.3).
+   *
+   * `POST` with a body rather than a `GET` with query parameters, which is the gateway's
+   * shape and is the reason for it: coordinates in a query string are coordinates in
+   * every access log between the phone and the process. Nothing here holds the point
+   * either, before or after the request.
+   */
+  async resolvePostalCode(
+    latitude: number,
+    longitude: number
+  ): Promise<ResolvedPostalCode> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/account/postal-code-lookups'),
+        { latitude, longitude },
+        { context: operation('profiles.resolvePostalCode') }
+      )
+    );
+
+    return required(toResolvedPostalCode(body), 'profiles.resolvePostalCode');
+  }
+
   async makeDefault(profileId: string): Promise<ShoppingProfile> {
     const body = await firstValueFrom(
       this._http.post<unknown>(
@@ -207,5 +272,9 @@ export class ShoppingProfileApi implements ShoppingProfileServiceI {
 
   private _profile(profileId: string): string {
     return `${this._profiles()}/${encodeURIComponent(profileId)}`;
+  }
+
+  private _postalCodes(profileId: string): string {
+    return `${this._profile(profileId)}/postal-codes`;
   }
 }
