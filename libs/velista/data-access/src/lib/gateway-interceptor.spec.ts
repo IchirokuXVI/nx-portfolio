@@ -428,6 +428,37 @@ describe('gatewayInterceptor', () => {
       await failure;
       expect(tokens.tokens()).toBeNull();
     });
+
+    it('keeps the session when the refresh could not be answered for', async () => {
+      // Plan 0067, section 2. This is the shape of every deploy: the request that woke
+      // the app is refused because its access token lapsed in the background, and the
+      // refresh behind it meets an auth service that is still restarting. The request
+      // fails, as it should. The account must not.
+      tokens.set(pair(staleToken(), 'TEMPORARY'));
+
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/zones`));
+      await tick();
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/refresh`)
+        .flush(null, { status: 503, statusText: 'Service Unavailable' });
+      await tick();
+
+      // No token to send, so the request goes out bare and is refused.
+      const req = httpMock.expectOne(`${GATEWAY}/v1/zones`);
+      expect(req.request.headers.has('Authorization')).toBe(false);
+      req.flush(null, { status: 401, statusText: 'Unauthorized' });
+      await tick();
+
+      // The 401 path refreshes again, and meets the same wall.
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/refresh`)
+        .flush(null, { status: 503, statusText: 'Service Unavailable' });
+
+      await failure;
+      expect(tokens.tokens()?.refreshToken).toBe('refresh-1');
+      expect(storage.get(StorageKeys.session)).toContain('refresh-1');
+    });
   });
 
   /**

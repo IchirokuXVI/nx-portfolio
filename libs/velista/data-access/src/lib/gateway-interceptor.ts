@@ -190,13 +190,15 @@ function noticeRefusal(error: unknown, updates: AppUpdates): void {
  * its own error handling, so a second 401 ends the request instead of starting another
  * refresh.
  *
- * **Either way out of here that is still a 401 deletes the stored pair**, which is the
- * invariant the whole path exists for: a session the server will not accept must not
- * survive in the browser, or the next attempt fails identically and so does every one
- * after it. A failed refresh clears in `TokenStore`; a refresh that succeeded and was
- * *still* refused is cleared here, because a token minted a moment ago and rejected on
- * the same tick says the identity behind it is gone rather than that the credential
- * was stale.
+ * **A 401 on the retry is the one thing here that may end a session**, and it is
+ * `TokenStore.reportRejected` that decides, not this file: a token minted a moment ago
+ * and rejected on the same tick says the identity behind it is gone, unless the other
+ * document on this origin rotated the pair in between, which the store is the only
+ * thing that can tell (plan 0067, section 5).
+ *
+ * A refresh that produced no pair no longer implies a cleared session. It can equally
+ * be an auth service that is restarting, and the session outlives that (plan 0067,
+ * section 2), so the original 401 is reported and the store is left alone.
  */
 function retryAfterRefresh(
   req: HttpRequest<unknown>,
@@ -210,38 +212,41 @@ function retryAfterRefresh(
   return from(tokens.refresh()).pipe(
     switchMap((refreshed) => {
       if (refreshed === null) {
-        // The session is already cleared by the store. Report the original 401 so the
-        // page shows "signed out" rather than a generic failure.
+        // Either the store cleared the session or it could not prove it. Report the
+        // original 401 either way: this request was refused, and which of the two it
+        // was is a question for the page, off `SessionStore`.
         return throwError(() => toGatewayError(null, 401, correlationId));
       }
 
+      // The retry's own error handling lives inside this closure so that the pair it
+      // presented is in scope below. A 401 has to be reported against **that** pair,
+      // because "was this still ours" is the whole question.
       return send(
         next,
         decorate(req, refreshed.accessToken, locale, correlationId)
-      );
-    }),
-    tap({ next: (event) => reportIfResponse(event, connection) }),
-    catchError((error: unknown) => {
-      if (!(error instanceof HttpErrorResponse)) {
-        return throwError(() => error);
-      }
+      ).pipe(
+        tap({ next: (event) => reportIfResponse(event, connection) }),
+        catchError((error: unknown) => {
+          if (!(error instanceof HttpErrorResponse)) {
+            return throwError(() => error);
+          }
 
-      if (error.status === 0) {
-        connection.reportNetworkFailure();
-        return throwError(() => new NetworkError(correlationId, operation));
-      }
+          if (error.status === 0) {
+            connection.reportNetworkFailure();
+            return throwError(() => new NetworkError(correlationId, operation));
+          }
 
-      connection.reportReachable();
+          connection.reportReachable();
 
-      if (error.status === 401) {
-        // Refused twice, the second time holding a pair issued between the two. See
-        // the note above: nothing about this session is usable, so it is deleted here
-        // rather than left to be presented again.
-        tokens.clear();
-      }
+          if (error.status === 401) {
+            // Refused twice, the second time holding a pair issued between the two.
+            tokens.reportRejected(refreshed);
+          }
 
-      return throwError(() =>
-        toGatewayError(error.error, error.status, correlationId)
+          return throwError(() =>
+            toGatewayError(error.error, error.status, correlationId)
+          );
+        })
       );
     })
   );

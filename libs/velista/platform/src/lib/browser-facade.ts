@@ -166,6 +166,41 @@ export class BrowserFacade {
     }
   }
 
+  /**
+   * Watch one storage key for writes made by **another document on this origin**.
+   *
+   * The `storage` event is the only thing that says so. It never fires in the document
+   * that did the writing, so a handler registered here hears the installed app and
+   * hears nothing of itself, which is exactly the distinction the caller needs
+   * (plan 0067, section 3).
+   *
+   * `newValue` is null when the other document removed the key, which is a sign out
+   * rather than a corrupt write and has to stay tellable from one.
+   *
+   * Returns a disposer. On the server, and anywhere with no window, it registers
+   * nothing and the disposer is a no-op, so a caller never guards the call itself.
+   */
+  watchStorage(
+    key: string,
+    onChange: (newValue: string | null) => void
+  ): () => void {
+    const win = this.window;
+    if (!win) {
+      return () => undefined;
+    }
+
+    const listener = (event: StorageEvent) => {
+      // A null key is the whole of storage being cleared, which is every key at once.
+      if (event.key !== null && event.key !== key) {
+        return;
+      }
+      onChange(event.key === null ? null : event.newValue);
+    };
+
+    win.addEventListener('storage', listener);
+    return () => win.removeEventListener('storage', listener);
+  }
+
   /** Remove a persisted value. Silently does nothing when storage is unavailable. */
   removeStorage(key: string): void {
     try {
