@@ -2,8 +2,16 @@ import { IDENTITY_EVENTS } from '../lib/events/identity.events';
 import { POSTAL_CODE_EVENTS } from '../lib/events/postal-code.events';
 import { RealtimeEvent } from '../lib/events/realtime.events';
 import { ADMIN_AUTH_PATTERNS } from '../lib/messages/admin-auth.messages';
+import {
+  ADMIN_BASKET_PATTERNS,
+  ADMIN_LIST_PATTERNS,
+  ADMIN_MEMBERSHIP_PATTERNS,
+  ADMIN_ZONE_PATTERNS,
+} from '../lib/messages/admin-core.messages';
+import { ADMIN_USER_PATTERNS } from '../lib/messages/admin-users.messages';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
+  ADMIN_POSTAL_CODE_PATTERNS,
   ITEM_PATTERNS,
   POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
@@ -54,6 +62,13 @@ describe('contract schemas', () => {
     const allMessageSubjects = [
       ...Object.values(AUTH_PATTERNS),
       ...Object.values(ADMIN_AUTH_PATTERNS),
+      // The back office's own reads and named actions (plan 0074).
+      ...Object.values(ADMIN_USER_PATTERNS),
+      ...Object.values(ADMIN_ZONE_PATTERNS),
+      ...Object.values(ADMIN_MEMBERSHIP_PATTERNS),
+      ...Object.values(ADMIN_LIST_PATTERNS),
+      ...Object.values(ADMIN_BASKET_PATTERNS),
+      ...Object.values(ADMIN_POSTAL_CODE_PATTERNS),
       ...Object.values(RECONCILIATION_PATTERNS),
       ...Object.values(ZONE_PATTERNS),
       ...Object.values(MEMBERSHIP_PATTERNS),

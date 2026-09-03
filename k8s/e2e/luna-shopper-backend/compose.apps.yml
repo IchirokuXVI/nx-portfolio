@@ -238,6 +238,11 @@ services:
       CORS_ORIGINS: http://localhost:4200,http://localhost:4205
       CORE_DB_URL: postgres://luna_core:luna_core@core-db:5432/luna_core
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
+      # The operator public key (plan 0074). Core gates its own back office
+      # subjects on a verified admin token, so it needs the public half the way
+      # catalog and the harvester below already do. Required at boot: leaving it
+      # out takes core down while the gateway stays up and answers 500s.
+      ADMIN_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/admin-jwt.pub
       ZONE_REAPER_ENABLED: 'false'
       # The basket sweep (plan 0059) is off here for the reason the reaper is: a
       # timer that finishes baskets underneath a suite is a flake, not a test.

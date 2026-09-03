@@ -139,6 +139,17 @@ what actually crossed the broker.
     secretKeyRef:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
+# What proves a caller may read somebody else's household (plan 0074). Core
+# verifies the operator token the gateway forwarded against this key, for itself,
+# so a gateway route that forgets its guard still cannot read a stranger's list.
+# The same key catalog and the harvester have held since plan 0072, and a
+# different keypair from the one above: an operator and a velista user are
+# different principals signed by different keys.
+- name: ADMIN_JWT_PUBLIC_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: ADMIN_JWT_PUBLIC_KEY
 {{- /*
 The second half of plan 0045 section 6's cap, from the same two ConfigMap keys the
 gateway reads. Core owns the `bytea` the recording is written into, so it refuses a

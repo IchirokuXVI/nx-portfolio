@@ -6,6 +6,7 @@ import {
   UnitOfMeasure,
 } from '../../lib/enums/catalog.enums';
 import {
+  ADMIN_POSTAL_CODE_PATTERNS,
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
   POSTAL_CODE_PATTERNS,
@@ -129,6 +130,10 @@ export const CATALOG_SCHEMA_IDS = {
   postalCodeLocationCountsView: schemaId(
     'catalog/PostalCodeLocationCountsView'
   ),
+  // The centroid table, read as a table (plan 0074).
+  adminPostalCodeView: schemaId('catalog/AdminPostalCodeView'),
+  adminPostalCodePage: schemaId('catalog/AdminPostalCodePage'),
+  listAdminPostalCodesRequest: schemaId('msg/adminPostalCode.list/request'),
   // The shops in your postal codes (plan 0068).
   summarizeLocationsByChainRequest: schemaId(
     'msg/supermarketLocation.summarizeByChain/request'
@@ -1026,6 +1031,41 @@ const postalCodeLocationCountsView = object(
   ['country', 'counts']
 );
 
+// --- The centroid table, for the back office (plan 0074) -------------------
+
+const adminPostalCodeView = object(
+  CATALOG_SCHEMA_IDS.adminPostalCodeView,
+  {
+    country: countryCode(),
+    postalCode: nonEmptyString(),
+    latitude: { type: 'number' },
+    longitude: { type: 'number' },
+    locationCount: integer({ minimum: 0 }),
+  },
+  ['country', 'postalCode', 'latitude', 'longitude', 'locationCount']
+);
+
+const adminPostalCodePage = paginated(
+  CATALOG_SCHEMA_IDS.adminPostalCodePage,
+  CATALOG_SCHEMA_IDS.adminPostalCodeView
+);
+
+// `served` absent is every code, which is the default because a listing that hid
+// the unserved ones would hide the coverage gap it exists to show.
+const listAdminPostalCodesRequest = object(
+  CATALOG_SCHEMA_IDS.listAdminPostalCodesRequest,
+  {
+    ...adminCredentialProperties,
+    country: string(),
+    postalCode: string(),
+    served: boolean(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
+);
+
 // --- The shops in your postal codes (plan 0068) ----------------------------
 
 /** Both shop reads take the same refusals, so they are written once. */
@@ -1225,6 +1265,9 @@ export const catalogSchemas: JsonSchema[] = [
   countLocationsByPostalCodeRequest,
   postalCodeLocationCount,
   postalCodeLocationCountsView,
+  adminPostalCodeView,
+  adminPostalCodePage,
+  listAdminPostalCodesRequest,
   summarizeLocationsByChainRequest,
   supermarketLocationChainSummaryView,
   supermarketLocationChainSummariesView,
@@ -1402,6 +1445,10 @@ export const catalogMessageContracts: Record<
   [POSTAL_CODE_PATTERNS.nearby]: {
     request: CATALOG_SCHEMA_IDS.listNearbyPostalCodesRequest,
     response: CATALOG_SCHEMA_IDS.nearbyPostalCodesView,
+  },
+  [ADMIN_POSTAL_CODE_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listAdminPostalCodesRequest,
+    response: CATALOG_SCHEMA_IDS.adminPostalCodePage,
   },
   [SUPERMARKET_LOCATION_PATTERNS.countByPostalCode]: {
     request: CATALOG_SCHEMA_IDS.countLocationsByPostalCodeRequest,

@@ -22,6 +22,19 @@ export const ADMIN_AUTH_PATTERNS = {
   /** Read one admin by id, for `GET /v1/admin/auth/me`. */
   getAdmin: 'adminAuth.getAdmin',
   /**
+   * Every admin, for `GET /v1/admin/admins` (plan 0074, section 5).
+   *
+   * The read half of section 6 of plan 0071 and, permanently, the only half. The
+   * screen this feeds answers "who has access", which is a question worth
+   * answering from a browser; granting or removing access is not, and stays an
+   * action that requires the server. Adding a create, update or delete subject
+   * beside this one would need plan 0071 changed first, not merely this file.
+   *
+   * No filters and no page. There are a handful of rows and there is no version
+   * of this product where there are enough to paginate.
+   */
+  listAdmins: 'adminAuth.listAdmins',
+  /**
    * Mint a token for a named admin with no password (plan 0071, section 8).
    *
    * Guarded twice over: the gateway only sends it when `ADMIN_DEV_AUTOLOGIN` is
@@ -146,6 +159,24 @@ export interface GetAdminRequest {
 /** Mint a development token for a named admin (plan 0071, section 8). */
 export interface AdminDevAutologinRequest {
   username: string;
+}
+
+/**
+ * Ask for the admin roster. Only the operator's own credential: there is nothing
+ * to filter by and nothing to page through (plan 0074, section 5).
+ */
+export type ListAdminsRequest = AdminCredential;
+
+/**
+ * Every admin, oldest first, so the order matches the order they were created in
+ * and does not shuffle when somebody signs in.
+ *
+ * An object rather than a bare array, so the shape matches every other listing
+ * this API returns and a field can be added beside it without becoming a
+ * breaking change.
+ */
+export interface AdminIdentityListView {
+  admins: AdminIdentityView[];
 }
 
 /**

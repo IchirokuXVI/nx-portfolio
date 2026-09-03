@@ -237,10 +237,31 @@ export class ZoneService {
       ZoneRole.OWNER,
       ZoneRole.ADMIN,
     ]);
-    const zone = await this.zones.findOneOrFail({ where: { id: req.zoneId } });
+    return this.applyJoinCodeRegeneration(req.zoneId);
+  }
+
+  /**
+   * Regenerate the join code for an operator who is not in the zone (plan 0074,
+   * section 1).
+   *
+   * The whole difference is the missing role check, and the write below is the
+   * one the zone's own admins reach. It matters that this is the same write: a
+   * regenerated code invalidates every invitation already handed out, and a
+   * second implementation that forgot `ZoneUpdated` would leave every open client
+   * showing a code that no longer works.
+   */
+  async regenerateJoinCodeAsOperator(zoneId: string): Promise<ZoneView> {
+    return this.applyJoinCodeRegeneration(zoneId);
+  }
+
+  private async applyJoinCodeRegeneration(zoneId: string): Promise<ZoneView> {
+    const zone = await this.zones.findOne({ where: { id: zoneId } });
+    if (!zone) {
+      throw new NotFoundException('Zone not found');
+    }
     zone.joinCode = generateJoinCode();
     const view = toZoneView(await this.zones.save(zone));
-    this.events.emit(RealtimeEvent.ZoneUpdated, req.zoneId, view);
+    this.events.emit(RealtimeEvent.ZoneUpdated, zoneId, view);
     return view;
   }
 
@@ -274,19 +295,65 @@ export class ZoneService {
       req.zoneId,
       req.membershipId
     );
+    return this.applyOwnershipTransfer(req.zoneId, owner, target);
+  }
+
+  /**
+   * Hand a zone to one of its members, for an operator (plan 0074, section 1).
+   *
+   * The outgoing owner is **found** rather than supplied, because an operator is
+   * not it. It may be nobody at all: a zone whose owner deleted their account is
+   * ownerless by plan 0011 section 2, and rescuing exactly that zone is the case
+   * this action is most useful for. So the demotion below is conditional and the
+   * promotion is not.
+   */
+  async transferOwnershipAsOperator(
+    zoneId: string,
+    membershipId: string
+  ): Promise<ZoneView> {
+    const target = await this.loadTargetMembership(zoneId, membershipId);
+    const outgoing = await this.memberships.findOne({
+      where: { zoneId, role: ZoneRole.OWNER },
+    });
+    return this.applyOwnershipTransfer(zoneId, outgoing, target);
+  }
+
+  /**
+   * The two role changes and the zone's `ownerUserId`, in one transaction (plan
+   * 0029), with the authorization already decided.
+   *
+   * `outgoingOwner` is null only on the operator path, over an ownerless zone.
+   * Passing the caller's own membership on the user path is what keeps the two
+   * from being two transactions that agree by inspection.
+   */
+  private async applyOwnershipTransfer(
+    zoneId: string,
+    outgoingOwner: ZoneMembership | null,
+    target: ZoneMembership
+  ): Promise<ZoneView> {
+    // Transferring a zone to the member who already owns it would otherwise save
+    // two instances of one row with opposite roles, and which of them landed
+    // would depend on the order the repository wrote them in.
+    if (target.role === ZoneRole.OWNER) {
+      throw new ValidationException('That member already owns this zone');
+    }
 
     const { view, outgoing, incoming } = await this.dataSource.transaction(
       async (manager) => {
-        owner.role = ZoneRole.ADMIN;
+        if (outgoingOwner) {
+          outgoingOwner.role = ZoneRole.ADMIN;
+        }
         target.role = ZoneRole.OWNER;
         target.status = MembershipStatus.APPROVED;
-        const [outgoing, incoming] = await manager
+        const saved = await manager
           .getRepository(ZoneMembership)
-          .save([owner, target]);
+          .save(outgoingOwner ? [outgoingOwner, target] : [target]);
+        const incoming = saved[saved.length - 1];
+        const outgoing = outgoingOwner ? saved[0] : null;
 
         const zone = await manager
           .getRepository(Zone)
-          .findOneOrFail({ where: { id: req.zoneId } });
+          .findOneOrFail({ where: { id: zoneId } });
         zone.ownerUserId = target.userId;
         const view = toZoneView(await manager.getRepository(Zone).save(zone));
         return { view, outgoing, incoming };
@@ -301,9 +368,11 @@ export class ZoneService {
     // `ownerUserId` names somebody whose role still says otherwise. Emitted
     // after the commit, like every other emit in this service: an event for a
     // transaction that then rolls back is a lie every client acts on.
-    this.emitMember(RealtimeEvent.MemberRoleChanged, outgoing);
+    if (outgoing) {
+      this.emitMember(RealtimeEvent.MemberRoleChanged, outgoing);
+    }
     this.emitMember(RealtimeEvent.MemberRoleChanged, incoming);
-    this.events.emit(RealtimeEvent.ZoneOwnershipChanged, req.zoneId, view);
+    this.events.emit(RealtimeEvent.ZoneOwnershipChanged, zoneId, view);
     return view;
   }
 

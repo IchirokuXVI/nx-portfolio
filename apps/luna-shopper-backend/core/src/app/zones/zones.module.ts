@@ -54,6 +54,18 @@ import { ZoneService } from './zone.service';
   ],
   // Exported so the lists slice (plan 0007) reuses membership resolution, the
   // event publisher and the zone counts rather than re-implementing them.
-  exports: [ZoneAuthzService, ZoneCountsService, CoreEventsPublisher],
+  //
+  // `ZoneService` and `MembershipService` are exported for the back office (plan
+  // 0074, section 1): its named actions call the operator variants on these two
+  // classes, so the write an operator makes is the write a zone's own admins
+  // make. Exporting them is what stops that module from reaching for the
+  // repositories and reimplementing the effect.
+  exports: [
+    ZoneAuthzService,
+    ZoneCountsService,
+    CoreEventsPublisher,
+    ZoneService,
+    MembershipService,
+  ],
 })
 export class ZonesModule {}
