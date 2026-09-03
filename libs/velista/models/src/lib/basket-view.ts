@@ -5,6 +5,7 @@ import type {
   ParticipantKind,
   SettlementOutcome,
 } from './enums';
+import { isLiveGeneratedList } from './enums';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -590,9 +591,17 @@ export interface BasketAddLineRequest {
  * A status this build has never heard of costs a composer; the other way round it
  * would draw a field over a basket the server considers closed, and every line
  * typed into it would come back refused.
+ *
+ * It delegates to {@link isLiveGeneratedList} rather than naming the pair a second
+ * time, and the delegation is the point: this function used to be the only place in
+ * the app that had the set right, while the dashboard and the history each asked
+ * `status === 'ACTIVE'` and drew nothing for the whole life of the feature. Two names
+ * for one question are worth keeping, because "does this take lines" and "is somebody
+ * still going to shop this" are asked by different screens for different reasons; two
+ * **answers** are not, which is what this line stops.
  */
 export function basketTakesLines(status: string): boolean {
-  return status === 'DRAFT' || status === 'ACTIVE';
+  return isLiveGeneratedList(status);
 }
 
 /** What one settling act asked for. The three gestures of section 4.2. */

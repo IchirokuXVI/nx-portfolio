@@ -5,11 +5,12 @@ import {
   Injectable,
   signal,
 } from '@angular/core';
-import type {
-  CreateGeneratedListRequest,
-  GeneratedListRun,
-  GeneratedListSummary,
-  ShoppingListsLoad,
+import {
+  isLiveGeneratedList,
+  type CreateGeneratedListRequest,
+  type GeneratedListRun,
+  type GeneratedListSummary,
+  type ShoppingListsLoad,
 } from '@portfolio/velista/models';
 import {
   REALTIME_CLIENT,
@@ -126,14 +127,21 @@ export class GeneratedListStore {
   /**
    * The baskets being shopped right now, newest first.
    *
-   * `ACTIVE` and nothing else. `DRAFT` is composed and not yet taken to a shop, and the
-   * dashboard's question is "what am I in the middle of", so a draft is not an answer
-   * to it. Nothing in this app produces a draft today, since a run lands `ACTIVE`; the
-   * filter is written for what the status **means** rather than for what the current
-   * server happens to emit.
+   * The live pair, `DRAFT` and `ACTIVE` both, through {@link isLiveGeneratedList}.
+   *
+   * **This used to read `status === 'ACTIVE'` and therefore never matched anything.**
+   * The paragraph that stood here argued that a draft is composed and not yet taken to
+   * a shop, so it is not an answer to "what am I in the middle of", and closed by
+   * asserting that nothing in this app produces a draft anyway because a run lands
+   * `ACTIVE`. The second half was simply wrong about the server: core composes a run as
+   * `DRAFT` and has no path that promotes one, so every basket velista has ever
+   * generated was filtered out here and the dashboard card drew for nobody. The first
+   * half does not survive it either. A basket composed minutes ago and not yet finished
+   * **is** the thing somebody is in the middle of, whatever the column calls it, and
+   * the way back into it is the only reason this signal exists.
    */
   readonly active = computed<readonly GeneratedListSummary[]>(() =>
-    this._lists().filter((list) => list.status === 'ACTIVE')
+    this._lists().filter((list) => isLiveGeneratedList(list.status))
   );
 
   constructor() {

@@ -27,6 +27,7 @@ import type {
   UserProfile,
   WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
+import { isLiveGeneratedList } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
 import {
@@ -1980,7 +1981,12 @@ export function fakeGeneratedListStore(
     loadingMore: loadingMore.asReadonly(),
     hasMore: hasMore.asReadonly(),
     pagesLoaded: pagesLoaded.asReadonly(),
-    active: computed(() => lists().filter((list) => list.status === 'ACTIVE')),
+    // `isLiveGeneratedList` rather than a status comparison, for the reason the real
+    // store now uses it: a double that filtered differently from the thing it stands in
+    // for is how a card stayed green in every spec and drew on no phone.
+    active: computed(() =>
+      lists().filter((list) => isLiveGeneratedList(list.status))
+    ),
 
     load: async () => {
       calls.push('load');

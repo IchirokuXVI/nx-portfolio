@@ -164,15 +164,24 @@ describe('ShoppingListCard', () => {
     expect(openedWith).toBe('gl1');
   });
 
-  it('offers the history from its own header', async () => {
+  /**
+   * The strip is docked on top of the action bar now, so it draws no header of its own:
+   * a heading and a History link would cost two rows of the dashboard permanently
+   * rather than two rows of a scroll. History is reached through "and N more" when
+   * there is more than one live basket, and otherwise through the sheet the button
+   * below opens, which carries the link for exactly this case.
+   *
+   * Asserted rather than left implied, because a header is the obvious thing to add
+   * back to a component that looks like a card, and adding it back is the regression.
+   */
+  it('draws no header of its own, since it is docked rather than on the page', async () => {
     const fixture = await render();
 
-    let history = 0;
-    fixture.componentInstance.openHistory.subscribe(() => (history += 1));
-
-    (element(fixture).querySelector('.history') as HTMLElement).click();
-
-    expect(history).toBe(1);
+    expect(element(fixture).querySelector('.head-row')).toBeNull();
+    expect(element(fixture).querySelector('.history')).toBeNull();
+    expect(element(fixture).textContent).not.toContain(
+      'home.section.shoppingList'
+    );
   });
 
   /**

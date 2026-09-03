@@ -461,6 +461,51 @@ describe('HomePage', () => {
       expect(text(fixture)).toContain('Saturday big shop');
     });
 
+    /**
+     * **The case the whole feature exists for, and the one it did not handle.**
+     *
+     * Core composes a run as `DRAFT` and never promotes it, so a draft is not an edge
+     * case here: it is every basket velista has ever generated. The card filtered on
+     * `ACTIVE` alone and therefore drew for nobody, while a suite full of `ACTIVE`
+     * fixtures stayed green over it. This is that suite disagreeing with the server,
+     * written down so it cannot happen quietly a second time.
+     */
+    it('appears for a draft, which is what the server actually composes', async () => {
+      const fixture = await render({
+        generated: fakeGeneratedListStore([basket({ status: 'DRAFT' })]),
+      });
+
+      expect(query(fixture, 'lib-shopping-list-card')).not.toBeNull();
+      expect(text(fixture)).toContain('Saturday big shop');
+    });
+
+    /**
+     * The dock (section 3.2 of this change): the strip sits directly on top of the
+     * action bar, on the same ground, so getting back into the basket you have and
+     * composing a new one are one object on the screen rather than two at opposite
+     * ends of it.
+     *
+     * Asserted as **adjacency in the DOM** rather than by reading styles, because that
+     * is what the seam actually depends on: the strip draws the rule above itself and
+     * the bar's own rule becomes the divider between them, which only works while
+     * nothing is laid out in between. It also pins the half that regressed for a year,
+     * which is the card living up in the scrolling content where a couple of groups
+     * push it off the screen.
+     */
+    it('docks the strip on the action bar rather than leaving it in the scroll', async () => {
+      const fixture = await render({
+        generated: fakeGeneratedListStore([basket()]),
+      });
+
+      const card = query(fixture, 'lib-shopping-list-card');
+      const bar = query(fixture, 'lib-bottom-action-bar');
+
+      expect(card).not.toBeNull();
+      expect(bar).not.toBeNull();
+      expect(card?.nextElementSibling).toBe(bar);
+      expect(query(fixture, '.content lib-shopping-list-card')).toBeNull();
+    });
+
     // Absent entirely: no header, no empty card, no gap (section 3.1). A person who has
     // never generated one is not shown a slot where one would go, because the bottom
     // bar's primary action already says the feature is there.

@@ -121,21 +121,6 @@
           />
         }
 
-        <!--
-          The basket being shopped now (plan 0045). Absent entirely when there is no
-          `ACTIVE` one: no header, no empty card, no gap, because the bottom bar's
-          primary action already says the feature is there.
-        -->
-        @if (page.shoppingList; as shoppingList) {
-          <lib-shopping-list-card
-            (open)="openShoppingList($event)"
-            (openHistory)="openShoppingLists()"
-            [generatedOn]="generatedOn(shoppingList.generatedAt)"
-            [generatedToday]="generatedToday(shoppingList.generatedAt)"
-            [list]="shoppingList"
-          />
-        }
-
         <section class="zones">
           <div class="zones-head">
             <h2 class="section-label">{{ 'home.section.zones' | rokuT }}</h2>
@@ -154,6 +139,32 @@
           }
         </section>
       </div>
+
+      <!--
+        The dock: the basket being shopped now, sitting directly on top of the button
+        that composes another, as one surface.
+
+        Two siblings rather than one wrapper, and rather than content projected into the
+        bar. `.page` is already a flex column whose `.content` takes the spare height,
+        so anything after it is pinned to the bottom by the layout that is there: a
+        wrapper would add an element and buy nothing. Projection would be worse than
+        nothing, because `BottomActionBar`'s action row is `ng-content` **fallback**
+        content, and fallback renders only while its slot is empty.
+
+        Each half draws the rule above itself, which is what keeps the seam right in
+        both states. With a basket: the strip's rule caps the dock and the bar's becomes
+        the divider under the strip. With none, the strip is absent entirely, no header
+        and no empty card and no gap, and the bar's rule caps the dock on its own.
+      -->
+      @if (page.shoppingList; as shoppingList) {
+        <lib-shopping-list-card
+          (open)="openShoppingList($event)"
+          (openHistory)="openShoppingLists()"
+          [generatedOn]="generatedOn(shoppingList.generatedAt)"
+          [generatedToday]="generatedToday(shoppingList.generatedAt)"
+          [list]="shoppingList"
+        />
+      }
 
       <lib-bottom-action-bar
         (getList)="getShoppingList()"

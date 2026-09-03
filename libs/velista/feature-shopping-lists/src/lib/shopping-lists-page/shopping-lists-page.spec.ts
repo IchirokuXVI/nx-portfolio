@@ -158,6 +158,18 @@ describe('ShoppingListsPage', () => {
       expect(text(fixture)).toContain('history.status.active');
     });
 
+    // A draft is a trip somebody is still going to make, and it is what a run actually
+    // composes: core writes `DRAFT` and never promotes it, so a badge that asked for
+    // `ACTIVE` alone was a badge no row could ever earn. Same one line bug as the
+    // dashboard card's, and both now ask `isLiveGeneratedList`.
+    it('marks a draft too, since that is what a run composes', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([basket({ status: 'DRAFT' })])
+      );
+
+      expect(text(fixture)).toContain('history.status.active');
+    });
+
     it('says nothing about being shopped now on a finished trip', async () => {
       const fixture = await render(
         fakeGeneratedListStore([basket({ status: 'COMPLETED' })])

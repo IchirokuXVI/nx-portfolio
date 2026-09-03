@@ -21,6 +21,7 @@ import {
 import {
   displayNames,
   formatGeneratedDate,
+  isLiveGeneratedList,
   outcomeBreakdown,
   type ShoppingListsState,
 } from '@portfolio/velista/models';
@@ -136,7 +137,11 @@ export class ShoppingListsPage {
         lineCount: list.lineCount,
         settledLineCount: list.settledLineCount,
         breakdown: outcomeBreakdown(list),
-        active: list.status === 'ACTIVE',
+        // The live pair, not `ACTIVE` alone: the server composes a run as `DRAFT` and
+        // never promotes it, so the Shopping now badge asked a question nothing could
+        // answer yes to. Same one line and same reason as the dashboard card's, which
+        // is why both now read `isLiveGeneratedList` rather than each naming a status.
+        active: isLiveGeneratedList(list.status),
       })),
       loadingMore: this._generated.loadingMore(),
     };
