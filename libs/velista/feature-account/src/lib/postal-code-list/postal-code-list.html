@@ -5,17 +5,41 @@
 <ul aria-labelledby="profiles-postal-label" class="chips">
   @for (code of codes(); track code.id) {
     <li class="chip-holder">
-      <span [class.flagged]="isUncovered(code.postalCode)" class="chip">
+      <span
+        [class.derived]="isDerived(code)"
+        [class.flagged]="isUncovered(code.postalCode)"
+        class="chip"
+      >
         <span class="code">{{ code.postalCode }}</span>
-        @if (code.label; as label) {
-          <span class="chip-label">{{ label }}</span>
+        <!--
+          The label, falling back to the code itself (plan 0058, section 4). Drawn only
+          when it says something the line above does not, so a row with no label of its
+          own is one chip and not the same four digits twice.
+        -->
+        @if (nameOf(code) !== code.postalCode) {
+          <span class="chip-label">{{ nameOf(code) }}</span>
+        }
+        <!--
+          A derived code says so in words as well as by its outline, because a mark that
+          only exists as a colour says nothing to somebody who cannot see it, and "we
+          added this, you did not" is the whole point of the distinction.
+        -->
+        @if (isDerived(code)) {
+          <span class="chip-source">
+            {{ 'profiles.postal.nearbySource' | rokuT }}
+          </span>
         }
         <!--
           Its own labelled target, and its own 44px, because a remove that shares a hit
           area with the chip is a remove somebody presses by accident (section 7).
+
+          The **code** and not the row id: the route removes by code, and the server
+          decides from the row's own source whether that is a delete or a suppression.
+          Identical for a derived row and a typed one, deliberately: two chips that look
+          alike must not carry different destructive weight (plan 0058, section 7).
         -->
         <button
-          (click)="removeCode.emit(code.id)"
+          (click)="removeCode.emit(code.postalCode)"
           [attr.aria-label]="
             'profiles.postal.remove' | rokuT: { code: code.postalCode }
           "
@@ -35,6 +59,17 @@
         <span>{{ 'profiles.postal.add' | rokuT }}</span>
       </button>
     </li>
+
+    <!--
+      The label names the outcome and not the mechanism, and it is words rather than a
+      pin glyph alone (plan 0058, section 7). Pressing it opens a sheet: the browser's
+      permission dialog is raised from in there, after what it is for has been said.
+    -->
+    <li class="chip-holder">
+      <button (click)="useLocation.emit()" class="add" type="button">
+        {{ 'profiles.location.use' | rokuT }}
+      </button>
+    </li>
   }
 </ul>
 
@@ -45,6 +80,21 @@
   reaches nobody we know of (section 7).
 -->
 <div aria-live="polite" class="flags" role="status">
+  <!--
+    How many codes an expansion brought in (plan 0058, section 5). Said rather than left
+    for the list to grow silently under somebody's finger, and said **here** because it
+    is the same live region the coverage flags use: one region per control, gaining its
+    text after the fact, is what actually gets announced.
+
+    There is deliberately nothing about supermarkets in it. Adding a postal code does
+    not mean shops appear in it, and `apps/velista/plans/0059` owns that empty state.
+  -->
+  @if (nearbyAdded() > 0) {
+    <p class="flag added">
+      {{ 'profiles.postal.nearbyAdded' | rokuT: { count: nearbyAdded() } }}
+    </p>
+  }
+
   @for (code of codes(); track code.id) {
     @if (isUncovered(code.postalCode)) {
       <p class="flag">
@@ -90,6 +140,20 @@
       id="profiles-postal-name"
       type="text"
     />
+
+    <!--
+      Off by default for a typed code, and on in the location sheet (plan 0058,
+      section 5). The whole row is the target, so what is tapped is the option rather
+      than the box.
+    -->
+    <label class="nearby">
+      <input
+        (change)="toggleNearby($event)"
+        [checked]="expandNearby()"
+        type="checkbox"
+      />
+      <span>{{ 'profiles.postal.nearby' | rokuT }}</span>
+    </label>
 
     <div class="form-actions">
       <button [disabled]="typed().trim() === ''" class="primary" type="submit">

@@ -6,7 +6,10 @@ import {
   signal,
 } from '@angular/core';
 import type {
+  AddPostalCodeRequest,
   ProfileLoad,
+  ProfilePostalCode,
+  ResolvedPostalCode,
   ShoppingProfile,
   Supermarket,
   WriteShoppingProfileRequest,
@@ -25,16 +28,16 @@ import {
  * The controls a save is reported against, one per control on the page.
  *
  * Section 3.1 says saving is **per control**, so this is what the page keys its
- * failed treatment on. `postalCodes` and `chains` cover a whole collection because a
- * collection is what the wire replaces: adding one code is a write of all of them, and
- * a per chip state would be describing an operation that does not exist.
+ * failed treatment on. `chains` covers a whole collection because a collection is what
+ * the wire replaces there.
+ *
+ * `postalCodes` stayed a single key after plan 0058 moved codes onto a row at a time
+ * surface, and that is deliberate rather than left over. The control it names is the
+ * chip list, one add or one remove is one write, and the failed treatment it drives is
+ * a sentence under that control. A key per chip would report a per row state the screen
+ * has nowhere to draw, on rows the server may have added by itself.
  */
-export type ProfileField =
-  | 'name'
-  | 'addressText'
-  | 'postalCodes'
-  | 'chains'
-  | 'minSavingCents';
+export type ProfileField = 'name' | 'postalCodes' | 'chains' | 'minSavingCents';
 
 /** How the last write to one control went. `idle` is also "nothing has been saved". */
 export type FieldSaveState = 'idle' | 'saving' | 'failed';
@@ -93,6 +96,19 @@ export class ShoppingProfileStore {
    */
   private readonly _unserved = signal<ReadonlySet<string>>(new Set());
 
+  /**
+   * How many derived codes the last add brought in (plan 0058, section 5).
+   *
+   * Zero is both "the last add expanded nothing" and "nothing has been added", and the
+   * screen says nothing for either, so the two do not need telling apart.
+   *
+   * It is cleared by {@link select}, and by {@link acknowledgeNearby} for a screen that
+   * wants to drop the sentence sooner. Clearing on selection is the one that matters: a
+   * count left standing would sit under the **next** profile's chips, describing codes
+   * that are not on it.
+   */
+  private readonly _nearbyAdded = signal(0);
+
   /** Whether the chain listing has been fetched. It is cached for the page's life. */
   private _chainsAsked = false;
 
@@ -116,6 +132,14 @@ export class ShoppingProfileStore {
 
   /** Every chain in the catalog, unscoped, in the order the listing gave them. */
   readonly chains = this._chains.asReadonly();
+
+  /**
+   * The neighbours the last add brought in, for the screen's sentence about them.
+   *
+   * Zero says nothing happened worth mentioning, which is what a typed code with the
+   * box unticked always produces.
+   */
+  readonly nearbyAdded = this._nearbyAdded.asReadonly();
 
   /**
    * The profile being edited.
@@ -180,6 +204,17 @@ export class ShoppingProfileStore {
   }
 
   /**
+   * Forget the last expansion's count, once its sentence has been said.
+   *
+   * Called by the screen that drew it. A live region holding text it has already
+   * announced reads it out again the next time anything inside it changes, which turns
+   * one piece of news into a stutter.
+   */
+  acknowledgeNearby(): void {
+    this._nearbyAdded.set(0);
+  }
+
+  /**
    * The profile that becomes default if the given one is deleted, or null when it is
    * not the default and nothing changes hands.
    *
@@ -230,6 +265,7 @@ export class ShoppingProfileStore {
   /** Choose which profile the page is editing. */
   select(profileId: string): void {
     this._selectedId.set(profileId);
+    this._nearbyAdded.set(0);
     void this.refreshCoverage();
   }
 
@@ -342,11 +378,119 @@ export class ShoppingProfileStore {
     this._replace(outcome.value);
     this._setSave(key, 'idle');
 
-    if (field === 'postalCodes') {
-      void this.refreshCoverage();
+    return 'saved';
+  }
+
+  /**
+   * Add one postal code, and optionally the ones near it (plan 0058, sections 4 and 5).
+   *
+   * **One row, not the list.** The replacement collection is gone from
+   * `WriteShoppingProfileRequest` because a profile's codes are no longer all the
+   * user's: sending the list back would promote every derived row to theirs.
+   *
+   * The optimistic chip carries a temporary id and the source the caller claimed, and
+   * the answer replaces it. What the overlay deliberately does **not** invent is the
+   * neighbours: how many codes an expansion finds is a fact about geography that only
+   * the server holds, and guessing at chips that may not appear would be a list that
+   * flickers shorter.
+   *
+   * What it leaves behind for the screen is {@link nearbyAdded}, and it is on the store
+   * rather than on the return value because the two writers are on different screens:
+   * the chip list adds a typed code and the location sheet adds a resolved one, and the
+   * sheet is a routed child that closes before the sentence is drawn. One signal both
+   * of them set is the only shape in which the page says the same thing either way.
+   */
+  async addPostalCode(
+    profileId: string,
+    request: AddPostalCodeRequest
+  ): Promise<'saved' | 'failed'> {
+    const profile = this.profiles().find((held) => held.id === profileId);
+    if (profile === undefined) {
+      return 'failed';
     }
 
+    const before = new Set(profile.postalCodes.map((code) => code.postalCode));
+
+    const pending: ProfilePostalCode = {
+      id: `pending-${request.postalCode}`,
+      postalCode: request.postalCode,
+      label: request.label ?? null,
+      position: profile.postalCodes.length,
+      source: request.source ?? 'TYPED',
+    };
+
+    const written = await this._writeCodes(
+      profileId,
+      () => this._service.addPostalCode(profileId, request),
+      (current) =>
+        current.postalCodes.some(
+          (code) => code.postalCode === request.postalCode
+        )
+          ? current
+          : { ...current, postalCodes: [...current.postalCodes, pending] }
+    );
+
+    if (written === null) {
+      return 'failed';
+    }
+
+    this._nearbyAdded.set(
+      written.postalCodes.filter(
+        (code) => code.source === 'NEARBY' && !before.has(code.postalCode)
+      ).length
+    );
+
     return 'saved';
+  }
+
+  /**
+   * Remove one postal code, whoever it belongs to.
+   *
+   * **By the code and not the row id**, which is the route's own shape: the server
+   * decides from the row's source whether that is a delete or a suppression, and a
+   * client that had to know the difference would eventually get it wrong.
+   *
+   * The optimistic removal takes out the one row. A remove can move more than that on
+   * the server, because dropping a code of the user's own prunes the neighbours it was
+   * justifying, and the answer is what settles it: guessing which derived rows lose
+   * their parent would mean holding a copy of the recompute here.
+   */
+  async removePostalCode(
+    profileId: string,
+    postalCode: string
+  ): Promise<'saved' | 'failed'> {
+    const written = await this._writeCodes(
+      profileId,
+      () => this._service.removePostalCode(profileId, postalCode),
+      (current) => ({
+        ...current,
+        postalCodes: current.postalCodes.filter(
+          (code) => code.postalCode !== postalCode
+        ),
+      })
+    );
+
+    return written === null ? 'failed' : 'saved';
+  }
+
+  /**
+   * Ask the server which postal code a point is in (plan 0058, section 3.3).
+   *
+   * **It writes nothing and holds nothing.** The point is passed straight through to
+   * the one request that carries it and is not kept on this store, on the profile, or
+   * anywhere else; only the code the user then confirms is written, through
+   * {@link addPostalCode} with `source: 'DEVICE'`.
+   *
+   * Null for a point the server will not place and null for a lookup that failed are
+   * deliberately **not** the same answer: the first comes back as a resolved code of
+   * null and the second throws, because "we cannot tell where you are" and "we could
+   * not ask" lead a person to do different things.
+   */
+  resolvePostalCode(
+    latitude: number,
+    longitude: number
+  ): Promise<ResolvedPostalCode> {
+    return this._service.resolvePostalCode(latitude, longitude);
   }
 
   /**
@@ -471,6 +615,7 @@ export class ShoppingProfileStore {
     this._selectedId.set(null);
     this._chains.set([]);
     this._unserved.set(new Set());
+    this._nearbyAdded.set(0);
     this._saves.set(new Map());
     this._chainsAsked = false;
   }
@@ -521,9 +666,6 @@ export class ShoppingProfileStore {
         return {
           ...profile,
           name: claims('name') ? held.name : profile.name,
-          addressText: claims('addressText')
-            ? held.addressText
-            : profile.addressText,
           minSavingCents: claims('minSavingCents')
             ? held.minSavingCents
             : profile.minSavingCents,
@@ -538,6 +680,48 @@ export class ShoppingProfileStore {
     // An event can only arrive once something has answered, so a page still showing its
     // skeleton when one lands has a list and should stop.
     this._state.set('loaded');
+  }
+
+  /**
+   * One postal code write, whichever route it takes.
+   *
+   * Both of them touch the same control, answer the whole profile, and want the same
+   * three endings as {@link save}: an overlay while the request is out, the server's
+   * profile when it lands, and the previous chips back when it does not. What they do
+   * not share with `save` is a request body, so this is that function with the body
+   * lifted out rather than a second copy of the rule.
+   *
+   * Null is the failure, and the caller turns it into whatever it needs to say.
+   */
+  private async _writeCodes(
+    profileId: string,
+    send: () => Promise<ShoppingProfile>,
+    apply: (profile: ShoppingProfile) => ShoppingProfile
+  ): Promise<ShoppingProfile | null> {
+    const key = overlayKey(profileId, 'postalCodes');
+    const overlay: Overlay<unknown> = {
+      key,
+      apply: (current) => apply(current as ShoppingProfile) as unknown,
+      fields: ['postalCodes'],
+    };
+
+    this._setSave(key, 'saving');
+
+    const outcome = await this._mutations.run(overlay, send);
+
+    if (outcome.state === 'failed') {
+      this._setSave(key, 'failed');
+      return null;
+    }
+
+    this._replace(outcome.value);
+    this._setSave(key, 'idle');
+
+    // A code that just arrived has no coverage answer yet, and the flag belongs under
+    // its own chip. The same call `save` makes for the same reason.
+    void this.refreshCoverage();
+
+    return outcome.value;
   }
 
   private _replace(profile: ShoppingProfile): void {

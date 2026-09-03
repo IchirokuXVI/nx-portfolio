@@ -13,6 +13,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -92,6 +93,51 @@ export class ProfilePostalCodeDto {
 
 /** The body of the add route; the code itself comes from the body too. */
 export class AddPostalCodeDto extends ProfilePostalCodeDto {}
+
+/**
+ * Where a device says it is (`apps/velista/plans/0058`, section 3).
+ *
+ * **A body and not a query string**, on a route that stores nothing. The point is
+ * the one piece of this feature we promise not to keep, and a query parameter is
+ * kept by every access log between the phone and the process whether we mean to
+ * or not. A body is the only shape in which "the coordinates appear in exactly one
+ * request and in no stored field" can be true of the whole system rather than only
+ * of our own tables.
+ */
+export class ResolvePostalCodeDto {
+  @ApiProperty({
+    minimum: -90,
+    maximum: 90,
+    description: 'Degrees, as the device reported them. Not stored.',
+  })
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude!: number;
+
+  @ApiProperty({
+    minimum: -180,
+    maximum: 180,
+    description: 'Degrees, as the device reported them. Not stored.',
+  })
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude!: number;
+
+  @ApiPropertyOptional({
+    default: DEFAULT_POSTAL_CODE_COUNTRY,
+    minLength: 2,
+    maxLength: 2,
+    description:
+      'ISO 3166-1 alpha-2. The centroid table is keyed on (country, postalCode), and a lookup without one searches every shipped country at once.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(2)
+  country?: string;
+}
 
 export class ProfileSupermarketDto {
   @ApiProperty({

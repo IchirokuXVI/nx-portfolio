@@ -5,8 +5,10 @@ import {
   POSTAL_CODE_PATTERNS,
   type ListNearbyPostalCodesRequest,
   type NearbyPostalCodesView,
+  type NearestPostalCodeView,
   type PostalCodeDistanceView,
   type PostalCodesAddedEvent,
+  type ResolveNearestPostalCodeRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -20,20 +22,24 @@ import { firstValueFrom } from 'rxjs';
 export const POSTAL_CODE_NATS_CLIENT = 'POSTAL_CODE_NATS_CLIENT';
 
 /**
- * The two things core says to the rest of the backend about postal codes (plan
- * 0062, sections 3 and 5).
+ * What core says to the rest of the backend about postal codes (plan 0062,
+ * sections 3 and 5, and `apps/velista/plans/0058` section 3.3).
  *
  * Core owns the profile and catalog owns the centroids, so "which codes are near
- * this one" is a question and not a lookup. It is asked over the broker against a
- * table catalog ships with its image: no third party, no rate limit, and nothing
- * in it that can be slow for a reason outside this backend.
+ * this one" and "which code is this point in" are questions and not lookups. Both
+ * are asked over the broker against a table catalog ships with its image: no
+ * third party, no rate limit, and nothing in it that can be slow for a reason
+ * outside this backend. That is also why a device's coordinates never leave our
+ * own process.
  *
- * The two halves fail in opposite directions on purpose:
+ * The halves fail in opposite directions on purpose:
  *
- * - **{@link nearby} throws.** Its answer is what the write is about, and a
- *   profile saved with the neighbours quietly missing is a screen that looks
- *   finished and is wrong. Only an expanding code asks it, so a profile that
- *   never expands never depends on catalog being up.
+ * - **{@link nearby} and {@link nearest} throw.** For `nearby` the answer is what
+ *   the write is about, and a profile saved with the neighbours quietly missing is
+ *   a screen that looks finished and is wrong. For `nearest` a null means
+ *   something specific to a user, and a broker timeout does not mean it. Only an
+ *   expanding code and a location press ask either, so a profile that does
+ *   neither never depends on catalog being up.
  * - **{@link announceAdded} cannot.** It is fire and forget by section 5: a
  *   discovery run takes minutes, so it may not hold up a profile save, and a
  *   failure to enqueue one must not fail the write that caused it.
@@ -44,6 +50,40 @@ export class PostalCodeClient {
     @Inject(POSTAL_CODE_NATS_CLIENT) private readonly client: ClientProxy,
     private readonly logger: Logger
   ) {}
+
+  /**
+   * The code a point is in, or null when nothing is close enough
+   * (`apps/velista/plans/0058`, section 3.3).
+   *
+   * **Throws rather than answering null when catalog cannot be asked**, which is
+   * the same direction as {@link nearby} and for a sharper version of its reason:
+   * null here is the sentence "we cannot tell which postal code you are in", and
+   * a broker timeout is not that sentence. A user who just granted a location
+   * permission and was told we could not place them would try the permission
+   * again; one told the lookup failed will not.
+   *
+   * The point goes no further than this call. It is not stored, not logged and
+   * not carried on the answer, which is what makes the sheet's promise before the
+   * browser prompt true.
+   */
+  async nearest(
+    country: string,
+    latitude: number,
+    longitude: number,
+    maxDistanceMetres: number
+  ): Promise<string | null> {
+    const request: ResolveNearestPostalCodeRequest = {
+      country,
+      latitude,
+      longitude,
+      maxDistanceMetres,
+    };
+    const view = await this.send<NearestPostalCodeView>(
+      POSTAL_CODE_PATTERNS.nearest,
+      { ...request }
+    );
+    return view.nearest?.postalCode ?? null;
+  }
 
   /**
    * The codes whose centroid is within `radiusMetres` of this one, nearest

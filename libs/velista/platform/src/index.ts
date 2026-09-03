@@ -7,6 +7,7 @@ export * from './lib/audio-capture';
 export * from './lib/audio-recorder';
 export * from './lib/browser-facade';
 export * from './lib/connection-state';
+export * from './lib/geolocation-reader';
 export * from './lib/install-state';
 export * from './lib/install-store';
 export * from './lib/money';

@@ -94,6 +94,21 @@ export const THROTTLE_LIMITS = {
    * and the eleventh is refused with a wait rather than lost.
    */
   voiceComment: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
+  /**
+   * Turning a device's point into a postal code (`apps/velista/plans/0058`,
+   * section 3).
+   *
+   * Backend plan 0060 section 7 refused a public lookup over the centroid table
+   * on the grounds that it would be a geocoding service nobody asked for.
+   * Requiring a token is most of that refusal; this bucket is the rest, because
+   * an authenticated caller at the default 120 a minute could walk the table
+   * anyway.
+   *
+   * Ten a minute is far more than the gesture needs. It is one press behind a
+   * browser permission prompt, and a person who presses it twice has already
+   * been told twice where they are.
+   */
+  postalCodeLookup: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
 } as const;
 
 /** One per route override, as {@link THROTTLE_LIMITS} publishes them. */

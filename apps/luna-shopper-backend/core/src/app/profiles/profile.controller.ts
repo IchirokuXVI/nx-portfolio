@@ -7,6 +7,8 @@ import {
   type ListShoppingProfilesRequest,
   type ProfileScopeSelector,
   type RemoveProfilePostalCodeRequest,
+  type ResolvedPostalCodeView,
+  type ResolveProfilePostalCodeRequest,
   type ResolveProfileScopesRequest,
   type SetProfileLocationPreferencesRequest,
   type ShoppingProfileIdRequest,
@@ -77,6 +79,23 @@ export class ProfileController {
     @Payload() req: RemoveProfilePostalCodeRequest
   ): Promise<ShoppingProfileView> {
     return this.profiles.removePostalCode(req);
+  }
+
+  /**
+   * A device's point, answered and forgotten (`apps/velista/plans/0058`,
+   * section 3.3).
+   *
+   * The only message on this controller that writes nothing and answers something
+   * other than a profile. It is here rather than on catalog's own surface because
+   * plan 0060 section 7 refused a public centroid lookup: this one is reached
+   * through a signed in caller, on the screen that is about to ask them to confirm
+   * what came back.
+   */
+  @MessagePattern(PROFILE_PATTERNS.resolvePostalCode)
+  resolvePostalCode(
+    @Payload() req: ResolveProfilePostalCodeRequest
+  ): Promise<ResolvedPostalCodeView> {
+    return this.profiles.resolvePostalCode(req);
   }
 
   /**

@@ -1,8 +1,10 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
+  AddPostalCodeRequest,
   CatalogScope,
   ProfileGenerationScope,
+  ResolvedPostalCode,
   ShoppingProfile,
   Supermarket,
   WriteShoppingProfileRequest,
@@ -12,7 +14,7 @@ import { ShoppingProfileApi } from './shopping-profile-api';
 /**
  * Where the caller shops, and what the catalog makes of it (plan 0046, section 5).
  *
- * Six methods over two services, and they are on one interface because they are one
+ * Nine methods over two services, and they are on one interface because they are one
  * screen's needs rather than one backend's shape: the profile routes reach core and the
  * two catalog reads reach catalog, but a page that could list profiles and not name a
  * chain would be a page with an empty supermarket list.
@@ -62,13 +64,63 @@ export interface ShoppingProfileServiceI {
   /**
    * Edit one (`PATCH /v1/account/shopping-profiles/:id`).
    *
-   * The collections are **full replacements**, which is what the page does anyway: it
-   * holds the whole list of postal codes and saves it.
+   * `supermarkets` is a **full replacement**, which is what the chain list does anyway:
+   * it holds every chain in the catalog and states an opinion about each. The postal
+   * codes are not here at all, for the reason on {@link WriteShoppingProfileRequest}.
    */
   updateProfile(
     profileId: string,
     body: WriteShoppingProfileRequest
   ): Promise<ShoppingProfile>;
+
+  /**
+   * Add one postal code, and optionally its neighbours
+   * (`POST /v1/account/shopping-profiles/:id/postal-codes`).
+   *
+   * One row at a time, because a profile's codes are no longer all the user's: the
+   * derived ones are the server's, this app never states them, and so it cannot lose
+   * them by omission or promote them by echoing them back.
+   *
+   * Answers the **whole profile**, because one add writes several rows: the code, and
+   * with `expandNearby` its neighbours. That is also how the screen knows how many
+   * arrived, without a second read.
+   */
+  addPostalCode(
+    profileId: string,
+    body: AddPostalCodeRequest
+  ): Promise<ShoppingProfile>;
+
+  /**
+   * Remove one postal code, whoever it belongs to
+   * (`DELETE /v1/account/shopping-profiles/:id/postal-codes/:postalCode`).
+   *
+   * **The code, not the row id**, and no argument saying how. A code the user gave is
+   * deleted; a derived one is suppressed so the server's recompute cannot put it
+   * straight back. Which happens follows from the row's own source, which the server
+   * knows and this app should not have to.
+   */
+  removePostalCode(
+    profileId: string,
+    postalCode: string
+  ): Promise<ShoppingProfile>;
+
+  /**
+   * Turn a point the device reported into a postal code
+   * (`POST /v1/account/postal-code-lookups`, plan 0058 section 3.3).
+   *
+   * **The only call in this app that carries a location, and it stores nothing.** The
+   * point goes out once and a code comes back; the code is what the confirm writes,
+   * through {@link addPostalCode} with `source: 'DEVICE'`. Nothing keeps the
+   * coordinates, which is what lets the sheet promise as much before the browser's own
+   * permission dialog appears.
+   *
+   * A null `postalCode` on the answer is not a failure: the server holds centroids
+   * rather than boundaries and declines to guess across too great a distance.
+   */
+  resolvePostalCode(
+    latitude: number,
+    longitude: number
+  ): Promise<ResolvedPostalCode>;
 
   /** Move the default (`POST /v1/account/shopping-profiles/:id/default`). */
   makeDefault(profileId: string): Promise<ShoppingProfile>;

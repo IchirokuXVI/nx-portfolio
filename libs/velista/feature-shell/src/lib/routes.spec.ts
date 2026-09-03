@@ -596,9 +596,12 @@ describe('AppShellRoutes', () => {
       expect(profiles?.canMatch).toBeUndefined();
     });
 
-    it('offers the delete confirm as a sheet over it', () => {
+    it('offers the delete confirm and the location ask as sheets over it', () => {
       expect(profiles?.children?.map((route) => route.path)).toEqual([
         'sheet/confirm/delete',
+        // Plan 0058, section 3: the permission prompt is raised from inside a sheet
+        // that has already said what it is for, and `sheet()` stamped the marker.
+        'sheet/location',
       ]);
     });
 
@@ -848,12 +851,12 @@ describe('the sheets and their exit animation', () => {
   const sheets = all.filter(({ route }) => isSheet(route));
 
   it('addresses every sheet in the table, so none has quietly been lost', () => {
-    // Twenty six entries rather than twenty sheets: the entry pair, Get shopping
+    // Twenty seven entries rather than twenty one sheets: the entry pair, Get shopping
     // list and the three confirms are each declared over more than one page, because
     // a sheet has to cover the page it was opened from. A count rather than a list of
     // paths: it fails when a sheet is deleted or stops being addressed as one, and
     // needs no edit here when a page gains a sheet it already had elsewhere.
-    expect(sheets).toHaveLength(26);
+    expect(sheets).toHaveLength(27);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

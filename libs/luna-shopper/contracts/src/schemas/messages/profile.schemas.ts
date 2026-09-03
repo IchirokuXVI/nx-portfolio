@@ -52,6 +52,8 @@ export const PROFILE_SCHEMA_IDS = {
   resolveScopesRequest: schemaId('msg/profiles.resolveScopes/request'),
   addPostalCodeRequest: schemaId('msg/profiles.addPostalCode/request'),
   removePostalCodeRequest: schemaId('msg/profiles.removePostalCode/request'),
+  resolvePostalCodeRequest: schemaId('msg/profiles.resolvePostalCode/request'),
+  resolvedPostalCodeView: schemaId('profile/ResolvedPostalCodeView'),
   setLocationPreferencesRequest: schemaId(
     'msg/profiles.setLocationPreferences/request'
   ),
@@ -279,6 +281,34 @@ const removePostalCodeRequest = object(
   ['userId', 'profileId', 'postalCode']
 );
 
+/**
+ * A point, bounded by the globe (`apps/velista/plans/0058`, section 3).
+ *
+ * The country is the same optional alpha-2 every other postal code request takes:
+ * the centroid table is keyed on `(country, postalCode)`, and a lookup with no
+ * country would search every shipped country at once.
+ */
+const resolvePostalCodeRequest = object(
+  PROFILE_SCHEMA_IDS.resolvePostalCodeRequest,
+  {
+    userId: nonEmptyString(),
+    country: nonEmptyString({ maxLength: 2 }),
+    latitude: { type: 'number', minimum: -90, maximum: 90 },
+    longitude: { type: 'number', minimum: -180, maximum: 180 },
+  },
+  ['userId', 'latitude', 'longitude']
+);
+
+/** Null is "we don't know", which is a real answer here (plan 0060, section 6). */
+const resolvedPostalCodeView = object(
+  PROFILE_SCHEMA_IDS.resolvedPostalCodeView,
+  {
+    country: nonEmptyString({ maxLength: 2 }),
+    postalCode: nullableString(),
+  },
+  ['country', 'postalCode']
+);
+
 const setLocationPreferencesRequest = object(
   PROFILE_SCHEMA_IDS.setLocationPreferencesRequest,
   {
@@ -313,6 +343,8 @@ export const profileSchemas: JsonSchema[] = [
   resolveScopesRequest,
   addPostalCodeRequest,
   removePostalCodeRequest,
+  resolvePostalCodeRequest,
+  resolvedPostalCodeView,
   setLocationPreferencesRequest,
 ];
 
@@ -353,6 +385,12 @@ export const profileMessageContracts: Record<
   [PROFILE_PATTERNS.removePostalCode]: {
     request: PROFILE_SCHEMA_IDS.removePostalCodeRequest,
     response: PROFILE_SCHEMA_IDS.shoppingProfileView,
+  },
+  // The one profile message that answers something other than a profile, because
+  // it is the one that writes nothing (`apps/velista/plans/0058`, section 3.3).
+  [PROFILE_PATTERNS.resolvePostalCode]: {
+    request: PROFILE_SCHEMA_IDS.resolvePostalCodeRequest,
+    response: PROFILE_SCHEMA_IDS.resolvedPostalCodeView,
   },
   // The whole profile again, for the same reason: one call writes several rows,
   // and some of them by deleting (plan 0064, section 5).

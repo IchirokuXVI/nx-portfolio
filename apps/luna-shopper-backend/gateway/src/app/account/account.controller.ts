@@ -16,6 +16,7 @@ import {
   AUTH_PATTERNS,
   PROFILE_PATTERNS,
   type DeleteAccountResult,
+  type ResolvedPostalCodeView,
   type ShoppingProfileListResult,
   type ShoppingProfileView,
   type UserProfileView,
@@ -32,6 +33,7 @@ import { UpdateProfileDto } from './account.dto';
 import {
   AddPostalCodeDto,
   CreateShoppingProfileDto,
+  ResolvePostalCodeDto,
   SetProfileLocationsDto,
   UpdateShoppingProfileDto,
 } from './shopping-profile.dto';
@@ -242,6 +244,48 @@ export class AccountController {
     );
     await this.scopes.invalidate(user.userId);
     return profile;
+  }
+
+  /**
+   * Turn a point a device reported into a postal code
+   * (`apps/velista/plans/0058`, section 3).
+   *
+   * **It writes nothing, and it is not addressed to a profile.** The client sends
+   * the coordinates once, shows what comes back to a person, and adds the code
+   * they confirm through the route above with `source: DEVICE`. Nothing here
+   * stores the point, so nothing in the system does: this is where "we keep the
+   * postal code and not the position" stops being a promise and starts being the
+   * shape of the code.
+   *
+   * `POST` for a read for the same reason it takes a body: coordinates in a query
+   * string are coordinates in an access log. It therefore answers **201** and
+   * creates nothing, exactly like `POST /v1/catalog/lookup`: the whole surface
+   * follows Nest's default statuses with no `@HttpCode` anywhere, and
+   * `openapi-document.spec.ts` enforces that as a house rule.
+   *
+   * Backend plan 0060 section 7 declined to expose catalog's centroid lookup
+   * publicly, on the grounds that it would be a geocoding service nobody asked
+   * for. Requiring a token and throttling the bucket is what keeps this route the
+   * narrower thing it is meant to be.
+   *
+   * A null `postalCode` is an ordinary answer, not an error: the point is further
+   * from every centroid than the configured distance, so we say we do not know
+   * and the screen offers typing instead.
+   */
+  @Post('postal-code-lookups')
+  @Throttle(THROTTLE_LIMITS.postalCodeLookup)
+  @ApiContractResponse(PROFILE_PATTERNS.resolvePostalCode, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, body: true })
+  resolvePostalCode(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: ResolvePostalCodeDto
+  ): Promise<ResolvedPostalCodeView> {
+    return this.nats.send<ResolvedPostalCodeView>(
+      PROFILE_PATTERNS.resolvePostalCode,
+      { userId: user.userId, ...dto }
+    );
   }
 
   /**
