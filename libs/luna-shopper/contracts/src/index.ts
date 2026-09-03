@@ -18,6 +18,7 @@ export * from './lib/enums/realtime.enums';
 export * from './lib/enums/zone.enums';
 
 // Messages
+export * from './lib/messages/admin-auth.messages';
 export * from './lib/messages/assistant.messages';
 export * from './lib/messages/auth.messages';
 export * from './lib/messages/catalog.messages';

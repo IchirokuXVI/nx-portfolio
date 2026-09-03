@@ -1,0 +1,140 @@
+{
+  "name": "luna-shopper-admin",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "prefix": "app",
+  "sourceRoot": "apps/luna-shopper-admin/src",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/angular:webpack-browser",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/luna-shopper-admin",
+        "index": "apps/luna-shopper-admin/src/index.html",
+        "main": "apps/luna-shopper-admin/src/main.ts",
+        "tsConfig": "apps/luna-shopper-admin/tsconfig.app.json",
+        "inlineStyleLanguage": "scss",
+        "assets": [
+          {
+            "glob": "**/*",
+            "input": "apps/luna-shopper-admin/public"
+          }
+        ],
+        "styles": ["apps/luna-shopper-admin/src/styles.scss"],
+        "customWebpackConfig": {
+          "path": "apps/luna-shopper-admin/webpack.config.ts"
+        }
+      },
+      "configurations": {
+        "production": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "500kb",
+              "maximumError": "1mb"
+            },
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "12kb",
+              "maximumError": "20kb"
+            }
+          ],
+          "outputHashing": "all",
+          "customWebpackConfig": {
+            "path": "apps/luna-shopper-admin/webpack.prod.config.ts"
+          },
+          "fileReplacements": [
+            {
+              "replace": "apps/luna-shopper-admin/src/environments/environment.ts",
+              "with": "apps/luna-shopper-admin/src/environments/environment.prod.ts"
+            }
+          ]
+        },
+        "development": {
+          "buildOptimizer": false,
+          "optimization": false,
+          "vendorChunk": true,
+          "extractLicenses": false,
+          "sourceMap": true,
+          "namedChunks": true
+        }
+      },
+      "defaultConfiguration": "production"
+    },
+    "build:docker": {
+      "executor": "@portfolio/docker:build",
+      "dependsOn": ["build"],
+      "options": {
+        "imageName": "nx-portfolio/luna-shopper-admin",
+        "forwardEnv": ["BUILDER_TAG"],
+        "context": "dist"
+      },
+      "configurations": {
+        "development": {
+          "versionTags": ["dev"],
+          "buildArgs": {
+            "BUILDER_TAG": "dev"
+          }
+        },
+        "production": {
+          "pushToRegistry": true,
+          "versionTags": ["latest"]
+        }
+      },
+      "defaultConfiguration": "development"
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/angular:dev-server",
+      "options": {
+        "port": 4206,
+        "publicHost": "http://localhost:4206"
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "luna-shopper-admin:build:production"
+        },
+        "development": {
+          "buildTarget": "luna-shopper-admin:build:development"
+        }
+      },
+      "defaultConfiguration": "development"
+    },
+    "extract-i18n": {
+      "executor": "@angular-devkit/build-angular:extract-i18n",
+      "options": {
+        "buildTarget": "luna-shopper-admin:build"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/luna-shopper-admin/jest.config.cts",
+        "tsConfig": "apps/luna-shopper-admin/tsconfig.spec.json"
+      }
+    },
+    "serve-static": {
+      "continuous": true,
+      "executor": "@nx/web:file-server",
+      "defaultConfiguration": "production",
+      "options": {
+        "buildTarget": "luna-shopper-admin:build",
+        "port": 4206,
+        "watch": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "luna-shopper-admin:build:development"
+        },
+        "production": {
+          "buildTarget": "luna-shopper-admin:build:production"
+        }
+      }
+    }
+  }
+}

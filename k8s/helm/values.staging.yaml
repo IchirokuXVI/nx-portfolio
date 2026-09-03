@@ -13,17 +13,24 @@
 baseDomain: staging.ichirokuxvi.com
 environment: staging
 
-# velista's own domain, staging half. Same three names as production, one label
+# velista's own domain, staging half. Same four names as production, one label
 # further down: `staging.velista.app` is to `velista.app` what
 # `staging.ichirokuxvi.com` is to `ichirokuxvi.com`.
 #
-# Each is a record of its own. `api.staging.velista.app` is NOT covered by an A
-# record on `staging.velista.app`, and a wildcard on `*.velista.app` does not reach
-# it either: a wildcard matches one label. All three have to exist and resolve to
+# Each is a record of its own. `api.staging.velista.app` is NOT covered by a record
+# on `staging.velista.app`, and a wildcard on `*.velista.app` does not reach it
+# either: a wildcard matches one label. All four have to exist and resolve to
 # `ipAddress` before this deploys, or cert-manager burns Let's Encrypt's failed
 # validation budget retrying names that cannot answer.
+#
+# **All four exist**, `admin.staging.velista.app` included, and each is a CNAME onto
+# the apex rather than an A record of its own: `admin.staging.velista.app` is a
+# canonical name for `staging.velista.app`, which answers `ipAddress`. That is why
+# moving `ipAddress` moves all of them at once and no per name edit is needed here.
+# Production is the same shape, `admin.velista.app` onto `velista.app`.
 hostOverrides:
   velista: staging.velista.app
+  luna-shopper-admin: admin.staging.velista.app
   luna-shopper-backend-gateway: api.staging.velista.app
   luna-shopper-backend-realtime: rt.staging.velista.app
 
@@ -52,9 +59,15 @@ lunaShopperBackend:
   enabled: true
   config:
     logLevel: debug
-    # Both origins while both are live, exactly as production.
-    corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app
+    # Three origins, exactly as production, one label down: the portfolio and
+    # velista while both are live, plus the back office.
+    corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app,https://admin.staging.velista.app
     authJwtKid: staging-1
+    adminJwtKid: staging-admin-1
+    # Staging says so, which is the whole point: an operator cannot mistake which
+    # database they are about to write to. ADMIN_DEV_AUTOLOGIN is absent here for
+    # the same reason it is absent from production.
+    environmentName: staging
     googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # Register this URI in the Google console beside the production one. Google
     # matches redirect_uri exactly, so the two are two entries, not a pattern.

@@ -1,0 +1,27 @@
+// The app's global stylesheet: a reset, and the tokens on the app's own root.
+//
+// The tokens land on `app-luna-shopper-admin-root` rather than on `:root`, which
+// costs nothing here (this app is never mounted inside anything) and keeps the habit
+// that makes velista extractable. The per deployment block is applied to the same
+// element, because that is where `AppRoot` stamps `data-deployment`.
+
+@use '../../../libs/luna-shopper-admin/ui/src/lib/styles/tokens' as tokens;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100dvh;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'Noto Sans', 'Liberation Sans', sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+app-luna-shopper-admin-root {
+  @include tokens.admin-root;
+  @include tokens.admin-deployments;
+}

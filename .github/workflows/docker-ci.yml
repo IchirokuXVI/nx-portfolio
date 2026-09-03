@@ -87,6 +87,13 @@ env:
   STAGING_MFE_REMOTE_URLS: velista=https://staging.velista.app
   # Which backend the staging velista image talks to (velista plan 0014). On
   # velista's domain too, since these two exist only to serve it.
+  #
+  # The gateway URL now serves **two** images, not one: luna-shopper-admin reads the
+  # same `LUNA_GATEWAY_URL` on its own build (its plan 0001, section 7), because it
+  # talks to the same gateway on different routes. That is why there is no second
+  # variable for it � one deployment has one gateway, and a second name for it could
+  # only ever disagree with this one. The realtime URL stays velista's alone: the
+  # back office polls and never subscribes.
   STAGING_LUNA_GATEWAY_URL: https://api.staging.velista.app
   STAGING_LUNA_REALTIME_URL: https://rt.staging.velista.app
   # Options for every SSH in this file, rsync's transport included.
@@ -681,9 +688,10 @@ jobs:
             # soon as the API server accepts the manifests, so the job went green
             # while pods crashlooped or a rollout hung forever.
             #
-            # It also covers the migration Jobs for free: they are pre-upgrade
-            # hooks, so a migration that fails through its backoffLimit fails the
-            # upgrade before any new pod takes traffic.
+            # It also covers the migration Jobs for free: they are hooks, so a
+            # migration that fails through its backoffLimit fails the upgrade,
+            # and on the ordinary pre-upgrade path it does so before any new pod
+            # takes traffic.
             #
             # 10m is chosen against the slowest real path: the migration Jobs
             # (four in staging since k8s plan 0008 added the harvester's), then
@@ -692,14 +700,18 @@ jobs:
             # pulling images.
             #
             # The ONE deploy with materially less margin than that is the first
-            # one after the harvester is enabled in a cluster, which also has to
-            # bind a new 2Gi local-path PVC and start a fourth Postgres before its
-            # migration can run. If that first deploy times out, --atomic rolls the
-            # whole release back and the log says so plainly; re-running it lands
-            # on a node that has already pulled the image and provisioned the
-            # volume. Raise this number only if that turns out not to be enough,
-            # rather than pre-emptively: a long timeout is how a hung rollout gets
-            # to look like a slow one.
+            # one after a service with its own database is enabled in a cluster,
+            # which also has to bind a new local-path PVC and start another
+            # Postgres. That deploy runs its migration LAST rather than first:
+            # the Job cannot precede the StatefulSet that gives it a database, so
+            # migration-job.yaml.tpl renders it post-upgrade for that one deploy
+            # and back on pre-upgrade afterwards. The comment there is the full
+            # account, and it is worth reading before assuming a slow first
+            # deploy is the same thing as a stuck one.
+            #
+            # Raise this number only if that turns out not to be enough, rather
+            # than pre-emptively: a long timeout is how a hung rollout gets to
+            # look like a slow one.
             helm upgrade --install nx-portfolio $HOME/k8s/helm \
               --namespace nx-portfolio \
               --create-namespace \

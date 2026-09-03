@@ -39,5 +39,20 @@ module.exports = {
       outputHashing: 'none',
       generatePackageJson: false,
     }),
+    // The operator commands (plan 0071, section 6). A third entry, for the same
+    // reason as the second: section 6 says an admin is created by the person who
+    // has the server, and without this in the image that is only true of a
+    // machine with a checkout on it. `node admin-cli.js create <username>` inside
+    // the auth pod is how a fresh cluster gets its first operator.
+    new NxAppWebpackPlugin({
+      target: 'node',
+      compiler: 'tsc',
+      main: './src/admin-cli.ts',
+      outputFileName: 'admin-cli.js',
+      tsConfig: './tsconfig.app.json',
+      optimization: false,
+      outputHashing: 'none',
+      generatePackageJson: false,
+    }),
   ],
 };

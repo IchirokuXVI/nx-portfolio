@@ -1,6 +1,7 @@
 import { IDENTITY_EVENTS } from '../lib/events/identity.events';
 import { POSTAL_CODE_EVENTS } from '../lib/events/postal-code.events';
 import { RealtimeEvent } from '../lib/events/realtime.events';
+import { ADMIN_AUTH_PATTERNS } from '../lib/messages/admin-auth.messages';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ITEM_PATTERNS,
@@ -52,6 +53,7 @@ describe('contract schemas', () => {
   describe('registry completeness', () => {
     const allMessageSubjects = [
       ...Object.values(AUTH_PATTERNS),
+      ...Object.values(ADMIN_AUTH_PATTERNS),
       ...Object.values(RECONCILIATION_PATTERNS),
       ...Object.values(ZONE_PATTERNS),
       ...Object.values(MEMBERSHIP_PATTERNS),

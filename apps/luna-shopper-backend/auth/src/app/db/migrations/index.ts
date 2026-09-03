@@ -1,4 +1,5 @@
 import { InitialAuthSchema1756000000000 } from './1756000000000-InitialAuthSchema';
+import { AdminUsers1772400000000 } from './1772400000000-AdminUsers';
 
 /**
  * Every auth migration, in the order TypeORM must apply them (plan 0027,
@@ -17,4 +18,7 @@ import { InitialAuthSchema1756000000000 } from './1756000000000-InitialAuthSchem
  * it is sorted by timestamp and matches the files in this directory, so adding a
  * migration and forgetting this list fails the suite rather than the deploy.
  */
-export const AUTH_MIGRATIONS = [InitialAuthSchema1756000000000];
+export const AUTH_MIGRATIONS = [
+  InitialAuthSchema1756000000000,
+  AdminUsers1772400000000,
+];

@@ -8,6 +8,7 @@ export { ENUM_IDS } from './enums.schemas';
 export { CATALOG_EVENT_SCHEMA_IDS } from './events/catalog.schemas';
 export { IDENTITY_EVENT_SCHEMA_IDS } from './events/identity.schemas';
 export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';
+export { ADMIN_AUTH_SCHEMA_IDS } from './messages/admin-auth.schemas';
 export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';
 export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
 export { GENERATED_LIST_SHARING_SCHEMA_IDS } from './messages/generated-list-sharing.schemas';

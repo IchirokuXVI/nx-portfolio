@@ -27,13 +27,26 @@ environment: production
 # .github/workflows/release.yml), which is why https://ichirokuxvi.com stays on
 # corsOrigins below.
 #
-# The three names must resolve to `ipAddress` BEFORE this deploys: cert-manager
+# All four names must resolve to `ipAddress` BEFORE this deploys: cert-manager
 # requests a certificate per Gateway listener the moment the chart applies, and
 # Let's Encrypt rate limits failed validations hard. `.app` is on the HSTS preload
 # list, so there is no plain HTTP fallback to fall back to while a certificate is
 # pending; the site is simply unreachable until it issues.
+#
+# They all exist, and each is a CNAME onto the apex rather than an A record of its
+# own: `admin.velista.app` is a canonical name for `velista.app`, which answers
+# `ipAddress`. So moving `ipAddress` moves all four at once.
+#
+# `admin.` joins them for the same reason `api.` and `rt.` did: the back office
+# exists to administer the backend that serves velista, and putting it under the
+# portfolio domain would keep a fourth unrelated name in play. This is the one place
+# the project name and the hostname deliberately disagree — the project is
+# `luna-shopper-admin`, because it administers luna-shopper rather than velista, and
+# the host is `admin.velista.app`, because that record exists and is what the
+# operator will type. Neither should be "fixed" to match the other.
 hostOverrides:
   velista: velista.app
+  luna-shopper-admin: admin.velista.app
   luna-shopper-backend-gateway: api.velista.app
   luna-shopper-backend-realtime: rt.velista.app
 
@@ -50,15 +63,30 @@ lunaShopperBackend:
   enabled: true
   config:
     logLevel: info
-    # Both origins, because after plan 0013 both can be serving velista: the
-    # portfolio at `/velista` and velista's own host, which is `velista.app` now.
+    # Three origins. Two of them can be serving velista, because after plan 0013
+    # both can: the portfolio at `/velista` and velista's own host, which is
+    # `velista.app` now. Once D5's redirect lands the portfolio entry can go.
+    #
+    # The third is the back office, which reaches this gateway on the `/v1/admin`
+    # routes from an origin of its own (luna-shopper-admin plan 0001, section 8).
+    #
     # Comma separated, and the gateway splits and trims it. Plan 0013 section 9
     # claimed CORS was unaffected by the move; it is not. The gateway was never
     # same origin with the app, but it allows an explicit list of hosts, so an
-    # origin that is not on the list has every request blocked. Once D5's
-    # redirect lands the portfolio entry can go.
-    corsOrigins: https://ichirokuxvi.com,https://velista.app
+    # origin that is not on the list has every request blocked — the app loads and
+    # then fails on its first call, which looks like a broken backend rather than a
+    # missing line here.
+    corsOrigins: https://ichirokuxvi.com,https://velista.app,https://admin.velista.app
     authJwtKid: prod-1
+    # The operator keypair's own kid (plan 0071, section 3), so a verification
+    # failure names which key was expected instead of only saying the signature
+    # is invalid.
+    adminJwtKid: prod-admin-1
+    # What GET /v1/admin/auth/me answers with, and therefore the accent colour the
+    # back office renders. ADMIN_DEV_AUTOLOGIN is not here and must never be: auth
+    # refuses to boot with it on against a non local database, and
+    # `provision-release.sh --check` asserts no rendered manifest carries it.
+    environmentName: production
     googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # The path the gateway actually serves: its controllers are versioned, so the
     # callback lives under /v1. It must match a URI pre-registered with Google
