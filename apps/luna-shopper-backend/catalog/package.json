@@ -2,7 +2,7 @@
   "name": "luna-shopper-backend-catalog",
   "version": "0.0.1",
   "private": true,
-  "comment": "Runtime dependency manifest for the container image. Development uses the single root package.json (plan 0003); this is the authoritative list of what the built service needs at runtime, so `nx prune` produces a pruned package.json + lockfile for a reproducible `npm ci` in the Dockerfile (plan 0002, section 3). Includes the deps the bundled @portfolio/luna-shopper/platform code pulls in (pino/terminus/swagger/throttler/class-validator, and the OpenTelemetry SDK that `main.ts` loads before anything else). ioredis and tslib are in that set even though this service never touches Redis: the platform barrel re-exports RedisService, so every bundle that imports anything from it emits a top level `require(\"ioredis\")`, and tslib is emitted by the TypeScript helpers. Neither is optional, and the container dies at boot without them, tslib only once nothing else happens to hoist it. Keep in sync with the imports the service actually uses, and check the built main.js rather than the source when a dependency looks unused.",
+  "comment": "Runtime dependency manifest for the container image. Development uses the single root package.json (plan 0003); this is the authoritative list of what the built service needs at runtime, so `nx prune` produces a pruned package.json + lockfile for a reproducible `npm ci` in the Dockerfile (plan 0002, section 3). Includes the deps the bundled @portfolio/luna-shopper/platform code pulls in (pino/terminus/swagger/throttler/class-validator, and the OpenTelemetry SDK that `main.ts` loads before anything else). ioredis and tslib are in that set even though this service never touches Redis: the platform barrel re-exports RedisService, so every bundle that imports anything from it emits a top level `require(\"ioredis\")`, and tslib is emitted by the TypeScript helpers. Neither is optional, and the container dies at boot without them, tslib only once nothing else happens to hoist it. Keep in sync with the imports the service actually uses, and check the built main.js rather than the source when a dependency looks unused. Check the OTHER two bundles as well, because the image runs three entry points and this file is the only thing that covers them all: `generatePackageJson` is set on the `main.ts` plugin alone (webpack.config.js says why two writers cannot share the file), so a package reachable only from `migrate.ts` or `seed-reference.ts` is invisible to the generator and reaches the image only if it is listed here. uuid is that case. `seed-reference.js` requires it for the deterministic ids in app/db/reference/ids.ts and nothing on the main path does, so the seed Job died with `Cannot find module 'uuid'` against an image whose service started perfectly, and, being a pre-upgrade hook, took the whole staging release down with it.",
   "dependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
@@ -38,6 +38,7 @@
     "reflect-metadata": "^0.1.13",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
-    "typeorm": "^1.1.0"
+    "typeorm": "^1.1.0",
+    "uuid": "^11.1.0"
   }
 }
