@@ -11,7 +11,11 @@ import {
   type ProductGroupDeletedEvent,
 } from '@portfolio/luna-shopper/contracts';
 import { runOnce } from '@portfolio/luna-shopper/platform';
-import { In, Repository, type DataSource, type EntityManager } from 'typeorm';
+// `DataSource` is a **value** import, not a type one, and that is load bearing:
+// Nest resolves a constructor parameter by its runtime token, so erasing this to
+// a type leaves index 0 undefined and the service unconstructable. It costs a
+// boot failure that no unit spec sees, because a spec passes its own double in.
+import { DataSource, In, Repository, type EntityManager } from 'typeorm';
 import {
   ListLine,
   ListLineGroupRemoval,
