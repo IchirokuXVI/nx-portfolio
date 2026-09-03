@@ -61,6 +61,19 @@ export class SessionMemory implements SessionServiceI {
     return this.issue();
   }
 
+  /**
+   * A new token, always.
+   *
+   * It cannot refuse, and that is the honest answer for a service standing in
+   * for a server: the only refusal a real refresh gives is a token that has
+   * already died, and this class has no clock of its own to have let one die
+   * on. Specs that need a refusal drive {@link SessionServiceI} with a fake, the
+   * same way they drive a lockout.
+   */
+  async refresh(): Promise<AdminSession> {
+    return this.issue();
+  }
+
   async readMe(): Promise<AdminMe> {
     return {
       admin: {
@@ -76,12 +89,16 @@ export class SessionMemory implements SessionServiceI {
   }
 
   private issue(): AdminSession {
+    const now = Date.now();
     return {
       adminId: MEMORY_ADMIN.adminId,
       username: MEMORY_ADMIN.username,
       displayName: MEMORY_ADMIN.displayName,
       accessToken: 'memory-token',
-      expiresAt: new Date(Date.now() + TOKEN_LIFETIME_MS),
+      expiresAt: new Date(now + TOKEN_LIFETIME_MS),
+      // Both instants from one `now`, so a session minted here has exactly the
+      // lifetime named above rather than one a millisecond short of it.
+      receivedAt: new Date(now),
     };
   }
 }

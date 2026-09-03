@@ -4,6 +4,7 @@ import {
   requireSession,
   SIGN_IN_PATH,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { SignInPage } from '@portfolio/luna-shopper-admin/feature-auth';
 
 /**
  * The route table, served from this app's own origin.
@@ -26,12 +27,19 @@ import {
  */
 export const appRoutes: Route[] = [
   {
+    // Imported rather than lazy-loaded, which is a change from `0002` and is
+    // forced by `0003`: the re-authentication overlay lives in this library and
+    // is drawn by `AppRoot`, above every route, because covering the screen must
+    // not unmount whatever is on it. A library statically imported there cannot
+    // also be lazy-loaded here, and `@nx/enforce-module-boundaries` says so.
+    //
+    // It costs nothing worth having. The login screen is the first thing this app
+    // draws, so deferring it defers the only page an unauthenticated operator can
+    // see, and the overlay has to be able to appear in the same frame the session
+    // ends in.
     path: SIGN_IN_PATH,
     canActivate: [requireNoSession],
-    loadComponent: () =>
-      import('@portfolio/luna-shopper-admin/feature-auth').then(
-        (m) => m.SignInPage
-      ),
+    component: SignInPage,
   },
   {
     path: '',

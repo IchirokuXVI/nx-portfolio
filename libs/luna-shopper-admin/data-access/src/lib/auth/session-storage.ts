@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import {
+  asInstant,
   toAdminSession,
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
@@ -73,6 +74,11 @@ export class SessionStorage {
           displayName: session.displayName,
           accessToken: session.accessToken,
           expiresAt: session.expiresAt.toISOString(),
+          // Written so a reload keeps the token's *lifetime* and not only what
+          // is left of it (plan 0003). Without it every reload would shorten
+          // the lifetime the warning fraction is taken from, and a tab reloaded
+          // at the wrong moment would warn seconds before it expired.
+          receivedAt: session.receivedAt.toISOString(),
         })
       );
     } catch {
@@ -108,8 +114,26 @@ export class SessionStorage {
  */
 function parse(raw: string): AdminSession | null {
   try {
-    return toAdminSession(JSON.parse(raw));
+    const body: unknown = JSON.parse(raw);
+    return toAdminSession(body, storedReceivedAt(body) ?? new Date());
   } catch {
     return null;
   }
+}
+
+/**
+ * The `receivedAt` a previous page wrote, or `null`.
+ *
+ * `null` covers a session written by a build from before `0003` as well as a
+ * value somebody edited into nonsense, and both fall back to now. That
+ * understates the lifetime, which moves the warning later rather than earlier:
+ * the operator gets less notice on that one restored session and nothing else
+ * changes. The opposite fallback, inventing a longer lifetime, would put the
+ * warning after the expiry it exists to precede.
+ */
+function storedReceivedAt(body: unknown): Date | null {
+  if (typeof body !== 'object' || body === null) {
+    return null;
+  }
+  return asInstant((body as Record<string, unknown>)['receivedAt']);
 }

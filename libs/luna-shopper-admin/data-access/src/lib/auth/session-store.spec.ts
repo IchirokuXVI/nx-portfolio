@@ -23,6 +23,7 @@ const session: AdminSession = {
   displayName: 'Operations',
   accessToken: 'a.b.c',
   expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+  receivedAt: new Date(),
 };
 
 const me: AdminMe = {
@@ -46,6 +47,7 @@ function serviceThat(
   return {
     signIn: answer,
     signInForDevelopment: answer,
+    refresh: answer,
     readMe: async (): Promise<AdminMe> => me,
   };
 }
@@ -165,5 +167,118 @@ describe('SessionStore', () => {
     await store.signIn('ops', 'ops');
 
     expect(store.token()).toBe('a.b.c');
+  });
+
+  /** Plan 0003, section 4. */
+  describe('refresh', () => {
+    const renewed: AdminSession = {
+      ...session,
+      accessToken: 'renewed.token',
+    };
+
+    /** A refresh that can be held open, so two callers can arrive during one. */
+    function serviceThatHangs() {
+      const calls = { refreshes: 0 };
+      let release: ((session: AdminSession) => void) | null = null;
+
+      const service: SessionServiceI = {
+        ...serviceThat({ session }),
+        refresh: () => {
+          calls.refreshes += 1;
+          return new Promise<AdminSession>((resolve) => (release = resolve));
+        },
+      };
+
+      return { service, calls, finish: () => release?.(renewed) };
+    }
+
+    it('replaces the held session, and what storage holds', async () => {
+      const store = setup(serviceThat({ session: renewed }));
+      await store.signIn('ops', 'ops');
+
+      await expect(store.refresh()).resolves.toBe(true);
+
+      expect(store.token()).toBe('renewed.token');
+      expect(sessionStorage.length).toBe(1);
+    });
+
+    /**
+     * The keepalive timer and a 401 retry will want a renewal at the same
+     * moment, and so will several requests that were in flight together. One
+     * call is made and everybody awaits the same promise.
+     */
+    it('makes one call however many callers ask at once', async () => {
+      const { service, calls, finish } = serviceThatHangs();
+      const store = setup(service);
+      await store.signIn('ops', 'ops');
+
+      const both = Promise.all([store.refresh(), store.refresh()]);
+      finish();
+
+      await expect(both).resolves.toEqual([true, true]);
+      expect(calls.refreshes).toBe(1);
+    });
+
+    /** The guard is per renewal, not for the life of the store. */
+    it('will renew again once the first one has finished', async () => {
+      const store = setup(serviceThat({ session: renewed }));
+      await store.signIn('ops', 'ops');
+
+      await store.refresh();
+      await expect(store.refresh()).resolves.toBe(true);
+    });
+
+    /**
+     * The failure is the caller's to interpret. A network that blinked must not
+     * cost a session, so this reports and changes nothing; `SessionLifecycle`
+     * decides whether to retry or to ask for a password.
+     */
+    it('reports a refusal without signing anybody out', async () => {
+      const store = setup({
+        ...serviceThat({ session }),
+        refresh: () =>
+          Promise.reject(
+            new GatewayError({
+              code: 'unauthorized',
+              status: 401,
+              correlationId: 'cid',
+            })
+          ),
+      });
+      await store.signIn('ops', 'ops');
+
+      await expect(store.refresh()).resolves.toBe(false);
+
+      expect(store.signedIn()).toBe(true);
+      expect(store.token()).toBe('a.b.c');
+    });
+
+    /** Asking would send an unauthenticated request that nothing explains. */
+    it('does not ask when there is nothing to renew', async () => {
+      const { service, calls } = serviceThatHangs();
+      const store = setup(service);
+
+      await expect(store.refresh()).resolves.toBe(false);
+      expect(calls.refreshes).toBe(0);
+    });
+
+    /**
+     * An abandoned overlay, or a deliberate sign out, may land while a renewal
+     * is in flight. Writing the answer would sign an operator back in after they
+     * asked to leave.
+     */
+    it('discards a renewal that arrives after a sign out', async () => {
+      const { service, finish } = serviceThatHangs();
+      const store = setup(service);
+      await store.signIn('ops', 'ops');
+
+      const renewing = store.refresh();
+      store.signOut();
+      finish();
+
+      await expect(renewing).resolves.toBe(false);
+      expect(store.signedIn()).toBe(false);
+      expect(sessionStorage.length).toBe(0);
+    });
   });
 });
