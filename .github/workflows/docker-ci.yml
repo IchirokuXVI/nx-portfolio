@@ -685,10 +685,21 @@ jobs:
             # hooks, so a migration that fails through its backoffLimit fails the
             # upgrade before any new pod takes traffic.
             #
-            # 10m is chosen against the slowest real path: three migration Jobs,
-            # then the Deployments rolling with a readiness probe whose
+            # 10m is chosen against the slowest real path: the migration Jobs
+            # (four in staging since k8s plan 0008 added the harvester's), then
+            # the Deployments rolling with a readiness probe whose
             # initialDelaySeconds is 5 and periodSeconds 10, on a single node
             # pulling images.
+            #
+            # The ONE deploy with materially less margin than that is the first
+            # one after the harvester is enabled in a cluster, which also has to
+            # bind a new 2Gi local-path PVC and start a fourth Postgres before its
+            # migration can run. If that first deploy times out, --atomic rolls the
+            # whole release back and the log says so plainly; re-running it lands
+            # on a node that has already pulled the image and provisioned the
+            # volume. Raise this number only if that turns out not to be enough,
+            # rather than pre-emptively: a long timeout is how a hung rollout gets
+            # to look like a slow one.
             helm upgrade --install nx-portfolio $HOME/k8s/helm \
               --namespace nx-portfolio \
               --create-namespace \
@@ -697,11 +708,17 @@ jobs:
               --atomic --timeout 10m
 
             # An affected app whose image CI built is not necessarily deployed in
-            # this cluster. The harvester (plan 0038) is the first of those: the
-            # chart describes it, `harvester.enabled` is false in both clusters,
-            # and CI still builds its image because it is an affected project.
-            # Restarting a Deployment that was never rendered fails the step and
-            # takes an otherwise good deploy down with it.
+            # this cluster. The harvester (plan 0038) is why this loop exists: the
+            # chart describes it, `harvester.enabled` decides per cluster whether
+            # it renders, and CI builds its image either way because it is an
+            # affected project. Restarting a Deployment that was never rendered
+            # fails the step and takes an otherwise good deploy down with it.
+            #
+            # As of k8s plan 0008 the harvester IS rendered in staging, so it will
+            # normally be found here and restarted like any other. The loop still
+            # earns its place: production has it off pending that plan's soak, the
+            # release workflow runs the same shape, and the switch is meant to be
+            # flippable in either direction without editing a workflow.
             #
             # So the list is narrowed to what actually exists, and what was
             # dropped is PRINTED rather than silently skipped: a deployment

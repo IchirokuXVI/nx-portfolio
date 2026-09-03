@@ -150,7 +150,7 @@ payload that reached the broker without passing the interceptor.
       key: PLATFORM_ADMIN_USER_IDS
 {{- end }}
 {{- if eq $svc.role "harvester" }}
-# The harvester (plan 0038). It owns the third database, verifies tokens offline
+# The harvester (plan 0038). It owns the fourth database, verifies tokens offline
 # with the auth public key like catalog does, and gates EVERY subject it exposes
 # on the platform admin allowlist rather than only its writes.
 - name: HARVESTER_DB_URL
