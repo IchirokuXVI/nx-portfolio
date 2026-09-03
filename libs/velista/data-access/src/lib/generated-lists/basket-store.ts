@@ -286,6 +286,41 @@ export class BasketStore {
   );
 
   /**
+   * Whether the trip is over, which is what takes every control off the screen
+   * (velista `0057`, section 6).
+   *
+   * **The negation of {@link takesLines} and not a status of its own**, once a basket
+   * has actually been read. There is one question here — may this basket still be
+   * changed — and it is asked by the composer, by every row, by the settle sheet and
+   * by the banner; two readings of it would eventually disagree, and the screen would
+   * draw a control beside a banner saying it cannot be used.
+   *
+   * The null check is what stops it claiming a finished trip during the first read,
+   * where `takesLines` is false because nothing has loaded rather than because
+   * anything is finished. A status this build does not recognise reads as finished,
+   * which is the same safe direction `takesLines` takes for the composer: the screen
+   * offers nothing it cannot promise, and the banner is a sentence rather than a
+   * refusal.
+   */
+  readonly finished = computed(
+    () => this._basket() !== null && !this.takesLines()
+  );
+
+  /**
+   * How many lines still have something outstanding (velista `0057`, section 5).
+   *
+   * What the finish sheet warns about, and the third line of its question. Derived
+   * from the lines this store already holds rather than read from anywhere: a line
+   * with nothing left to get is finished however it got that way, which is exactly
+   * what {@link progress} counts, and the two must not be able to disagree about how
+   * many are left.
+   */
+  readonly unsettled = computed(() => {
+    const { done, unavailable, total } = this.progress();
+    return total - done - unavailable;
+  });
+
+  /**
    * The most recent line to arrive, however it arrived, for the page's live region.
    *
    * One signal rather than a queue, and that is what makes the announcement right
@@ -550,6 +585,10 @@ export class BasketStore {
       return line;
     } catch (error) {
       this._fail(id, error);
+      // The composer is a write like any other, and the one that most needs the
+      // screen to catch up: an add refused because the owner finished the trip
+      // leaves a field drawn over a basket that takes no lines (velista `0057`).
+      await this._rereadIfOvertaken(error);
       return null;
     } finally {
       this._adding.set(false);
@@ -862,7 +901,7 @@ export class BasketStore {
    * that has to close or stay open, and every failure this can suffer is already
    * reflected in {@link state} or is a transient the next refresh resolves.
    *
-   * ## One failure is refetched before the caller hears about it
+   * ## Two failures are refetched before the caller hears about them
    *
    * `stale_quantity` says the number this write was moving is not where the control
    * believed it started, which is two phones in one shop working one line. Every
@@ -871,6 +910,13 @@ export class BasketStore {
    * back, and the caller can read the true amount off the line the moment it has it.
    * Doing it in each caller would be the same three lines in two sheets, and the one
    * that forgot would draw a sentence over a stale number.
+   *
+   * `generated_list_finished` is the same shape of answer about the whole basket
+   * rather than one line (velista `0057`, section 7): the owner ended the trip while
+   * this phone was in a shop, so the write that just refused is one of a screenful
+   * that would all refuse the same way. Refetching turns the basket into the finished
+   * one it now is, and the controls that refused go with it. A refusal that left them
+   * sitting there would invite the same tap again.
    */
   private async _write<T>(
     lineId: string,
@@ -886,12 +932,7 @@ export class BasketStore {
       return await send(id);
     } catch (error) {
       this._fail(id, error);
-      if (error instanceof GatewayError && error.code === 'stale_quantity') {
-        await this.refresh();
-        // `_fail` recorded the error and `refresh` sets `state` back to ready, so
-        // what the caller reads is the true line beside a failure it can name.
-        this._error.set(error);
-      }
+      await this._rereadIfOvertaken(error);
       return null;
     } finally {
       this._busyLines.update((busy) => {
@@ -899,6 +940,29 @@ export class BasketStore {
         next.delete(lineId);
         return next;
       });
+    }
+  }
+
+  /**
+   * Read the basket again when the failure means somebody else moved first.
+   *
+   * Two codes, and the same treatment for both: the write refused because the world
+   * is not what the control was drawn from, so the honest answer is the world as it
+   * now is rather than a sentence over a stale screen. See {@link _write} for each
+   * of them in full.
+   *
+   * The error is put back **after** the refresh, because `refresh` clears it on the
+   * way to `ready`: what the caller has to read is the true basket beside a failure
+   * it can still name.
+   */
+  private async _rereadIfOvertaken(error: unknown): Promise<void> {
+    if (
+      error instanceof GatewayError &&
+      (error.code === 'stale_quantity' ||
+        error.code === 'generated_list_finished')
+    ) {
+      await this.refresh();
+      this._error.set(error);
     }
   }
 

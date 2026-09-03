@@ -57,6 +57,8 @@ async function render(
     listNames?: ReadonlyMap<string, string>;
     busy?: boolean;
     notice?: { key: string; count: number } | null;
+    /** Whether the **trip** is over, which is not the same as a finished line. */
+    finished?: boolean;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -80,6 +82,7 @@ async function render(
   fixture.componentRef.setInput('canReopen', options.canReopen ?? false);
   fixture.componentRef.setInput('busy', options.busy ?? false);
   fixture.componentRef.setInput('notice', options.notice ?? null);
+  fixture.componentRef.setInput('finished', options.finished ?? false);
   fixture.detectChanges();
 
   return fixture;
@@ -241,6 +244,66 @@ describe('BasketLineRow: a backend with no reopen route', () => {
     const fixture = await render(line(), { canReopen: false });
 
     expect(status(fixture)?.tagName).toBe('BUTTON');
+  });
+});
+
+/**
+ * A row on a trip that is over (velista `0057`, section 6).
+ *
+ * The row still **says** everything it said: the words, the product, who settled it,
+ * which household it came from. What goes is everything that would change it, absent
+ * rather than disabled, because every one of those writes is refused by the server on
+ * a finished basket and a drawn control is an invitation that cannot be honoured.
+ */
+describe('BasketLineRow: the trip is finished', () => {
+  it('draws no settle control, even on a line nobody settled', async () => {
+    // The case a line-level check would miss entirely: this line has everything
+    // outstanding, so `canReopen` and the line's own state both say "offer the
+    // control", and the basket says no.
+    const fixture = await render(line(), { finished: true, canReopen: true });
+
+    const control = status(fixture);
+    expect(control?.tagName).toBe('SPAN');
+    expect(control?.getAttribute('aria-label')).toContain(
+      'basket.status.isWanted'
+    );
+  });
+
+  it('says what a partly settled line is rather than offering the rest', async () => {
+    const fixture = await render(line({ settled: 1 }), { finished: true });
+
+    expect(status(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.status.isPartly'
+    );
+  });
+
+  it('offers no undo on a line somebody did settle', async () => {
+    const fixture = await render(bought(), { finished: true, canReopen: true });
+
+    const control = status(fixture);
+    expect(control?.tagName).toBe('SPAN');
+    expect(control?.getAttribute('aria-label')).toContain(
+      'basket.status.isGot'
+    );
+  });
+
+  it('turns the reel back into the number it was before plan 0054', async () => {
+    const fixture = await render(line({ quantity: 3, settled: 1 }), {
+      finished: true,
+    });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('lib-quantity-reel')
+    ).toBeNull();
+    expect(text(fixture, '.settled-count').trim()).toBe('2');
+  });
+
+  it('still opens the sheet, which is where the history is', async () => {
+    // A finished basket is the receipt for a trip somebody took, and the most likely
+    // reason to open one is to see what was bought.
+    const fixture = await render(bought(), { finished: true });
+
+    expect(body(fixture)?.tagName).toBe('BUTTON');
   });
 });
 

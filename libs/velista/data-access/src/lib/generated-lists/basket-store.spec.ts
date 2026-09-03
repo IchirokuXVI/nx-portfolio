@@ -2,8 +2,10 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   outstanding,
+  type BasketAddLineRequest,
   type BasketLine,
   type BasketSession,
+  type BasketSettleRequest,
 } from '@portfolio/velista/models';
 import { Subject } from 'rxjs';
 import { GatewayError } from '../errors';
@@ -590,6 +592,179 @@ describe('BasketStore', () => {
       // to be finished is an invitation that cannot be honoured.
       const { store } = build();
 
+      expect(store.takesLines()).toBe(false);
+    });
+  });
+
+  /**
+   * The trip being over, which is what takes every control off the screen
+   * (velista `0057`, section 6).
+   *
+   * `finished` is the negation of `takesLines` and not a status of its own, which is
+   * the whole of what these assert: one question, asked once, so a control and the
+   * banner beside it cannot disagree about whether the basket may be changed.
+   */
+  describe('a finished basket', () => {
+    it('says so once the basket has been read', async () => {
+      const memory = new BasketMemory();
+      memory.status = 'COMPLETED';
+      const { store } = build({ getBasket: () => memory.getBasket() });
+      await store.open('basket-saturday');
+
+      expect(store.finished()).toBe(true);
+      expect(store.takesLines()).toBe(false);
+    });
+
+    it('says nothing at all before the first read lands', async () => {
+      // The one place the two questions come apart, and the reason `finished` is not
+      // written as a plain negation: nothing has loaded, so the screen must not draw
+      // a banner claiming a trip is over while it is still asking what the trip is.
+      const { store } = build();
+
+      expect(store.takesLines()).toBe(false);
+      expect(store.finished()).toBe(false);
+    });
+
+    it('is not finished while the trip is live', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      expect(store.finished()).toBe(false);
+    });
+
+    it('counts the lines nobody settled, for the sheet warning', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const stillOutstanding = store
+        .lines()
+        .filter((line) => outstanding(line) > 0).length;
+
+      expect(store.unsettled()).toBe(stillOutstanding);
+      expect(stillOutstanding).toBeGreaterThan(0);
+    });
+
+    /**
+     * The guest standing in a shop when the owner presses Finish (section 6.1).
+     *
+     * Their screen redraws **in place**: no reload, and no disconnection. Finishing
+     * does not revoke the link, evict anybody or drop a socket, so the event arrives
+     * over the connection they already hold and the basket they are looking at
+     * becomes the finished one. Disconnecting them would tell them nothing at all,
+     * and they are the people who most need to see that it happened.
+     */
+    it('redraws from the broadcast, over the socket already held', async () => {
+      jest.useFakeTimers();
+      try {
+        const memory = new BasketMemory();
+        const { store, socket } = build({
+          getBasket: () => memory.getBasket(),
+        });
+        await store.open('basket-saturday');
+        expect(store.finished()).toBe(false);
+
+        memory.status = 'COMPLETED';
+        socket.events.next({
+          type: 'generatedList.updated',
+          list: { id: 'basket-saturday' },
+        } as never);
+
+        // Coalesced, like every other refetch this store schedules: a shop full of
+        // people is a stream of broadcasts and a request each would be a request per
+        // tin of tomatoes.
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(store.finished()).toBe(true);
+        // Nobody was thrown out of the shop.
+        expect(socket.closes).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('counts nothing outstanding once every line is finished', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      for (const line of store.lines()) {
+        if (outstanding(line) > 0) {
+          await store.settle(line.id, { outcome: 'BOUGHT' });
+        }
+      }
+
+      expect(store.unsettled()).toBe(0);
+    });
+  });
+
+  /**
+   * The refusal a guest gets when the owner finishes while their phone is in a shop
+   * (velista `0057`, section 7).
+   *
+   * The screen does not stop at the message: the store refetches, so the basket
+   * redraws as a finished one and the controls that just refused are gone. A refusal
+   * that left them sitting there would invite the same tap again.
+   */
+  describe('a write into a trip somebody has just finished', () => {
+    /** A basket a spec can finish underneath the store, as the owner's PATCH does. */
+    function underneath() {
+      const memory = new BasketMemory();
+      const reads: number[] = [];
+      return {
+        memory,
+        reads,
+        service: {
+          getBasket: () => {
+            reads.push(1);
+            return memory.getBasket();
+          },
+          settle: (id: string, lineId: string, body: BasketSettleRequest) =>
+            memory.settle(id, lineId, body),
+          addLine: (id: string, body: BasketAddLineRequest) =>
+            memory.addLine(id, body),
+        },
+      };
+    }
+
+    it('reads the basket again before the caller is told, so the controls go', async () => {
+      const { memory, reads, service } = underneath();
+      const { store } = build(service);
+      await store.open('basket-saturday');
+      const readsAfterOpen = reads.length;
+      let told = -1;
+
+      memory.status = 'COMPLETED';
+      const result = await store
+        .settle('line-milk', { outcome: 'BOUGHT' })
+        .then((answer) => {
+          told = reads.length;
+          return answer;
+        });
+
+      expect(result).toBeNull();
+      expect(told).toBe(readsAfterOpen + 1);
+      // What the caller now reads is the finished basket, so every control drawn
+      // from this store has already gone by the time the sentence is rendered.
+      expect(store.finished()).toBe(true);
+      // And the failure is still there to be named, rather than cleared by the read
+      // that followed it.
+      expect((store.error() as GatewayError).code).toBe(
+        'generated_list_finished'
+      );
+    });
+
+    it('does the same for the composer, which is a write like any other', async () => {
+      const { memory, reads, service } = underneath();
+      const { store } = build(service);
+      await store.open('basket-saturday');
+      const readsAfterOpen = reads.length;
+
+      memory.status = 'COMPLETED';
+      const line = await store.addLine({ content: 'Batteries' });
+
+      expect(line).toBeNull();
+      expect(reads.length).toBe(readsAfterOpen + 1);
       expect(store.takesLines()).toBe(false);
     });
   });

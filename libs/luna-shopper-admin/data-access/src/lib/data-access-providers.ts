@@ -1,6 +1,7 @@
 import type { Provider } from '@angular/core';
 import { ApiUrl } from './api-url';
 import { SessionBootstrap } from './auth/session-bootstrap';
+import { SessionLifecycle } from './auth/session-lifecycle';
 import { SessionStorage } from './auth/session-storage';
 import { SessionStore } from './auth/session-store';
 import { DeploymentStore } from './deployment/deployment-store';
@@ -25,4 +26,5 @@ export const LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS: Provider[] = [
   SessionStorage,
   SessionStore,
   SessionBootstrap,
+  SessionLifecycle,
 ];

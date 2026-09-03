@@ -264,6 +264,29 @@ export class SettleSheet {
   );
 
   /**
+   * Whether the **trip** is over, which is a different fact from {@link finished}
+   * (velista `0057`, section 6).
+   *
+   * That one is about this line and this one is about the basket around it, and the
+   * pair is why both names spell out which they mean. A finished trip takes the
+   * controls off every line at once, the ones nobody settled included: those are not
+   * being bought, not being dropped and not being recorded as anything, and this
+   * sheet is where somebody reads what happened to them.
+   */
+  protected readonly basketFinished = this._store.finished;
+
+  /**
+   * Whether to draw the settle targets at all.
+   *
+   * The two ways of having nothing to settle, in one place, because the template
+   * asks the question once and a control drawn from either half alone would be an
+   * invitation the server refuses. A control you may not use is not drawn (`0030`).
+   */
+  protected readonly canSettle = computed(
+    () => !this.finished() && !this.basketFinished()
+  );
+
+  /**
    * What happened to this line, in one sentence, for a finished one.
    *
    * The **same** sentence `touchedCaption` composes for the row, so the sheet and the
@@ -536,6 +559,10 @@ export class SettleSheet {
   protected readonly canEditUnits = computed(() => {
     const line = this.line();
     return (
+      // A finished trip changes nothing about what a household asked for, and the
+      // server refuses the write, so the way in goes with every other control
+      // (velista `0057`, section 6).
+      !this.basketFinished() &&
       this._store.seesZoneData() &&
       this._store.me()?.kind !== 'GUEST' &&
       line !== null &&
@@ -557,6 +584,8 @@ export class SettleSheet {
   protected readonly canSendToList = computed(() => {
     const line = this.line();
     return (
+      // Absent on a finished trip, for {@link canEditUnits}'s reason.
+      !this.basketFinished() &&
       this._store.seesZoneData() &&
       this._store.me()?.kind !== 'GUEST' &&
       line !== null &&

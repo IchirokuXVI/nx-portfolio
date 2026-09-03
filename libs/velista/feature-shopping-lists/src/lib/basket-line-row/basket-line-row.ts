@@ -51,6 +51,37 @@ import {
 export type BasketStatusGlyph = 'wanted' | 'partly' | 'bought' | 'unavailable';
 
 /**
+ * What pressing the status control does, per shape, for its accessible name.
+ *
+ * The **act** and not the state, because a control announced only by what it is
+ * leaves somebody guessing what pressing it does. Which state it is performing the
+ * act from is in the copy too: colour is never the difference between these four
+ * (`0044`, section 7), so the shape carries it for a reader who sees the row and the
+ * name carries it for one who hears it.
+ */
+const ACTS_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
+  wanted: 'basket.status.got',
+  partly: 'basket.status.rest',
+  bought: 'basket.status.undoGot',
+  unavailable: 'basket.status.undoNone',
+};
+
+/**
+ * What the line **is**, per shape, for a glyph that is not a control.
+ *
+ * The same pairs without the act, for the two cases where nothing may be pressed: a
+ * finished line on a build with no reopen route behind it, and any line at all once
+ * the whole trip is finished (velista `0057`). There is nothing to promise about
+ * pressing it, so the name says what the row says.
+ */
+const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
+  wanted: 'basket.status.isWanted',
+  partly: 'basket.status.isPartly',
+  bought: 'basket.status.isGot',
+  unavailable: 'basket.status.isNone',
+};
+
+/**
  * One line of the basket, as it is read in an aisle (plan 0044, section 4).
  *
  * ## A status control, and the row beside it
@@ -160,6 +191,27 @@ export class BasketLineRow {
    * is where the store already is.
    */
   readonly canReopen = input(false);
+
+  /**
+   * Whether the trip this line belongs to is over (velista `0057`, section 6).
+   *
+   * A fact about the **basket** and not about the line, which is why it arrives as an
+   * input beside {@link canReopen} rather than being read off `line()`: the page holds
+   * the store, and a component constructed once per line has no business asking the
+   * same question a dozen times.
+   *
+   * What it removes is every control: the status glyph stops being a button and the
+   * reel goes back to being the readout it was before plan 0054. What it keeps is
+   * everything the row **says** — the words, the product, who settled it, which
+   * household it came from — because a finished basket is the receipt for a trip
+   * somebody took, and the most likely reason to open one is to see what was bought.
+   * The row still opens the sheet, where the settlement history is.
+   *
+   * Absent rather than disabled, per `0030`. Every one of these writes is refused by
+   * the server on a finished basket, so a drawn control is an invitation that cannot
+   * be honoured.
+   */
+  readonly finished = input(false);
 
   /**
    * A sentence about the **last move of the number on this row**, or null.
@@ -354,9 +406,16 @@ export class BasketLineRow {
       : 'bought';
   });
 
-  /** Whether the glyph is a control, or only a statement of what the line is. */
+  /**
+   * Whether the glyph is a control, or only a statement of what the line is.
+   *
+   * Three ways to be a statement rather than a button, and they are three different
+   * facts: the line is finished and this build has no route to reopen one; or the
+   * whole trip is finished, so nothing about this line may change at all. In both
+   * cases what is drawn is what the line **is**, which is why they share a treatment.
+   */
   protected readonly statusIsButton = computed(
-    () => this.state() !== 'done' || this.canReopen()
+    () => !this.finished() && (this.state() !== 'done' || this.canReopen())
   );
 
   /**
@@ -373,22 +432,17 @@ export class BasketLineRow {
    * what the line **is**, and there is nothing to promise about pressing it.
    */
   protected readonly statusLabel = computed(() => {
-    const name = this.line().content;
     const glyph = this.statusGlyph();
-    const key =
-      glyph === 'wanted'
-        ? 'basket.status.got'
-        : glyph === 'partly'
-          ? 'basket.status.rest'
-          : this.canReopen()
-            ? glyph === 'unavailable'
-              ? 'basket.status.undoNone'
-              : 'basket.status.undoGot'
-            : glyph === 'unavailable'
-              ? 'basket.status.isNone'
-              : 'basket.status.isGot';
+    // The act it performs, or, where there is no act, the state it is in. The pair
+    // is keyed off the same question the template asks, so a glyph that is drawn as
+    // a statement can never be announced as a promise (velista `0057`, section 6).
+    const key = this.statusIsButton()
+      ? ACTS_ON_STATUS[glyph]
+      : STATES_ON_STATUS[glyph];
 
-    return this._translator.t(key, undefined, this._locale(), { name });
+    return this._translator.t(key, undefined, this._locale(), {
+      name: this.line().content,
+    });
   });
 
   /**

@@ -25,11 +25,13 @@ const session: AdminSession = {
   displayName: null,
   accessToken: 'a.b.c',
   expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+  receivedAt: new Date(),
 };
 
 const service: SessionServiceI = {
   signIn: async () => session,
   signInForDevelopment: async () => session,
+  refresh: async () => session,
   readMe: async () => ({
     admin: {
       adminId: 'adm_1',

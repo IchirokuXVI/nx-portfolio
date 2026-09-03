@@ -24,6 +24,21 @@ export interface AdminSession {
    * discarded on sight when it is already over.
    */
   readonly expiresAt: Date;
+  /**
+   * When this app took the token (plan 0003).
+   *
+   * Not stated by the server, because the server states no `issuedAt` and the
+   * wire shape is deliberately five fields. This is the client's own record of
+   * when the token arrived, and with `expiresAt` it is the only way to know the
+   * token's **lifetime** rather than merely what is left of it.
+   *
+   * The lifetime is what `0003` needs: the warning fires at a fraction of it, so
+   * a session renewed at half a lifetime and one restored from storage with two
+   * minutes left must not be treated as the same shape of thing. Persisted
+   * alongside the token for exactly that reason, so a reload does not shrink the
+   * lifetime to whatever happened to remain.
+   */
+  readonly receivedAt: Date;
 }
 
 /**
@@ -39,7 +54,10 @@ export interface AdminSession {
  * `Date` whose `getTime()` is `NaN`, and every comparison against it is false,
  * so a token would look permanently valid rather than obviously wrong.
  */
-export function toAdminSession(value: unknown): AdminSession | null {
+export function toAdminSession(
+  value: unknown,
+  receivedAt: Date = new Date()
+): AdminSession | null {
   if (typeof value !== 'object' || value === null) {
     return null;
   }
@@ -69,6 +87,11 @@ export function toAdminSession(value: unknown): AdminSession | null {
     displayName: typeof displayName === 'string' ? displayName : null,
     accessToken,
     expiresAt,
+    // Defaulted to now, because the ordinary caller is mapping a response that
+    // has just arrived. Storage passes the instant it recorded instead, so a
+    // restored session keeps the lifetime it was actually issued with rather
+    // than being reborn with a shorter one on every reload.
+    receivedAt,
   };
 }
 

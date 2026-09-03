@@ -46,10 +46,12 @@
     </button>
   } @else {
     <!--
-      A finished line with no reopen route behind it: `BASKET_REOPEN_AVAILABLE` is
-      false until luna `0054` ships. It says what the line **is** and does not offer
-      an act that would 404, which is the absence rule again (`0030`). The settle
-      direction above works in full either way.
+      Two ways to have nothing to press, and one treatment. A finished line with no
+      reopen route behind it: `BASKET_REOPEN_AVAILABLE` is false until luna `0054`
+      ships, so pressing would 404. Or the whole trip is finished (velista 0057),
+      where every write on every line is refused at once. Either way this says what
+      the line **is** and offers no act, which is the absence rule again (`0030`).
+      The settle direction above works in full whenever it is drawn.
 
       A `span` with `role="img"` rather than a disabled button, because there is no
       control here to disable: nothing has been taken away from this reader, and a
@@ -146,18 +148,33 @@
     on the reel is not a tap on the line, and the row underneath must not hear it.
   -->
   <span class="numbers">
-    <lib-quantity-reel
-      (autoClosed)="onReelAutoClosed()"
-      (click)="$event.stopPropagation()"
-      (committedTo)="onCommitted($event)"
-      (pointerdown)="$event.stopPropagation()"
-      (preview)="onPreview($event)"
-      [label]="reelLabel()"
-      [max]="ceiling()"
-      [min]="0"
-      [readonly]="busy()"
-      [value]="shownOutstanding()"
-    />
+    @if (finished()) {
+      <!--
+        The trip is over, so the number is a number again (velista 0057, section 6).
+
+        This is what the row drew before plan 0054 made it a control: how many are
+        still to get, read and not moved. A reel here would be a gesture the server
+        refuses on every line of the basket at once, and `0030` does not draw one of
+        those. The count keeps the reel's own accessible name, because the question
+        it answers has not changed, only whether it can be answered again.
+      -->
+      <span [attr.aria-label]="reelLabel()" class="settled-count" role="img">
+        {{ stillToGet() }}
+      </span>
+    } @else {
+      <lib-quantity-reel
+        (autoClosed)="onReelAutoClosed()"
+        (click)="$event.stopPropagation()"
+        (committedTo)="onCommitted($event)"
+        (pointerdown)="$event.stopPropagation()"
+        (preview)="onPreview($event)"
+        [label]="reelLabel()"
+        [max]="ceiling()"
+        [min]="0"
+        [readonly]="busy()"
+        [value]="shownOutstanding()"
+      />
+    }
 
     <!--
       What the gesture is about to do, while the thumb is still down, and the

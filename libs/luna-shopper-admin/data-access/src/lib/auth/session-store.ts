@@ -35,6 +35,9 @@ export class SessionStore {
   /** Whether there is a session at all. What the route guard asks. */
   readonly signedIn = computed(() => this._session() !== null);
 
+  /** The one renewal that may be in flight, and what every other caller awaits. */
+  private _refreshing: Promise<boolean> | null = null;
+
   private readonly _identity = signal<AdminIdentity | null>(null);
 
   /**
@@ -86,6 +89,53 @@ export class SessionStore {
    */
   async signInForDevelopment(): Promise<SignInFailure | null> {
     return this.hold(() => this._service.signInForDevelopment());
+  }
+
+  /**
+   * Renew the held token, once, however many callers ask (plan 0003,
+   * section 4).
+   *
+   * **Single-flight.** The keepalive timer and a 401 retry will want to refresh
+   * at the same moment, and so will several 401s from requests that were in
+   * flight together. One call is made and everybody awaits the same promise.
+   * With no rotating refresh token the duplicate calls would not invalidate each
+   * other, but they would still be several requests and several interleaved
+   * writes of a token, and preventing that is three lines.
+   *
+   * Answers `true` when the session was renewed and `false` for every way of
+   * not being, and it **never signs out on a failure**. A refusal is the caller's
+   * to interpret: `SessionLifecycle` retries a renewal that failed while the
+   * token is still live, because a network that blinked must not cost a session,
+   * and raises the overlay only once the token is genuinely dead.
+   */
+  async refresh(): Promise<boolean> {
+    this._refreshing ??= this.renew().finally(() => {
+      this._refreshing = null;
+    });
+    return this._refreshing;
+  }
+
+  private async renew(): Promise<boolean> {
+    // Nothing to renew, and asking would send an unauthenticated request that
+    // fails in a way nothing explains.
+    if (!this.signedIn()) {
+      return false;
+    }
+
+    try {
+      const session = await this._service.refresh();
+      // Checked again: a sign out, or an abandoned overlay, may have run while
+      // this was in flight, and writing a token onto a cleared session would
+      // sign an operator back in after they asked to leave.
+      if (!this.signedIn()) {
+        return false;
+      }
+      this._session.set(session);
+      this._storage.write(session);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**

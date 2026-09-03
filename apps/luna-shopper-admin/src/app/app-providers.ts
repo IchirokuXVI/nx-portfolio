@@ -18,6 +18,7 @@ import {
   SESSION_SERVICE,
   SessionApi,
   SessionBootstrap,
+  SessionLifecycle,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ADMIN_API_CONFIG } from '@portfolio/luna-shopper-admin/models';
 import { provideService } from '@portfolio/shared/data-access';
@@ -43,7 +44,8 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
 
   // `withFetch` because it costs nothing and is what the rest of the workspace uses.
   // The interceptor attaches the bearer token to gateway requests and to nothing
-  // else, and clears the session on a 401 (plan 0002, section 4).
+  // else, and turns a 401 into a renewal, an overlay and a retry rather than into
+  // a lost request (plan 0003, section 6).
   provideHttpClient(withFetch(), withInterceptors([adminAuthInterceptor])),
 
   // The app's own services, which cannot provide themselves. The array is owned by
@@ -69,6 +71,14 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // This is also what starts the environment read that decides the accent colour,
   // so `0001`'s `DeploymentStore.load()` is no longer called separately.
   provideAppInitializer(() => inject(SessionBootstrap).run()),
+
+  // Start counting interaction before anything can happen (plan 0003, section 2).
+  //
+  // An **environment** initializer, which runs earlier than the app initializer
+  // above, and started explicitly because nothing injects this service until a
+  // token needs renewing — by which point every interaction it should have been
+  // counting has already happened and the session would look idle from birth.
+  provideEnvironmentInitializer(() => inject(SessionLifecycle).start()),
 
   // Put the environment name in the document title (plan 0001, section 6). A
   // listener, not a dependency: nothing injects it, so without this line nothing

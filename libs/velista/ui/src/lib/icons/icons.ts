@@ -893,3 +893,25 @@ export class ProductIcon {
       import('./product-icon.svg?raw')
   );
 }
+
+/**
+ * A flag: the end of a trip, on the basket's Finish control (velista `0057`).
+ *
+ * Deliberately **not** a tick. A tick is what a settled line wears on this very
+ * screen, and section 3 keeps the control that ends the whole trip away from the one
+ * that finishes a single line. Giving the two the same glyph would put that distance
+ * back into the layout and take it out of the artwork.
+ */
+@Component({
+  selector: 'lib-flag-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class FlagIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./flag-icon.svg?raw')
+  );
+}

@@ -9,6 +9,7 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { GatewayError, toGatewayError } from '../gateway-error';
+import { withoutSessionRecovery } from './session-http-context';
 import type { SessionServiceI } from './session-service';
 
 /**
@@ -50,6 +51,37 @@ export class SessionApi implements SessionServiceI {
     return this.login({ username: 'development', password: 'development' });
   }
 
+  /**
+   * The held token in the header, a new one in the answer (plan 0003).
+   *
+   * The body is empty because there is nothing to send: the gateway reads the
+   * bearer token the interceptor attached, and auth is told only which admin it
+   * named. An empty object rather than `null`, because a POST with no body at
+   * all is a request some proxies handle differently from one with `{}`.
+   */
+  async refresh(): Promise<AdminSession> {
+    let answer: unknown;
+    try {
+      answer = await firstValueFrom(
+        this._http.post<unknown>(
+          this._urls.gateway('/v1/admin/auth/refresh'),
+          {},
+          // A 401 here is the answer. Without this the interceptor would try to
+          // recover from it by refreshing, from inside the refresh.
+          { context: withoutSessionRecovery() }
+        )
+      );
+    } catch (error) {
+      throw toGatewayError(error);
+    }
+
+    const session = toAdminSession(answer);
+    if (session === null) {
+      throw unreadable();
+    }
+    return session;
+  }
+
   async readMe(): Promise<AdminMe> {
     const body = await this.get('/v1/admin/auth/me');
     const me = toAdminMe(body);
@@ -68,7 +100,11 @@ export class SessionApi implements SessionServiceI {
       answer = await firstValueFrom(
         this._http.post<unknown>(
           this._urls.gateway('/v1/admin/auth/login'),
-          body
+          body,
+          // A 401 here is a wrong password, not an expired session. Without this
+          // the interceptor would raise a re-authentication overlay over the
+          // login screen, and the overlay's own sign in would raise another.
+          { context: withoutSessionRecovery() }
         )
       );
     } catch (error) {

@@ -557,6 +557,7 @@ export class BasketMemory implements BasketServiceI {
     lineId: string,
     body: BasketSettleRequest
   ): Promise<BasketSettleResult> {
+    this._requireLive();
     const line = this._lines.find((row) => row.id === lineId);
     if (!line) {
       throw new GatewayError({
@@ -619,6 +620,7 @@ export class BasketMemory implements BasketServiceI {
     _generatedListId: string,
     lineId: string
   ): Promise<BasketSettleResult> {
+    this._requireLive();
     const line = this._lines.find((row) => row.id === lineId);
     if (!line) {
       throw new GatewayError({
@@ -766,6 +768,7 @@ export class BasketMemory implements BasketServiceI {
     body: BasketOriginQuantityRequest
   ): Promise<BasketOriginQuantityResult> {
     this._requireZoneReader();
+    this._requireLive();
     const line = this._require(lineId);
 
     const origins = line.origins ?? [];
@@ -948,6 +951,7 @@ export class BasketMemory implements BasketServiceI {
     lineId: string,
     itemId: string
   ): Promise<BasketLine> {
+    this._requireLive();
     const line = this._lines.find((row) => row.id === lineId);
     if (!line) {
       throw new GatewayError({
@@ -996,20 +1000,15 @@ export class BasketMemory implements BasketServiceI {
     _generatedListId: string,
     body: BasketAddLineRequest
   ): Promise<BasketLine> {
-    if (!basketTakesLines(this.status)) {
-      // A 409, which is the status the server answers. Its code there is
-      // `generated_list_finished`, which this app's hand-synced `ERROR_CODES` does
-      // not carry, so it reads as a plain conflict exactly as a real one would.
-      // That is the honest fake: the screen draws no composer over a finished
-      // basket at all, so the refusal is a race rather than a state with a
-      // sentence, and nothing branches on telling it apart.
-      throw new GatewayError({
-        code: 'conflict',
-        status: 409,
-        correlationId: 'memory',
-        detail: 'This basket is finished, so nothing more can be added to it',
-      });
-    }
+    // The same refusal every other write here gets, and by the same route since
+    // velista `0057`. It used to throw a plain conflict, on the grounds that
+    // `ERROR_CODES` did not carry `generated_list_finished` and that nothing
+    // branched on telling the two apart. Both halves have since stopped being true:
+    // the code is in `problem.ts`, luna `0059` section 3.1 widened the set of writes
+    // that raise it from three to nine with the add among them, and `BasketStore`
+    // now refetches on exactly this code so a field drawn over a basket somebody
+    // just finished goes away with the rest of the controls.
+    this._requireLive();
 
     const line: BasketLine = {
       id: `line-added-${(this._added += 1)}`,
@@ -1139,9 +1138,16 @@ export class BasketMemory implements BasketServiceI {
    * Refuse a write to a basket whose trip is over.
    *
    * Its own code rather than a conflict, because the screen can explain it: the
-   * basket is finished, so it cannot be changed. `addLine` predates the code being
-   * in this app's `ERROR_CODES` and still throws a plain conflict, which reads the
-   * same to a screen that draws no composer over a finished basket at all.
+   * owner finished this trip, so it cannot be edited any more.
+   *
+   * **Every write goes through it**, since velista `0057`: settling, reopening a
+   * line, moving the number, swapping a pick, changing what a list asked for,
+   * binding a line to one, and adding one. It used to guard three, and luna `0059`
+   * section 3.1 widened the server's set to nine, so a fake that guarded three would
+   * be kinder than the real thing on exactly the six writes a guest can still be
+   * holding a control for when the owner presses Finish. That is the race the
+   * refusal exists for, and `BasketStore` refetches on this code so the controls
+   * that refused are gone by the time the sentence is drawn.
    */
   private _requireLive(): void {
     if (!basketTakesLines(this.status)) {

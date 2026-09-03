@@ -3,6 +3,8 @@ export * from './lib/auth/admin-auth-interceptor';
 export * from './lib/auth/session-api';
 export * from './lib/auth/session-bootstrap';
 export * from './lib/auth/session-guards';
+export * from './lib/auth/session-http-context';
+export * from './lib/auth/session-lifecycle';
 export * from './lib/auth/session-memory';
 export * from './lib/auth/session-service';
 export * from './lib/auth/session-storage';
