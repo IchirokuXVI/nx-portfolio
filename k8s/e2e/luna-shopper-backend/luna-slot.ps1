@@ -105,8 +105,8 @@ $defaultAppSlot = 0
 # The two -List outputs printing different numbers for one slot is the symptom of
 # getting it wrong.
 $frontendSlotBand = 42000
-$frontendDefaultPort = @{ shell = 4200; velista = 4205 }
-$frontendSlotOffset = @{ shell = 0; velista = 5 }
+$frontendDefaultPort = @{ shell = 4200; velista = 4205; 'luna-shopper-admin' = 4206 }
+$frontendSlotOffset = @{ shell = 0; velista = 5; 'luna-shopper-admin' = 6 }
 
 function Get-FrontendPort([string]$app, [int]$slot) {
   if ($slot -eq 0) { return $frontendDefaultPort[$app] }
@@ -126,6 +126,9 @@ function Get-FrontendOrigins {
   for ($slot = 0; $slot -le $maxSlot; $slot++) {
     $origins += "http://localhost:$(Get-FrontendPort 'shell' $slot)"
     $origins += "http://localhost:$(Get-FrontendPort 'velista' $slot)"
+    # The back office, the third front end that calls this backend. An origin
+    # missing here shows an operator "Unknown" rather than a CORS error.
+    $origins += "http://localhost:$(Get-FrontendPort 'luna-shopper-admin' $slot)"
   }
   return ($origins -join ',')
 }

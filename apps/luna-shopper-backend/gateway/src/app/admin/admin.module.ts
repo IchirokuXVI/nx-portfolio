@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { MessagingModule } from '../messaging/messaging.module';
 import { AdminAuthController } from './admin-auth.controller';
+import { AdminEnvironmentController } from './admin-environment.controller';
 import { AdminJwtStrategy } from './admin-jwt.strategy';
 
 /**
@@ -17,7 +18,7 @@ import { AdminJwtStrategy } from './admin-jwt.strategy';
  */
 @Module({
   imports: [PassportModule, MessagingModule],
-  controllers: [AdminAuthController],
+  controllers: [AdminAuthController, AdminEnvironmentController],
   providers: [AdminJwtStrategy],
 })
 export class GatewayAdminModule {}

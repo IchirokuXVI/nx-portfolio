@@ -886,6 +886,47 @@
         ]
       }
     },
+    "/v1/admin/environment": {
+      "get": {
+        "operationId": "AdminEnvironmentController_read_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Which deployment answered. The back office derives its accent colour and its document title from this, and never from a build time constant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin.AdminEnvironmentResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/zones": {
       "post": {
         "operationId": "ZoneController_create_v1",
@@ -16822,6 +16863,20 @@
           "environment"
         ],
         "additionalProperties": false
+      },
+      "admin.AdminEnvironmentResponse": {
+        "type": "object",
+        "description": "Which deployment answered. Readable with no token, so the back office can draw its per environment accent colour before anybody has signed in.",
+        "required": [
+          "environment"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "environment": {
+            "type": "string",
+            "description": "The name this deployment reports itself by, from `ENVIRONMENT_NAME`. Conventionally `production`, `staging` or `development`, but not constrained to them."
+          }
+        }
       },
       "assistant.AssistantChoice": {
         "type": "object",

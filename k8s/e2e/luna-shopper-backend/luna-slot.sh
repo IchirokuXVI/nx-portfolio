@@ -44,7 +44,7 @@
 #
 # Two consequences, and they pull in opposite directions:
 #
-#   CORS_ORIGINS is a LIST, so it names every front end slot's two origins, not
+#   CORS_ORIGINS is a LIST, so it names every front end slot's three origins, not
 #   this slot's. A backend has no way to know which front ends will call it and no
 #   reason to care, and an origin it has not been told about fails with a CORS
 #   error that says nothing about slots. Listing them all costs a long line in a
@@ -242,8 +242,8 @@ probe_ports() {
 # with it. `ng-slot.sh --list` and this script's `--list` printing different
 # numbers for the same slot is the symptom of getting it wrong.
 FRONTEND_SLOT_BAND=42000
-declare -A FRONTEND_DEFAULT_PORT=([shell]=4200 [velista]=4205)
-declare -A FRONTEND_SLOT_OFFSET=([shell]=0 [velista]=5)
+declare -A FRONTEND_DEFAULT_PORT=([shell]=4200 [velista]=4205 [luna-shopper-admin]=4206)
+declare -A FRONTEND_SLOT_OFFSET=([shell]=0 [velista]=5 [luna-shopper-admin]=6)
 
 frontend_port() {
   local app="$1" slot="$2"
@@ -269,6 +269,11 @@ frontend_origins() {
   for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
     origins+=("http://localhost:$(frontend_port shell "$slot")")
     origins+=("http://localhost:$(frontend_port velista "$slot")")
+    # The back office is the third front end that calls this backend. It reaches
+    # `/v1/admin/**` from an origin of its own, and the very first thing it asks
+    # for is the environment name it colours itself by, so an origin missing here
+    # shows an operator "Unknown" rather than a CORS error.
+    origins+=("http://localhost:$(frontend_port luna-shopper-admin "$slot")")
   done
   local IFS=','
   echo "${origins[*]}"
