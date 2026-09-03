@@ -297,6 +297,10 @@ describe('toLine', () => {
     // A product set, where this was a single nullable `itemId` that was null on every
     // line ever created (backend plan 0048, section 1.1).
     itemIds: ['item-milk'],
+    // The subscription, and which of the products the catalog put there (backend
+    // plan 0070, section 9).
+    productGroupId: 'group-milk',
+    groupItemIds: ['item-milk'],
     position: 3,
     approvalStatus: 'APPROVED',
     // The two derived indicators, which replaced the trip status (backend plan 0047,
@@ -356,6 +360,30 @@ describe('toLine', () => {
 
     expect(bare?.boughtCount).toBe(0);
     expect(bare?.lastSettlementOutcome).toBeNull();
+  });
+
+  it('reads an absent subscription as a hand made set', () => {
+    // The safe direction, and the same answer for two different servers: one that
+    // predates backend `0070` and one describing a line that follows no group. Both
+    // are lines nothing syncs, so neither draws a provenance heading or a `Keep`
+    // control, and the two need no distinction.
+    const bare = toLine({
+      ...valid,
+      productGroupId: undefined,
+      groupItemIds: undefined,
+    });
+
+    expect(bare?.productGroupId).toBeNull();
+    expect(bare?.groupItemIds).toEqual([]);
+  });
+
+  it('drops a group product id that is not a string', () => {
+    // The same rule `itemIds` follows: a reference nobody can resolve is not a
+    // product, and keeping it as a hole would put an unnamed chip in the catalog's
+    // cluster for something that is not on the line.
+    expect(
+      toLine({ ...valid, groupItemIds: [1, null, 'ok'] })?.groupItemIds
+    ).toEqual(['ok']);
   });
 
   it('reads an absent claim as nobody buying it, in the safe direction', () => {

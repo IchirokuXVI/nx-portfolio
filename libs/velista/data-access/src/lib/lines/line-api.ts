@@ -105,6 +105,7 @@ export class LineApi implements LineServiceI {
       content?: string;
       quantity?: number;
       itemIds?: readonly string[];
+      adoptItemIds?: readonly string[];
     }
   ): Promise<Line> {
     const request: UpdateLineRequest = {};
@@ -119,6 +120,13 @@ export class LineApi implements LineServiceI {
     // server tells them apart by absence.
     if (changes.itemIds !== undefined) {
       (request as { itemIds?: readonly string[] }).itemIds = changes.itemIds;
+    }
+    // Sent only when there is something to adopt, and never as an empty array:
+    // adopting nothing is not a gesture, and a field that was always present would
+    // make every ordinary edit look like one (backend plan 0070, section 9).
+    if (changes.adoptItemIds !== undefined) {
+      (request as { adoptItemIds?: readonly string[] }).adoptItemIds =
+        changes.adoptItemIds;
     }
 
     const body = await firstValueFrom(

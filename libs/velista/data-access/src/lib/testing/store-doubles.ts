@@ -13,6 +13,7 @@ import type {
   MyZone,
   PresenceEditor,
   PresenceUser,
+  ProductGroup,
   ProfileLoad,
   ProfilePostalCode,
   ResolvedPostalCode,
@@ -36,6 +37,7 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
 import { GeneratedListStore } from '../generated-lists/generated-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
@@ -690,6 +692,15 @@ export type LineWriteCall =
       readonly lineId: string;
       readonly content?: string;
       readonly itemIds?: readonly string[];
+      /**
+       * The products this edit adopted (velista plan 0065, section 4).
+       *
+       * Recorded because the rule under test is what the request **carries**: `Keep`
+       * sends this field and nothing else, so a spec asserting on the resulting set
+       * alone could not tell adoption from an ordinary edit that happened to leave
+       * the set where it was.
+       */
+      readonly adoptItemIds?: readonly string[];
     }
   | { readonly kind: 'delete'; readonly lineId: string }
   | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] }
@@ -814,6 +825,11 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         content,
         quantity,
         itemIds: [...(itemIds ?? [])],
+        // Following no group, like every line the composer adds: nothing on the
+        // client creates a binding, so a double that invented one would put a `Keep`
+        // control on a subscription no server would agree exists.
+        productGroupId: null,
+        groupItemIds: [],
         position: lines().length + 1,
         approvalStatus: addedApproval,
         boughtCount: 0,
@@ -840,10 +856,18 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
      */
     updateLine: async (
       lineId: string,
-      patch?: { content?: string; itemIds?: readonly string[] }
+      patch?: {
+        content?: string;
+        itemIds?: readonly string[];
+        adoptItemIds?: readonly string[];
+      }
     ) => {
       calls.push({ kind: 'update', lineId, ...patch });
       if (outcome === 'succeeded' && patch !== undefined) {
+        const adopting = new Set(patch.adoptItemIds ?? []);
+        const stillOn =
+          patch.itemIds === undefined ? null : new Set(patch.itemIds);
+
         lines.update((current) =>
           current.map((l) =>
             l.id === lineId
@@ -855,6 +879,15 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
                   ...(patch.itemIds === undefined
                     ? {}
                     : { itemIds: patch.itemIds }),
+                  // Provenance moves one way (backend plan 0070, section 3), and the
+                  // double has to move it: the feedback for `Keep` is the chip
+                  // changing cluster, so a double that left this alone would let a
+                  // spec pass over a gesture that visibly did nothing.
+                  groupItemIds: l.groupItemIds.filter(
+                    (itemId) =>
+                      !adopting.has(itemId) &&
+                      (stillOn === null || stillOn.has(itemId))
+                  ),
                 }
               : l
           )
@@ -1142,6 +1175,49 @@ export function provideFakeItemNames(
   store: FakeItemNames = fakeItemNames()
 ): Provider {
   return { provide: ItemNames, useValue: store };
+}
+
+/** What a fake catalog says a group is called (velista plan 0065, section 2.1). */
+export interface FakeGroupNamesOptions {
+  /** The groups it knows. An id not in here resolves to null, as a gone group does. */
+  readonly groups?: readonly ProductGroup[];
+  /**
+   * Ids whose lookup **failed**, as opposed to answering with nothing.
+   *
+   * `FakeItemNames`' distinction, kept here for the same reason even though both
+   * cases draw the same heading today: the page is entitled to start telling them
+   * apart, and a double that could not say which one it was in would make that
+   * change untestable.
+   */
+  readonly failed?: readonly string[];
+}
+
+/** A `GroupNames` that simply knows what you told it. `fakeItemNames`' twin. */
+export function fakeGroupNames(options: FakeGroupNamesOptions = {}) {
+  const groups = options.groups ?? [];
+  const failed = new Set(options.failed ?? []);
+  const asked: string[][] = [];
+
+  return {
+    nameOf: (groupId: string) =>
+      groups.find((row) => row.id === groupId) ?? null,
+    anyFailed: (groupIds: readonly string[]) =>
+      groupIds.some((groupId) => failed.has(groupId)),
+    ensure: async (groupIds: readonly string[]) => {
+      asked.push([...groupIds]);
+    },
+    prime: () => undefined,
+    /** Every set that was asked for, in order, so a spec can assert one request. */
+    asked,
+  };
+}
+
+export type FakeGroupNames = ReturnType<typeof fakeGroupNames>;
+
+export function provideFakeGroupNames(
+  store: FakeGroupNames = fakeGroupNames()
+): Provider {
+  return { provide: GroupNames, useValue: store };
 }
 
 /** Who a fake says is present, per zone and per list (plan 0017). */

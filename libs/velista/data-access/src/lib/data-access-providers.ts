@@ -7,6 +7,7 @@ import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
 import { TokenStore } from './auth/token-store';
+import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
@@ -123,6 +124,8 @@ import { ZoneStore } from './zones/zone-store';
  * default resolved to rather than from the catalog the app bound. It is app scoped
  * rather than page scoped because the line detail sheet and the line page ask the same
  * question about the same products, and the second is usually opened from the first.
+ * `GroupNames` (plan 0065) joins beside it for every one of those reasons, being the
+ * same resolver for the group a line follows rather than for the products on it.
  *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
@@ -155,6 +158,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LineMemory,
   LineStore,
   CommentMemory,
+  GroupNames,
   ItemNames,
   MemberNames,
   MembershipStore,

@@ -4,11 +4,17 @@ import {
   SUGGEST_LIMIT_PER_KIND,
   type CatalogItem,
   type CatalogSuggestion,
+  type ProductGroup,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
-import { toCatalogItem, toCatalogSuggestion } from '../mapping/mappers';
+import { GatewayError } from '../errors';
+import {
+  toCatalogItem,
+  toCatalogSuggestion,
+  toProductGroup,
+} from '../mapping/mappers';
 import { isRecord, mapArray } from '../mapping/primitives';
 import type { CatalogServiceI } from './catalog-service';
 
@@ -95,6 +101,62 @@ export class CatalogApi implements CatalogServiceI {
       return isRecord(body) ? mapArray(body['items'], toCatalogItem) : null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * The names of a set of groups (velista plan 0065, section 2.1).
+   *
+   * `GET /v1/catalog/product-groups/:id` per id rather than one batch call, because
+   * there is no batch route and there is nothing to batch: a line follows one group
+   * at most, so this is one request in every case the product has. If a line ever
+   * follows several, the loop is still one request each and the shape here does not
+   * have to change.
+   *
+   * **A `not_found` is an answer** and its id is simply omitted, exactly as an
+   * unknown product id is by `itemsByIds`: a line outlives the group it was bound
+   * to, and a deleted group is an ordinary thing for an old line to name. Anything
+   * else is a lookup that did not answer, and the whole call returns null so the
+   * heading falls back to "From a group" rather than to a group with no name.
+   */
+  async productGroupsByIds(
+    groupIds: readonly string[]
+  ): Promise<readonly ProductGroup[] | null> {
+    const wanted = [...new Set(groupIds)].filter((groupId) => groupId !== '');
+    if (wanted.length === 0) {
+      // Nothing was asked, so nothing failed. The empty answer and the null one are
+      // different facts here just as they are on the products above.
+      return [];
+    }
+
+    const answers = await Promise.all(
+      wanted.map((groupId) => this._productGroup(groupId))
+    );
+
+    return answers.some((answer) => answer === 'failed')
+      ? null
+      : answers.filter((answer): answer is ProductGroup => answer !== 'gone');
+  }
+
+  /** One group: itself, `gone` for a 404, or `failed` for anything else. */
+  private async _productGroup(
+    groupId: string
+  ): Promise<ProductGroup | 'gone' | 'failed'> {
+    try {
+      const body = await firstValueFrom(
+        this._http.get<unknown>(
+          this._urls.gateway(
+            `/v1/catalog/product-groups/${encodeURIComponent(groupId)}`
+          ),
+          { context: operation('catalog.productGroup') }
+        )
+      );
+
+      return toProductGroup(body) ?? 'gone';
+    } catch (error) {
+      return error instanceof GatewayError && error.code === 'not_found'
+        ? 'gone'
+        : 'failed';
     }
   }
 }

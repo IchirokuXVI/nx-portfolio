@@ -138,6 +138,19 @@ export interface UpdateLineRequest {
    * otherwise each send a delta against a set neither of them still has.
    */
   readonly itemIds?: readonly string[];
+  /**
+   * Products to move from the catalog's side of the line to the person's, without
+   * otherwise changing the set (backend plan 0070, section 9).
+   *
+   * A field of its own rather than something inferred from {@link itemIds},
+   * because a set replacement that happens to keep a product is not a statement
+   * about who owns it: reading adoption out of it would adopt the whole line every
+   * time somebody removed one product.
+   *
+   * **One way.** `0070` section 3 makes provenance move from the group to the
+   * person and never back, so there is no field here that hands a product back.
+   */
+  readonly adoptItemIds?: readonly string[];
 }
 
 /**

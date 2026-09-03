@@ -420,6 +420,12 @@ export class LineStore {
       content,
       quantity,
       itemIds: [...(itemIds ?? [])],
+      // Following no group until the server says otherwise. An optimistic row that
+      // claimed a binding would draw provenance headings for the beat before the
+      // real row arrives, and drawing them and taking them away is worse than
+      // drawing them a beat late (backend plan 0070, section 9).
+      productGroupId: null,
+      groupItemIds: [],
       position: this._nextPosition(listId),
       approvalStatus:
         approval.canDecide || approval.autoApproveLines
@@ -470,6 +476,7 @@ export class LineStore {
       content?: string;
       quantity?: number;
       itemIds?: readonly string[];
+      adoptItemIds?: readonly string[];
     }
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
     const before = this._lineById(lineId);
@@ -477,16 +484,11 @@ export class LineStore {
       return 'failed';
     }
 
-    const fields = Object.keys(changes).filter(
-      (field) =>
-        changes[field as 'content' | 'quantity' | 'itemIds'] !== undefined
-    );
-
     return this._write(
       lineId,
       before,
-      fields,
-      (line) => ({ ...line, ...changes }),
+      claimedBy(changes),
+      (line) => applyLineChanges(line, changes),
       () => this._lines.updateLine(lineId, changes)
     );
   }
@@ -1398,6 +1400,76 @@ export class LineStore {
   private _setCursor(listId: string, cursor: string | null): void {
     this._cursor.update((current) => new Map(current).set(listId, cursor));
   }
+}
+
+/** What one edit may carry, which is not the same as what it changes. */
+interface LineChanges {
+  readonly content?: string;
+  readonly quantity?: number;
+  readonly itemIds?: readonly string[];
+  readonly adoptItemIds?: readonly string[];
+}
+
+/**
+ * Which fields of the **line** an edit claims, for its overlay.
+ *
+ * One overlay per field, so a realtime event about a field this write does not
+ * claim still wins while the request is in flight (plan 0004, section 7.2, case 3).
+ * That only works if the names are the line's rather than the request's, and
+ * `adoptItemIds` is the one place they differ: it is a gesture, and the field it
+ * moves is `groupItemIds`. Claiming the request's name would claim nothing, and the
+ * echo of the adoption would be free to arrive and be discarded.
+ */
+function claimedBy(changes: LineChanges): readonly string[] {
+  const fields: string[] = [];
+  if (changes.content !== undefined) {
+    fields.push('content');
+  }
+  if (changes.quantity !== undefined) {
+    fields.push('quantity');
+  }
+  if (changes.itemIds !== undefined) {
+    // Removing a product takes it off the catalog's side as well, so a write that
+    // rewrites the set claims both.
+    fields.push('itemIds', 'groupItemIds');
+  }
+  if (changes.adoptItemIds !== undefined) {
+    fields.push('groupItemIds');
+  }
+  return [...new Set(fields)];
+}
+
+/**
+ * The line as it will look if the write lands, for the optimistic patch.
+ *
+ * Not a spread of `changes` onto the line, which is what this was while every field
+ * of a request was also a field of a line. `adoptItemIds` is not: spreading it would
+ * hang a request field off the model and leave `groupItemIds` untouched, so the chip
+ * would stay in the catalog's cluster until the server's row landed. The feedback
+ * for adoption **is** the chip moving (velista plan 0065, section 4), so it has to
+ * move on the frame of the tap.
+ */
+function applyLineChanges(line: Line, changes: LineChanges): Line {
+  const adopting = new Set(changes.adoptItemIds ?? []);
+  const stillOn =
+    changes.itemIds === undefined ? null : new Set(changes.itemIds);
+
+  return {
+    ...line,
+    ...(changes.content === undefined ? {} : { content: changes.content }),
+    ...(changes.quantity === undefined ? {} : { quantity: changes.quantity }),
+    ...(changes.itemIds === undefined ? {} : { itemIds: changes.itemIds }),
+    // Provenance moves one way and nothing here moves it back (backend plan 0070,
+    // section 3). A product that left the set leaves this too: it is not on the line
+    // for anybody to own.
+    groupItemIds:
+      adopting.size === 0 && stillOn === null
+        ? line.groupItemIds
+        : line.groupItemIds.filter(
+            (itemId) =>
+              !adopting.has(itemId) && (stillOn === null || stillOn.has(itemId))
+          ),
+  };
 }
 
 /** Whether a failure is the gateway refusing a write for lack of access. */
