@@ -26,7 +26,8 @@ line back in front of whoever approves.
 | Caller                            | Today, on an `APPROVED` line | After                                                    |
 | --------------------------------- | ---------------------------- | -------------------------------------------------------- |
 | `MANAGE`                          | every field                  | every field, unchanged, and no reversion                 |
-| `DECIDE`                          | quantity alone               | every field, and no reversion                            |
+| `DECIDE` alone                    | quantity alone               | quantity alone, unchanged, and no reversion              |
+| `WRITE` and `DECIDE`              | quantity alone               | every field, and no reversion                            |
 | `WRITE` alone                     | nothing                      | every field except quantity, and it returns to `PENDING` |
 | `WRITE` alone, list auto approves | nothing                      | every field except quantity, and no reversion            |
 | `READ`                            | nothing                      | nothing                                                  |
@@ -57,6 +58,20 @@ This is the half of the current rule that is deleted rather than kept: the branc
 refusing a `DECIDE` holder any field but the quantity goes, along with the sentence
 saying that holding `WRITE` and `DECIDE` together does not add up to editing an approved
 line. It does now, and it adds up through `DECIDE` alone.
+
+> **Correction, after the fact.** That last sentence, and the `DECIDE` row of section 1's
+> table, read as though `DECIDE` on its own were enough to edit an approved line's
+> content. Section 4.1 says the opposite in the same document: the quantity needs `DECIDE`
+> or `MANAGE`, and **everything else needs `WRITE`**. Section 4.1 is right and this
+> paragraph is loose, for two reasons. The exemption's own argument is that such a caller
+> reaches the same end state by un-approving, editing and approving again, which needs the
+> `WRITE` that makes the edit possible at all, so for a caller without it there is no end
+> state and no ceremony to save. And `DECIDE` alone reaching an approved line's content
+> would leave that caller able to edit the more protected state and not the less protected
+> one, since a `PENDING` line's content is a writer's field and always was. Read every
+> mention of `DECIDE` in this plan as `WRITE` held together with `DECIDE`, except in
+> section 3, where a `DECIDE` holder reaches an approved line's quantity on their own and
+> plan 0040's delta path depends on it.
 
 ### 2.2 Why `MANAGE` is exempt
 

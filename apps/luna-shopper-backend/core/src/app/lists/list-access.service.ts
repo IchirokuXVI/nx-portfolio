@@ -228,8 +228,9 @@ export class ListAccessService {
    * they still hand back the `ShoppingList` because that is what their call sites
    * went on to use. Callers that need the set as well ask here instead: `line.add`
    * has to know whether the writer also holds `DECIDE` (plan 0037, section 2),
-   * `line.update` branches three ways on `WRITE`, `DECIDE` and `MANAGE` (plan
-   * 0036, section 4.1), and both would otherwise resolve the same membership
+   * `line.update` reads `WRITE`, `DECIDE` and `MANAGE` to authorize the edit and
+   * again to decide whether it un-approves the line (plan 0036, section 4.1; plan
+   * 0076, section 4.2), and both would otherwise resolve the same membership
    * twice to learn something the first resolution already knew.
    */
   async requireAccess(

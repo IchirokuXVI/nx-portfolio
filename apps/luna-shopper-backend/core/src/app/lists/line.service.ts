@@ -754,9 +754,13 @@ export class LineService {
    *   in it, an item the group agreed to that turns out to be the wrong one. A
    *   fix that un-approved the line would not be much of a fix, and `MANAGE` does
    *   not grant approval, so its holder could not undo it.
-   * - **`DECIDE` may edit any field of an `APPROVED` line**, and it keeps its
-   *   approval too. They can reach that end state anyway by un-approving, editing
-   *   and approving again, so the reversion below would be ceremony.
+   * - **`DECIDE` reaches an approved line's quantity on its own**, and nothing
+   *   else on its own: it is a separate permission from `WRITE` rather than a
+   *   larger one, so a caller holding it alone edits no content anywhere, on an
+   *   approved line or a pending one (plan 0076, section 4.1). Held **alongside**
+   *   `WRITE` it lifts the quantity refusal below, and it exempts the edit from
+   *   the reversion, which would otherwise be ceremony for somebody who can
+   *   un-approve, edit and approve again.
    * - **`WRITE` may edit any line and every field but one**: an `APPROVED` line's
    *   quantity stays with `DECIDE` and `MANAGE` (plan 0076, section 3). Content
    *   and the product set are what the group agreed to; the quantity is how many
@@ -1115,6 +1119,26 @@ export class LineService {
    * The one field an approved line withholds from a writer is its quantity, and
    * the refusal names it rather than the line, because the writer may well be
    * about to edit the content instead and that is allowed.
+   *
+   * ## `WRITE` governs every field but that one, on every line
+   *
+   * The write check sits in front of `DECIDE`, and not behind it, because
+   * `DECIDE` is not a superset of `WRITE`: the two are separate entries in
+   * `ListPermission` and a member can hold either without the other. A caller
+   * holding `DECIDE` alone who skipped this check would be able to rewrite an
+   * approved line's content, and adopt its products, while still being refused
+   * that same edit on a `PENDING` one, which is the more protected state
+   * granting more. Plan 0076, section 4.1 states it the other way round and is
+   * what this follows: a request naming the quantity needs `DECIDE` or `MANAGE`,
+   * and everything else needs `WRITE`.
+   *
+   * Section 2.1's `DECIDE` exemption is about the reversion in
+   * {@link reopenAfterEdit}, and its argument (such a caller reaches the same end
+   * state by un-approving, editing and approving again) holds only for somebody
+   * who can make the edit in the first place, which is to say somebody holding
+   * `WRITE` as well. A `DECIDE` holder without it cannot edit the content of a
+   * `PENDING` line either, so there is no end state for the exemption to save
+   * requests on.
    */
   private authorizeEdit(
     req: UpdateLineRequest,
@@ -1125,18 +1149,27 @@ export class LineService {
       return;
     }
     const approved = line.approvalStatus === LineApprovalStatus.APPROVED;
-    // Every field of an approved line, and no reversion afterwards. A `DECIDE`
-    // holder reaches the same end state today by un-approving, editing and
-    // approving again, so refusing them here buys nothing (plan 0076, section
-    // 2.1). On a line that is not approved they hold no more than anybody else,
-    // and fall to the write check like everybody else.
-    if (approved && permissions.has(ListPermission.DECIDE)) {
+    const decides = permissions.has(ListPermission.DECIDE);
+    // The one thing `DECIDE` reaches on its own, and the reason it is asked
+    // ahead of the write check rather than after it: an approved line's quantity
+    // is where plan 0040's delta path arrives, and that path's caller need hold
+    // nothing else. Plan 0076, section 3 keeps it exactly as it was. A request
+    // naming any other field alongside the quantity drops through, so a caller
+    // who may move the number but not rename the line is refused the whole
+    // request rather than half of it.
+    if (
+      approved &&
+      decides &&
+      req.content === undefined &&
+      req.itemIds === undefined &&
+      req.adoptItemIds === undefined
+    ) {
       return;
     }
     if (!permissions.has(ListPermission.WRITE)) {
       throw new ForbiddenException('You need write access to this list');
     }
-    if (approved && req.quantity !== undefined) {
+    if (approved && req.quantity !== undefined && !decides) {
       throw new ForbiddenException(
         'Only somebody who can approve lines can change the quantity of an approved line. Change something else on it first, which puts it back to pending'
       );
