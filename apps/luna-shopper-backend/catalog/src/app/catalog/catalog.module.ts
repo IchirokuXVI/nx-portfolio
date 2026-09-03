@@ -1,6 +1,13 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import type { CatalogConfig } from '../config/app-config';
 import { CATALOG_ENTITIES } from '../entities';
+import {
+  CATALOG_NATS_EVENTS,
+  CatalogEventsPublisher,
+} from '../events/catalog-events.publisher';
 import { CatalogController } from './catalog.controller';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
@@ -19,9 +26,27 @@ import { SupermarketService } from './supermarket.service';
  * than on a store, and what is genuinely per store lives beside it.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature(CATALOG_ENTITIES)],
+  imports: [
+    TypeOrmModule.forFeature(CATALOG_ENTITIES),
+    // Catalog's first outbound client (plan 0070, section 5). It publishes the
+    // group membership changes core reconciles into subscribed lines, and it
+    // publishes nothing else.
+    ClientsModule.registerAsync([
+      {
+        name: CATALOG_NATS_EVENTS,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.NATS,
+          options: {
+            servers: [config.getOrThrow<CatalogConfig>('catalog').natsUrl],
+          },
+        }),
+      },
+    ]),
+  ],
   controllers: [CatalogController],
   providers: [
+    CatalogEventsPublisher,
     PlatformAdminService,
     SupermarketService,
     PriceScopeService,

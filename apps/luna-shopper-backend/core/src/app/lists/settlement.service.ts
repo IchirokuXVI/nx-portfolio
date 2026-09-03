@@ -23,6 +23,7 @@ import { LineSettlement, ListLine, ListLineItem } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../generated-lists/line-claim.service';
 import { ListAccessService } from './list-access.service';
+import { toLineItemSet, type LineItemSet } from './line-item-set';
 import { toLineSettlementView, toLineView } from './list.mappers';
 import { ITEM_SETTLEMENTS_SQL } from './settlement.sql';
 
@@ -127,11 +128,11 @@ export class SettlementService {
         throw new NotFoundException('Line not found');
       }
 
-      const itemIds = await this.itemIdsOf(
+      const items = await this.itemSetOf(
         manager.getRepository(ListLineItem),
         line.id
       );
-      const itemId = this.resolveItemId(req.itemId, itemIds);
+      const itemId = this.resolveItemId(req.itemId, items.itemIds);
 
       // Floored at zero, and the settlement keeps what was actually bought
       // (section 4.2): buying three of a line that says two decrements to zero
@@ -204,7 +205,7 @@ export class SettlementService {
       return {
         line: toLineView(
           line,
-          itemIds,
+          items,
           { boughtCount, lastOutcome: req.outcome },
           claim
         ),
@@ -384,16 +385,23 @@ export class SettlementService {
     return requested;
   }
 
-  /** A line's products, in the order they were attached. */
-  private async itemIdsOf(
+  /**
+   * A line's products, in the order they were attached, and which of them its
+   * group is still responsible for (plan 0048, section 1.1; plan 0070, section 9).
+   *
+   * Both halves, because the `line.settled` event carries a whole `LineView`: one
+   * that reported only the products would take velista `0065`'s marks off a
+   * subscribed line the moment somebody said they had bought it.
+   */
+  private async itemSetOf(
     repo: Repository<ListLineItem>,
     lineId: string
-  ): Promise<string[]> {
+  ): Promise<LineItemSet> {
     const rows = await repo.find({
       where: { lineId },
       order: { position: 'ASC', id: 'ASC' },
     });
-    return rows.map((row) => row.itemId);
+    return toLineItemSet(rows);
   }
 }
 

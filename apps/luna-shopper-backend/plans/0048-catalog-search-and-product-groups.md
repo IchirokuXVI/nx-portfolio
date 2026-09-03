@@ -55,14 +55,23 @@ replaced by a **product set**: a `list_line_items` join table (`lineId`, `itemId
 pair, ordered by insertion) and an `itemSetHash` on the line, a digest of the sorted
 distinct item ids, recomputed on write and null while the set is empty.
 
-Picking a group in the composer **copies the group's members onto the line**. The line
-references no group afterwards, so removing a product the household never buys, or adding
-one the group missed, is an ordinary edit of that line. That is the point of the copy: the
-catalog does not have to curate a group for every household's version of "milk", because a
-line is its own hand made group. One deliberately unspecific product set is also exactly
-what the basket needs: `0050` resolves each generated line to the best priced member of
-its set, records which exact product was bought, and lets the shopper swap to another
-member (`0051` section 6).
+Picking a group in the composer **copies the group's members onto the line**. Removing a
+product the household never buys, or adding one the group missed, is an ordinary edit of
+that line. That is the point of the copy: the catalog does not have to curate a group for
+every household's version of "milk", because a line is its own hand made group. One
+deliberately unspecific product set is also exactly what the basket needs: `0050` resolves
+each generated line to the best priced member of its set, records which exact product was
+bought, and lets the shopper swap to another member (`0051` section 6).
+
+> **Revised by `0070`.** This paragraph used to continue "The line references no group
+> afterwards", bundling two claims where only the first survives. A household must be able
+> to diverge from the group: true, and `0070` does not weaken it by a single gesture.
+> _Therefore_ the line must forget the group: this does not follow. Forgetting is one way
+> to protect a divergence, and it is the way that also throws away every correction the
+> catalog will ever make. So a line now keeps a `productGroupId`, a `source` per membership
+> row and a tombstone per product somebody took off, and the divergence is **recorded**
+> rather than protected by amnesia. Everything else in this section stands, the hash
+> included.
 
 The hash is what makes the hand made sets legible. Two lines carrying the same products
 carry the same hash however the products got there, which is what the dedup rule in `0050`

@@ -14,6 +14,7 @@ import type {
   ListLine,
   ShoppingList,
 } from '../entities';
+import type { LineItemSet } from './line-item-set';
 
 /** A list with no lines yet, which is every list at the moment it is created. */
 export const EMPTY_LIST_COUNTS: ListCounts = { lineCount: 0, wantedCount: 0 };
@@ -73,6 +74,12 @@ const PERMISSION_ORDER: readonly ListPermission[] = [
  * right one. An argument the compiler insists on means every caller has to say
  * what the set is, and there is exactly one service that calls this.
  *
+ * Since plan 0070 that argument is a {@link LineItemSet} rather than an array,
+ * because the set has two halves now and both are read off the same rows. A
+ * mapper that took the array and defaulted `groupItemIds` would report every
+ * product on a subscribed line as one a person chose, which is the same class of
+ * quiet wrong answer the paragraph above is about.
+ *
  * The settlement summary arrives the same way and for the same reasons, plus one
  * of its own: it is what the two indicators in plan 0047 section 5 are drawn
  * from, and a mapper that computed it would be an aggregate **per row of a page**
@@ -94,7 +101,7 @@ const PERMISSION_ORDER: readonly ListPermission[] = [
  */
 export function toLineView(
   line: ListLine,
-  itemIds: readonly string[],
+  items: LineItemSet,
   settlements: LineSettlementSummary,
   claim: LineClaim
 ): LineView {
@@ -103,8 +110,13 @@ export function toLineView(
     listId: line.listId,
     content: line.content,
     quantity: line.quantity,
-    itemIds: [...itemIds],
+    itemIds: [...items.itemIds],
     itemSetHash: line.itemSetHash,
+    // The subscription and the part of the set it still accounts for (plan 0070,
+    // section 9). Null and empty on every line 0048 created, which is the honest
+    // answer for a hand made set rather than a stand in for an unread value.
+    productGroupId: line.productGroupId,
+    groupItemIds: [...items.groupItemIds],
     position: line.position,
     approvalStatus: line.approvalStatus,
     createdByUserId: line.createdByUserId,

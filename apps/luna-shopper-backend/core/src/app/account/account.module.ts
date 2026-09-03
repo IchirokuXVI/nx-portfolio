@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ProcessedEvent, Zone, ZoneMembership } from '../entities';
+import { Zone, ZoneMembership } from '../entities';
+import { IdempotencyModule } from '../events/idempotency.module';
 import { GeneratedListsModule } from '../generated-lists/generated-lists.module';
 import { ZonesModule } from '../zones/zones.module';
 import { AccountDeletionService } from './account-deletion.service';
-import { ProcessedEventStore } from './idempotency.store';
 import { AccountController } from './reconciliation.controller';
 import { UsernamePropagationService } from './username-propagation.service';
 import { ZoneReaperService } from './zone-reaper.service';
@@ -18,7 +18,11 @@ import { ZoneReaperService } from './zone-reaper.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Zone, ZoneMembership, ProcessedEvent]),
+    TypeOrmModule.forFeature([Zone, ZoneMembership]),
+    // The inbox both identity sagas dedupe on. A module of its own since plan
+    // 0070, because the product group sync needs the same store from a slice
+    // that cannot import this one (see IdempotencyModule).
+    IdempotencyModule,
     ZonesModule,
     // For the `user.deleted` saga alone: a departing account's baskets are
     // private to it and go with it (plan 0050, section 7).
@@ -28,7 +32,6 @@ import { ZoneReaperService } from './zone-reaper.service';
   providers: [
     AccountDeletionService,
     UsernamePropagationService,
-    ProcessedEventStore,
     ZoneReaperService,
   ],
 })

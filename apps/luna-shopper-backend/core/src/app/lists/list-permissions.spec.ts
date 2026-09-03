@@ -9,12 +9,16 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
-import { LineSettlement, ListLineItem } from '../entities';
+import {
+  LineSettlement,
+  ListLineGroupRemoval,
+  ListLineItem,
+} from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { CommentService } from './comment.service';
-import { fakeLineItems } from './line-items.fake';
+import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -167,6 +171,9 @@ function world(options: {
   // Plan 0048: the line's product set. This file is about who may do what, not
   // about products, but every write path now touches a set.
   const lineItems = fakeLineItems();
+  // Plan 0070: a write to a subscribed line's set can leave a tombstone. No line
+  // here is subscribed, so nothing lands in it, but the repository has to exist.
+  const groupRemovals = fakeGroupRemovals();
 
   // What a settle writes (plan 0047). This file asks who may settle rather than
   // what the history says, but both services read the table back on their way
@@ -179,6 +186,9 @@ function world(options: {
     transaction: async <T>(run: (m: unknown) => Promise<T>) =>
       run({
         getRepository: (entity: unknown) => {
+          if (entity === ListLineGroupRemoval) {
+            return groupRemovals.repo;
+          }
           if (entity === ListLineItem) {
             return lineItems.repo;
           }
@@ -198,6 +208,7 @@ function world(options: {
     dataSource,
     lineRepo as never,
     lineItems.repo as never,
+    groupRemovals.repo as never,
     settlementRepo as never,
     listAccess,
     fakeLineClaims().service,

@@ -27,6 +27,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { In, Repository, type SelectQueryBuilder } from 'typeorm';
 import { Item, ProductGroup, SupermarketItem } from '../entities';
+import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import {
   toItemOfferView,
   toItemView,
@@ -104,9 +105,21 @@ export class ItemService {
     @InjectRepository(SupermarketItem)
     private readonly prices: Repository<SupermarketItem>,
     private readonly productGroups: ProductGroupService,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    // Where a product's group moves is where plan 0070's fan out starts. Fire and
+    // forget: an admin's write must not fail because nobody was listening.
+    private readonly events: CatalogEventsPublisher
   ) {}
 
+  /**
+   * A new product (plan 0012).
+   *
+   * It announces its group when it is created into one (plan 0070, section 5).
+   * That is "joined", with nothing on the other side, and it is the same fact as
+   * an update that moves a product into a group: a household subscribed to Milk
+   * should get a milk the catalog has only just heard of, and there is no second
+   * write coming that would tell them.
+   */
   async create(req: CreateItemRequest): Promise<ItemView> {
     this.admin.requireAdmin(req.userId);
     const saved = await this.items.save(
@@ -122,12 +135,30 @@ export class ItemService {
         productGroupId: await this.resolveGroup(req.productGroupId ?? null),
       })
     );
+    if (saved.productGroupId !== null) {
+      this.events.itemGroupChanged(saved.id, null, saved.productGroupId);
+    }
     return toItemView(saved);
   }
 
+  /**
+   * Edit a product (plan 0012).
+   *
+   * **This is where group membership moves**, and therefore where plan 0070's fan
+   * out is triggered from. `ProductGroupService` says so in its own class doc:
+   * nothing there assigns items to groups, so "an admin adds three products to
+   * Milk" is three calls to this method, and a sync hung off the group service
+   * would watch a service that never fires.
+   *
+   * Announced only when the group actually moved, and only after the write. Every
+   * other field an admin can change here means nothing to a subscribed line, and
+   * the consumer's work is proportional to how many households subscribe to the
+   * group, so an event for a rename would be a fan out over nothing.
+   */
   async update(req: UpdateItemRequest): Promise<ItemView> {
     this.admin.requireAdmin(req.userId);
     const row = await this.load(req.itemId);
+    const groupBefore = row.productGroupId;
     if (req.name !== undefined) {
       row.name = req.name;
     }
@@ -155,7 +186,15 @@ export class ItemService {
     if (req.productGroupId !== undefined) {
       row.productGroupId = await this.resolveGroup(req.productGroupId);
     }
-    return toItemView(await this.items.save(row));
+    const saved = await this.items.save(row);
+    if (saved.productGroupId !== groupBefore) {
+      this.events.itemGroupChanged(
+        saved.id,
+        groupBefore,
+        saved.productGroupId
+      );
+    }
+    return toItemView(saved);
   }
 
   async delete(req: ItemIdRequest): Promise<{ id: string }> {

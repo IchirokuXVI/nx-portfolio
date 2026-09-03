@@ -8,6 +8,7 @@ import { GeneratedList } from './generated-list.entity';
 import { LineComment } from './line-comment.entity';
 import { LineSettlement } from './line-settlement.entity';
 import { ListAccess } from './list-access.entity';
+import { ListLineGroupRemoval } from './list-line-group-removal.entity';
 import { ListLineItem } from './list-line-item.entity';
 import { ListLine } from './list-line.entity';
 import { MergeRequest } from './merge-request.entity';
@@ -32,6 +33,7 @@ export { GeneratedList } from './generated-list.entity';
 export { LineComment } from './line-comment.entity';
 export { LineSettlement } from './line-settlement.entity';
 export { ListAccess } from './list-access.entity';
+export { ListLineGroupRemoval } from './list-line-group-removal.entity';
 export { ListLineItem } from './list-line-item.entity';
 export { ListLine } from './list-line.entity';
 export { MergeRequest } from './merge-request.entity';
@@ -53,6 +55,9 @@ export const CORE_ENTITIES = [
   ListAccess,
   ListLine,
   ListLineItem,
+  // What a person took off the set their line's group put there (plan 0070).
+  // After the line it hangs off, like every other child table here.
+  ListLineGroupRemoval,
   LineComment,
   // What happened to a line on a trip (plan 0047). After the line it references.
   LineSettlement,

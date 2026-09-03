@@ -6,10 +6,12 @@ import {
   LineSettlement,
   ListAccess,
   ListLine,
+  ListLineGroupRemoval,
   ListLineItem,
   ShoppingList,
   ZoneMembership,
 } from '../entities';
+import { IdempotencyModule } from '../events/idempotency.module';
 import { LineClaimModule } from '../generated-lists/line-claim.module';
 import { ZonesModule } from '../zones/zones.module';
 import { CommentService } from './comment.service';
@@ -17,6 +19,8 @@ import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { ListController } from './list.controller';
 import { ListService } from './list.service';
+import { ProductGroupSyncController } from './product-group-sync.controller';
+import { ProductGroupSyncService } from './product-group-sync.service';
 import { SettlementService } from './settlement.service';
 import { SharedListGrantModule } from './shared-list-grant.module';
 
@@ -32,6 +36,8 @@ import { SharedListGrantModule } from './shared-list-grant.module';
       ListAccess,
       ListLine,
       ListLineItem,
+      // The tombstones a subscribed line's edits leave (plan 0070, section 2).
+      ListLineGroupRemoval,
       LineComment,
       LineSettlement,
       CommentAudio,
@@ -43,14 +49,19 @@ import { SharedListGrantModule } from './shared-list-grant.module';
     // `GeneratedListsModule`, which imports this one, on exactly the reasoning
     // `SharedListGrantModule` above it exists for.
     LineClaimModule,
+    // The `processed_events` inbox the catalog event handlers dedupe on (plan
+    // 0070, section 5.1).
+    IdempotencyModule,
   ],
-  controllers: [ListController],
+  controllers: [ListController, ProductGroupSyncController],
   providers: [
     ListService,
     LineService,
     CommentService,
     SettlementService,
     ListAccessService,
+    // Catalog's group membership, reconciled into subscribed lines (plan 0070).
+    ProductGroupSyncService,
   ],
   // `ListAccessService` is exported so the realtime access checks (plan 0009)
   // can reuse list-access resolution rather than re-implementing it.

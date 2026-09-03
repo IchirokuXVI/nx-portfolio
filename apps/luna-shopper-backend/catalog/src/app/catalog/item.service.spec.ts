@@ -8,6 +8,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 import type { Item, ProductGroup, SupermarketItem } from '../entities';
+import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -50,14 +51,22 @@ function build(overrides: {
   const groups = {
     load: jest.fn(async (id: string) => ({ id }) as ProductGroup),
   } as unknown as jest.Mocked<ProductGroupService>;
+  // Plan 0070: a write that moves a product's group announces it. Fire and
+  // forget, so nothing here waits on it, but a spec that left it out would fail
+  // on the write rather than on what it is testing.
+  const events = {
+    itemGroupChanged: jest.fn(),
+    productGroupDeleted: jest.fn(),
+  } as unknown as jest.Mocked<CatalogEventsPublisher>;
   const service = new ItemService(
     overrides.items as Repository<Item>,
     {} as Repository<ProductGroup>,
     (overrides.prices ?? {}) as Repository<SupermarketItem>,
     groups,
-    admin
+    admin,
+    events
   );
-  return { service, admin, groups };
+  return { service, admin, groups, events };
 }
 
 describe('ItemService', () => {

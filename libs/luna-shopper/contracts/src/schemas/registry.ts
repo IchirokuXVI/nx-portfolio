@@ -2,6 +2,10 @@ import { JsonSchema } from './builders';
 import { commonSchemas } from './common.schemas';
 import { enumSchemas } from './enums.schemas';
 import {
+  catalogEventContracts,
+  catalogEventSchemas,
+} from './events/catalog.schemas';
+import {
   identityEventContracts,
   identityEventSchemas,
 } from './events/identity.schemas';
@@ -78,6 +82,7 @@ export const eventContracts: Record<string, string> = {
   ...identityEventContracts,
   ...domainEventContracts,
   ...postalCodeEventContracts,
+  ...catalogEventContracts,
 };
 
 /** Every schema, ready to hand to a single Ajv instance (`ajv.addSchema`). */
@@ -100,6 +105,7 @@ export const allSchemas: JsonSchema[] = [
   ...identityEventSchemas,
   ...realtimeEventSchemas,
   ...postalCodeEventSchemas,
+  ...catalogEventSchemas,
 ];
 
 export const messageSubjects = Object.keys(messageContracts);

@@ -31,6 +31,27 @@ export enum ListPermission {
   MANAGE = 'MANAGE',
 }
 
+/**
+ * Who put one product on a line (plan 0070, section 2).
+ *
+ * A column on `list_line_items` and never a field on the wire: `LineView` says
+ * the same thing as `groupItemIds`, a subset of `itemIds`, because there are
+ * exactly two sources and one subset therefore determines the other. It lives
+ * here rather than in core because it is the vocabulary the view's doc comments
+ * are written in, beside the approval state the same rows carry.
+ *
+ * **Provenance moves one way** (section 3): `GROUP` may become `USER` and never
+ * back. Said once, in one sentence, the app never takes ownership of something a
+ * person touched, and the four cases that would otherwise each need an argument
+ * answer themselves.
+ */
+export enum LineItemSource {
+  /** The line's product group put it there and nobody has adopted it. */
+  GROUP = 'GROUP',
+  /** A person did: typed it, or adopted what the group offered. */
+  USER = 'USER',
+}
+
 /** A line's approval state (it has to be approved). */
 export enum LineApprovalStatus {
   PENDING = 'PENDING',

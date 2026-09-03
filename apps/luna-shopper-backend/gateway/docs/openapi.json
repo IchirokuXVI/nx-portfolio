@@ -14919,6 +14919,37 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "productGroupId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The catalog product group this set came from (plan 0070, section 9), which subscribes the line to it: products the group gains later appear on the line, and products it loses go, unless somebody has adopted or removed them. The server takes the set as sent and never re-derives it from the group, so the line holds exactly what the suggestion said it would add."
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "AddLinesItemDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "itemIds": {
+            "maxItems": 100,
+            "description": "The catalog products this line stands for (plan 0048, section 1.1). Picking a group in the composer sends that group’s members here. Absent or empty is a free text line, which stays first class.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "required": [
@@ -14933,7 +14964,7 @@
             "maxItems": 50,
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AddLineDto"
+              "$ref": "#/components/schemas/AddLinesItemDto"
             }
           }
         },
@@ -14969,8 +15000,17 @@
             "maximum": 100000
           },
           "itemIds": {
-            "maxItems": 100,
-            "description": "Replace the line’s product set (plan 0048, section 1.1); an empty array clears it back to free text. A whole set and not an add or a remove, for the same reason reorder takes the whole order.",
+            "maxItems": 500,
+            "description": "Replace the line’s product set (plan 0048, section 1.1); an empty array clears it back to free text. A whole set and not an add or a remove, for the same reason reorder takes the whole order. The real bound is max(100, what the line currently holds) and is applied in core, which is the only layer that can see the second half of it: a line a growing group has carried past 100 has to stay editable, or it could never be shrunk back under the cap (plan 0070, section 7.2).",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "adoptItemIds": {
+            "maxItems": 500,
+            "description": "Products to take ownership of, moving them from the line’s group to the person holding the line (plan 0070, section 9). A field of its own and not an inference from itemIds, because keeping a product in a set replacement is not a statement about who owns it: reading adoption out of that would adopt the whole line every time somebody removed one product. Ids the line does not hold are ignored, and adopting twice is a no op.",
             "type": "array",
             "items": {
               "type": "string",
@@ -19868,6 +19908,19 @@
               "null"
             ]
           },
+          "productGroupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "position": {
             "type": "integer"
           },
@@ -19926,6 +19979,8 @@
           "quantity",
           "itemIds",
           "itemSetHash",
+          "productGroupId",
+          "groupItemIds",
           "position",
           "approvalStatus",
           "createdByUserId",
