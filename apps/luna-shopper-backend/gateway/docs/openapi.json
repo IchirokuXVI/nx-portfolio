@@ -10717,9 +10717,11 @@
           },
           {
             "name": "supermarketId",
-            "required": true,
+            "required": false,
             "in": "query",
+            "description": "Only this chain’s scopes. Absent lists every chain’s.",
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
@@ -14959,9 +14961,11 @@
           },
           {
             "name": "supermarketId",
-            "required": true,
+            "required": false,
             "in": "query",
+            "description": "Only this chain’s scopes. Absent lists every chain’s.",
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }

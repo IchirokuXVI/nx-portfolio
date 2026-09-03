@@ -2,6 +2,8 @@ import { computed, signal, type Signal } from '@angular/core';
 import {
   appendPage,
   idOf,
+  queryFilters,
+  unansweredFilters,
   type ResourceDescriptor,
   type ResourceGateway,
   type ResourceRow,
@@ -22,7 +24,7 @@ import { GatewayError, toGatewayError } from '../gateway-error';
  * **no rows** and **no rows matching the filter** are different answers with
  * different remedies, and only the second one offers a way out.
  */
-export type ListStatus = 'loading' | 'ready' | 'error';
+export type ListStatus = 'loading' | 'ready' | 'error' | 'blocked';
 
 export class ResourceListStore<T extends ResourceRow> {
   private readonly _rows = signal<readonly T[]>([]);
@@ -43,6 +45,22 @@ export class ResourceListStore<T extends ResourceRow> {
   readonly error: Signal<GatewayError | null> = this._error.asReadonly();
   readonly filters = this._filters.asReadonly();
   readonly order = this._order.asReadonly();
+
+  /**
+   * The required filters still unanswered, which is why nothing has been read.
+   *
+   * Three of the catalog's lists begin from something rather than from
+   * everything: a chain's shops are addressed under the chain, and a shop's
+   * aisle positions name the shop as a required parameter. Asking without it is
+   * a 400, so the list waits and names what it is waiting for, rather than
+   * showing the operator an error the screen caused itself.
+   */
+  readonly waitingFor = computed(() =>
+    unansweredFilters(this._descriptor.filters ?? [], this._filters())
+  );
+
+  /** Nothing has been read, and nothing will be until a filter is answered. */
+  readonly blocked = computed(() => this.waitingFor().length > 0);
 
   /** Another page is being fetched under the rows already shown. */
   readonly loadingMore = this._loadingMore.asReadonly();
@@ -66,6 +84,18 @@ export class ResourceListStore<T extends ResourceRow> {
     Object.values(this._filters()).some((value) => value !== '')
   );
 
+  /**
+   * The filters the gateway is allowed to see.
+   *
+   * Local ones are dropped. The shop picker on the aisle position screen needs
+   * a chain to search within and the route has no parameter for one, and the
+   * gateway validates its query with `forbidNonWhitelisted`, so sending it
+   * anyway would turn a helpful control into a 400.
+   */
+  private readonly _queryFilters = computed(() =>
+    queryFilters(this._descriptor.filters ?? [], this._filters())
+  );
+
   /** Nothing is here, and nothing was excluded. */
   readonly empty = computed(
     () =>
@@ -86,13 +116,25 @@ export class ResourceListStore<T extends ResourceRow> {
       this._status() === 'ready' && this._rows().length === 0 && this.narrowed()
   );
 
-  /** The first page, from the current filters and order. Replaces the rows. */
+  /**
+   * The first page, from the current filters and order. Replaces the rows.
+   *
+   * A blocked list reads nothing and says so instead. The rows are still
+   * cleared, because the ones on screen belonged to the parent that has just
+   * been unchosen and leaving them would attribute one shop's prices to
+   * another.
+   */
   async load(): Promise<void> {
-    this._status.set('loading');
     this._error.set(null);
     this._rows.set([]);
     this._cursor.set(null);
 
+    if (this.blocked()) {
+      this._status.set('blocked');
+      return;
+    }
+
+    this._status.set('loading');
     await this._fetch(undefined, (page) => this._rows.set(page));
   }
 
@@ -105,11 +147,7 @@ export class ResourceListStore<T extends ResourceRow> {
    */
   async loadMore(): Promise<void> {
     const cursor = this._cursor();
-    if (
-      cursor === null ||
-      this._loadingMore() ||
-      this._status() === 'loading'
-    ) {
+    if (cursor === null || this._loadingMore() || this._status() !== 'ready') {
       return;
     }
 
@@ -135,7 +173,15 @@ export class ResourceListStore<T extends ResourceRow> {
     return this.load();
   }
 
-  /** Put every filter back, which is the way out of an empty filtered list. */
+  /**
+   * Put every filter back, which is the way out of an empty filtered list.
+   *
+   * Including the required ones, which sends the list back to asking for a
+   * parent. That is the right answer rather than an awkward one: an operator
+   * clearing the filter wants to start again, and a screen that kept the chain
+   * while dropping everything else would be clearing something they did not
+   * name.
+   */
   clear(): Promise<void> {
     this._filters.set({});
     this._order.set(undefined);
@@ -171,7 +217,7 @@ export class ResourceListStore<T extends ResourceRow> {
       const page = await this._gateway.list({
         cursor,
         order: this._order(),
-        filters: this._filters(),
+        filters: this._queryFilters(),
       });
 
       apply(page.items);

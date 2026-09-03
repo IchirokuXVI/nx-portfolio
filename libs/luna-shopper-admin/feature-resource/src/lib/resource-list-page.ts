@@ -23,6 +23,7 @@ import {
   type RowAction,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
+import { ResourceReferences } from './resource-registry';
 import { RESOURCE_DESCRIPTOR } from './resource-route-data';
 
 /**
@@ -52,6 +53,7 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
       (orderChange)="store.setOrder($event)"
       (remove)="askToDelete($event)"
       (retry)="store.load()"
+      [blocked]="store.blocked()"
       [busyRowId]="busyRowId()"
       [canCreate]="canCreate()"
       [canDelete]="canDelete()"
@@ -66,6 +68,7 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
       [hasMore]="store.hasMore()"
       [loading]="store.status() === 'loading'"
       [loadingMore]="store.loadingMore()"
+      [lookup]="references"
       [moreFailed]="moreFailed()"
       [namedActions]="namedActions()"
       [noMatch]="store.noMatch()"
@@ -73,7 +76,20 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
       [rows]="rows()"
       [sorts]="descriptor.sorts ?? []"
       [titleKey]="descriptor.labels.many"
+      [waitingForLabels]="waitingForLabels()"
     />
+
+    @if (confirming(); as pending) {
+      <lib-confirm-dialog
+        (confirm)="confirmAction()"
+        (dismiss)="confirming.set(null)"
+        [bodyArgs]="{ name: pending.row.title }"
+        [busy]="busyRowId() !== null"
+        [confirmKey]="pending.action.label"
+        [headingKey]="pending.action.label"
+        bodyKey="resource.confirm.action.body"
+      />
+    }
 
     @if (deleting(); as row) {
       <lib-confirm-dialog
@@ -102,6 +118,9 @@ export class ResourceListPage {
   private readonly _viewport = inject(Viewport);
   private readonly _translator = inject(RokuTranslatorService);
 
+  /** Answers the reference filters' searches, from every descriptor the app has. */
+  readonly references = inject(ResourceReferences);
+
   /**
    * The resource this screen is for, from route `data`.
    *
@@ -118,9 +137,19 @@ export class ResourceListPage {
    * A field initializer runs during construction, which is where `inject` works.
    * It has to come after `descriptor`, and does.
    */
+  /**
+   * The gateway, built here because this is an injection context.
+   *
+   * Held rather than passed straight through, because a named action needs the
+   * same one: a descriptor is a constant with no injector of its own, and an
+   * action that built a second gateway could be changing rows the list did not
+   * read.
+   */
+  readonly gateway = this.descriptor.gateway();
+
   readonly store = new ResourceListStore<ResourceRow>(
     this.descriptor,
-    this.descriptor.gateway()
+    this.gateway
   );
 
   readonly compact = this._viewport.compact;
@@ -130,6 +159,23 @@ export class ResourceListPage {
 
   /** The row something is happening to. */
   readonly busyRowId = signal<string | null>(null);
+
+  /** The named action awaiting a yes, or `null`. */
+  readonly confirming = signal<RowAction | null>(null);
+
+  /**
+   * What the list is waiting to be told, already translated and joined.
+   *
+   * Joined here rather than in the template because the testing translator does
+   * not interpolate, so the message is one key with one argument and a spec can
+   * assert on the argument.
+   */
+  readonly waitingForLabels = computed(() =>
+    this.store
+      .waitingFor()
+      .map((filter) => this._translator.t(filter.label))
+      .join(', ')
+  );
 
   readonly columns = computed(() => this._fields(this.descriptor.list.columns));
 
@@ -200,10 +246,28 @@ export class ResourceListPage {
    * this component knows nothing about can change any column of any row, and a
    * screen that assumed otherwise would be showing something that is not there.
    */
-  async run(event: RowAction): Promise<void> {
+  run(event: RowAction): void {
+    if (event.action.confirm === true) {
+      this.confirming.set(event);
+      return;
+    }
+    void this._run(event);
+  }
+
+  /** The yes, for an action that asked first. */
+  async confirmAction(): Promise<void> {
+    const pending = this.confirming();
+    if (pending === null) {
+      return;
+    }
+    await this._run(pending);
+    this.confirming.set(null);
+  }
+
+  private async _run(event: RowAction): Promise<void> {
     this.busyRowId.set(event.row.id);
     try {
-      await event.action.run(event.row.row);
+      await event.action.run(event.row.row, this.gateway);
     } finally {
       this.busyRowId.set(null);
     }

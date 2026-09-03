@@ -78,7 +78,26 @@ interface FieldBase<T extends ResourceRow> {
    * row.
    */
   readonly editable?: boolean;
+  /**
+   * Editable while creating the row, and text once it exists.
+   *
+   * The catalog is full of these, because half of it is keyed on something the
+   * caller states rather than on an id the server mints: a price is
+   * `(itemId, priceScopeId)`, an aisle position is
+   * `(itemId, supermarketLocationId)`, and a shop belongs to the chain whose
+   * path created it. None of those appear in the matching update DTO.
+   *
+   * So a form that offered them on an edit would take the operator's answer,
+   * report success, and change nothing, which is worse than not offering them:
+   * they would believe they had moved a price to another scope. Stating it here
+   * makes the field read as text the moment the row exists, and keeps it out of
+   * the request entirely.
+   */
+  readonly createOnly?: boolean;
 }
+
+/** Whether the form is creating a row or changing one. */
+export type FormMode = 'create' | 'edit';
 
 /** A single line, or a paragraph. */
 export interface TextField<T extends ResourceRow> extends FieldBase<T> {
@@ -102,6 +121,22 @@ export interface MoneyField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'money';
   /** The column's scale: 2 for `price`, 4 for `unitPrice`. */
   readonly decimals: number;
+  /**
+   * What the gateway carries the value as. A decimal string unless stated.
+   *
+   * The database column is `numeric` and the plan describes money as a string
+   * end to end, but the gateway's own DTO validates `price` and `unitPrice`
+   * with `@IsNumber()`, so a string is refused. Stating it here keeps the whole
+   * of the exactness where it belongs: the operator's digits are parsed, held
+   * and validated as text, and the conversion happens once, at the edge, on a
+   * value already known to be a readable decimal.
+   *
+   * A `numeric(12,4)` survives that conversion exactly. Eight integer digits and
+   * four decimals is well inside what a double round trips to the same shortest
+   * decimal it came from, so the digits the operator typed are the digits the
+   * request carries.
+   */
+  readonly wire?: 'string' | 'number';
 }
 
 export interface BooleanField<T extends ResourceRow> extends FieldBase<T> {
@@ -134,6 +169,20 @@ export interface LocalizedTextField<
   /** The locales the form renders an input for. */
   readonly locales: readonly string[];
   readonly maxLength?: number;
+  /**
+   * What each locale holds: one string, or a list of them.
+   *
+   * A product group's `synonyms` is the only `list` in the catalog: the column
+   * is `{ en: string[], es: string[] }`, and it is what makes a search for
+   * "semi skimmed" reach a group called "milk". The control is still one input
+   * per locale, holding the words separated by commas, because a list editor
+   * per language is a great deal of screen for a field that is a handful of
+   * words.
+   *
+   * The splitting and joining happen at the two edges, so nothing above the
+   * draft has to know: the form holds text and the gateway gets arrays.
+   */
+  readonly entries?: 'text' | 'list';
 }
 
 /** A timestamp, formatted with `Intl` and never with `DatePipe`. */
@@ -153,9 +202,21 @@ export type FieldDescriptor<T extends ResourceRow = ResourceRow> =
   | LocalizedTextField<T>
   | DateField<T>;
 
-/** Whether the form may change this field. Absent means yes. */
+/**
+ * Whether the form may change this field, in the mode it is open in.
+ *
+ * The mode defaults to `create`, which is the answer that treats a create only
+ * field as editable. A caller that does not say which form it is has not yet
+ * committed to a row existing, and a field the operator can still set is the
+ * safe way to be wrong: the alternative would hide it from the create form that
+ * is the only place it can ever be set.
+ */
 export function isEditable<T extends ResourceRow>(
-  field: FieldDescriptor<T>
+  field: FieldDescriptor<T>,
+  mode: FormMode = 'create'
 ): boolean {
-  return field.editable !== false;
+  if (field.editable === false) {
+    return false;
+  }
+  return !(field.createOnly === true && mode === 'edit');
 }

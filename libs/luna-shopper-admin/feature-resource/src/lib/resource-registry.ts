@@ -8,11 +8,13 @@ import {
 } from '@angular/core';
 import {
   idOf,
+  unansweredFilters,
   type AnyResourceDescriptor,
   type ResourceGateway,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import type {
+  ReferenceContext,
   ReferenceLookup,
   ReferenceOption,
 } from '@portfolio/luna-shopper-admin/ui';
@@ -84,20 +86,39 @@ export class ResourceReferences implements ReferenceLookup {
 
   async search(
     resource: string,
-    term: string
+    term: string,
+    context: ReferenceContext = {}
   ): Promise<readonly ReferenceOption[]> {
     const descriptor = this._registry.byName(resource);
     if (descriptor === undefined) {
       return [];
     }
 
-    const search = descriptor.filters?.find(
-      (filter) => filter.kind === 'search'
-    );
-    const filters =
-      search === undefined || term.trim() === ''
-        ? {}
-        : { [search.param]: term.trim() };
+    const declared = descriptor.filters ?? [];
+
+    // Only the parameters the target really has. A caller passes whatever it
+    // knows, and a name this resource does not declare would be sent verbatim
+    // to a gateway that validates its query with `forbidNonWhitelisted`.
+    const known = new Set(declared.map((filter) => filter.param));
+    const filters: Record<string, string> = {};
+    for (const [param, value] of Object.entries(context)) {
+      if (known.has(param) && value !== '') {
+        filters[param] = value;
+      }
+    }
+
+    // A search this resource cannot answer without a parent it has not been
+    // given. The screen has already disabled the control and said what is
+    // missing; sending a request that could only be a 400 would find that out
+    // a second time and more slowly.
+    if (unansweredFilters(declared, filters).length > 0) {
+      return [];
+    }
+
+    const search = declared.find((filter) => filter.kind === 'search');
+    if (search !== undefined && term.trim() !== '') {
+      filters[search.param] = term.trim();
+    }
 
     const page = await this._registry
       .gatewayFor(descriptor)

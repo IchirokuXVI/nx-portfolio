@@ -278,7 +278,7 @@ export class ResourceForm {
   readonly leave = output<void>();
 
   editable(field: FieldDescriptor<ResourceRow>): boolean {
-    return isEditable(field);
+    return isEditable(field, this.mode());
   }
 
   controlId(field: FieldDescriptor<ResourceRow>): string {

@@ -6,13 +6,11 @@ import {
   localizedTextValue,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { SUPERMARKETS_PATH } from './catalog-paths';
 import { SUPERMARKET_SEED } from './supermarkets-seed';
 
 /** A chain, as the gateway describes it. */
 export type Supermarket = Wire.CatalogSupermarketView;
-
-/** Where the back office reads and writes chains (backend plan 0073). */
-export const SUPERMARKETS_PATH = '/v1/admin/catalog/supermarkets';
 
 /**
  * Supermarkets, as a descriptor and nothing else (plan 0004, section 9).

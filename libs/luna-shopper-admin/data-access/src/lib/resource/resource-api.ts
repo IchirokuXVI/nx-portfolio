@@ -1,15 +1,16 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import type {
-  ResourceGateway,
-  ResourceInput,
-  ResourcePage,
-  ResourceQuery,
-  ResourceRow,
+import {
+  fromNaturalKey,
+  type ResourceGateway,
+  type ResourceInput,
+  type ResourcePage,
+  type ResourceQuery,
+  type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
-import { toGatewayError } from '../gateway-error';
+import { GatewayError, toGatewayError } from '../gateway-error';
 import type { ResourceGatewaysI, ResourceSource } from './resource-gateways';
 
 /**
@@ -46,31 +47,129 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
   ) {}
 
   async list(query: ResourceQuery): Promise<ResourcePage<T>> {
-    const body = await this._send<unknown>('get', this._collection(), {
-      params: toParams(query, this._source.pageSize),
+    const filters = query.filters ?? {};
+    const body = await this._send<unknown>('get', this._collection(filters), {
+      params: toParams(
+        { ...query, filters: this._queryFilters(filters) },
+        this._source.pageSize
+      ),
     });
 
     return toPage<T>(body);
   }
 
-  read(id: string): Promise<T> {
-    return this._send<T>('get', this._member(id));
+  /**
+   * One row, by whatever addresses it.
+   *
+   * A resource with no member route is found by reading its collection: the
+   * fields the route filters on narrow the read, and the rest are matched here.
+   * It stops at {@link SCAN_PAGE_LIMIT} pages, so an id that names nothing costs
+   * a bounded number of requests and then answers "not there", which is what it
+   * would have answered anyway.
+   */
+  async read(id: string): Promise<T> {
+    const key = this._source.key;
+    if (key === undefined) {
+      return this._send<T>('get', this._member(id));
+    }
+
+    const wanted = fromNaturalKey(id, key);
+    const narrow = this._source.keyFilters ?? key;
+    const filters = Object.fromEntries(
+      narrow.map((field) => [field, wanted[field] ?? ''])
+    );
+
+    let cursor: string | undefined = undefined;
+    for (let page = 0; page < SCAN_PAGE_LIMIT; page += 1) {
+      const answer: ResourcePage<T> = await this.list({
+        filters,
+        cursor,
+        limit: SCAN_PAGE_SIZE,
+      });
+
+      const row = answer.items.find((entry) =>
+        key.every((field) => String(entry[field] ?? '') === wanted[field])
+      );
+      if (row !== undefined) {
+        return row;
+      }
+
+      if (answer.nextCursor === null) {
+        break;
+      }
+      cursor = answer.nextCursor;
+    }
+
+    throw notFound();
   }
 
   create(input: ResourceInput): Promise<T> {
-    return this._send<T>('post', this._collection(), { body: input });
+    const filters = toFilterValues(input);
+    return this._source.upsert === true
+      ? this._send<T>('put', this._collection(filters), { body: input })
+      : this._send<T>('post', this._collection(filters), { body: input });
   }
 
+  /**
+   * A change, sent the way the resource accepts one.
+   *
+   * An upsert carries its key in the body, so the key is put back before the
+   * changed fields: the form leaves the key out of an edit, deliberately, since
+   * changing it would address a different row rather than move this one.
+   */
   update(id: string, input: ResourceInput): Promise<T> {
-    return this._send<T>('patch', this._member(id), { body: input });
+    if (this._source.upsert !== true) {
+      return this._send<T>('patch', this._member(id), { body: input });
+    }
+
+    const key =
+      this._source.key === undefined
+        ? {}
+        : fromNaturalKey(id, this._source.key);
+    const body = { ...key, ...input };
+    return this._send<T>('put', this._collection(toFilterValues(body)), {
+      body,
+    });
   }
 
+  /**
+   * Delete a row.
+   *
+   * A resource with a natural key is read first, because its `DELETE` is
+   * addressed by the id the row answers with rather than by the key the URL
+   * carries. That is one extra request on an act that already asked the
+   * operator whether they meant it.
+   */
   async remove(id: string): Promise<void> {
-    await this._send<unknown>('delete', this._member(id));
+    if (this._source.key === undefined) {
+      await this._send<unknown>('delete', this._member(id));
+      return;
+    }
+
+    const row = await this.read(id);
+    const rowId = row['id'];
+    if (typeof rowId !== 'string' || rowId === '') {
+      throw notFound();
+    }
+    await this._send<unknown>('delete', this._member(rowId));
   }
 
-  private _collection(): string {
-    return this._urls.gateway(this._source.path);
+  /** The filters the route declares, which is every one it does not consume. */
+  private _queryFilters(
+    filters: Readonly<Record<string, string>>
+  ): Readonly<Record<string, string>> {
+    const consumed = new Set(this._source.pathFilters ?? []);
+    return consumed.size === 0
+      ? filters
+      : Object.fromEntries(
+          Object.entries(filters).filter(([name]) => !consumed.has(name))
+        );
+  }
+
+  private _collection(scope: Readonly<Record<string, string>> = {}): string {
+    return this._urls.gateway(
+      this._source.collectionPath?.(scope) ?? this._source.path
+    );
   }
 
   private _member(id: string): string {
@@ -84,7 +183,7 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
    * status number. The form reads `fieldErrors`; everything else reads `code`.
    */
   private async _send<R>(
-    method: 'get' | 'post' | 'patch' | 'delete',
+    method: 'get' | 'post' | 'put' | 'patch' | 'delete',
     url: string,
     options: { params?: HttpParams; body?: unknown } = {}
   ): Promise<R> {
@@ -99,6 +198,45 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
       throw toGatewayError(error);
     }
   }
+}
+
+/**
+ * How much of a collection a member read may walk before giving up.
+ *
+ * A bound rather than a budget. An operator reaches a form from the list, so the
+ * row is almost always on the first page; the pages after it are for a
+ * bookmarked URL, and the limit is what stops a mistyped one from reading the
+ * whole catalog to find that out.
+ */
+const SCAN_PAGE_LIMIT = 25;
+
+/** The largest page the gateway will answer with, so a scan asks for one. */
+const SCAN_PAGE_SIZE = 100;
+
+/**
+ * A create's body as the values a path can be built from.
+ *
+ * The parent of a new row is stated in the body the operator filled in, and the
+ * collection it is posted to is addressed under that parent. Only strings are
+ * taken, because only a string can be a path segment.
+ */
+function toFilterValues(
+  input: ResourceInput
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    Object.entries(input).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string'
+    )
+  );
+}
+
+/** A 404 shaped the way one off the wire would be. */
+function notFound(): GatewayError {
+  return new GatewayError({
+    code: 'not_found',
+    status: 404,
+    correlationId: '',
+  });
 }
 
 /**

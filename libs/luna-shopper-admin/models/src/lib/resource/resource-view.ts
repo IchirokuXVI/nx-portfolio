@@ -1,4 +1,4 @@
-import { localizedTextValue } from './localized-text';
+import { localizedListToText, localizedTextValue } from './localized-text';
 import { formatMoney } from './money';
 import { idOf, type ResourceDescriptor } from './resource-descriptor';
 import type { FieldDescriptor, ResourceRow } from './resource-field';
@@ -75,7 +75,10 @@ export function toCell<T extends ResourceRow>(
 
   switch (field.kind) {
     case 'localized-text': {
-      const text = localizedTextValue(value, options.contentLocales);
+      const text = localizedTextValue(
+        field.entries === 'list' ? localizedListToText(value) : value,
+        options.contentLocales
+      );
       return text === '' ? EMPTY : { text };
     }
 

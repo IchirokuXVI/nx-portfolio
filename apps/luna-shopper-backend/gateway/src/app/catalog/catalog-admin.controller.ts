@@ -54,6 +54,7 @@ import {
   CreateProductGroupDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
+  ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
   UpdateItemDto,
   UpdatePriceScopeDto,
@@ -559,12 +560,11 @@ export class AdminCatalogPriceScopesController {
   @ApiContractResponse(PRICE_SCOPE_PATTERNS.list)
   list(
     @ActingAdmin() admin: CurrentAdmin,
-    @Query() query: CatalogListQueryDto,
-    @Query('supermarketId') supermarketId?: string
+    @Query() query: ListPriceScopesQueryDto
   ): Promise<PriceScopePage> {
     return this.nats.send<PriceScopePage>(PRICE_SCOPE_PATTERNS.list, {
       userId: admin.adminId,
-      supermarketId,
+      supermarketId: query.supermarketId,
       cursor: query.cursor,
       limit: query.limit,
     });

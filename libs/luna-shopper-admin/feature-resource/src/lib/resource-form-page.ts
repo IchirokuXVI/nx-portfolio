@@ -182,7 +182,7 @@ export class ResourceFormPage {
       };
       const cells: Record<string, ResourceCell> = {};
       for (const field of this.descriptor.fields) {
-        if (!isEditable(field)) {
+        if (!isEditable(field, this.mode)) {
           cells[field.name] = toCell(field, row, options);
         }
       }

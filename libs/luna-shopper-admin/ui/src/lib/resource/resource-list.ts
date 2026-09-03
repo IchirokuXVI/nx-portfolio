@@ -13,6 +13,7 @@ import type {
   ResourceRow,
   ResourceRowView,
 } from '@portfolio/luna-shopper-admin/models';
+import type { ReferenceLookup } from './reference-lookup';
 import { ResourceCellView } from './resource-cell';
 import { ResourceFilters, type FilterChange } from './resource-filters';
 
@@ -44,6 +45,10 @@ export interface RowAction {
  *   that offers a way out. An operator staring at "no supermarkets" because a
  *   filter from three screens ago is still set is the failure this exists for.
  * - **Failed**, which offers the request again.
+ * - **Blocked**, meaning a required filter has no answer and nothing has been
+ *   asked for yet. Three of the catalog's lists are addressed under a parent,
+ *   so this is the screen saying which choice is missing rather than showing an
+ *   error it caused itself by asking anyway.
  */
 @Component({
   selector: 'lib-resource-list',
@@ -63,13 +68,18 @@ export interface RowAction {
         (filterChange)="filterChange.emit($event)"
         (orderChange)="orderChange.emit($event)"
         [filters]="filters()"
+        [lookup]="lookup()"
         [order]="order()"
         [sorts]="sorts()"
         [values]="filterValues()"
       />
     }
 
-    @if (loading()) {
+    @if (blocked()) {
+      <p class="state" role="status">
+        {{ 'resource.list.blocked' | rokuT: { names: waitingForLabels() } }}
+      </p>
+    } @else if (loading()) {
       <p class="state" role="status">{{ 'resource.list.loading' | rokuT }}</p>
     } @else if (failed()) {
       <div class="state error" role="alert">
@@ -410,6 +420,16 @@ export class ResourceList {
 
   readonly loading = input(false);
   readonly failed = input(false);
+  /**
+   * Nothing has been read, and nothing will be until a filter is answered.
+   *
+   * A fifth state beside the four above, and it is not "empty": there may be
+   * thousands of rows, and the screen has not asked for them. Saying "there is
+   * nothing here" would be a claim about the data rather than about the screen.
+   */
+  readonly blocked = input(false);
+  /** What is missing, already translated and joined, for the blocked message. */
+  readonly waitingForLabels = input('');
   /** A failure with rows already on screen: a line, not a replacement. */
   readonly moreFailed = input(false);
   /** The key for whatever went wrong, chosen by the page. */
@@ -427,6 +447,11 @@ export class ResourceList {
 
   readonly filters = input<readonly FilterDescriptor[]>([]);
   readonly filterValues = input<Readonly<Record<string, string>>>({});
+  /** Answers the reference filters' searches. */
+  readonly lookup = input<ReferenceLookup>({
+    search: async () => [],
+    resolve: async () => null,
+  });
   readonly sorts = input<readonly EnumOption[]>([]);
   readonly order = input<string | undefined>(undefined);
 

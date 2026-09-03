@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   input,
   output,
@@ -8,7 +9,11 @@ import {
   type OnDestroy,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { ReferenceLookup, ReferenceOption } from './reference-lookup';
+import type {
+  ReferenceContext,
+  ReferenceLookup,
+  ReferenceOption,
+} from './reference-lookup';
 
 /** How long typing settles before a search goes out. */
 const SEARCH_DELAY_MS = 250;
@@ -191,6 +196,14 @@ export class ReferencePicker implements OnDestroy {
   readonly lookup = input.required<ReferenceLookup>();
   readonly nullable = input(false);
   readonly disabled = input(false);
+  /**
+   * What narrows the search, for a target that cannot be listed on its own.
+   *
+   * Changing it discards the options already offered, because they belonged to
+   * the parent that is no longer chosen. Leaving them would let an operator
+   * pick one chain's shop while another chain is selected.
+   */
+  readonly context = input<ReferenceContext>({});
 
   readonly valueChange = output<string>();
 
@@ -201,6 +214,16 @@ export class ReferencePicker implements OnDestroy {
   readonly chosen = signal<ReferenceOption | null>(null);
   /** Whether the operator asked to replace a value that is already there. */
   readonly changing = signal(false);
+
+  /**
+   * The context as one comparable value.
+   *
+   * A caller builds the context object in a template expression, so it is a new
+   * object on every change detection run and the input's identity says nothing
+   * about whether the parent changed. A `computed` over its text does say so,
+   * and stops the effect below from clearing the options continuously.
+   */
+  private readonly _contextKey = computed(() => JSON.stringify(this.context()));
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
   /** The search this component is waiting for, so a slow one cannot land last. */
@@ -214,6 +237,15 @@ export class ReferencePicker implements OnDestroy {
         return;
       }
       void this._resolve(id);
+    });
+
+    effect(() => {
+      // Read the key so the effect depends on it, and drop what the previous
+      // parent offered. The search itself is not repeated here: an operator who
+      // has not opened the box is not waiting for a list, and one who has will
+      // type.
+      this._contextKey();
+      this.options.set([]);
     });
   }
 
@@ -256,7 +288,11 @@ export class ReferencePicker implements OnDestroy {
     this.searching.set(true);
 
     try {
-      const options = await this.lookup().search(this.resource(), term);
+      const options = await this.lookup().search(
+        this.resource(),
+        term,
+        this.context()
+      );
       // A search the operator has already typed past must not overwrite a later
       // one that came back first, which is the ordinary case when the second
       // term is more specific and therefore faster.

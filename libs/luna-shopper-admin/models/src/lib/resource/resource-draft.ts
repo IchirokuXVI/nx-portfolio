@@ -1,5 +1,7 @@
 import {
   emptyLocalizedText,
+  localizedListToText,
+  localizedTextToList,
   missingLocales,
   toLocalizedText,
 } from './localized-text';
@@ -10,6 +12,7 @@ import {
   isEditable,
   type FieldDescriptor,
   type FieldMessage,
+  type FormMode,
   type ResourceRow,
 } from './resource-field';
 
@@ -46,7 +49,10 @@ export function emptyValue<T extends ResourceRow>(
 ): DraftValue {
   switch (field.kind) {
     case 'boolean':
-      return false;
+      // A nullable boolean has three answers, and the third is the one it starts
+      // at. A shop's availability override means "somebody checked here", so a
+      // new row saying nothing must not read as "not available here".
+      return field.nullable === true ? '' : false;
     case 'localized-text':
       return emptyLocalizedText(field.locales);
     default:
@@ -60,11 +66,17 @@ function toDraftValue<T extends ResourceRow>(
   value: unknown
 ): DraftValue {
   if (field.kind === 'boolean') {
-    return value === true;
+    if (field.nullable !== true) {
+      return value === true;
+    }
+    return typeof value === 'boolean' ? String(value) : '';
   }
 
   if (field.kind === 'localized-text') {
-    const text = toLocalizedText(value);
+    const text =
+      field.entries === 'list'
+        ? localizedListToText(value)
+        : toLocalizedText(value);
     return Object.fromEntries(
       field.locales.map((locale) => [locale, text[locale] ?? ''])
     );
@@ -97,12 +109,13 @@ function toDraftValue<T extends ResourceRow>(
  */
 export function draftFor<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>,
-  row: T | null
+  row: T | null,
+  mode: FormMode = 'create'
 ): ResourceDraft {
   const draft: Record<string, DraftValue> = {};
 
   for (const field of descriptor.fields) {
-    if (!isEditable(field)) {
+    if (!isEditable(field, mode)) {
       continue;
     }
     draft[field.name] =
@@ -172,12 +185,13 @@ export const REQUIRED_KEY = 'resource.error.required';
  */
 export function validateDraft<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>,
-  draft: ResourceDraft
+  draft: ResourceDraft,
+  mode: FormMode = 'create'
 ): Readonly<Record<string, FieldMessage[]>> {
   const problems: Record<string, FieldMessage[]> = {};
 
   for (const field of descriptor.fields) {
-    if (!isEditable(field)) {
+    if (!isEditable(field, mode)) {
       continue;
     }
 
@@ -319,11 +333,22 @@ function toWireValue<T extends ResourceRow>(
   value: DraftValue
 ): unknown {
   if (field.kind === 'boolean') {
-    return value === true;
+    if (field.nullable !== true) {
+      return value === true;
+    }
+    // Three answers, and the empty one is `null` rather than `false`. They are
+    // different claims: one defers to the scope and the other says the shop
+    // does not stock it.
+    if (value === '' || value === null) {
+      return null;
+    }
+    return value === true || value === 'true';
   }
 
   if (field.kind === 'localized-text') {
-    return toLocalizedText(value);
+    return field.entries === 'list'
+      ? localizedTextToList(value, field.locales)
+      : toLocalizedText(value);
   }
 
   if (isEmptyValue(value)) {
@@ -341,7 +366,10 @@ function toWireValue<T extends ResourceRow>(
       // branch is unreachable from the form. It returns the text unchanged
       // rather than throwing, because a caller that skipped validation should
       // get the server's answer, not a client side exception.
-      return parsed.ok ? parsed.value : text;
+      if (!parsed.ok) {
+        return text;
+      }
+      return field.wire === 'number' ? Number(parsed.value) : parsed.value;
     }
     case 'date':
       return new Date(text).toISOString();
@@ -349,9 +377,6 @@ function toWireValue<T extends ResourceRow>(
       return text;
   }
 }
-
-/** Whether the form is creating a row or changing one. */
-export type FormMode = 'create' | 'edit';
 
 /**
  * The body to submit.
@@ -376,7 +401,7 @@ export function toInput<T extends ResourceRow>(
   const changed = new Set(changedFields(draft, original));
 
   for (const field of descriptor.fields) {
-    if (!isEditable(field)) {
+    if (!isEditable(field, mode)) {
       continue;
     }
 

@@ -1,9 +1,11 @@
 import { Injectable } from '@angular/core';
-import type {
-  ResourceGateway,
-  ResourcePage,
-  ResourceQuery,
-  ResourceRow,
+import {
+  fromNaturalKey,
+  naturalKey,
+  type ResourceGateway,
+  type ResourcePage,
+  type ResourceQuery,
+  type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { GatewayError } from '../gateway-error';
 import type { ResourceGatewaysI, ResourceSource } from './resource-gateways';
@@ -28,7 +30,7 @@ export class ResourceMemoryGateways implements ResourceGatewaysI {
 
   for<T extends ResourceRow>(source: ResourceSource<T>): ResourceGateway<T> {
     const rows = this._table(source);
-    return new ResourceMemory<T>(rows, source.pageSize ?? DEFAULT_PAGE_SIZE);
+    return new ResourceMemory<T>(rows, source);
   }
 
   /** The table for a path, seeded the first time it is asked for. */
@@ -46,17 +48,25 @@ export class ResourceMemoryGateways implements ResourceGatewaysI {
 
 const DEFAULT_PAGE_SIZE = 25;
 
-/** One resource's table. */
+/**
+ * One resource's table.
+ *
+ * It honours the same three peculiarities the HTTP gateway does, because a
+ * screen that only works against a server is a screen no spec can drive. What it
+ * does **not** honour is `collectionPath`: there are no URLs here, and the
+ * parent that would have been a path segment arrives as an ordinary filter this
+ * table matches on, which is the same answer by a shorter road.
+ */
 class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   constructor(
     private readonly _rows: T[],
-    private readonly _pageSize: number
+    private readonly _source: ResourceSource<T>
   ) {}
 
   async list(query: ResourceQuery): Promise<ResourcePage<T>> {
     const matching = this._rows.filter((row) => matches(row, query.filters));
     const from = cursorIndex(query.cursor);
-    const size = query.limit ?? this._pageSize;
+    const size = query.limit ?? this._source.pageSize ?? DEFAULT_PAGE_SIZE;
     const items = matching.slice(from, from + size);
     const next = from + items.length;
 
@@ -67,14 +77,30 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   }
 
   async read(id: string): Promise<T> {
-    const row = this._rows.find((entry) => entry['id'] === id);
+    const row = this._rows[this._indexOf(id)];
     if (row === undefined) {
       throw notFound();
     }
     return row;
   }
 
+  /**
+   * Add a row, or replace the one holding the same key.
+   *
+   * An upsert resource has no separate create: writing a price for a product
+   * and a scope that already have one is a change to that row, and a table that
+   * added a second would let the memory gateway hold a state the database
+   * forbids.
+   */
   async create(input: ResourceRow): Promise<T> {
+    const key = this._source.key;
+    if (key !== undefined && this._source.upsert === true) {
+      const index = this._indexOf(naturalKey(input, key));
+      if (index !== -1) {
+        return this._replace(index, input);
+      }
+    }
+
     const row = {
       id: `mem_${this._rows.length + 1}`,
       ...input,
@@ -84,21 +110,38 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   }
 
   async update(id: string, input: ResourceRow): Promise<T> {
-    const index = this._rows.findIndex((entry) => entry['id'] === id);
+    const index = this._indexOf(id);
     if (index === -1) {
       throw notFound();
     }
+    return this._replace(index, input);
+  }
+
+  async remove(id: string): Promise<void> {
+    const index = this._indexOf(id);
+    if (index === -1) {
+      throw notFound();
+    }
+    this._rows.splice(index, 1);
+  }
+
+  private _replace(index: number, input: ResourceRow): T {
     const row = { ...this._rows[index], ...input } as T;
     this._rows[index] = row;
     return row;
   }
 
-  async remove(id: string): Promise<void> {
-    const index = this._rows.findIndex((entry) => entry['id'] === id);
-    if (index === -1) {
-      throw notFound();
+  /** Where the row this id addresses sits, by id or by natural key. */
+  private _indexOf(id: string): number {
+    const key = this._source.key;
+    if (key === undefined) {
+      return this._rows.findIndex((entry) => entry['id'] === id);
     }
-    this._rows.splice(index, 1);
+
+    const wanted = fromNaturalKey(id, key);
+    return this._rows.findIndex((entry) =>
+      key.every((field) => String(entry[field] ?? '') === wanted[field])
+    );
   }
 }
 

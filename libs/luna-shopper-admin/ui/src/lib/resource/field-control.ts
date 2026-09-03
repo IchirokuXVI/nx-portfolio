@@ -43,13 +43,30 @@ import { ReferencePicker } from './reference-picker';
       }
 
       @case ('boolean') {
-        <input
-          (change)="onCheckbox($event)"
-          [checked]="value() === true"
-          [disabled]="disabled()"
-          [id]="controlId()"
-          type="checkbox"
-        />
+        @if (field().nullable === true) {
+          <!-- Three answers rather than two, because the column has three. A
+               shop's availability override means somebody checked this shop;
+               saying nothing defers to the scope, which is not the same claim
+               as saying the shop does not stock it. -->
+          <select
+            (change)="onInput($event)"
+            [disabled]="disabled()"
+            [id]="controlId()"
+            [value]="asText()"
+          >
+            <option value="">{{ 'resource.value.unset' | rokuT }}</option>
+            <option value="true">{{ 'resource.value.yes' | rokuT }}</option>
+            <option value="false">{{ 'resource.value.no' | rokuT }}</option>
+          </select>
+        } @else {
+          <input
+            (change)="onCheckbox($event)"
+            [checked]="value() === true"
+            [disabled]="disabled()"
+            [id]="controlId()"
+            type="checkbox"
+          />
+        }
       }
 
       @case ('enum') {

@@ -56,17 +56,20 @@
     "value": {
       "none": "None",
       "yes": "Yes",
-      "no": "No"
+      "no": "No",
+      "unset": "Use the scope’s answer"
     },
     "list": {
       "loading": "Loading…",
       "loadingMore": "Loading more…",
       "empty": "There is nothing here yet.",
       "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
-      "actions": "Actions"
+      "actions": "Actions",
+      "blocked": "Choose a {{names}} to see anything. There is no way to list these across all of them."
     },
     "filter": {
-      "any": "Any"
+      "any": "Any",
+      "chooseFirst": "Choose a {{name}} first."
     },
     "sort": {
       "label": "Order",
@@ -111,6 +114,9 @@
         "heading": "Leave without saving?",
         "body": "This form has changes that have not been saved. Leaving now loses them.",
         "confirm": "Leave and lose them"
+      },
+      "action": {
+        "body": "This will be done to {{name}}."
       }
     },
     "error": {
@@ -151,6 +157,165 @@
         "name": "By name",
         "created": "Newest first",
         "updated": "Recently changed"
+      }
+    },
+    "sort": {
+      "name": "By name",
+      "created": "Newest first",
+      "updated": "Recently changed"
+    },
+    "priceSourceKind": {
+      "OFFICIAL_API": "Chain’s own API",
+      "OFFICIAL_WEB": "Chain’s own website",
+      "OFFICIAL_LEAFLET": "Chain’s leaflet",
+      "ADMIN": "Typed here (pinned)",
+      "USER_RECEIPT": "A shopper’s receipt",
+      "USER_REPORTED": "A shopper said so"
+    },
+    "priceScopeKind": {
+      "NATIONAL": "Whole country",
+      "WAREHOUSE": "Warehouse",
+      "POSTAL_CODE": "Postal code",
+      "STORE": "Single shop"
+    },
+    "postalCodeSource": {
+      "SOURCE": "From the shop",
+      "DERIVED": "Guessed",
+      "MANUAL": "Typed here"
+    },
+    "itemCategory": {
+      "PRODUCE": "Fruit and vegetables",
+      "DAIRY": "Dairy",
+      "BAKERY": "Bakery",
+      "MEAT": "Meat",
+      "SEAFOOD": "Fish and seafood",
+      "FROZEN": "Frozen",
+      "BEVERAGES": "Drinks",
+      "SNACKS": "Snacks",
+      "PANTRY": "Cupboard",
+      "HOUSEHOLD": "Household",
+      "PERSONAL_CARE": "Personal care",
+      "OTHER": "Other"
+    },
+    "unit": {
+      "UNIT": "Unit",
+      "GRAM": "Gram",
+      "KILOGRAM": "Kilogram",
+      "MILLILITER": "Millilitre",
+      "LITER": "Litre",
+      "PACK": "Pack"
+    },
+    "productGroups": {
+      "one": "product group",
+      "many": "Product groups",
+      "id": "Identifier",
+      "name": "Name",
+      "slug": "Handle",
+      "slugHelp": "A stable handle for tooling and tests: lower case words separated by single dashes.",
+      "referenceUnit": "Compared in",
+      "referenceUnitHelp": "The unit this group’s members are compared in. It is the group’s own unit and not any member’s: a group compared in litres can hold a product sold by the pack.",
+      "synonyms": "Other words for it",
+      "synonymsHelp": "Separate the words with commas. They are what makes a search for \"semi skimmed\" reach this group.",
+      "search": "Name contains"
+    },
+    "items": {
+      "one": "product",
+      "many": "Products",
+      "id": "Identifier",
+      "name": "Name",
+      "brand": "Brand",
+      "category": "Category",
+      "categoryHelp": "Twelve aisles against a chain’s twenty six, so the mapping from a chain’s own tree is lossy by construction. Correct it here when it is wrong.",
+      "defaultUnit": "Sold by",
+      "unitSize": "Size",
+      "unitSizeHelp": "How many of the unit above are in one pack. Without it the unit says nothing: \"litre\" is not a size.",
+      "ean": "Barcode",
+      "eanHelp": "The only identifier that joins a product across chains, and unique across the whole catalog when present.",
+      "sku": "Chain’s own code",
+      "imageUrl": "Picture address",
+      "productGroupId": "Product group",
+      "productGroupIdHelp": "Empty is the ordinary state. A freshly harvested product belongs to no group until a person puts it in one.",
+      "search": "Name or barcode contains",
+      "withoutProductGroup": "Not in a group"
+    },
+    "priceScopes": {
+      "one": "price scope",
+      "many": "Price scopes",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "supermarketIdHelp": "A scope cannot move to another chain. That would be a different scope.",
+      "kind": "Reaches",
+      "kindHelp": "How far one price reaches. A warehouse scope prices every shop that warehouse supplies, which is why a price is not attached to a shop.",
+      "externalKey": "Chain’s own key",
+      "externalKeyHelp": "The chain’s own name for the scope, such as a warehouse code. Text and never a number: it arrives as both 4661 and mad3.",
+      "label": "Label",
+      "labelHelp": "For people to read. Most scopes have none, and the kind and the key are what identify one."
+    },
+    "locations": {
+      "one": "shop",
+      "many": "Shops",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "supermarketIdHelp": "A shop cannot move to another chain. That would be a different shop.",
+      "label": "Label",
+      "labelHelp": "For people to read. Most shops have none, and their address is what identifies them.",
+      "address": "Address",
+      "city": "City",
+      "country": "Country",
+      "countryHelp": "Two letters, such as ES.",
+      "postalCode": "Postal code",
+      "postalCodeHelp": "Changing this does not move the shop to another price scope. The two are set separately, and correcting an address leaves the pricing exactly where it was.",
+      "postalCodeSource": "Postal code came from",
+      "postalCodeSourceHelp": "Set by the catalog service. Typing a postal code above records that a person typed it. A shop with no postal code has no source either, which is deliberate: a wrong postcode is worse than none.",
+      "priceScopeId": "Price scope",
+      "priceScopeIdHelp": "What this shop prices against. Several shops usually share one, and changing it here moves only this shop.",
+      "latitude": "Latitude",
+      "longitude": "Longitude",
+      "externalRef": "Discovery reference",
+      "externalRefHelp": "The provider’s own reference, such as node/1156230891. Not a reliable identity: it changes when a shop is remapped.",
+      "externalProvider": "Discovered by"
+    },
+    "locationItems": {
+      "one": "aisle position",
+      "many": "Aisle positions",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "supermarketLocationId": "Shop",
+      "itemId": "Product",
+      "positionInStore": "Where it is",
+      "positionInStoreHelp": "Where this product sits in this shop, in whatever words help: \"aisle 4, bottom shelf\".",
+      "available": "Stocked here",
+      "availableHelp": "A per shop override, meaning somebody checked this shop. Leaving it unset defers to the price scope, which is not the same as saying the shop does not stock it."
+    },
+    "prices": {
+      "one": "price",
+      "many": "Prices",
+      "id": "Identifier",
+      "itemId": "Product",
+      "supermarketId": "Chain",
+      "priceScopeId": "Price scope",
+      "priceScopeIdHelp": "A price belongs to a scope and never to a shop. Every shop the scope covers gets this price.",
+      "price": "Price",
+      "priceHelp": "What one pack costs. Typing it here pins the price: no automated run will overwrite it afterwards.",
+      "currency": "Currency",
+      "unitPrice": "Price per unit",
+      "unitPriceHelp": "The chain’s own figure, copied exactly. Never work it out from the price and the size: the two disagree on about one product in forty, in the field whose only purpose is comparison.",
+      "unitPriceLabel": "Per unit label",
+      "unitPriceLabelHelp": "The chain’s own label for the figure above, in its own words: \"100 ml\", or \"lv\" for washing machine loads. It is text and not a unit.",
+      "available": "Stocked",
+      "availableHelp": "Whether the chain sells this at all in this scope. The per shop answer is on the aisle position.",
+      "priceSourceKind": "Came from",
+      "priceSourceKindHelp": "Set when the price is written. A price typed here is pinned, and filtering on \"Typed here\" is the only way to find every one you have pinned.",
+      "priceObservedAt": "Last seen",
+      "priceObservedAtHelp": "When this price was last observed. An old date on a pinned price means nothing has checked it since you typed it.",
+      "unpin": "Clear the pinned price",
+      "scopeNote": {
+        "none": "Choose a price scope. A price belongs to a scope and never to a single shop.",
+        "loading": "Reading the scope…",
+        "missing": "That price scope could not be read. Choose another one.",
+        "covers": "This scope covers {{count}} shops.",
+        "coversAtLeast": "This scope covers at least {{count}} shops.",
+        "warning": "Every one of those shops gets this price. This is not the price at one shop."
       }
     }
   }

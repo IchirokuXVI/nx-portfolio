@@ -810,3 +810,28 @@ export class ListProductGroupsQueryDto extends CatalogListQueryDto {
   @MaxLength(120)
   query?: string;
 }
+
+/**
+ * The scopes of one chain, or of every chain.
+ *
+ * `supermarketId` is a **property of this class** rather than a second
+ * `@Query('supermarketId')` parameter beside a DTO, and that is the whole
+ * reason the class exists. The global pipe runs `whitelist` with
+ * `forbidNonWhitelisted`, and it checks the whole query object against the DTO
+ * of the `@Query()` parameter. A name the DTO does not declare is therefore
+ * refused, however faithfully a second parameter reads it: both price scope
+ * lists answered 400 to the one parameter they document, and nothing called
+ * them, so nothing said so.
+ *
+ * Optional, because {@link ListPriceScopesRequest} is: a read with no chain
+ * lists every scope, which is what an operator with no chain in mind wants.
+ */
+export class ListPriceScopesQueryDto extends CatalogListQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Only this chain’s scopes. Absent lists every chain’s.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketId?: string;
+}

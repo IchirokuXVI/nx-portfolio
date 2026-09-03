@@ -64,6 +64,55 @@ export function localizedTextValue(
   return Object.values(text).find((entry) => entry.trim() !== '') ?? '';
 }
 
+/**
+ * A `{ en: string[], es: string[] }` column as one line per locale.
+ *
+ * Product group synonyms are the only such column, and the form edits them as
+ * text: a list editor per language is a great deal of screen for a handful of
+ * words. The words keep their order and their spelling; only the commas are
+ * added.
+ */
+export function localizedListToText(value: unknown): LocalizedText {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {};
+  }
+
+  const text: Record<string, string> = {};
+  for (const [locale, entry] of Object.entries(value)) {
+    if (Array.isArray(entry)) {
+      text[locale] = entry.filter((one) => typeof one === 'string').join(', ');
+    } else if (typeof entry === 'string') {
+      text[locale] = entry;
+    }
+  }
+
+  return text;
+}
+
+/**
+ * One line per locale, back as the lists the column holds.
+ *
+ * An empty line is an empty list rather than a list holding one empty string,
+ * which is the difference between "this group has no synonyms" and "this group
+ * has a synonym that is nothing".
+ */
+export function localizedTextToList(
+  value: unknown,
+  locales: readonly string[]
+): Readonly<Record<string, readonly string[]>> {
+  const text = toLocalizedText(value);
+  const lists: Record<string, readonly string[]> = {};
+
+  for (const locale of locales) {
+    lists[locale] = (text[locale] ?? '')
+      .split(',')
+      .map((one) => one.trim())
+      .filter((one) => one !== '');
+  }
+
+  return lists;
+}
+
 /** One empty string per locale, which is what a create form starts from. */
 export function emptyLocalizedText(locales: readonly string[]): LocalizedText {
   return Object.fromEntries(locales.map((locale) => [locale, '']));

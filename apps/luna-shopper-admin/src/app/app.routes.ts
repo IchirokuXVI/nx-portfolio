@@ -6,7 +6,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import { SignInPage } from '@portfolio/luna-shopper-admin/feature-auth';
 import { adminRoutes } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ADMIN_RESOURCES } from './resources';
+import { ADMIN_RESOURCES, ADMIN_SCREENS } from './resources';
 
 /**
  * The route table, served from this app's own origin.
@@ -53,6 +53,6 @@ export const appRoutes: Route[] = [
     // in and cannot tell the difference.
     path: '',
     canActivate: [requireSession],
-    children: adminRoutes(ADMIN_RESOURCES),
+    children: adminRoutes(ADMIN_RESOURCES, ADMIN_SCREENS),
   },
 ];

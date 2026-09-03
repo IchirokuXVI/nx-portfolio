@@ -26,6 +26,68 @@ export interface ResourceSource<T extends ResourceRow = ResourceRow> {
    * descriptor is how a resource gets one without a second class per entity.
    */
   readonly seed?: readonly T[];
+
+  /**
+   * The collection's URL, when it is addressed under a parent.
+   *
+   * A chain's shops live at `/supermarkets/{id}/locations` while one shop lives
+   * at `/locations/{id}`, so the collection and the member are two different
+   * paths and only the first depends on a filter. Given the filter values, this
+   * answers the collection's path; {@link path} stays the member's.
+   *
+   * The in-memory gateway ignores it, which is right: there are no URLs there,
+   * and the parent reaches it as an ordinary filter it can match on.
+   */
+  collectionPath?(scope: Readonly<Record<string, string>>): string;
+
+  /**
+   * Filter names {@link collectionPath} consumes, so they are not also sent as
+   * query parameters.
+   *
+   * `supermarketId` is a path segment on the shops route and not a parameter it
+   * declares, and the gateway validates its query with `forbidNonWhitelisted`,
+   * so sending it both ways is a 400 rather than a harmless repetition.
+   */
+  readonly pathFilters?: readonly string[];
+
+  /**
+   * Whether a write is a `PUT` to the collection rather than a `POST` and a
+   * `PATCH`.
+   *
+   * Prices and aisle positions are both written this way, because the row is
+   * keyed on what the body carries rather than on a path segment: writing one
+   * is the same act whether or not it already exists, and the gateway offers no
+   * other verb for it.
+   */
+  readonly upsert?: boolean;
+
+  /**
+   * The properties that address a row, when no member route reads one.
+   *
+   * Three catalog resources need it. A price and an aisle position are keyed on
+   * a pair the body carries and answer with an `id` they accept nowhere; a price
+   * scope has an ordinary id and simply has no `GET` for it. In all three cases
+   * the row is found by reading the collection and matching on these fields.
+   *
+   * The descriptor's `identify` is what puts the same key in the URL, and the
+   * two have to agree: this states how the gateway takes a key apart and that
+   * states how a screen puts one together.
+   */
+  readonly key?: readonly string[];
+
+  /**
+   * Which of {@link key} the list route accepts as filters.
+   *
+   * Every one of them unless stated, which is the case that costs one request.
+   * Where the route filters on fewer, the rest are matched here: one shop's
+   * aisle positions can be asked for by shop and not by product, so the shop
+   * narrows the read and the product is found within it.
+   *
+   * An empty list means the collection is read whole. That is the price scopes'
+   * case, and it is affordable because scopes are few: one per chain, or one
+   * per warehouse, or one per shop.
+   */
+  readonly keyFilters?: readonly string[];
 }
 
 /** Builds the gateway for one resource. */

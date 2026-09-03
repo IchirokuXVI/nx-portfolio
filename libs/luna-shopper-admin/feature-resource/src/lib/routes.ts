@@ -1,3 +1,4 @@
+import type { Type } from '@angular/core';
 import type { Route } from '@angular/router';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
 import { NotFoundPage } from '@portfolio/luna-shopper-admin/ui';
@@ -25,8 +26,12 @@ import { RESOURCE_DESCRIPTOR, RESOURCE_FORM_MODE } from './resource-route-data';
  * would otherwise swallow it, sending the create screen off to read a row
  * called "new".
  */
-export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
+export function resourceRoutes(
+  descriptor: AnyResourceDescriptor,
+  screens: ResourceScreens = {}
+): Route[] {
   const data = { [RESOURCE_DESCRIPTOR]: descriptor };
+  const form = screens.form ?? ResourceFormPage;
 
   return [
     {
@@ -35,17 +40,36 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
         { path: '', component: ResourceListPage, data },
         {
           path: 'new',
-          component: ResourceFormPage,
+          component: form,
           data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
         },
         {
           path: ':id',
-          component: ResourceFormPage,
+          component: form,
           data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
         },
       ],
     },
   ];
+}
+
+/**
+ * What one resource draws with, where the generic answer is not enough.
+ *
+ * There is one of these today and the plans said there would be: prices need a
+ * screen that names the scope a price belongs to, states its kind and says how
+ * many shops it covers, because a price is not attached to a shop and an
+ * interface that hides that is not simpler, it is wrong
+ * (`apps/luna-shopper-admin/plans/0005`, sections 2 and 4).
+ *
+ * A component named here rather than on the descriptor, because a descriptor is
+ * a plain object in a library that knows nothing about Angular, and putting a
+ * component type on it would make every entity's configuration depend on the
+ * framework its screens happen to be written in.
+ */
+export interface ResourceScreens {
+  /** Drawn instead of {@link ResourceFormPage}, for create and for edit. */
+  readonly form?: Type<unknown>;
 }
 
 /**
@@ -63,7 +87,8 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
  * between them and it.
  */
 export function adminRoutes(
-  descriptors: readonly AnyResourceDescriptor[]
+  descriptors: readonly AnyResourceDescriptor[],
+  screens: Readonly<Record<string, ResourceScreens>> = {}
 ): Route[] {
   const first = descriptors[0];
 
@@ -72,7 +97,9 @@ export function adminRoutes(
       path: '',
       component: AdminShellPage,
       children: [
-        ...descriptors.flatMap(resourceRoutes),
+        ...descriptors.flatMap((descriptor) =>
+          resourceRoutes(descriptor, screens[descriptor.name])
+        ),
         ...(first === undefined
           ? []
           : [
