@@ -4,6 +4,8 @@ export * from './lib/admin-session';
 export * from './lib/app-api-config';
 export * from './lib/app-key';
 export * from './lib/deployment';
+export * from './lib/harvest/harvest-run';
+export * from './lib/harvest/harvest-switches';
 export * from './lib/resource/localized-text';
 export * from './lib/resource/money';
 export * from './lib/resource/resource-descriptor';
