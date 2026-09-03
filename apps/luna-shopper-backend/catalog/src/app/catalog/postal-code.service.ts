@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type {
+  AdminPostalCodePage,
+  AdminPostalCodeView,
+  ListAdminPostalCodesRequest,
   ListNearbyPostalCodesRequest,
   NearbyPostalCodesView,
   NearestPostalCodeView,
@@ -11,9 +14,15 @@ import {
   distanceMetres,
   type LatLon,
 } from '@portfolio/luna-shopper/osm-places';
+import {
+  clampPageSize,
+  decodeCursor,
+  encodeCursor,
+} from '@portfolio/luna-shopper/platform';
 import { boundingBox } from '@portfolio/luna-shopper/postal-codes';
 import { Between, Repository } from 'typeorm';
 import { PostalCodePoint } from '../entities';
+import { PlatformAdminService } from './platform-admin.service';
 
 /**
  * The two reads over the postal code centroids (plan 0060, section 5).
@@ -34,8 +43,103 @@ import { PostalCodePoint } from '../entities';
 export class PostalCodeService {
   constructor(
     @InjectRepository(PostalCodePoint)
-    private readonly points: Repository<PostalCodePoint>
+    private readonly points: Repository<PostalCodePoint>,
+    private readonly admin: PlatformAdminService
   ) {}
+
+  /**
+   * The centroid table itself, for the back office (plan 0074, section 2).
+   *
+   * The third read on this class and the only gated one, which is the difference
+   * worth noticing: the two below answer geography questions asked service to
+   * service and carry no caller at all, while this is a page of a table ordered
+   * for a person to look at. It goes through `requireAdmin` like every other
+   * admin path in catalog, so the gate is the signature rather than the route it
+   * arrived on.
+   *
+   * `locationCount` is counted with the same `postalCode` match that
+   * `countByPostalCode` uses, so the coverage this screen reports and the
+   * coverage the discovery queue acts on cannot disagree. The `served` filter is
+   * the same count with a `HAVING`, rather than a second definition of served.
+   *
+   * Ordered by country then code, not by distance from anything: this is a table
+   * being read, and an operator scanning for a gap wants the codes in the order
+   * they think of them.
+   */
+  async listForAdmin(
+    req: ListAdminPostalCodesRequest
+  ): Promise<AdminPostalCodePage> {
+    await this.admin.requireAdmin(req);
+
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor(req.cursor) as
+      | { country: string; postalCode: string }
+      | undefined;
+
+    const qb = this.points
+      .createQueryBuilder('p')
+      .select('p.country', 'country')
+      .addSelect('p."postalCode"', 'postalCode')
+      .addSelect('p.latitude', 'latitude')
+      .addSelect('p.longitude', 'longitude')
+      // A correlated count rather than a join and a group by: the table is one
+      // row per code, so grouping would only undo a fan out this way never
+      // creates. The country match mirrors `countByPostalCode`, including its
+      // tolerance of a location whose country predates plan 0061.
+      .addSelect(
+        `(SELECT COUNT(*) FROM supermarket_locations l
+           WHERE l."postalCode" = p."postalCode"
+             AND (l.country IS NULL OR lower(l.country) = p.country))`,
+        'locationCount'
+      )
+      .orderBy('p.country', 'ASC')
+      .addOrderBy('p."postalCode"', 'ASC')
+      .limit(limit + 1);
+
+    if (req.country) {
+      qb.andWhere('p.country = :country', {
+        country: normalizeCountry(req.country),
+      });
+    }
+    if (req.postalCode) {
+      // A prefix rather than a contains match: a postal code is read left to
+      // right, and "28" means the province rather than every code with a 28 in
+      // the middle of it.
+      qb.andWhere('p."postalCode" LIKE :prefix', {
+        prefix: `${req.postalCode.trim()}%`,
+      });
+    }
+    if (req.served !== undefined) {
+      qb.andWhere(
+        `(SELECT COUNT(*) FROM supermarket_locations l
+           WHERE l."postalCode" = p."postalCode"
+             AND (l.country IS NULL OR lower(l.country) = p.country)) ${
+               req.served ? '> 0' : '= 0'
+             }`
+      );
+    }
+    if (cursor) {
+      qb.andWhere('(p.country, p."postalCode") > (:cc, :cp)', {
+        cc: cursor.country,
+        cp: cursor.postalCode,
+      });
+    }
+
+    const rows = await qb.getRawMany<RawAdminPostalCode>();
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      items: page.map(toAdminPostalCodeView),
+      nextCursor:
+        hasMore && last
+          ? encodeCursor({
+              country: last.country,
+              postalCode: last.postalCode,
+            })
+          : null,
+    };
+  }
 
   /**
    * Which postal code is this point in. Null beyond `maxDistanceMetres`,
@@ -125,4 +229,23 @@ function rank(
 /** The table stores lowercase alpha-2; a caller sending `ES` means the same. */
 function normalizeCountry(country: string): string {
   return country.trim().toLowerCase();
+}
+
+/** What the admin listing selects, before the numbers are numbers. */
+interface RawAdminPostalCode {
+  country: string;
+  postalCode: string;
+  latitude: number | string;
+  longitude: number | string;
+  locationCount: string;
+}
+
+function toAdminPostalCodeView(row: RawAdminPostalCode): AdminPostalCodeView {
+  return {
+    country: row.country,
+    postalCode: row.postalCode,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    locationCount: Number(row.locationCount),
+  };
 }

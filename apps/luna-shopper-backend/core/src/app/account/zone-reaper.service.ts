@@ -83,13 +83,37 @@ export class ZoneReaperService
       if (zone.ownerUserId) {
         continue;
       }
-      await this.zones.delete({ id: zone.id });
-      this.events.emit(RealtimeEvent.ZoneDeleted, zone.id, { id: zone.id });
+      await this.deleteZone(zone.id);
       removed++;
     }
     if (removed > 0) {
-      this.logger.log({ count: removed }, 'zone reaper deleted abandoned zones');
+      this.logger.log(
+        { count: removed },
+        'zone reaper deleted abandoned zones'
+      );
     }
     return removed;
+  }
+
+  /**
+   * Delete one zone: the row goes, the cascade takes its memberships, lists,
+   * lines and comments, and every client holding it is told.
+   *
+   * Public because plan 0074 gives an operator a delete a zone action, and
+   * section 1 says a named action reuses the code that maintains the invariant
+   * rather than restating it. What deleting a zone **means** lives here, so the
+   * operator's delete and the reaper's are one write and cannot come to mean two
+   * different things.
+   *
+   * No grace period and no marking on this path, deliberately. The grace period
+   * exists so an admin can rescue a zone whose owner vanished by accident (plan
+   * 0011, section 3); an operator deleting a zone on purpose is the decision the
+   * grace period was waiting for, and leaving the zone up for a week afterwards
+   * would only mean it is still there when they check.
+   */
+  async deleteZone(zoneId: string): Promise<{ id: string }> {
+    await this.zones.delete({ id: zoneId });
+    this.events.emit(RealtimeEvent.ZoneDeleted, zoneId, { id: zoneId });
+    return { id: zoneId };
   }
 }

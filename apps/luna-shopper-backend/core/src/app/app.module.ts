@@ -12,6 +12,7 @@ import {
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
 import { AccountModule } from './account/account.module';
+import { CoreAdminModule } from './admin/admin.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
 import { CORE_ENTITIES } from './entities';
@@ -54,6 +55,9 @@ import { ZonesModule } from './zones/zones.module';
     // Generated shopping lists: the basket you carry round the shop (plan 0050).
     GeneratedListsModule,
     AccountModule,
+    // What the back office can see and do here (plan 0074). Last, because it
+    // imports two of the slices above and adds nothing they depend on.
+    CoreAdminModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {

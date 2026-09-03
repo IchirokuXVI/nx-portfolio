@@ -12,9 +12,11 @@ import {
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import { AdminDirectoryService } from './admin/admin-directory.service';
 import { AdminIdentityService } from './admin/admin-identity.service';
 import { AdminTokenService } from './admin/admin-token.service';
 import { AdminController } from './admin/admin.controller';
+import { AuthPlatformAdminService } from './admin/platform-admin.service';
 import type { AuthConfig } from './config/app-config';
 import { authConfiguration, authValidationSchema } from './config/app-config';
 import { AUTH_ENTITIES } from './entities';
@@ -24,9 +26,9 @@ import {
 } from './events/identity-events.publisher';
 import { IdentityController } from './identity/identity.controller';
 import { IdentityService } from './identity/identity.service';
+import { StatsService } from './identity/stats.service';
 import { MailModule } from './mail/mail.module';
 import { PasswordService } from './password/password.service';
-import { StatsService } from './identity/stats.service';
 import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
 import { TokenGrantService } from './tokens/token-grant.service';
 import { TokenService } from './tokens/token.service';
@@ -109,6 +111,12 @@ import { UsernameGenerator } from './username/username-generator.service';
     // services above it.
     AdminTokenService,
     AdminIdentityService,
+    // The back office's directory (plan 0074), and the gate it opens with. The
+    // gate verifies the operator token against `admin.publicKey`, which is the
+    // public half of the pair `AdminTokenService` signs with, so auth cannot
+    // mint a token it would then refuse.
+    AuthPlatformAdminService,
+    AdminDirectoryService,
     PasswordService,
     IdentityEventsPublisher,
     UsernameGenerator,

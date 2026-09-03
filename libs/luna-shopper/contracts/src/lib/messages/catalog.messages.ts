@@ -978,8 +978,7 @@ export interface ListSupermarketItemsByScopeRequest extends PageQuery {
  * so it is reachable by an operator token and by nothing else.
  */
 export interface AdminListSupermarketItemsRequest
-  extends PageQuery,
-    AdminCredential {
+  extends PageQuery, AdminCredential {
   /** One product's prices across every scope. */
   itemId?: string;
   /** One scope's prices, which is what a chain's price table is. */
@@ -1352,3 +1351,60 @@ export interface PostalCodeLocationCountsView {
   country: string;
   counts: PostalCodeLocationCount[];
 }
+
+// --- The postal code table, for the back office (plan 0074) ------------------
+
+/**
+ * Read the shipped centroid table itself (plan 0074, section 2).
+ *
+ * The two reads above answer geography questions and neither can show an
+ * operator what is in the table, which is the question the back office asks:
+ * which codes do we hold, and which of them have a shop in them. So this is a
+ * listing rather than a third distance query, and unlike its neighbours it
+ * carries an {@link AdminCredential}: the centroids are reference data, but a
+ * page of them ordered for administration is a back office screen.
+ */
+export const ADMIN_POSTAL_CODE_PATTERNS = {
+  list: 'adminPostalCode.list',
+} as const;
+
+export type AdminPostalCodePattern =
+  (typeof ADMIN_POSTAL_CODE_PATTERNS)[keyof typeof ADMIN_POSTAL_CODE_PATTERNS];
+
+/**
+ * One shipped postal code, with the number of shops catalog knows in it.
+ *
+ * `locationCount` is the answer to "does anything serve this code", counted the
+ * same way `supermarketLocation.countByPostalCode` counts it, so the back office
+ * and the profile widening path cannot disagree about whether a code is covered.
+ */
+export interface AdminPostalCodeView {
+  /** ISO 3166-1 alpha-2, lowercase. */
+  country: string;
+  postalCode: string;
+  latitude: number;
+  longitude: number;
+  /** Supermarket locations whose `postalCode` is this one. Often zero. */
+  locationCount: number;
+}
+
+/**
+ * The filters of section 2: by code, and by whether anything serves them.
+ *
+ * `served` is the one worth being careful about. False means **zero** locations,
+ * which is a great many of the codes in a shipped national table and is exactly
+ * the set an operator looking for coverage gaps wants; true means at least one.
+ * Omitting it is every code, which is the default because a listing that hid the
+ * empty ones by default would make the gap invisible.
+ */
+export interface ListAdminPostalCodesRequest
+  extends AdminCredential, PageQuery {
+  /** ISO 3166-1 alpha-2, lowercase. Defaults to every country in the table. */
+  country?: string;
+  /** Prefix match on the code, which is how a person narrows a numeric code. */
+  postalCode?: string;
+  /** True for codes with at least one location, false for those with none. */
+  served?: boolean;
+}
+
+export type AdminPostalCodePage = Paginated<AdminPostalCodeView>;
