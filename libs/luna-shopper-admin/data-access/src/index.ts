@@ -15,3 +15,8 @@ export * from './lib/deployment/deployment-memory';
 export * from './lib/deployment/deployment-service';
 export * from './lib/deployment/deployment-store';
 export * from './lib/gateway-error';
+export * from './lib/resource/resource-api';
+export * from './lib/resource/resource-form-store';
+export * from './lib/resource/resource-gateways';
+export * from './lib/resource/resource-list-store';
+export * from './lib/resource/resource-memory';

@@ -10,11 +10,16 @@ import type { SignInFailure } from '@portfolio/luna-shopper-admin/models';
  * `data-access` that need them and for a log line that can be matched to a
  * server one by `correlationId`.
  *
- * Much smaller than velista's. There is no `fieldErrors` map because the only
- * form in this plan has two fields and one answer for both of them, and no
- * `NetworkError` class because this app draws no connection screen: a request
- * that produced no response is a failure with status 0, and every caller here
- * treats it the same way it treats a 500.
+ * Smaller than velista's. There is no `NetworkError` class because this app
+ * draws no connection screen: a request that produced no response is a failure
+ * with status 0, and every caller here treats it the same way it treats a 500.
+ *
+ * `fieldErrors` arrived with `0004`, which is the plan that brought a form with
+ * more than two fields. `ProblemDetails.errors` is present only on a
+ * `validation_failed`, and the generic form puts each entry back on the field
+ * that caused it rather than dumping the lot in a banner (section 5). The
+ * messages are the server's own, already translated into the request's locale,
+ * so this app shows them rather than re-keying them.
  */
 export class GatewayError extends Error {
   /** The server's stable code, or `''` when the body carried none. */
@@ -25,12 +30,15 @@ export class GatewayError extends Error {
   readonly correlationId: string;
   /** The server's own wait, in whole seconds, only when it named one. */
   readonly retryAfterSeconds?: number;
+  /** Per field messages, by field name. Empty unless the server sent any. */
+  readonly fieldErrors: Readonly<Record<string, readonly string[]>>;
 
   constructor(init: {
     code: string;
     status: number;
     correlationId: string;
     retryAfterSeconds?: number;
+    fieldErrors?: Readonly<Record<string, readonly string[]>>;
   }) {
     // For a stack trace and a log, never for a screen. Every operator facing
     // string is chosen by the page from the failure reason.
@@ -42,6 +50,7 @@ export class GatewayError extends Error {
     this.status = init.status;
     this.correlationId = init.correlationId;
     this.retryAfterSeconds = init.retryAfterSeconds;
+    this.fieldErrors = init.fieldErrors ?? {};
   }
 }
 
@@ -54,6 +63,15 @@ export class GatewayError extends Error {
  * house envelope. Nothing here reads a property off an unvalidated object.
  */
 export function toGatewayError(error: unknown): GatewayError {
+  // Already one. Without this the second pass reads `status` off it and finds
+  // no body at all, so a fully described failure comes out with an empty code
+  // and no field errors: a form would show "something went wrong" for a refusal
+  // the server explained field by field. The stores call this on whatever they
+  // caught, and one of the things they catch is this class.
+  if (error instanceof GatewayError) {
+    return error;
+  }
+
   const response = error as { status?: unknown; error?: unknown } | null;
   const status = typeof response?.status === 'number' ? response.status : 0;
   const body = asRecord(response?.error);
@@ -64,7 +82,39 @@ export function toGatewayError(error: unknown): GatewayError {
     correlationId:
       typeof body?.['correlationId'] === 'string' ? body['correlationId'] : '',
     retryAfterSeconds: asWaitSeconds(body?.['retryAfterSeconds']),
+    fieldErrors: asFieldErrors(body?.['errors']),
   });
+}
+
+/**
+ * `ProblemDetails.errors`, as a map this app is willing to render.
+ *
+ * Every layer is checked. The envelope promises a map of arrays of strings, and
+ * this is the response most likely to arrive as something else entirely: a
+ * proxy's error page, an unhandled exception, or a CORS failure. A field whose
+ * value is not an array of strings is dropped rather than coerced, because a
+ * half read message under an input is worse than the general banner the form
+ * falls back to.
+ */
+function asFieldErrors(value: unknown): Record<string, readonly string[]> {
+  const record = asRecord(value);
+  if (record === null) {
+    return {};
+  }
+
+  const errors: Record<string, readonly string[]> = {};
+  for (const [field, messages] of Object.entries(record)) {
+    if (Array.isArray(messages)) {
+      const strings = messages.filter(
+        (message): message is string => typeof message === 'string'
+      );
+      if (strings.length > 0) {
+        errors[field] = strings;
+      }
+    }
+  }
+
+  return errors;
 }
 
 /**

@@ -167,6 +167,12 @@
       ],
       "@portfolio/luna-shopper-admin/ui": [
         "./libs/luna-shopper-admin/ui/src/index.ts"
+      ],
+      "@portfolio/luna-shopper-admin/feature-resource": [
+        "./libs/luna-shopper-admin/feature-resource/src/index.ts"
+      ],
+      "@portfolio/luna-shopper-admin/feature-catalog": [
+        "./libs/luna-shopper-admin/feature-catalog/src/index.ts"
       ]
     }
   },

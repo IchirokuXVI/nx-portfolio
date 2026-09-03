@@ -288,6 +288,22 @@ with each library's `capture-fixtures` target, never by hand.
   than silent drift. Never work around that failure by editing `openapi.json` by hand: it is
   generated output, and the generator is the only thing allowed to write it.
 
+- **`luna-shopper-admin` reads its types out of that document, so regenerating it is two steps.**
+  `tools/openapi/generate-wire-types.mjs` turns `components.schemas` into
+  `libs/luna-shopper-admin/models/src/lib/wire/wire-types.ts`, which the back office uses as its
+  view models (admin plan 0004, section 2, records why that is a deliberate exception to rule D4).
+  Both files are committed output:
+
+  ```sh
+  npx nx run luna-shopper-backend-gateway:openapi     # the document
+  npx nx run luna-shopper-admin/models:wire-types     # the types read from it
+  ```
+
+  `wire-types.spec.ts` fails when the second is stale, and `luna-shopper-admin/models` names the
+  gateway as an implicit dependency so that a gateway change marks it affected. Do not edit the
+  generated file, and do not add hand written types beside it: a shape the document does not
+  describe is a gap in the document.
+
 ## Git workflow
 
 - **Finish a task by pushing it and opening a pull request against `dev`.** Commit, push the working branch, then `gh pr create --base dev`. No confirmation is needed for either step; this standing instruction is the authorization.

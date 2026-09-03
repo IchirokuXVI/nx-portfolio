@@ -5,6 +5,8 @@ import {
   SIGN_IN_PATH,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { SignInPage } from '@portfolio/luna-shopper-admin/feature-auth';
+import { adminRoutes } from '@portfolio/luna-shopper-admin/feature-resource';
+import { ADMIN_RESOURCES } from './resources';
 
 /**
  * The route table, served from this app's own origin.
@@ -15,10 +17,11 @@ import { SignInPage } from '@portfolio/luna-shopper-admin/feature-auth';
  * operator, one browser, no links sent to anyone. The cost of carrying it is a
  * guard, a route table shaped around it, and a redirect on every cold load.
  *
- * So a path here is just a path, and the `**` below is a genuine catch-all rather
- * than the always-matching child a locale-inserting guard needs underneath it.
+ * So a path here is just a path, and the `**` inside the shell is a genuine
+ * catch-all rather than the always-matching child a locale-inserting guard needs
+ * underneath it.
  *
- * Two routes, and the guards on them are a pair (plan 0002): nothing renders
+ * Two branches, and the guards on them are a pair (plan 0002): nothing renders
  * without a session, and an operator who has one has no business on the login
  * screen. Both guards answer with a *fixed* URL rather than the one they were
  * handed, because a guard that redirects to the URL it is guarding loops forever
@@ -42,15 +45,14 @@ export const appRoutes: Route[] = [
     component: SignInPage,
   },
   {
+    // Everything else: the chrome, one branch per resource, and a not found page
+    // inside the chrome rather than instead of it (plan 0004, sections 3 and 7).
+    // The guard is on this route and not on its children, so a URL under it that
+    // matches nothing still reaches the login screen when there is no session,
+    // rather than drawing a "no such screen" page to somebody who is not signed
+    // in and cannot tell the difference.
     path: '',
     canActivate: [requireSession],
-    loadComponent: () =>
-      import('./placeholder-page').then((m) => m.PlaceholderPage),
+    children: adminRoutes(ADMIN_RESOURCES),
   },
-  // Everything else, for now. `0004` brings the real chrome and with it a localized
-  // not found page; until there is more than one route, sending an unknown URL to
-  // the only page there is beats a 404 that says less. It lands on the guarded
-  // route, so an unknown URL from a signed out operator still reaches the login
-  // screen rather than a page they cannot see.
-  { path: '**', redirectTo: '' },
 ];
