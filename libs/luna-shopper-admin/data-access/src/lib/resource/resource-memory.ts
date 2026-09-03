@@ -63,6 +63,17 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
     private readonly _source: ResourceSource<T>
   ) {}
 
+  /**
+   * The property a row is found by.
+   *
+   * `id` for most things and not for all of them: a user is keyed by `userId`
+   * and an admin by `adminId`, so a table that assumed `id` would answer 404
+   * for every row it holds.
+   */
+  private get _idField(): string {
+    return this._source.idField ?? 'id';
+  }
+
   async list(query: ResourceQuery): Promise<ResourcePage<T>> {
     const matching = this._rows.filter((row) => matches(row, query.filters));
     const from = cursorIndex(query.cursor);
@@ -102,7 +113,7 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
     }
 
     const row = {
-      id: `mem_${this._rows.length + 1}`,
+      [this._idField]: `mem_${this._rows.length + 1}`,
       ...input,
     } as unknown as T;
     this._rows.push(row);
@@ -135,7 +146,7 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   private _indexOf(id: string): number {
     const key = this._source.key;
     if (key === undefined) {
-      return this._rows.findIndex((entry) => entry['id'] === id);
+      return this._rows.findIndex((entry) => entry[this._idField] === id);
     }
 
     const wanted = fromNaturalKey(id, key);

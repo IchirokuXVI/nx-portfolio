@@ -1,6 +1,8 @@
-import type { Type } from '@angular/core';
 import type { Route } from '@angular/router';
-import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
+import {
+  hasDetailScreen,
+  type AnyResourceDescriptor,
+} from '@portfolio/luna-shopper-admin/models';
 import { NotFoundPage } from '@portfolio/luna-shopper-admin/ui';
 import { AdminShellPage } from './admin-shell-page';
 import { ResourceFormPage } from './resource-form-page';
@@ -26,50 +28,54 @@ import { RESOURCE_DESCRIPTOR, RESOURCE_FORM_MODE } from './resource-route-data';
  * would otherwise swallow it, sending the create screen off to read a row
  * called "new".
  */
-export function resourceRoutes(
-  descriptor: AnyResourceDescriptor,
-  screens: ResourceScreens = {}
-): Route[] {
+export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
   const data = { [RESOURCE_DESCRIPTOR]: descriptor };
-  const form = screens.form ?? ResourceFormPage;
+
+  // The resource's own component where it named one, and the generic form
+  // otherwise. It draws both starting points, because create and edit are one
+  // act from two of them (plan 0004, section 5): a price's screen names the
+  // scope the price belongs to, and that note is worth most while the scope is
+  // still being chosen. A resource whose own screen is not a form therefore
+  // declares no `create` action, which is true of all four of plan 0007's.
+  const screen = descriptor.detail ?? ResourceFormPage;
 
   return [
     {
       path: descriptor.segment,
       children: [
         { path: '', component: ResourceListPage, data },
-        {
-          path: 'new',
-          component: form,
-          data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
-        },
-        {
-          path: ':id',
-          component: form,
-          data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
-        },
+
+        // A create screen only where there is something to create. A resource
+        // with no `POST` behind it would otherwise answer a typed URL with a
+        // form that fills in, submits, and is refused by the gateway, which is
+        // a worse answer than the not found page (plan 0007, section 1).
+        ...(descriptor.actions?.create === true
+          ? [
+              {
+                path: 'new',
+                component: screen,
+                data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
+              },
+            ]
+          : []),
+
+        // The detail screen: the resource's own component where it named one,
+        // and the generic form otherwise, which draws the fields it cannot
+        // change beside the ones it can. A resource with neither has no such
+        // route, and `resource-list` draws its rows as text rather than as
+        // controls that lead nowhere.
+        ...(hasDetailScreen(descriptor)
+          ? [
+              {
+                path: ':id',
+                component: screen,
+                data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
+              },
+            ]
+          : []),
       ],
     },
   ];
-}
-
-/**
- * What one resource draws with, where the generic answer is not enough.
- *
- * There is one of these today and the plans said there would be: prices need a
- * screen that names the scope a price belongs to, states its kind and says how
- * many shops it covers, because a price is not attached to a shop and an
- * interface that hides that is not simpler, it is wrong
- * (`apps/luna-shopper-admin/plans/0005`, sections 2 and 4).
- *
- * A component named here rather than on the descriptor, because a descriptor is
- * a plain object in a library that knows nothing about Angular, and putting a
- * component type on it would make every entity's configuration depend on the
- * framework its screens happen to be written in.
- */
-export interface ResourceScreens {
-  /** Drawn instead of {@link ResourceFormPage}, for create and for edit. */
-  readonly form?: Type<unknown>;
 }
 
 /**
@@ -94,7 +100,6 @@ export interface ResourceScreens {
  */
 export function adminRoutes(
   descriptors: readonly AnyResourceDescriptor[],
-  screens: Readonly<Record<string, ResourceScreens>> = {},
   sections: readonly Route[] = []
 ): Route[] {
   const first = descriptors[0];
@@ -104,9 +109,7 @@ export function adminRoutes(
       path: '',
       component: AdminShellPage,
       children: [
-        ...descriptors.flatMap((descriptor) =>
-          resourceRoutes(descriptor, screens[descriptor.name])
-        ),
+        ...descriptors.flatMap(resourceRoutes),
         // Screens that are not a resource, inside the same chrome (plan 0006).
         // The harvester's are the first: a run is a process rather than a row,
         // and a review queue is not a list somebody edits, so neither of them

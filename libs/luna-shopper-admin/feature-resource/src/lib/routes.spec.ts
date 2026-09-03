@@ -21,6 +21,7 @@ const shops = defineResource<Shop>({
   title: (row) => row.name,
   fields: [{ kind: 'text', name: 'name', label: 'shops.name' }],
   list: { columns: ['name'], compact: ['name'] },
+  actions: { create: true, edit: true },
   gateway: () => {
     throw new Error('not used');
   },
@@ -72,6 +73,42 @@ describe('resourceRoutes', () => {
     expect(children[1].data?.[RESOURCE_FORM_MODE]).toBe('create');
     expect(children[2].data?.[RESOURCE_FORM_MODE]).toBe('edit');
   });
+
+  /**
+   * A resource with no `POST` behind it would otherwise answer a typed URL with
+   * a form that fills in, submits and is refused by the gateway, which is a
+   * worse answer than the not found page (plan 0007, section 1).
+   */
+  it('declares no create route for a resource that cannot be created', () => {
+    const readOnly = defineResource<Shop>({
+      ...shops,
+      actions: { edit: true },
+    });
+    const [branch] = resourceRoutes(readOnly);
+
+    expect(branch.children?.map((route) => route.path)).toEqual(['', ':id']);
+  });
+
+  /**
+   * The admin table is the case this exists for: it can be read and it can
+   * never be written, so it has a list and nothing else, and `resource-list`
+   * draws its rows as text rather than as controls that lead nowhere.
+   */
+  it('declares no detail route for a resource with neither an editor nor a screen', () => {
+    const listOnly = defineResource<Shop>({ ...shops, actions: {} });
+    const [branch] = resourceRoutes(listOnly);
+
+    expect(branch.children?.map((route) => route.path)).toEqual(['']);
+  });
+
+  /** A resource with its own detail screen gets that at `:id`, not the form. */
+  it('mounts a resource own detail component in place of the form', () => {
+    const withDetail = defineResource<Shop>({ ...shops, detail: NotFoundPage });
+    const [branch] = resourceRoutes(withDetail);
+    const detail = branch.children?.find((route) => route.path === ':id');
+
+    expect(detail?.component).toBe(NotFoundPage);
+  });
 });
 
 describe('adminRoutes', () => {
@@ -121,7 +158,7 @@ describe('adminRoutes', () => {
  */
 describe('adminRoutes with sections', () => {
   const harvest = { path: 'harvest', children: [] };
-  const children = adminRoutes([shops], {}, [harvest])[0].children ?? [];
+  const children = adminRoutes([shops], [harvest])[0].children ?? [];
   const paths = children.map((route) => route.path);
 
   it('puts the section inside the chrome beside the resources', () => {

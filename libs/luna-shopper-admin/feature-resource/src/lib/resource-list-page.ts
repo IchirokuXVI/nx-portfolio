@@ -11,7 +11,9 @@ import { ResourceListStore } from '@portfolio/luna-shopper-admin/data-access';
 import {
   CONTENT_LOCALES,
   fieldOf,
+  hasDetailScreen,
   toRowView,
+  type ActionConfirmation,
   type FieldDescriptor,
   type NamedAction,
   type ResourceRow,
@@ -25,6 +27,11 @@ import {
 import { gatewayErrorKey } from './gateway-error-key';
 import { ResourceReferences } from './resource-registry';
 import { RESOURCE_DESCRIPTOR } from './resource-route-data';
+
+/** A named action waiting on an answer, and what it would be done to. */
+interface PendingAction extends RowAction {
+  readonly confirm: ActionConfirmation;
+}
 
 /**
  * The list screen, for every resource (plan 0004, section 3).
@@ -57,6 +64,7 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
       [busyRowId]="busyRowId()"
       [canCreate]="canCreate()"
       [canDelete]="canDelete()"
+      [canOpen]="canOpen()"
       [columns]="columns()"
       [compact]="compact()"
       [compactColumns]="compactColumns()"
@@ -70,26 +78,15 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
       [loadingMore]="store.loadingMore()"
       [lookup]="references"
       [moreFailed]="moreFailed()"
-      [namedActions]="namedActions()"
+      [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
+      [noteKey]="descriptor.note ?? null"
       [order]="store.order()"
       [rows]="rows()"
       [sorts]="descriptor.sorts ?? []"
       [titleKey]="descriptor.labels.many"
       [waitingForLabels]="waitingForLabels()"
     />
-
-    @if (confirming(); as pending) {
-      <lib-confirm-dialog
-        (confirm)="confirmAction()"
-        (dismiss)="confirming.set(null)"
-        [bodyArgs]="{ name: pending.row.title }"
-        [busy]="busyRowId() !== null"
-        [confirmKey]="pending.action.label"
-        [headingKey]="pending.action.label"
-        bodyKey="resource.confirm.action.body"
-      />
-    }
 
     @if (deleting(); as row) {
       <lib-confirm-dialog
@@ -100,6 +97,18 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
         bodyKey="resource.confirm.delete.body"
         confirmKey="resource.confirm.delete.confirm"
         headingKey="resource.confirm.delete.heading"
+      />
+    }
+
+    @if (asking(); as pending) {
+      <lib-confirm-dialog
+        (confirm)="confirmAction()"
+        (dismiss)="asking.set(null)"
+        [bodyArgs]="{ name: pending.row.title }"
+        [bodyKey]="pending.confirm.body"
+        [busy]="busyRowId() !== null"
+        [confirmKey]="pending.confirm.confirm"
+        [headingKey]="pending.confirm.heading"
       />
     }
   `,
@@ -118,7 +127,7 @@ export class ResourceListPage {
   private readonly _viewport = inject(Viewport);
   private readonly _translator = inject(RokuTranslatorService);
 
-  /** Answers the reference filters' searches, from every descriptor the app has. */
+  /** How a reference filter finds the resource it points at. */
   readonly references = inject(ResourceReferences);
 
   /**
@@ -157,11 +166,11 @@ export class ResourceListPage {
   /** The row awaiting a yes, or `null`. */
   readonly deleting = signal<ReturnType<typeof this.rows>[number] | null>(null);
 
+  /** The named action awaiting a yes, with the row it would act on. */
+  readonly asking = signal<PendingAction | null>(null);
+
   /** The row something is happening to. */
   readonly busyRowId = signal<string | null>(null);
-
-  /** The named action awaiting a yes, or `null`. */
-  readonly confirming = signal<RowAction | null>(null);
 
   /**
    * What the list is waiting to be told, already translated and joined.
@@ -207,9 +216,19 @@ export class ResourceListPage {
 
   readonly canDelete = computed(() => this.descriptor.actions?.delete === true);
 
-  readonly namedActions = computed<readonly NamedAction<ResourceRow>[]>(
-    () => this.descriptor.actions?.named ?? []
-  );
+  /**
+   * The resource's named actions, built once in this injection context.
+   *
+   * A field rather than a `computed`, because the factory calls `inject` and a
+   * computed body runs whenever something it read has changed, long after the
+   * constructor. The set of actions never changes anyway; only whether a given
+   * row is allowed one does, and that is `available` on each of them.
+   */
+  readonly namedActions: readonly NamedAction<ResourceRow>[] =
+    this.descriptor.actions?.named?.() ?? [];
+
+  /** Whether a row leads to a detail screen. The route factory agrees, by construction. */
+  readonly canOpen = computed(() => hasDetailScreen(this.descriptor));
 
   constructor() {
     void this.store.load();
@@ -246,22 +265,24 @@ export class ResourceListPage {
    * this component knows nothing about can change any column of any row, and a
    * screen that assumed otherwise would be showing something that is not there.
    */
-  run(event: RowAction): void {
-    if (event.action.confirm === true) {
-      this.confirming.set(event);
+  async run(event: RowAction): Promise<void> {
+    const confirm = event.action.confirm;
+    if (confirm !== undefined) {
+      this.asking.set({ ...event, confirm });
       return;
     }
-    void this._run(event);
+    await this._run(event);
   }
 
-  /** The yes, for an action that asked first. */
+  /** The operator said yes to a named action. */
   async confirmAction(): Promise<void> {
-    const pending = this.confirming();
+    const pending = this.asking();
     if (pending === null) {
       return;
     }
+
     await this._run(pending);
-    this.confirming.set(null);
+    this.asking.set(null);
   }
 
   private async _run(event: RowAction): Promise<void> {

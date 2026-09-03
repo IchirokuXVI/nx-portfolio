@@ -1,6 +1,5 @@
 export * from './lib/catalog-enums';
 export * from './lib/catalog-paths';
-export * from './lib/catalog-screens';
 export * from './lib/items';
 export * from './lib/items-seed';
 export * from './lib/location-items';

@@ -63,6 +63,10 @@ export interface RowAction {
       }
     </header>
 
+    @if (noteKey(); as note) {
+      <p class="note">{{ note | rokuT }}</p>
+    }
+
     @if (filters().length > 0 || sorts().length > 0) {
       <lib-resource-filters
         (filterChange)="filterChange.emit($event)"
@@ -101,9 +105,13 @@ export interface RowAction {
       <ul class="cards">
         @for (row of rows(); track row.id) {
           <li class="card">
-            <button (click)="open.emit(row.id)" class="title" type="button">
-              {{ row.title }}
-            </button>
+            @if (canOpen()) {
+              <button (click)="open.emit(row.id)" class="title" type="button">
+                {{ row.title }}
+              </button>
+            } @else {
+              <p class="title plain">{{ row.title }}</p>
+            }
             <dl>
               @for (field of compactColumns(); track field.name) {
                 <div class="pair">
@@ -166,7 +174,7 @@ export interface RowAction {
                          control that opens it. A row needs one thing that is
                          reachable by keyboard and says what it opens, and its
                          name is the only honest candidate. -->
-                    @if (index === 0) {
+                    @if (index === 0 && canOpen()) {
                       <button
                         (click)="open.emit(row.id)"
                         class="title"
@@ -174,6 +182,8 @@ export interface RowAction {
                       >
                         {{ row.title }}
                       </button>
+                    } @else if (index === 0) {
+                      <span class="title plain">{{ row.title }}</span>
                     } @else {
                       <lib-resource-cell [cell]="cellOf(row, field.name)" />
                     }
@@ -329,6 +339,19 @@ export interface RowAction {
       text-align: end;
     }
 
+    .note {
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      color: var(--admin-ink-muted);
+    }
+
+    .title.plain {
+      font-weight: 600;
+      color: var(--admin-ink);
+    }
+
     .title {
       padding: 0;
       border: none;
@@ -441,19 +464,29 @@ export class ResourceList {
 
   readonly canCreate = input(false);
   readonly canDelete = input(false);
+  /**
+   * Whether a row leads anywhere.
+   *
+   * False for a resource with no detail screen, where the name is drawn as text
+   * rather than as a control. A button that looks like a link and goes nowhere
+   * is worse than a plain name, and a keyboard reaches it first.
+   */
+  readonly canOpen = input(true);
+  /** A sentence above the list, as a key. For a screen whose shape needs explaining. */
+  readonly noteKey = input<string | null>(null);
   readonly namedActions = input<readonly NamedAction<ResourceRow>[]>([]);
   /** The row something is happening to, so its controls stop taking clicks. */
   readonly busyRowId = input<string | null>(null);
 
   readonly filters = input<readonly FilterDescriptor[]>([]);
   readonly filterValues = input<Readonly<Record<string, string>>>({});
-  /** Answers the reference filters' searches. */
+  readonly sorts = input<readonly EnumOption[]>([]);
+  readonly order = input<string | undefined>(undefined);
+  /** How a reference filter finds the resource it points at. */
   readonly lookup = input<ReferenceLookup>({
     search: async () => [],
     resolve: async () => null,
   });
-  readonly sorts = input<readonly EnumOption[]>([]);
-  readonly order = input<string | undefined>(undefined);
 
   readonly create = output<void>();
   readonly open = output<string>();

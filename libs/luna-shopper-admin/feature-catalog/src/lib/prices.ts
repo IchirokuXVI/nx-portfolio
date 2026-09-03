@@ -11,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { PRICE_SOURCE_KINDS } from './catalog-enums';
 import { PRICES_PATH } from './catalog-paths';
+import { PriceFormPage } from './price-form-page';
 import { PRICE_SEED } from './prices-seed';
 
 /** A price, as the gateway describes it. */
@@ -58,6 +59,16 @@ export function isPinned(row: Price): boolean {
 export const PRICES = defineResource<Price>({
   name: 'prices',
   segment: 'prices',
+
+  /**
+   * Prices draw with their own screen (plan 0005, sections 2 and 4).
+   *
+   * It is the generic form with a note above it saying what the chosen price
+   * scope is, what kind it is and how many shops it covers. A price is not
+   * attached to a shop, so a form that hid that would let an operator change
+   * twelve shops' price believing they had changed one.
+   */
+  detail: PriceFormPage,
   labels: { one: 'catalog.prices.one', many: 'catalog.prices.many' },
 
   // The product's name would be a request per row, which a list cannot afford.
@@ -209,11 +220,18 @@ export const PRICES = defineResource<Price>({
     create: true,
     edit: true,
     delete: true,
-    named: [
+    // A factory rather than an array, which is what the descriptor asks for.
+    // This one injects nothing: `unpin` writes through the gateway the screen
+    // hands to `run`, so there is nothing here that needs a running Angular.
+    named: () => [
       {
         name: 'unpin',
         label: 'catalog.prices.unpin',
-        confirm: true,
+        confirm: {
+          heading: 'catalog.prices.confirm.unpin.heading',
+          body: 'catalog.prices.confirm.unpin.body',
+          confirm: 'catalog.prices.confirm.unpin.confirm',
+        },
         // Only a price a person typed is pinned. Offering this on a harvested
         // row would promise something that is already true of it.
         available: isPinned,

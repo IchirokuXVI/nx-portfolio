@@ -55,7 +55,8 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
       ),
     });
 
-    return toPage<T>(body);
+    const read = this._source.page;
+    return read === undefined ? toPage<T>(body) : read(body);
   }
 
   /**

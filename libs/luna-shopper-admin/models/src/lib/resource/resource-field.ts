@@ -94,6 +94,25 @@ interface FieldBase<T extends ResourceRow> {
    * the request entirely.
    */
   readonly createOnly?: boolean;
+  /**
+   * Where this field's displayed value comes from, when it is not the property.
+   *
+   * For **display only**, and allowed only on a field the form cannot change.
+   * The form still writes `name`, so a field that reads from somewhere else and
+   * is also editable would submit one thing and show another.
+   *
+   * It exists for a shape the gateway really answers with: a zone row carries
+   * `ownerName` from a second call to auth, and that name is null whenever the
+   * id resolved to nobody. The rule there is that the screen renders the id and
+   * the listing still succeeds (plan 0074, section 3), which is one expression
+   * here rather than a special case in the list.
+   *
+   * A method rather than a property holding a function, for the reason
+   * {@link NamedAction.available} is one: under `strictFunctionTypes` a
+   * property's parameter is checked contravariantly, and a descriptor for a
+   * concrete row has to remain assignable to a descriptor for any row.
+   */
+  read?(row: T): unknown;
 }
 
 /** Whether the form is creating a row or changing one. */

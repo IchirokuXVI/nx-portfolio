@@ -59,7 +59,10 @@ export function toCell<T extends ResourceRow>(
   row: T,
   options: RenderOptions
 ): ResourceCell {
-  const value = row[field.name];
+  // `read` before the property, so a field that says where its displayed value
+  // comes from is obeyed. It is display only and never editable, so nothing the
+  // form writes can disagree with what this shows.
+  const value = field.read === undefined ? row[field.name] : field.read(row);
 
   if (field.kind === 'boolean') {
     // Before the null check: a boolean that is missing is not the same claim as

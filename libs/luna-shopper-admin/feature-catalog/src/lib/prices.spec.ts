@@ -20,7 +20,6 @@ import {
   toInput,
   type FieldDescriptor,
 } from '@portfolio/luna-shopper-admin/models';
-import { CATALOG_SCREENS } from './catalog-screens';
 import { ITEMS } from './items';
 import { LOCATIONS } from './locations';
 import { PRICE_SCOPES } from './price-scopes';
@@ -59,7 +58,7 @@ async function boot(url: string): Promise<ComponentFixture<TestHost>> {
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
-      provideRouter(adminRoutes([...RESOURCES], CATALOG_SCREENS)),
+      provideRouter(adminRoutes([...RESOURCES])),
       provideLocationMocks(),
       provideResources(...RESOURCES),
       SessionStorage,
@@ -151,11 +150,13 @@ describe('the price descriptor', () => {
   });
 
   it('offers to clear a pin only on a price that has one', () => {
-    const action = PRICES.actions?.named?.find(
-      (named) => named.name === 'unpin'
-    );
+    const action = PRICES.actions
+      ?.named?.()
+      .find((named) => named.name === 'unpin');
 
-    expect(action?.confirm).toBe(true);
+    expect(action?.confirm?.heading).toBe(
+      'catalog.prices.confirm.unpin.heading'
+    );
     expect(action?.available?.(PINNED ?? {})).toBe(true);
     expect(action?.available?.(PRICE_SEED[0])).toBe(false);
   });

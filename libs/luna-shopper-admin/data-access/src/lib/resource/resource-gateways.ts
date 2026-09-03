@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import type {
   ResourceGateway,
+  ResourcePage,
   ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { serviceToken } from '@portfolio/shared/data-access';
@@ -18,6 +19,24 @@ export interface ResourceSource<T extends ResourceRow = ResourceRow> {
   readonly path: string;
   /** How many rows a page asks for. The backend clamps it either way. */
   readonly pageSize?: number;
+  /**
+   * The property holding a row's id. `id` unless stated.
+   *
+   * The same answer the descriptor gives, repeated here because the in-memory
+   * table has to find a row by it and knows nothing about descriptors. A user
+   * is keyed by `userId` and an admin by `adminId`, so this is not a corner
+   * case.
+   */
+  readonly idField?: string;
+  /**
+   * How to read a page out of the body, when it is not `{ items, nextCursor }`.
+   *
+   * Every collection under `/v1/admin/**` answers with that shape but one:
+   * `GET /v1/admin/admins` returns `{ admins }` and no cursor, because there
+   * are a handful of admins and paging them would be a ceremony. One function
+   * here is cheaper than a second gateway implementation for one route.
+   */
+  page?(body: unknown): ResourcePage<T>;
   /**
    * Rows to answer with when there is no backend.
    *

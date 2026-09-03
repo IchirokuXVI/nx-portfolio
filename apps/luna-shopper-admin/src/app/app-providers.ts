@@ -14,6 +14,8 @@ import {
   adminAuthInterceptor,
   DEPLOYMENT_SERVICE,
   DeploymentApi,
+  DIRECTORY_SERVICE,
+  DirectoryApi,
   HARVEST_SERVICE,
   HarvestApi,
   LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS,
@@ -72,6 +74,7 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   provideService(DEPLOYMENT_SERVICE, DeploymentApi),
   provideService(SESSION_SERVICE, SessionApi),
   provideService(RESOURCE_GATEWAYS, ResourceApiGateways),
+  provideService(DIRECTORY_SERVICE, DirectoryApi),
 
   // The harvester's own surface, bound the same way and for the same reason
   // (plan 0006). `HarvestMemory` stays the token's default, which is what makes
