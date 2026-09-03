@@ -28,7 +28,11 @@ export class ResourceMemoryGateways implements ResourceGatewaysI {
 
   for<T extends ResourceRow>(source: ResourceSource<T>): ResourceGateway<T> {
     const rows = this._table(source);
-    return new ResourceMemory<T>(rows, source.pageSize ?? DEFAULT_PAGE_SIZE);
+    return new ResourceMemory<T>(
+      rows,
+      source.pageSize ?? DEFAULT_PAGE_SIZE,
+      source.idField ?? 'id'
+    );
   }
 
   /** The table for a path, seeded the first time it is asked for. */
@@ -50,7 +54,15 @@ const DEFAULT_PAGE_SIZE = 25;
 class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   constructor(
     private readonly _rows: T[],
-    private readonly _pageSize: number
+    private readonly _pageSize: number,
+    /**
+     * The property a row is found by.
+     *
+     * `id` for most things and not for all of them: a user is keyed by
+     * `userId` and an admin by `adminId`, so a table that assumed `id` would
+     * answer 404 for every row it holds.
+     */
+    private readonly _idField: string
   ) {}
 
   async list(query: ResourceQuery): Promise<ResourcePage<T>> {
@@ -67,7 +79,7 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   }
 
   async read(id: string): Promise<T> {
-    const row = this._rows.find((entry) => entry['id'] === id);
+    const row = this._rows.find((entry) => entry[this._idField] === id);
     if (row === undefined) {
       throw notFound();
     }
@@ -76,7 +88,7 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
 
   async create(input: ResourceRow): Promise<T> {
     const row = {
-      id: `mem_${this._rows.length + 1}`,
+      [this._idField]: `mem_${this._rows.length + 1}`,
       ...input,
     } as unknown as T;
     this._rows.push(row);
@@ -84,7 +96,7 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   }
 
   async update(id: string, input: ResourceRow): Promise<T> {
-    const index = this._rows.findIndex((entry) => entry['id'] === id);
+    const index = this._rows.findIndex((entry) => entry[this._idField] === id);
     if (index === -1) {
       throw notFound();
     }
@@ -94,7 +106,7 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   }
 
   async remove(id: string): Promise<void> {
-    const index = this._rows.findIndex((entry) => entry['id'] === id);
+    const index = this._rows.findIndex((entry) => entry[this._idField] === id);
     if (index === -1) {
       throw notFound();
     }

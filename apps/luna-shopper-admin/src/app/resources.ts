@@ -1,4 +1,11 @@
 import { SUPERMARKETS } from '@portfolio/luna-shopper-admin/feature-catalog';
+import {
+  ADMINS,
+  BASKETS,
+  LISTS,
+  USERS,
+  ZONES,
+} from '@portfolio/luna-shopper-admin/feature-people';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
 
 /**
@@ -9,9 +16,21 @@ import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models
  * read from, so a resource cannot end up reachable without a link or linked
  * without a route.
  *
- * One entry, today. That is the whole of `0004`'s exit criterion: supermarkets
- * working end to end through the generic machinery is the proof that the
- * descriptor is sufficient, and `0005` to `0007` add the other fourteen by
- * adding lines here.
+ * The order is the order the navigation shows, so it is grouped by what an
+ * operator came here to do rather than alphabetically. The catalog first,
+ * because that is the half that gets edited; then the people and what they
+ * share, which is read far more often than it is touched; and the admin table
+ * last, which is opened to answer one question and never to change anything.
+ *
+ * `0005` and `0006` add the rest of the catalog and the harvester by adding
+ * lines here, which is the whole of `0004`'s second exit criterion: a new entity
+ * is a line in this file and a descriptor, and no change to the list or the form.
  */
-export const ADMIN_RESOURCES: readonly AnyResourceDescriptor[] = [SUPERMARKETS];
+export const ADMIN_RESOURCES: readonly AnyResourceDescriptor[] = [
+  SUPERMARKETS,
+  USERS,
+  ZONES,
+  LISTS,
+  BASKETS,
+  ADMINS,
+];

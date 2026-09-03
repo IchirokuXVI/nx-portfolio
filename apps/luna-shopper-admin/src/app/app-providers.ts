@@ -14,6 +14,8 @@ import {
   adminAuthInterceptor,
   DEPLOYMENT_SERVICE,
   DeploymentApi,
+  DIRECTORY_SERVICE,
+  DirectoryApi,
   LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS,
   RESOURCE_GATEWAYS,
   ResourceApiGateways,
@@ -66,6 +68,7 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   provideService(DEPLOYMENT_SERVICE, DeploymentApi),
   provideService(SESSION_SERVICE, SessionApi),
   provideService(RESOURCE_GATEWAYS, ResourceApiGateways),
+  provideService(DIRECTORY_SERVICE, DirectoryApi),
 
   // Which resources this app has (plan 0004). The route table is built from the
   // same list, so a resource cannot be reachable without a link or linked

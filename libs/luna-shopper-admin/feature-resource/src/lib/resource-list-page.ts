@@ -11,7 +11,9 @@ import { ResourceListStore } from '@portfolio/luna-shopper-admin/data-access';
 import {
   CONTENT_LOCALES,
   fieldOf,
+  hasDetailScreen,
   toRowView,
+  type ActionConfirmation,
   type FieldDescriptor,
   type NamedAction,
   type ResourceRow,
@@ -23,7 +25,13 @@ import {
   type RowAction,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
+import { ResourceReferences } from './resource-registry';
 import { RESOURCE_DESCRIPTOR } from './resource-route-data';
+
+/** A named action waiting on an answer, and what it would be done to. */
+interface PendingAction extends RowAction {
+  readonly confirm: ActionConfirmation;
+}
 
 /**
  * The list screen, for every resource (plan 0004, section 3).
@@ -55,6 +63,7 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
       [busyRowId]="busyRowId()"
       [canCreate]="canCreate()"
       [canDelete]="canDelete()"
+      [canOpen]="canOpen()"
       [columns]="columns()"
       [compact]="compact()"
       [compactColumns]="compactColumns()"
@@ -66,9 +75,11 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
       [hasMore]="store.hasMore()"
       [loading]="store.status() === 'loading'"
       [loadingMore]="store.loadingMore()"
+      [lookup]="references"
       [moreFailed]="moreFailed()"
-      [namedActions]="namedActions()"
+      [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
+      [noteKey]="descriptor.note ?? null"
       [order]="store.order()"
       [rows]="rows()"
       [sorts]="descriptor.sorts ?? []"
@@ -86,6 +97,18 @@ import { RESOURCE_DESCRIPTOR } from './resource-route-data';
         headingKey="resource.confirm.delete.heading"
       />
     }
+
+    @if (asking(); as pending) {
+      <lib-confirm-dialog
+        (confirm)="confirmAction()"
+        (dismiss)="asking.set(null)"
+        [bodyArgs]="{ name: pending.row.title }"
+        [bodyKey]="pending.confirm.body"
+        [busy]="busyRowId() !== null"
+        [confirmKey]="pending.confirm.confirm"
+        [headingKey]="pending.confirm.heading"
+      />
+    }
   `,
   styles: `
     :host {
@@ -101,6 +124,9 @@ export class ResourceListPage {
   private readonly _router = inject(Router);
   private readonly _viewport = inject(Viewport);
   private readonly _translator = inject(RokuTranslatorService);
+
+  /** How a reference filter finds the resource it points at. */
+  readonly references = inject(ResourceReferences);
 
   /**
    * The resource this screen is for, from route `data`.
@@ -127,6 +153,9 @@ export class ResourceListPage {
 
   /** The row awaiting a yes, or `null`. */
   readonly deleting = signal<ReturnType<typeof this.rows>[number] | null>(null);
+
+  /** The named action awaiting a yes, with the row it would act on. */
+  readonly asking = signal<PendingAction | null>(null);
 
   /** The row something is happening to. */
   readonly busyRowId = signal<string | null>(null);
@@ -161,9 +190,19 @@ export class ResourceListPage {
 
   readonly canDelete = computed(() => this.descriptor.actions?.delete === true);
 
-  readonly namedActions = computed<readonly NamedAction<ResourceRow>[]>(
-    () => this.descriptor.actions?.named ?? []
-  );
+  /**
+   * The resource's named actions, built once in this injection context.
+   *
+   * A field rather than a `computed`, because the factory calls `inject` and a
+   * computed body runs whenever something it read has changed, long after the
+   * constructor. The set of actions never changes anyway; only whether a given
+   * row is allowed one does, and that is `available` on each of them.
+   */
+  readonly namedActions: readonly NamedAction<ResourceRow>[] =
+    this.descriptor.actions?.named?.() ?? [];
+
+  /** Whether a row leads to a detail screen. The route factory agrees, by construction. */
+  readonly canOpen = computed(() => hasDetailScreen(this.descriptor));
 
   constructor() {
     void this.store.load();
@@ -201,6 +240,26 @@ export class ResourceListPage {
    * screen that assumed otherwise would be showing something that is not there.
    */
   async run(event: RowAction): Promise<void> {
+    const confirm = event.action.confirm;
+    if (confirm !== undefined) {
+      this.asking.set({ ...event, confirm });
+      return;
+    }
+    await this._run(event);
+  }
+
+  /** The operator said yes to a named action. */
+  async confirmAction(): Promise<void> {
+    const pending = this.asking();
+    if (pending === null) {
+      return;
+    }
+
+    await this._run(pending);
+    this.asking.set(null);
+  }
+
+  private async _run(event: RowAction): Promise<void> {
     this.busyRowId.set(event.row.id);
     try {
       await event.action.run(event.row.row);

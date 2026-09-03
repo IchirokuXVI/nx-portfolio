@@ -101,6 +101,36 @@ describe('ResourceMemoryGateways', () => {
     expect(none.items).toEqual([]);
   });
 
+  /**
+   * `id` for most things and not for all of them: a user is keyed by `userId`
+   * and an admin by `adminId`, so a table that assumed `id` would answer 404 for
+   * every row it holds.
+   */
+  it('finds a row by the property the source named', async () => {
+    const gateway = gateways.for({
+      path: '/v1/admin/users',
+      idField: 'userId',
+      seed: [{ userId: 'u1', username: 'rosa' }],
+    });
+
+    await expect(gateway.read('u1')).resolves.toEqual({
+      userId: 'u1',
+      username: 'rosa',
+    });
+  });
+
+  it('mints a new row id under that same property', async () => {
+    const gateway = gateways.for({
+      path: '/v1/admin/keyed',
+      idField: 'userId',
+    });
+
+    const created = await gateway.create({ username: 'marc' });
+
+    expect(Object.keys(created)).toContain('userId');
+    expect(created['id']).toBeUndefined();
+  });
+
   it('keeps two resources apart', async () => {
     await gateways.for({ path: PATH, seed }).create({ name: 'Dia' });
 
