@@ -204,6 +204,18 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
   into `plans/` and takes the next free number there. Backlog plans open with a
   `> **Status: backlog. Not scheduled for development.**` blockquote, so the file says
   so on its own and not only by where it sits.
+- **An implemented plan names the pull request that implemented it**, at the top of the
+  file, above the `# NNNN Title` heading, in the same position a backlog plan carries its
+  status blockquote:
+
+  ```markdown
+  > **PR:** [#178](https://github.com/IchirokuXVI/nx-portfolio/pull/178)
+  ```
+
+  Write it once `gh pr create` has returned the URL and push the amendment onto the same
+  branch, so the plan lands inside the PR it names. Otherwise a plan and the change that
+  realised it are linked only through a commit message or a release note, and reading the
+  plan later says nothing about whether it shipped or where the code went.
 
 ## Luna Shopper backend
 
