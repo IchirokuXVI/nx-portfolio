@@ -7,7 +7,10 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { ADMIN_API_CONFIG } from '@portfolio/luna-shopper-admin/models';
+import {
+  ADMIN_API_CONFIG,
+  UNKNOWN_ENVIRONMENT,
+} from '@portfolio/luna-shopper-admin/models';
 import { ApiUrl } from '../api-url';
 import { DeploymentApi } from './deployment-api';
 
@@ -42,9 +45,29 @@ describe('DeploymentApi', () => {
     // Nothing attaches a token in this plan, and the endpoint is public. A header
     // here would be a claim of identity the login screen cannot yet make.
     expect(request.request.headers.has('Authorization')).toBe(false);
-    request.flush({ environment: 'staging' });
+    request.flush({ environment: 'staging', devAutologin: false });
 
-    await expect(read).resolves.toBe('staging');
+    await expect(read).resolves.toEqual({
+      deployment: 'staging',
+      devAutologin: false,
+    });
+  });
+
+  /**
+   * The other half of the same read (plan 0002, section 5). The app skips its
+   * login screen only because the server said it may, so this is the value that
+   * carries that permission across the boundary.
+   */
+  it('reads the autologin the gateway offers', async () => {
+    const read = api.read();
+    http
+      .expectOne(URL)
+      .flush({ environment: 'development', devAutologin: true });
+
+    await expect(read).resolves.toEqual({
+      deployment: 'development',
+      devAutologin: true,
+    });
   });
 
   /**
@@ -56,14 +79,14 @@ describe('DeploymentApi', () => {
     const read = api.read();
     http.expectOne(URL).flush({ environment: 'preview' });
 
-    await expect(read).resolves.toBeNull();
+    await expect(read).resolves.toEqual(UNKNOWN_ENVIRONMENT);
   });
 
   it('answers unknown for a body with no environment at all', async () => {
     const read = api.read();
     http.expectOne(URL).flush({});
 
-    await expect(read).resolves.toBeNull();
+    await expect(read).resolves.toEqual(UNKNOWN_ENVIRONMENT);
   });
 
   /**
@@ -71,6 +94,10 @@ describe('DeploymentApi', () => {
    * page has to be able to draw itself and say the environment is unknown; an
    * unhandled rejection during bootstrap would give an operator a blank screen and
    * less information than that.
+   *
+   * It is also the safe answer to the second question: a gateway that could not be
+   * reached offers no autologin, so the app draws its login screen rather than
+   * skipping it on a request that never arrived.
    */
   it('answers unknown rather than throwing when the gateway does not answer', async () => {
     const read = api.read();
@@ -78,6 +105,6 @@ describe('DeploymentApi', () => {
       .expectOne(URL)
       .error(new ProgressEvent('error'), { status: 0 } as HttpErrorResponse);
 
-    await expect(read).resolves.toBeNull();
+    await expect(read).resolves.toEqual(UNKNOWN_ENVIRONMENT);
   });
 });

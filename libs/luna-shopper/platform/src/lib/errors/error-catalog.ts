@@ -77,6 +77,15 @@ export const ERROR_CATALOG: Record<
     en: 'This basket has already bought {floor}, so it cannot go below that.',
     es: 'Esta cesta ya ha comprado {floor}, así que no puede bajar de ahí.',
   },
+  // Phrased about the account rather than about the request, and it says how the
+  // state ends, because the two things an operator needs are "waiting is what
+  // clears this" and "somebody with the server can clear it sooner". Distinct in
+  // wording from `rate_limited` above for the same reason it is distinct in
+  // code: one is answered by slowing down and the other is not.
+  [ERROR_CODES.ACCOUNT_LOCKED]: {
+    en: 'This account is locked after too many failed sign in attempts. It unlocks on its own once the window passes, or sooner if an administrator clears it on the server.',
+    es: 'Esta cuenta está bloqueada tras demasiados intentos fallidos de inicio de sesión. Se desbloquea sola cuando pase el periodo, o antes si un administrador la desbloquea en el servidor.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

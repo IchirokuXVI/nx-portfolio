@@ -10,13 +10,16 @@ import { AdminEnvironmentController } from './admin-environment.controller';
  * told they are in staging while writing to production, so a value the client could
  * have supplied, or the server could have guessed, would reintroduce exactly that.
  */
-function configWith(environmentName: string): ConfigService {
+function configWith(
+  environmentName: string,
+  devAutologin = false
+): ConfigService {
   return {
     getOrThrow: (key: string) => {
       if (key !== 'gateway') {
         throw new Error(`unexpected config namespace ${key}`);
       }
-      return { environmentName };
+      return { environmentName, admin: { devAutologin } };
     },
   } as unknown as ConfigService;
 }
@@ -29,9 +32,28 @@ describe('GET /v1/admin/environment', () => {
         configWith(environmentName)
       );
 
-      expect(controller.read()).toEqual({ environment: environmentName });
+      expect(controller.read()).toEqual({
+        environment: environmentName,
+        devAutologin: false,
+      });
     }
   );
+
+  /**
+   * The second half of the answer, and the one the back office acts on
+   * (`apps/luna-shopper-admin/plans/0002`, section 5).
+   *
+   * The app skips its login screen only because the server said it may. Asserted
+   * in both directions because a flag that is always false is indistinguishable
+   * from one that is never read, and this one turns authentication off.
+   */
+  it.each([true, false])('reports whether it will autologin: %s', (on) => {
+    const controller = new AdminEnvironmentController(
+      configWith('development', on)
+    );
+
+    expect(controller.read().devAutologin).toBe(on);
+  });
 
   /**
    * `ENVIRONMENT_NAME` is a free string, so a deployment can report a name nobody
@@ -44,7 +66,10 @@ describe('GET /v1/admin/environment', () => {
   it('passes an unexpected environment name through rather than normalising it', () => {
     const controller = new AdminEnvironmentController(configWith('preview-7'));
 
-    expect(controller.read()).toEqual({ environment: 'preview-7' });
+    expect(controller.read()).toEqual({
+      environment: 'preview-7',
+      devAutologin: false,
+    });
   });
 
   /**
@@ -58,7 +83,7 @@ describe('GET /v1/admin/environment', () => {
     const config = {
       getOrThrow: (key: string) => {
         seen.push(key);
-        return { environmentName: 'staging' };
+        return { environmentName: 'staging', admin: { devAutologin: false } };
       },
     } as unknown as ConfigService;
 

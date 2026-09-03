@@ -16868,13 +16868,18 @@
         "type": "object",
         "description": "Which deployment answered. Readable with no token, so the back office can draw its per environment accent colour before anybody has signed in.",
         "required": [
-          "environment"
+          "environment",
+          "devAutologin"
         ],
         "additionalProperties": false,
         "properties": {
           "environment": {
             "type": "string",
             "description": "The name this deployment reports itself by, from `ENVIRONMENT_NAME`. Conventionally `production`, `staging` or `development`, but not constrained to them."
+          },
+          "devAutologin": {
+            "type": "boolean",
+            "description": "Whether this deployment will issue an admin token without a password, from `ADMIN_DEV_AUTOLOGIN`. The back office asks rather than deciding for itself that it is in development, so the decision to skip the login screen is the server’s. False everywhere it would matter: auth refuses to boot with the switch on against a non local database."
           }
         }
       },
@@ -20844,6 +20849,7 @@
               "generated_list_finished",
               "stale_quantity",
               "below_settled",
+              "account_locked",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

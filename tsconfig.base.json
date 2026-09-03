@@ -156,6 +156,9 @@
       "@portfolio/velista/feature-shell": [
         "./libs/velista/feature-shell/src/index.ts"
       ],
+      "@portfolio/luna-shopper-admin/feature-auth": [
+        "./libs/luna-shopper-admin/feature-auth/src/index.ts"
+      ],
       "@portfolio/luna-shopper-admin/models": [
         "./libs/luna-shopper-admin/models/src/index.ts"
       ],

@@ -14,6 +14,23 @@ const ADMIN_ENVIRONMENT_SCHEMA = hoistAdminEnvironment();
 /** Which deployment answered, for a caller with no token. */
 export interface AdminEnvironmentResponse {
   environment: string;
+  /**
+   * Whether this deployment will mint an admin token without a password
+   * (`apps/luna-shopper-admin/plans/0002`, section 5).
+   *
+   * The back office skips its login screen in development, and this is how it
+   * learns that it may. **The client never decides that for itself**: a build
+   * time flag that turns authentication off is precisely the kind of thing that
+   * ships wrong, and it is unnecessary, because the server already knows. The app
+   * asks, and the server is entitled to say no.
+   *
+   * Not a secret, and false in every deployment where it would matter. Auth
+   * refuses to boot with the switch on against a non local database (plan 0071,
+   * section 8), so a server that answers `true` is a developer's own, and one that
+   * answers `false` has told the caller nothing it could not already work out from
+   * being asked for a password.
+   */
+  devAutologin: boolean;
 }
 
 /**
@@ -59,6 +76,9 @@ export class AdminEnvironmentController {
   })
   @ApiProblemResponses()
   read(): AdminEnvironmentResponse {
-    return { environment: this.config.environmentName };
+    return {
+      environment: this.config.environmentName,
+      devAutologin: this.config.admin.devAutologin,
+    };
   }
 }
