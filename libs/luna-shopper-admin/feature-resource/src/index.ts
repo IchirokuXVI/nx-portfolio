@@ -5,3 +5,4 @@ export * from './lib/resource-list-page';
 export * from './lib/resource-registry';
 export * from './lib/resource-route-data';
 export * from './lib/routes';
+export * from './lib/shell-links';

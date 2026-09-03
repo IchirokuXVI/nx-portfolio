@@ -1,3 +1,5 @@
+> **PR:** [#193](https://github.com/IchirokuXVI/nx-portfolio/pull/193)
+
 # 0006 The harvester screens
 
 The harvester is the part of the back office an operator will actually open most often, and it is
@@ -16,16 +18,23 @@ Depends on `0004` for the chrome, the list primitives and the data layer, and on
 Every route these screens need exists today under `/v1/admin/harvest/*`. Nothing new is needed from
 the backend beyond `0073`'s guard change.
 
-| Screen            | Routes                                                                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runs              | `POST runs`, `GET runs`, `GET runs/:id`, `POST runs/:id/abort`                                                                                    |
-| Catalog entries   | `GET .../entries`, `GET .../entries/groups`, `POST .../entries/:id/import`, `POST .../entries/:id/reject`                                         |
-| Item source refs  | `GET item-refs`, `GET item-refs/unresolved`, `PUT item-refs`, `POST item-refs/:id/confirm`, `POST item-refs/:id/reject`, `POST .../:entryId/item` |
-| Discovered places | `GET places`, `POST places/:id/confirm`, `POST places/:id/reject`                                                                                 |
-| Sources           | `GET sources`, `GET sources/:supermarketId`, `PUT sources/:supermarketId`, `PUT sources/:supermarketId/enabled`                                   |
+| Screen            | Routes                                                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Runs              | `POST runs`, `GET runs`, `GET runs/:id`, `POST runs/:id/abort`                                                          |
+| Catalog entries   | `GET supermarkets/:supermarketId/entries`, `POST supermarkets/:supermarketId/entries/:entryId/item`                     |
+| Item source refs  | `GET item-refs`, `GET item-refs/unresolved`, `PUT item-refs`, `POST item-refs/:id/confirm`, `POST item-refs/:id/reject` |
+| Discovered places | `GET places`, `GET places/groups`, `POST places/:id/import`, `POST places/:id/reject`                                   |
+| Sources           | `GET sources`, `GET sources/:supermarketId`, `PUT sources/:supermarketId`, `PUT sources/:supermarketId/enabled`         |
 
 Note that the harvester gates **every** subject it exposes, reads included, unlike catalog. So every
 screen here requires an admin token and there is no partially public view of any of it.
+
+**Corrected while building this (PR #193).** The table above originally put `groups`, `import` and
+`reject` under catalog entries and gave discovered places a `confirm`. All four belong to `places`,
+which is where `harvest.controller.ts` declares them. The entries controller exposes a list and
+`POST :entryId/item`, and nothing else: **there is no `entries/groups` and no way to reject an
+entry.** Section 5's sentence about the entries screen using the grouping therefore describes a
+route that does not exist, and that queue offers a search and one entry at a time instead.
 
 ## 2. Runs are polled, not pushed
 
@@ -66,6 +75,19 @@ application state.
 The screen must make the distinction legible, because "why did my run do nothing" is otherwise
 unanswerable from the UI. When a run cannot start, the reason is displayed: the service is off, the
 storefront is off, or the chain is disabled.
+
+**"Read only here" was optimistic, and PR #193 says so instead.** No route reports `HARVEST_ENABLED`
+or `MERCADONA_ENABLED`, and section 1 rules out adding one, so two of the three cannot be read at
+all. The panel shows all three and renders a **third state, "not known"**, rather than guessing
+`off`: both default to false, so a guess would be right most of the time and wrong in exactly the
+situation this panel exists for.
+
+Where behaviour reveals a switch, it is read. `HARVEST_ENABLED` false refuses a spawn with a 501
+carrying `not_configured`; `MERCADONA_ENABLED` false lets the run start and fails it on its first
+step with the variable named in `error`; and the first switch is answered from the chart, which
+fixes it for both clusters. So the last paragraph above holds in full, and only the static panel is
+short of what this section asked for. Reporting the two literally needs a gateway route, which is a
+backend change and therefore a plan of its own.
 
 ## 4. The harvester does not run in a cluster
 

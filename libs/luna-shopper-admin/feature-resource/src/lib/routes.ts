@@ -85,10 +85,17 @@ export interface ResourceScreens {
  * dashboard and this plan does not add one: an operator opens this tool to
  * change a specific thing, and a landing page in front of that is a click
  * between them and it.
+ *
+ * The two optional arguments answer different questions, which is why they are
+ * two. `screens` says what a named resource draws instead of the generic form,
+ * keyed by descriptor name, so it belongs beside the descriptors it changes.
+ * `sections` carries screens that are not a resource at all, and they are added
+ * after every resource branch.
  */
 export function adminRoutes(
   descriptors: readonly AnyResourceDescriptor[],
-  screens: Readonly<Record<string, ResourceScreens>> = {}
+  screens: Readonly<Record<string, ResourceScreens>> = {},
+  sections: readonly Route[] = []
 ): Route[] {
   const first = descriptors[0];
 
@@ -100,6 +107,17 @@ export function adminRoutes(
         ...descriptors.flatMap((descriptor) =>
           resourceRoutes(descriptor, screens[descriptor.name])
         ),
+        // Screens that are not a resource, inside the same chrome (plan 0006).
+        // The harvester's are the first: a run is a process rather than a row,
+        // and a review queue is not a list somebody edits, so neither of them
+        // can be a descriptor. They are still part of this app, so they belong
+        // under the same navigation rather than in a branch of their own that
+        // draws its own header.
+        //
+        // After the resource branches and before `**`, which is the only place
+        // they can go: a catch all matches anything, so a route declared after
+        // it is unreachable.
+        ...sections,
         ...(first === undefined
           ? []
           : [

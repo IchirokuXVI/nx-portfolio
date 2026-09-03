@@ -130,8 +130,64 @@ export function fakeBrowserFacade(
     readStorage: (key: string) => storage.get(key) ?? null,
     writeStorage: (key: string, value: string) => void storage.set(key, value),
     removeStorage: (key: string) => void storage.delete(key),
+    watchStorage: (key: string, onChange: (value: string | null) => void) => {
+      const watchers = watchersFor(storage);
+      const forKey = watchers.get(key) ?? new Set();
+      forKey.add(onChange);
+      watchers.set(key, forKey);
+      return () => void forKey.delete(onChange);
+    },
     ...overrides,
   } as unknown as BrowserFacade;
+}
+
+/**
+ * Watchers registered against one storage `Map`, so {@link writeStorageElsewhere} can
+ * find them without the spec threading a bus through every provider.
+ *
+ * Keyed on the `Map` the spec already holds, because that `Map` is what stands for the
+ * origin's storage: two fakes over the same `Map` are two documents on one origin,
+ * which is the situation being tested.
+ */
+const STORAGE_WATCHERS = new WeakMap<
+  Map<string, string>,
+  Map<string, Set<(value: string | null) => void>>
+>();
+
+function watchersFor(
+  storage: Map<string, string>
+): Map<string, Set<(value: string | null) => void>> {
+  const existing = STORAGE_WATCHERS.get(storage);
+  if (existing) {
+    return existing;
+  }
+
+  const created = new Map<string, Set<(value: string | null) => void>>();
+  STORAGE_WATCHERS.set(storage, created);
+  return created;
+}
+
+/**
+ * Write a storage key **as another document would**, and raise the event that says so.
+ *
+ * The real `storage` event never fires in the document that wrote the value, so this
+ * is the only faithful way to spell "the installed app refreshed the token while this
+ * tab was asleep". Pass `null` to spell a sign out in the other document.
+ */
+export function writeStorageElsewhere(
+  storage: Map<string, string>,
+  key: string,
+  value: string | null
+): void {
+  if (value === null) {
+    storage.delete(key);
+  } else {
+    storage.set(key, value);
+  }
+
+  for (const watcher of watchersFor(storage).get(key) ?? []) {
+    watcher(value);
+  }
 }
 
 /**

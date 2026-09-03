@@ -318,5 +318,222 @@
         "warning": "Every one of those shops gets this price. This is not the price at one shop."
       }
     }
+  },
+  "harvest": {
+    "nav": {
+      "runs": "Harvest runs",
+      "places": "Discovered places",
+      "entries": "Source entries",
+      "itemRefs": "Item links",
+      "sources": "Chain sources"
+    },
+    "mode": {
+      "STORE_DISCOVERY": "Store discovery",
+      "CATALOG_DISCOVERY": "Catalog discovery",
+      "REFRESH": "Price refresh"
+    },
+    "status": {
+      "PENDING": "Pending",
+      "RUNNING": "Running",
+      "COMPLETED": "Completed",
+      "FAILED": "Failed",
+      "ABORTED": "Aborted",
+      "STALE": "Stale"
+    },
+    "category": {
+      "PRODUCE": "Produce",
+      "DAIRY": "Dairy",
+      "BAKERY": "Bakery",
+      "MEAT": "Meat",
+      "SEAFOOD": "Seafood",
+      "FROZEN": "Frozen",
+      "BEVERAGES": "Beverages",
+      "SNACKS": "Snacks",
+      "PANTRY": "Pantry",
+      "HOUSEHOLD": "Household",
+      "PERSONAL_CARE": "Personal care",
+      "OTHER": "Other"
+    },
+    "absent": {
+      "heading": "The harvester does not run here",
+      "body": "It is switched off in production and in staging on purpose, so nothing is deployed to answer this. Runs happen on a development machine against the compose stack. Nothing is broken and there is nothing to retry."
+    },
+    "down": {
+      "heading": "The harvester did not answer",
+      "body": "Something should be listening in this environment and nothing replied. Check that the harvester service and its database are running."
+    },
+    "blocked": {
+      "service-off": "Harvesting is switched off on this deployment. HARVEST_ENABLED is false, so no run can start. It is server configuration and cannot be changed from here.",
+      "storefront-off": "That storefront is switched off on this deployment. MERCADONA_ENABLED is false, so the run started and stopped before fetching anything. It is server configuration and cannot be changed from here.",
+      "chain-disabled": "That chain is switched off. Turn it on under chain sources, which is application state rather than server configuration.",
+      "unknown": "The run could not start, and the server did not say which switch stopped it."
+    },
+    "switch": {
+      "heading": "What is allowed to happen",
+      "lead": "Three separate decisions, none of them changed from here. They are shown because otherwise there is no way to tell a run that did nothing from a run that was never allowed to.",
+      "state": {
+        "on": "On",
+        "off": "Off",
+        "unknown": "Not known"
+      },
+      "name": {
+        "deployed": "Harvester deployed",
+        "harvestEnabled": "HARVEST_ENABLED",
+        "mercadonaEnabled": "MERCADONA_ENABLED"
+      },
+      "what": {
+        "deployed": "Whether the service exists in this environment at all. Set in the Helm chart.",
+        "harvestEnabled": "Whether a running service may start any run. Set in the service configuration.",
+        "mercadonaEnabled": "Whether that one storefront may be fetched. Set in the service configuration."
+      },
+      "from": {
+        "chart": "From the chart, which switches the harvester off in production and in staging.",
+        "reply": "Something answered a request on this screen.",
+        "silence": "Nothing answered a request on this screen.",
+        "refusal": "The server refused to start a run and named this switch.",
+        "run": "A run got far enough that this switch must have been on.",
+        "failure": "A run failed and named this switch.",
+        "nothing": "No route reports this, and nothing has been attempted that would reveal it."
+      }
+    },
+    "queue": {
+      "tally": "{{remaining}} left, {{decided}} decided",
+      "skip": "Skip for now"
+    },
+    "runs": {
+      "heading": "Harvest runs",
+      "empty": "No runs have been recorded.",
+      "row": {
+        "counts": "{{processed}} processed, {{failed}} failed"
+      },
+      "start": {
+        "heading": "Start a run",
+        "mode": "What to run",
+        "supermarketId": "Chain identifier",
+        "postalCode": "Postal code",
+        "country": "Country",
+        "submit": "Start the run",
+        "starting": "Starting…",
+        "attribution": "A run's writes are recorded against the harvester service, not against you. Starting one is what is being recorded here.",
+        "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
+        "failed": "The run did not start, and the server did not say why."
+      }
+    },
+    "run": {
+      "back": "Back to runs",
+      "abort": "Stop this run",
+      "aborting": "Stopping. The run is flushing what it has already fetched, which is kept, and will finish shortly.",
+      "paused": "This tab is in the background, so the screen has stopped asking. These numbers are from the last read, not from now. Bring the tab forward to carry on.",
+      "pollFailed": "The last read failed. What is shown is from before that.",
+      "progress": {
+        "label": "Run progress",
+        "of": "{{processed}} of {{total}}",
+        "processed": "{{processed}} processed",
+        "unsized": "The run does not know yet how much work it has."
+      },
+      "counter": {
+        "created": "Created",
+        "updated": "Updated",
+        "unchanged": "Unchanged",
+        "notFound": "Not stocked",
+        "failed": "Failed"
+      },
+      "fact": {
+        "requested": "Requested",
+        "started": "Started",
+        "finished": "Finished",
+        "heartbeat": "Last heartbeat",
+        "correlationId": "Correlation identifier"
+      }
+    },
+    "places": {
+      "heading": "Discovered places",
+      "empty": "Every discovered place has been decided.",
+      "import": "Add to the catalog",
+      "reject": "Not a shop we want",
+      "why": "Nothing in the catalog matched this: neither its OpenStreetMap reference nor the same brand nearby. It is being offered rather than created.",
+      "supermarketId": "Chain identifier to file it under (optional)",
+      "near": {
+        "heading": "Others of the same brand nearby",
+        "none": "Nothing else of this brand is near it in the queue."
+      },
+      "field": {
+        "brand": "Brand",
+        "brandKey": "Wikidata identifier",
+        "street": "Street",
+        "city": "City",
+        "postalCode": "Postal code",
+        "country": "Country",
+        "openingHours": "Opening hours",
+        "website": "Website",
+        "provider": "Provider",
+        "externalRef": "Provider reference",
+        "coordinates": "Coordinates"
+      }
+    },
+    "entries": {
+      "heading": "Source entries",
+      "empty": "Every entry for this chain has a catalog item.",
+      "import": "Create a catalog item",
+      "category": "Category",
+      "categoryHelp": "The one thing the source does not tell us. Everything else on the item comes from the entry.",
+      "choose": {
+        "body": "Entries belong to one chain, so choose which chain to work through. The queue reads that chain's entries that have no catalog item yet.",
+        "supermarketId": "Chain identifier",
+        "submit": "Open the queue"
+      },
+      "field": {
+        "brand": "Brand",
+        "externalId": "Source identifier",
+        "ean": "EAN",
+        "sizeFormat": "Size",
+        "price": "Price",
+        "unitPrice": "Unit price",
+        "categoryPath": "Source category",
+        "url": "Product page"
+      }
+    },
+    "refs": {
+      "heading": "Item links",
+      "empty": "Every link has been resolved.",
+      "confirm": "Yes, this is the product",
+      "reject": "No, unlink it",
+      "confidence": "{{percent}}% confident",
+      "problem": {
+        "unmatched": "Never resolved",
+        "stale": "Stopped appearing at the source"
+      },
+      "correct": {
+        "heading": "Point it somewhere else",
+        "help": "If the match is wrong, give the source's own identifier for the right product. That replaces the link rather than removing it, so the item keeps a price.",
+        "externalId": "Source identifier",
+        "submit": "Use this one instead"
+      },
+      "field": {
+        "itemId": "Catalog item",
+        "supermarketId": "Chain",
+        "externalId": "Source identifier",
+        "matchedBy": "Matched by",
+        "status": "Status",
+        "externalUrl": "Product page",
+        "lastSeenAt": "Last seen"
+      }
+    },
+    "sources": {
+      "heading": "Chain sources",
+      "lead": "How each chain is fetched, and whether it is fetched at all. This switch is per chain and is the one on this screen that can be changed from here.",
+      "empty": "No chain has a source configured.",
+      "enabled": "Fetching",
+      "disabled": "Not fetching",
+      "edit": "Change how it is fetched",
+      "field": {
+        "adapter": "Adapter",
+        "workers": "Workers",
+        "rate": "Requests per second",
+        "lastRunAt": "Last run",
+        "lastSuccessAt": "Last success",
+        "failures": "Failures in a row"
+      }
+    }
   }
 }

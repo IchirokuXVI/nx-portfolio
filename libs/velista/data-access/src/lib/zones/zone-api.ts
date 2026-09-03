@@ -11,6 +11,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
 import { TokenStore } from '../auth/token-store';
+import { refuseUnprovenSession } from '../auth/unproven-session';
 import { GatewayError } from '../errors';
 import {
   toDeletedId,
@@ -100,6 +101,7 @@ export class ZoneApi implements ZoneServiceI {
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
     }
+    refuseUnprovenSession(authorized, 'zones.create');
 
     const presented = this._tokens.tokens();
 
@@ -141,6 +143,7 @@ export class ZoneApi implements ZoneServiceI {
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
     }
+    refuseUnprovenSession(authorized, 'zones.join');
 
     const presented = this._tokens.tokens();
 

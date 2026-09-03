@@ -79,19 +79,60 @@ export class NetworkError extends Error {
  *
  * Angular reports a request that never reached a server as status 0, and that one
  * number is the whole difference between "the server said no" and "nothing was said".
- * Two places in this library turn on it, and they are two decisions rather than one
- * repeated: `ConnectionRecovery` treats any answer, a 503 included, as proof the
- * network works, and `TokenStore` treats any answer as proof the refresh token was
- * spent (plan 0035, section 2). They must never disagree, so there is one of these.
+ * `ConnectionRecovery` turns on it, because any answer, a 503 included, proves the
+ * network works.
+ *
+ * **`TokenStore` used to turn on it too, and must not** (plan 0067, section 2).
+ * "Anything the server answered" is the right test for whether the network is up and
+ * the wrong test for whether a credential was refused: a 500 from a gateway that never
+ * reached auth, and a 503 from the proxy while auth restarts, are answers that say
+ * nothing at all about the token. That question is {@link isCredentialRejection}.
  */
 export function hasResponse(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'status' in error &&
-    typeof (error as { status: unknown }).status === 'number' &&
-    (error as { status: number }).status !== 0
-  );
+  return statusOf(error) !== null;
+}
+
+/**
+ * The statuses that are a statement about the credential the request carried.
+ *
+ * 401 is auth refusing the refresh token. 403 is the same refusal one shade further
+ * on, and is included because the two are decided by the same guard and neither can
+ * be retried into a different answer.
+ *
+ * **Everything else is excluded, and 5xx above all** (plan 0067, section 2). The
+ * refresh route is `this.nats.send` behind the gateway, so an auth service that is
+ * down, restarting, or unreachable over the broker produces a 500 `internal` from
+ * `GlobalExceptionFilter`, and a gateway pod that is down produces Envoy's own 503.
+ * Both are the ordinary shape of a deploy. Reading either as "your refresh token was
+ * rejected" deletes the session of every user whose app happened to resume inside that
+ * window, and for a temporary user the session is the account.
+ */
+const REJECTION_STATUSES: readonly number[] = [401, 403];
+
+/**
+ * Whether the server refused the credential, as opposed to failing to answer for it.
+ *
+ * This is the only thing that may delete a session. See {@link hasResponse} for why
+ * the two questions are separate, and `TokenStore` for what turns on the answer.
+ */
+export function isCredentialRejection(error: unknown): boolean {
+  const status = statusOf(error);
+  return status !== null && REJECTION_STATUSES.includes(status);
+}
+
+/** The HTTP status a failure carried, or null when it carried none. */
+function statusOf(error: unknown): number | null {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('status' in error) ||
+    typeof (error as { status: unknown }).status !== 'number'
+  ) {
+    return null;
+  }
+
+  const status = (error as { status: number }).status;
+  return status === 0 ? null : status;
 }
 
 /**

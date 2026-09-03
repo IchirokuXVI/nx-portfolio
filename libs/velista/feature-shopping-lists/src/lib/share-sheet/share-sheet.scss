@@ -53,6 +53,24 @@
   cursor: pointer;
 }
 
+// The system share sheet, under the address rather than beside Copy.
+//
+// `secondary-button` and not the filled treatment `.copy` wears: the two are the
+// same act by two routes, and drawing both as primaries would ask which one is the
+// real one. The full width row also gives the glyph and its word room, which the
+// row above has none of once a wrapped URL is in it.
+.share {
+  @include shared.secondary-button;
+
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-3);
+  color: var(--app-text-primary);
+}
+
+.share-glyph {
+  font-size: var(--app-icon-md);
+}
+
 .joined {
   margin: var(--app-space-3) 0 0;
   font-size: var(--app-text-xs);
