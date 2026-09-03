@@ -19,6 +19,7 @@ const session: AdminSession = {
   displayName: 'Operations',
   accessToken: 'a.b.c',
   expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+  receivedAt: new Date(),
 };
 
 const KEY = 'luna-shopper-admin.session';

@@ -34,6 +34,7 @@ const session: AdminSession = {
   displayName: 'Operations',
   accessToken: 'a.b.c',
   expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+  receivedAt: new Date(),
 };
 
 const me: AdminMe = {
@@ -80,6 +81,7 @@ async function render(
       return outcome.session;
     },
     signInForDevelopment: async () => session,
+    refresh: async () => session,
     readMe: async () => me,
   };
 

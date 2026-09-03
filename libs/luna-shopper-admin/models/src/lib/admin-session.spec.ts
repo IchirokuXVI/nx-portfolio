@@ -20,7 +20,8 @@ const valid = {
 
 describe('toAdminSession', () => {
   it('reads a complete response, with the expiry as an instant', () => {
-    const session = toAdminSession(valid);
+    const receivedAt = new Date('2026-09-03T10:00:00.000Z');
+    const session = toAdminSession(valid, receivedAt);
 
     expect(session).toEqual({
       adminId: 'adm_1',
@@ -28,7 +29,22 @@ describe('toAdminSession', () => {
       displayName: 'Operations',
       accessToken: 'a.b.c',
       expiresAt: new Date('2026-09-03T10:15:00.000Z'),
+      receivedAt,
     });
+  });
+
+  /**
+   * The wire carries no `issuedAt`, so the arrival is the only thing that can
+   * date the token. Defaulted rather than required, because the ordinary caller
+   * is mapping a response that has just come back and passing `new Date()` at
+   * every call site is one more place to forget (plan 0003).
+   */
+  it('dates the session from now when the caller names no arrival', () => {
+    const before = Date.now();
+    const session = toAdminSession(valid);
+
+    expect(session?.receivedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(session?.receivedAt.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   /** An admin who never set one is a normal account, not a broken payload. */

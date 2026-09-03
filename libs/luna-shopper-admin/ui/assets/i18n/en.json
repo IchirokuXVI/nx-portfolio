@@ -28,6 +28,20 @@
       "unknown": "Signing in failed, and the server did not say why. Check that the backend is reachable and try again."
     }
   },
+  "session": {
+    "warning": {
+      "body": "Nothing has been touched for a while, so this session is about to end. Anything you do keeps it.",
+      "keep": "Keep me signed in"
+    },
+    "reauth": {
+      "heading": "Session ended",
+      "body": "Signed in as {{name}}. Enter the password to carry on. Nothing behind this has been lost, including anything half typed.",
+      "password": "Password",
+      "submit": "Carry on",
+      "submitting": "Checking…",
+      "signOut": "Sign out and lose unsaved work"
+    }
+  },
   "placeholder": {
     "heading": "Signed in",
     "body": "Signed in as {{name}}. The screens arrive next; until then this page reports who you are and which deployment answered, and nothing else."
