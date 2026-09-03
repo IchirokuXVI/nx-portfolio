@@ -1,3 +1,5 @@
+> **PR:** [#183](https://github.com/IchirokuXVI/nx-portfolio/pull/183)
+
 # 0057: finishing the shopping
 
 > Server half: `apps/luna-shopper-backend/plans/0059`, which owns every rule this plan
