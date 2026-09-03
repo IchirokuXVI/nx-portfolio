@@ -401,6 +401,7 @@
       "dismissHeard": "Cerrar",
       "suggestions": "Productos que coinciden",
       "groupAdds": "añade sus {{count}} productos",
+      "bestPrice": "Mejor precio: {{price}}",
       "groupBadge": "GRUPO",
       "size": {
         "UNIT": "{{size}} uds",

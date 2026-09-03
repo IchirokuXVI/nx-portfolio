@@ -95,6 +95,7 @@ export class CatalogMemory implements CatalogServiceI {
       kind: 'group',
       group: row,
       itemIds: MEMBERS[row.id] ?? [],
+      offer: null,
     }));
 
     const items: CatalogSuggestion[] = ITEMS.filter((row) =>
@@ -149,7 +150,10 @@ function item(
   unit: UnitOfMeasure,
   productGroupId: string
 ): CatalogItem {
-  return { id, name: { es, en }, brand, size, unit, productGroupId };
+  // No offer, on every row. There is one catalog here and no scopes to price it
+  // against, so a number would be invented rather than modelled, and unpriced is
+  // the state both clusters are permanently in anyway (velista `0063`, section 3).
+  return { id, name: { es, en }, brand, size, unit, productGroupId, offer: null };
 }
 
 function group(id: string, es: string, en: string): ProductGroup {

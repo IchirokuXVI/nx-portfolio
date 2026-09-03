@@ -1,6 +1,12 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type { CatalogItem, CatalogSuggestion } from '@portfolio/velista/models';
+import type {
+  CatalogItem,
+  CatalogSuggestion,
+  ProductGroup,
+  ProductOffer,
+} from '@portfolio/velista/models';
+import { formatMoney } from '@portfolio/velista/platform';
 import { SuggestionList } from './suggestion-list';
 
 /**
@@ -26,7 +32,40 @@ function item(
     size,
     unit,
     productGroupId: null,
+    // Unpriced by default, which is what staging and production are: the tests
+    // that want a price say so, and every other one asserts the row a cluster
+    // with the harvester off draws.
+    offer: null,
   };
+}
+
+/** An offer carrying one number, for the rows that quote one. */
+function offer(
+  price: number | null,
+  currency: string | null = 'EUR'
+): ProductOffer {
+  return {
+    price,
+    currency,
+    unitPrice: null,
+    unitPriceLabel: null,
+    observedAt: null,
+    sourceKind: 'OFFICIAL_WEB',
+    priceScopeId: 'scope-cordoba',
+  };
+}
+
+/** A group row, priced or not. */
+function groupRow(
+  name: string,
+  itemIds: readonly string[],
+  priced: ProductOffer | null = null
+): CatalogSuggestion {
+  const group: ProductGroup = {
+    id: `group-${name}`,
+    name: { es: name, en: name },
+  };
+  return { kind: 'group', group, itemIds, offer: priced };
 }
 
 function suggestions(count: number): readonly CatalogSuggestion[] {
@@ -115,6 +154,19 @@ function names(fixture: ComponentFixture<SuggestionList>): string[] {
       row.querySelector<HTMLElement>('.suggestion-name')?.textContent?.trim() ??
       ''
   );
+}
+
+/**
+ * Every note element drawn, in row order, and **one entry per row that has one**.
+ *
+ * The count matters as much as the text: a priced row and an unpriced one are the
+ * same one line, so a change that put a price under the note rather than after it
+ * would show up here as an extra element rather than as different words.
+ */
+function notes(fixture: ComponentFixture<SuggestionList>): string[] {
+  return [
+    ...panel(fixture).querySelectorAll<HTMLElement>('.suggestion-note'),
+  ].map((element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 }
 
 /** Every size drawn, as the translation key the testing translator hands back. */
@@ -329,13 +381,7 @@ describe('SuggestionList, how big the packet is', () => {
 
   it('never puts a size on a group, which is sizes rather than one of them', async () => {
     const fixture = await render(
-      [
-        {
-          kind: 'group',
-          group: { id: 'group-milk', name: { es: 'Leche', en: 'Milk' } },
-          itemIds: ['item-milk-1l', 'item-milk-half'],
-        },
-      ],
+      [groupRow('Milk', ['item-milk-1l', 'item-milk-half'])],
       'below'
     );
 
@@ -343,5 +389,203 @@ describe('SuggestionList, how big the packet is', () => {
     // a group attaches every one of them.
     expect(sizes(fixture)).toEqual([]);
     expect(fixture.componentInstance.sizeOf(offered(fixture, 0))).toBeNull();
+  });
+});
+
+/**
+ * What a product costs, on the three screens that search the catalog (velista
+ * `0063`).
+ *
+ * The numbers were on the wire from backend `0048` and dropped at the mapper, so
+ * every typeahead in the app answered with a catalog and no prices.
+ *
+ * The rule the whole block turns on: **a row with a price and a row without are
+ * the same shape.** No layout may depend on a price existing, because in staging
+ * and production the harvester is off and no row has one.
+ */
+describe('SuggestionList, what the row says it costs', () => {
+  const priced = (
+    id: string,
+    name: string,
+    brand: string | null,
+    price: number | null
+  ): CatalogSuggestion => ({
+    kind: 'item',
+    item: { ...item(id, name, 1, 'LITER'), brand, offer: offer(price) },
+  });
+
+  it('puts the price after the brand on the note line, joined by the separator', async () => {
+    const fixture = await render(
+      [priced('item-milk-1l', 'Whole milk', 'Hacendado', 1.05)],
+      'below'
+    );
+
+    // A brand and a formatted number are both plain data, so the note is safe to
+    // read off the DOM: nothing on an item row goes through a key.
+    expect(notes(fixture)).toEqual([
+      `Hacendado · ${formatMoney(1.05, 'EUR', 'en')}`,
+    ]);
+    expect(notes(fixture)[0]).toContain('1.05');
+  });
+
+  it('draws the brand alone where nothing has been harvested', async () => {
+    // Every row in staging and production, and the assertion that this plan left
+    // those two clusters looking exactly as they looked before it.
+    const fixture = await render(
+      [
+        {
+          kind: 'item',
+          item: { ...item('item-milk-1l', 'Whole milk'), brand: 'Hacendado' },
+        },
+      ],
+      'below'
+    );
+
+    expect(notes(fixture)).toEqual(['Hacendado']);
+  });
+
+  /**
+   * A scope can carry a product with no number on it, which maps to an offer
+   * whose price is null rather than to no offer. It draws the same nothing, and
+   * that is one branch rather than a scattering of them.
+   */
+  it('draws the brand alone for an offer that carries no number', async () => {
+    const fixture = await render(
+      [priced('item-milk-1l', 'Whole milk', 'Hacendado', null)],
+      'below'
+    );
+
+    expect(notes(fixture)).toEqual(['Hacendado']);
+  });
+
+  it('draws the money alone for a product with no brand', async () => {
+    const fixture = await render(
+      [priced('item-oil', 'Olive oil', null, 1.19)],
+      'below'
+    );
+
+    expect(notes(fixture)).toEqual([formatMoney(1.19, 'EUR', 'en')]);
+  });
+
+  /**
+   * **No empty state, no placeholder, no dash.** A product with neither a brand
+   * nor a price says nothing at all, and the note element is absent rather than
+   * present and blank.
+   */
+  it('draws no note element at all for a row with neither', async () => {
+    const fixture = await render(
+      [{ kind: 'item', item: item('item-bread', 'Sliced bread') }],
+      'below'
+    );
+
+    expect(rows(fixture)).toHaveLength(1);
+    expect(notes(fixture)).toEqual([]);
+  });
+
+  /**
+   * The packet size lives at the row's end and is the only field telling two
+   * otherwise identical records apart, so the price may never be put beside it.
+   */
+  it('leaves the size badge exactly where it was', async () => {
+    const withPrice = await render(
+      [priced('item-milk-1l', 'Whole milk', 'Hacendado', 1.05)],
+      'below'
+    );
+    const without = await render(
+      [{ kind: 'item', item: item('item-milk-1l', 'Whole milk', 1, 'LITER') }],
+      'below'
+    );
+
+    expect(sizes(withPrice)).toEqual(['list.add.size.LITER']);
+    expect(sizes(without)).toEqual(sizes(withPrice));
+  });
+});
+
+/**
+ * A group row's price, which is labelled where an item's is bare (section 6.6).
+ *
+ * A group adds several products and no single price among them is what the row
+ * costs, so a bare number under one would read like an item's and mean something
+ * else. "Best price" says the number is the floor rather than the total.
+ */
+describe('SuggestionList, the best price on a group row', () => {
+  it('follows the "adds N" note on one line, in that order', async () => {
+    const fixture = await render(
+      [groupRow('Milk', ['item-milk-1l', 'item-milk-half'], offer(1.05))],
+      'below'
+    );
+
+    // Both halves are copy, so the testing translator hands back the keys and
+    // the order is what the DOM can prove. The number is asserted below, off
+    // the method, because the key interpolates and the testing translator does
+    // not.
+    expect(notes(fixture)).toEqual(['list.add.groupAdds · list.add.bestPrice']);
+  });
+
+  it('says the number in the reader’s language, under the label key', async () => {
+    const fixture = await render(
+      [groupRow('Milk', ['item-milk-1l'], offer(1.05))],
+      'below'
+    );
+
+    expect(fixture.componentInstance.bestPriceOf(offered(fixture, 0))).toEqual({
+      key: 'list.add.bestPrice',
+      args: { price: formatMoney(1.05, 'EUR', 'en') },
+    });
+  });
+
+  it('draws the note it draws today for a group with no priced member', async () => {
+    const fixture = await render([groupRow('Oil', ['item-oil-1l'])], 'below');
+
+    expect(notes(fixture)).toEqual(['list.add.groupAdds']);
+    expect(
+      fixture.componentInstance.bestPriceOf(offered(fixture, 0))
+    ).toBeNull();
+  });
+
+  /**
+   * Section 6.6's one line rule, asserted rather than described: a priced group
+   * row and an unpriced one have the **same** note element and the same count of
+   * them, so the two rows are the same height.
+   */
+  it('is one note element whether the group is priced or not', async () => {
+    const withPrice = await render(
+      [groupRow('Milk', ['item-milk-1l'], offer(1.05))],
+      'below'
+    );
+    const without = await render([groupRow('Milk', ['item-milk-1l'])], 'below');
+
+    expect(notes(withPrice)).toHaveLength(1);
+    expect(notes(without)).toHaveLength(notes(withPrice).length);
+  });
+
+  /**
+   * The order is the server's ranking and nothing here re-sorts it. The fixture's
+   * cheapest row is deliberately not its first, so a change that let a price
+   * influence the order would move it.
+   */
+  it('lets no price touch the order the server sent', async () => {
+    const fixture = await render(
+      [
+        groupRow('Milk', ['item-milk-1l'], offer(1.05)),
+        {
+          kind: 'item',
+          item: {
+            ...item('item-milk-6', 'Six pack', 6, 'LITER'),
+            offer: offer(5.45),
+          },
+        },
+        {
+          kind: 'item',
+          item: {
+            ...item('item-milk-half', 'Half litre', 0.5, 'LITER'),
+            offer: offer(0.69),
+          },
+        },
+      ],
+      'below'
+    );
+
+    expect(names(fixture)).toEqual(['Milk', 'Six pack', 'Half litre']);
   });
 });

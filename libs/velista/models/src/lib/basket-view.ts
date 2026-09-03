@@ -1,8 +1,8 @@
+import type { ProductOffer } from './domain';
 import type {
   BasketLineKind,
   BasketOriginUnavailableReason,
   ParticipantKind,
-  PriceSourceKind,
   SettlementOutcome,
 } from './enums';
 import type { LocalizedName } from './shopping-profile';
@@ -116,29 +116,6 @@ export interface BasketLineOrigin {
   lineId: string;
   /** What this origin contributed to the line's summed quantity. */
   quantity: number;
-}
-
-/**
- * What one product costs, at the cheapest scope this basket was priced against
- * (velista `0062`, section 3; `ItemOfferView` on the wire).
- *
- * A fact and not a recommendation. The pick is still the first option added
- * and not the cheapest, so a row quoting this is quoting what its product
- * costs, and the pick sheet is where two of them are put next to each other.
- */
-export interface ProductOffer {
-  /** In {@link currency}. Null is a scope that carries the product with no price on it. */
-  readonly price: number | null;
-  readonly currency: string | null;
-  /** The source's own figure, never recomputed here. Null when it published none. */
-  readonly unitPrice: number | null;
-  /** "EUR/L", "EUR/lv". Text for a human, not a unit to parse. */
-  readonly unitPriceLabel: string | null;
-  /** Without it a price has no age. */
-  readonly observedAt: Date | null;
-  readonly sourceKind: PriceSourceKind;
-  /** Which scope quoted it. Opaque, and resolved against {@link BasketView.scopes}. */
-  readonly priceScopeId: string;
 }
 
 /**

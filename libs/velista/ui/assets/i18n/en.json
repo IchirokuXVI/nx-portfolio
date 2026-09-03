@@ -401,6 +401,7 @@
       "dismissHeard": "Close",
       "suggestions": "Matching products",
       "groupAdds": "adds its {{count}} products",
+      "bestPrice": "Best price: {{price}}",
       "groupBadge": "GROUP",
       "size": {
         "UNIT": "{{size}} units",

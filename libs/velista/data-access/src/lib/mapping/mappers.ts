@@ -12,6 +12,8 @@ import {
   MEMBERSHIP_STATUSES,
   POSTAL_CODE_SOURCE_FALLBACK,
   POSTAL_CODE_SOURCES,
+  PRICE_SOURCE_KIND_FALLBACK,
+  PRICE_SOURCE_KINDS,
   SETTLEMENT_OUTCOME_FALLBACK,
   SETTLEMENT_OUTCOMES,
   UNIT_OF_MEASURE_FALLBACK,
@@ -51,6 +53,7 @@ import {
   type PresenceEditor,
   type PresenceUser,
   type ProductGroup,
+  type ProductOffer,
   type ProfileGenerationScope,
   type ProfilePostalCode,
   type ResolvedPostalCode,
@@ -467,12 +470,58 @@ export function toLineSettlement(raw: unknown): LineSettlement | null {
 }
 
 /**
+ * From catalog's `ItemOfferView` (velista `0062`, section 3).
+ *
+ * Null for anything that is not an offer, which is the ordinary case: absent
+ * on a read that priced nothing, null on a product with no price at the
+ * reader's scopes, and both draw the same nothing. The scope id is the one
+ * thing required, because an offer that cannot say where it came from cannot be
+ * resolved against `BasketView.scopes`; a price without one would still be a
+ * number, and it is dropped rather than drawn unplaceable, so that the pick
+ * sheet never says "cheapest" about a figure it cannot account for.
+ *
+ * It lives here rather than in `basket-mappers.ts`, which is where `0062` wrote
+ * it, because the typeahead reads offers too and that file already imports from
+ * this one (velista `0063`, section 5). One mapper and not two: a second, laxer
+ * one for the suggestion row would be two functions disagreeing about what an
+ * offer is. A caller with no scope map simply ignores a field it cannot resolve.
+ */
+export function toProductOffer(raw: unknown): ProductOffer | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const priceScopeId = str(raw['priceScopeId']);
+  if (priceScopeId === null) {
+    return null;
+  }
+
+  return {
+    price: typeof raw['price'] === 'number' ? raw['price'] : null,
+    currency: nullableStr(raw['currency']),
+    unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
+    unitPriceLabel: nullableStr(raw['unitPriceLabel']),
+    observedAt: date(raw['priceObservedAt']),
+    sourceKind: oneOf(
+      raw['priceSourceKind'],
+      PRICE_SOURCE_KINDS,
+      PRICE_SOURCE_KIND_FALLBACK
+    ),
+    priceScopeId,
+  };
+}
+
+/**
  * From `catalog.ItemView` (backend plan 0048).
  *
- * Deliberately narrow: an id, a name, a brand, how big the packet is and the
- * group it belongs to. Everything about price is still out of scope until the
- * backend's backlog `0004` exists (velista plan 0043, section 9), and carrying
- * fields nothing renders would be a promise the screen cannot keep.
+ * Deliberately narrow: an id, a name, a brand, how big the packet is, the group
+ * it belongs to and the one price a row draws. Narrower than `ItemView` on
+ * purpose, rather than carrying every price field the wire has, which would be a
+ * promise the screen cannot keep.
+ *
+ * `bestOffer` is read since velista `0063`: the cheapest price at the scopes the
+ * caller was resolved to, or null. It is the price of **this packet**, since the
+ * catalog holds one record per size, and nothing here divides it by anything.
  *
  * `unitSize` and `defaultUnit` are read because **the catalog holds one record
  * per size**, so a search for "leche" answers with the same name and the same
@@ -496,6 +545,7 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
     size: nullableNum(raw['unitSize']),
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     productGroupId: nullableStr(raw['productGroupId']),
+    offer: toProductOffer(raw['bestOffer']),
   };
 }
 
@@ -519,11 +569,14 @@ export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
   }
 
   if (raw['kind'] === 'group') {
-    const offer = raw['group'];
-    if (!isRecord(offer)) {
+    // The whole `ProductGroupOfferView`, named for what it is: the price on it
+    // is under `offer`, so a variable called `offer` here would have to be read
+    // as `offer['offer']` one line down (velista `0063`, section 5).
+    const groupOffer = raw['group'];
+    if (!isRecord(groupOffer)) {
       return null;
     }
-    const group = toProductGroup(offer['group']);
+    const group = toProductGroup(groupOffer['group']);
     return group === null
       ? null
       : {
@@ -532,7 +585,12 @@ export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
           // The products choosing it attaches, whole (section 6). An offer that
           // names none is still a legitimate suggestion: it adds a line with the
           // group's name and no set, which the line page can fill in later.
-          itemIds: mapArray(offer['itemIds'], str),
+          itemIds: mapArray(groupOffer['itemIds'], str),
+          // `offer`, and never `bestOffer`: the wire calls a group's price one
+          // and an item's the other, and they are the same shape, so the wrong
+          // key here reads as a catalog with no prices in it rather than as a
+          // mistake.
+          offer: toProductOffer(groupOffer['offer']),
         };
   }
 
