@@ -194,6 +194,38 @@ export function hoistPlatformStats(): string {
   });
 }
 
+/**
+ * Publishes the body of the unauthenticated `GET /v1/admin/environment`
+ * (`apps/luna-shopper-admin/plans/0001`, section 6).
+ *
+ * Composed here rather than authored in the contracts library for the reason the
+ * two above are: no broker message has this shape. The gateway answers it from its
+ * own configuration and asks no service anything.
+ *
+ * `environment` is a plain string rather than an enum, which is deliberate and
+ * matches `admin-auth.AdminMeView`: `ENVIRONMENT_NAME` is a free value, so a
+ * deployment may report a name nobody has thought of yet. The back office maps what
+ * it receives into its own three names and renders anything else as "unknown"
+ * rather than colouring itself from a value it does not understand, so documenting
+ * a closed set here would be a promise the configuration does not keep.
+ */
+export function hoistAdminEnvironment(): string {
+  return registerComponent('admin.AdminEnvironmentResponse', {
+    type: 'object',
+    description:
+      'Which deployment answered. Readable with no token, so the back office can draw its per environment accent colour before anybody has signed in.',
+    required: ['environment'],
+    additionalProperties: false,
+    properties: {
+      environment: {
+        type: 'string',
+        description:
+          'The name this deployment reports itself by, from `ENVIRONMENT_NAME`. Conventionally `production`, `staging` or `development`, but not constrained to them.',
+      },
+    },
+  });
+}
+
 /** Publishes the shared RFC 7807 error body. */
 export function hoistProblemDetails(): string {
   return registerComponent(

@@ -27,11 +27,15 @@ environment: production
 # .github/workflows/release.yml), which is why https://ichirokuxvi.com stays on
 # corsOrigins below.
 #
-# The three names must resolve to `ipAddress` BEFORE this deploys: cert-manager
+# All four names must resolve to `ipAddress` BEFORE this deploys: cert-manager
 # requests a certificate per Gateway listener the moment the chart applies, and
 # Let's Encrypt rate limits failed validations hard. `.app` is on the HSTS preload
 # list, so there is no plain HTTP fallback to fall back to while a certificate is
 # pending; the site is simply unreachable until it issues.
+#
+# They all exist, and each is a CNAME onto the apex rather than an A record of its
+# own: `admin.velista.app` is a canonical name for `velista.app`, which answers
+# `ipAddress`. So moving `ipAddress` moves all four at once.
 #
 # `admin.` joins them for the same reason `api.` and `rt.` did: the back office
 # exists to administer the backend that serves velista, and putting it under the
