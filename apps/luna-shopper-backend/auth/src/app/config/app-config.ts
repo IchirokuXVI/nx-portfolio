@@ -2,6 +2,7 @@ import { registerAs } from '@nestjs/config';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
 import { parseDurationMs } from '../tokens/duration';
+import { assertDevAutologinIsSafe } from './local-host';
 import { readKey } from './read-key';
 
 /**
@@ -45,6 +46,45 @@ export const authValidationSchema = Joi.object({
   AUTH_JWT_KID: Joi.string().required(),
   ACCESS_TOKEN_TTL: Joi.string().default('15m'),
   REFRESH_TOKEN_TTL: Joi.string().default('30d'),
+
+  // The operator keypair (plan 0071, section 3), and a SECOND one rather than the
+  // auth key with a different audience. Five services already hold
+  // AUTH_JWT_PUBLIC_KEY, so one key for both kinds of token would make every one
+  // of them find an admin token structurally valid and reject it only if it
+  // remembered to check `aud`. Realtime, which authenticates sockets, is exactly
+  // where forgetting that is plausible and expensive. A second key makes the
+  // mistake unrepresentable rather than merely discouraged.
+  //
+  // Required, unlike the Google and SMTP blocks below. Those are optional because
+  // an unconfigured deployment degrades to a feature that is absent; a missing
+  // signing key degrades to tokens signed with nothing, which is not a lesser
+  // version of the feature. `provision-release.sh` generates the pair beside the
+  // auth one and `--check` asserts the Secret keys resolve, so an absent key is a
+  // preflight failure taking seconds rather than a pod that boots and cannot
+  // authenticate anybody.
+  ADMIN_JWT_PRIVATE_KEY: Joi.string(),
+  ADMIN_JWT_PRIVATE_KEY_FILE: Joi.string(),
+  ADMIN_JWT_PUBLIC_KEY: Joi.string(),
+  ADMIN_JWT_PUBLIC_KEY_FILE: Joi.string(),
+  ADMIN_JWT_KID: Joi.string().required(),
+  // Configurable so development can raise it; section 8 is why that cannot leak
+  // into production.
+  ADMIN_ACCESS_TOKEN_TTL: Joi.string().default('15m'),
+
+  // Lockout (plan 0071, section 7). Separate from the gateway's throttling
+  // because throttling limits a source and this protects an account: one admin
+  // username is a far better brute force target than a user base, since the
+  // attacker knows the name is one of very few.
+  ADMIN_LOGIN_LOCKOUT_THRESHOLD: Joi.number().integer().min(1).default(5),
+  ADMIN_LOGIN_LOCKOUT_WINDOW: Joi.string().default('15m'),
+
+  // Development signs in without a password (plan 0071, section 8). Its own
+  // variable and NOT derived from NODE_ENV, and auth refuses to boot with it on
+  // and a non local database. When on it issues a token for a named EXISTING
+  // admin rather than inventing one, so a development session has a real actor id
+  // and the audit rows of plan 0075 are attributable even locally.
+  ADMIN_DEV_AUTOLOGIN: Joi.boolean().default(false),
+  ADMIN_DEV_AUTOLOGIN_USERNAME: Joi.string().allow('').default(''),
 
   // Google OAuth (login with Google). Optional, and mirroring the gateway's
   // schema exactly (plan 0026, section 3.2).
@@ -97,7 +137,9 @@ export const authValidationSchema = Joi.object({
   ...telemetryValidationSchema,
 })
   .or('AUTH_JWT_PRIVATE_KEY', 'AUTH_JWT_PRIVATE_KEY_FILE')
-  .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE');
+  .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE')
+  .or('ADMIN_JWT_PRIVATE_KEY', 'ADMIN_JWT_PRIVATE_KEY_FILE')
+  .or('ADMIN_JWT_PUBLIC_KEY', 'ADMIN_JWT_PUBLIC_KEY_FILE');
 
 export interface AuthConfig {
   port: number;
@@ -122,6 +164,30 @@ export interface AuthConfig {
      * ordinary case; this is the backstop for a sweep that never ran.
      */
     participantTokenTtl: string;
+  };
+  /**
+   * The operator identity (plan 0071). Its own key, its own TTL and its own
+   * lockout, sharing nothing with the block above but the algorithm.
+   */
+  admin: {
+    privateKey: string;
+    publicKey: string;
+    kid: string;
+    accessTokenTtl: string;
+    lockout: {
+      /** Consecutive failures for one username before it is refused outright. */
+      threshold: number;
+      /** How far back the failures are counted, and how long the refusal lasts. */
+      windowMs: number;
+    };
+    /**
+     * Sign in with no password, for development only. False everywhere else, and
+     * the boot has already refused to continue if it was true against a non local
+     * database, so nothing downstream needs to re-check where it is running.
+     */
+    devAutologin: boolean;
+    /** The existing admin a development autologin issues a token for. */
+    devAutologinUsername: string;
   };
   google: {
     clientId: string;
@@ -158,6 +224,40 @@ export interface AuthConfig {
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
+/**
+ * The operator block, built apart from the rest so the one thing in this file
+ * that can refuse a boot has a name (plan 0071, section 8).
+ *
+ * The autologin check runs HERE rather than at the point of use. Config load is
+ * the earliest moment the resolved database URL and the switch are both known,
+ * and a check any later is a check a request path can be written around.
+ */
+function adminConfig(): AuthConfig['admin'] {
+  const devAutologin = process.env.ADMIN_DEV_AUTOLOGIN === 'true';
+  assertDevAutologinIsSafe(devAutologin, process.env.AUTH_DB_URL);
+
+  return {
+    privateKey: readKey(
+      process.env.ADMIN_JWT_PRIVATE_KEY,
+      process.env.ADMIN_JWT_PRIVATE_KEY_FILE
+    ),
+    publicKey: readKey(
+      process.env.ADMIN_JWT_PUBLIC_KEY,
+      process.env.ADMIN_JWT_PUBLIC_KEY_FILE
+    ),
+    kid: process.env.ADMIN_JWT_KID as string,
+    accessTokenTtl: process.env.ADMIN_ACCESS_TOKEN_TTL ?? '15m',
+    lockout: {
+      threshold: Number(process.env.ADMIN_LOGIN_LOCKOUT_THRESHOLD ?? 5),
+      windowMs: parseDurationMs(
+        process.env.ADMIN_LOGIN_LOCKOUT_WINDOW ?? '15m'
+      ),
+    },
+    devAutologin,
+    devAutologinUsername: process.env.ADMIN_DEV_AUTOLOGIN_USERNAME ?? '',
+  };
+}
+
 export const authConfiguration = registerAs(
   'auth',
   (): AuthConfig => ({
@@ -182,6 +282,7 @@ export const authConfiguration = registerAs(
       // than the value being implicit (plan 0051, section 9).
       participantTokenTtl: process.env.PARTICIPANT_TOKEN_TTL ?? '15m',
     },
+    admin: adminConfig(),
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',

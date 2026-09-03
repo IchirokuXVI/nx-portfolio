@@ -56,6 +56,18 @@ services:
       # below) and so is an origin this stack has to answer.
       CORS_ORIGINS: http://localhost:4200,http://localhost:4205
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
+      # The operator trust root (plan 0071, section 3). Required, so this file
+      # states it rather than inheriting: it does not read luna-slot.sh's output,
+      # and a newly required variable missing here is a gateway that dies at boot.
+      ADMIN_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/admin-jwt.pub
+      # What GET /v1/admin/auth/me reports back. The e2e stack is a development
+      # one and says so.
+      ENVIRONMENT_NAME: development
+      # Off, even here. A suite that needs an operator signs one in with a
+      # password it created through the admin:create command, so the login path
+      # under test is the real one rather than the shortcut around it.
+      ADMIN_DEV_AUTOLOGIN: 'false'
+      ADMIN_DEV_AUTOLOGIN_USERNAME: dev-admin
       PORT: '3000'
       # Google sign in at the gateway (plan 0023). The credentials are fictional:
       # no suite here can complete a real consent screen, and what the stack does
@@ -165,6 +177,16 @@ services:
       AUTH_JWT_KID: dev-1
       ACCESS_TOKEN_TTL: 15m
       REFRESH_TOKEN_TTL: 30d
+      # The operator identity (plan 0071). Auth holds the private half and nothing
+      # else does, exactly as with the pair above.
+      ADMIN_JWT_PRIVATE_KEY_FILE: /run/secrets/luna/admin-jwt.key
+      ADMIN_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/admin-jwt.pub
+      ADMIN_JWT_KID: dev-admin-1
+      ADMIN_ACCESS_TOKEN_TTL: 15m
+      ADMIN_LOGIN_LOCKOUT_THRESHOLD: '5'
+      ADMIN_LOGIN_LOCKOUT_WINDOW: 15m
+      ADMIN_DEV_AUTOLOGIN: 'false'
+      ADMIN_DEV_AUTOLOGIN_USERNAME: dev-admin
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
       SMTP_USER: ''

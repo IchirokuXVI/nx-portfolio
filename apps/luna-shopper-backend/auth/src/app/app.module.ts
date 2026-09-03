@@ -12,6 +12,9 @@ import {
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import { AdminIdentityService } from './admin/admin-identity.service';
+import { AdminTokenService } from './admin/admin-token.service';
+import { AdminController } from './admin/admin.controller';
 import type { AuthConfig } from './config/app-config';
 import { authConfiguration, authValidationSchema } from './config/app-config';
 import { AUTH_ENTITIES } from './entities';
@@ -95,12 +98,17 @@ import { UsernameGenerator } from './username/username-generator.service';
       },
     }),
   ],
-  controllers: [IdentityController],
+  controllers: [IdentityController, AdminController],
   providers: [
     IdentityService,
     StatsService,
     TokenService,
     TokenGrantService,
+    // The operator identity (plan 0071). It shares `PasswordService` so argon2
+    // parameters stay in one place, and shares nothing else with the user facing
+    // services above it.
+    AdminTokenService,
+    AdminIdentityService,
     PasswordService,
     IdentityEventsPublisher,
     UsernameGenerator,

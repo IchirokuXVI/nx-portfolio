@@ -18,6 +18,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
 import { GatewayAccountModule } from './account/account.module';
+import { GatewayAdminModule } from './admin/admin.module';
 import { GatewayAssistantModule } from './assistant/assistant.module';
 import { GatewayAuthModule } from './auth/auth.module';
 import { GatewayCatalogModule } from './catalog/catalog.module';
@@ -99,6 +100,9 @@ import { GatewayZonesModule } from './zones/zones.module';
     }),
     // Auth endpoints + JWT verification (plan 0005).
     GatewayAuthModule,
+    // The operator identity (plan 0071): a second trust root, its own passport
+    // strategy, and the namespace plan 0073 moves the back office routes into.
+    GatewayAdminModule,
     // Zone + membership endpoints (plan 0006).
     GatewayZonesModule,
     // Shopping list / line / comment endpoints (plan 0007).

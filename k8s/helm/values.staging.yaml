@@ -62,6 +62,11 @@ lunaShopperBackend:
     # velista while both are live, plus the back office.
     corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app,https://admin.staging.velista.app
     authJwtKid: staging-1
+    adminJwtKid: staging-admin-1
+    # Staging says so, which is the whole point: an operator cannot mistake which
+    # database they are about to write to. ADMIN_DEV_AUTOLOGIN is absent here for
+    # the same reason it is absent from production.
+    environmentName: staging
     googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # Register this URI in the Google console beside the production one. Google
     # matches redirect_uri exactly, so the two are two entries, not a pattern.

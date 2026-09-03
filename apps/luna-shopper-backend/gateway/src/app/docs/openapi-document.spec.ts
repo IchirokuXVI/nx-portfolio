@@ -44,6 +44,10 @@ async function loadAppModule(): Promise<new () => unknown> {
   process.env.NATS_URL ??= 'nats://localhost:4222';
   process.env.REDIS_URL ??= 'redis://localhost:6379';
   process.env.AUTH_JWT_PUBLIC_KEY ??= 'documentation-only-public-key';
+  // The second trust root (plan 0071, section 3). Required like the first, so the
+  // module refuses to load without it, and stubbed here for the same reason: this
+  // builds a document from controller metadata and verifies nothing.
+  process.env.ADMIN_JWT_PUBLIC_KEY ??= 'documentation-only-admin-public-key';
   const { AppModule } = await import('../app.module');
   return AppModule as unknown as new () => unknown;
 }

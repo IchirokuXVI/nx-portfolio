@@ -192,6 +192,10 @@ REQUIRED_ENV_FILES=(
 )
 
 KEYPAIR="$root/apps/luna-shopper-backend/secrets/jwt.key"
+# The operator keypair (plan 0071, section 3). A second pair, not a second use of
+# the first: an admin token must not verify against the key five services already
+# hold, which is a property two keys have and one key with two audiences does not.
+ADMIN_KEYPAIR="$root/apps/luna-shopper-backend/secrets/admin-jwt.key"
 
 # luna-slot.sh sends openssl's stderr to /dev/null, so a missing openssl would
 # abort it under `set -e` with nothing printed at all. Check for it up front and
@@ -225,7 +229,7 @@ bootstrap_config() {
   # This is the case that used to fail, and it is the common one.
   if (( ${#present[@]} == 0 )); then
     echo "==> no service .env files found: configuring this checkout for slot 0 (the default ports)"
-    if [[ ! -f "$KEYPAIR" ]]; then
+    if [[ ! -f "$KEYPAIR" || ! -f "$ADMIN_KEYPAIR" ]]; then
       require_openssl || return 1
     fi
     bash "$here/luna-slot.sh" 0
@@ -241,12 +245,23 @@ bootstrap_config() {
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$KEYPAIR" 2>/dev/null
     openssl pkey -in "$KEYPAIR" -pubout -out "${KEYPAIR%.key}.pub" 2>/dev/null
   fi
+  # Checked separately from the pair above rather than beside it, because a
+  # checkout configured before plan 0071 has the first and not the second, and
+  # that is precisely the checkout this branch exists for.
+  if [[ ! -f "$ADMIN_KEYPAIR" ]]; then
+    require_openssl || return 1
+    echo "==> generating the missing dev admin JWT keypair in apps/luna-shopper-backend/secrets"
+    openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$ADMIN_KEYPAIR" 2>/dev/null
+    openssl pkey -in "$ADMIN_KEYPAIR" -pubout -out "${ADMIN_KEYPAIR%.key}.pub" 2>/dev/null
+  fi
 
   # Readable by the `node` user the images run as, for the reason luna-slot.sh
   # spells out where it generates the same pair. Applied to an existing key too,
   # not only one this branch just wrote.
   if [[ -f "$KEYPAIR" ]]; then chmod 0644 "$KEYPAIR"; fi
   if [[ -f "${KEYPAIR%.key}.pub" ]]; then chmod 0644 "${KEYPAIR%.key}.pub"; fi
+  if [[ -f "$ADMIN_KEYPAIR" ]]; then chmod 0644 "$ADMIN_KEYPAIR"; fi
+  if [[ -f "${ADMIN_KEYPAIR%.key}.pub" ]]; then chmod 0644 "${ADMIN_KEYPAIR%.key}.pub"; fi
 
   if (( ${#missing[@]} == 0 )); then
     return 0
