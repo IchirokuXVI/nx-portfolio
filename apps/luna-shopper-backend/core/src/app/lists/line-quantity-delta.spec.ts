@@ -331,6 +331,47 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     expect(view.quantity).toBe(3);
   });
 
+  it('leaves an approved line approved, because a delta never reaches the new reversion', async () => {
+    // Plan 0076, section 3. The reversion an edit can cause is exempted for
+    // `DECIDE` and `MANAGE`, and they are the only callers this path authorizes
+    // on an approved line, so the two rules cancel. Were it otherwise, velista's
+    // quantity reel would un-approve the line once per unit a thumb passed over.
+    const w = build({
+      permissions: DECIDER,
+      approvalStatus: LineApprovalStatus.APPROVED,
+    });
+
+    const view = await w.service.addQuantity({
+      userId: SHOPPER,
+      lineId: 'li1',
+      delta: 2,
+    });
+
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    expect(view.approvedByUserId).toBe(APPROVER);
+    expect(view.quantity).toBe(5);
+  });
+
+  it('still reopens a rejected line on a list that auto approves', async () => {
+    // The asymmetry is deliberate (plan 0076, section 2.3): the option exempts an
+    // approved line from the reversion and never a rejected one, because a
+    // rejection is a decision somebody made and an auto approval is not.
+    const w = build({
+      permissions: WRITER,
+      approvalStatus: LineApprovalStatus.REJECTED,
+      autoApproveLines: true,
+      quantity: 1,
+    });
+
+    const view = await w.service.addQuantity({
+      userId: SHOPPER,
+      lineId: 'li1',
+      delta: 1,
+    });
+
+    expect(view.approvalStatus).toBe(LineApprovalStatus.PENDING);
+  });
+
   describe('a negative delta on an approved line no longer splits', () => {
     it('writes one row, exactly as an absolute lowering does', async () => {
       // Plan 0037 wrote a second `NOT_AVAILABLE` line holding the shortfall, so

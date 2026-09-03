@@ -122,6 +122,10 @@ function select(overrides: Partial<LinePageInput> = {}): LinePageVm | null {
     canDelete: true,
     busy: false,
     groupNameOf: (groupId) => (groupId === MILK_GROUP.id ? MILK_GROUP : null),
+    // Already translated by the container, which is where the translator lives. The
+    // words are the ones `list.page.you` and `list.page.someone` carry.
+    youLabel: 'you',
+    someoneLabel: 'somebody',
     ...overrides,
   });
 }
@@ -129,6 +133,48 @@ function select(overrides: Partial<LinePageInput> = {}): LinePageVm | null {
 describe('selectLinePage', () => {
   it('is null for a line the store does not hold', () => {
     expect(select({ line: undefined })).toBeNull();
+  });
+
+  /**
+   * Who put the line there (velista plan 0066, section 4).
+   *
+   * Three cases and the third covers two situations, which is the one worth asserting
+   * twice: an author who left the zone and a line older than the field are drawn the
+   * same way on purpose, and "somebody" is true of both.
+   */
+  describe('who added the line', () => {
+    it('is the reader, in their own word', () => {
+      expect(select({ line: line({ createdByUserId: ME }) })?.addedBy).toBe(
+        'you'
+      );
+    });
+
+    it('is the name when the zone can resolve it', () => {
+      const page = select({
+        line: line({ createdByUserId: 'user-ana' }),
+        nameOf: (userId) => (userId === 'user-ana' ? 'Ana' : null),
+      });
+
+      expect(page?.addedBy).toBe('Ana');
+    });
+
+    it('is somebody when the zone cannot name them', () => {
+      // The author has left the zone, so their name is no longer this reader's to have.
+      const page = select({
+        line: line({ createdByUserId: 'user-gone' }),
+        nameOf: () => null,
+      });
+
+      expect(page?.addedBy).toBe('somebody');
+    });
+
+    it('is somebody for a line from a server that predates the field', () => {
+      // `strOr(raw['createdByUserId'], '')` in the mapper is what produces this, and it
+      // is not a person the zone will ever resolve.
+      expect(select({ line: line({ createdByUserId: '' }) })?.addedBy).toBe(
+        'somebody'
+      );
+    });
   });
 
   describe('the two histories', () => {

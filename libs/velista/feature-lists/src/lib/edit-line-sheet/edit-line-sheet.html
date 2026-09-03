@@ -6,50 +6,48 @@
 >
   <h2 class="title" id="edit-line-title">{{ 'list.edit.title' | rokuT }}</h2>
 
-  <!--
-    Two modes of one sheet (plan 0030, section 4). In `quantity` mode the content is
-    **shown and not editable** rather than hidden: the number being changed is a number
-    of something, and a stepper with no idea what it counts is a sheet you have to
-    remember the row for. A paragraph and not a disabled input, because a greyed out
-    field invites a tap that does nothing, and nothing here is going to become editable
-    later.
-  -->
-  @if (scope() === 'full') {
-    <label class="label" for="edit-line-content">
-      {{ 'list.edit.content' | rokuT }}
-    </label>
-    <input
-      (input)="onContentInput($event)"
-      [attr.maxlength]="maxLength"
-      [value]="content()"
-      autocomplete="off"
-      class="field"
-      id="edit-line-content"
-      type="text"
-    />
-  } @else {
-    <p class="label">{{ 'list.edit.content' | rokuT }}</p>
-    <p class="shown">{{ content() }}</p>
-  }
+  <!-- The content is live in both modes: fixing what a line says is what the sheet is
+  for, and plan 0066 opened it to the writer whose line was approved before they read it
+  back. -->
+  <label class="label" for="edit-line-content">
+    {{ 'list.edit.content' | rokuT }}
+  </label>
+  <input
+    (input)="onContentInput($event)"
+    [attr.maxlength]="maxLength"
+    [value]="content()"
+    autocomplete="off"
+    class="field"
+    id="edit-line-content"
+    type="text"
+  />
 
+  <!--
+    Two modes of one sheet (plan 0030, section 4; plan 0066, section 2.1). In `content`
+    mode the quantity is **shown and not editable** rather than hidden: the words being
+    changed are the words for a number of something, and a sheet that dropped the count
+    is one you have to remember the row for. A paragraph and not a disabled stepper,
+    because a greyed out control invites a tap that does nothing, and nothing here is
+    going to become editable later.
+  -->
   <div class="quantity-row">
     <span class="label">{{ 'list.add.quantity' | rokuT }}</span>
-    <lib-quantity-stepper [(value)]="quantity" [disabled]="submitting()" />
+    @if (scope() === 'full') {
+      <lib-quantity-stepper [(value)]="quantity" [disabled]="submitting()" />
+    } @else {
+      <p class="shown">{{ quantity() }}</p>
+    }
   </div>
 
   <!--
-    Before the save, not after it. The server keeps the difference as a second line
-    marked as not in the shop, so what the list asked for is not quietly lost (backend
-    plan 0037, section 4), and a row appearing out of nowhere under the one just edited
-    is confusing exactly once per person.
+    Before the save, not after it (plan 0066, section 3). A row that quietly went back to
+    awaiting approval under somebody who was fixing a typo is confusing exactly once per
+    person, which is once too many for a sentence this cheap.
 
-    `role="status"` rather than `alert`: this is what is about to happen, not a failure,
-    and it changes as the stepper moves.
+    `role="status"` rather than `alert`: this is what is about to happen, not a failure.
   -->
-  @if (warnsAboutRemainder()) {
-    <p class="remainder" role="status">
-      {{ 'list.edit.remainder' | rokuT: { count: remainder() } }}
-    </p>
+  @if (warnsAboutUnapproval()) {
+    <p class="notice" role="status">{{ 'list.edit.unapproves' | rokuT }}</p>
   }
 
   @if (errorKey(); as key) {

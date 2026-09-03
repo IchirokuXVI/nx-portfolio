@@ -29,6 +29,16 @@
       </p>
 
       <!--
+        Who put it there (plan 0066, section 4). Under where the line lives and before
+        the tiles, because it answers the same kind of question: not what this line is,
+        but where it came from. A caption and never a control: there is no profile
+        screen for a member to tap through to.
+      -->
+      <p class="added-by">
+        {{ 'list.page.addedBy' | rokuT: { who: line.addedBy } }}
+      </p>
+
+      <!--
         The names could not be read, which is **not** the line being empty (plan 0047,
         section 1.2). The line above still says where the line lives and never says it
         has no products, because it has some: what failed is the request for their

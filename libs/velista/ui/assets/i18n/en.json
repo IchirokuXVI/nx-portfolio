@@ -453,8 +453,7 @@
       "title": "Change this line",
       "content": "What is it",
       "save": "Save",
-      "remainder_one": "The one you are not bringing back stays on the list, marked as not in the shop",
-      "remainder_other": "The {{count}} you are not bringing back stay on the list, marked as not in the shop"
+      "unapproves": "Saving this will put the line back to awaiting approval."
     },
     "confirm": {
       "deleteLine": {
@@ -580,6 +579,7 @@
       "fromGroup": "From {{name}}",
       "fromGroupUnnamed": "From a group",
       "addedByYou": "Added by you",
+      "addedBy": "Added by {{who}}",
       "keepProduct": "Keep",
       "keepProductLabel": "Keep {{name}} on this line",
       "productsFull": {

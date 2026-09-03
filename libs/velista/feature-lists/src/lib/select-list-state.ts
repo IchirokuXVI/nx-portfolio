@@ -379,22 +379,23 @@ function captionKeyFor(awaiting: boolean, rejected: boolean): string | null {
  * A function of the caller's permissions **and** the line's approval together, which is
  * the point of deriving it per row (plan 0030, section 4): a `MANAGE` holder gets the
  * full sheet on every row, while a caller holding only `DECIDE` gets no edit on a
- * pending row and the quantity stepper on an approved one. Writing those two answers
- * down separately is how they end up disagreeing.
+ * pending row and the whole sheet on an approved one. Writing those two answers down
+ * separately is how they end up disagreeing.
  *
- * The three cases mirror backend plan 0036 section 4.1 exactly, in the order the server
- * checks them:
+ * The cases mirror backend plan 0076 section 1 exactly, in the order the server checks
+ * them:
  *
  * - `MANAGE` may edit any field of any line, because a governed thing needs somebody who
  *   can fix a line that was approved with a typo in it;
- * - `WRITE` may edit a `PENDING` or `REJECTED` line and never an `APPROVED` one, so a
- *   writer cannot quietly change what the group agreed to;
- * - `DECIDE` may change the quantity of an `APPROVED` line and nothing else, which is
- *   the single field a person in the aisle learns that the list did not know.
+ * - `DECIDE` may edit any field of an `APPROVED` line, and the line keeps its approval,
+ *   because they can approve it again in the next request anyway;
+ * - `WRITE` may edit any line, and every field but one: an `APPROVED` line yields its
+ *   content and not its number, because the content is what a person typed wrong and the
+ *   quantity is what the group agreed to.
  *
- * A `DECIDE` holder who needs more than the number still has a way through and it is not
- * this sheet: `DECIDE` puts a line back to `PENDING`, so un-approve, edit, approve reads
- * correctly and leaves the approval saying what happened.
+ * Until plan 0066 a writer got nothing at all on an approved line, which landed on the
+ * person who typed "Mile" and could not fix it: a list that auto approves, or an author
+ * who holds `DECIDE`, approves the line before its author has read it back.
  *
  * Exported for the edit sheet, which is a routed child and has to reach the same answer
  * about the same row without the page handing it down.
@@ -409,11 +410,14 @@ export function editScopeFor(
     return 'full';
   }
 
-  if (!approved && abilities.canWrite) {
-    return 'full';
+  if (approved) {
+    if (abilities.canDecide) {
+      return 'full';
+    }
+    return abilities.canWrite ? 'content' : null;
   }
 
-  return approved && abilities.canDecide ? 'quantity' : null;
+  return abilities.canWrite ? 'full' : null;
 }
 
 /**

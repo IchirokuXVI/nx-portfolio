@@ -471,12 +471,13 @@ describe('selectListState', () => {
       });
     });
 
-    it('keeps a writer away from an approved line entirely', () => {
-      // A writer whose line has been agreed to cannot quietly change what was agreed to
-      // (backend plan 0036, section 4.1).
+    it('lets a writer fix an approved line, without giving them its number', () => {
+      // Plan 0066, section 2. It used to be nothing at all, which landed on the person
+      // who typed "Mile" on a list that approves lines by itself and could not fix it.
+      // The number is still not theirs: that is what the group agreed to.
       expect(row(WRITER)).toMatchObject({
-        actions: ['comments'],
-        editScope: null,
+        actions: ['edit', 'comments'],
+        editScope: 'content',
       });
     });
 
@@ -492,11 +493,30 @@ describe('selectListState', () => {
       });
     });
 
-    it('gives a decider the quantity and nothing else on an approved row', () => {
+    it('gives a decider the whole sheet on an approved row', () => {
+      // It was the quantity alone until backend plan 0076: the same caller reached the
+      // rest in three requests anyway, by un-approving, editing and approving again.
       expect(row(DECIDER)).toMatchObject({
         actions: ['edit', 'comments'],
-        editScope: 'quantity',
+        editScope: 'full',
       });
+    });
+
+    it('never produces the quantity scope that plan 0066 deleted', () => {
+      // The deletion proved rather than assumed. A mode the sheet still branches on and
+      // no row can reach is the kind of thing that survives three plans and then gets a
+      // feature built on it.
+      for (const permissions of [READ_ONLY, WRITER, DECIDER, BOTH, ADMIN]) {
+        for (const candidate of [line(), pending, rejected, missing]) {
+          expect(row(permissions, [candidate]).editScope).not.toBe('quantity');
+        }
+      }
+    });
+
+    it('offers a read only caller no edit on any approval state', () => {
+      for (const candidate of [line(), pending, rejected]) {
+        expect(row(READ_ONLY, [candidate]).editScope).toBeNull();
+      }
     });
 
     it('never lets a decider delete an approved line', () => {

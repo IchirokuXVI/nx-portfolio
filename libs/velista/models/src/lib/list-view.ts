@@ -51,20 +51,25 @@ export type LineAction =
   | 'moveDown';
 
 /**
- * The two modes of the one edit sheet (plan 0030, section 4).
+ * The two modes of the one edit sheet (plan 0030, section 4; plan 0066, section 2).
  *
- * `full` makes every field live: `WRITE` on a line that is `PENDING` or `REJECTED`, or
- * `MANAGE` on any line at all. `quantity` shows the content and lets only the number be
- * changed: `DECIDE` on an `APPROVED` line, which is the single field a person in the
- * aisle learns that the list did not know.
+ * `full` makes every field live: `WRITE` on a line that is `PENDING` or `REJECTED`,
+ * `MANAGE` on any line at all, or `DECIDE` on an `APPROVED` one. `content` shows the
+ * quantity and lets only the content be changed: `WRITE` alone on an `APPROVED` line,
+ * whose author may fix what they typed but may not change how many the group agreed to.
  *
  * Two modes of one sheet rather than two sheets, because they are the same gesture from
  * the same row and the only difference is which fields are live. Naming the **scope** of
  * the edit rather than the permission behind it is deliberate: three different
  * permission combinations produce `full`, and a sheet that switched on a role would have
  * to learn all three.
+ *
+ * There used to be a `quantity` member, the mirror of this one, for a `DECIDE` holder on
+ * an approved line. Backend plan 0076 gave that caller the whole sheet, so nothing could
+ * produce it any more, and a mode the sheet still branches on that no row can reach is
+ * the kind of thing that survives three plans and then gets a feature built on it.
  */
-export type LineEditScope = 'full' | 'quantity';
+export type LineEditScope = 'full' | 'content';
 
 /**
  * The three indicators a row can carry (velista plan 0043, section 3.3).
