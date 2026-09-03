@@ -1,3 +1,5 @@
+> **PR:** [#192](https://github.com/IchirokuXVI/nx-portfolio/pull/192)
+
 # 0007 The people and what they share
 
 Users, zones, lists and shopping lists. The last of the screens, and the one that deliberately does

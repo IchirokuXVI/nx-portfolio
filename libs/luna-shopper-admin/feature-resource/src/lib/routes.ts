@@ -1,5 +1,8 @@
 import type { Route } from '@angular/router';
-import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
+import {
+  hasDetailScreen,
+  type AnyResourceDescriptor,
+} from '@portfolio/luna-shopper-admin/models';
 import { NotFoundPage } from '@portfolio/luna-shopper-admin/ui';
 import { AdminShellPage } from './admin-shell-page';
 import { ResourceFormPage } from './resource-form-page';
@@ -33,16 +36,35 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
       path: descriptor.segment,
       children: [
         { path: '', component: ResourceListPage, data },
-        {
-          path: 'new',
-          component: ResourceFormPage,
-          data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
-        },
-        {
-          path: ':id',
-          component: ResourceFormPage,
-          data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
-        },
+
+        // A create screen only where there is something to create. A resource
+        // with no `POST` behind it would otherwise answer a typed URL with a
+        // form that fills in, submits, and is refused by the gateway, which is
+        // a worse answer than the not found page (plan 0007, section 1).
+        ...(descriptor.actions?.create === true
+          ? [
+              {
+                path: 'new',
+                component: ResourceFormPage,
+                data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
+              },
+            ]
+          : []),
+
+        // The detail screen: the resource's own component where it named one,
+        // and the generic form otherwise, which draws the fields it cannot
+        // change beside the ones it can. A resource with neither has no such
+        // route, and `resource-list` draws its rows as text rather than as
+        // controls that lead nowhere.
+        ...(hasDetailScreen(descriptor)
+          ? [
+              {
+                path: ':id',
+                component: descriptor.detail ?? ResourceFormPage,
+                data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
+              },
+            ]
+          : []),
       ],
     },
   ];

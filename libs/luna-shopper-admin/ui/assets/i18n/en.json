@@ -370,5 +370,187 @@
         "failures": "Failures in a row"
       }
     }
+  },
+  "people": {
+    "detail": {
+      "back": "Back to the list",
+      "loading": "Loading…",
+      "actions": "Actions"
+    },
+    "users": {
+      "one": "person",
+      "many": "People",
+      "userId": "Identifier",
+      "username": "Username",
+      "displayName": "Display name",
+      "email": "Email address",
+      "emailVerifiedAt": "Address confirmed",
+      "hasPassword": "Has a password",
+      "providers": "Sign in methods",
+      "createdAt": "Signed up",
+      "updatedAt": "Last changed",
+      "zones": "Zones",
+      "noZones": "This person is not in any zone.",
+      "zonesUnavailable": "The zones could not be read. The account above is still what the server sent.",
+      "kind": {
+        "label": "Kind",
+        "REGISTERED": "Registered",
+        "TEMPORARY": "Temporary"
+      },
+      "filter": {
+        "username": "Username contains",
+        "email": "Email contains",
+        "verified": "Address confirmed",
+        "createdAfter": "Signed up on or after",
+        "createdBefore": "Signed up on or before"
+      },
+      "action": {
+        "resendVerification": "Resend confirmation",
+        "deleteAccount": "Delete account"
+      },
+      "confirm": {
+        "resendVerification": {
+          "heading": "Send the confirmation email again?",
+          "body": "A new confirmation email goes to {{email}}, the address on {{name}}'s account. This skips the wait an ordinary resend has to sit through.",
+          "confirm": "Send it"
+        },
+        "deleteAccount": {
+          "heading": "Delete this account?",
+          "body": "{{name}}'s identity is removed and their shopping lists are deleted. Any zone they own is marked for deletion, and their memberships are retired with the name they used in each zone scrubbed. What they wrote on other people's lists stays. There is no undo.",
+          "confirm": "Delete the account"
+        }
+      }
+    },
+    "zones": {
+      "one": "zone",
+      "many": "Zones",
+      "id": "Identifier",
+      "name": "Name",
+      "owner": "Owner",
+      "joinCode": "Join code",
+      "memberCount": "Members",
+      "listCount": "Lists",
+      "markedForDeletionAt": "Marked for deletion",
+      "createdAt": "Created",
+      "updatedAt": "Last changed",
+      "members": "Members",
+      "noMembers": "This zone has no members.",
+      "lists": "Lists",
+      "noLists": "This zone has no lists.",
+      "lineCount": "{{count}} lines",
+      "status": {
+        "label": "State",
+        "ACTIVE": "Active",
+        "MARKED_FOR_DELETION": "Marked for deletion"
+      },
+      "role": {
+        "OWNER": "Owner",
+        "ADMIN": "Admin",
+        "MEMBER": "Member"
+      },
+      "membership": {
+        "PENDING": "Waiting to be let in",
+        "APPROVED": "In the zone",
+        "KICKED": "Removed",
+        "BANNED": "Banned"
+      },
+      "filter": {
+        "userId": "Zones this person is in",
+        "createdAfter": "Created on or after",
+        "createdBefore": "Created on or before"
+      },
+      "action": {
+        "regenerateJoinCode": "New join code",
+        "deleteZone": "Delete zone",
+        "transferOwnership": "Make owner",
+        "kickMember": "Remove",
+        "banMember": "Ban"
+      },
+      "confirm": {
+        "regenerateJoinCode": {
+          "heading": "Replace the join code?",
+          "body": "{{name}} gets a new join code. Anybody holding the old one can no longer use it, including a link somebody was sent an hour ago.",
+          "confirm": "Replace it"
+        },
+        "deleteZone": {
+          "heading": "Delete this zone?",
+          "body": "{{name}} is deleted, with its lists, its lines and everything settled inside it. Every member loses it from their app. There is no undo.",
+          "confirm": "Delete the zone"
+        },
+        "transferOwnership": {
+          "heading": "Hand the zone over?",
+          "body": "{{member}} becomes the owner of {{name}}. Whoever owns it now becomes an admin instead.",
+          "confirm": "Make them the owner"
+        },
+        "kickMember": {
+          "heading": "Remove this member?",
+          "body": "{{member}} loses {{name}} from their app. They can join again with the code, so ban them instead if that is not what you want.",
+          "confirm": "Remove them"
+        },
+        "banMember": {
+          "heading": "Ban this member?",
+          "body": "{{member}} loses {{name}} and cannot rejoin with the code. What they already wrote on the zone's lists stays.",
+          "confirm": "Ban them"
+        }
+      }
+    },
+    "lists": {
+      "one": "list",
+      "many": "Lists",
+      "id": "Identifier",
+      "name": "Name",
+      "zone": "Zone",
+      "zoneId": "Zone identifier",
+      "createdByUserId": "Created by",
+      "lineCount": "Lines",
+      "sharedWithZone": "Shared with the zone",
+      "autoApproveLines": "Lines approved automatically",
+      "createdAt": "Created",
+      "updatedAt": "Last changed",
+      "lines": "Lines",
+      "noLines": "This list has no lines.",
+      "approval": {
+        "PENDING": "Waiting for approval",
+        "APPROVED": "Approved",
+        "REJECTED": "Rejected"
+      },
+      "filter": {
+        "zoneId": "In this zone",
+        "createdByUserId": "Created by this person"
+      }
+    },
+    "baskets": {
+      "one": "shopping list",
+      "many": "Shopping lists",
+      "id": "Identifier",
+      "name": "Name",
+      "ownerUserId": "Owner",
+      "zoneIds": "Zones the lines came from",
+      "lineCount": "Lines",
+      "generatedAt": "Generated",
+      "updatedAt": "Last changed",
+      "lines": "Lines",
+      "noLines": "This shopping list has no lines.",
+      "status": {
+        "label": "State",
+        "DRAFT": "Being shopped",
+        "ACTIVE": "Active",
+        "COMPLETED": "Finished",
+        "ARCHIVED": "Archived"
+      },
+      "filter": {
+        "ownerUserId": "Belonging to this person",
+        "zoneId": "With lines from this zone"
+      }
+    },
+    "admins": {
+      "one": "admin",
+      "many": "Admins",
+      "username": "Username",
+      "displayName": "Display name",
+      "disabledAt": "Disabled",
+      "lastLoginAt": "Last signed in",
+      "note": "Admins are read only here, on purpose. There is no route that creates, changes or removes one, so adding an admin means running \"npx nx run luna-shopper-backend-auth:admin:create\" on the server, or \"node admin-cli.js create <username>\" inside the auth pod."
+    }
   }
 }

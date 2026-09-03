@@ -50,7 +50,8 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
       params: toParams(query, this._source.pageSize),
     });
 
-    return toPage<T>(body);
+    const read = this._source.page;
+    return read === undefined ? toPage<T>(body) : read(body);
   }
 
   read(id: string): Promise<T> {

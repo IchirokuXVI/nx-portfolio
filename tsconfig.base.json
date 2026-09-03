@@ -176,6 +176,9 @@
       ],
       "@portfolio/luna-shopper-admin/feature-harvest": [
         "./libs/luna-shopper-admin/feature-harvest/src/index.ts"
+      ],
+      "@portfolio/luna-shopper-admin/feature-people": [
+        "./libs/luna-shopper-admin/feature-people/src/index.ts"
       ]
     }
   },

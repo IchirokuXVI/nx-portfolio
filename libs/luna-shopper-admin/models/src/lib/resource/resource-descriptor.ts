@@ -1,3 +1,4 @@
+import type { Type } from '@angular/core';
 import type {
   EnumOption,
   FieldDescriptor,
@@ -92,6 +93,34 @@ export type FilterDescriptor =
       readonly kind: 'boolean';
       readonly param: string;
       readonly label: string;
+    }
+  /**
+   * A day, sent as an ISO 8601 instant.
+   *
+   * The gateway's bounds are timestamps and the control is a date, so the
+   * conversion happens once in the filter rather than in each descriptor that
+   * wants to ask "created between". `edge` says which end of the day to send:
+   * a lower bound starts at midnight and an upper bound ends at the next one.
+   */
+  | {
+      readonly kind: 'date';
+      readonly param: string;
+      readonly label: string;
+      readonly edge: 'start' | 'end';
+    }
+  /**
+   * Another resource, chosen by name (plan 0004, section 6).
+   *
+   * The same control the form uses for a reference field, for the same reason:
+   * "zones belonging to this person" is a question an operator asks by name,
+   * and a filter that demanded a pasted uuid would be a filter nobody uses.
+   */
+  | {
+      readonly kind: 'reference';
+      readonly param: string;
+      readonly label: string;
+      /** The `name` of the resource being pointed at. */
+      readonly resource: string;
     };
 
 /**
@@ -101,12 +130,31 @@ export type FilterDescriptor =
  * exists for. It is here rather than in `0006` so that those screens are a
  * descriptor rather than a component.
  */
+/**
+ * What to ask before a named action runs.
+ *
+ * Three keys rather than a boolean, because a generic question is the wrong
+ * question. Every action in `0007` is destructive or hard to reverse and
+ * several are irreversible, and the confirmation has to name the specific thing
+ * being acted on and say what goes with it: deleting an account says whose, and
+ * says that the zones they own go too.
+ *
+ * The body is translated with the row's title as `name`, so one key per action
+ * says the whole sentence.
+ */
+export interface ActionConfirmation {
+  readonly heading: string;
+  readonly body: string;
+  /** What the button that goes through with it says. */
+  readonly confirm: string;
+}
+
 export interface NamedAction<T extends ResourceRow = ResourceRow> {
   readonly name: string;
   /** A translation key. */
   readonly label: string;
-  /** Whether the operator is asked first. */
-  readonly confirm?: boolean;
+  /** What to ask first. Absent means the action runs on the first click. */
+  readonly confirm?: ActionConfirmation;
   /**
    * Whether this row can have it done to it right now.
    *
@@ -125,7 +173,16 @@ export interface ResourceActions<T extends ResourceRow = ResourceRow> {
   readonly create?: boolean;
   readonly edit?: boolean;
   readonly delete?: boolean;
-  readonly named?: readonly NamedAction<T>[];
+  /**
+   * The resource's named actions, built in an injection context.
+   *
+   * A factory rather than an array, for the same reason {@link
+   * ResourceDescriptor.gateway} is one: an action calls a service, the
+   * descriptor is a constant declared at module scope, and `inject` only works
+   * where Angular is running. Everything about an action except what it *does*
+   * is still static, so a screen can list them without running anything.
+   */
+  named?(): readonly NamedAction<T>[];
 }
 
 export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
@@ -147,12 +204,47 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
   title(row: T): string;
   readonly fields: readonly FieldDescriptor<T>[];
   readonly list: ListPresentation<T>;
+  /**
+   * A translation key for a sentence above the list.
+   *
+   * For a screen whose shape needs explaining rather than a screen that is
+   * short of a feature. The admin table is the case it exists for: an operator
+   * looking for the button that adds one finds a sentence naming the server
+   * command instead of an empty toolbar (plan 0007, section 2).
+   */
+  readonly note?: string;
   readonly filters?: readonly FilterDescriptor[];
   /** The orders the backend accepts, sent as `order`. Absent means none. */
   readonly sorts?: readonly EnumOption[];
   readonly actions?: ResourceActions<T>;
+  /**
+   * The component that draws one row, when the generic form cannot.
+   *
+   * The generic form is the detail view for anything whose rows are flat, which
+   * is every catalog resource: it draws the fields it cannot change beside the
+   * ones it can. It is not the detail view for a zone, whose interesting
+   * content is its membership and its lists, or for a list, whose content is
+   * its lines. Those get a component, named here, and the route factory mounts
+   * it at `:id` instead.
+   *
+   * Absent, with no edit either, means the resource has no detail screen at all
+   * and its rows do not open. That is the admin table (plan 0007, section 2).
+   */
+  readonly detail?: Type<unknown>;
   /** Called in an injection context, so the gateway can inject what it needs. */
   gateway(): ResourceGateway<T>;
+}
+
+/**
+ * Whether one row of this resource can be opened.
+ *
+ * The route factory and the list read the same answer, so a row that opens
+ * always has somewhere to go and a row with nowhere to go is not a button.
+ */
+export function hasDetailScreen<T extends ResourceRow>(
+  descriptor: ResourceDescriptor<T>
+): boolean {
+  return descriptor.detail !== undefined || descriptor.actions?.edit === true;
 }
 
 /**

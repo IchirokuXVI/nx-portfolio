@@ -1,5 +1,5 @@
 import { localizedTextValue } from './localized-text';
-import type { ResourceDescriptor } from './resource-descriptor';
+import { defineResource, type ResourceDescriptor } from './resource-descriptor';
 import {
   EMPTY_VALUE_KEY,
   FALSE_VALUE_KEY,
@@ -178,5 +178,60 @@ describe('toRowView', () => {
 
   it('keeps the row, for a named action that needs it', () => {
     expect(toRowView(descriptor, row, options).row).toBe(row);
+  });
+});
+
+/**
+ * A field that says where its displayed value comes from.
+ *
+ * The shape it exists for is a zone row: the gateway decorates it with the
+ * owner's name from a second call to auth, and that name is null whenever the
+ * id resolved to nobody. The rule is that the screen renders the id and the
+ * listing still succeeds (plan 0074, section 3), which is one expression on the
+ * descriptor rather than a special case in the list.
+ */
+describe('a field that reads from somewhere else', () => {
+  const decorated = defineResource<{
+    id: string;
+    ownerName: string | null;
+    ownerUserId: string;
+  }>({
+    name: 'zones',
+    segment: 'zones',
+    labels: { one: 'zones.one', many: 'zones.many' },
+    title: (entry) => entry.id,
+    fields: [
+      {
+        kind: 'text',
+        name: 'ownerName',
+        label: 'zones.owner',
+        editable: false,
+        read: (entry) => entry.ownerName ?? entry.ownerUserId,
+      },
+    ],
+    list: { columns: ['ownerName'], compact: ['ownerName'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  });
+
+  it('shows the property when it has one', () => {
+    const view = toRowView(
+      decorated,
+      { id: 'z1', ownerName: 'rosa', ownerUserId: 'u1' },
+      options
+    );
+
+    expect(view.cells['ownerName']).toEqual({ text: 'rosa' });
+  });
+
+  it('falls back to what the field named instead', () => {
+    const view = toRowView(
+      decorated,
+      { id: 'z1', ownerName: null, ownerUserId: 'u1' },
+      options
+    );
+
+    expect(view.cells['ownerName']).toEqual({ text: 'u1' });
   });
 });
