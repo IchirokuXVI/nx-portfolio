@@ -53,9 +53,15 @@ env:
   # still mounts the remote at that path, it just fetches remoteEntry.mjs from
   # here. The chart has to agree (k8s/helm/values.production.yaml, hostOverrides).
   PROD_MFE_REMOTE_URLS: velista=https://velista.app
-  # Which backend the production velista image talks to (velista plan 0014).
-  # Ignored by every app except velista, exactly as MFE_BASE_URL is ignored by
-  # every app except the shell. Note `rt.` for realtime: the chart routes it on
+  # Which backend the production velista image talks to (velista plan 0014), and
+  # the back office with it: luna-shopper-admin reads the same `LUNA_GATEWAY_URL` on
+  # its own build (its plan 0001, section 7), since it talks to the same gateway on
+  # different routes. One deployment has one gateway, so a second variable naming it
+  # could only ever disagree with this one.
+  #
+  # The gateway URL is ignored by every app except those two, and the realtime URL by
+  # every app except velista, exactly as MFE_BASE_URL is ignored by every app except
+  # the shell. Note `rt.` for realtime: the chart routes it on
   # its own host, and environment.prod.ts used to name `api.` for both. Both
   # moved to velista.app with the app they serve.
   PROD_LUNA_GATEWAY_URL: https://api.velista.app

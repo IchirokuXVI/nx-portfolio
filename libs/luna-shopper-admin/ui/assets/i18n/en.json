@@ -1,0 +1,19 @@
+{
+  "app": {
+    "name": "Luna Shopper admin"
+  },
+  "environment": {
+    "label": "Environment",
+    "production": "Production",
+    "staging": "Staging",
+    "development": "Development",
+    "unknown": "Unknown",
+    "checking": "Checking which environment answered…",
+    "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does.",
+    "sourcedFromApi": "Reported by the gateway this app is talking to, not by the build."
+  },
+  "placeholder": {
+    "heading": "The app exists",
+    "body": "Signing in arrives next. Until then this page reports which deployment answered, and nothing else."
+  }
+}

@@ -177,6 +177,28 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/velista
     hostPrefix: velista
     path: /
+  # The back office for the luna-shopper backend (luna-shopper-admin plan 0001).
+  #
+  # Named after the backend it administers rather than after velista: velista is one
+  # interface consuming that backend and there could be twenty more, so an admin tool
+  # named after one consumer would be named after the wrong thing.
+  #
+  # The **host does not follow the name**, and that is deliberate rather than an
+  # oversight. It is `admin.velista.app`: the record already exists and it is the
+  # domain the operator will type. Both clusters override this entry's host (see
+  # `hostOverrides`), so the `admin` prefix below is only what a single domain deploy
+  # would fall back to.
+  #
+  # `path: /` emits no rewrite filter, which is what a host root wants. It is **not**
+  # a micro-frontend: no remote entry, no exposed routes, and no entry in the shell's
+  # `remotes` list, so nothing here is loaded by the shell.
+  #
+  # DNS is the one manual prerequisite, as it was for velista: cert-manager cannot
+  # solve an HTTP-01 challenge for a name that does not resolve.
+  - name: luna-shopper-admin
+    image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-admin
+    hostPrefix: admin
+    path: /
 
 # ---------------------------------------------------------------------------
 # Luna Shopper backend (plan 0002).

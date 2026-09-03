@@ -156,8 +156,14 @@
       "@portfolio/velista/feature-shell": [
         "./libs/velista/feature-shell/src/index.ts"
       ],
-      "@portfolio/velista/feature-shopping-lists": [
-        "./libs/velista/feature-shopping-lists/src/index.ts"
+      "@portfolio/luna-shopper-admin/models": [
+        "./libs/luna-shopper-admin/models/src/index.ts"
+      ],
+      "@portfolio/luna-shopper-admin/data-access": [
+        "./libs/luna-shopper-admin/data-access/src/index.ts"
+      ],
+      "@portfolio/luna-shopper-admin/ui": [
+        "./libs/luna-shopper-admin/ui/src/index.ts"
       ]
     }
   },

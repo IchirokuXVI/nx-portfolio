@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      A holding title. The real one carries the environment name and is set at
+      runtime by `DocumentTitle` (plan 0001, section 6), because which deployment
+      this is comes from the API and cannot be baked into a static document.
+    -->
+    <title>Luna Shopper admin</title>
+    <base href="/" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <link href="favicon.ico" rel="icon" type="image/x-icon" />
+    <!--
+      No manifest and no apple touch icon, unlike velista's document. This app is
+      not installable and has no service worker (plan 0001, section 4).
+    -->
+  </head>
+  <body>
+    <app-luna-shopper-admin-root></app-luna-shopper-admin-root>
+  </body>
+</html>

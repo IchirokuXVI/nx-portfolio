@@ -19,11 +19,17 @@ environment: staging
 #
 # Each is a record of its own. `api.staging.velista.app` is NOT covered by an A
 # record on `staging.velista.app`, and a wildcard on `*.velista.app` does not reach
-# it either: a wildcard matches one label. All three have to exist and resolve to
+# it either: a wildcard matches one label. All four have to exist and resolve to
 # `ipAddress` before this deploys, or cert-manager burns Let's Encrypt's failed
 # validation budget retrying names that cannot answer.
+#
+# `admin.staging.velista.app` is the newest of the four and the one most likely to
+# be missed: production's `admin.velista.app` already exists, so it is easy to
+# assume this one does too. It does not, and a wildcard does not cover it. Create
+# the A record before the first deploy that includes the back office.
 hostOverrides:
   velista: staging.velista.app
+  luna-shopper-admin: admin.staging.velista.app
   luna-shopper-backend-gateway: api.staging.velista.app
   luna-shopper-backend-realtime: rt.staging.velista.app
 
@@ -52,8 +58,9 @@ lunaShopperBackend:
   enabled: true
   config:
     logLevel: debug
-    # Both origins while both are live, exactly as production.
-    corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app
+    # Three origins, exactly as production, one label down: the portfolio and
+    # velista while both are live, plus the back office.
+    corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app,https://admin.staging.velista.app
     authJwtKid: staging-1
     googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # Register this URI in the Google console beside the production one. Google
