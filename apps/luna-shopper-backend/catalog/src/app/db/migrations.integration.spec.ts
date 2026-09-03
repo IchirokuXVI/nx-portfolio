@@ -53,6 +53,8 @@ describeIntegration('catalog schema (real Postgres)', () => {
       'product_groups',
       // Plan 0060.
       'postal_code_points',
+      // Plan 0075.
+      'catalog_audit',
     ]) {
       expect(names.has(table)).toBe(true);
     }

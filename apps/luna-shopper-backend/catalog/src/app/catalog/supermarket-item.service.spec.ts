@@ -5,12 +5,14 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, type Repository } from 'typeorm';
-import type {
-  Item,
-  PriceScope,
+// `SupermarketItem` is a value here: the audit double keys on the entity class.
+import {
   SupermarketItem,
-  SupermarketLocation,
+  type Item,
+  type PriceScope,
+  type SupermarketLocation,
 } from '../entities';
+import { fakeAudit } from './catalog-audit.testing';
 import { SupermarketItemService } from './supermarket-item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 
@@ -83,14 +85,24 @@ describe('SupermarketItemService', () => {
     const locations = {
       findOne: jest.fn(async () => location),
     } as unknown as Repository<SupermarketLocation>;
+    // Plan 0075: the write and its audit row share a transaction. The double
+    // routes the write back to `supermarketItems`, so every assertion below
+    // still watches the same `save`.
+    const audit = fakeAudit([
+      [
+        SupermarketItem,
+        { name: 'supermarket_items', repository: supermarketItems },
+      ],
+    ]);
     const svc = new SupermarketItemService(
       supermarketItems,
       items,
       scopes,
       locations,
-      admin
+      admin,
+      audit.service
     );
-    return { svc, admin, supermarketItems, items, scopes, locations };
+    return { svc, admin, supermarketItems, items, scopes, locations, audit };
   }
 
   it('upsert is gated to the platform admin', async () => {
@@ -218,7 +230,10 @@ describe('SupermarketItemService.adminList (plan 0073, section 4)', () => {
       {} as Repository<Item>,
       {} as Repository<PriceScope>,
       {} as Repository<SupermarketLocation>,
-      admin
+      admin,
+      // A read: it opens no transaction, so an unbound double is the honest
+      // double. A write reaching it here would throw rather than pass quietly.
+      fakeAudit([]).service
     );
     return { svc, qb, admin };
   }
@@ -288,6 +303,12 @@ describe('SupermarketItemService overwrite rules (plan 0038, section 6.5)', () =
         return rows;
       }),
     } as unknown as Repository<SupermarketItem>;
+    const audit = fakeAudit([
+      [
+        SupermarketItem,
+        { name: 'supermarket_items', repository: supermarketItems },
+      ],
+    ]);
     const svc = new SupermarketItemService(
       supermarketItems,
       { findOne: jest.fn(async () => ({ id: 'item-1' })) } as unknown as Repository<Item>,
@@ -295,9 +316,10 @@ describe('SupermarketItemService overwrite rules (plan 0038, section 6.5)', () =
       {
         findOne: jest.fn(async () => null),
       } as unknown as Repository<SupermarketLocation>,
-      admin
+      admin,
+      audit.service
     );
-    return { svc, saved };
+    return { svc, saved, audit };
   }
 
   it('does not overwrite an ADMIN price, and reports the disagreement', async () => {

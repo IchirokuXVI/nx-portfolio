@@ -1,3 +1,4 @@
+import { CatalogAudit } from './catalog-audit.entity';
 import { Item } from './item.entity';
 import { PostalCodePoint } from './postal-code-point.entity';
 import { PriceScope } from './price-scope.entity';
@@ -8,6 +9,11 @@ import { SupermarketLocation } from './supermarket-location.entity';
 import { Supermarket } from './supermarket.entity';
 
 export { BaseEntity } from './base.entity';
+export {
+  AuditAction,
+  AuditActorKind,
+  CatalogAudit,
+} from './catalog-audit.entity';
 export { Item } from './item.entity';
 export { PostalCodePoint } from './postal-code-point.entity';
 export { PriceScope } from './price-scope.entity';
@@ -30,4 +36,6 @@ export const CATALOG_ENTITIES = [
   // Reference data, loaded by a migration and never written by a service
   // (plan 0060, section 2).
   PostalCodePoint,
+  // Written inside every write above it, and read by nothing (plan 0075).
+  CatalogAudit,
 ];

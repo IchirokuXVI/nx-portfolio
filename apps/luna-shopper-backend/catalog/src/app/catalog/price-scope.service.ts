@@ -18,6 +18,10 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, Repository } from 'typeorm';
 import { PriceScope, Supermarket } from '../entities';
+import {
+  type AuditedWrite,
+  CatalogAuditService,
+} from './catalog-audit.service';
 import { toPriceScopeView } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 
@@ -45,20 +49,22 @@ export class PriceScopeService {
     private readonly scopes: Repository<PriceScope>,
     @InjectRepository(Supermarket)
     private readonly supermarkets: Repository<Supermarket>,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    private readonly audit: CatalogAuditService
   ) {}
 
   async create(req: CreatePriceScopeRequest): Promise<PriceScopeView> {
-    await this.admin.requireAdmin(req);
+    const actor = await this.admin.requireAdmin(req);
     await this.requireSupermarket(req.supermarketId);
+    const draft = this.scopes.create({
+      supermarketId: req.supermarketId,
+      kind: req.kind,
+      externalKey: req.externalKey ?? null,
+      label: req.label ?? null,
+    });
     try {
-      const saved = await this.scopes.save(
-        this.scopes.create({
-          supermarketId: req.supermarketId,
-          kind: req.kind,
-          externalKey: req.externalKey ?? null,
-          label: req.label ?? null,
-        })
+      const saved = await this.audit.write(actor, (tx) =>
+        tx.create(PriceScope, draft)
       );
       return toPriceScopeView(saved);
     } catch (error) {
@@ -72,8 +78,9 @@ export class PriceScopeService {
   }
 
   async update(req: UpdatePriceScopeRequest): Promise<PriceScopeView> {
-    await this.admin.requireAdmin(req);
+    const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.priceScopeId);
+    const before = { ...row };
     if (req.kind !== undefined) {
       row.kind = req.kind;
     }
@@ -83,16 +90,16 @@ export class PriceScopeService {
     if (req.label !== undefined) {
       row.label = req.label;
     }
-    return toPriceScopeView(await this.scopes.save(row));
+    return toPriceScopeView(
+      await this.audit.write(actor, (tx) => tx.update(PriceScope, before, row))
+    );
   }
 
   async delete(req: PriceScopeIdRequest): Promise<{ id: string }> {
-    await this.admin.requireAdmin(req);
+    const actor = await this.admin.requireAdmin(req);
+    const row = await this.load(req.priceScopeId);
     try {
-      const result = await this.scopes.delete({ id: req.priceScopeId });
-      if (!result.affected) {
-        throw new NotFoundException('Price scope not found');
-      }
+      await this.audit.write(actor, (tx) => tx.delete(PriceScope, row));
     } catch (error) {
       if (isPgError(error, PG_FOREIGN_KEY_VIOLATION)) {
         throw new ConflictException(
@@ -144,13 +151,19 @@ export class PriceScopeService {
    * is exactly the shape the schema had before scopes existed. The migration
    * seeded these for every location that already existed; this is the same rule
    * applied to a location created afterwards.
+   *
+   * **It takes the caller's transaction** rather than opening its own (plan
+   * 0075). The only caller is a location being created, and the two rows are one
+   * act: a scope left behind by a location save that then failed is a scope
+   * nothing points at, and before this the failure produced exactly that.
    */
   async ensureStoreScope(
+    tx: AuditedWrite,
     supermarketId: string,
     locationId: string,
     label: PriceScope['label'] = null
   ): Promise<PriceScope> {
-    const existing = await this.scopes.findOne({
+    const existing = await tx.manager.findOne(PriceScope, {
       where: {
         supermarketId,
         kind: PriceScopeKind.STORE,
@@ -160,7 +173,8 @@ export class PriceScopeService {
     if (existing) {
       return existing;
     }
-    return this.scopes.save(
+    return tx.create(
+      PriceScope,
       this.scopes.create({
         supermarketId,
         kind: PriceScopeKind.STORE,

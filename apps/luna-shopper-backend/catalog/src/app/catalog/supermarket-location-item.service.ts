@@ -15,6 +15,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { Item, SupermarketLocation, SupermarketLocationItem } from '../entities';
+import { CatalogAuditService } from './catalog-audit.service';
 import { toSupermarketLocationItemView } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 
@@ -40,13 +41,14 @@ export class SupermarketLocationItemService {
     @InjectRepository(Item) private readonly items: Repository<Item>,
     @InjectRepository(SupermarketLocation)
     private readonly locations: Repository<SupermarketLocation>,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    private readonly audit: CatalogAuditService
   ) {}
 
   async upsert(
     req: UpsertSupermarketLocationItemRequest
   ): Promise<SupermarketLocationItemView> {
-    await this.admin.requireAdmin(req);
+    const actor = await this.admin.requireAdmin(req);
     await this.requireItemAndLocation(req.itemId, req.supermarketLocationId);
 
     const existing = await this.rows.findOne({
@@ -61,6 +63,7 @@ export class SupermarketLocationItemService {
         itemId: req.itemId,
         supermarketLocationId: req.supermarketLocationId,
       });
+    const before = existing ? { ...existing } : null;
 
     if (req.positionInStore !== undefined) {
       row.positionInStore = req.positionInStore;
@@ -71,7 +74,12 @@ export class SupermarketLocationItemService {
       row.available = req.available;
     }
 
-    return toSupermarketLocationItemView(await this.rows.save(row));
+    const saved = await this.audit.write(actor, (tx) =>
+      before
+        ? tx.update(SupermarketLocationItem, before, row)
+        : tx.create(SupermarketLocationItem, row)
+    );
+    return toSupermarketLocationItemView(saved);
   }
 
   async get(

@@ -2,11 +2,13 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
-import type {
-  PostalCodePoint,
-  Supermarket,
+// `SupermarketLocation` is a value here: the audit double keys on the class.
+import {
   SupermarketLocation,
+  type PostalCodePoint,
+  type Supermarket,
 } from '../entities';
+import { fakeAudit } from './catalog-audit.testing';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
@@ -98,15 +100,24 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
     }),
   } as unknown as ConfigService;
 
+  // Plan 0075: a location and the store scope created for it now commit
+  // together, so the create runs inside a transaction this double stands in for.
+  const audit = fakeAudit([
+    [
+      SupermarketLocation,
+      { name: 'supermarket_locations', repository: locations },
+    ],
+  ]);
   const service = new SupermarketLocationService(
     locations,
     supermarkets,
     scopes,
     new PlatformAdminService(new JwtService(), config),
+    audit.service,
     new PostalCodeService(pointsRepository),
     config
   );
-  return { service, locations, stored };
+  return { service, locations, stored, audit };
 }
 
 /** Everything a create needs beyond the field under test. */
@@ -364,6 +375,8 @@ describe('SupermarketLocationService.list postal code filter', () => {
       {} as Repository<Supermarket>,
       {} as PriceScopeService,
       {} as PlatformAdminService,
+      // A read: nothing here opens a transaction.
+      fakeAudit([]).service,
       {} as PostalCodeService,
       { getOrThrow: () => ({}) } as unknown as ConfigService
     );

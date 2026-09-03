@@ -7,8 +7,11 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
-import type { Item, ProductGroup, SupermarketItem } from '../entities';
+// `Item` is a value here, not just a type: the audit double keys on the entity
+// class the service hands it.
+import { Item, type ProductGroup, type SupermarketItem } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
+import { fakeAudit } from './catalog-audit.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -61,15 +64,21 @@ function build(overrides: {
     itemGroupChanged: jest.fn(),
     productGroupDeleted: jest.fn(),
   } as unknown as jest.Mocked<CatalogEventsPublisher>;
+  // Plan 0075: every write runs inside a transaction this opens. The double
+  // routes the write back to the same fake repository, and records what moved.
+  const audit = fakeAudit([
+    [Item, { name: 'items', repository: overrides.items ?? {} }],
+  ]);
   const service = new ItemService(
     overrides.items as Repository<Item>,
     {} as Repository<ProductGroup>,
     (overrides.prices ?? {}) as Repository<SupermarketItem>,
     groups,
     admin,
+    audit.service,
     events
   );
-  return { service, admin, groups, events };
+  return { service, admin, groups, events, audit };
 }
 
 describe('ItemService', () => {
