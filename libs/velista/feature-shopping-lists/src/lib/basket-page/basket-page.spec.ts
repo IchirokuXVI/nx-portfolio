@@ -9,6 +9,7 @@ import {
 import {
   BasketStore,
   GatewayError,
+  GeneratedListStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import type {
@@ -70,6 +71,14 @@ interface FakeStore {
   readonly setOutstanding: jest.Mock;
   /** Where the page navigated, so a spec can see the settle sheet being opened. */
   readonly navigate: jest.Mock;
+  /** Whether the trip is over, writable so a spec can end one (plan 0057). */
+  readonly finished: WritableSignal<boolean>;
+  /** How many lines nobody settled, which is what the prompt waits for. */
+  readonly unsettled: WritableSignal<number>;
+  /** Every status write the page made, on the **owner's** surface (plan 0057). */
+  readonly setStatus: jest.Mock;
+  /** Every refetch, so a spec can see the screen being brought up to date. */
+  readonly refresh: jest.Mock;
 }
 
 interface Options {
@@ -89,6 +98,19 @@ interface Options {
   readonly suggestions?: readonly CatalogSuggestion[];
   /** The rows on the basket. Empty draws the empty state. */
   readonly lines?: readonly BasketLine[];
+  /** Whether the trip is over (plan 0057). A finished basket draws no controls. */
+  readonly finished?: boolean;
+  /**
+   * How many lines nobody settled. Defaults to all of them, which is a fresh trip.
+   *
+   * Zero with lines on the basket is what makes the "all done" prompt appear, and
+   * the two are stated separately here for the same reason the real store derives
+   * one from the other rather than counting the array: the question the prompt asks
+   * is about what is left, not about how many rows there are.
+   */
+  readonly unsettled?: number;
+  /** Whether a finish or a reopen lands. False is the failure the banner reports. */
+  readonly statusWriteLands?: boolean;
 }
 
 function guest(
@@ -180,6 +202,10 @@ async function render(options: Options = {}): Promise<{
         })
     ),
     navigate: jest.fn().mockResolvedValue(true),
+    finished: signal(options.finished ?? false),
+    unsettled: signal(options.unsettled ?? options.lines?.length ?? 0),
+    setStatus: jest.fn().mockResolvedValue(options.statusWriteLands ?? true),
+    refresh: jest.fn().mockResolvedValue(undefined),
   };
 
   const paramMap = convertToParamMap({ generatedListId: 'basket-saturday' });
@@ -246,7 +272,9 @@ async function render(options: Options = {}): Promise<{
           // Session local, and empty unless a spec says otherwise: no field of a line
           // carries whether the list it was sent to has accepted it (`0056`).
           pendingTargets: signal(new Set<string>()),
-          refresh: () => Promise.resolve(),
+          finished: store.finished,
+          unsettled: store.unsettled,
+          refresh: store.refresh,
           settle: () => Promise.resolve(null),
           reopen: () => Promise.resolve(null),
           setOutstanding: store.setOutstanding,
@@ -266,6 +294,14 @@ async function render(options: Options = {}): Promise<{
             return Promise.resolve(options.suggestions ?? []);
           },
         },
+      },
+      // The owner's surface, which is where the one write of plan 0057 goes: the
+      // route behind it is account authenticated, so a guest cannot reach it with
+      // any token they hold. The page injects it for every reader and calls it only
+      // through a control the owner alone is drawn.
+      {
+        provide: GeneratedListStore,
+        useValue: { setStatus: store.setStatus },
       },
     ],
   }).compileComponents();
@@ -765,5 +801,262 @@ describe('the number on a row', () => {
     await settleWrites(fixture);
 
     expect(row(fixture).notice()).toBeNull();
+  });
+});
+
+/**
+ * Ending the trip, and taking it back (plan 0057).
+ *
+ * A trip ends when the person carrying the phone walks out of the shop, and nothing
+ * in velista could say so: `COMPLETED` had existed since `0044`, the route that sets
+ * it had existed just as long, and no screen had ever called it. So a basket stayed
+ * live forever and the household kept reading "Ana is buying this" on ten lines Ana
+ * walked past.
+ *
+ * What is asserted here is the screen either side of that button: who is offered it,
+ * what appears when every line is settled, and what a finished basket stops drawing.
+ */
+describe('finishing the shopping', () => {
+  const finish = (fixture: ComponentFixture<BasketPage>) =>
+    query(fixture, '.finish');
+
+  const rows = (fixture: ComponentFixture<BasketPage>) =>
+    fixture.debugElement
+      .queryAll(By.directive(BasketLineRow))
+      .map((found) => found.componentInstance as BasketLineRow);
+
+  /** Let the page await a status write, then draw what came back. */
+  async function settleWrite(
+    fixture: ComponentFixture<BasketPage>
+  ): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  describe('who is offered the control', () => {
+    it('draws it for the owner, in the header beside share', async () => {
+      const { fixture } = await render();
+
+      expect(finish(fixture)).not.toBeNull();
+      // In the **header** and not the footer, which is section 3's whole argument:
+      // the footer belongs to the line you are working on, and a button that ends
+      // the trip must not sit a thumb's width from the one that settles a line.
+      expect(query(fixture, '.bar .finish')).not.toBeNull();
+    });
+
+    it('is absent for a registered participant, never disabled', async () => {
+      const { fixture } = await render({
+        me: participant({
+          participantId: 'p-2',
+          kind: 'REGISTERED',
+          displayName: 'Marta',
+          guestNumber: null,
+          userId: 'u-2',
+        }),
+      });
+
+      // Absent, per `0030`: a control you may not use is not drawn. A disabled one
+      // would tell somebody who passes the all or nothing rule everywhere else that
+      // this is a thing they might one day be allowed to press.
+      expect(finish(fixture)).toBeNull();
+    });
+
+    it('is absent for a guest', async () => {
+      const { fixture } = await render({
+        me: participant(guest('p-9', 1)),
+      });
+
+      expect(finish(fixture)).toBeNull();
+    });
+
+    it('asks the sheet rather than finishing where it stands', async () => {
+      // The question is worth a screen because what it is about cannot be seen from
+      // this one: three people may still be walking around a shop, and the lines
+      // nobody settled stay on their households' lists as they are.
+      const { fixture, store } = await render();
+
+      finish(fixture)?.click();
+      await settleWrite(fixture);
+
+      expect(store.setStatus).not.toHaveBeenCalled();
+      expect(store.navigate).toHaveBeenCalledWith(
+        ['sheet', 'finish'],
+        expect.anything()
+      );
+    });
+  });
+
+  describe('when every line is settled', () => {
+    const settledLines = [
+      line('Milk', { quantity: 1, settled: 1, lastOutcome: 'BOUGHT' }),
+      line('Eggs', { quantity: 1, settled: 1, lastOutcome: 'BOUGHT' }),
+    ];
+
+    it('asks, rather than finishing anything itself', async () => {
+      // The last settle is not a status change and the server does not make it one
+      // (luna `0059`, section 1.1). This screen does not pretend it did.
+      const { fixture, store } = await render({
+        lines: settledLines,
+        unsettled: 0,
+      });
+
+      expect(query(fixture, '.prompt')).not.toBeNull();
+      expect(store.setStatus).not.toHaveBeenCalled();
+    });
+
+    it('leaves the basket fully editable until somebody presses the button', async () => {
+      // The most common thing that happens after the last line is settled is
+      // remembering milk. A screen that had closed itself would have to be reopened
+      // by somebody standing in a dairy aisle.
+      const { fixture } = await render({ lines: settledLines, unsettled: 0 });
+
+      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+      expect(rows(fixture).every((row) => row.finished())).toBe(false);
+    });
+
+    it('opens the same sheet the header control does', async () => {
+      const { fixture, store } = await render({
+        lines: settledLines,
+        unsettled: 0,
+      });
+
+      query(fixture, '.prompt-action')?.click();
+      await settleWrite(fixture);
+
+      expect(store.navigate).toHaveBeenCalledWith(
+        ['sheet', 'finish'],
+        expect.anything()
+      );
+    });
+
+    it('says nothing while a line is still outstanding', async () => {
+      const { fixture } = await render({
+        lines: [line('Milk', { quantity: 2 })],
+        unsettled: 1,
+      });
+
+      expect(query(fixture, '.prompt')).toBeNull();
+    });
+
+    it('says nothing on a basket that arrived empty', async () => {
+      // Nothing was settled, so there is nothing to congratulate anybody about.
+      const { fixture } = await render({ lines: [], unsettled: 0 });
+
+      expect(query(fixture, '.prompt')).toBeNull();
+    });
+
+    it('says nothing to a guest, who could not act on it', async () => {
+      const { fixture } = await render({
+        lines: settledLines,
+        unsettled: 0,
+        me: participant(guest('p-9', 1)),
+      });
+
+      expect(query(fixture, '.prompt')).toBeNull();
+    });
+  });
+
+  describe('a finished basket', () => {
+    const someLines = [line('Milk', { quantity: 2 }), line('Eggs')];
+
+    it('says so, and still draws every line', async () => {
+      // The screen is the receipt for a trip somebody took, and the most likely
+      // reason to open one is to see what was bought.
+      const { fixture } = await render({ finished: true, lines: someLines });
+
+      expect(query(fixture, '.finished')).not.toBeNull();
+      expect(rows(fixture)).toHaveLength(2);
+    });
+
+    it('announces the banner once, rather than per redraw', async () => {
+      const { fixture } = await render({ finished: true, lines: someLines });
+
+      // `role="status"` on the banner itself, which is only in the document while
+      // the basket is finished: it is announced when it appears rather than on every
+      // line that lost a control (section 11).
+      expect(query(fixture, '.finished')?.getAttribute('role')).toBe('status');
+    });
+
+    it('takes every control off the rows', async () => {
+      const { fixture } = await render({ finished: true, lines: someLines });
+
+      expect(rows(fixture).every((row) => row.finished())).toBe(true);
+    });
+
+    it('draws no field to add a line into', async () => {
+      const { fixture, store } = await render({
+        finished: true,
+        lines: someLines,
+      });
+      store.takesLines.set(false);
+      fixture.detectChanges();
+
+      expect(query(fixture, 'lib-line-composer')).toBeNull();
+    });
+
+    it('offers the owner the way back', async () => {
+      const { fixture } = await render({ finished: true, lines: someLines });
+
+      expect(query(fixture, '.finished-action')).not.toBeNull();
+    });
+
+    it('shows a guest the banner without it', async () => {
+      // Not a revocation: a guest who was in the shop keeps the basket open, keeps
+      // their identity and keeps their name on the rows they settled (section 6.1).
+      const { fixture } = await render({
+        finished: true,
+        lines: someLines,
+        me: participant(guest('p-9', 1)),
+      });
+
+      expect(query(fixture, '.finished')).not.toBeNull();
+      expect(query(fixture, '.finished-action')).toBeNull();
+    });
+
+    it('takes the trip back with no confirmation, and re-reads it', async () => {
+      // Nothing is destroyed and the act is trivially repeatable, which is the test
+      // `0031` applies before it asks a question (section 8). It is also what makes
+      // the finish sheet honest: the owner is confirming something reversible.
+      const { fixture, store } = await render({
+        finished: true,
+        lines: someLines,
+      });
+
+      query(fixture, '.finished-action')?.click();
+      await settleWrite(fixture);
+
+      expect(store.setStatus).toHaveBeenCalledWith('basket-saturday', 'ACTIVE');
+      expect(store.refresh).toHaveBeenCalled();
+      expect(store.navigate).not.toHaveBeenCalled();
+    });
+
+    it('says so on the banner when the reopen does not land', async () => {
+      const { fixture, store } = await render({
+        finished: true,
+        lines: someLines,
+        statusWriteLands: false,
+      });
+
+      query(fixture, '.finished-action')?.click();
+      await settleWrite(fixture);
+
+      expect(store.refresh).not.toHaveBeenCalled();
+      expect(query(fixture, '.finished-failed')).not.toBeNull();
+    });
+
+    it('draws no finish control, because there is nothing left to finish', async () => {
+      const { fixture } = await render({ finished: true, lines: someLines });
+
+      expect(finish(fixture)).toBeNull();
+    });
+
+    it('keeps the share control, and the link with it', async () => {
+      // Finishing is not revoking. The link and the people are a separate act with
+      // its own sheet, which `0044` section 5.2 already owns.
+      const { fixture } = await render({ finished: true, lines: someLines });
+
+      expect(query(fixture, '.share')).not.toBeNull();
+    });
   });
 });

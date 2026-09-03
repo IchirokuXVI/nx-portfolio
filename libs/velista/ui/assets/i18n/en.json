@@ -1113,6 +1113,22 @@
       "confirm": "Revoke the link",
       "cancel": "Keep it"
     },
+    "finish": {
+      "open": "Finish shopping",
+      "prompt": "All done. Finish shopping?",
+      "action": "Finish shopping",
+      "title": "Finish shopping?",
+      "body": "Nobody will be able to change this list any more, including the people shopping it with you.",
+      "unsettled_one": "{{count}} line was not settled. It stays on your lists as it is.",
+      "unsettled_other": "{{count}} lines were not settled. They stay on your lists as they are.",
+      "confirm": "Finish shopping",
+      "cancel": "Cancel",
+      "failed": "That did not save. Try again"
+    },
+    "finished": {
+      "title": "This trip is finished.",
+      "reopen": "Reopen"
+    },
     "join": {
       "invited": "You’ve been invited to shop",
       "people_one": "{{count}} person is on it",
@@ -1159,7 +1175,7 @@
       "staleLine_other": "Somebody else changed this line. It says {{count}} now",
       "belowSettled_one": "One of these has already been bought for this list",
       "belowSettled_other": "{{count}} of these have already been bought for this list",
-      "basketFinished": "This list is finished, so it cannot be changed",
+      "basketFinished": "The owner finished this shopping trip. It cannot be edited any more",
       "notSendable": "Only a line added here can be sent to a shopping list",
       "alreadySent": "This line has already been sent to a shopping list",
       "reference": "ref {{correlationId}}"
@@ -1170,7 +1186,9 @@
       "undoGot": "{{name}} is got. Undo it",
       "undoNone": "{{name}} was not available. Undo it",
       "isGot": "{{name}} is got",
-      "isNone": "{{name}} was not available"
+      "isNone": "{{name}} was not available",
+      "isWanted": "{{name}} is still to get",
+      "isPartly": "{{name}} is partly got"
     }
   },
   "getList": {
@@ -1200,7 +1218,8 @@
     "title": "Your shopping lists",
     "back": "Back",
     "status": {
-      "active": "Shopping now"
+      "active": "Shopping now",
+      "finished": "Finished"
     },
     "row": {
       "progress": "{{settled}} of {{total}} finished",

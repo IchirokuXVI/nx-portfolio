@@ -4,6 +4,7 @@ import type {
   GeneratedListRun,
   GeneratedListSummary,
   Page,
+  WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { GatewayError } from '../errors';
@@ -47,11 +48,18 @@ interface FakeOptions {
    */
   readonly refreshPage?: Page<GeneratedListSummary>;
   readonly createRejectsWith?: unknown;
+  /** What a status write fails with, for the rollback (velista `0057`). */
+  readonly setStatusRejectsWith?: unknown;
 }
 
 /** A `GeneratedListServiceI` recording what it was asked, with no transport. */
 function fakeService(options: FakeOptions = {}) {
-  const calls: { method: string; cursor?: string }[] = [];
+  const calls: {
+    method: string;
+    cursor?: string;
+    generatedListId?: string;
+    status?: string;
+  }[] = [];
   const pages = options.pages ?? [{ items: [], nextCursor: null }];
   let served = 0;
   let firstReads = 0;
@@ -78,6 +86,15 @@ function fakeService(options: FakeOptions = {}) {
         );
       }
       return pages[++served] ?? { items: [], nextCursor: null };
+    },
+    setStatus: async (
+      generatedListId: string,
+      status: WritableGeneratedListStatus
+    ) => {
+      calls.push({ method: 'setStatus', generatedListId, status });
+      if (options.setStatusRejectsWith !== undefined) {
+        throw options.setStatusRejectsWith;
+      }
     },
     create: async (request: CreateGeneratedListRequest) => {
       calls.push({ method: 'create' });
@@ -588,6 +605,122 @@ describe('GeneratedListStore', () => {
 
       expect(store.lists()).toHaveLength(1);
       expect(store.lists()[0]?.lineCount).toBe(12);
+    });
+  });
+
+  /**
+   * Finishing a trip, and taking it back (velista `0057`, section 10).
+   *
+   * The one write on this surface a **participant screen** makes, and the only
+   * optimistic one this store has: it is pressed on the basket screen, where the
+   * whole answer is a banner appearing and a page's worth of controls going away,
+   * and a round trip of nothing happening in a shop reads as a button that did not
+   * work.
+   */
+  describe('finishing a trip', () => {
+    it('asks the server for the status the caller named', async () => {
+      const { store, calls } = harness({
+        pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
+      });
+      await store.load();
+
+      await store.setStatus('a', 'COMPLETED');
+
+      expect(calls).toContainEqual({
+        method: 'setStatus',
+        generatedListId: 'a',
+        status: 'COMPLETED',
+      });
+    });
+
+    it('moves the row it holds before the server has answered', async () => {
+      const { store } = harness({
+        pages: [
+          { items: [summary({ id: 'a', status: 'ACTIVE' })], nextCursor: null },
+        ],
+      });
+      await store.load();
+
+      // Deliberately not awaited: the flip is what the screen is drawn from, and it
+      // has to be true the moment the gesture is made rather than a round trip later.
+      const landing = store.setStatus('a', 'COMPLETED');
+
+      expect(store.lists()[0]?.status).toBe('COMPLETED');
+      await landing;
+    });
+
+    // The dashboard card asks the same question the history's badge does, so a
+    // finished trip has to leave the live set as well as gaining a mark.
+    it('takes the trip out of the live set', async () => {
+      const { store } = harness({
+        pages: [
+          { items: [summary({ id: 'a', status: 'ACTIVE' })], nextCursor: null },
+        ],
+      });
+      await store.load();
+      expect(store.active()).toHaveLength(1);
+
+      await store.setStatus('a', 'COMPLETED');
+
+      expect(store.active()).toEqual([]);
+    });
+
+    it('puts back the status the row held when the write does not land', async () => {
+      const { store } = harness({
+        pages: [
+          { items: [summary({ id: 'a', status: 'DRAFT' })], nextCursor: null },
+        ],
+        setStatusRejectsWith: new GatewayError({
+          code: 'forbidden',
+          status: 403,
+          correlationId: 'c-1',
+        }),
+      });
+      await store.load();
+
+      const landed = await store.setStatus('a', 'COMPLETED');
+
+      // `DRAFT` and not `ACTIVE`: the rollback restores what the row actually held,
+      // rather than guessing at the status a live basket ought to have. Core
+      // composes a run as `DRAFT` and never promotes one, so a guess would be wrong
+      // for every basket this app has ever generated.
+      expect(landed).toBe(false);
+      expect(store.lists()[0]?.status).toBe('DRAFT');
+    });
+
+    /**
+     * The ordinary case for the caller this write has: a basket opened from a link
+     * or from the dashboard, on a session where the history has never been read.
+     */
+    it('writes for a basket it is not holding, and holds nothing new', async () => {
+      const { store, calls } = harness();
+
+      const landed = await store.setStatus('never-read', 'COMPLETED');
+
+      expect(landed).toBe(true);
+      expect(store.lists()).toEqual([]);
+      expect(calls).toContainEqual({
+        method: 'setStatus',
+        generatedListId: 'never-read',
+        status: 'COMPLETED',
+      });
+    });
+
+    it('takes a finished trip back the same way', async () => {
+      const { store } = harness({
+        pages: [
+          {
+            items: [summary({ id: 'a', status: 'COMPLETED' })],
+            nextCursor: null,
+          },
+        ],
+      });
+      await store.load();
+
+      await store.setStatus('a', 'ACTIVE');
+
+      expect(store.lists()[0]?.status).toBe('ACTIVE');
+      expect(store.active()).toHaveLength(1);
     });
   });
 });

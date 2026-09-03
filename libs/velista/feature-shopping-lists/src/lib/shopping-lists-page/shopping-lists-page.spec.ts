@@ -178,6 +178,45 @@ describe('ShoppingListsPage', () => {
       expect(text(fixture)).not.toContain('history.status.active');
     });
 
+    /**
+     * A trip somebody finished, marked and kept (velista `0057`, section 9).
+     *
+     * **Not hidden.** Hiding is what `ARCHIVED` is for, and the trip finished an
+     * hour ago is the one most likely to be opened next, to check what came home.
+     * The sweep in luna `0059` section 4 eventually marks a basket nobody finished
+     * the same way, and nothing here tells the two apart: the row says the trip is
+     * over, which is true either way.
+     */
+    it('marks a finished trip, and keeps it in the listing', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([basket({ status: 'COMPLETED' })])
+      );
+
+      expect(all(fixture, 'lib-shopping-list-row')).toHaveLength(1);
+      expect(text(fixture)).toContain('history.status.finished');
+    });
+
+    it('says nothing about being finished on a trip that is still live', async () => {
+      const fixture = await render(fakeGeneratedListStore([basket()]));
+
+      expect(text(fixture)).not.toContain('history.status.finished');
+    });
+
+    /**
+     * `UNKNOWN` is this build's fallback for a status it does not recognise, so a
+     * badge here would tell somebody their shopping was over because the app could
+     * not read a word. It costs a mark, which is the safe direction, and is why the
+     * row asks for `COMPLETED` exactly rather than for "not live".
+     */
+    it('claims nothing at all about a status it cannot read', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([basket({ status: 'UNKNOWN' })])
+      );
+
+      expect(text(fixture)).not.toContain('history.status.finished');
+      expect(text(fixture)).not.toContain('history.status.active');
+    });
+
     it('titles an unnamed trip with its date rather than leaving it blank', async () => {
       const fixture = await render(
         fakeGeneratedListStore([basket({ name: null })])

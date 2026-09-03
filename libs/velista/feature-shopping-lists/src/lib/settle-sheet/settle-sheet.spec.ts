@@ -130,6 +130,14 @@ interface World {
   readonly products?: ReadonlyMap<string, BasketProduct>;
   /** The scopes those products' offers name, as the server described them. */
   readonly scopes?: ReadonlyMap<string, BasketPriceScope>;
+  /**
+   * Whether the **trip** is over, which is not the same as a finished line
+   * (velista `0057`, section 6).
+   *
+   * A finished basket takes every control off this sheet at once, including the
+   * ones a line with something still outstanding would otherwise offer.
+   */
+  readonly basketFinished?: boolean;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -175,6 +183,8 @@ function storeDouble(world: World) {
     present: signal([]),
     live: signal(true),
     revoked: signal(false),
+    finished: signal(world.basketFinished ?? false),
+    unsettled: signal(0),
     open: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
@@ -697,6 +707,84 @@ describe('SettleSheet: a line with nothing left to settle', () => {
     const { fixture } = await render({ lines: [line({ settled: 1 })] });
 
     expect(control(fixture, '.primary')).not.toBeNull();
+  });
+});
+
+/**
+ * The sheet over a trip that is finished (velista `0057`, section 6).
+ *
+ * A different fact from the section above, which is about one line: this takes the
+ * controls off **every** line at once, the ones nobody settled included. What stays
+ * is everything the sheet says, the settlement history among it, because a finished
+ * basket is the receipt for a trip somebody took.
+ */
+describe('SettleSheet: the trip is finished', () => {
+  const control = (fixture: ComponentFixture<SettleSheet>, selector: string) =>
+    (fixture.nativeElement as HTMLElement).querySelector(selector);
+
+  it('offers no settle target on a line with everything outstanding', async () => {
+    // The case a line-level check misses: nothing has been settled here, so the
+    // sheet's own `finished` says draw the buttons, and the basket says no.
+    const { fixture } = await render({
+      lines: [line({ settled: 0 })],
+      basketFinished: true,
+    });
+
+    expect(control(fixture, '.actions:not(.lists)')).toBeNull();
+    expect(control(fixture, '.primary')).toBeNull();
+  });
+
+  it('offers no way to swap the product', async () => {
+    // A correction of the record is still a change to it, and the server refuses it.
+    const { fixture } = await render({
+      lines: [line({ pickId: 'item-1', optionIds: ['item-1', 'item-2'] })],
+      products: new Map([
+        [
+          'item-1',
+          {
+            id: 'item-1',
+            name: { en: 'Hacendado milk' },
+            brand: null,
+            size: null,
+            unit: null,
+            offer: null,
+          },
+        ],
+        [
+          'item-2',
+          {
+            id: 'item-2',
+            name: { en: 'Pascual milk' },
+            brand: null,
+            size: null,
+            unit: null,
+            offer: null,
+          },
+        ],
+      ]),
+      basketFinished: true,
+    });
+
+    expect(control(fixture, '.product-name')).not.toBeNull();
+    expect(control(fixture, '.product-change')).toBeNull();
+  });
+
+  it('offers neither the units sheet nor the send sheet', async () => {
+    const { fixture } = await render({
+      lines: [line({ kind: 'ADDED', targetListId: null, origins: [] })],
+      basketFinished: true,
+    });
+
+    expect(control(fixture, '.actions.lists')).toBeNull();
+  });
+
+  it('still offers the history, which is what a receipt is read for', async () => {
+    const { fixture } = await render({
+      lines: [line({ settled: 4, touchedBy: 'me', lastOutcome: 'BOUGHT' })],
+      basketFinished: true,
+    });
+
+    expect(control(fixture, '.link')).not.toBeNull();
   });
 });
 

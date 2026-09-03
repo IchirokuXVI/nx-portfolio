@@ -8,6 +8,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BasketStore,
+  GeneratedListStore,
   LINE_SERVICE,
   SessionStore,
 } from '@portfolio/velista/data-access';
@@ -17,6 +18,7 @@ import {
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
+import { FinishSheet } from './finish-sheet/finish-sheet';
 import { LineListSheet } from './line-list-sheet/line-list-sheet';
 import { LineUnitsSheet } from './line-units-sheet/line-units-sheet';
 import { PeopleSheet } from './people-sheet/people-sheet';
@@ -51,6 +53,7 @@ const SHEETS: readonly {
   },
   { name: 'PeopleSheet', component: PeopleSheet, path: 'people', params: {} },
   { name: 'ShareSheet', component: ShareSheet, path: 'share', params: {} },
+  { name: 'FinishSheet', component: FinishSheet, path: 'finish', params: {} },
 ];
 
 /**
@@ -104,6 +107,9 @@ function storeDouble() {
     me: signal(null),
     participantsById: signal(new Map()),
     progress: signal({ settled: 0, total: 0, spent: 0 }),
+    // The finish sheet's two readings of the basket underneath (velista `0057`).
+    finished: signal(false),
+    unsettled: signal(0),
     open: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
@@ -179,6 +185,13 @@ async function render(
       // keeps no `displayName` for an owner. These tests are about the URL a sheet
       // leaves on, so the emptiest session there is keeps them about it.
       { provide: SessionStore, useValue: { username: signal(null) } },
+      // The owner's surface, which the finish sheet writes its one status change
+      // to. These tests are about the URL a sheet leaves on and never press the
+      // confirm, so what matters is that the injection resolves.
+      {
+        provide: GeneratedListStore,
+        useValue: { setStatus: jest.fn().mockResolvedValue(true) },
+      },
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },

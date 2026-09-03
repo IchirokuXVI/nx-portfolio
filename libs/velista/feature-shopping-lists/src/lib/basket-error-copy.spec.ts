@@ -192,6 +192,36 @@ describe('basketErrorKey: the three codes that used to read as a conflict', () =
       basketErrorKey(gateway('generated_list_finished', 409), 'basket.bind')
     ).toBe('basket.error.basketFinished');
   });
+
+  /**
+   * Every write a guest can still be holding a control for when the owner presses
+   * Finish (velista `0057`, section 7).
+   *
+   * Luna `0059` section 3.1 widened the set of writes that can raise this from three
+   * to nine, so this is a case per operation rather than the two above: two phones,
+   * one basket and a second of latency means whichever control was open is the one
+   * that refuses, and the sentence must not depend on which it was.
+   *
+   * A table, so the eighth write added to this screen is one row here and fails
+   * until it is mapped. `basket.read` is deliberately in it: a refresh cannot raise
+   * the code, and a mapping that answered the generic sentence for a read while
+   * answering this one for every write would be a difference nobody could explain.
+   */
+  it.each([
+    'basket.read',
+    'basket.settle',
+    'basket.reopen',
+    'basket.pick',
+    'basket.share',
+    'basket.people',
+    'basket.outstanding',
+    'basket.origins',
+    'basket.bind',
+  ] as const)('names the finished trip on a refused %s', (operation) => {
+    expect(
+      basketErrorKey(gateway('generated_list_finished', 409), operation)
+    ).toBe('basket.error.basketFinished');
+  });
 });
 
 describe('basketErrorKey: sending a line to a list', () => {

@@ -4,6 +4,7 @@ import type {
   GeneratedListRun,
   GeneratedListSummary,
   Page,
+  WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import type { GeneratedListServiceI } from './generated-list-service';
@@ -103,5 +104,33 @@ export class GeneratedListMemory implements GeneratedListServiceI {
     }
 
     return run;
+  }
+
+  /**
+   * Finish a trip, or take it back to being one (velista `0057`).
+   *
+   * **A basket this fake has never heard of is a `not_found`**, as the gateway
+   * answers one, rather than a quiet success. That is the same rule the refused
+   * empty run above follows: a fake that accepted a write against nothing would
+   * let a screen pass here that draws a banner over a basket the server never
+   * moved.
+   */
+  async setStatus(
+    generatedListId: string,
+    status: WritableGeneratedListStatus
+  ): Promise<void> {
+    const at = this._lists.findIndex((list) => list.id === generatedListId);
+    if (at < 0) {
+      throw new GatewayError({
+        code: 'not_found',
+        status: 404,
+        correlationId: 'memory',
+        detail: 'no such shopping list',
+      });
+    }
+
+    this._lists = this._lists.map((list, index) =>
+      index === at ? { ...list, status } : list
+    );
   }
 }

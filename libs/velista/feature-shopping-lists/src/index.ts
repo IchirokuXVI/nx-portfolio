@@ -16,6 +16,7 @@ export * from './lib/basket-labels';
 export * from './lib/basket-line-row/basket-line-row';
 export * from './lib/basket-page/basket-page';
 export * from './lib/basket-paths';
+export * from './lib/finish-sheet/finish-sheet';
 export * from './lib/join-page/join-page';
 export * from './lib/line-list-sheet/line-list-sheet';
 export * from './lib/line-units-sheet/line-units-sheet';

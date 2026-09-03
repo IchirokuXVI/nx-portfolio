@@ -86,7 +86,8 @@ lib-line-composer {
 
 .back,
 .share,
-.people {
+.people,
+.finish {
   @include shared.tap-target;
 
   display: flex;
@@ -113,7 +114,8 @@ lib-line-composer {
 // `.people` and inherited a hover from them, so the basket's was the one back
 // control in the product that lit up under a cursor.
 .share,
-.people {
+.people,
+.finish {
   &:hover {
     background: var(--app-surface-raised);
     color: var(--app-text-primary);
@@ -122,7 +124,8 @@ lib-line-composer {
 
 .back-glyph,
 .share-glyph,
-.people-glyph {
+.people-glyph,
+.finish-glyph {
   font-size: var(--app-icon-md);
 }
 
@@ -229,6 +232,119 @@ lib-line-composer {
 // progress through it, and it must not read as more of the same number.
 .progress-unavailable {
   color: var(--app-action-quiet-fg);
+}
+
+// The trip is over (plan 0057, section 6). A band across the top of the page rather
+// than a card in the flow: it is about the whole screen, and everything below it is
+// drawn differently because of it.
+//
+// Neutral rather than the success colours. This is not a congratulation and it is not
+// a warning; it is the state the screen is in, and the words carry it. Colour is
+// never the difference on this screen (`0044`, section 7).
+.finished {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  flex-wrap: wrap;
+  margin-inline: var(--app-space-4);
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-sunken);
+}
+
+.finished-title {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  text-wrap: pretty;
+}
+
+// The way back, and 44 square like every other control on this screen (section 11).
+.finished-action {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-button-radius);
+  background: var(--app-surface-raised);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--app-border-strong);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+// A reopen that did not land, beside the control it was pressed on rather than as a
+// toast: the basket is still the finished one it was, and the sentence belongs where
+// the person is looking (`0012`, section 3.3).
+.finished-failed {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-status-danger-fg);
+}
+
+// "All done. Finish shopping?", where the outstanding total sits (section 4).
+//
+// A quiet row and not a modal: it does not steal focus, it does not appear over the
+// lines, and it is one tap for the person who is done and nothing at all for the
+// person who has just remembered milk.
+.prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin-inline: var(--app-space-4);
+  padding: var(--app-space-2) var(--app-space-2) var(--app-space-2)
+    var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-sunken);
+}
+
+.prompt-title {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  text-wrap: pretty;
+}
+
+.prompt-action {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding-inline: var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-on-action);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
 }
 
 .lines {
