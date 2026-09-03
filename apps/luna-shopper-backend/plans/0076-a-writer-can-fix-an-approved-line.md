@@ -1,3 +1,5 @@
+> **PR:** [#186](https://github.com/IchirokuXVI/nx-portfolio/pull/186)
+
 # 0076: a writer can fix an approved line
 
 > Client half: `apps/velista/plans/0066`, which opens the sheet this plan makes reachable
