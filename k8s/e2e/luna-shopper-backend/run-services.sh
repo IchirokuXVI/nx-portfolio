@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run-services.sh — start, health gate, and stop the five Luna Shopper services
+# run-services.sh — start, health gate, and stop the six Luna Shopper services
 # as plain Node processes out of `dist` (plan 0015, section 5).
 #
 # There is no service orchestrator in this repo: the slot harness deliberately
@@ -12,7 +12,7 @@
 #   bash k8s/e2e/luna-shopper-backend/run-services.sh start [--no-build]
 #   bash k8s/e2e/luna-shopper-backend/run-services.sh stop
 #
-# `start` builds the five services, launches each one in the background with its
+# `start` builds the six services, launches each one in the background with its
 # stdout and stderr captured, polls `GET /health/ready` on each until it passes,
 # then checks that each one serves `GET /metrics` in Prometheus format (plan
 # 0016, section 5.1). Readiness, not liveness: readiness is the probe that already means
@@ -110,7 +110,7 @@ metrics_enabled() {
 #
 # It is checked here rather than in the e2e suite because /metrics lives on each
 # service's own health port, and the e2e suite deliberately never touches a
-# service's internal port. Checking it where the five services are already known
+# service's internal port. Checking it where the six services are already known
 # to be up is the cheapest place that covers all of them, and it fails the run
 # loudly if a service ever stops answering: a scrape that silently 404s looks
 # exactly like a healthy service with no traffic.
@@ -214,7 +214,7 @@ start() {
     echo "ready"
   done
 
-  echo "all five services are ready."
+  echo "all six services are ready."
 
   check_metrics
 }

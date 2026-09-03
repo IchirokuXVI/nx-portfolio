@@ -2,8 +2,8 @@
 
 This is the procedure for developing or testing more than one Luna Shopper
 change in parallel, each in its own git worktree, without the copies colliding.
-It exists because the backend has fixed, shared infrastructure ports (three
-Postgres, NATS, Redis, Mailpit) and five services on fixed ports; two checkouts
+It exists because the backend has fixed, shared infrastructure ports (four
+Postgres, NATS, Redis, Mailpit) and seven services on fixed ports; two checkouts
 that each `docker compose up` and `nx serve` will otherwise fight over the same
 ports, container names, and database volumes.
 
@@ -16,7 +16,7 @@ slot numbering: see `tools/dev/README.md`.
 | ------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
 | `nx lint`, `nx build`, **unit tests** (`nx test`) | no                                  | **Yes.** Pure compute, no ports, no DB. Run in every worktree at once; the only limit is CPU. |
 | Integration tests (real Postgres + NATS)          | yes                                 | Only with an isolated stack — see slots below.                                                |
-| e2e (Playwright driving gateway + realtime)       | yes, plus the four services running | Only with an isolated stack **and** an isolated service port band.                            |
+| e2e (Playwright driving gateway + realtime)       | yes, plus the services running | Only with an isolated stack **and** an isolated service port band.                            |
 | Live manual smoke (`nx serve` + curl / ws)        | yes, same as e2e                    | Same as e2e.                                                                                  |
 
 So the cheap 90%, lint/build/unit, needs nothing special: give each worktree its
@@ -133,7 +133,7 @@ now. `OBSERV 0/5` is normal, the profile is opt in.
 
 From the **root of the worktree** you want to place on slot N, one command does
 all of it: write the `.env` files, bring the compose stack up and wait on its
-healthchecks, run every migration, then serve all five services.
+healthchecks, run every migration, then serve all seven services.
 
 ```sh
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1   # or: ...luna-slot.ps1 -Up 1
@@ -146,10 +146,10 @@ made a worktree needs one command and no bookkeeping:
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up
 ```
 
-`--up` waits for all five to listen before it returns, so a zero exit means the
+`--up` waits for all seven to listen before it returns, so a zero exit means the
 slot is genuinely serving rather than merely spawned. Logs and pids go to
 `k8s/e2e/luna-shopper-backend/.run/`, git ignored. `--down` is its inverse: it
-frees the five service ports, then takes the compose stack down **with its
+frees the seven service ports, then takes the compose stack down **with its
 volumes**, which is what `stack.sh down` has always meant here. Pass `--keep-data`
 to stop the containers instead and keep the databases.
 
@@ -161,7 +161,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
 
 `nx serve` here is `@nx/js:node`, whose `watch` defaults to true, so **a change to
 a service or to a library it consumes rebuilds and restarts that one process by
-itself**. Nothing needs stopping to see your work, and the other four services and
+itself**. Nothing needs stopping to see your work, and the other six services and
 the databases are untouched.
 
 The exception is a rewritten **`.env`**: Nx loads `{projectRoot}/.env` into a task
@@ -171,7 +171,7 @@ the compose stack and its volumes alone** so bouncing a service never costs you
 the data you have been working with:
 
 ```sh
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart                    # all five
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart                    # all seven
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services gateway # just one
 ```
 
@@ -283,22 +283,50 @@ push.
 Every port shifts by the slot offset like the rest, so two worktrees can each run
 their own collector, Jaeger and Prometheus at the same time. The collector
 scrapes the services on the **host** (they run under `nx serve`, not in compose),
-which is why `.env.slot` also carries the five service ports.
+which is why `.env.slot` also carries the seven service ports.
 
 With the profile down, telemetry is harmless: the batch processor drops spans and
 logs a warning, and requests are unaffected. Set `OTEL_ENABLED=false` in
 `apps/luna-shopper-backend/.env.luna-shopper-backend` to silence it entirely.
 
+### The `test` databases, per slot
+
+The other opt in profile is `test`: a fifth through eighth Postgres, one per
+migrated service, holding a database a run can wreck without touching the data
+you have been working with. Bring it up on its own, and note that a profiled `up`
+never migrates, so the migrations are a separate step:
+
+```sh
+bash k8s/e2e/luna-shopper-backend/stack.sh -p test up
+LUNA_ENV=test npx nx run luna-shopper-backend-catalog:migration:run
+```
+
+`LUNA_ENV=test` is what selects them. The db tooling loads
+`apps/luna-shopper-backend/<svc>/.env.test` **first** and dotenv keeps the first
+value it sees, so the switch is a pure connection string swap: every other
+variable still comes from the service's own `.env`. `luna-slot.sh` writes those
+four files with this slot's ports, which is why you should not copy the committed
+`.env.test.example` siblings on any slot but 0 — they name slot 0's.
+
+Their host ports shift with the slot exactly like everything else (+14 through
++17 in the block), and `--list` counts them in its own `TEST` column: opt in, so
+`0/4` is the normal reading. This is worth knowing because it was **not** true
+until recently. compose declares them as `${LUNA_AUTH_DB_TEST_PORT:-5442}` and
+the rest, `.env.slot` set none of those four, and every slot therefore fell back
+to the same 5442..5445 — two worktrees running the profile collided on the host
+ports while each believed it was isolated, and a slot's test database collided
+with slot 0's.
+
 ## Two strategies
 
 1. **Parallel (multi-process, isolated).** Assign each worker worktree a distinct
    slot starting at **1** (1, 2, 3, …) — never slot 0, which stays yours. Each
-   runs its own compose stack and its own four services on its own port band,
+   runs its own compose stack and its own seven services on its own port band,
    fully concurrently, and none of them touch the default ports your own dev
    stack (slot 0) may be using. Use this when you genuinely want several sets of
    integration/e2e or live smoke tests running at the same time. Cost is RAM and
-   CPU: three worker stacks means six Postgres, three NATS, three Mailpit, plus
-   up to twelve Node services.
+   CPU: three worker stacks means twelve Postgres, three NATS, three Mailpit, plus
+   up to twenty one Node services.
 
 2. **Sequential (one shared worker stack).** Keep every worker worktree on a
    single shared worker slot (say slot 1) and let only one run infra-backed tests
@@ -324,7 +352,7 @@ npx nx run luna-shopper-backend:test-integration:stack
 npx nx run luna-shopper-backend:e2e:stack
 ```
 
-`e2e:stack` also builds and starts the five services, polls `/health/ready` on
+`e2e:stack` also builds and starts the six services it covers, polls `/health/ready` on
 each, and points the Playwright suite at **this slot's** gateway and realtime
 ports. That last part matters: left to its defaults the suite talks to
 `:3000/:3001`, which from a slotted worktree is either nothing (so it skips itself

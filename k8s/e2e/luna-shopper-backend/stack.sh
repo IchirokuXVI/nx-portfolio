@@ -56,7 +56,7 @@
 # profile would make teardown scoping fall out for free, but a service with no
 # profile that `depends_on` one that has a profile makes the whole project
 # invalid ("service X depends on undefined service Y: invalid compose project")
-# whenever that profile is inactive, and all five services in compose.apps.yml
+# whenever that profile is inactive, and all six services in compose.apps.yml
 # depend on nats and the databases. The alternative, profiling those too, buys a
 # bare `docker compose up` that silently starts nothing and exits 0, which is
 # the exact green-run-that-did-nothing failure this script exists to prevent.
@@ -97,7 +97,7 @@ compose_base() {
   fi
 }
 
-# Infrastructure plus the five service images (tier 2). The overlay is always
+# Infrastructure plus the six service images (tier 2). The overlay is always
 # applied on top of compose.yml, never on its own, so there is still exactly one
 # definition of the infrastructure.
 compose_apps_base() {
@@ -155,7 +155,7 @@ MIGRATED_SERVICES=(auth core catalog harvester)
 
 # --- configuration bootstrap ------------------------------------------------
 #
-# None of what a service needs to boot is committed: the six .env files and the
+# None of what a service needs to boot is committed: the eight .env files and the
 # dev JWT keypair are all git ignored (the keypair must never be shared, and the
 # .env files are per developer). A fresh checkout therefore has none of it, and
 # the failure that produces is actively misleading rather than merely annoying.
@@ -170,8 +170,14 @@ MIGRATED_SERVICES=(auth core catalog harvester)
 # workflow already calls it for exactly this reason. Slot 0 is the plain default
 # ports, which is what a developer's own machine wants.
 
-# Every file luna-slot.sh writes. The services read all seven; the migrations
-# below read only their own.
+# The shared file plus one per service. Every service reads the shared file and
+# its own; the migrations below read only their own.
+#
+# All eight, and the count is the point: this list decides whether a checkout
+# counts as configured, so a service missing from it is a service whose .env can
+# be absent with nothing said about it. The assistant was missing, which is the
+# worst shape of that bug — the gateway comes up, answers, and 500s the one route
+# that needed the service that never booted.
 ENV_FILES=(
   'apps/luna-shopper-backend/.env.luna-shopper-backend'
   'apps/luna-shopper-backend/gateway/.env'
@@ -180,6 +186,7 @@ ENV_FILES=(
   'apps/luna-shopper-backend/core/.env'
   'apps/luna-shopper-backend/catalog/.env'
   'apps/luna-shopper-backend/harvester/.env'
+  'apps/luna-shopper-backend/assistant/.env'
 )
 
 # The subset `up` cannot proceed without, because each migration resolves its
@@ -237,7 +244,7 @@ bootstrap_config() {
   fi
 
   # Past this point something is already configured, and luna-slot.sh rewrites
-  # all six files, so running it now would silently discard hand edits in the
+  # all eight files, so running it now would silently discard hand edits in the
   # ones that do exist. From here we only ever add what is absent.
   if [[ ! -f "$KEYPAIR" ]]; then
     require_openssl || return 1
@@ -284,7 +291,7 @@ bootstrap_config() {
       echo "migrations need:"
       printf '  %s\n' "${blocking[@]}"
       echo
-      echo "Nothing was written, because luna-slot.sh rewrites all six .env files and"
+      echo "Nothing was written, because luna-slot.sh rewrites all eight .env files and"
       echo "would discard whatever is in the ones you already have. Either take the slot"
       echo "defaults for all of them:"
       echo "  bash k8s/e2e/luna-shopper-backend/luna-slot.sh 0"
@@ -295,7 +302,7 @@ bootstrap_config() {
 
   echo "==> note: these are not configured, and this command does not need them:"
   printf '      %s\n' "${missing[@]}"
-  echo "    copy each from its .example sibling, or run luna-slot.sh 0 to rewrite all six."
+  echo "    copy each from its .example sibling, or run luna-slot.sh 0 to rewrite all eight."
 }
 
 up() {
@@ -447,7 +454,10 @@ up_or_clean() {
 }
 
 test_integration() {
-  local projects="${LUNA_INTEGRATION_PROJECTS:-luna-shopper-backend-auth,luna-shopper-backend-core,luna-shopper-backend-catalog}"
+  # Every project with a test-integration target, which is every service that owns
+  # a database. The harvester was left out when it landed, so its migration and
+  # postal code discovery suites never ran here or in CI.
+  local projects="${LUNA_INTEGRATION_PROJECTS:-luna-shopper-backend-auth,luna-shopper-backend-core,luna-shopper-backend-catalog,luna-shopper-backend-harvester}"
 
   up_or_clean || return 1
 
@@ -579,7 +589,7 @@ done
 # `down` is exempt on purpose, since tearing down needs no service config.
 #
 # A profiled `up` is exempt for the same reason: it starts containers that read
-# none of the six service .env files, and refusing to start Grafana over a
+# none of the seven service .env files, and refusing to start Grafana over a
 # missing auth/.env would be a confusing failure for a command that touches no
 # database. `stack.sh up` remains the command that configures a fresh checkout.
 case "${1:-}" in

@@ -48,7 +48,7 @@ code is the suite's:
 # integration (real Postgres), for auth, core and catalog
 npx nx run luna-shopper-backend:test-integration:stack
 
-# e2e (gateway REST + realtime SSE), building and starting the five services
+# e2e (gateway REST + realtime SSE), building and starting the six services
 npx nx run luna-shopper-backend:e2e:stack
 
 # just the stack, to poke at by hand
