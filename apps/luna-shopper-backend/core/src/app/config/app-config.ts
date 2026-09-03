@@ -128,7 +128,7 @@ export const coreValidationSchema = Joi.object({
     .default('info'),
 
   // Tracing and metrics (plan 0016, section 7). Declared once in the platform
-  // library so all five services accept the same names. Every one is optional
+  // library so all seven services accept the same names. Every one is optional
   // with a working default: with none of them set the service runs exactly as it
   // did before, and what the validation buys is failing fast on a malformed
   // value rather than silently sampling everything.

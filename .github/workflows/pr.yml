@@ -164,10 +164,10 @@ jobs:
           node apps/luna-shopper-backend/tools/ci/assert-integration-ran.js \
             "${{ steps.affected.outputs.integration }}"
 
-      # Builds the five services and polls /health/ready on each. On timeout it
+      # Builds the six services and polls /health/ready on each. On timeout it
       # prints the tail of every service log, so a boot failure is diagnosable from
       # this output alone.
-      - name: Start the five services
+      - name: Start the six services
         if: steps.affected.outputs.any == 'true'
         run: bash k8s/e2e/luna-shopper-backend/run-services.sh start
 
