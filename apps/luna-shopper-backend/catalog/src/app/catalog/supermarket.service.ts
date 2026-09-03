@@ -38,7 +38,7 @@ export class SupermarketService {
   ) {}
 
   async create(req: CreateSupermarketRequest): Promise<SupermarketView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const saved = await this.supermarkets.save(
       this.supermarkets.create({
         name: req.name,
@@ -56,7 +56,7 @@ export class SupermarketService {
   }
 
   async update(req: UpdateSupermarketRequest): Promise<SupermarketView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const row = await this.load(req.supermarketId);
     if (req.name !== undefined) {
       row.name = req.name;
@@ -91,7 +91,7 @@ export class SupermarketService {
   }
 
   async delete(req: SupermarketIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const result = await this.supermarkets.delete({ id: req.supermarketId });
     if (!result.affected) {
       throw new NotFoundException('Supermarket not found');

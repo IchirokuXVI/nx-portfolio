@@ -30,7 +30,7 @@ function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
     natsUrl: 'nats://localhost:4222',
     dbUrl: 'postgres://localhost/harvester',
     authJwtPublicKey: 'key',
-    platformAdminUserIds: [ADMIN],
+    adminJwtPublicKey: 'key',
     logLevel: 'silent',
     actorId: 'ac700000-0000-4000-a000-000000000001',
     harvestEnabled: true,
@@ -60,11 +60,13 @@ function build(
   } = {}
 ) {
   const admin = {
-    isAdmin: (id: string) => id === ADMIN,
-    requireAdmin: (id: string) => {
-      if (id !== ADMIN) {
+    // The gate takes the whole request and answers the admin id (plan 0072).
+    // Reading `userId` keeps every case here meaning what it did.
+    requireAdmin: async (credential: { userId: string }) => {
+      if (credential.userId !== ADMIN) {
         throw new ForbiddenException('nope');
       }
+      return credential.userId;
     },
   } as unknown as PlatformAdminService;
 

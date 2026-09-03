@@ -1,3 +1,4 @@
+import { JwtService } from '@nestjs/jwt';
 import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import {
   describeIntegration,
@@ -63,8 +64,11 @@ describeIntegration('locations counted by postal code (real Postgres)', () => {
     await dataSource.initialize();
     await dataSource.runMigrations();
 
-    const admin = new PlatformAdminService({
-      getOrThrow: () => ({ platformAdminUserIds: [OWNER] }),
+    const admin = new PlatformAdminService(new JwtService(), {
+      // The owner writes as a configured SERVICE here (plan 0072): these specs
+      // are about catalog's behaviour, not about which door the caller used, and
+      // the service path needs no keypair to set up.
+      getOrThrow: () => ({ adminJwtPublicKey: '', serviceActorIds: [OWNER] }),
     } as never);
     const config = {
       getOrThrow: () => ({ postalCodeDeriveMaxMetres: 5000 }),

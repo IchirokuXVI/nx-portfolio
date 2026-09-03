@@ -62,7 +62,7 @@ export class ProductGroupService {
   ) {}
 
   async create(req: CreateProductGroupRequest): Promise<ProductGroupView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     try {
       const saved = await this.groups.save(
         this.groups.create({
@@ -79,7 +79,7 @@ export class ProductGroupService {
   }
 
   async update(req: UpdateProductGroupRequest): Promise<ProductGroupView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const row = await this.load(req.productGroupId);
     if (req.name !== undefined) {
       row.name = req.name;
@@ -118,7 +118,7 @@ export class ProductGroupService {
    * actually do is unbind them and leave every product where it is.
    */
   async delete(req: ProductGroupIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const result = await this.groups.delete({ id: req.productGroupId });
     if (!result.affected) {
       throw new NotFoundException('Product group not found');

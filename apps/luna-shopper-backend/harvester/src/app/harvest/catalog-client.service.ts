@@ -43,11 +43,16 @@ export const CATALOG_NATS_CLIENT = 'CATALOG_NATS_CLIENT';
  * Nothing in the harvester imports a catalog entity, and no query in the
  * harvester's database mentions a catalog table.
  *
- * **Authentication is backlog 0001 section 4.1 unchanged**: the harvester holds
- * a dedicated `HARVESTER_ACTOR_ID` uuid listed in catalog's
- * `PLATFORM_ADMIN_USER_IDS`, so every write it makes passes the existing platform
- * admin gate and is attributable in the log exactly like the owner's own writes.
- * No new authorization machinery, and no shared secret.
+ * **Authentication is plan 0072, section 4**: the harvester holds a dedicated
+ * `HARVESTER_ACTOR_ID` uuid, and catalog knows it as a **service** through its
+ * own `SERVICE_ACTOR_IDS`. Every write passes catalog's gate on the service
+ * branch, carrying no token at all. Still no shared secret.
+ *
+ * The harvester deliberately holds no operator token. It is a service, not an
+ * admin, and giving a machine a credential shaped like a person's is how the
+ * arrangement this replaced became confusing: the uuid used to sit in catalog's
+ * `PLATFORM_ADMIN_USER_IDS`, which made the harvester an admin in every log line
+ * and every gate that read that list.
  */
 @Injectable()
 export class CatalogClient {
@@ -70,7 +75,7 @@ export class CatalogClient {
       throw new Error(
         'HARVESTER_ACTOR_ID is not set, so catalog would reject every write ' +
           "this run makes. Set it to a uuid and add that uuid to catalog's " +
-          'PLATFORM_ADMIN_USER_IDS.'
+          'SERVICE_ACTOR_IDS.'
       );
     }
     return this.actorId;

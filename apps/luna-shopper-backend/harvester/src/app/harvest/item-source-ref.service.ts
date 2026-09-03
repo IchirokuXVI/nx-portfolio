@@ -44,7 +44,7 @@ export class ItemSourceRefService {
   ) {}
 
   async list(req: ListItemSourceRefsRequest): Promise<ItemSourceRefPage> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     return this.page(req, req.status ? [req.status] : undefined);
   }
 
@@ -52,13 +52,13 @@ export class ItemSourceRefService {
   async listUnresolved(
     req: ListItemSourceRefsRequest
   ): Promise<ItemSourceRefPage> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     return this.page(req, [ItemSourceRefStatus.CANDIDATE]);
   }
 
   /** Accept a candidate. From here on a refresh includes this item. */
   async confirm(req: ItemSourceRefIdRequest): Promise<ItemSourceRefView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const row = await this.load(req.refId);
     row.status = ItemSourceRefStatus.ACTIVE;
     row.confidence = 1;
@@ -71,7 +71,7 @@ export class ItemSourceRefService {
    * discovery run does not propose the same wrong match again.
    */
   async reject(req: ItemSourceRefIdRequest): Promise<ItemSourceRefView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const row = await this.load(req.refId);
     row.status = ItemSourceRefStatus.REJECTED;
     return toItemSourceRefView(await this.refs.save(row));
@@ -85,7 +85,7 @@ export class ItemSourceRefService {
   async setManual(
     req: SetManualItemSourceRefRequest
   ): Promise<ItemSourceRefView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const existing = await this.refs.findOne({
       where: { itemId: req.itemId, supermarketId: req.supermarketId },
     });

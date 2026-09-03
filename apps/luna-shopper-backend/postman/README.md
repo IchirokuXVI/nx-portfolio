@@ -63,20 +63,29 @@ name the failing service directly:
 If folder 00 fails, everything after it fails too and there is no point reading the rest
 of the output. Fix the service it names first.
 
-## Catalog writes need the admin allowlist
+## Catalog writes need an operator token
 
-Catalog reads are open to any authenticated user, but every catalog **write** is gated to
-`PLATFORM_ADMIN_USER_IDS` in the catalog service — the app owner alone. A normal run gets
-`403` on all of them, so folder 06b skips itself unless you opt in:
+Catalog reads are open to any authenticated user, but every catalog **write** is gated to the
+app owner. A normal run gets `403` on all of them, so folder 06b skips itself unless you opt
+in.
 
-1. Run the suite once and note the `userId` it registered (folder 02).
-2. Add that id to `PLATFORM_ADMIN_USER_IDS` in `apps/luna-shopper-backend/catalog/.env` and
-   restart the catalog service.
+Since plan 0072 the gate is a **signature**, not a list of uuids, so opting in is no longer a
+matter of adding your own user id to a variable and restarting: catalog verifies an operator
+token against `ADMIN_JWT_PUBLIC_KEY` for itself, and a velista access token cannot be made to
+pass. Getting one means creating an admin on the server and logging in as it:
+
+1. `npx nx run luna-shopper-backend-auth:admin:create <username>` (plan 0071, section 6).
+2. `POST /v1/admin/auth/login` with those credentials, and keep the `accessToken`.
 3. Set the collection variable `catalogAdmin` to `true`.
 
 Folder 06 covers the part that matters without any of that: it asserts a non-admin write is
-refused with a `403`, which is the check worth having, since that allowlist is the only
-thing standing between a signed-in user and the shared catalog.
+refused with a `403`, which is the check worth having, since that gate is the only thing
+standing between a signed-in user and the shared catalog.
+
+Note that until plan 0073 moves the catalog write routes under `/v1/admin/**` and swaps their
+gateway guard, those routes still expect a velista token at the gateway and forward no
+operator token, so folder 06b's writes are refused downstream whatever you set here. Folder
+06's negative assertion is unaffected and is the one that carries the suite meanwhile.
 
 ## Two things this suite currently catches
 

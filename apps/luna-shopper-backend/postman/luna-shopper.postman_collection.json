@@ -2426,7 +2426,7 @@
                 "items"
               ]
             },
-            "description": "The allowlist is the only thing protecting the shared catalog from any signed-in user, so it is worth asserting positively. Expects 403 unless the run's user is in PLATFORM_ADMIN_USER_IDS.",
+            "description": "The admin gate is the only thing protecting the shared catalog from any signed-in user, so it is worth asserting positively. Expects 403 unless the run presents a valid operator token.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": {\n    \"en\": \"Should not be created\",\n    \"es\": \"No deberia crearse\"\n  },\n  \"category\": \"OTHER\",\n  \"defaultUnit\": \"UNIT\"\n}",
@@ -2587,7 +2587,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -2637,7 +2637,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -2698,7 +2698,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -2758,7 +2758,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -2818,7 +2818,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -2864,7 +2864,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -2926,7 +2926,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -2977,7 +2977,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -3026,7 +3026,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -3050,7 +3050,7 @@
           ]
         }
       ],
-      "description": "Catalog write CRUD plus the supermarket-item price join. Every request here is skipped unless the collection variable `catalogAdmin` is set to 'true', because these routes are gated to the PLATFORM_ADMIN_USER_IDS allowlist and would otherwise all return 403."
+      "description": "Catalog write CRUD plus the supermarket-item price join. Every request here is skipped unless the collection variable `catalogAdmin` is set to 'true', because these routes are gated to holders of an operator token and would otherwise all return 403."
     },
     {
       "name": "07 · Account",
@@ -3703,7 +3703,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -3747,7 +3747,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -3791,7 +3791,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
@@ -3835,7 +3835,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Catalog writes are restricted to holders of an operator token (plan 0072).",
                   "// Set the collection variable catalogAdmin to 'true' to run this folder.",
                   "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
                   "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",

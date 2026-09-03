@@ -10,9 +10,19 @@ import { readKey } from './read-key';
 /**
  * Catalog service configuration (plan 0012). Catalog owns its own database and
  * verifies access tokens offline with the auth public key (inline in the cluster,
- * or a file path locally); it never reads the auth database. Writes are gated to a
- * platform-admin allowlist (`PLATFORM_ADMIN_USER_IDS`, comma separated), the app
- * owner alone. `PORT` is the small HTTP health port (the real surface is NATS).
+ * or a file path locally); it never reads the auth database.
+ *
+ * Writes are gated to the app owner, and plan 0072 changed what proves that.
+ * `ADMIN_JWT_PUBLIC_KEY` is a **second** public key beside the auth one, read the
+ * same way, and it is required: catalog cannot verify an operator token without
+ * it, so a catalog that boots without one is a catalog whose every write would be
+ * refused. `SERVICE_ACTOR_IDS` is the other door, for callers that are machines
+ * rather than people (section 4), and the harvester is its only member.
+ *
+ * `PLATFORM_ADMIN_USER_IDS` used to sit here and is gone. It listed uuids, and a
+ * uuid is not a secret.
+ *
+ * `PORT` is the small HTTP health port (the real surface is NATS).
  */
 export const LOG_LEVELS = [
   'fatal',
@@ -33,7 +43,9 @@ export const catalogValidationSchema = Joi.object({
   CATALOG_DB_URL: Joi.string().required(),
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
   AUTH_JWT_PUBLIC_KEY_FILE: Joi.string(),
-  PLATFORM_ADMIN_USER_IDS: Joi.string().allow('').default(''),
+  ADMIN_JWT_PUBLIC_KEY: Joi.string(),
+  ADMIN_JWT_PUBLIC_KEY_FILE: Joi.string(),
+  SERVICE_ACTOR_IDS: Joi.string().allow('').default(''),
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -44,20 +56,29 @@ export const catalogValidationSchema = Joi.object({
   // did before, and what the validation buys is failing fast on a malformed
   // value rather than silently sampling everything.
   ...telemetryValidationSchema,
-}).or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE');
+})
+  .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE')
+  .or('ADMIN_JWT_PUBLIC_KEY', 'ADMIN_JWT_PUBLIC_KEY_FILE');
 
 export interface CatalogConfig {
   port: number;
   natsUrl: string;
   dbUrl: string;
   authJwtPublicKey: string;
-  platformAdminUserIds: string[];
+  /** The second trust root (plan 0072): what an operator token is verified with. */
+  adminJwtPublicKey: string;
+  /**
+   * The uuids of **services** allowed to write catalog without a token (plan
+   * 0072, section 4). The harvester's actor id is the only member, and it is
+   * stable: creating an admin does not touch it.
+   */
+  serviceActorIds: string[];
   logLevel: (typeof LOG_LEVELS)[number];
   /** The bound on a derived postal code (plan 0061, section 4). */
   postalCodeDeriveMaxMetres: number;
 }
 
-function parseAdminIds(raw?: string): string[] {
+function parseActorIds(raw?: string): string[] {
   return (raw ?? '')
     .split(',')
     .map((id) => id.trim())
@@ -74,7 +95,11 @@ export const catalogConfiguration = registerAs(
       process.env.AUTH_JWT_PUBLIC_KEY,
       process.env.AUTH_JWT_PUBLIC_KEY_FILE
     ),
-    platformAdminUserIds: parseAdminIds(process.env.PLATFORM_ADMIN_USER_IDS),
+    adminJwtPublicKey: readKey(
+      process.env.ADMIN_JWT_PUBLIC_KEY,
+      process.env.ADMIN_JWT_PUBLIC_KEY_FILE
+    ),
+    serviceActorIds: parseActorIds(process.env.SERVICE_ACTOR_IDS),
     logLevel: process.env.LOG_LEVEL as CatalogConfig['logLevel'],
     postalCodeDeriveMaxMetres: postalCodeDeriveMaxMetres(),
   })

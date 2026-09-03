@@ -90,7 +90,7 @@ export class SupermarketItemService {
    * owner's override, and section 6.5 is what keeps an import from undoing it.
    */
   async upsert(req: UpsertSupermarketItemRequest): Promise<SupermarketItemView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     await this.requireItemAndScope(req.itemId, req.priceScopeId);
 
     const existing = await this.supermarketItems.findOne({
@@ -139,7 +139,7 @@ export class SupermarketItemService {
   async upsertBatch(
     req: UpsertSupermarketItemBatchRequest
   ): Promise<UpsertSupermarketItemBatchResult> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     await this.requireScope(req.priceScopeId);
 
     const itemIds = req.entries.map((entry) => entry.itemId);
@@ -204,7 +204,7 @@ export class SupermarketItemService {
   }
 
   async delete(req: SupermarketItemIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const result = await this.supermarketItems.delete({
       id: req.supermarketItemId,
     });

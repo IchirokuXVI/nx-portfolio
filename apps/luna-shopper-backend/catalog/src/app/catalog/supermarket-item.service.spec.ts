@@ -18,11 +18,14 @@ const ADMIN = 'owner-1';
 
 function makeAdmin(): jest.Mocked<PlatformAdminService> {
   return {
-    isAdmin: jest.fn((id: string) => id === ADMIN),
-    requireAdmin: jest.fn((id: string) => {
-      if (id !== ADMIN) {
+    // The gate takes the whole request now and answers who it let through
+    // (plan 0072). Reading `userId` keeps every case here meaning what it did:
+    // these files are about the services, not about the gate.
+    requireAdmin: jest.fn(async (credential: { userId: string }) => {
+      if (credential.userId !== ADMIN) {
         throw new ForbiddenException('nope');
       }
+      return { kind: 'admin', actorId: credential.userId };
     }),
   } as unknown as jest.Mocked<PlatformAdminService>;
 }

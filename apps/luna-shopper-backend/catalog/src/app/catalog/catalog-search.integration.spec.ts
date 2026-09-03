@@ -1,3 +1,4 @@
+import { JwtService } from '@nestjs/jwt';
 import {
   ItemCategory,
   PriceScopeKind,
@@ -97,8 +98,11 @@ describeIntegration('catalog search (real Postgres)', () => {
     await dataSource.initialize();
     await dataSource.runMigrations();
 
-    const admin = new PlatformAdminService({
-      getOrThrow: () => ({ platformAdminUserIds: [OWNER] }),
+    const admin = new PlatformAdminService(new JwtService(), {
+      // The owner writes as a configured SERVICE here (plan 0072): these specs
+      // are about catalog's behaviour, not about which door the caller used, and
+      // the service path needs no keypair to set up.
+      getOrThrow: () => ({ adminJwtPublicKey: '', serviceActorIds: [OWNER] }),
     } as never);
     // Plan 0070: a write that moves a product's group, or deletes one,
     // announces it. Fire and forget and nothing here consumes it, but both

@@ -8,6 +8,7 @@ import type {
   PostalCodeDiscoveryStatus,
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { AdminCredential } from './admin-auth.messages';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
@@ -223,8 +224,7 @@ export interface ItemSourceRefView {
  * the scope to write prices for. Answers a conflict carrying the active run's id
  * when one is already in progress for that supermarket.
  */
-export interface SpawnHarvestRunRequest {
-  userId: string;
+export interface SpawnHarvestRunRequest extends AdminCredential {
   mode: HarvestRunMode;
   supermarketId?: string;
   priceScopeId?: string;
@@ -235,13 +235,11 @@ export interface SpawnHarvestRunRequest {
   brandKeys?: string[];
 }
 
-export interface HarvestRunIdRequest {
-  userId: string;
+export interface HarvestRunIdRequest extends AdminCredential {
   runId: string;
 }
 
-export interface ListHarvestRunsRequest extends PageQuery {
-  userId: string;
+export interface ListHarvestRunsRequest extends PageQuery, AdminCredential {
   supermarketId?: string;
   mode?: HarvestRunMode;
   status?: HarvestRunStatus;
@@ -249,8 +247,8 @@ export interface ListHarvestRunsRequest extends PageQuery {
 
 // --- Discovered place requests ---------------------------------------------
 
-export interface ListDiscoveredPlacesRequest extends PageQuery {
-  userId: string;
+export interface ListDiscoveredPlacesRequest
+  extends PageQuery, AdminCredential {
   runId?: string;
   brandKey?: string;
   status?: DiscoveredPlaceStatus;
@@ -261,8 +259,7 @@ export interface ListDiscoveredPlacesRequest extends PageQuery {
  * The chain is created on demand rather than up front, because one run returns 17
  * brands and the owner will never shop at most of them.
  */
-export interface ImportDiscoveredPlaceRequest {
-  userId: string;
+export interface ImportDiscoveredPlaceRequest extends AdminCredential {
   placeId: string;
   /** Attach to an existing chain instead of resolving by `brand:wikidata`. */
   supermarketId?: string;
@@ -271,13 +268,11 @@ export interface ImportDiscoveredPlaceRequest {
   priceScopeId?: string;
 }
 
-export interface DiscoveredPlaceIdRequest {
-  userId: string;
+export interface DiscoveredPlaceIdRequest extends AdminCredential {
   placeId: string;
 }
 
-export interface GroupDiscoveredPlacesRequest {
-  userId: string;
+export interface GroupDiscoveredPlacesRequest extends AdminCredential {
   runId?: string;
   /** How many places to include per group as a sample. */
   sampleSize?: number;
@@ -289,8 +284,7 @@ export interface DiscoveredPlaceGroupsResult {
 
 // --- Source entry requests -------------------------------------------------
 
-export interface ListSourceEntriesRequest extends PageQuery {
-  userId: string;
+export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
   supermarketId: string;
   /** Only entries with no `item_source_refs` row, i.e. candidate new items. */
   unmatchedOnly?: boolean;
@@ -303,8 +297,7 @@ export interface ListSourceEntriesRequest extends PageQuery {
  * 4,232 products nobody chose. The English name costs one extra request, made
  * here rather than during discovery (plan 0038, section 6.2).
  */
-export interface CreateItemFromSourceEntryRequest {
-  userId: string;
+export interface CreateItemFromSourceEntryRequest extends AdminCredential {
   entryId: string;
   /** Override the category the source's own tree mapped to. */
   category?: string;
@@ -312,21 +305,18 @@ export interface CreateItemFromSourceEntryRequest {
 
 // --- Item source ref requests ----------------------------------------------
 
-export interface ListItemSourceRefsRequest extends PageQuery {
-  userId: string;
+export interface ListItemSourceRefsRequest extends PageQuery, AdminCredential {
   supermarketId?: string;
   itemId?: string;
   status?: ItemSourceRefStatus;
 }
 
-export interface ItemSourceRefIdRequest {
-  userId: string;
+export interface ItemSourceRefIdRequest extends AdminCredential {
   refId: string;
 }
 
 /** Link an item to an external id by hand, bypassing the matching ladder. */
-export interface SetManualItemSourceRefRequest {
-  userId: string;
+export interface SetManualItemSourceRefRequest extends AdminCredential {
   itemId: string;
   supermarketId: string;
   externalId: string;
@@ -334,8 +324,7 @@ export interface SetManualItemSourceRefRequest {
 
 // --- Supermarket source requests -------------------------------------------
 
-export interface UpsertSupermarketSourceRequest {
-  userId: string;
+export interface UpsertSupermarketSourceRequest extends AdminCredential {
   supermarketId: string;
   adapterKey: AdapterKey;
   enabled?: boolean;
@@ -344,20 +333,17 @@ export interface UpsertSupermarketSourceRequest {
   maxRequestsPerSecond?: number;
 }
 
-export interface SupermarketSourceIdRequest {
-  userId: string;
+export interface SupermarketSourceIdRequest extends AdminCredential {
   supermarketId: string;
 }
 
-export interface SetSupermarketSourceEnabledRequest {
-  userId: string;
+export interface SetSupermarketSourceEnabledRequest extends AdminCredential {
   supermarketId: string;
   enabled: boolean;
 }
 
-export interface ListSupermarketSourcesRequest extends PageQuery {
-  userId: string;
-}
+export interface ListSupermarketSourcesRequest
+  extends PageQuery, AdminCredential {}
 
 // --- Pages -----------------------------------------------------------------
 
@@ -405,8 +391,8 @@ export interface PostalCodeDiscoveryRequestView {
   error: string | null;
 }
 
-export interface ListPostalCodeDiscoveryRequestsRequest extends PageQuery {
-  userId: string;
+export interface ListPostalCodeDiscoveryRequestsRequest
+  extends PageQuery, AdminCredential {
   country?: string;
   status?: PostalCodeDiscoveryStatus;
 }
