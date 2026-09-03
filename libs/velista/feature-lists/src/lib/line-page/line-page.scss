@@ -57,6 +57,15 @@
   color: var(--app-text-muted);
 }
 
+// Who put the line there. The same quiet voice as the line above it, one step smaller,
+// because it is the second thing said about where the line came from rather than a
+// second subject (plan 0066, section 4).
+.added-by {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
 // The names could not be read. Amber rather than coral: nothing is broken about the
 // line and the page below is entirely usable. It is missing text, not a failed write
 // (plan 0047, section 1.2).

@@ -54,9 +54,10 @@ import { editScopeFor, selectAbilities } from '../select-list-state';
  *
  * ## Two modes, and the row chooses which
  *
- * Plan 0030, section 4. `full` makes every field live, `quantity` shows the content and
- * lets only the number move. Two modes of one sheet rather than two sheets, because they
- * are the same gesture from the same row and the only difference is which fields answer.
+ * Plan 0030, section 4; plan 0066, section 2. `full` makes every field live, `content`
+ * shows the quantity and lets only the words move. Two modes of one sheet rather than
+ * two sheets, because they are the same gesture from the same row and the only
+ * difference is which fields answer.
  *
  * The mode comes from `editScopeFor`, the same expression the row's overflow used to
  * decide whether to offer this sheet at all, so the menu entry and the sheet behind it
@@ -67,12 +68,17 @@ import { editScopeFor, selectAbilities } from '../select-list-state';
  *
  * ## It says what the save is about to do
  *
- * Section 4.1. Lowering an approved line's quantity does not merely change a number: the
- * server keeps the difference as a second line marked as not in the shop, so the amount
- * the list asked for is not quietly lost (backend plan 0037, section 4). A row appearing
- * out of nowhere under the one you just edited is confusing exactly once per person,
- * which is once too many for a sentence this cheap. It is absent on an auto-approving
- * list, because there the split does not happen.
+ * Plan 0066, section 3. A writer fixing an approved line puts it back in front of
+ * whoever approves it (backend plan 0076, section 2), and a row that quietly went back
+ * to awaiting approval under somebody who was fixing a typo is confusing exactly once
+ * per person, which is once too many for a sentence this cheap. Before the save rather
+ * than after it, for the same reason.
+ *
+ * The sheet used to warn about something else here, a second line holding the difference
+ * when an approved line's quantity went down (backend plan 0037, section 4). Backend plan
+ * 0047 deleted that behaviour along with the trip status it was written in, so the sheet
+ * was warning about a row that is never created, on the exact edit this new sentence is
+ * about.
  *
  * ## It announces the edit, and the sheet's life is the intent's life
  *
@@ -119,13 +125,7 @@ export class EditLineSheet {
   /** Which fields answer. Null never renders: the constructor dismisses on it. */
   readonly scope = signal<LineEditScope | null>(null);
 
-  /** What the quantity was when the sheet opened, which is what the warning compares to. */
-  private readonly _openedAt = signal(0);
-
-  /** Whether the line this sheet is about had already been agreed to. */
-  private readonly _approved = signal(false);
-
-  /** Whether this list approves new lines by itself, which turns the split off. */
+  /** Whether this list approves new lines by itself, which is what spares the line. */
   private readonly _autoApproves = signal(false);
 
   readonly canSubmit = computed(
@@ -133,23 +133,19 @@ export class EditLineSheet {
   );
 
   /**
-   * Whether to say what the save is about to do (section 4.1).
+   * Whether to say that the save will put the line back to awaiting approval (plan 0066,
+   * section 3).
    *
-   * Three conditions, and all three are the server's own (backend plan 0037, section
-   * 4.4): the line is `APPROVED`, the number is going **down**, and the list does not
-   * auto-approve. Keyed on the line rather than on who is editing it, because the split
-   * is too, and a warning that appeared for one person and not another about the same
-   * edit to the same line would be a rule nobody could state.
+   * The server's own condition (backend plan 0076, section 2): the line is `APPROVED`,
+   * the caller holds neither `DECIDE` nor `MANAGE`, and the list does not auto approve.
+   * The first two are exactly what `content` scope means, so they are asked once, of
+   * `editScopeFor`, rather than restated here where they could drift from it. The third
+   * is not in the scope, because who may edit which field does not depend on the option
+   * and whether the edit reverts the line does.
    */
-  readonly warnsAboutRemainder = computed(
-    () =>
-      this._approved() &&
-      !this._autoApproves() &&
-      this.quantity() < this._openedAt()
+  readonly warnsAboutUnapproval = computed(
+    () => this.scope() === 'content' && !this._autoApproves()
   );
-
-  /** How many are being left behind, which the sentence names rather than implying. */
-  readonly remainder = computed(() => this._openedAt() - this.quantity());
 
   constructor() {
     const line = this._lines
@@ -179,8 +175,6 @@ export class EditLineSheet {
     this.scope.set(scope);
     this.content.set(line.content);
     this.quantity.set(line.quantity);
-    this._openedAt.set(line.quantity);
-    this._approved.set(line.approvalStatus === 'APPROVED');
     this._autoApproves.set(list?.autoApproveLines ?? false);
 
     // The list page underneath is what holds the room, so the intent lands. It is
@@ -201,14 +195,14 @@ export class EditLineSheet {
     this.submitting.set(true);
     this.errorKey.set(null);
 
-    // In `quantity` mode the content is not sent at all, rather than sent unchanged.
-    // `DECIDE` may move that one field on an approved line and nothing else (backend plan
-    // 0036, section 4.1), so a body naming `content` would be refused even when the value
-    // in it is the value already stored.
+    // In `content` mode the quantity is not sent at all, rather than sent unchanged. A
+    // writer may not move that one field on an approved line (backend plan 0076, section
+    // 3), and the server refuses a body naming it even when the value in it is the value
+    // already stored.
     const outcome = await this._lines.updateLine(
       this.lineId(),
-      this.scope() === 'quantity'
-        ? { quantity: this.quantity() }
+      this.scope() === 'content'
+        ? { content: this.content().trim() }
         : { content: this.content().trim(), quantity: this.quantity() }
     );
 

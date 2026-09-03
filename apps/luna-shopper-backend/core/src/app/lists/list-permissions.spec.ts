@@ -378,6 +378,21 @@ describe('a member holding {READ} (acceptance 2)', () => {
       w.listAccess.requireRead(LIST_ID, USER_ID)
     ).resolves.toBeDefined();
   });
+
+  it('may edit no field of an approved line, which plan 0076 did not widen', async () => {
+    // The plan opened a door for `WRITE` and for nobody else, so this is the
+    // regression it is most able to cause.
+    const w = world({
+      permissions: READ_ONLY,
+      line: { approvalStatus: LineApprovalStatus.APPROVED },
+    });
+    await expect(
+      w.lines.update({ userId: USER_ID, lineId: 'li1', content: 'Passata' })
+    ).rejects.toThrow();
+    await expect(
+      w.lines.update({ userId: USER_ID, lineId: 'li1', quantity: 1 })
+    ).rejects.toThrow();
+  });
 });
 
 describe('a member holding {READ, WRITE} (acceptance 3)', () => {
@@ -438,14 +453,87 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
     ).rejects.toThrow();
   });
 
-  it('may not touch an approved line at all', async () => {
+  it('fixes an approved line, and the fix puts it back to PENDING', async () => {
+    // Plan 0076, section 2. The writer typed "Mile" and can correct it, and the
+    // correction is what puts the line back in front of whoever approves.
+    const w = world({
+      permissions: WRITER,
+      line: {
+        approvalStatus: LineApprovalStatus.APPROVED,
+        approvedByUserId: 'the-approver',
+      },
+    });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Milk',
+    });
+
+    expect(view.content).toBe('Milk');
+    expect(view.approvalStatus).toBe(LineApprovalStatus.PENDING);
+    expect(view.approvedByUserId).toBeNull();
+  });
+
+  it('bumps the version once on an edit that also reverts the approval', async () => {
+    const w = world({
+      permissions: WRITER,
+      line: {
+        approvalStatus: LineApprovalStatus.APPROVED,
+        approvedByUserId: 'the-approver',
+        version: 4,
+      },
+    });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Milk',
+    });
+
+    expect(view.version).toBe(5);
+  });
+
+  it('keeps the approval when the list approves lines by itself', async () => {
+    // Plan 0076, section 2.3: nothing re-reads the option after creation, so a
+    // reversion here would strand the line awaiting an approval the list's owner
+    // switched off.
+    const w = world({
+      permissions: WRITER,
+      autoApproveLines: true,
+      line: {
+        approvalStatus: LineApprovalStatus.APPROVED,
+        approvedByUserId: 'the-approver',
+      },
+    });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Milk',
+    });
+
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    expect(view.approvedByUserId).toBe('the-approver');
+  });
+
+  it("is refused when it changes an approved line's quantity, by that field's name", async () => {
+    // Plan 0076, section 3. The message names the quantity rather than the line,
+    // because the same caller editing the content instead is allowed.
     const w = world({
       permissions: WRITER,
       line: { approvalStatus: LineApprovalStatus.APPROVED },
     });
     await expect(
       w.lines.update({ userId: USER_ID, lineId: 'li1', quantity: 1 })
-    ).rejects.toThrow();
+    ).rejects.toThrow(/quantity/i);
+  });
+
+  it('may not delete an approved line', async () => {
+    const w = world({
+      permissions: WRITER,
+      line: { approvalStatus: LineApprovalStatus.APPROVED },
+    });
     await expect(
       w.lines.delete({ userId: USER_ID, lineId: 'li1' })
     ).rejects.toThrow();
@@ -523,25 +611,40 @@ describe('a member holding {READ, DECIDE} (acceptance 4)', () => {
     ).rejects.toThrow();
   });
 
-  it("is refused when it changes an approved line's content", async () => {
-    // Acceptance 7 of plan 0037 as well. Quantity is the one field, and a request
-    // naming any other is refused rather than silently trimmed, so a client that
-    // thought it was renaming a line finds out that it did not.
+  it("changes an approved line's content, and it stays approved", async () => {
+    // Plan 0076, section 2.1. This was refused until that plan, and the caller
+    // got the same end state in three requests instead: un-approve, edit,
+    // approve. The reversion is exempted here for the same reason.
     const w = world({
       permissions: DECIDER,
-      line: { approvalStatus: LineApprovalStatus.APPROVED },
+      line: {
+        approvalStatus: LineApprovalStatus.APPROVED,
+        approvedByUserId: 'the-approver',
+      },
     });
-    await expect(
-      w.lines.update({ userId: USER_ID, lineId: 'li1', content: 'Passata' })
-    ).rejects.toThrow();
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Passata',
+    });
+
+    expect(view.content).toBe('Passata');
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    expect(view.approvedByUserId).toBe('the-approver');
   });
 });
 
 describe('a member holding {READ, MANAGE} (acceptance 5)', () => {
-  it('edits the content of an approved line', async () => {
+  it('edits the content of an approved line, and it stays approved', async () => {
+    // Plan 0076, section 2.2: `MANAGE` does not grant approval, so a reversion
+    // here would put the line into a state its holder cannot get it out of.
     const w = world({
       permissions: LIST_ADMIN,
-      line: { approvalStatus: LineApprovalStatus.APPROVED },
+      line: {
+        approvalStatus: LineApprovalStatus.APPROVED,
+        approvedByUserId: 'the-approver',
+      },
     });
     const view = await w.lines.update({
       userId: USER_ID,
@@ -549,6 +652,8 @@ describe('a member holding {READ, MANAGE} (acceptance 5)', () => {
       content: 'Passata',
     });
     expect(view.content).toBe('Passata');
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    expect(view.approvedByUserId).toBe('the-approver');
   });
 
   it('deletes an approved line', async () => {
