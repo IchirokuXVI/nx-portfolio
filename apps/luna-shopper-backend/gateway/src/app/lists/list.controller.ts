@@ -296,6 +296,7 @@ export class ListsController {
       content: dto.content,
       quantity: dto.quantity,
       itemIds: dto.itemIds,
+      productGroupId: dto.productGroupId,
     });
   }
 
@@ -369,6 +370,7 @@ export class LinesController {
       content: dto.content,
       quantity: dto.quantity,
       itemIds: dto.itemIds,
+      adoptItemIds: dto.adoptItemIds,
     });
   }
 

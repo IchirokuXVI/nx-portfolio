@@ -12,6 +12,7 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LIST_COUNTS_COLUMN, LIST_COUNTS_SQL } from '../zones/zone-summary.sql';
 import type { ListAccessService } from './list-access.service';
+import { EMPTY_LINE_ITEM_SET } from './line-item-set';
 import { EMPTY_LIST_COUNTS, toLineView, toListView } from './list.mappers';
 import { ListService } from './list.service';
 import { SharedListGrantService } from './shared-list-grant.service';
@@ -58,6 +59,9 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
       content: 'Milk',
       quantity: 1,
       itemSetHash: null,
+      // A hand made line, which is what every line 0048 created is (plan 0070,
+      // section 10): nothing was retro bound to a group.
+      productGroupId: null,
       position: 1,
       approvalStatus: LineApprovalStatus.PENDING,
       createdByUserId: 'u1',
@@ -67,13 +71,22 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
       updatedAt: new Date('2026-03-02T00:00:00.000Z'),
     } as ListLine;
 
-    const view = toLineView(line, [], NO_LINE_SETTLEMENTS, NO_LINE_CLAIM);
+    const view = toLineView(
+      line,
+      EMPTY_LINE_ITEM_SET,
+      NO_LINE_SETTLEMENTS,
+      NO_LINE_CLAIM
+    );
     expect(view.createdAt).toBe('2026-03-01T00:00:00.000Z');
     expect(view.updatedAt).toBe('2026-03-02T00:00:00.000Z');
     // A free text line, which is what most lines are: an empty set and a null
     // hash, said out loud rather than left absent (plan 0048, section 1.1).
     expect(view.itemIds).toEqual([]);
     expect(view.itemSetHash).toBeNull();
+    // And subscribed to nothing, said out loud for the same reason (plan 0070,
+    // section 9): a null group and an empty subset are what a hand made line is.
+    expect(view.productGroupId).toBeNull();
+    expect(view.groupItemIds).toEqual([]);
     // And nobody out buying it, said out loud for the same reason (plan 0052,
     // section 4): an absent pair would leave "nobody has this" and "this server
     // does not say" looking identical, and they draw different rows.

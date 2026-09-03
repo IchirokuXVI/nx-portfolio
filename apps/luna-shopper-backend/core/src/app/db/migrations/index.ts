@@ -12,6 +12,7 @@ import { ParticipantUsernameAndReopen1756001300000 } from './1756001300000-Parti
 import { BasketLineAuthor1756001400000 } from './1756001400000-BasketLineAuthor';
 import { PostalCodeSourceAndNearby1756001500000 } from './1756001500000-PostalCodeSourceAndNearby';
 import { ProfileLocationPreferences1756001600000 } from './1756001600000-ProfileLocationPreferences';
+import { LineProductGroupSubscription1756001700000 } from './1756001700000-LineProductGroupSubscription';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -53,4 +54,8 @@ export const CORE_MIGRATIONS = [
   // A new table hanging off `shopping_profiles`, so it follows the migration
   // that created that and nothing else (plan 0064, section 6).
   ProfileLocationPreferences1756001600000,
+  // Additive on `list_lines` and `list_line_items`, which plan 0048's migration
+  // shaped, plus a new table hanging off the lines. It follows those and nothing
+  // else (plan 0070, section 10).
+  LineProductGroupSubscription1756001700000,
 ];

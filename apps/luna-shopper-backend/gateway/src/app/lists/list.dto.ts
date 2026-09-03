@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   LINE_BATCH_MAX_ITEMS,
+  LINE_ITEM_SET_CEILING,
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
@@ -123,7 +124,18 @@ export class SetListAccessDto {
   entries!: ListAccessEntryDto[];
 }
 
-export class AddLineDto {
+/**
+ * One line of an {@link AddLinesDto} batch (plan 0040, section 6.5).
+ *
+ * Everything an add can carry **except the group**, which is what makes it the
+ * base of {@link AddLineDto} rather than a copy of it: the bounds on a batched
+ * line stay the bounds on a single one by construction and cannot drift apart.
+ * A batch is a paste, an import or the assistant, and none of those is somebody
+ * picking a group in the composer, so a subscription is the one thing a batched
+ * line cannot ask for (plan 0070, section 9). Accepting it here and ignoring it
+ * in core would be worse than not accepting it.
+ */
+export class AddLinesItemDto {
   @ApiProperty({ maxLength: 400 })
   @IsString()
   @MinLength(1)
@@ -155,17 +167,34 @@ export class AddLineDto {
 }
 
 /**
+ * Add one line to a list (plan 0007, section 2).
+ *
+ * A batched line plus the one thing only a single add can say: which group the
+ * set came from.
+ */
+export class AddLineDto extends AddLinesItemDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The catalog product group this set came from (plan 0070, section 9), which subscribes the line to it: products the group gains later appear on the line, and products it loses go, unless somebody has adopted or removed them. The server takes the set as sent and never re-derives it from the group, so the line holds exactly what the suggestion said it would add.',
+  })
+  @IsOptional()
+  @IsUUID()
+  productGroupId?: string;
+}
+
+/**
  * Add several lines to one list in one request (plan 0040, section 6).
  *
- * The item type is {@link AddLineDto} itself rather than a copy of it, so the
- * bounds on a batched line are the bounds on a single one by construction and
+ * The item type is {@link AddLinesItemDto}, which {@link AddLineDto} extends, so
+ * the bounds on a batched line are the bounds on a single one by construction and
  * cannot drift apart. Every item is validated at the edge, which is what lets
  * core answer all or nothing: by the time it sees the batch, a bad item has
  * already produced a 400 for the whole request.
  */
 export class AddLinesDto {
   @ApiProperty({
-    type: [AddLineDto],
+    type: [AddLinesItemDto],
     minItems: 1,
     maxItems: LINE_BATCH_MAX_ITEMS,
   })
@@ -173,8 +202,8 @@ export class AddLinesDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(LINE_BATCH_MAX_ITEMS)
   @ValidateNested({ each: true })
-  @Type(() => AddLineDto)
-  items!: AddLineDto[];
+  @Type(() => AddLinesItemDto)
+  items!: AddLinesItemDto[];
 }
 
 /**
@@ -221,15 +250,28 @@ export class UpdateLineDto {
   @ApiPropertyOptional({
     type: [String],
     format: 'uuid',
-    maxItems: LINE_ITEM_SET_MAX,
+    maxItems: LINE_ITEM_SET_CEILING,
     description:
-      'Replace the line’s product set (plan 0048, section 1.1); an empty array clears it back to free text. A whole set and not an add or a remove, for the same reason reorder takes the whole order.',
+      'Replace the line’s product set (plan 0048, section 1.1); an empty array clears it back to free text. A whole set and not an add or a remove, for the same reason reorder takes the whole order. The real bound is max(100, what the line currently holds) and is applied in core, which is the only layer that can see the second half of it: a line a growing group has carried past 100 has to stay editable, or it could never be shrunk back under the cap (plan 0070, section 7.2).',
   })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(LINE_ITEM_SET_MAX)
+  @ArrayMaxSize(LINE_ITEM_SET_CEILING)
   @IsUUID(undefined, { each: true })
   itemIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: LINE_ITEM_SET_CEILING,
+    description:
+      'Products to take ownership of, moving them from the line’s group to the person holding the line (plan 0070, section 9). A field of its own and not an inference from itemIds, because keeping a product in a set replacement is not a statement about who owns it: reading adoption out of that would adopt the whole line every time somebody removed one product. Ids the line does not hold are ignored, and adopting twice is a no op.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(LINE_ITEM_SET_CEILING)
+  @IsUUID(undefined, { each: true })
+  adoptItemIds?: string[];
 }
 
 export class SetApprovalDto {

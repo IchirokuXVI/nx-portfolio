@@ -9,6 +9,7 @@ import {
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
+import { CATALOG_MIGRATIONS } from '../db/migrations';
 import {
   CATALOG_ENTITIES,
   Item,
@@ -17,7 +18,7 @@ import {
   Supermarket,
   SupermarketItem,
 } from '../entities';
-import { CATALOG_MIGRATIONS } from '../db/migrations';
+import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -99,16 +100,25 @@ describeIntegration('catalog search (real Postgres)', () => {
     const admin = new PlatformAdminService({
       getOrThrow: () => ({ platformAdminUserIds: [OWNER] }),
     } as never);
+    // Plan 0070: a write that moves a product's group, or deletes one,
+    // announces it. Fire and forget and nothing here consumes it, but both
+    // services call it, so the double has to exist.
+    const events = {
+      itemGroupChanged: jest.fn(),
+      productGroupDeleted: jest.fn(),
+    } as unknown as CatalogEventsPublisher;
     groups = new ProductGroupService(
       dataSource.getRepository(ProductGroup),
-      admin
+      admin,
+      events
     );
     items = new ItemService(
       dataSource.getRepository(Item),
       dataSource.getRepository(ProductGroup),
       dataSource.getRepository(SupermarketItem),
       groups,
-      admin
+      admin,
+      events
     );
 
     await seed();
@@ -333,7 +343,10 @@ describeIntegration('catalog search (real Postgres)', () => {
       });
 
       try {
-        const page = await items.search({ userId: SHOPPER, query: PASCUAL_EAN });
+        const page = await items.search({
+          userId: SHOPPER,
+          query: PASCUAL_EAN,
+        });
 
         // The impostor carries no barcode, and `NULL = '848…'` is NULL, which a
         // descending sort puts first unless it is told otherwise. This asserts
@@ -424,14 +437,20 @@ describeIntegration('catalog search (real Postgres)', () => {
     });
 
     it('carries the members with no scopes given, where nothing is priced', async () => {
-      const page = await items.searchOffers({ userId: SHOPPER, query: 'leche' });
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        query: 'leche',
+      });
       expect([...page.items[0].itemIds].sort()).toEqual(
         [ids.pascualMilk, ids.hacendadoMilk].sort()
       );
     });
 
     it('works with no scopes at all, quoting nothing', async () => {
-      const page = await items.searchOffers({ userId: SHOPPER, query: 'leche' });
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        query: 'leche',
+      });
       expect(page.items.map((g) => g.group.id)).toEqual([ids.milkGroup]);
       expect(page.items[0].offer).toBeNull();
     });
@@ -462,7 +481,10 @@ describeIntegration('catalog search (real Postgres)', () => {
       // Nothing about the items changed, and both of them have to become
       // findable by a word that did not exist a moment ago. This is the second
       // trigger, and the reason the vectors are columns rather than generated.
-      const before = await items.search({ userId: SHOPPER, query: 'mantequilla' });
+      const before = await items.search({
+        userId: SHOPPER,
+        query: 'mantequilla',
+      });
       expect(before.items).toHaveLength(0);
 
       await groups.update({
@@ -471,7 +493,10 @@ describeIntegration('catalog search (real Postgres)', () => {
         synonyms: { en: ['milk'], es: ['leche', 'lácteo', 'mantequilla'] },
       });
 
-      const after = await items.search({ userId: SHOPPER, query: 'mantequilla' });
+      const after = await items.search({
+        userId: SHOPPER,
+        query: 'mantequilla',
+      });
       expect(after.items.map((i) => i.id).sort()).toEqual(
         [ids.pascualMilk, ids.hacendadoMilk].sort()
       );

@@ -35,6 +35,10 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import {
+  toLineItemSet,
+  type LineItemSet,
+} from '../lists/line-item-set';
 import { toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
@@ -428,7 +432,7 @@ export class GeneratedListOriginsService {
       zone.zoneId,
       toLineView(
         written.source,
-        written.itemIds,
+        written.items,
         written.settlements,
         written.claim
       ),
@@ -553,7 +557,7 @@ export class GeneratedListOriginsService {
         // repositories, which would take a second connection while this
         // transaction holds one; enough concurrent edits and every connection in
         // the pool is a transaction waiting for one that will never come free.
-        itemIds: await this.zoneLineItemIds(manager, source.id),
+        items: await this.zoneLineItemSet(manager, source.id),
         settlements: await this.settlementsOf(manager, source.id),
         claim: await this.claims.claimOf(source.id, manager),
       };
@@ -739,16 +743,23 @@ export class GeneratedListOriginsService {
     return new Map(rows.map((row) => [row.id, row]));
   }
 
-  /** A zone line's product set, in attachment order (plan 0048, section 1.1). */
-  private async zoneLineItemIds(
+  /**
+   * A zone line's product set, in attachment order, and which of it the line's
+   * group is still responsible for (plan 0048, section 1.1; plan 0070, section 9).
+   *
+   * Both halves, because the `line.updated` this feeds carries a whole `LineView`
+   * and a client reconciles off it: one that reported only the products would take
+   * velista `0065`'s marks off a subscribed line over a quantity change.
+   */
+  private async zoneLineItemSet(
     manager: EntityManager,
     lineId: string
-  ): Promise<string[]> {
+  ): Promise<LineItemSet> {
     const rows = await manager.getRepository(ListLineItem).find({
       where: { lineId },
       order: { position: 'ASC', createdAt: 'ASC' },
     });
-    return rows.map((row) => row.itemId);
+    return toLineItemSet(rows);
   }
 
   /**
@@ -846,7 +857,7 @@ interface WrittenOrigin {
   source: ListLine;
   /** The provenance row, or null when the contribution was set to zero. */
   origin: GeneratedListLineOrigin | null;
-  itemIds: string[];
+  items: LineItemSet;
   settlements: LineSettlementSummary;
   claim: Awaited<ReturnType<LineClaimService['claimOf']>>;
 }

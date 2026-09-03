@@ -265,6 +265,10 @@ describe('contract schemas', () => {
           // null hash, both stated rather than left out (plan 0048, 1.1).
           itemIds: [],
           itemSetHash: null,
+          // Subscribed to nothing, stated rather than left out for the same
+          // reason (plan 0070, section 9): a hand made line says so.
+          productGroupId: null,
+          groupItemIds: [],
           position: 1,
           approvalStatus: 'PENDING',
           createdByUserId: 'u',
@@ -298,6 +302,11 @@ describe('contract schemas', () => {
             quantity: 0,
             itemIds: ['3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13'],
             itemSetHash: 'h',
+            // Subscribed to Milk, and the one product on it is still the
+            // group's: nobody has adopted it, so a sync still looks after it
+            // (plan 0070, section 9).
+            productGroupId: '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f52',
+            groupItemIds: ['3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13'],
             position: 1,
             approvalStatus: 'APPROVED',
             createdByUserId: 'u',
@@ -465,6 +474,55 @@ describe('contract schemas', () => {
           listId: 'l',
           viewers: [],
           editors: [],
+        }).valid
+      ).toBe(true);
+    });
+
+    it('catalog.itemGroupChanged, with a null on each end (plan 0070)', () => {
+      // A move between two groups, a join, and a departure. All three are one
+      // event shape, and both ends are **null** rather than absent when the
+      // product belongs to no group: an absent field would leave the consumer
+      // guessing which half of the sync to run.
+      expect(
+        validateEvent('catalog.itemGroupChanged', {
+          eventId: 'e1',
+          itemId: 'i1',
+          from: 'g-old',
+          to: 'g-new',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateEvent('catalog.itemGroupChanged', {
+          eventId: 'e2',
+          itemId: 'i1',
+          from: null,
+          to: 'g-new',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateEvent('catalog.itemGroupChanged', {
+          eventId: 'e3',
+          itemId: 'i1',
+          from: 'g-old',
+          to: null,
+        }).valid
+      ).toBe(true);
+      // Without the event id there is nothing for the consumer's inbox to
+      // dedupe on, which is the whole of its at least once protection.
+      expect(
+        validateEvent('catalog.itemGroupChanged', {
+          itemId: 'i1',
+          from: null,
+          to: 'g-new',
+        }).valid
+      ).toBe(false);
+    });
+
+    it('catalog.productGroupDeleted (plan 0070, section 5)', () => {
+      expect(
+        validateEvent('catalog.productGroupDeleted', {
+          eventId: 'e1',
+          productGroupId: 'g1',
         }).valid
       ).toBe(true);
     });

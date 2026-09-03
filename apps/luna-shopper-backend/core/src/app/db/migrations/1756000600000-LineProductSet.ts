@@ -12,11 +12,17 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * ## Why a set at all
  *
- * Picking a group in the composer copies that group's members onto the line, and
- * the line references no group afterwards. That copy is the point: the catalog
- * does not have to curate a group for every household's version of "milk",
- * because a line is its own hand made group, and removing a product the household
- * never buys is then an ordinary edit of that line.
+ * Picking a group in the composer copies that group's members onto the line. That
+ * copy is the point: the catalog does not have to curate a group for every
+ * household's version of "milk", because a line is its own hand made group, and
+ * removing a product the household never buys is then an ordinary edit of that
+ * line.
+ *
+ * This migration also said "and the line references no group afterwards", which
+ * `LineProductGroupSubscription1756001700000` revises: the divergence is recorded
+ * now rather than protected by forgetting. Nothing about the schema this
+ * migration writes changes, and the sentence is corrected here rather than
+ * deleted so a reader following the history is not left with the old rule.
  *
  * ## What `itemSetHash` is for
  *

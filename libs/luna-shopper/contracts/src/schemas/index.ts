@@ -5,6 +5,7 @@
 export { buildAsyncApiDocument } from './asyncapi';
 export { COMMON_IDS } from './common.schemas';
 export { ENUM_IDS } from './enums.schemas';
+export { CATALOG_EVENT_SCHEMA_IDS } from './events/catalog.schemas';
 export { IDENTITY_EVENT_SCHEMA_IDS } from './events/identity.schemas';
 export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';
 export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';

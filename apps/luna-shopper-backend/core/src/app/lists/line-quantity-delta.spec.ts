@@ -8,11 +8,15 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
-import { LineSettlement, ListLineItem } from '../entities';
+import {
+  LineSettlement,
+  ListLineGroupRemoval,
+  ListLineItem,
+} from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
-import { fakeLineItems } from './line-items.fake';
+import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -151,12 +155,18 @@ function build(options: {
   // Plan 0048: the line's product set. Nothing in this file is about the set,
   // but every write path now touches one, so it has to work.
   const lineItems = fakeLineItems();
+  // Plan 0070: a write to a subscribed line's set can leave a tombstone. No line
+  // here is subscribed, so nothing lands in it, but the repository has to exist.
+  const groupRemovals = fakeGroupRemovals();
   const settlements = fakeLineSettlements();
 
   const dataSource = {
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
       run({
         getRepository: (entity: unknown) => {
+          if (entity === ListLineGroupRemoval) {
+            return groupRemovals.repo;
+          }
           if (entity === ListLineItem) {
             return lineItems.repo;
           }
@@ -181,6 +191,7 @@ function build(options: {
     dataSource,
     lineRepo as never,
     lineItems.repo as never,
+    groupRemovals.repo as never,
     // No settlements on any line here: a delta is an edit, and the two
     // indicators it carries back are whatever the history already said.
     settlements.repo as never,

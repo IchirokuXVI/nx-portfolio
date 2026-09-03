@@ -33,6 +33,10 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import {
+  toLineItemSet,
+  type LineItemSet,
+} from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
@@ -228,7 +232,7 @@ export class GeneratedListReopenService {
           // reader is holding: the event carries one settlement, and the others
           // are older states of the same line's history.
           settlement: rows[rows.length - 1],
-          itemIds: await this.zoneLineItemIds(manager, zoneLine.id),
+          items: await this.zoneLineItemSet(manager, zoneLine.id),
           // Counted after the reverts are saved, so the rows just marked are out
           // of it, and the most recent outcome is read rather than assumed: this
           // call removes settlements, so what is left is whatever stood before
@@ -266,7 +270,7 @@ export class GeneratedListReopenService {
         {
           line: toLineView(
             announcement.line,
-            announcement.itemIds,
+            announcement.items,
             announcement.settlementSummary,
             announcement.claim ?? NO_LINE_CLAIM
           ),
@@ -384,16 +388,23 @@ export class GeneratedListReopenService {
     return participant ? await this.sharing.seesZoneData(participant) : false;
   }
 
-  /** A zone line's product set, in attachment order (plan 0048, section 1.1). */
-  private async zoneLineItemIds(
+  /**
+   * A zone line's product set, in attachment order, and which of it the line's
+   * group is still responsible for (plan 0048, section 1.1; plan 0070, section 9).
+   *
+   * Both halves, because the announcement carries a whole `LineView` and a client
+   * reconciles off it: one that reported only the products would take velista
+   * `0065`'s marks off a subscribed line over somebody taking a purchase back.
+   */
+  private async zoneLineItemSet(
     manager: EntityManager,
     lineId: string
-  ): Promise<string[]> {
+  ): Promise<LineItemSet> {
     const rows = await manager.getRepository(ListLineItem).find({
       where: { lineId },
       order: { position: 'ASC', createdAt: 'ASC' },
     });
-    return rows.map((row) => row.itemId);
+    return toLineItemSet(rows);
   }
 }
 
@@ -403,7 +414,7 @@ interface ZoneAnnouncement {
   listId: string;
   line: ListLine;
   settlement: LineSettlement;
-  itemIds: string[];
+  items: LineItemSet;
   settlementSummary: LineSettlementSummary;
   /**
    * The zone line's third indicator, filled in after the basket line is saved

@@ -5,6 +5,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
 import type { Item, ProductGroup, SupermarketItem } from '../entities';
+import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -36,7 +37,10 @@ function build(
     {} as Repository<ProductGroup>,
     prices,
     {} as ProductGroupService,
-    { requireAdmin: jest.fn() } as unknown as PlatformAdminService
+    { requireAdmin: jest.fn() } as unknown as PlatformAdminService,
+    // Plan 0070. Neither read here moves a product's group, so it is never
+    // called; the constructor still needs it.
+    {} as unknown as CatalogEventsPublisher
   );
   return { service, prices };
 }

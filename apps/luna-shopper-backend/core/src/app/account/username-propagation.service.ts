@@ -12,7 +12,7 @@ import { Repository } from 'typeorm';
 import { ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { toMembershipView } from '../zones/zone.mappers';
-import { ProcessedEventStore } from './idempotency.store';
+import { ProcessedEventStore } from '../events/idempotency.store';
 
 /**
  * Core's reaction to a global username change (plan 0018, section 4.4).
