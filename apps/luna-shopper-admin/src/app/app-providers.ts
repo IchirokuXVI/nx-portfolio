@@ -15,15 +15,19 @@ import {
   DEPLOYMENT_SERVICE,
   DeploymentApi,
   LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS,
+  RESOURCE_GATEWAYS,
+  ResourceApiGateways,
   SESSION_SERVICE,
   SessionApi,
   SessionBootstrap,
   SessionLifecycle,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { provideResources } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ADMIN_API_CONFIG } from '@portfolio/luna-shopper-admin/models';
 import { provideService } from '@portfolio/shared/data-access';
 import { environment } from '../environments/environment';
 import { DocumentTitle } from './document-title';
+import { ADMIN_RESOURCES } from './resources';
 import { LUNA_SHOPPER_ADMIN_TRANSLATION_PROVIDERS } from './translation-providers';
 
 /**
@@ -61,6 +65,13 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // well as binding it, and neither class provides itself anywhere.
   provideService(DEPLOYMENT_SERVICE, DeploymentApi),
   provideService(SESSION_SERVICE, SessionApi),
+  provideService(RESOURCE_GATEWAYS, ResourceApiGateways),
+
+  // Which resources this app has (plan 0004). The route table is built from the
+  // same list, so a resource cannot be reachable without a link or linked
+  // without a route, and a reference field pointing at one of them resolves
+  // through this rather than through a second registry.
+  provideResources(...ADMIN_RESOURCES),
 
   // Ask the server about itself, and take a passwordless session if it offers one
   // (plan 0002, section 5).

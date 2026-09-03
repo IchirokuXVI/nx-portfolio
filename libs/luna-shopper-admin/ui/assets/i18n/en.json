@@ -42,8 +42,116 @@
       "signOut": "Sign out and lose unsaved work"
     }
   },
-  "placeholder": {
-    "heading": "Signed in",
-    "body": "Signed in as {{name}}. The screens arrive next; until then this page reports who you are and which deployment answered, and nothing else."
+  "shell": {
+    "menu": "Menu",
+    "navigation": "Sections",
+    "signOut": "Sign out"
+  },
+  "notFound": {
+    "heading": "There is no such screen",
+    "body": "The address you asked for does not belong to anything in this back office. It may have been a link from an older version.",
+    "home": "Go to the first screen"
+  },
+  "resource": {
+    "value": {
+      "none": "None",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "list": {
+      "loading": "Loading…",
+      "loadingMore": "Loading more…",
+      "empty": "There is nothing here yet.",
+      "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
+      "actions": "Actions"
+    },
+    "filter": {
+      "any": "Any"
+    },
+    "sort": {
+      "label": "Order",
+      "default": "Default order"
+    },
+    "field": {
+      "choose": "Choose…"
+    },
+    "reference": {
+      "search": "Search",
+      "searching": "Searching…",
+      "noResults": "Nothing matched.",
+      "resolving": "Looking it up…",
+      "missing": "This points at {{id}}, which no longer exists.",
+      "change": "Change",
+      "clear": "Clear"
+    },
+    "form": {
+      "create": "New {{name}}",
+      "edit": "Edit {{name}}",
+      "loading": "Loading…"
+    },
+    "action": {
+      "create": "Create",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "retry": "Try again",
+      "more": "Load more",
+      "clearFilters": "Clear the filter",
+      "confirm": "Yes, do it",
+      "working": "Working…"
+    },
+    "confirm": {
+      "delete": {
+        "heading": "Delete this row?",
+        "body": "{{name}} will be deleted. There is no undo, and anything pointing at it may stop working.",
+        "confirm": "Delete it"
+      },
+      "discard": {
+        "heading": "Leave without saving?",
+        "body": "This form has changes that have not been saved. Leaving now loses them.",
+        "confirm": "Leave and lose them"
+      }
+    },
+    "error": {
+      "required": "This is needed.",
+      "missingLocale": "The {{locale}} text is needed.",
+      "tooLong": "Use at most {{max}} characters.",
+      "localeTooLong": "The {{locale}} text must be at most {{max}} characters.",
+      "notAUrl": "Write a full web address, starting with http:// or https://.",
+      "notANumber": "Write a number.",
+      "notAnInteger": "Write a whole number.",
+      "tooSmall": "Use {{min}} or more.",
+      "tooLarge": "Use {{max}} or less.",
+      "tooPrecise": "This column keeps {{decimals}} decimals. Values are not rounded for you, because a rounded price is a different price.",
+      "notADate": "Write a date.",
+      "notAnOption": "Choose one of the offered values.",
+      "notFound": "That row is not there. Somebody may have deleted it.",
+      "forbidden": "This account is not allowed to do that.",
+      "conflict": "That change conflicts with the current state. Read the row again and try once more.",
+      "validation": "Some of the values were refused. The details are beside the fields.",
+      "unreachable": "The gateway did not answer. Check that the backend is running.",
+      "unknown": "That did not work, and the server did not say why."
+    }
+  },
+  "catalog": {
+    "supermarkets": {
+      "one": "supermarket",
+      "many": "Supermarkets",
+      "id": "Identifier",
+      "name": "Name",
+      "logoUrl": "Logo address",
+      "websiteUrl": "Website",
+      "externalBrandKey": "Wikidata identifier",
+      "externalBrandKeyHelp": "The chain's stable identity across discovery runs. It is what splits Carrefour from Carrefour Express, so change it only when that is what you mean.",
+      "defaultPriceScopeId": "Default price scope",
+      "defaultPriceScopeIdHelp": "Set by the catalog service, not from here.",
+      "search": "Name contains",
+      "sort": {
+        "name": "By name",
+        "created": "Newest first",
+        "updated": "Recently changed"
+      }
+    }
   }
 }
