@@ -121,7 +121,7 @@ export class ItemService {
    * write coming that would tell them.
    */
   async create(req: CreateItemRequest): Promise<ItemView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const saved = await this.items.save(
       this.items.create({
         name: req.name,
@@ -156,7 +156,7 @@ export class ItemService {
    * group, so an event for a rename would be a fan out over nothing.
    */
   async update(req: UpdateItemRequest): Promise<ItemView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const row = await this.load(req.itemId);
     const groupBefore = row.productGroupId;
     if (req.name !== undefined) {
@@ -198,7 +198,7 @@ export class ItemService {
   }
 
   async delete(req: ItemIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const result = await this.items.delete({ id: req.itemId });
     if (!result.affected) {
       throw new NotFoundException('Item not found');

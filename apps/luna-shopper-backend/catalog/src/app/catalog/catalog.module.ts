@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import type { CatalogConfig } from '../config/app-config';
@@ -28,6 +29,10 @@ import { SupermarketService } from './supermarket.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature(CATALOG_ENTITIES),
+    // Verification only, and registered with no key (plan 0072): every call
+    // passes the public key it wants explicitly, because a default signing key
+    // on this module is a key catalog has no business holding.
+    JwtModule.register({}),
     // Catalog's first outbound client (plan 0070, section 5). It publishes the
     // group membership changes core reconciles into subscribed lines, and it
     // publishes nothing else.

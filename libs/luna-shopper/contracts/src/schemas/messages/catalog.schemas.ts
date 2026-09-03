@@ -34,7 +34,7 @@ import {
   schemaId,
   string,
 } from '../builders';
-import { COMMON_IDS } from '../common.schemas';
+import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
 
 /**
  * Catalog schemas (plan 0012): supermarkets, locations, items and per-location
@@ -422,7 +422,7 @@ const productGroupOfferPage = paginated(
 const createSupermarketRequest = object(
   CATALOG_SCHEMA_IDS.createSupermarketRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     logoUrl: nullableString(),
     websiteUrl: nullableString(),
@@ -433,7 +433,7 @@ const createSupermarketRequest = object(
 const updateSupermarketRequest = object(
   CATALOG_SCHEMA_IDS.updateSupermarketRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     logoUrl: nullableString(),
@@ -445,7 +445,7 @@ const updateSupermarketRequest = object(
 );
 const supermarketIdRequest = object(
   CATALOG_SCHEMA_IDS.supermarketIdRequest,
-  { userId: nonEmptyString(), supermarketId: nonEmptyString() },
+  { ...adminCredentialProperties, supermarketId: nonEmptyString() },
   ['userId', 'supermarketId']
 );
 const listSupermarketsRequest = object(
@@ -478,7 +478,7 @@ const locationFields = {
 const createLocationRequest = object(
   CATALOG_SCHEMA_IDS.createLocationRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     ...locationFields,
   },
@@ -487,7 +487,7 @@ const createLocationRequest = object(
 const updateLocationRequest = object(
   CATALOG_SCHEMA_IDS.updateLocationRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketLocationId: nonEmptyString(),
     ...locationFields,
   },
@@ -495,7 +495,7 @@ const updateLocationRequest = object(
 );
 const locationIdRequest = object(
   CATALOG_SCHEMA_IDS.locationIdRequest,
-  { userId: nonEmptyString(), supermarketLocationId: nonEmptyString() },
+  { ...adminCredentialProperties, supermarketLocationId: nonEmptyString() },
   ['userId', 'supermarketLocationId']
 );
 const listLocationsRequest = object(
@@ -515,7 +515,7 @@ const listLocationsRequest = object(
 const createItemRequest = object(
   CATALOG_SCHEMA_IDS.createItemRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     brand: nullableString(),
     imageUrl: nullableString(),
@@ -531,7 +531,7 @@ const createItemRequest = object(
 const updateItemRequest = object(
   CATALOG_SCHEMA_IDS.updateItemRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     itemId: nonEmptyString(),
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     brand: nullableString(),
@@ -561,7 +561,7 @@ const findItemByEanResult = object(
 );
 const itemIdRequest = object(
   CATALOG_SCHEMA_IDS.itemIdRequest,
-  { userId: nonEmptyString(), itemId: nonEmptyString() },
+  { ...adminCredentialProperties, itemId: nonEmptyString() },
   ['userId', 'itemId']
 );
 /**
@@ -624,7 +624,7 @@ const searchOffersRequest = object(
 const createProductGroupRequest = object(
   CATALOG_SCHEMA_IDS.createProductGroupRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     slug: nonEmptyString(),
     referenceUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
@@ -635,7 +635,7 @@ const createProductGroupRequest = object(
 const updateProductGroupRequest = object(
   CATALOG_SCHEMA_IDS.updateProductGroupRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     productGroupId: nonEmptyString(),
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     slug: nonEmptyString(),
@@ -646,7 +646,7 @@ const updateProductGroupRequest = object(
 );
 const productGroupIdRequest = object(
   CATALOG_SCHEMA_IDS.productGroupIdRequest,
-  { userId: nonEmptyString(), productGroupId: nonEmptyString() },
+  { ...adminCredentialProperties, productGroupId: nonEmptyString() },
   ['userId', 'productGroupId']
 );
 const listProductGroupsRequest = object(
@@ -673,7 +673,7 @@ const priceFields = {
 const upsertSupermarketItemRequest = object(
   CATALOG_SCHEMA_IDS.upsertSupermarketItemRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     itemId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
     priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
@@ -689,7 +689,7 @@ const supermarketItemBatchEntry = object(
 const upsertSupermarketItemBatchRequest = object(
   CATALOG_SCHEMA_IDS.upsertSupermarketItemBatchRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     priceScopeId: nonEmptyString(),
     priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
     entries: array(ref(CATALOG_SCHEMA_IDS.supermarketItemBatchEntry)),
@@ -718,7 +718,7 @@ const upsertSupermarketItemBatchResult = object(
 );
 const supermarketItemIdRequest = object(
   CATALOG_SCHEMA_IDS.supermarketItemIdRequest,
-  { userId: nonEmptyString(), supermarketItemId: nonEmptyString() },
+  { ...adminCredentialProperties, supermarketItemId: nonEmptyString() },
   ['userId', 'supermarketItemId']
 );
 const getSupermarketItemRequest = object(
@@ -769,7 +769,7 @@ const listByScopeRequest = object(
 const createPriceScopeRequest = object(
   CATALOG_SCHEMA_IDS.createPriceScopeRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     kind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
     externalKey: nullableString(),
@@ -780,7 +780,7 @@ const createPriceScopeRequest = object(
 const updatePriceScopeRequest = object(
   CATALOG_SCHEMA_IDS.updatePriceScopeRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     priceScopeId: nonEmptyString(),
     kind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
     externalKey: nullableString(),
@@ -790,7 +790,7 @@ const updatePriceScopeRequest = object(
 );
 const priceScopeIdRequest = object(
   CATALOG_SCHEMA_IDS.priceScopeIdRequest,
-  { userId: nonEmptyString(), priceScopeId: nonEmptyString() },
+  { ...adminCredentialProperties, priceScopeId: nonEmptyString() },
   ['userId', 'priceScopeId']
 );
 const listPriceScopesRequest = object(
@@ -875,7 +875,7 @@ const catalogScopeView = object(
 const upsertLocationItemRequest = object(
   CATALOG_SCHEMA_IDS.upsertLocationItemRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     itemId: nonEmptyString(),
     supermarketLocationId: nonEmptyString(),
     positionInStore: nullableString(),

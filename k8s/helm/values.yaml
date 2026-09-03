@@ -291,9 +291,11 @@ lunaShopperBackend:
     smtpHost: ''
     smtpPort: '587'
     smtpUser: ''
-    # Comma-separated user ids allowed to write the catalog (plan 0012). Set to
-    # the app owner's registered user id; empty means no one can write.
-    platformAdminUserIds: ''
+    # There is deliberately no admin list here any more (plan 0072). Writing the
+    # catalog is proved by a signature the service verifies for itself, so an
+    # admin is created with one database write and no restart, and no value in
+    # this file can grant the role. What services may write catalog is rendered
+    # into `SERVICE_ACTOR_IDS` from `harvester.actorId` below.
     # The oldest velista build this deployment will serve (velista plan 0034).
     #
     # Empty switches the mechanism off, which is how both clusters run: the gateway
@@ -349,11 +351,15 @@ lunaShopperBackend:
   harvester:
     enabled: false
 
-    # The uuid the harvester writes to catalog as (backlog 0001, section 4.1). It
-    # must also appear in `config.platformAdminUserIds` above, because catalog
-    # gates every write on that allowlist and does not know the harvester is
-    # special. Empty means the harvester cannot write anything, which is the safe
-    # default and exactly what it should do when nobody has set it up.
+    # The uuid the harvester writes to catalog as (backlog 0001, section 4.1;
+    # plan 0072, section 4). It is the single source for catalog's
+    # `SERVICE_ACTOR_IDS`, rendered from this value in the ConfigMap rather than
+    # restated beside it, so the pair cannot drift.
+    #
+    # It used to have to appear in `config.platformAdminUserIds` too, which made
+    # the harvester an admin. It is a service, and catalog now has a separate door
+    # for services. Empty means the harvester cannot write anything, which is the
+    # safe default and exactly what it should do when nobody has set it up.
     actorId: ''
 
     # Whether the pod may start a run at all. Separate from `enabled` on purpose:

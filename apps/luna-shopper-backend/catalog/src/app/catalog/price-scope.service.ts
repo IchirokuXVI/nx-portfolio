@@ -49,7 +49,7 @@ export class PriceScopeService {
   ) {}
 
   async create(req: CreatePriceScopeRequest): Promise<PriceScopeView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     await this.requireSupermarket(req.supermarketId);
     try {
       const saved = await this.scopes.save(
@@ -72,7 +72,7 @@ export class PriceScopeService {
   }
 
   async update(req: UpdatePriceScopeRequest): Promise<PriceScopeView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const row = await this.load(req.priceScopeId);
     if (req.kind !== undefined) {
       row.kind = req.kind;
@@ -87,7 +87,7 @@ export class PriceScopeService {
   }
 
   async delete(req: PriceScopeIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     try {
       const result = await this.scopes.delete({ id: req.priceScopeId });
       if (!result.affected) {

@@ -1,3 +1,4 @@
+import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
@@ -88,7 +89,11 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
 
   const config = {
     getOrThrow: () => ({
-      platformAdminUserIds: [OWNER],
+      // The owner writes as a configured SERVICE here (plan 0072). This file is
+      // about location and postal code behaviour rather than about which door
+      // the caller came through, and the service path needs no keypair.
+      adminJwtPublicKey: '',
+      serviceActorIds: [OWNER],
       postalCodeDeriveMaxMetres: MAX_METRES,
     }),
   } as unknown as ConfigService;
@@ -97,7 +102,7 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
     locations,
     supermarkets,
     scopes,
-    new PlatformAdminService(config),
+    new PlatformAdminService(new JwtService(), config),
     new PostalCodeService(pointsRepository),
     config
   );

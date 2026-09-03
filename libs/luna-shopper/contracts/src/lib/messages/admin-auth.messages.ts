@@ -39,6 +39,44 @@ export type AdminAuthPattern =
 export const ADMIN_TOKEN_AUDIENCE = 'platform-admin';
 
 /**
+ * What a caller presents at a downstream admin gate (plan 0072, section 2).
+ *
+ * Catalog and harvester decide who is an admin **for themselves**, and this is
+ * the evidence they decide on. `adminToken` is the operator token the gateway
+ * forwarded, verified offline against `ADMIN_JWT_PUBLIC_KEY` by whichever service
+ * received it. That the gateway also checked it is not the point: a gateway route
+ * that forgets its guard, or a new one added without one, still cannot write the
+ * catalog, because the service behind it proves the signature itself. A trusted
+ * `isPlatformAdmin` boolean in the payload would throw that property away and
+ * replace it with a convention nobody can enforce in review.
+ *
+ * `userId` is who the caller says it is, and it is **not** a credential. It
+ * carries the caller's identity for reads scoped to a person, and it is the only
+ * thing a *service* presents for itself: catalog matches it against its
+ * configured `serviceActorIds`, which is how the harvester writes prices without
+ * holding a credential shaped like a person's (section 4).
+ *
+ * Both fields are optional to a gate in different ways, so neither is optional
+ * here by accident: a request with no `adminToken` can still pass catalog's gate
+ * as a service, and a request whose `userId` is unknown can still pass it as an
+ * admin. What no request can do is pass by naming a uuid, which is what
+ * `PLATFORM_ADMIN_USER_IDS` allowed and why it is gone.
+ *
+ * Some `*IdRequest` shapes below are shared between an open read and a gated
+ * delete. They carry `adminToken` for the delete's sake; a read simply ignores
+ * it.
+ */
+export interface AdminCredential {
+  /** The actor the caller presents for itself: a person's id, or a service's. */
+  userId: string;
+  /**
+   * The operator token the gateway forwarded, when a person made the call.
+   * Absent on a service to service call, which has no token to forward.
+   */
+  adminToken?: string;
+}
+
+/**
  * The claims inside a signed admin token (plan 0071, section 4).
  *
  * No `kind`: `UserKind` describes velista users and an admin is not one, so

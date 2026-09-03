@@ -46,7 +46,7 @@ export class SupermarketLocationItemService {
   async upsert(
     req: UpsertSupermarketLocationItemRequest
   ): Promise<SupermarketLocationItemView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     await this.requireItemAndLocation(req.itemId, req.supermarketLocationId);
 
     const existing = await this.rows.findOne({

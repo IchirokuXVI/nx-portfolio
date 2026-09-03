@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import type { HarvesterConfig } from '../config/app-config';
@@ -33,6 +34,10 @@ import { SupermarketSourceService } from './supermarket-source.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature(HARVESTER_ENTITIES),
+    // Verification only, and registered with no key (plan 0072): every call
+    // passes the public key it wants explicitly, because a default signing key
+    // on this module is a key the harvester has no business holding.
+    JwtModule.register({}),
     ClientsModule.registerAsync([
       {
         name: CATALOG_NATS_CLIENT,

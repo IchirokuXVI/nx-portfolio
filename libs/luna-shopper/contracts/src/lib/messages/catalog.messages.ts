@@ -6,6 +6,7 @@ import type {
   UnitOfMeasure,
 } from '../enums/catalog.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { AdminCredential } from './admin-auth.messages';
 
 /**
  * Catalog message contracts (plan 0012). The gateway calls these on the catalog
@@ -498,16 +499,14 @@ export interface SupermarketLocationItemView {
 
 // --- Supermarket requests --------------------------------------------------
 
-export interface CreateSupermarketRequest {
-  userId: string;
+export interface CreateSupermarketRequest extends AdminCredential {
   name: LocalizedText;
   logoUrl?: string | null;
   websiteUrl?: string | null;
   externalBrandKey?: string | null;
 }
 
-export interface UpdateSupermarketRequest {
-  userId: string;
+export interface UpdateSupermarketRequest extends AdminCredential {
   supermarketId: string;
   name?: LocalizedText;
   logoUrl?: string | null;
@@ -521,8 +520,7 @@ export interface UpdateSupermarketRequest {
   defaultPriceScopeId?: string | null;
 }
 
-export interface SupermarketIdRequest {
-  userId: string;
+export interface SupermarketIdRequest extends AdminCredential {
   supermarketId: string;
 }
 
@@ -532,8 +530,7 @@ export interface ListSupermarketsRequest extends PageQuery {
 
 // --- Supermarket location requests -----------------------------------------
 
-export interface CreateSupermarketLocationRequest {
-  userId: string;
+export interface CreateSupermarketLocationRequest extends AdminCredential {
   supermarketId: string;
   /**
    * Optional: a location with no scope named is given its chain's STORE scope for
@@ -571,8 +568,7 @@ export interface CreateSupermarketLocationRequest {
   externalProvider?: string | null;
 }
 
-export interface UpdateSupermarketLocationRequest {
-  userId: string;
+export interface UpdateSupermarketLocationRequest extends AdminCredential {
   supermarketLocationId: string;
   priceScopeId?: string;
   label?: LocalizedText | null;
@@ -592,8 +588,7 @@ export interface UpdateSupermarketLocationRequest {
   externalProvider?: string | null;
 }
 
-export interface SupermarketLocationIdRequest {
-  userId: string;
+export interface SupermarketLocationIdRequest extends AdminCredential {
   supermarketLocationId: string;
 }
 
@@ -687,8 +682,7 @@ export interface SearchShopsRequest extends PageQuery, ShopRefusals {
 
 // --- Item requests ---------------------------------------------------------
 
-export interface CreateItemRequest {
-  userId: string;
+export interface CreateItemRequest extends AdminCredential {
   name: LocalizedText;
   brand?: string | null;
   imageUrl?: string | null;
@@ -701,8 +695,7 @@ export interface CreateItemRequest {
   productGroupId?: string | null;
 }
 
-export interface UpdateItemRequest {
-  userId: string;
+export interface UpdateItemRequest extends AdminCredential {
   itemId: string;
   name?: LocalizedText;
   brand?: string | null;
@@ -731,8 +724,7 @@ export interface FindItemByEanResult {
   item: ItemView | null;
 }
 
-export interface ItemIdRequest {
-  userId: string;
+export interface ItemIdRequest extends AdminCredential {
   itemId: string;
 }
 
@@ -817,16 +809,14 @@ export interface SearchOffersRequest extends PageQuery {
 
 // --- Product group requests ------------------------------------------------
 
-export interface CreateProductGroupRequest {
-  userId: string;
+export interface CreateProductGroupRequest extends AdminCredential {
   name: LocalizedText;
   slug: string;
   referenceUnit: UnitOfMeasure;
   synonyms?: LocalizedSynonyms;
 }
 
-export interface UpdateProductGroupRequest {
-  userId: string;
+export interface UpdateProductGroupRequest extends AdminCredential {
   productGroupId: string;
   name?: LocalizedText;
   slug?: string;
@@ -834,8 +824,7 @@ export interface UpdateProductGroupRequest {
   synonyms?: LocalizedSynonyms;
 }
 
-export interface ProductGroupIdRequest {
-  userId: string;
+export interface ProductGroupIdRequest extends AdminCredential {
   productGroupId: string;
 }
 
@@ -852,8 +841,7 @@ export interface ListProductGroupsRequest extends PageQuery {
  * it sets `priceSourceKind` to ADMIN and **pins** the row: section 6.5's rule is
  * that an automated fetch will not overwrite it afterwards.
  */
-export interface UpsertSupermarketItemRequest {
-  userId: string;
+export interface UpsertSupermarketItemRequest extends AdminCredential {
   itemId: string;
   priceScopeId: string;
   price?: number | null;
@@ -887,8 +875,7 @@ export interface SupermarketItemBatchEntry {
  * does not make one round trip per item. Section 6.5 is applied per entry, and
  * the entries it declined are reported rather than silently dropped.
  */
-export interface UpsertSupermarketItemBatchRequest {
-  userId: string;
+export interface UpsertSupermarketItemBatchRequest extends AdminCredential {
   priceScopeId: string;
   priceSourceKind: PriceSourceKind;
   entries: SupermarketItemBatchEntry[];
@@ -915,8 +902,7 @@ export interface SupermarketItemPriceDisagreement {
   fetchedPrice: number | null;
 }
 
-export interface SupermarketItemIdRequest {
-  userId: string;
+export interface SupermarketItemIdRequest extends AdminCredential {
   supermarketItemId: string;
 }
 
@@ -948,24 +934,21 @@ export interface ListSupermarketItemsByScopeRequest extends PageQuery {
 
 // --- Price scope requests --------------------------------------------------
 
-export interface CreatePriceScopeRequest {
-  userId: string;
+export interface CreatePriceScopeRequest extends AdminCredential {
   supermarketId: string;
   kind: PriceScopeKind;
   externalKey?: string | null;
   label?: LocalizedText | null;
 }
 
-export interface UpdatePriceScopeRequest {
-  userId: string;
+export interface UpdatePriceScopeRequest extends AdminCredential {
   priceScopeId: string;
   kind?: PriceScopeKind;
   externalKey?: string | null;
   label?: LocalizedText | null;
 }
 
-export interface PriceScopeIdRequest {
-  userId: string;
+export interface PriceScopeIdRequest extends AdminCredential {
   priceScopeId: string;
 }
 
@@ -1109,8 +1092,7 @@ export interface ShopChainSummariesView {
 
 // --- Supermarket location item requests ------------------------------------
 
-export interface UpsertSupermarketLocationItemRequest {
-  userId: string;
+export interface UpsertSupermarketLocationItemRequest extends AdminCredential {
   itemId: string;
   supermarketLocationId: string;
   positionInStore?: string | null;

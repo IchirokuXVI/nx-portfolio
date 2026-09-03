@@ -35,17 +35,22 @@ export const harvesterValidationSchema = Joi.object({
   HARVESTER_DB_URL: Joi.string().required(),
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
   AUTH_JWT_PUBLIC_KEY_FILE: Joi.string(),
-  PLATFORM_ADMIN_USER_IDS: Joi.string().allow('').default(''),
+  ADMIN_JWT_PUBLIC_KEY: Joi.string(),
+  ADMIN_JWT_PUBLIC_KEY_FILE: Joi.string(),
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
 
   /**
-   * The uuid catalog knows this service by (backlog 0001, section 4.1). It is
-   * listed in catalog's own `PLATFORM_ADMIN_USER_IDS`, so every write the
-   * harvester makes passes the existing platform admin gate and is attributable
-   * in the log exactly like the owner's own writes. No new authorization
-   * machinery, and no shared secret.
+   * The uuid catalog knows this service by (backlog 0001, section 4.1; plan
+   * 0072, section 4). It belongs to catalog's `SERVICE_ACTOR_IDS`, the door for
+   * callers that are machines, so every write the harvester makes is accepted
+   * and attributed to the harvester rather than to a person.
+   *
+   * It used to sit in catalog's `PLATFORM_ADMIN_USER_IDS` instead, which made a
+   * machine an admin. It is not one, and the two lists are separate now for that
+   * reason. One practical gain: this uuid is stable, so creating an admin no
+   * longer means editing a list the harvester also depends on.
    */
   HARVESTER_ACTOR_ID: Joi.string().uuid().allow('').default(''),
 
@@ -88,14 +93,17 @@ export const harvesterValidationSchema = Joi.object({
   NOMINATIM_URL: Joi.string().allow('').default(''),
 
   ...telemetryValidationSchema,
-}).or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE');
+})
+  .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE')
+  .or('ADMIN_JWT_PUBLIC_KEY', 'ADMIN_JWT_PUBLIC_KEY_FILE');
 
 export interface HarvesterConfig {
   port: number;
   natsUrl: string;
   dbUrl: string;
   authJwtPublicKey: string;
-  platformAdminUserIds: string[];
+  /** The second trust root (plan 0072): what an operator token is verified with. */
+  adminJwtPublicKey: string;
   logLevel: (typeof LOG_LEVELS)[number];
   actorId: string;
   harvestEnabled: boolean;
@@ -113,13 +121,6 @@ export interface HarvesterConfig {
   mercadonaBaseUrl: string | undefined;
   overpassUrl: string | undefined;
   nominatimUrl: string | undefined;
-}
-
-function parseAdminIds(raw?: string): string[] {
-  return (raw ?? '')
-    .split(',')
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0);
 }
 
 /** Joi coerces to a real boolean, but process.env is read directly here too. */
@@ -144,7 +145,10 @@ export const harvesterConfiguration = registerAs(
       process.env.AUTH_JWT_PUBLIC_KEY,
       process.env.AUTH_JWT_PUBLIC_KEY_FILE
     ),
-    platformAdminUserIds: parseAdminIds(process.env.PLATFORM_ADMIN_USER_IDS),
+    adminJwtPublicKey: readKey(
+      process.env.ADMIN_JWT_PUBLIC_KEY,
+      process.env.ADMIN_JWT_PUBLIC_KEY_FILE
+    ),
     logLevel: process.env.LOG_LEVEL as HarvesterConfig['logLevel'],
     actorId: process.env.HARVESTER_ACTOR_ID ?? '',
     harvestEnabled: parseBoolean(process.env.HARVEST_ENABLED, false),

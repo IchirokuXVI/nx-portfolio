@@ -56,7 +56,7 @@ export class DiscoveredPlaceService {
   ) {}
 
   async list(req: ListDiscoveredPlacesRequest): Promise<DiscoveredPlacePage> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as PlaceCursor | undefined;
 
@@ -107,7 +107,7 @@ export class DiscoveredPlaceService {
   async groups(
     req: GroupDiscoveredPlacesRequest
   ): Promise<DiscoveredPlaceGroupsResult> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const sampleSize = Math.max(1, Math.min(req.sampleSize ?? 3, 20));
 
     const qb = this.places.createQueryBuilder('p').orderBy('p.name', 'ASC');
@@ -159,7 +159,7 @@ export class DiscoveredPlaceService {
   async import(
     req: ImportDiscoveredPlaceRequest
   ): Promise<DiscoveredPlaceView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const place = await this.load(req.placeId);
     if (place.status === DiscoveredPlaceStatus.IMPORTED) {
       throw new ConflictException(
@@ -199,7 +199,7 @@ export class DiscoveredPlaceService {
   }
 
   async reject(req: DiscoveredPlaceIdRequest): Promise<DiscoveredPlaceView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const place = await this.load(req.placeId);
     place.status = DiscoveredPlaceStatus.REJECTED;
     return toDiscoveredPlaceView(await this.places.save(place));

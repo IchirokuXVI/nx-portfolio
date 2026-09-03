@@ -83,7 +83,7 @@ export class SupermarketLocationService {
   async create(
     req: CreateSupermarketLocationRequest
   ): Promise<SupermarketLocationView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const parent = await this.supermarkets.findOne({
       where: { id: req.supermarketId },
     });
@@ -128,7 +128,7 @@ export class SupermarketLocationService {
   async update(
     req: UpdateSupermarketLocationRequest
   ): Promise<SupermarketLocationView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const row = await this.load(req.supermarketLocationId);
     if (req.priceScopeId !== undefined) {
       row.priceScopeId = (
@@ -174,7 +174,7 @@ export class SupermarketLocationService {
   }
 
   async delete(req: SupermarketLocationIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const result = await this.locations.delete({
       id: req.supermarketLocationId,
     });
