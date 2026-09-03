@@ -336,3 +336,59 @@ describe('SupermarketLocationService postal codes', () => {
     expect(view.priceScopeId).toBe(SCOPE);
   });
 });
+
+/**
+ * The review filter (plan 0073, section 4, for `apps/luna-shopper-admin/plans/0005`
+ * section 3).
+ *
+ * `DERIVED` means the postal code was inferred from the nearest centroid rather
+ * than known, and the point of the filter is that an operator can list exactly
+ * those rows. The case worth pinning is the third state: a location with no
+ * postal code at all has no source either, so it is absent from every value of
+ * the filter rather than folded in with the guesses.
+ */
+describe('SupermarketLocationService.list postal code filter', () => {
+  function listing() {
+    const qb: Record<string, jest.Mock> = {};
+    for (const name of ['where', 'andWhere', 'orderBy', 'addOrderBy', 'take']) {
+      qb[name] = jest.fn(() => qb);
+    }
+    qb.getMany = jest.fn(async () => []);
+
+    const locations = {
+      createQueryBuilder: jest.fn(() => qb),
+    } as unknown as Repository<SupermarketLocation>;
+
+    const service = new SupermarketLocationService(
+      locations,
+      {} as Repository<Supermarket>,
+      {} as PriceScopeService,
+      {} as PlatformAdminService,
+      {} as PostalCodeService,
+      { getOrThrow: () => ({}) } as unknown as ConfigService
+    );
+    return { service, qb };
+  }
+
+  it('narrows to one source when the caller names one', async () => {
+    const { service, qb } = listing();
+
+    await service.list({
+      userId: OWNER,
+      supermarketId: CHAIN,
+      postalCodeSource: PostalCodeSource.DERIVED,
+    });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('l."postalCodeSource" = :pcs', {
+      pcs: PostalCodeSource.DERIVED,
+    });
+  });
+
+  it('lists the whole chain when it does not', async () => {
+    const { service, qb } = listing();
+
+    await service.list({ userId: OWNER, supermarketId: CHAIN });
+
+    expect(qb.andWhere).not.toHaveBeenCalled();
+  });
+});

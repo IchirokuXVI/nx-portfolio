@@ -158,6 +158,21 @@
     {
       "key": "perZoneUsernameSet",
       "value": "false"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminUsername",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -2416,17 +2431,18 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/items",
+              "raw": "{{baseUrl}}/v1/admin/catalog/items",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "items"
               ]
             },
-            "description": "The admin gate is the only thing protecting the shared catalog from any signed-in user, so it is worth asserting positively. Expects 403 unless the run presents a valid operator token.",
+            "description": "The boundary of plan 0073, asserted positively. This is the one request in the suite that presents a velista access token to an admin route on purpose, and the refusal is now a 401 rather than a 403: the route is guarded by AdminJwtGuard, which verifies against the operator public key, so a user token fails to authenticate rather than failing to authorise. Every run makes this call, because the token it presents is the user's whether or not an operator token is configured.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": {\n    \"en\": \"Should not be created\",\n    \"es\": \"No deberia crearse\"\n  },\n  \"category\": \"OTHER\",\n  \"defaultUnit\": \"UNIT\"\n}",
@@ -2440,30 +2456,32 @@
           "response": [],
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Inverted: this request asserts the refusal, so it is the *admin* run that skips it.",
-                  "if (pm.collectionVariables.get('catalogAdmin') === 'true') {",
-                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
-                  "}"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status is 403', function () { pm.response.to.have.status(403); });",
+                  "pm.test('status is 401', function () { pm.response.to.have.status(401); });",
                   "pm.test('body is an RFC7807 problem document', function () {",
                   "  const b = pm.response.json();",
                   "  pm.expect(b, 'type').to.have.property('type');",
                   "  pm.expect(b, 'title').to.have.property('title');",
-                  "  pm.expect(b.status, 'status field').to.eql(403);",
+                  "  pm.expect(b.status, 'status field').to.eql(401);",
                   "  pm.expect(b, 'code').to.have.property('code');",
                   "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});",
+                  "pm.test('and the old path is gone rather than merely guarded', function () {",
+                  "  pm.sendRequest({",
+                  "    url: pm.variables.replaceIn('{{baseUrl}}/v1/catalog/items'),",
+                  "    method: 'POST',",
+                  "    header: {",
+                  "      'Content-Type': 'application/json',",
+                  "      Authorization: pm.variables.replaceIn('Bearer {{accessToken}}')",
+                  "    },",
+                  "    body: { mode: 'raw', raw: '{}' }",
+                  "  }, function (err, res) {",
+                  "    pm.expect(err).to.be.null;",
+                  "    pm.expect(res.code, 'POST /v1/catalog/items').to.eql(404);",
+                  "  });",
                   "});"
                 ]
               }
@@ -2550,6 +2568,75 @@
       "name": "06b · Catalog (admin only)",
       "item": [
         {
+          "name": "Sign in as the operator",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "An operator is a different principal from a velista user (plan 0071): a different table, a different signing key, and since plan 0073 a different namespace. Nothing earlier in this run produces a token that works here, so the folder starts by getting one. Set adminUsername and adminPassword, which `admin:create` on the server is what creates.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "pm.test('answers with an operator token', function () {",
+                  "  pm.expect(b.accessToken).to.be.a('string').and.not.empty;",
+                  "  pm.expect(b.adminId).to.be.a('string').and.not.empty;",
+                  "});",
+                  "// Kept apart from accessToken on purpose. One variable holding",
+                  "// either principal is how a request ends up sending the wrong one.",
+                  "pm.collectionVariables.set('adminToken', b.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Create an item",
           "request": {
             "method": "POST",
@@ -2560,12 +2647,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/items",
+              "raw": "{{baseUrl}}/v1/admin/catalog/items",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "items"
               ]
@@ -2578,6 +2666,16 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "response": [],
@@ -2618,15 +2716,26 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/items/{{itemId}}",
+              "raw": "{{baseUrl}}/v1/admin/catalog/items/{{itemId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "items",
                 "{{itemId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -2670,12 +2779,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/items/{{itemId}}",
+              "raw": "{{baseUrl}}/v1/admin/catalog/items/{{itemId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "items",
                 "{{itemId}}"
@@ -2689,6 +2799,16 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "response": [],
@@ -2731,12 +2851,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/supermarkets",
+              "raw": "{{baseUrl}}/v1/admin/catalog/supermarkets",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "supermarkets"
               ]
@@ -2749,6 +2870,16 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "response": [],
@@ -2789,12 +2920,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/supermarkets/{{supermarketId}}/locations",
+              "raw": "{{baseUrl}}/v1/admin/catalog/supermarkets/{{supermarketId}}/locations",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "supermarkets",
                 "{{supermarketId}}",
@@ -2809,6 +2941,16 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "response": [],
@@ -2844,16 +2986,27 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/supermarkets/{{supermarketId}}/locations",
+              "raw": "{{baseUrl}}/v1/admin/catalog/supermarkets/{{supermarketId}}/locations",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "supermarkets",
                 "{{supermarketId}}",
                 "locations"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -2898,12 +3051,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/supermarket-items",
+              "raw": "{{baseUrl}}/v2/admin/catalog/supermarket-items",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "v1",
+                "v2",
+                "admin",
                 "catalog",
                 "supermarket-items"
               ]
@@ -2917,6 +3071,16 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "response": [],
@@ -3684,15 +3848,26 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/supermarket-items/{{supermarketItemId}}",
+              "raw": "{{baseUrl}}/v2/admin/catalog/supermarket-items/{{supermarketItemId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "v1",
+                "v2",
+                "admin",
                 "catalog",
                 "supermarket-items",
                 "{{supermarketItemId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -3728,15 +3903,26 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/locations/{{locationId}}",
+              "raw": "{{baseUrl}}/v1/admin/catalog/locations/{{locationId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "locations",
                 "{{locationId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -3772,15 +3958,26 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/supermarkets/{{supermarketId}}",
+              "raw": "{{baseUrl}}/v1/admin/catalog/supermarkets/{{supermarketId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "supermarkets",
                 "{{supermarketId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -3816,15 +4013,26 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/v1/catalog/items/{{itemId}}",
+              "raw": "{{baseUrl}}/v1/admin/catalog/items/{{itemId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
+                "admin",
                 "catalog",
                 "items",
                 "{{itemId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },

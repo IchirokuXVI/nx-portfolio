@@ -105,6 +105,9 @@ export const CATALOG_SCHEMA_IDS = {
   listByItemRequest: schemaId('msg/supermarketItem.listByItem/request'),
   listByLocationRequest: schemaId('msg/supermarketItem.listByLocation/request'),
   listByScopeRequest: schemaId('msg/supermarketItem.listByScope/request'),
+  adminListSupermarketItemsRequest: schemaId(
+    'msg/supermarketItem.adminList/request'
+  ),
   createPriceScopeRequest: schemaId('msg/priceScope.create/request'),
   updatePriceScopeRequest: schemaId('msg/priceScope.update/request'),
   priceScopeIdRequest: schemaId('msg/priceScope.id/request'),
@@ -505,6 +508,8 @@ const listLocationsRequest = object(
     supermarketId: nonEmptyString(),
     // Plan 0066, section 4: only the shops that sell at this scope.
     priceScopeId: nonEmptyString(),
+    // Plan 0073, section 4: the guessed postal codes, for the operator's review.
+    postalCodeSource: ref(CATALOG_SCHEMA_IDS.postalCodeSource),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -599,6 +604,8 @@ const searchItemsRequest = object(
     // Plan 0048: the group filter, and the scopes a price may be quoted from. No
     // default is resolved when the scopes are absent; that is plan 0049.
     productGroupId: string(),
+    // Plan 0073: the back office's "what has curation not reached yet".
+    withoutProductGroup: boolean(),
     priceScopeIds: array(nonEmptyString()),
     cursor: string(),
     limit: integer({ minimum: 1 }),
@@ -762,6 +769,23 @@ const listByScopeRequest = object(
     order: string(),
   },
   ['userId', 'priceScopeId']
+);
+// Plan 0073, section 4. Every filter optional, so the empty request is the whole
+// table: the three lists above each require the thing they start from, and this
+// one starts from nothing on purpose.
+const adminListSupermarketItemsRequest = object(
+  CATALOG_SCHEMA_IDS.adminListSupermarketItemsRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    priceScopeId: nonEmptyString(),
+    priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    available: boolean(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
 );
 
 // --- Price scopes and per store rows (plan 0038) ---------------------------
@@ -1180,6 +1204,7 @@ export const catalogSchemas: JsonSchema[] = [
   listByItemRequest,
   listByLocationRequest,
   listByScopeRequest,
+  adminListSupermarketItemsRequest,
   createPriceScopeRequest,
   updatePriceScopeRequest,
   priceScopeIdRequest,
@@ -1332,6 +1357,10 @@ export const catalogMessageContracts: Record<
   },
   [SUPERMARKET_ITEM_PATTERNS.listByScope]: {
     request: CATALOG_SCHEMA_IDS.listByScopeRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketItemPage,
+  },
+  [SUPERMARKET_ITEM_PATTERNS.adminList]: {
+    request: CATALOG_SCHEMA_IDS.adminListSupermarketItemsRequest,
     response: CATALOG_SCHEMA_IDS.supermarketItemPage,
   },
   [PRICE_SCOPE_PATTERNS.create]: {

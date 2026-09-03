@@ -537,7 +537,7 @@ const asArray = ({ value }: { value: unknown }) =>
  * handed on untouched, so `@IsBoolean` refuses it rather than reading it as
  * false, which is what a typo deserves.
  */
-const asBoolean = ({ value }: { value: unknown }) => {
+export const asBoolean = ({ value }: { value: unknown }) => {
   if (value === '' || value === 'true' || value === true) {
     return true;
   }

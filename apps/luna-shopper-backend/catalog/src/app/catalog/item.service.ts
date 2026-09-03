@@ -630,6 +630,13 @@ export class ItemService {
     if (req.productGroupId) {
       filters.push(`i."productGroupId" = ${p.bind(req.productGroupId)}::uuid`);
     }
+    // Plan 0073, section 4, applied on both branches: an operator who types a
+    // word while filtering to the ungrouped products means both, and a filter
+    // that silently stopped applying when the ordering changed would be worse
+    // than one that was never offered.
+    if (req.withoutProductGroup) {
+      filters.push('i."productGroupId" IS NULL');
+    }
     // Unit price is the last ranking key, so it is joined even when the caller
     // asked for no prices in the answer: with no scopes there is nothing to join
     // and every row sorts as unpriced, which is the same order.
@@ -724,6 +731,12 @@ export class ItemService {
       qb.andWhere('i."productGroupId" = :groupId', {
         groupId: req.productGroupId,
       });
+    }
+    if (req.withoutProductGroup) {
+      // Plan 0073, section 4: what curation has not reached. Applied beside the
+      // group filter rather than instead of it, so asking for both answers with
+      // nothing, which is what the two clauses together mean.
+      qb.andWhere('i."productGroupId" IS NULL');
     }
     this.applyOrder(qb, order, cursor);
     return qb.getMany();

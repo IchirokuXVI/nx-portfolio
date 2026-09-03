@@ -192,6 +192,84 @@ describe('SupermarketItemService', () => {
 });
 
 /**
+ * The back office's price list (plan 0073, section 4).
+ *
+ * It is the one read in this service behind the gate, and the two properties
+ * worth pinning are why: it starts from nothing, so with no filter it is the
+ * whole price table, and `priceSourceKind` is what makes "which prices did I
+ * type in myself" answerable at all.
+ */
+describe('SupermarketItemService.adminList (plan 0073, section 4)', () => {
+  function build() {
+    const qb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getMany: jest.fn(async () => []),
+    };
+    const admin = makeAdmin();
+    const supermarketItems = {
+      createQueryBuilder: jest.fn(() => qb),
+    } as unknown as Repository<SupermarketItem>;
+    const svc = new SupermarketItemService(
+      supermarketItems,
+      {} as Repository<Item>,
+      {} as Repository<PriceScope>,
+      {} as Repository<SupermarketLocation>,
+      admin
+    );
+    return { svc, qb, admin };
+  }
+
+  it('is gated, unlike the three lists beside it', async () => {
+    const { svc } = build();
+
+    await expect(svc.adminList({ userId: 'intruder' })).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+  });
+
+  it('with no filter it pages the whole table, newest first', async () => {
+    const { svc, qb } = build();
+
+    await svc.adminList({ userId: ADMIN });
+
+    expect(qb.andWhere).not.toHaveBeenCalled();
+    expect(qb.orderBy).toHaveBeenCalledWith('si.createdAt', 'DESC');
+  });
+
+  it('answers "what have I pinned by hand"', async () => {
+    const { svc, qb } = build();
+
+    await svc.adminList({
+      userId: ADMIN,
+      priceSourceKind: PriceSourceKind.ADMIN,
+    });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('si."priceSourceKind" = :kind', {
+      kind: PriceSourceKind.ADMIN,
+    });
+  });
+
+  /**
+   * `available: false` is a filter and not an absent one. Reading it as "no
+   * filter" is the obvious bug, and it would hide exactly the rows an operator
+   * opened the screen to find.
+   */
+  it('treats available=false as a filter rather than as absent', async () => {
+    const { svc, qb } = build();
+
+    await svc.adminList({ userId: ADMIN, available: false });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('si."available" = :available', {
+      available: false,
+    });
+  });
+});
+
+/**
  * Section 6.5. These are the tests that make "an import does not clobber a price
  * the owner typed in" a property rather than a comment.
  */

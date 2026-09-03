@@ -82,8 +82,13 @@ describe('admin and user tokens are separate principals', () => {
     await expect(adminGuard.canActivate(context)).resolves.toBe(true);
 
     // `adminId` and no `userId`: a handler that asked for the wrong principal
-    // would not find one, rather than find something it could act on.
-    expect(request.user as CurrentAdmin).toEqual({ adminId: 'a1' });
+    // would not find one, rather than find something it could act on. The token
+    // comes back with it because catalog and the harvester verify it again for
+    // themselves (plan 0073, section 1), so the route has to forward it.
+    expect(request.user as CurrentAdmin).toEqual({
+      adminId: 'a1',
+      token: adminToken,
+    });
   });
 
   it('rejects a velista access token on an admin route', async () => {

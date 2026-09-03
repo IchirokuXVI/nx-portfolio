@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   PriceSourceKind,
+  type AdminListSupermarketItemsRequest,
   type GetSupermarketItemRequest,
   type ListSupermarketItemsByItemRequest,
   type ListSupermarketItemsByLocationRequest,
@@ -257,6 +258,65 @@ export class SupermarketItemService {
     req: ListSupermarketItemsByScopeRequest
   ): Promise<SupermarketItemPage> {
     return this.page('priceScopeId', req.priceScopeId, req.cursor, req.limit);
+  }
+
+  /**
+   * The back office's price list (plan 0073, section 4).
+   *
+   * Gated, unlike the three lists above it, and gated for what it returns rather
+   * than for what it changes: with no filter at all it pages the entire price
+   * table, which is not a shape any user facing screen has a use for. The gate
+   * is also what makes `priceSourceKind` answerable — "which prices did I type
+   * in" is a question about the operator's own past writes.
+   */
+  async adminList(
+    req: AdminListSupermarketItemsRequest
+  ): Promise<SupermarketItemPage> {
+    await this.admin.requireAdmin(req);
+
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor(req.cursor) as
+      | SupermarketItemCursor
+      | undefined;
+
+    const qb = this.supermarketItems
+      .createQueryBuilder('si')
+      .orderBy('si.createdAt', 'DESC')
+      .addOrderBy('si.id', 'DESC')
+      .take(limit + 1);
+    if (req.itemId) {
+      qb.andWhere('si."itemId" = :itemId', { itemId: req.itemId });
+    }
+    if (req.priceScopeId) {
+      qb.andWhere('si."priceScopeId" = :scopeId', {
+        scopeId: req.priceScopeId,
+      });
+    }
+    if (req.priceSourceKind) {
+      qb.andWhere('si."priceSourceKind" = :kind', {
+        kind: req.priceSourceKind,
+      });
+    }
+    if (req.available !== undefined) {
+      qb.andWhere('si."available" = :available', { available: req.available });
+    }
+    if (cursor) {
+      qb.andWhere('(si."createdAt", si.id) < (:cv, :cid)', {
+        cv: cursor.value,
+        cid: cursor.id,
+      });
+    }
+
+    const rows = await qb.getMany();
+    const hasMore = rows.length > limit;
+    const list = rows.slice(0, limit);
+    const last = list[list.length - 1];
+    const nextCursor =
+      hasMore && last
+        ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
+        : null;
+
+    return { items: list.map(toSupermarketItemView), nextCursor };
   }
 
   private async page(
