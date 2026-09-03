@@ -139,6 +139,13 @@ echo "Upgrading helm release '${RELEASE_NAME}' in namespace '${NAMESPACE}' to ${
 # pod takes traffic. That is the behaviour plan 0027 assumes and nothing
 # previously enforced.
 #
+# The one deploy that migrates post-upgrade instead is the one that introduces a
+# service's database, which cannot migrate before the StatefulSet that provides
+# one; migration-job.yaml.tpl detects that case per cluster and explains it. A
+# failure there still fails this script, because --wait covers post hooks too.
+# Production reaches that case when the harvester is enabled here (k8s plan
+# 0008), after staging's soak.
+#
 # Deliberately NOT --atomic, unlike the staging deploy. --atomic on production
 # turns a partial failure into an automatic rollback of the whole release,
 # including the pods that ran alongside database migrations — and migrations do

@@ -6,6 +6,13 @@
 {{- range $ls.services }}
 {{- if not (include "lunaShopperBackend.entryEnabled" (dict "entry" . "ls" $ls)) }}{{- continue }}{{- end }}
 {{- if or (eq .role "auth") (eq .role "core") (eq .role "catalog") (eq .role "harvester") }}
+{{- $svc := . }}
+{{- $dbKey := printf "%s_DB_URL" (upper $svc.role) }}
+{{- $dbName := "" }}
+{{- range $ls.postgres.instances }}
+{{- if eq .urlSecretKey $dbKey }}{{- $dbName = .name }}{{- end }}
+{{- end }}
+{{- $dbExists := and $dbName (lookup "v1" "Service" $root.Values.namespace $dbName) }}
 ---
 # Database migrations on deploy (plan 0002, section 5 and 6). A Helm pre upgrade
 # hook runs this service's migrations against its database before the new pods
@@ -67,7 +74,49 @@ metadata:
     app: {{ .name }}-migrate
     app.kubernetes.io/part-of: luna-shopper-backend
   annotations:
-    helm.sh/hook: post-install,pre-upgrade
+    # pre-upgrade, EXCEPT on the upgrade that introduces this service's database,
+    # which takes post-upgrade instead.
+    #
+    # The comment above explains why a first install migrates post-install: Helm
+    # runs pre hooks before it applies a single chart resource, so a hook that
+    # needs a database cannot run before the release that creates one. A service
+    # switched on inside an ALREADY INSTALLED release is the same problem wearing
+    # a different name, and it is not the install path, so it did not get the
+    # install path's answer. k8s plan 0008 turned the harvester on in staging and
+    # the deploy failed in two minutes:
+    #
+    #   Error: getaddrinfo ENOTFOUND luna-shopper-backend-harvester-db
+    #   job luna-shopper-backend-harvester-migrate failed: BackoffLimitExceeded
+    #   Error: UPGRADE FAILED: ... rolled back due to atomic being set
+    #
+    # The Job was correct, its image was correct, and its database was three
+    # steps further down the same upgrade. --atomic then rolled the release back,
+    # which removed the StatefulSet that would have fixed it, so every retry
+    # failed identically. Nothing about it is specific to the harvester: it is
+    # what the fifth database will do too.
+    #
+    # So the condition is asked of the cluster rather than assumed. `lookup`
+    # returns empty for a Service that does not exist yet, and that is exactly
+    # the case that cannot migrate first. It renders post-upgrade for that one
+    # deploy; the next deploy finds the Service and is back on pre-upgrade, with
+    # no flag to remember to remove.
+    #
+    # post-upgrade is safe HERE and would not be safe as the general rule. The
+    # upgrade uses --wait, so Helm has applied the StatefulSet and waited for
+    # Postgres to be ready before this hook starts, and a failure still fails the
+    # release. What is given up is the expand/contract ordering: the new pods
+    # roll before the migration. On the deploy that introduces a database that
+    # costs nothing, because the pods rolling are the first copies of a service
+    # nothing has talked to yet, against a schema no release has ever migrated.
+    # On every other deploy it would cost exactly the 500s the imagePullPolicy
+    # comment below describes, which is why this is a lookup and not a values
+    # switch somebody could leave on.
+    #
+    # `helm template` (and so `provision-release.sh --check`) has no cluster to
+    # ask and renders post-upgrade for every service. That is correct for what
+    # the check does, which is assert that every secretKeyRef it references
+    # exists; it does not read hook annotations.
+    helm.sh/hook: {{ if $dbExists }}post-install,pre-upgrade{{ else }}post-install,post-upgrade{{ end }}
     helm.sh/hook-weight: '0'
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
