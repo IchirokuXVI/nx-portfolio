@@ -559,7 +559,10 @@ describe('LineComposer, putting the suggestions down', () => {
         id: 'item-oat',
         name: { es: 'Bebida de avena', en: 'Oat drink' },
         brand: 'Oatly',
+        size: null,
+        unit: 'UNIT',
         productGroupId: null,
+        offer: null,
       },
     },
   ];

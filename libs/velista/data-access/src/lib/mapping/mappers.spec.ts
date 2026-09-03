@@ -984,6 +984,7 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       size: 0.5,
       unit: 'LITER',
       productGroupId: 'group-milk',
+      offer: null,
     });
   });
 
@@ -1021,6 +1022,77 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       kind: 'item',
       item: expect.objectContaining({ size: 0.5, unit: 'LITER' }),
     });
+  });
+});
+
+/**
+ * The price the suggestion row draws (velista `0063`).
+ *
+ * It was on the wire as `bestOffer` from backend `0048` and dropped here, which
+ * is why three screens searched the catalog and answered with no prices at all.
+ *
+ * The one distinction worth a test of its own: **an absent offer and an offer
+ * with no price are different values and the same nothing on screen.** A scope
+ * can carry a product with no number on it, and that is an offer whose `price`
+ * is null rather than an absence, so no caller has to know which one it got.
+ */
+describe('toCatalogItem: the price it used to drop', () => {
+  const item = {
+    id: 'item-milk-1l',
+    name: { es: 'Leche entera', en: 'Whole milk' },
+    brand: 'Hacendado',
+    unitSize: 1,
+    defaultUnit: 'LITER',
+    productGroupId: 'group-milk',
+    bestOffer: {
+      price: 1.05,
+      currency: 'EUR',
+      unitPrice: 1.05,
+      unitPriceLabel: 'EUR/L',
+      priceObservedAt: '2026-09-01T08:00:00.000Z',
+      priceSourceKind: 'OFFICIAL_WEB',
+      priceScopeId: 'scope-cordoba',
+    },
+  };
+
+  it('maps the whole offer, not only the number on it', () => {
+    expect(toCatalogItem(item)?.offer).toEqual({
+      price: 1.05,
+      currency: 'EUR',
+      unitPrice: 1.05,
+      unitPriceLabel: 'EUR/L',
+      observedAt: new Date('2026-09-01T08:00:00.000Z'),
+      sourceKind: 'OFFICIAL_WEB',
+      priceScopeId: 'scope-cordoba',
+    });
+  });
+
+  /**
+   * Every product in staging and production, where the harvester is off on
+   * purpose, and the row is the row it has always been.
+   */
+  it('reads an absent offer as no offer', () => {
+    expect(toCatalogItem({ ...item, bestOffer: undefined })?.offer).toBeNull();
+    expect(toCatalogItem({ ...item, bestOffer: null })?.offer).toBeNull();
+  });
+
+  it('keeps an offer whose price is null as an offer', () => {
+    const mapped = toCatalogItem({
+      ...item,
+      bestOffer: { ...item.bestOffer, price: null },
+    });
+
+    expect(mapped?.offer).not.toBeNull();
+    expect(mapped?.offer?.price).toBeNull();
+    expect(mapped?.offer?.priceScopeId).toBe('scope-cordoba');
+  });
+
+  it('carries the offer through an item suggestion', () => {
+    const mapped = toCatalogSuggestion({ kind: 'item', group: null, item });
+
+    expect(mapped?.kind === 'item' ? mapped.item.offer?.price : null).toBe(
+      1.05
+    );
   });
 });
 
@@ -1083,5 +1155,49 @@ describe('toCatalogSuggestion', () => {
     });
 
     expect(mapped?.kind === 'item' ? mapped.item.id : null).toBe('i1');
+  });
+
+  const priced = {
+    price: 1.05,
+    currency: 'EUR',
+    unitPrice: 1.05,
+    unitPriceLabel: 'EUR/L',
+    priceObservedAt: '2026-09-01T08:00:00.000Z',
+    priceSourceKind: 'OFFICIAL_WEB',
+    priceScopeId: 'scope-cordoba',
+  };
+
+  it("carries the group's best price, which the row draws labelled", () => {
+    const mapped = toCatalogSuggestion({
+      ...offer,
+      group: { ...offer.group, offer: priced },
+    });
+
+    expect(mapped?.kind === 'group' ? mapped.offer?.price : null).toBe(1.05);
+  });
+
+  /**
+   * **The wire calls a group's price `offer` and an item's `bestOffer`**, and
+   * they are the same shape, so a copy paste between the two branches of the
+   * mapper produces a null that looks like an unpriced catalog rather than like
+   * a mistake. This is the assertion that catches it.
+   */
+  it('reads only `offer` on a group, never `bestOffer`', () => {
+    const mapped = toCatalogSuggestion({
+      ...offer,
+      group: { ...offer.group, offer: null, bestOffer: priced },
+    });
+
+    expect(mapped?.kind === 'group' ? mapped.offer : 'wrong kind').toBeNull();
+  });
+
+  /**
+   * Every group in a cluster with the harvester off, and any group none of whose
+   * members is priced at the reader's scopes. The row is the row it is today.
+   */
+  it('reads a group with no priced member as no offer', () => {
+    const mapped = toCatalogSuggestion(offer);
+
+    expect(mapped?.kind === 'group' ? mapped.offer : 'wrong kind').toBeNull();
   });
 });

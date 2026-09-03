@@ -3,8 +3,6 @@ import {
   BASKET_ORIGIN_UNAVAILABLE_REASONS,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
-  PRICE_SOURCE_KIND_FALLBACK,
-  PRICE_SOURCE_KINDS,
   type BasketBindResult,
   type BasketLine,
   type BasketLineOrigin,
@@ -22,10 +20,9 @@ import {
   type BasketSettleResult,
   type BasketShareLink,
   type BasketView,
-  type ProductOffer,
   type ScopeLocation,
 } from '@portfolio/velista/models';
-import { toLocalizedName } from './mappers';
+import { toLocalizedName, toProductOffer } from './mappers';
 import {
   date,
   isRecord,
@@ -408,42 +405,6 @@ export function toBasketBindResult(raw: unknown): BasketBindResult | null {
     createdLineId,
     quantity: numOr(raw['quantity'], 0),
     pendingApproval: raw['pendingApproval'] === true,
-  };
-}
-
-/**
- * From catalog's `ItemOfferView` (velista `0062`, section 3).
- *
- * Null for anything that is not an offer, which is the ordinary case: absent
- * on a read that priced nothing, null on a product with no price at the run's
- * scopes, and both draw the same nothing. The scope id is the one thing
- * required, because an offer that cannot say where it came from cannot be
- * resolved against {@link BasketView.scopes}; a price without one would still
- * be a number, and it is dropped rather than drawn unplaceable, so that the
- * pick sheet never says "cheapest" about a figure it cannot account for.
- */
-function toProductOffer(raw: unknown): ProductOffer | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const priceScopeId = str(raw['priceScopeId']);
-  if (priceScopeId === null) {
-    return null;
-  }
-
-  return {
-    price: typeof raw['price'] === 'number' ? raw['price'] : null,
-    currency: nullableStr(raw['currency']),
-    unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
-    unitPriceLabel: nullableStr(raw['unitPriceLabel']),
-    observedAt: date(raw['priceObservedAt']),
-    sourceKind: oneOf(
-      raw['priceSourceKind'],
-      PRICE_SOURCE_KINDS,
-      PRICE_SOURCE_KIND_FALLBACK
-    ),
-    priceScopeId,
   };
 }
 

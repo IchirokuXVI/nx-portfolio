@@ -3,6 +3,7 @@ import type {
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
+  PriceSourceKind,
   SettlementOutcome,
   UnitOfMeasure,
   UserKind,
@@ -352,13 +353,46 @@ export interface LineSettlement {
 }
 
 /**
+ * What one product costs, at the cheapest scope the reader was priced against
+ * (velista `0062`, section 3; `ItemOfferView` on the wire).
+ *
+ * A fact and not a recommendation. The pick is still the first option added
+ * and not the cheapest, so a row quoting this is quoting what its product
+ * costs, and the pick sheet is where two of them are put next to each other.
+ *
+ * It lives here, beside {@link CatalogItem}, because an offer is a fact about a
+ * catalog product rather than a fact about a basket (velista `0063`, section
+ * 4.1). The basket was merely the first screen to draw one.
+ */
+export interface ProductOffer {
+  /** In {@link currency}. Null is a scope that carries the product with no price on it. */
+  readonly price: number | null;
+  readonly currency: string | null;
+  /** The source's own figure, never recomputed here. Null when it published none. */
+  readonly unitPrice: number | null;
+  /** "EUR/L", "EUR/lv". Text for a human, not a unit to parse. */
+  readonly unitPriceLabel: string | null;
+  /** Without it a price has no age. */
+  readonly observedAt: Date | null;
+  readonly sourceKind: PriceSourceKind;
+  /**
+   * The scope that quoted this price. Opaque.
+   *
+   * The basket resolves it against `BasketView.scopes` to name a chain and a
+   * shop. No other screen resolves it at all: the suggestion response is one
+   * array and carries no scopes to resolve against, and a typeahead row draws
+   * no place anyway (velista `0063`, section 6.5).
+   */
+  readonly priceScopeId: string;
+}
+
+/**
  * One catalog product, as much of it as this app draws.
  *
- * Far narrower than the gateway's `ItemView`, and deliberately: the suggestion
- * row and the product chip need a name and a brand, and every price field on the
- * wire is out of scope until the backend's backlog `0004` exists (velista plan
- * 0043, section 9). Widening it later is a mapper change; carrying fields nothing
- * renders is a promise the screen cannot keep.
+ * Far narrower than the gateway's `ItemView`, and deliberately: it carries the
+ * one price a row draws rather than every price field the wire has. Widening it
+ * later is a mapper change; carrying fields nothing renders is a promise the
+ * screen cannot keep.
  */
 export interface CatalogItem {
   readonly id: string;
@@ -386,6 +420,15 @@ export interface CatalogItem {
   /** What {@link CatalogItem.size} is counted in. Never null; see the fallback. */
   readonly unit: UnitOfMeasure;
   readonly productGroupId: string | null;
+  /**
+   * The cheapest price this product has at the scopes the reader was resolved to,
+   * or null where nothing has been harvested for it.
+   *
+   * It is the price of **this packet**, which is the price of this record: the
+   * catalog holds one record per size, so the six pack row's offer is the six
+   * pack's price and is never derived from a smaller one.
+   */
+  readonly offer: ProductOffer | null;
 }
 
 /** One catalog group: the thing "milk" means before it means a brand of it. */
@@ -416,6 +459,16 @@ export type CatalogSuggestion =
        * products while attaching none.
        */
       readonly itemIds: readonly string[];
+      /**
+       * The group's cheapest way to buy, at the reader's scopes, or null.
+       *
+       * On the variant and not on {@link ProductGroup}, for the reason
+       * {@link itemIds} is: a group's identity is its name, and what it costs is
+       * an answer to a question asked with a set of scopes. A group read
+       * anywhere else has no offer to carry, and a field that is null on every
+       * other read is a field nothing can trust.
+       */
+      readonly offer: ProductOffer | null;
     }
   | { readonly kind: 'item'; readonly item: CatalogItem };
 
