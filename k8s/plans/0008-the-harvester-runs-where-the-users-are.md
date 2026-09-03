@@ -42,11 +42,19 @@ applies, and the other is worth paying now that a user facing feature depends on
 Follow it exactly. Staging gets the flag first and runs for long enough to see real store discovery
 traffic from real profile edits. Production follows.
 
-**`MERCADONA_ENABLED` stays false in both clusters, permanently, under this plan.** Store discovery
-reads OpenStreetMap and never touches a storefront, so "the service exists and discovers shops"
-and "the service scrapes a supermarket's prices" stay separate decisions, which is what
-`0038` section 8.1 separated the two switches to achieve. `HARVEST_ENABLED` becomes true; the third
-switch does not.
+**`MERCADONA_ENABLED` stays false in both clusters under this plan**, which is not the same as
+saying it stays false for good. Store discovery reads OpenStreetMap and never touches a storefront,
+so "the service exists and discovers shops" and "the service reads a supermarket's prices" are two
+questions, and this plan only answers the first one. That is exactly what `0038` section 8.1
+separated the two switches to achieve: turning the third one on later is a decision somebody makes
+on its own evidence, not something this plan forecloses and not something that follows
+automatically from the second. `HARVEST_ENABLED` becomes true here; the third switch is left where
+it is, for now.
+
+The argument that would have to be made to move it is in section 3, and it is a real one rather
+than a formality: catalog discovery is where the double fetch objection actually bites, because
+that is four thousand requests into somebody's shop for one copy of an answer. Nothing about
+enabling store discovery makes that case, and nothing about it prevents the case being made.
 
 ## 3. The double fetch rule, and how this plan stays inside it
 
@@ -73,8 +81,17 @@ it is not needed at this volume.
 
 Everything the chart already describes and currently skips: the Deployment (`replicas: 1`,
 `strategy: Recreate`, because a run must not have a second copy of itself), the Service, the
-PodDisruptionBudget, the migration Job, the StatefulSet with its 2Gi PVC, and the backup CronJob at
+migration Job, the StatefulSet with its 2Gi PVC and its own Service, and the backup CronJob at
 `7 3 * * *`.
+
+**Not a PodDisruptionBudget, and that is correct.** `pdb.yaml.tpl` skips any entry pinned to one
+replica, because `minAvailable: 1` against a single pod is unsatisfiable: the API would refuse
+every voluntary eviction and `kubectl drain` would block on this node forever. The harvester pins
+`replicas: 1`, so it is exactly the case that rule was written for. Do not go looking for the
+missing object.
+
+The CronJob renders only where `backups.enabled` is true, which is production. Staging has backups
+off by design and gets no CronJob, which is the same answer as for the other three databases there.
 
 Plus **the two Secret keys `provision-release.sh` already knows how to write**, per production's
 own note. Run `provision-release.sh --check --env <env>` before deploying either cluster: it

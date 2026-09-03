@@ -309,13 +309,24 @@ lunaShopperBackend:
   # The harvester (plan 0038), and the one switch that decides whether it exists
   # in a cluster at all.
   #
-  # OFF EVERYWHERE, INCLUDING PRODUCTION AND STAGING, and that is the decision
-  # rather than an oversight. The work is genuinely heavy and genuinely optional:
-  # a catalog discovery run is 4,383 HTTP requests over eighteen minutes at the
-  # default rate, and running it needs a third Postgres with its own volume plus a
-  # sixth Node process. A developer machine has room for that. The two VPSs this
-  # chart deploys to have a 256Mi Postgres budget per instance and are sized for
-  # the app, not for a crawler.
+  # FALSE HERE IS THE CHART'S DEFAULT, NOT EVERY CLUSTER'S ANSWER (k8s plan
+  # 0008). Staging turns it on for store discovery, production follows after a
+  # soak, and each environment file says so beside its own flag. A cluster that
+  # says nothing gets no harvester, which is the right way round for a service
+  # that fetches from third parties.
+  #
+  # It was false everywhere until then, for one reason that came apart into two:
+  #
+  # - The FETCHING cost was the loud half. A catalog discovery run is 4,383 HTTP
+  #   requests over eighteen minutes at the default rate, on nodes sized for the
+  #   app rather than for a crawler. That cost belongs to catalog discovery, which
+  #   is still off in both clusters. Store discovery, the mode plan 0063 puts in
+  #   the path of somebody adding a postal code, is TWO requests: one geocode and
+  #   one Overpass query, once per postal code per thirty day cooldown.
+  # - The RESIDENT cost is unchanged, and it is what a cluster now pays: a fourth
+  #   Postgres with its own 2Gi volume on a 256Mi memory budget, plus another Node
+  #   process at roughly 230 MB. Section 5 of that plan sizes the database for
+  #   this workload, and tens of thousands of small rows is comfortable inside it.
   #
   # Nothing else in the chart branches on this. Both the service entry and the
   # database instance carry `optional: harvester`, and every template that walks
@@ -324,11 +335,21 @@ lunaShopperBackend:
   # StatefulSet, no PVC and no backup CronJob: the harvester is described by the
   # chart and absent from the cluster.
   #
-  # Turning it on in a cluster later is this flag plus two Secret keys
-  # (HARVESTER_DB_URL and the harvester-db instance secret, both of which
-  # provision-release.sh writes) — and then `config.harvestEnabled` below, which is
-  # a second, separate decision: the pod existing and the pod fetching from a third
-  # party are not the same thing.
+  # Turning it on in a cluster is this flag plus two Secret keys (HARVESTER_DB_URL
+  # and the harvester-db instance secret, both of which provision-release.sh
+  # writes unconditionally), and then `harvestEnabled` below, which is a second,
+  # separate decision: the pod existing and the pod fetching from a third party
+  # are not the same thing. Run `provision-release.sh --check --env <env>` before
+  # the first deploy that carries this true; a missing secretKeyRef is precisely
+  # the failure a newly enabled service introduces, and --check names it in
+  # seconds rather than at rollout.
+  #
+  # TURNING IT BACK OFF LEAVES THE VOLUME BEHIND. A StatefulSet's
+  # `volumeClaimTemplates` PVCs are not deleted with the StatefulSet, so setting
+  # this false removes the workload and leaves a 2Gi claim on the node. That is
+  # correct behaviour rather than a leak. Deleting the claim is deliberate and
+  # manual, and it destroys the import decisions section 6 of k8s plan 0008
+  # explains no re-run can bring back.
   # -------------------------------------------------------------------------
   harvester:
     enabled: false
@@ -343,13 +364,28 @@ lunaShopperBackend:
     # Whether the pod may start a run at all. Separate from `enabled` on purpose:
     # bringing the service up and letting it fetch from a third party are two
     # decisions, and this one is reversible in seconds.
+    #
+    # False here for the same reason `enabled` is: a cluster that has not decided
+    # gets the quiet answer. The environment file of a cluster that wants store
+    # discovery sets it true beside its own `enabled` (k8s plan 0008), and the
+    # queue in plan 0063 fills either way, so a cluster that turns this on later
+    # drains a real backlog rather than starting from nothing.
     harvestEnabled: false
 
     # And the same again for the one storefront (plan 0038, section 8.1). If
     # Mercadona ever objects, this goes false and the catalog keeps working on
     # hand entered prices, which is the property backlog 0001 section 5.4 designs
-    # for. Off in every environment here; the local compose stack is where runs
-    # actually happen.
+    # for.
+    #
+    # False in both clusters today, and that is a decision about Mercadona rather
+    # than about the harvester: store discovery reads OpenStreetMap and never
+    # touches a storefront, so "the service exists and finds shops" and "the
+    # service reads a supermarket's prices" stay separable, which is the whole
+    # point of section 8.1 having two switches. Enabling this in a cluster is its
+    # own call to make when there is a reason to make it, and the double fetch
+    # rule in that section is the first thing to settle when it comes up: two
+    # clusters walking the same assortment is twice the requests for one copy of
+    # the answer. Runs happen against the local compose stack until then.
     mercadonaEnabled: false
 
     # An HONEST User-Agent naming the app and a contact address, and specifically
@@ -406,9 +442,10 @@ lunaShopperBackend:
   #
   # **No `enabled` switch, unlike the harvester above, and that difference is the
   # design rather than an omission.** The harvester is gated because running it
-  # costs a third Postgres and eighteen minutes of continuous fetching that the
-  # two VPSs are not sized for. This service is one small stateless Node process
-  # with no database at all, so there is nothing to gate: it deploys everywhere.
+  # costs a fourth Postgres with its own volume, and because a cluster has to
+  # decide separately whether that service may fetch from anybody. This service is
+  # one small stateless Node process with no database at all, so there is nothing
+  # to gate: it deploys everywhere.
   #
   # What decides whether it can actually answer is `GEMINI_API_KEY` in the Secret,
   # and an absent key is a supported deployment rather than a broken one. The pod
@@ -516,12 +553,13 @@ lunaShopperBackend:
     # The harvester (plan 0038). Internal, with no route of its own: its callers
     # are the gateway and itself.
     #
-    # `optional: harvester` is what keeps it OFF in both clusters. Every template
-    # that walks this list skips an entry whose `optional` names a feature that is
-    # not enabled, and `harvester.enabled` below is false everywhere. The entry
-    # lives here rather than being added by an environment values file because a
-    # Helm list is replaced wholesale, not appended to: describing it once and
-    # gating it is the only way the two clusters and a local deploy stay in step.
+    # `optional: harvester` is what decides whether it exists in a given cluster.
+    # Every template that walks this list skips an entry whose `optional` names a
+    # feature that is not enabled, and `harvester.enabled` above is false unless an
+    # environment file says otherwise. The entry lives here rather than being added
+    # by an environment values file because a Helm list is replaced wholesale, not
+    # appended to: describing it once and gating it is the only way the two
+    # clusters and a local deploy stay in step.
     #
     # `replicas: 1` and `strategy: Recreate` (see the deployment template): a run
     # holds an in memory work queue and an AbortController, so a second replica
@@ -602,8 +640,8 @@ lunaShopperBackend:
         database: luna_auth
         user: luna_auth
         secret: luna-shopper-backend-auth-db-secret
-        # Staggered so three dumps never contend for the single node at once
-        # (plan 0005, section 3.1).
+        # Staggered so no two dumps contend for the single node at once (plan
+        # 0005, section 3.1). Four windows now, the harvester's last.
         backupSchedule: '17 2 * * *'
         # The key in the application Secret holding this instance's connection
         # string. The backup Job reads it rather than duplicating credentials.
@@ -620,10 +658,22 @@ lunaShopperBackend:
         secret: luna-shopper-backend-catalog-db-secret
         backupSchedule: '57 2 * * *'
         urlSecretKey: CATALOG_DB_URL
-      # The harvester's own database (plan 0038, section 4.1), gated by the same
-      # `harvester.enabled` switch as its service: with the harvester off, this
-      # StatefulSet and its 2Gi volume are never created, which is most of what
-      # keeping it off a small VPS is worth.
+      # The harvester's own database (plan 0038, section 4.1), the FOURTH of them
+      # after auth, core and catalog, gated by the same `harvester.enabled` switch
+      # as its service: with the harvester off, this StatefulSet and its 2Gi
+      # volume are never created, which is most of what keeping it off a small VPS
+      # is worth.
+      #
+      # The 2Gi claim is sized for catalog discovery's `SourceCatalogEntry` rows
+      # and stays that size under store discovery, which needs a fraction of it
+      # (k8s plan 0008, section 5). A PVC does not shrink, so sizing it down now
+      # would only have to be undone the first time catalog discovery is wanted.
+      #
+      # `backupSchedule` is not optional here even though the data looks
+      # regenerable. Re-running discovery brings the places back; it does not bring
+      # back `DiscoveredPlaceStatus`, which records what an admin imported and what
+      # they rejected, and a run deliberately does not resurrect a rejected place.
+      # Losing that table replays every rejection ever made as new work.
       - name: luna-shopper-backend-harvester-db
         database: luna_harvester
         user: luna_harvester
