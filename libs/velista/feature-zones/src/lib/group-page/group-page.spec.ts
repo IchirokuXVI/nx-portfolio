@@ -21,7 +21,11 @@ import {
   type FakeZoneStore,
 } from '@portfolio/velista/data-access';
 import type { MyZone, ShoppingListSummary } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  provideFakeBrowserFacade,
+  provideVelistaTesting,
+  type BrowserFacade,
+} from '@portfolio/velista/platform';
 import { GroupHeader, ListRow } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { GroupPage } from './group-page';
@@ -72,6 +76,15 @@ interface Options {
   readonly presence?: FakePresenceOptions;
   /** User id to the name they go by here, since presence carries ids alone. */
   readonly names?: Readonly<Record<string, string>>;
+  /**
+   * Where this tab is and what the browser can do, for the invite link tests.
+   *
+   * Absent by default, and then the real facade stands: jsdom has no share sheet and
+   * no clipboard, which is the shape every other test here already runs under.
+   */
+  readonly browser?: Partial<BrowserFacade>;
+  /** The mount. `/velista` unless a test is about the standalone build. */
+  readonly basePath?: string;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -98,7 +111,10 @@ async function render(options: Options = {}): Promise<{
   await TestBed.configureTestingModule({
     imports: [GroupPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
-      provideVelistaTesting({ basePath: '/velista' }),
+      provideVelistaTesting({ basePath: options.basePath ?? '/velista' }),
+      ...(options.browser
+        ? [provideFakeBrowserFacade(undefined, options.browser)]
+        : []),
       provideFakeZoneStore(zones),
       provideFakeListStore(lists),
       // Plan 0022: the header's "who is here now" and the rows' viewer dots. Both are
@@ -594,6 +610,77 @@ describe('GroupPage', () => {
       expect(router.navigateByUrl).toHaveBeenCalledWith(
         `/velista/en/zones/${ZONE_ID}/lists/list-1`
       );
+    });
+  });
+
+  /**
+   * The one link on this page that leaves it, and it therefore states no language.
+   *
+   * The test above is the contrast worth reading beside these: a navigation this
+   * session makes carries `en`, because that is the language this session is in.
+   * An invite is read by somebody else, and `localeGuard` gives them theirs on
+   * arrival, so the sender's must not be in the URL at all.
+   */
+  describe('the invite link', () => {
+    function fakeWindow(
+      origin: string,
+      sent: { url?: string },
+      copied: string[],
+      canShare = true
+    ): Partial<BrowserFacade> {
+      const navigator = {
+        share: canShare
+          ? (data: { url: string }) => {
+              sent.url = data.url;
+              return Promise.resolve();
+            }
+          : undefined,
+        clipboard: {
+          writeText: (text: string) => {
+            copied.push(text);
+            return Promise.resolve();
+          },
+        },
+      };
+
+      return {
+        location: { origin },
+        window: { navigator },
+      } as unknown as Partial<BrowserFacade>;
+    }
+
+    it('carries the mount and no locale', async () => {
+      const sent: { url?: string } = {};
+      const { fixture } = await render({
+        browser: fakeWindow('https://ichirokuxvi.com', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://ichirokuxvi.com/velista/join/HK7M2QPD');
+    });
+
+    it('drops the mount too in the standalone build', async () => {
+      const sent: { url?: string } = {};
+      const { fixture } = await render({
+        basePath: '',
+        browser: fakeWindow('https://velista.app', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://velista.app/join/HK7M2QPD');
+    });
+
+    it('copies the same locale free URL where there is no share sheet', async () => {
+      const copied: string[] = [];
+      const { fixture } = await render({
+        browser: fakeWindow('https://ichirokuxvi.com', {}, copied, false),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(copied).toEqual(['https://ichirokuxvi.com/velista/join/HK7M2QPD']);
     });
   });
 });

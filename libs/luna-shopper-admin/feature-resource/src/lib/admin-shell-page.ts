@@ -16,6 +16,7 @@ import {
   type ShellLink,
 } from '@portfolio/luna-shopper-admin/ui';
 import { ResourceRegistry } from './resource-registry';
+import { SHELL_LINKS } from './shell-links';
 
 /**
  * The chrome, wired up (plan 0004, section 7).
@@ -52,6 +53,7 @@ import { ResourceRegistry } from './resource-registry';
 })
 export class AdminShellPage {
   private readonly _registry = inject(ResourceRegistry);
+  private readonly _extraLinks = inject(SHELL_LINKS);
   private readonly _sessions = inject(SessionStore);
   private readonly _deployments = inject(DeploymentStore);
   private readonly _viewport = inject(Viewport);
@@ -60,12 +62,27 @@ export class AdminShellPage {
   readonly deployment = this._deployments.deployment;
   readonly compact = this._viewport.compact;
 
-  readonly links = computed<readonly ShellLink[]>(() =>
-    this._registry.all().map((descriptor) => ({
+  /**
+   * The navigation: every resource, then every screen that is not one.
+   *
+   * Resources come from the registry rather than from a list written out again,
+   * so a resource the app mounted is one the operator can reach and a link
+   * cannot point at a route nobody declared. The rest come from
+   * {@link SHELL_LINKS}, which is how a hand written screen says it exists;
+   * plan 0006's harvester screens are the first, because a run and a review
+   * queue are not resources with a form.
+   *
+   * Resources first, in both cases in the order the app named them. The
+   * bespoke screens are the ones with a reason to be grouped at the end: they
+   * are a section rather than more of the same list.
+   */
+  readonly links = computed<readonly ShellLink[]>(() => [
+    ...this._registry.all().map((descriptor) => ({
       path: `/${descriptor.segment}`,
       label: descriptor.labels.many,
-    }))
-  );
+    })),
+    ...this._extraLinks,
+  ]);
 
   /**
    * What to call the operator.

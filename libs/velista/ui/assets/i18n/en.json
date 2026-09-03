@@ -1094,6 +1094,7 @@
       "body": "Anyone with the link can shop it, no account needed. They see the lines, never your groups.",
       "copy": "Copy",
       "copied": "Copied",
+      "share": "Send the link",
       "joinedWith_one": "{{count}} person joined with it",
       "joinedWith_other": "{{count}} people joined with it",
       "made": "made {{date}}",

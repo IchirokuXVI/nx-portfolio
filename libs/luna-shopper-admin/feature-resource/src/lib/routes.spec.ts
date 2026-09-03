@@ -148,3 +148,45 @@ describe('adminRoutes', () => {
     expect(empty[0].children?.map((route) => route.path)).toEqual(['**']);
   });
 });
+
+/**
+ * Screens that are not a resource, inside the same chrome (plan 0006).
+ *
+ * A run is a process and a review queue is a decision, so neither can be a
+ * descriptor. They still belong under the same navigation and the same session
+ * guard, which is what this second argument is for.
+ */
+describe('adminRoutes with sections', () => {
+  const harvest = { path: 'harvest', children: [] };
+  const children = adminRoutes([shops], [harvest])[0].children ?? [];
+  const paths = children.map((route) => route.path);
+
+  it('puts the section inside the chrome beside the resources', () => {
+    expect(paths).toContain('harvest');
+  });
+
+  /**
+   * A catch all matches anything, so a section after it would be unreachable
+   * and would draw the not found page instead of itself.
+   */
+  it('declares every section before the catch all', () => {
+    expect(paths.indexOf('harvest')).toBeLessThan(paths.indexOf('**'));
+  });
+
+  it('still lands the empty path on the first resource', () => {
+    const empty = children.find(
+      (route) => route.path === '' && route.redirectTo !== undefined
+    );
+
+    expect(empty?.redirectTo).toBe('shops');
+  });
+
+  /** Nothing changes for an app that has only resources. */
+  it('changes nothing when no section is given', () => {
+    expect(adminRoutes([shops])[0].children?.map((r) => r.path)).toEqual([
+      'shops',
+      '',
+      '**',
+    ]);
+  });
+});

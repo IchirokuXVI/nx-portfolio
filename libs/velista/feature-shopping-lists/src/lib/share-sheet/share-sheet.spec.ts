@@ -8,8 +8,10 @@ import {
 import { BasketStore } from '@portfolio/velista/data-access';
 import type { BasketShareLink } from '@portfolio/velista/models';
 import {
+  provideFakeBrowserFacade,
   provideVelistaTesting,
   SheetNavigation,
+  type BrowserFacade,
 } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { ShareSheet } from './share-sheet';
@@ -41,7 +43,7 @@ function link(): BasketShareLink {
   };
 }
 
-async function render() {
+async function render(browser?: Partial<BrowserFacade>) {
   TestBed.resetTestingModule();
 
   const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
@@ -50,6 +52,9 @@ async function render() {
     imports: [ShareSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
+      // Absent by default, so every test above runs against the real facade, which in
+      // jsdom is a browser with no share sheet and no clipboard.
+      ...(browser ? [provideFakeBrowserFacade(undefined, browser)] : []),
       {
         provide: BasketStore,
         useValue: {
@@ -159,5 +164,79 @@ describe('ShareSheet: the revoke pane cannot be double tapped into', () => {
 
     const [, close] = footer(fixture);
     expect(close.textContent?.trim()).toBe('basket.share.close');
+  });
+});
+
+/**
+ * The second way to hand the link over, which this sheet had no control for.
+ *
+ * Copy is the one that always works; the system share sheet is how a link actually
+ * reaches a group chat on a phone, and it is the treatment the group's invite card
+ * has had since plan 0008. Drawn only where the browser has the API, because a
+ * button that opens nothing is worse than one that is absent.
+ */
+describe('ShareSheet: sending the link', () => {
+  function fakeWindow(
+    sent: { url?: string },
+    copied: string[],
+    canShare = true
+  ): Partial<BrowserFacade> {
+    const navigator = {
+      share: canShare
+        ? (data: { url: string }) => {
+            sent.url = data.url;
+            return Promise.resolve();
+          }
+        : undefined,
+      clipboard: {
+        writeText: (text: string) => {
+          copied.push(text);
+          return Promise.resolve();
+        },
+      },
+    };
+
+    return {
+      window: { navigator, location: { origin: 'https://velista.app' } },
+    } as unknown as Partial<BrowserFacade>;
+  }
+
+  const share = (fixture: Awaited<ReturnType<typeof render>>) =>
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button.share'
+    );
+
+  it('offers the share control where the browser has one', async () => {
+    const fixture = await render(fakeWindow({}, []));
+
+    expect(share(fixture)).not.toBeNull();
+  });
+
+  it('draws no share control where the browser has none', async () => {
+    const fixture = await render(fakeWindow({}, [], false));
+
+    expect(share(fixture)).toBeNull();
+  });
+
+  it('hands over the link itself, which carries no locale', async () => {
+    const sent: { url?: string } = {};
+    const fixture = await render(fakeWindow(sent, []));
+
+    share(fixture)?.click();
+    await fixture.whenStable();
+
+    expect(sent.url).toBe('https://velista.app/velista/s/s3cr3t');
+  });
+
+  it('still offers Copy, because a URL on the clipboard goes anywhere', async () => {
+    const copied: string[] = [];
+    const fixture = await render(fakeWindow({}, copied));
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('button.copy')
+      ?.click();
+    await fixture.whenStable();
+
+    expect(copied).toEqual(['https://velista.app/velista/s/s3cr3t']);
   });
 });

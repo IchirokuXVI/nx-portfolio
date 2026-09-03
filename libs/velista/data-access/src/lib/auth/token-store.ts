@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { inject, Injectable, signal } from '@angular/core';
+import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import type { SessionTokens } from '@portfolio/velista/models';
 import {
   BrowserFacade,
@@ -8,7 +8,7 @@ import {
 } from '@portfolio/velista/platform';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
-import { hasResponse } from '../errors';
+import { isCredentialRejection } from '../errors';
 import { toSessionTokens } from '../mapping/mappers';
 import { anonymous } from './http-context';
 
@@ -16,11 +16,20 @@ import { anonymous } from './http-context';
  * What rule D3's gate found. `guest-account-lost` is the one that needs a screen: the
  * user had a guest account, its refresh token is spent or revoked, and creating a new
  * zone now would silently give them a second account instead of their groups.
+ *
+ * `unavailable` is the fourth, and it is the one that keeps the other three honest
+ * (plan 0067, section 4): a session is held, and this app could not prove it right
+ * now, because the refresh got no answer or an answer that said nothing about the
+ * token. **It is not `anonymous`**, and the difference is a whole account. The two
+ * routes behind this gate mint a guest account when they see no identity, so calling
+ * either one anonymously while a session sits unproven in storage is how somebody ends
+ * a supermarket outage with a second, empty account and no way back to their groups.
  */
 export type OptionalAuthResult =
   | { readonly state: 'authenticated'; readonly accessToken: string }
   | { readonly state: 'anonymous' }
-  | { readonly state: 'guest-account-lost' };
+  | { readonly state: 'guest-account-lost' }
+  | { readonly state: 'unavailable' };
 
 /**
  * Holds the token pair, persists it, and owns refreshing it.
@@ -43,10 +52,28 @@ export type OptionalAuthResult =
  * ## Why refresh is single flight
  *
  * The backend rotates refresh tokens and revokes the presented one
- * (`auth/src/app/tokens/token.service.ts:85`). Two requests refreshing concurrently
+ * (`auth/src/app/tokens/token.service.ts:177`). Two requests refreshing concurrently
  * means the second presents a token the first just revoked, and the user is signed out
  * mid session. `0003` loads zones and opens a realtime connection on the same tick, so
  * this is not a rare race.
+ *
+ * ## Why single flight is not enough, and what stands beside it
+ *
+ * Single flight is per document, and one origin holds more than one (plan 0067,
+ * section 3). The installed app and the browser tab are two documents over one
+ * `localStorage`, both hold their own copy of the pair in a signal, and both refresh on
+ * resume. The loser presents a token the winner revoked a moment earlier, and the 401
+ * it gets back is real. So this store also **watches storage for the other document's
+ * pair**, adopts a newer one rather than racing it, and checks for one before it acts
+ * on any refusal.
+ *
+ * ## What may delete a session
+ *
+ * One thing: the server refusing the credential, `isCredentialRejection`, while the
+ * pair that was refused is still the newest one on this origin. Not a 500, not a 503,
+ * not a body this app could not read, and not a request that got no answer. Everything
+ * else keeps the pair and reports the failure, because the pair is the only way back
+ * into the account and a temporary user has nothing else at all.
  */
 // Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
 // something only the app can supply, and the app injector is a child of the root one.
@@ -55,6 +82,7 @@ export class TokenStore {
   private readonly _browser = inject(BrowserFacade);
   private readonly _http = inject(HttpClient);
   private readonly _urls = inject(ApiUrl);
+  private readonly _destroyRef = inject(DestroyRef);
 
   private readonly _tokens = signal<SessionTokens | null>(null);
 
@@ -66,6 +94,44 @@ export class TokenStore {
 
   constructor() {
     this._tokens.set(this._restore());
+    this._followOtherDocuments();
+  }
+
+  /**
+   * Keep in step with the other document on this origin (plan 0067, section 3).
+   *
+   * The installed app and the browser tab share one `localStorage` and hold two
+   * independent copies of the pair. Without this, the copy in the document that was
+   * asleep goes stale the moment the other one refreshes, and the next thing it does
+   * with that copy is present a revoked token and be signed out on a real 401.
+   *
+   * The `storage` event never fires in the document that wrote the value, so
+   * everything arriving here was written by somebody else:
+   *
+   * - **A pair.** Adopt it. It is newer than whatever is held, by construction, and
+   *   adopting it costs nothing: no request, no rotation, no round trip.
+   * - **A removal.** Sign out too. Deleting the key is what `signOut` and the account
+   *   deletion path do, and both are deliberate. This is the one case that ends a
+   *   session without the server refusing anything, and it is safe because the only
+   *   thing that removes the key is this same store deciding to.
+   * - **Anything unreadable.** Ignored, deliberately. A value this app cannot parse
+   *   says nothing about the account, and treating it as a sign out would let one
+   *   corrupt write on a shared origin end a working session.
+   */
+  private _followOtherDocuments(): void {
+    const stop = this._browser.watchStorage(StorageKeys.session, (value) => {
+      if (value === null) {
+        this._tokens.set(null);
+        return;
+      }
+
+      const adopted = this._parse(value);
+      if (adopted !== null) {
+        this._tokens.set(adopted);
+      }
+    });
+
+    this._destroyRef.onDestroy(stop);
   }
 
   /** Persist a new pair. Called after sign in, refresh, and the guest handshake. */
@@ -156,13 +222,19 @@ export class TokenStore {
    * refresh over a `TEMPORARY` identity is the second case, and only that one needs
    * telling.
    *
-   * **A refresh that got no response is neither** (plan 0035, section 2). The pair
-   * survives it, so the account is exactly where it was, and telling a guest it is
-   * gone because their phone was in a lift is the one false alarm in this app with no
-   * way back from it. The session still standing afterwards is how that case is
-   * recognised, and it is the only reading of `hasSession` here: the request that
-   * follows refreshes again, and either it works or it fails on the network like
-   * everything else and raises the blocking screen.
+   * **A refresh that was not answered, or was answered with something that says
+   * nothing about the token, is neither** (plan 0035, section 2, widened by plan 0067,
+   * section 4). The pair survives it, so the account is exactly where it was, and
+   * telling a guest it is gone because their phone was in a lift is the one false
+   * alarm in this app with no way back from it.
+   *
+   * That case is `unavailable`, and it used to be `anonymous`, which was the more
+   * expensive of the two mistakes. The caller goes on to a route that mints a guest
+   * account when it sees no identity, so answering "nobody is signed in" while a
+   * perfectly good session sat unproven in storage handed the user a second, empty
+   * account and left their groups on the first one. The session still standing after a
+   * failed refresh is how that case is recognised, and it is the only reading of
+   * `hasSession` here.
    */
   async authorizeOptionalAuthCall(): Promise<OptionalAuthResult> {
     const before = this._tokens();
@@ -175,70 +247,173 @@ export class TokenStore {
       return { state: 'authenticated', accessToken: token };
     }
 
-    return before.kind === 'TEMPORARY' && !this.hasSession()
+    if (this.hasSession()) {
+      return { state: 'unavailable' };
+    }
+
+    return before.kind === 'TEMPORARY'
       ? { state: 'guest-account-lost' }
       : { state: 'anonymous' };
   }
 
+  /**
+   * The gateway refused a token this store had just minted (plan 0067, section 5).
+   *
+   * Called from the interceptor's one retry, which is the only place that holds a
+   * pair issued seconds earlier and refused anyway. That normally means the identity
+   * behind it is gone, and the session goes with it. It means something else entirely
+   * when another document rotated the pair in between, so that is checked first, and
+   * the newer pair is adopted rather than deleted.
+   */
+  reportRejected(presented: SessionTokens): void {
+    const newer = this._newerThan(presented);
+    if (newer !== null) {
+      this._tokens.set(newer);
+      return;
+    }
+
+    this.clear();
+  }
+
   private async _performRefresh(): Promise<SessionTokens | null> {
-    const current = this._tokens();
+    const held = this._tokens();
+    const current = this._newestHeldPair();
     if (current === null) {
       return null;
     }
 
+    // The other document refreshed while this one was in the background, and what it
+    // wrote is still good. Adopt it instead of spending a rotation to arrive at the
+    // same place.
+    //
+    // **Only when the pair came from elsewhere.** This method also serves the
+    // interceptor's forced retry, which holds a token that looks perfectly valid and
+    // was refused anyway, so a check on freshness alone would hand that path back the
+    // very token the gateway had just rejected and the retry would ask the same
+    // question twice.
+    const adopted = held !== null && current.refreshToken !== held.refreshToken;
+    if (adopted && !isAccessTokenExpired(current.accessToken)) {
+      return current;
+    }
+
+    return this._exchange(current, true);
+  }
+
+  /**
+   * Present one refresh token and store whatever comes back.
+   *
+   * `mayAdopt` allows exactly one restart, on a pair another document wrote. One,
+   * because a second restart would be racing the same document again rather than
+   * catching up with it, and a bounded retry is what keeps a resume from turning into
+   * a loop of rotations between two windows.
+   */
+  private async _exchange(
+    presented: SessionTokens,
+    mayAdopt: boolean
+  ): Promise<SessionTokens | null> {
     try {
       const body = await firstValueFrom(
         this._http.post<unknown>(
           this._urls.gateway('/v1/auth/refresh'),
-          { refreshToken: current.refreshToken },
+          { refreshToken: presented.refreshToken },
           { context: anonymous('auth.refresh') }
         )
       );
 
       const tokens = toSessionTokens(body);
       if (tokens === null) {
-        this.clear();
+        // Rule D4: an answer this app cannot read is not a session. It is not a
+        // refusal either, and the difference decides whether an account survives, so
+        // the pair stays (plan 0067, section 2). A captive portal answering 200 with
+        // its own login page is exactly this shape, and it is the single most likely
+        // way to meet it: a phone joining a supermarket's wifi. If the pair really was
+        // spent, the next refresh is answered with a 401 and cleared then, at the cost
+        // of one round trip.
         return null;
       }
 
       this.set(tokens);
       return tokens;
     } catch (error) {
-      if (!hasResponse(error)) {
-        // **A network failure is not a rejected token** (plan 0035, section 2). The
-        // refresh never reached a server, so nothing was spent and nothing was
-        // revoked, and the pair being thrown away is the only way back into the
-        // account. Angular reports that as status 0, which is exactly the test
-        // `ConnectionRecovery` makes for exactly this reason.
+      if (!isCredentialRejection(error)) {
+        // **Only a refusal is a refusal** (plan 0067, section 2). No answer at all
+        // means the refresh never reached a server, so nothing was spent (plan 0035).
+        // A 5xx means it reached the gateway and no further: the refresh route is a
+        // broker call, so an auth service that is restarting produces a 500, and a
+        // gateway pod that is down produces the proxy's 503. Neither says one word
+        // about this token, and both are the ordinary shape of a deploy.
         //
         // Returning null without clearing leaves every caller where it was: the
         // interceptor's retry fails, the request surfaces its ordinary error,
         // `ConnectionState` raises the blocking screen and `ConnectionRecovery`
         // probes until the backend answers. The session is simply still there when it
-        // comes back, which is the whole of the fix for an app that was resumed with
-        // an expired access token and a radio still waking up.
+        // comes back.
         return null;
       }
 
-      // The server answered, whatever it answered. A refresh token is single use, so a
-      // rejected one is spent or revoked either way, and a stale pair kept around would
-      // be sent to an optional-auth route later and mint a duplicate guest account.
+      // Refused. Before believing it, check whether the token that was refused is
+      // still the one this origin holds: the other document rotating it is the one
+      // way to earn a truthful 401 while the account is perfectly fine.
+      const newer = this._newerThan(presented);
+      if (newer !== null) {
+        this._tokens.set(newer);
+        return mayAdopt ? this._exchange(newer, false) : null;
+      }
+
+      // A refresh token is single use, so one the server rejected is spent or revoked
+      // either way, and a stale pair kept around would be sent to an optional-auth
+      // route later and mint a duplicate guest account.
       this.clear();
       return null;
     }
   }
 
-  private _restore(): SessionTokens | null {
-    const stored = this._browser.readStorage(StorageKeys.session);
+  /**
+   * The newest pair on this origin, adopting it if this document was behind.
+   *
+   * Storage is the shared truth and the signal is one document's view of it. Reading
+   * storage first is what stops a tab that has been asleep from presenting a token the
+   * installed app rotated an hour ago.
+   *
+   * Falls back to the held pair when storage reads null, which is both "there is
+   * nothing stored" and "storage threw", as it does in private mode. Neither is a
+   * reason to drop a session this document is holding.
+   */
+  private _newestHeldPair(): SessionTokens | null {
+    const stored = this._restore();
     if (stored === null) {
-      return null;
+      return this._tokens();
     }
 
+    if (stored.refreshToken !== this._tokens()?.refreshToken) {
+      this._tokens.set(stored);
+    }
+
+    return stored;
+  }
+
+  /** The stored pair when another document has replaced the given one, else null. */
+  private _newerThan(presented: SessionTokens): SessionTokens | null {
+    const stored = this._restore();
+    return stored !== null && stored.refreshToken !== presented.refreshToken
+      ? stored
+      : null;
+  }
+
+  private _restore(): SessionTokens | null {
+    const stored = this._browser.readStorage(StorageKeys.session);
+    return stored === null ? null : this._parse(stored);
+  }
+
+  /**
+   * Rule D4 applies to storage too. What was written days ago by an older build is as
+   * untrusted as a response body, and it is the input most likely to be stale in
+   * shape. It is also what another document just wrote, which is the same problem
+   * wearing a different hat.
+   */
+  private _parse(raw: string): SessionTokens | null {
     try {
-      // Rule D4 applies to storage too. What was written days ago by an older build
-      // is as untrusted as a response body, and it is the input most likely to be
-      // stale in shape.
-      return toSessionTokens(JSON.parse(stored));
+      return toSessionTokens(JSON.parse(raw));
     } catch {
       return null;
     }

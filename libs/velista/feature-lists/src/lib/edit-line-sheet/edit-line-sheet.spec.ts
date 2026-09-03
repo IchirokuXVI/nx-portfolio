@@ -183,11 +183,11 @@ describe('EditLineSheet', () => {
       });
     });
 
-    it('makes every field live for DECIDE too, on an approved line', async () => {
-      // Backend plan 0076 gave that caller the whole sheet, which is what deleted the
-      // `quantity` mode this used to assert.
+    it('makes every field live for a writer who also decides, on an approved line', async () => {
+      // `WRITE` is what opens this sheet, and `DECIDE` beside it is what brings the
+      // number back. `DECIDE` on its own reaches neither, which is the case below.
       const { fixture } = await render({
-        list: list({ myPermissions: ['READ', 'DECIDE'] }),
+        list: list({ myPermissions: ['READ', 'WRITE', 'DECIDE'] }),
       });
 
       expect(host(fixture).querySelector('#edit-line-content')).not.toBeNull();
@@ -223,6 +223,19 @@ describe('EditLineSheet', () => {
       // and a URL is not a permission (rule G2).
       const { realtime } = await render({
         list: list({ myPermissions: ['READ'] }),
+      });
+
+      expect(realtime.editedLines.has(LIST_ID)).toBe(false);
+    });
+
+    it('closes on a caller holding DECIDE and no WRITE', async () => {
+      // The same rule as the reader above, and worth its own case because "can approve
+      // this line" reads like "can correct it". The server refuses them its content on
+      // an approved line exactly as on a pending one (backend plan 0076, section 4.1),
+      // so the sheet would be a screen whose save is a 403. Their quantity control is
+      // the reel on the row, which this sheet is not.
+      const { realtime } = await render({
+        list: list({ myPermissions: ['READ', 'DECIDE'] }),
       });
 
       expect(realtime.editedLines.has(LIST_ID)).toBe(false);

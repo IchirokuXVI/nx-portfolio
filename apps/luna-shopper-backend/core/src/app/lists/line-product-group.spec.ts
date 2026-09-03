@@ -8,7 +8,10 @@ import {
   ZoneRole,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
-import { ValidationException } from '@portfolio/luna-shopper/platform';
+import {
+  ForbiddenException,
+  ValidationException,
+} from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
 import {
   LineSettlement,
@@ -284,13 +287,13 @@ describe('adopting a product the group put there (plan 0070, section 3)', () => 
     expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineUpdated]);
   });
 
-  it('is within a DECIDE holder’s reach on an approved line, and does not un-approve it', async () => {
-    // Until plan 0076 this was refused, on plan 0036 section 4.1's rule that an
-    // approved line yielded nothing but its quantity to a decider. That branch
-    // is gone: adoption still decides whether the catalog may go on correcting a
-    // set somebody agreed to, and the person deciding it is the person who
-    // approves the line, who could reach the same end state by un-approving,
-    // adopting and approving again.
+  it('is out of a DECIDE holder’s reach, whatever the line’s approval', async () => {
+    // Plan 0070, section 3's rule, which plan 0076 did not widen and does not
+    // mention: adoption changes no product on the line, but it decides whether
+    // the catalog may go on correcting a set somebody agreed to, and that is a
+    // writer's field. `DECIDE` is a separate permission from `WRITE` rather than
+    // a larger one, so holding it alone reaches an approved line's quantity and
+    // nothing else. The caller who adopts holds `WRITE`, which is the case below.
     const w = build({
       productGroupId: MILK,
       items: [{ itemId: itemId(1) }],
@@ -298,15 +301,15 @@ describe('adopting a product the group put there (plan 0070, section 3)', () => 
       permissions: [ListPermission.READ, ListPermission.DECIDE],
     });
 
-    const view = await w.service.update({
-      userId: ACTOR,
-      lineId: LINE_ID,
-      adoptItemIds: [itemId(1)],
-    });
-
-    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    await expect(
+      w.service.update({
+        userId: ACTOR,
+        lineId: LINE_ID,
+        adoptItemIds: [itemId(1)],
+      })
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(setOf(w)).toEqual([
-      { itemId: itemId(1), source: LineItemSource.USER },
+      { itemId: itemId(1), source: LineItemSource.GROUP },
     ]);
   });
 

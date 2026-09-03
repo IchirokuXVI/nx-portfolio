@@ -9,6 +9,7 @@ import {
   type Zone,
 } from '@portfolio/velista/models';
 import { TokenStore } from '../auth/token-store';
+import { refuseUnprovenSession } from '../auth/unproven-session';
 import { GatewayError } from '../errors';
 import {
   SEED_JOIN_CODES,
@@ -82,6 +83,7 @@ export class ZoneMemory implements ZoneServiceI {
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
     }
+    refuseUnprovenSession(authorized, 'zones.create');
 
     const zone: MyZone = {
       id: `zone-${crypto.randomUUID?.() ?? Date.now()}`,
@@ -125,6 +127,7 @@ export class ZoneMemory implements ZoneServiceI {
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
     }
+    refuseUnprovenSession(authorized, 'zones.join');
 
     const code = joinCode.toUpperCase();
 

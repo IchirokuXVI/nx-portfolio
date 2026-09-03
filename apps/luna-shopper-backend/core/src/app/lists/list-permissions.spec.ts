@@ -388,10 +388,14 @@ describe('a member holding {READ} (acceptance 2)', () => {
     });
     await expect(
       w.lines.update({ userId: USER_ID, lineId: 'li1', content: 'Passata' })
-    ).rejects.toThrow();
+    ).rejects.toThrow(/write access/i);
+    // Told that they cannot write, rather than that the quantity of an approved
+    // line needs approval rights. The second is true of a writer and beside the
+    // point for a reader, who is refused this line whatever its approval, so the
+    // write check is asked first.
     await expect(
       w.lines.update({ userId: USER_ID, lineId: 'li1', quantity: 1 })
-    ).rejects.toThrow();
+    ).rejects.toThrow(/write access/i);
   });
 });
 
@@ -611,12 +615,38 @@ describe('a member holding {READ, DECIDE} (acceptance 4)', () => {
     ).rejects.toThrow();
   });
 
-  it("changes an approved line's content, and it stays approved", async () => {
-    // Plan 0076, section 2.1. This was refused until that plan, and the caller
-    // got the same end state in three requests instead: un-approve, edit,
-    // approve. The reversion is exempted here for the same reason.
+  it("is refused when it changes an approved line's content", async () => {
+    // This is the cell the file's opening paragraph is about, and plan 0076 did
+    // not move it. It is refused not because the line is approved, which stopped
+    // mattering with that plan, but because content is a writer's field on every
+    // line and this caller holds no `WRITE`. Section 2.1's exemption is about the
+    // reversion, and its argument (un-approve, edit, approve) needs a caller who
+    // can make the edit at all: this one cannot, on a `PENDING` line either, per
+    // the case above. The caller who edits an approved line's content without
+    // un-approving it holds both permissions, which is the case below.
     const w = world({
       permissions: DECIDER,
+      line: { approvalStatus: LineApprovalStatus.APPROVED },
+    });
+
+    await expect(
+      w.lines.update({ userId: USER_ID, lineId: 'li1', content: 'Passata' })
+    ).rejects.toThrow();
+  });
+});
+
+describe('a member holding {READ, WRITE, DECIDE} (plan 0076, section 1)', () => {
+  const WRITER_DECIDER = [
+    ListPermission.READ,
+    ListPermission.WRITE,
+    ListPermission.DECIDE,
+  ];
+
+  it("changes an approved line's content, and it stays approved", async () => {
+    // Plan 0076, section 2.1: the reversion would be ceremony for somebody who
+    // can approve the line again in the next request, so they are exempt from it.
+    const w = world({
+      permissions: WRITER_DECIDER,
       line: {
         approvalStatus: LineApprovalStatus.APPROVED,
         approvedByUserId: 'the-approver',
@@ -632,6 +662,26 @@ describe('a member holding {READ, DECIDE} (acceptance 4)', () => {
     expect(view.content).toBe('Passata');
     expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
     expect(view.approvedByUserId).toBe('the-approver');
+  });
+
+  it("changes an approved line's quantity, which a writer alone may not", async () => {
+    const w = world({
+      permissions: WRITER_DECIDER,
+      line: { approvalStatus: LineApprovalStatus.APPROVED, quantity: 1 },
+    });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      quantity: 3,
+      content: 'Passata',
+    });
+
+    // Both fields in one request, which is the combination the quantity refusal
+    // turns away for a writer holding no `DECIDE`.
+    expect(view.quantity).toBe(3);
+    expect(view.content).toBe('Passata');
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
   });
 });
 

@@ -16,6 +16,8 @@ import {
   DeploymentApi,
   DIRECTORY_SERVICE,
   DirectoryApi,
+  HARVEST_SERVICE,
+  HarvestApi,
   LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS,
   RESOURCE_GATEWAYS,
   ResourceApiGateways,
@@ -24,7 +26,11 @@ import {
   SessionBootstrap,
   SessionLifecycle,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { provideResources } from '@portfolio/luna-shopper-admin/feature-resource';
+import { HARVEST_LINKS } from '@portfolio/luna-shopper-admin/feature-harvest';
+import {
+  provideResources,
+  provideShellLinks,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import { ADMIN_API_CONFIG } from '@portfolio/luna-shopper-admin/models';
 import { provideService } from '@portfolio/shared/data-access';
 import { environment } from '../environments/environment';
@@ -70,11 +76,22 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   provideService(RESOURCE_GATEWAYS, ResourceApiGateways),
   provideService(DIRECTORY_SERVICE, DirectoryApi),
 
+  // The harvester's own surface, bound the same way and for the same reason
+  // (plan 0006). `HarvestMemory` stays the token's default, which is what makes
+  // these screens render at all for anybody not sitting in front of the compose
+  // stack: the service is switched off in both clusters on purpose.
+  provideService(HARVEST_SERVICE, HarvestApi),
+
   // Which resources this app has (plan 0004). The route table is built from the
   // same list, so a resource cannot be reachable without a link or linked
   // without a route, and a reference field pointing at one of them resolves
   // through this rather than through a second registry.
   provideResources(...ADMIN_RESOURCES),
+
+  // The screens that are not resources, so the navigation can reach them. A
+  // hand written screen has no descriptor for the registry to read, so it says
+  // it exists here instead, from the same library that declares its routes.
+  provideShellLinks(...HARVEST_LINKS),
 
   // Ask the server about itself, and take a passwordless session if it offers one
   // (plan 0002, section 5).

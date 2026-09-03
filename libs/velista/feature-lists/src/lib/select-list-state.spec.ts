@@ -493,10 +493,24 @@ describe('selectListState', () => {
       });
     });
 
-    it('gives a decider the whole sheet on an approved row', () => {
-      // It was the quantity alone until backend plan 0076: the same caller reached the
-      // rest in three requests anyway, by un-approving, editing and approving again.
+    it('gives a decider no sheet on an approved row either, and keeps the reel', () => {
+      // `DECIDE` is a separate permission from `WRITE` rather than a larger one, and
+      // the server refuses this caller an approved line's content exactly as it
+      // refuses them a pending one's (backend plan 0076, section 4.1). Offering the
+      // sheet here would open a screen whose save is a 403. What they keep is the
+      // reel, which asks `canDecide` on its own.
       expect(row(DECIDER)).toMatchObject({
+        actions: ['comments'],
+        editScope: null,
+        adjustable: true,
+      });
+    });
+
+    it('gives a caller holding both the whole sheet on an approved row', () => {
+      // Plan 0066, section 2, and the reason the reversion is exempted for them: they
+      // reach the same end state anyway by un-approving, editing and approving again,
+      // which needs the `WRITE` that makes the edit possible in the first place.
+      expect(row(BOTH)).toMatchObject({
         actions: ['edit', 'comments'],
         editScope: 'full',
       });

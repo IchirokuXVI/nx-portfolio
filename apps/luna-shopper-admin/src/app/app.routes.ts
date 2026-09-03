@@ -5,6 +5,7 @@ import {
   SIGN_IN_PATH,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { SignInPage } from '@portfolio/luna-shopper-admin/feature-auth';
+import { harvestRoutes } from '@portfolio/luna-shopper-admin/feature-harvest';
 import { adminRoutes } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ADMIN_RESOURCES } from './resources';
 
@@ -53,6 +54,11 @@ export const appRoutes: Route[] = [
     // in and cannot tell the difference.
     path: '',
     canActivate: [requireSession],
-    children: adminRoutes(ADMIN_RESOURCES),
+    // The resources, then the screens that are not resources (plan 0006). The
+    // harvester's five are hand written because a run is a process and a review
+    // queue is a decision, and neither is a row with a form; they still sit
+    // inside this branch, so the session guard covers them and the chrome draws
+    // around them exactly as it does around a list.
+    children: adminRoutes(ADMIN_RESOURCES, harvestRoutes()),
   },
 ];

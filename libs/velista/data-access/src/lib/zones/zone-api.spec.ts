@@ -98,6 +98,51 @@ describe('ZoneApi', () => {
       httpMock.expectNone(`${GATEWAY}/v1/zones`);
     });
 
+    it('refuses to create a zone for a session it could not prove', async () => {
+      // Plan 0067, section 4, and the same data loss as the test above by a different
+      // road. The refresh is not refused here, it is unanswerable: auth is restarting.
+      // The session survives that, so the caller still has an account, and creating a
+      // zone anonymously now would give them a second one and strand the first.
+      tokens.set({
+        userId: 'u1',
+        kind: 'TEMPORARY',
+        accessToken: stale(),
+        refreshToken: 'refresh-1',
+      });
+
+      const result = api.createZone('Flat 3B');
+      await tick();
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/refresh`)
+        .flush(null, { status: 503, statusText: 'Service Unavailable' });
+
+      await expect(result).rejects.toThrow();
+      // Neither half of the loss happened: no zone, and the account is still here.
+      httpMock.expectNone(`${GATEWAY}/v1/zones`);
+      expect(tokens.tokens()?.refreshToken).toBe('refresh-1');
+    });
+
+    it('refuses to join a zone for a session it could not prove', async () => {
+      tokens.set({
+        userId: 'u1',
+        kind: 'REGISTERED',
+        accessToken: stale(),
+        refreshToken: 'refresh-1',
+      });
+
+      const result = api.joinZone('ABC123');
+      await tick();
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/refresh`)
+        .flush(null, { status: 500, statusText: 'Internal Server Error' });
+
+      await expect(result).rejects.toThrow();
+      httpMock.expectNone(`${GATEWAY}/v1/zones/join`);
+      expect(tokens.tokens()?.refreshToken).toBe('refresh-1');
+    });
+
     it('proceeds anonymously when there was no session to lose', async () => {
       const result = api.createZone('Flat 3B');
       await tick();
@@ -315,10 +360,7 @@ describe('ZoneApi', () => {
 
       httpMock
         .expectOne(`${GATEWAY}/v1/zones/join`)
-        .flush(
-          { code: 'not_found' },
-          { status: 404, statusText: 'Not Found' }
-        );
+        .flush({ code: 'not_found' }, { status: 404, statusText: 'Not Found' });
 
       await expect(result).rejects.toMatchObject({ code: 'not_found' });
       expect(tokens.tokens()?.userId).toBe('u1');
