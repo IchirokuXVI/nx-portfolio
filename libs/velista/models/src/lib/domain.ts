@@ -245,12 +245,38 @@ export interface Line {
    *
    * A **set**, where this was a single nullable `itemId` that was null on every
    * line ever created, because `0012` put the catalog out of scope. Picking a
-   * group in the composer copies that group's members here and the line
-   * references no group afterwards: a line is its own hand made group, so
-   * dropping a brand the household never buys is an ordinary edit rather than a
-   * change to somebody else's taxonomy.
+   * group in the composer copies that group's members here, so dropping a brand
+   * the household never buys is an ordinary edit rather than a change to
+   * somebody else's taxonomy.
+   *
+   * The line no longer **forgets** the group it came from, which is the half of
+   * `0048` section 1.1 that backend `0070` revises: see
+   * {@link productGroupId} and {@link groupItemIds}.
    */
   readonly itemIds: readonly string[];
+  /**
+   * The product group this line follows, or null for a hand made set (backend
+   * plan 0070, section 9).
+   *
+   * Null on every line `0048` ever created, and on every line the composer adds
+   * without choosing a group, so it is the ordinary case rather than the
+   * exception. When it is set, the catalog keeps adding and removing products on
+   * this line by itself, and velista `0065` is what tells the reader which ones.
+   */
+  readonly productGroupId: string | null;
+  /**
+   * The subset of {@link itemIds} the catalog put there and nobody has adopted
+   * (backend plan 0070, section 9).
+   *
+   * A subset of the ids rather than an array of objects, because there are
+   * exactly two sources and one subset determines the other: everything not in
+   * here was put on the line by a person, by hand or by adopting it.
+   *
+   * **Empty is the answer for a line that follows no group**, and it is also
+   * what a server that predates `0070` produces, so the mapper needs no
+   * distinction between the two.
+   */
+  readonly groupItemIds: readonly string[];
   readonly position: number;
   readonly approvalStatus: LineApprovalStatus;
   /**

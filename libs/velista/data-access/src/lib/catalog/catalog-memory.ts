@@ -122,6 +122,20 @@ export class CatalogMemory implements CatalogServiceI {
     const wanted = new Set(itemIds);
     return ITEMS.filter((row) => wanted.has(row.id));
   }
+
+  /**
+   * The fixture's groups, unknown ids **omitted**, for the reason above.
+   *
+   * A line outlives the group it was bound to, so an id matching nothing here is the
+   * ordinary "the group is gone" case, which the heading draws as `From a group`.
+   * Never null: a fake has no transport to fail.
+   */
+  async productGroupsByIds(
+    groupIds: readonly string[]
+  ): Promise<readonly ProductGroup[] | null> {
+    const wanted = new Set(groupIds);
+    return GROUPS.filter((row) => wanted.has(row.id));
+  }
 }
 
 /** The products of one group, for a composer choosing it whole. */

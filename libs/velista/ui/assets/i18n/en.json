@@ -577,6 +577,16 @@
       "noProducts": "No products yet",
       "products": "PRODUCTS ON THIS LINE",
       "addProduct": "Add a product",
+      "productsCount": "{{count}}/{{cap}}",
+      "fromGroup": "From {{name}}",
+      "fromGroupUnnamed": "From a group",
+      "addedByYou": "Added by you",
+      "keepProduct": "Keep",
+      "keepProductLabel": "Keep {{name}} on this line",
+      "productsFull": {
+        "one": "This line holds {{count}} of {{cap}} products. Remove one first.",
+        "group": "This line holds {{count}} of {{cap}} products, and {{name}} adds {{adds}}. Remove a few products first."
+      },
       "searchProduct": "Search for a product",
       "add": "Add",
       "removeProduct": "Remove {{name}}",

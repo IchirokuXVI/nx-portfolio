@@ -201,6 +201,11 @@ function line(
     position,
     // Free text, which is what most lines are and stays first class (section 6).
     itemIds: [],
+    // Following no group, which is every line backend `0048` created and therefore
+    // the honest default here (backend plan 0070, section 10). A seeded subscription
+    // would draw provenance headings over a fixture nothing syncs.
+    productGroupId: null,
+    groupItemIds: [],
     approvalStatus: 'APPROVED',
     // Nothing has ever happened to it, which is the honest default and the one that
     // draws no indicator. The helpers below are what say otherwise.

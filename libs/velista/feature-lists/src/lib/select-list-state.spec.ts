@@ -36,6 +36,8 @@ function line(overrides: Partial<Line> = {}): Line {
     content: 'Sourdough loaf',
     quantity: 1,
     itemIds: [],
+    productGroupId: null,
+    groupItemIds: [],
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,

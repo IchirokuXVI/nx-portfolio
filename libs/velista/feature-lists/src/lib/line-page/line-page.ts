@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,6 +15,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_SERVICE,
+  GroupNames,
   ItemNames,
   LINE_SERVICE,
   LineStore,
@@ -27,11 +29,14 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  inLocale,
+  LINE_ITEM_SET_MAX,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
   type CatalogSuggestion,
+  type LineProductsFullVm,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -75,7 +80,12 @@ import { selectLinePage } from './select-line-page';
  */
 @Component({
   selector: 'lib-line-page',
-  imports: [RokuTranslatorPipe, ChevronLeftIcon, SuggestionList],
+  imports: [
+    NgTemplateOutlet,
+    RokuTranslatorPipe,
+    ChevronLeftIcon,
+    SuggestionList,
+  ],
   templateUrl: './line-page.html',
   styleUrl: './line-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -86,6 +96,7 @@ export class LinePage {
   private readonly _zones = inject(ZoneStore);
   private readonly _names = inject(MemberNames);
   private readonly _itemNames = inject(ItemNames);
+  private readonly _groupNames = inject(GroupNames);
   private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
   /**
    * The transport, for the one read that is this page's alone.
@@ -141,6 +152,23 @@ export class LinePage {
   private readonly _loadNames = effect(() => {
     const itemIds = this._itemIds();
     untracked(() => void this._itemNames.ensure(itemIds));
+  });
+
+  /**
+   * The name of the group this line follows (velista plan 0065, section 2.1).
+   *
+   * A fourth effect rather than a branch inside the third, keyed on the binding rather
+   * than on the products: a line gains and loses products constantly and its group
+   * changes at most once, so folding this into `_loadNames` would re-ask on every edit
+   * for an answer that had not moved. Nothing waits for it either: the cluster draws
+   * under `From a group` until it lands, which is the same heading it keeps if the
+   * lookup never answers at all.
+   */
+  private readonly _loadGroupName = effect(() => {
+    const productGroupId = this._line()?.productGroupId ?? null;
+    if (productGroupId !== null) {
+      untracked(() => void this._groupNames.ensure([productGroupId]));
+    }
   });
 
   private readonly _line = computed(() =>
@@ -210,6 +238,10 @@ export class LinePage {
       canEdit: this._canEdit(),
       canDelete: this._canEdit(),
       busy: this.busy(),
+      // Null while it has not answered, for a group that is gone, and for a lookup
+      // that failed. The heading is the same in all three cases, and the selector is
+      // where that is decided (section 2.1).
+      groupNameOf: (groupId) => this._groupNames.nameOf(groupId),
     });
   });
 
@@ -472,6 +504,10 @@ export class LinePage {
     this.searching.set(false);
     this._query.set('');
     this.suggestions.set([]);
+    // And the refusal, for the same reason: it was about the product somebody was
+    // choosing, and reopening the search should not begin with an answer to a
+    // question nobody has asked yet.
+    this.productsFull.set(null);
   }
 
   /**
@@ -488,6 +524,20 @@ export class LinePage {
    *
    * The set is **unioned** rather than replaced, and a product already on the line is a
    * no-op rather than a duplicate: the line's set is a set.
+   *
+   * ## The cap, checked before anything is sent (velista plan 0065, section 3.2)
+   *
+   * The same expression the server enforces, `next.length <= max(cap, current.length)`,
+   * so an over cap line the catalog's sync produced can still be shrunk and can never
+   * be grown (backend plan 0070, section 7.1). When it fails **nothing is sent**,
+   * nothing on the line changes, and the sentence says the whole thing: a group is all
+   * or nothing, because a partial fill would be the server choosing which two of Milk's
+   * ten land on somebody's shopping list.
+   *
+   * This is what makes `list-error-copy.ts`'s note about a `validation_failed` true of
+   * the product set, which it was not before: caught in the field before the request,
+   * with the server's own refusal left exactly as it is as the belt on top of the
+   * braces.
    */
   async addProduct(suggestion: CatalogSuggestion): Promise<void> {
     const line = this._line();
@@ -499,23 +549,105 @@ export class LinePage {
       suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
     const merged = [...new Set([...line.itemIds, ...chosen])];
     if (merged.length === line.itemIds.length) {
+      this.productsFull.set(null);
       this.stopAdding();
       return;
     }
 
+    if (merged.length > Math.max(LINE_ITEM_SET_MAX, line.itemIds.length)) {
+      this.productsFull.set(
+        suggestion.kind === 'group'
+          ? {
+              key: 'list.page.productsFull.group',
+              args: {
+                count: line.itemIds.length,
+                cap: LINE_ITEM_SET_MAX,
+                name: inLocale(
+                  suggestion.group.name,
+                  this._localeStore.locale()
+                ),
+                // What the group **adds**, not how big it is: the products already on
+                // the line are not being added again, and a number that counted them
+                // twice would not add up against the count beside it.
+                adds: merged.length - line.itemIds.length,
+              },
+            }
+          : {
+              key: 'list.page.productsFull.one',
+              args: { count: line.itemIds.length, cap: LINE_ITEM_SET_MAX },
+            }
+      );
+      // The search stays open. Somebody who has just been told the line is full is
+      // more likely to want a different product than to want the panel gone, and
+      // closing it would take the sentence away with it.
+      return;
+    }
+
+    this.productsFull.set(null);
     this.busy.set(true);
     await this._lines.updateLine(line.id, { itemIds: merged });
     this.busy.set(false);
     this.stopAdding();
   }
 
-  /** Take one product off the line. An ordinary edit: the set is rewritten whole. */
+  /**
+   * Why the last add was refused, or null (velista plan 0065, section 3.3).
+   *
+   * A sentence on the screen rather than a thrown error, because nothing failed: the
+   * request was never sent. Cleared by anything that changes the products, so it
+   * cannot outlive the state it describes.
+   */
+  readonly productsFull = signal<LineProductsFullVm | null>(null);
+
+  /**
+   * Keep a product the catalog put there (velista plan 0065, section 4).
+   *
+   * `adoptItemIds` and **nothing else**, which is what makes the gesture legible: the
+   * set does not change, only who owns one product in it, and afterwards the catalog's
+   * sync stops touching it (backend plan 0070, section 9).
+   *
+   * **The feedback is the chip moving.** It leaves `From Milk` and appears under
+   * `Added by you`, on the frame of the tap, because the store patches optimistically.
+   * No toast and no confirmation: the result of the gesture is the whole point of the
+   * gesture, and it is already on screen.
+   *
+   * There is no un-adopt and there will not be one: provenance moves one way, and a
+   * control that hands a product back to the catalog is a control for a state nobody
+   * wants to be in.
+   */
+  async adoptProduct(itemId: string): Promise<void> {
+    const line = this._line();
+    if (line === undefined || this.busy()) {
+      return;
+    }
+
+    // Nothing to adopt, so nothing is sent. A product the person already owns reaching
+    // here is a stale frame rather than a gesture, and a request for it would bump the
+    // line's version to say nothing at all.
+    if (!line.groupItemIds.includes(itemId)) {
+      return;
+    }
+
+    this.productsFull.set(null);
+    this.busy.set(true);
+    await this._lines.updateLine(line.id, { adoptItemIds: [itemId] });
+    this.busy.set(false);
+  }
+
+  /**
+   * Take one product off the line. An ordinary edit: the set is rewritten whole.
+   *
+   * Never refused by the cap. Removing shrinks the set, and `max(cap, current.length)`
+   * is what lets an over cap line be brought back under the cap rather than frozen by
+   * the rule that exists to keep it under one (backend plan 0070, section 7.2).
+   */
   async removeProduct(itemId: string): Promise<void> {
     const line = this._line();
     if (line === undefined || this.busy()) {
       return;
     }
 
+    this.productsFull.set(null);
     this.busy.set(true);
     await this._lines.updateLine(line.id, {
       itemIds: line.itemIds.filter((id) => id !== itemId),

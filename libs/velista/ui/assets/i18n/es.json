@@ -577,6 +577,16 @@
       "noProducts": "Aún sin productos",
       "products": "PRODUCTOS DE ESTA LÍNEA",
       "addProduct": "Añadir un producto",
+      "productsCount": "{{count}}/{{cap}}",
+      "fromGroup": "De {{name}}",
+      "fromGroupUnnamed": "De un grupo",
+      "addedByYou": "Añadidos por ti",
+      "keepProduct": "Conservar",
+      "keepProductLabel": "Conservar {{name}} en esta línea",
+      "productsFull": {
+        "one": "Esta línea tiene {{count}} de {{cap}} productos. Quita alguno primero.",
+        "group": "Esta línea tiene {{count}} de {{cap}} productos y {{name}} añade {{adds}}. Quita algunos productos primero."
+      },
       "searchProduct": "Buscar un producto",
       "add": "Añadir",
       "removeProduct": "Quitar {{name}}",

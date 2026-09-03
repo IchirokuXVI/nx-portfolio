@@ -1,6 +1,7 @@
 import { inject, Injectable, signal } from '@angular/core';
 import {
   ALSO_ON_MAX_LISTS,
+  LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   type AlsoOnPlaceVm,
@@ -138,6 +139,13 @@ export class LineMemory implements LineServiceI {
       content,
       quantity: quantity ?? 1,
       itemIds: [...(itemIds ?? [])],
+      // A hand made set. The composer sends the products a group offered rather
+      // than the group itself, and this fake does not model the binding a real
+      // `line.add` would take (backend plan 0070, section 9): nothing on the client
+      // creates one, so a fake that invented one would put a `Keep` control on a
+      // subscription no server would agree exists.
+      productGroupId: null,
+      groupItemIds: [],
       // One past the highest, never `length`. Deletes leave gaps and a list whose
       // positions collide is the bug rule L4 is about.
       position: existing.reduce((top, l) => Math.max(top, l.position), 0) + 1,
@@ -183,6 +191,7 @@ export class LineMemory implements LineServiceI {
       content?: string;
       quantity?: number;
       itemIds?: readonly string[];
+      adoptItemIds?: readonly string[];
     }
   ): Promise<Line> {
     const line = this._lineOrThrow(lineId);
@@ -210,6 +219,17 @@ export class LineMemory implements LineServiceI {
       throw memoryFailure('validation_failed', 400);
     }
 
+    // The cap as the server states it (backend plan 0070, section 7.1): a bound on
+    // what a person may **grow** the set to, and not on its size. A line the
+    // catalog's own sync has carried past the cap can still be shrunk, which is why
+    // the rule is written against the current length rather than the constant alone.
+    if (
+      changes.itemIds !== undefined &&
+      changes.itemIds.length > Math.max(LINE_ITEM_SET_MAX, line.itemIds.length)
+    ) {
+      throw memoryFailure('validation_failed', 400);
+    }
+
     this._maybeFail();
 
     return this._patch(lineId, (current) => ({
@@ -219,6 +239,10 @@ export class LineMemory implements LineServiceI {
       // Undefined leaves the set alone; an empty array clears it to free text.
       itemIds:
         changes.itemIds === undefined ? current.itemIds : [...changes.itemIds],
+      // Provenance moves one way (backend plan 0070, section 3): adopting takes a
+      // product off the catalog's side and nothing puts it back. A product removed
+      // from the set leaves that side too, because it is no longer on the line.
+      groupItemIds: adopted(current, changes),
       ...(current.approvalStatus === 'REJECTED'
         ? {
             approvalStatus: 'PENDING' as LineApprovalStatus,
@@ -635,6 +659,32 @@ function order(lines: readonly Line[], by: LineOrder): readonly Line[] {
   // `created` and `updated` need timestamps the client's model of a line does not
   // carry, and no screen asks for either (section 9). The seeded order stands in.
   return lines;
+}
+
+/**
+ * The catalog's side of a line after one edit (backend plan 0070, section 3).
+ *
+ * Two rules, and both are one way. **Adopting moves a product off**, because the
+ * person has claimed it and the sync stops touching it; nothing ever moves one back.
+ * **A product that left the set leaves this too**, because it is not on the line for
+ * anybody to own. The fake writes no removal tombstones: nothing on the client can
+ * observe one, and the sync that would read them does not run here.
+ */
+function adopted(
+  current: Line,
+  changes: {
+    itemIds?: readonly string[];
+    adoptItemIds?: readonly string[];
+  }
+): readonly string[] {
+  const adopting = new Set(changes.adoptItemIds ?? []);
+  const stillOn =
+    changes.itemIds === undefined ? null : new Set(changes.itemIds);
+
+  return current.groupItemIds.filter(
+    (itemId) =>
+      !adopting.has(itemId) && (stillOn === null || stillOn.has(itemId))
+  );
 }
 
 function newId(): string {

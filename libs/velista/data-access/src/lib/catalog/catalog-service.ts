@@ -1,6 +1,10 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
-import type { CatalogItem, CatalogSuggestion } from '@portfolio/velista/models';
+import type {
+  CatalogItem,
+  CatalogSuggestion,
+  ProductGroup,
+} from '@portfolio/velista/models';
 import { CatalogApi } from './catalog-api';
 
 /**
@@ -71,6 +75,33 @@ export interface CatalogServiceI {
    * accepted and never honoured is the shape this plan exists to remove.
    */
   itemsByIds(itemIds: readonly string[]): Promise<readonly CatalogItem[] | null>;
+
+  /**
+   * What the catalog calls a set of **groups** (velista plan 0065, section 2.1).
+   *
+   * The read behind the `From Milk` heading on the line page. A line follows one
+   * group at most (backend plan 0070, section 12), so in practice this is asked one
+   * id at a time; it takes a set anyway, so that the resolver in front of it is the
+   * same shape as {@link itemsByIds}' one and neither has to be read twice to know
+   * what it does.
+   *
+   * The three answers are {@link itemsByIds}' three, unchanged and for the same
+   * reasons: a group that came back, a group the catalog answered about and does not
+   * have, which is **omitted**, and a lookup that did not answer at all, which is
+   * `null`. A heading over a group whose name failed says `From a group`, and a
+   * heading saying `From ` because a failure was read as an empty name is the thing
+   * the third case exists to prevent.
+   *
+   * Reads only, and open to any authenticated caller: `GET
+   * /v1/catalog/product-groups/:id` performs no admin check, unlike the create,
+   * update and delete beside it, because curating a group and naming one are not the
+   * same permission.
+   *
+   * **Fails soft**, like everything else here: a heading is not worth a screen.
+   */
+  productGroupsByIds(
+    groupIds: readonly string[]
+  ): Promise<readonly ProductGroup[] | null>;
 }
 
 /**

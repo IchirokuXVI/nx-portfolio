@@ -53,6 +53,28 @@ export const LINE_QUANTITY_MIN = 0;
 export const LINE_QUANTITY_MAX = 100000;
 
 /**
+ * How many products one line's set may hold: `LINE_ITEM_SET_MAX` in the contracts
+ * (backend plan 0048 section 1.1, given its precise meaning by `0070` section 7).
+ *
+ * velista `0065` section 3.2 asks for this to be imported from
+ * `@portfolio/luna-shopper/contracts` so the two halves cannot drift. It is
+ * **copied** instead, for the reason the top of this file gives and plan 0004
+ * section 9.3 states as a rule: the contracts barrel is a single entry point that
+ * re-exports the ajv schemas, so a value import from it pulls ajv into the bundle,
+ * and every contracts reference in this app is an erased `import type`. Copying is
+ * the same intent honoured the way this workspace requires, and it is still not a
+ * literal `100` at the call site.
+ *
+ * It is a bound on **what a person may grow a line to**, and not a bound on the
+ * set's size. A line following a product group can be carried past it by the
+ * catalog's own sync (`0070`, section 7.2), which is an accepted state and the
+ * reason the counter on the line page is never clamped. The rule a client applies
+ * before sending is `next.length <= Math.max(LINE_ITEM_SET_MAX, current.length)`,
+ * so shrinking an over cap line is always allowed and growing one never is.
+ */
+export const LINE_ITEM_SET_MAX = 100;
+
+/**
  * How far the thumb travels per unit on the quantity reel (velista plan 0043,
  * section 4).
  *

@@ -118,11 +118,56 @@
 }
 
 .section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
   margin: 0 0 var(--app-space-3);
   font-size: var(--app-text-2xs);
   font-weight: 600;
   letter-spacing: 0.07em;
   color: var(--app-text-muted);
+}
+
+// The count against the cap (plan 0065, section 3.1). At the far end of the heading,
+// where a number belongs, and in the heading's own muted colour: it is present on
+// every line that has products, so it must read as part of the label rather than as a
+// warning that has been on screen the whole time.
+.counter {
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+// Over the cap, which the catalog's own sync can produce and a person cannot (backend
+// plan 0070, section 7.2). This is the one moment the number is worth looking at, so
+// it is the one moment it is coloured.
+.counter.over-cap {
+  color: var(--app-status-danger-fg);
+}
+
+// Which side of the line a run of chips is (plan 0065, section 2). Quieter and smaller
+// than the section title above it: the section is "products on this line" and these
+// only say who put them there, so a heading competing with that one would make the
+// distinction look like the subject.
+.cluster-title {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-2xs);
+  font-weight: 500;
+  color: var(--app-text-muted);
+
+  // Between two clusters rather than above the first, so a line with one cluster is
+  // spaced exactly as the flat run of chips that shipped before it.
+  & + .chips {
+    margin-block-end: var(--app-space-4);
+  }
+}
+
+// The add that was refused before it was sent (section 3.3). Under the search rather
+// than over the chips, because it is about the product somebody was choosing.
+.products-full {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-status-danger-fg);
 }
 
 .chips {
@@ -202,6 +247,27 @@
   color: var(--app-text-muted);
   font: inherit;
   font-size: var(--app-text-sm);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  }
+}
+
+// Keep a product the catalog put there (plan 0065, section 4). **A word, not a
+// glyph**: there is no pin, lock or check icon in `libs/shared/ui`, adoption is a rare
+// and genuinely unobvious action, and an unlabelled mark for it would need a visible
+// label beside it anyway.
+//
+// It sits before the `×` and is drawn quietly, because it is the rarer of the two and
+// the ordinary gesture on a chip is still removing it.
+.chip-keep {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-2xs);
   cursor: pointer;
 
   &:focus-visible {

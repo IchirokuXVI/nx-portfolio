@@ -65,6 +65,13 @@ export interface LineServiceI {
    * free text. A whole set rather than an add or a remove, for the reason reorder
    * takes the whole order.
    *
+   * `adoptItemIds` moves products from the catalog's side of the line to the
+   * person's and changes the set not at all (backend plan 0070, section 9). It is
+   * sent **alone**, which is what makes the gesture legible on the wire: a set
+   * replacement that happens to keep a product is not a statement about who owns
+   * it, and reading adoption out of one would adopt the whole line every time
+   * somebody removed a product.
+   *
    * Not the reel's path, deliberately. This is an absolute write, which is a last
    * writer wins race over a value somebody deliberately chose; a moving control
    * writes {@link addQuantity} instead.
@@ -75,6 +82,7 @@ export interface LineServiceI {
       content?: string;
       quantity?: number;
       itemIds?: readonly string[];
+      adoptItemIds?: readonly string[];
     }
   ): Promise<Line>;
 

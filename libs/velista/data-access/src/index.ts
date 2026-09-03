@@ -16,6 +16,7 @@ export * from './lib/auth/token-store';
 export * from './lib/catalog/catalog-api';
 export * from './lib/catalog/catalog-memory';
 export * from './lib/catalog/catalog-service';
+export * from './lib/catalog/group-names';
 export * from './lib/catalog/item-names';
 export * from './lib/comments/comment-api';
 export * from './lib/comments/comment-memory';

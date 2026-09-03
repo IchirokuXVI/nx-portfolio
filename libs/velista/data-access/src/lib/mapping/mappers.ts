@@ -362,6 +362,14 @@ export function toLine(raw: unknown): Line | null {
     // section 1.1). Ids that are not strings are dropped rather than kept as
     // holes: a product reference nobody can resolve is not a product.
     itemIds: mapArray(raw['itemIds'], str),
+    // Which group the line follows, and which of its products the catalog put
+    // there (backend plan 0070, section 9). **Both default to "no group"**, and
+    // that is the one safe direction: a missing `groupItemIds` is `[]`, which is
+    // the correct reading for a server that predates `0070` and for every line
+    // that follows nothing, so the two need no distinction. Defaulting the other
+    // way would offer a `Keep` control for a subscription that does not exist.
+    productGroupId: nullableStr(raw['productGroupId']),
+    groupItemIds: mapArray(raw['groupItemIds'], str),
     position: numOr(raw['position'], 0),
     approvalStatus: oneOf(
       raw['approvalStatus'],
