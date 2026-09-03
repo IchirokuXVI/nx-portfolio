@@ -198,6 +198,17 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
   **always starts at `0001`** (no `0000`, no unnumbered files). The next plan in a
   directory takes the next free number.
 - A plan in `plans/` is **part of the build order**: it is being built, or it is next.
+- **The plan you were named is the whole job. Read the others, build none of them.**
+  Reading around the task is expected: a plan states the contracts, tokens and rules that
+  neighboring plans already fixed, and the surrounding `plans/` directory is where that
+  context lives, so open whatever you need to understand the one you were given. Writing
+  code for a plan nobody asked for is a different act, and it is not yours to decide. If
+  plan X turns out to need plan Y or plan Z first, say so and stop: name the plans, say what
+  each one is missing, and let the user choose whether to widen the task. That is one round
+  trip, and the alternative is a pull request three times its expected size, reviewed by
+  someone who asked for one plan and was handed three. Build every part of the named plan
+  that the missing dependency does not block, and state plainly which parts you left out and
+  why.
 - A design that is agreed but **not scheduled for development** goes in `plans/backlog/`
   instead, which is its own numbering namespace starting at `0001`. This keeps parked
   designs from burning a number in the build sequence. When one is picked up it moves
