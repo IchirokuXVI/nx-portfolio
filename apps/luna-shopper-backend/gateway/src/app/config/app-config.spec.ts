@@ -18,6 +18,10 @@ const base = {
   // reset endpoint that looked healthy.
   REDIS_URL: 'redis://localhost:6379',
   AUTH_JWT_PUBLIC_KEY: 'a-public-key',
+  // The operator trust root (plan 0071, section 3). Required for the same reason
+  // the one above it is: a missing signing key is not a lesser version of a
+  // feature, it is tokens verified against nothing.
+  ADMIN_JWT_PUBLIC_KEY: 'an-admin-public-key',
 };
 
 const validate = (env: Record<string, string>) =>

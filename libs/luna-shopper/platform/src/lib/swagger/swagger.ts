@@ -49,6 +49,15 @@ export function buildSwaggerDocument(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
       'access-token'
     )
+    // A second scheme, not a second name for the first (plan 0071, section 3).
+    // Operator tokens are signed with their own keypair and carry their own
+    // audience, so a reader of the docs who pastes a velista token into an admin
+    // route should be told which credential the route wants rather than left to
+    // discover that both say "bearer" and only one works.
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'admin-token'
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

@@ -339,6 +339,27 @@ run_check() {
     fi
   done <<< "$refs"
 
+  # The development autologin must not exist in a cluster, in any form (plan 0071,
+  # section 8).
+  #
+  # It mints an operator token with no password, so if it is ever on in production
+  # it is total compromise of every user's data. Auth refuses to boot with it on
+  # against a non local database, which catches it at the pod; this catches it
+  # before the deploy, in the render, which is seconds rather than a rollout.
+  #
+  # It greps the whole render rather than one ConfigMap on purpose: the variable
+  # could arrive as a literal `value:` on a container, from a Secret, or from a
+  # ConfigMap key nobody thought to check, and all three are the same mistake.
+  if printf '%s
+' "$rendered" | grep -q 'ADMIN_DEV_AUTOLOGIN'; then
+    echo
+    echo "  REFUSED ADMIN_DEV_AUTOLOGIN appears in the rendered chart." >&2
+    echo "          That switch signs an operator in with no password. It belongs" >&2
+    echo "          to a developer machine and to nothing else; neither" >&2
+    echo "          values.production.yaml nor values.staging.yaml may set it." >&2
+    failures=$((failures + 1))
+  fi
+
   echo
   if [ "$failures" -gt 0 ]; then
     echo "$failures reference(s) cannot be satisfied. The deploy would fail." >&2
@@ -462,6 +483,32 @@ if [ -z "$JWT_PRIVATE_KEY" ] || [ "$ROTATE" = true ]; then
   rm -f "$tmp_key" "$tmp_pub"
 fi
 
+# The OPERATOR keypair (plan 0071, section 3), generated beside the one above so a
+# fresh cluster gets one with no manual step.
+#
+# A second keypair rather than the auth key with a different audience, and the
+# argument is concrete: five services already hold AUTH_JWT_PUBLIC_KEY, so one key
+# for both kinds of token would leave every one of them finding an admin token
+# structurally valid and rejecting it only if it remembered to check the audience.
+# Realtime, which authenticates sockets, is exactly where forgetting that is
+# plausible and expensive.
+#
+# Losing it logs out every operator at once and loses nothing else, because an
+# admin session holds no refresh token; it is written to the operator's copy below
+# all the same.
+ADMIN_JWT_PRIVATE_KEY="$(existing "$APP_SECRET" ADMIN_JWT_PRIVATE_KEY)"
+ADMIN_JWT_PUBLIC_KEY="$(existing "$APP_SECRET" ADMIN_JWT_PUBLIC_KEY)"
+if [ -z "$ADMIN_JWT_PRIVATE_KEY" ] || [ "$ROTATE" = true ]; then
+  echo "  generating a new RSA keypair for admin token signing"
+  tmp_key="$(mktemp)"
+  tmp_pub="$(mktemp)"
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$tmp_key" 2>/dev/null
+  openssl pkey -in "$tmp_key" -pubout -out "$tmp_pub" 2>/dev/null
+  ADMIN_JWT_PRIVATE_KEY="$(cat "$tmp_key")"
+  ADMIN_JWT_PUBLIC_KEY="$(cat "$tmp_pub")"
+  rm -f "$tmp_key" "$tmp_pub"
+fi
+
 # What cannot be generated. All three may be empty: since plan 0026 that is a
 # supported configuration rather than a broken one — the Google routes answer 501,
 # registration answers 501, and (plan 0039) the assistant answers 501, instead of
@@ -523,7 +570,7 @@ apply_secret "$APP_SECRET" \
   --from-literal=CATALOG_DB_URL="$CATALOG_DB_URL" \
   --from-literal=HARVESTER_DB_URL="$HARVESTER_DB_URL" \
   --from-literal=AUTH_JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \
-  --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
+  --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY"   --from-literal=ADMIN_JWT_PRIVATE_KEY="$ADMIN_JWT_PRIVATE_KEY"   --from-literal=ADMIN_JWT_PUBLIC_KEY="$ADMIN_JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
   --from-literal=SMTP_PASS="$SMTP_PASS" \
   --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY"
@@ -584,6 +631,12 @@ ${JWT_PRIVATE_KEY}
 
 ${APP_SECRET}/AUTH_JWT_PUBLIC_KEY:
 ${JWT_PUBLIC_KEY}
+
+${APP_SECRET}/ADMIN_JWT_PRIVATE_KEY:
+${ADMIN_JWT_PRIVATE_KEY}
+
+${APP_SECRET}/ADMIN_JWT_PUBLIC_KEY:
+${ADMIN_JWT_PUBLIC_KEY}
 EOF
 
 echo

@@ -78,6 +78,15 @@ lunaShopperBackend:
     # missing line here.
     corsOrigins: https://ichirokuxvi.com,https://velista.app,https://admin.velista.app
     authJwtKid: prod-1
+    # The operator keypair's own kid (plan 0071, section 3), so a verification
+    # failure names which key was expected instead of only saying the signature
+    # is invalid.
+    adminJwtKid: prod-admin-1
+    # What GET /v1/admin/auth/me answers with, and therefore the accent colour the
+    # back office renders. ADMIN_DEV_AUTOLOGIN is not here and must never be: auth
+    # refuses to boot with it on against a non local database, and
+    # `provision-release.sh --check` asserts no rendered manifest carries it.
+    environmentName: production
     googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # The path the gateway actually serves: its controllers are versioned, so the
     # callback lives under /v1. It must match a URI pre-registered with Google

@@ -127,6 +127,20 @@
         "command": "node apps/luna-shopper-backend/auth/src/app/db/cli.js migration:generate apps/luna-shopper-backend/auth/src/app/db/migrations/Migration -d apps/luna-shopper-backend/auth/src/app/db/data-source.ts"
       }
     },
+    "admin:create": {
+      "// ": "Create an operator on a developer machine (plan 0071, section 6). Prompts for the password twice without echoing it; the password is never an argument, because an argument is in the shell history and in ps. Inside a cluster the equivalent is `node admin-cli.js create <username>` in the auth pod.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper-backend/auth/src/app/admin/cli/cli.js create"
+      }
+    },
+    "admin:list": {
+      "// ": "Username, display name, disabledAt and lastLoginAt. No secrets (plan 0071, section 6).",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper-backend/auth/src/app/admin/cli/cli.js list"
+      }
+    },
     "seed": {
       "executor": "nx:run-commands",
       "options": {

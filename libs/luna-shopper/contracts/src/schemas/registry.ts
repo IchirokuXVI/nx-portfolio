@@ -22,6 +22,10 @@ import {
   accountSchemas,
 } from './messages/account.schemas';
 import {
+  adminAuthMessageContracts,
+  adminAuthSchemas,
+} from './messages/admin-auth.schemas';
+import {
   assistantMessageContracts,
   assistantSchemas,
 } from './messages/assistant.schemas';
@@ -63,6 +67,7 @@ export interface MessageContract {
 /** subject -> { request schema id, response schema id } for every request/reply. */
 export const messageContracts: Record<string, MessageContract> = {
   ...authMessageContracts,
+  ...adminAuthMessageContracts,
   ...accountMessageContracts,
   ...zoneMessageContracts,
   ...listMessageContracts,
@@ -90,6 +95,7 @@ export const allSchemas: JsonSchema[] = [
   ...enumSchemas,
   ...commonSchemas,
   ...authSchemas,
+  ...adminAuthSchemas,
   ...accountSchemas,
   ...zoneSchemas,
   ...listSchemas,

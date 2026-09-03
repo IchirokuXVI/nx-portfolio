@@ -22,6 +22,32 @@ data:
   AUTH_JWT_KID: {{ $cfg.authJwtKid | quote }}
   ACCESS_TOKEN_TTL: {{ $cfg.accessTokenTtl | quote }}
   REFRESH_TOKEN_TTL: {{ $cfg.refreshTokenTtl | quote }}
+  # The operator identity (plan 0071). Its own kid, so a verification failure says
+  # which key was expected rather than only "invalid signature", and its own TTL,
+  # because the admin session holds no refresh token and renews itself while it is
+  # still valid.
+  ADMIN_JWT_KID: {{ $cfg.adminJwtKid | quote }}
+  ADMIN_ACCESS_TOKEN_TTL: {{ $cfg.adminAccessTokenTtl | quote }}
+  # Lockout (plan 0071, section 7). Separate from the gateway's throttling because
+  # throttling limits a source and this protects an account: one admin username is
+  # a far better brute force target than a user base.
+  ADMIN_LOGIN_LOCKOUT_THRESHOLD: {{ $cfg.adminLoginLockoutThreshold | quote }}
+  ADMIN_LOGIN_LOCKOUT_WINDOW: {{ $cfg.adminLoginLockoutWindow | quote }}
+  # What the back office renders its accent colour from, read back through
+  # GET /v1/admin/auth/me. Set per environment, in the values file, and nowhere
+  # else: a build time constant is exactly what is wrong when the failure being
+  # guarded against is believing you are in staging when you are in production.
+  ENVIRONMENT_NAME: {{ $cfg.environmentName | quote }}
+{{- /*
+The development autologin is deliberately ABSENT from this ConfigMap, in every
+environment. It signs an operator in with no password; auth refuses to boot with
+it on against a non local database, and `provision-release.sh --check` greps the
+whole render for its name and refuses the deploy if it appears anywhere (plan
+0071, section 8).
+
+A Go template comment rather than a YAML one, because a YAML comment would be
+part of the render and would trip that very check.
+*/}}
   GOOGLE_CLIENT_ID: {{ $cfg.googleClientId | default "" | quote }}
   GOOGLE_CALLBACK_URL: {{ $cfg.googleCallbackUrl | default "" | quote }}
   # Where the Google callback sends the browser back to (plan 0023, section 3.4).
