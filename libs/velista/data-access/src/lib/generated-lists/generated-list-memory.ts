@@ -76,7 +76,11 @@ export class GeneratedListMemory implements GeneratedListServiceI {
     const summary: GeneratedListSummary = {
       id: `gl-${this._nextId++}`,
       name: request.name ?? null,
-      status: 'ACTIVE',
+      // `DRAFT`, because that is what core composes: it writes a run as `DRAFT` and has
+      // no path that promotes one to `ACTIVE`. This double said `ACTIVE` and so agreed
+      // with the dashboard's old filter instead of with the server, which is precisely
+      // how a card that worked in demo mode drew for nobody on a real account.
+      status: 'DRAFT',
       generatedAt: new Date(),
       // A plausible basket rather than an empty one, so a card and a row have counts
       // to draw and the progress bar has a fraction to be.

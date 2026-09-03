@@ -230,13 +230,13 @@ export const PARTICIPANT_KIND_FALLBACK: ParticipantKind = 'UNKNOWN';
  * through, `COMPLETED` is a trip that is over, and `ARCHIVED` hides a trip from the
  * default listing without deleting it.
  *
- * `ACTIVE` is the only value this app derives anything from: it is what puts a basket
- * on the dashboard card and marks a row in the history as being shopped now. The other
- * three are carried so the history can be read back, and nothing branches on them.
+ * What this app derives from is not one of them but a **pair**: see
+ * {@link LIVE_GENERATED_LIST_STATUSES}. The other two are carried so the history can be
+ * read back, and nothing branches on them.
  *
  * `UNKNOWN` is the fallback for a status this build does not recognise, following
- * `ZONE_STATUSES`: an unrecognised value must not read as `ACTIVE`, because that would
- * put a basket the server considers finished back on the dashboard.
+ * `ZONE_STATUSES`: an unrecognised value must not read as live, because that would put
+ * a basket the server considers finished back on the dashboard.
  */
 export const GENERATED_LIST_STATUSES = [
   'DRAFT',
@@ -247,6 +247,41 @@ export const GENERATED_LIST_STATUSES = [
 ] as const;
 export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
 export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';
+
+/**
+ * The statuses of a basket somebody is still going to shop.
+ *
+ * **`DRAFT` is in it, and leaving it out is what kept the dashboard card off every
+ * screen in the app since plan 0045 shipped it.** The server composes a run as `DRAFT`
+ * (core's `GeneratedListService.write`) and has no path that promotes one to `ACTIVE`,
+ * so a filter written as `status === 'ACTIVE'` matched nothing a run had ever produced.
+ * The card was correct, tested and unreachable, and so was the history's Shopping now
+ * badge, which asked the same question the same wrong way.
+ *
+ * It mirrors the server's `LIVE_GENERATED_LIST_STATUSES` deliberately, and mirrors the
+ * reasoning with it: the question worth asking about a basket is whether somebody is
+ * still going to shop it, and `DRAFT` and `ACTIVE` are both yes. Asking about one value
+ * is how the two ended up disagreeing.
+ *
+ * `UNKNOWN` is outside it, which is the safe direction: a status this build has never
+ * heard of costs a card, where the other way round would offer somebody a way back into
+ * a trip the server considers over.
+ */
+export const LIVE_GENERATED_LIST_STATUSES = [
+  'DRAFT',
+  'ACTIVE',
+] as const satisfies readonly GeneratedListStatus[];
+
+/**
+ * Whether this basket is one somebody is still going to shop.
+ *
+ * Takes a `string` rather than a {@link GeneratedListStatus} so a caller holding a raw
+ * status off the wire can ask without a cast, which is the shape {@link basketTakesLines}
+ * already had and the reason it can delegate here.
+ */
+export function isLiveGeneratedList(status: string): boolean {
+  return (LIVE_GENERATED_LIST_STATUSES as readonly string[]).includes(status);
+}
 
 /**
  * Where a basket line came from (backend `0055`, section 3; velista `0056`).

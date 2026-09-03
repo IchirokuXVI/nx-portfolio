@@ -1,115 +1,112 @@
 @let vm = list();
 
-<section class="wrapper">
-  <div class="head-row">
-    <h2 class="section-label">{{ 'home.section.shoppingList' | rokuT }}</h2>
+<!--
+  How far through the trip somebody is, drawn as a hairline along the **top edge of the
+  dock** rather than inside the card (plan 0045 drew it inside; section 3.2 of this
+  change moves it).
 
-    <!--
-      A control of its own and not part of the card, because it goes somewhere else.
-      Section 7: the card and the history are two destinations, so they are two stops.
-    -->
-    <button (click)="openHistory.emit()" class="history" type="button">
-      {{ 'home.action.history' | rokuT }}
-    </button>
+  It is the one element that spans the whole container, so it is what makes the strip
+  and the action row beneath it read as one surface instead of two things that happen to
+  touch. Hidden from the reader, because the sentence below says the same thing in words
+  and the button's own label already said what is left: a progressbar here would make
+  the dock announce its fraction three times.
+
+  Absent for a basket with no lines, which is the one case there is no fraction to be.
+-->
+@if (progress(); as percent) {
+  <div aria-hidden="true" class="track">
+    <div [style.width.%]="percent" class="fill"></div>
   </div>
+}
 
-  <!--
-    One tap target for the whole card, with the chevron as decoration inside it rather
-    than a control of its own, exactly as the resume card and the zone card are.
+<!--
+  One tap target for the whole strip, with the chevron as decoration inside it rather
+  than a control of its own, exactly as the zone card is.
 
-    The accessible name is stated rather than read off the parts: left to itself a
-    screen reader would say the name, then the date, then "33%", then "4 of 12 got",
-    which is four facts in the order they happen to be laid out. Section 7 asks for the
-    name and what is left.
-  -->
-  <button
-    (click)="open.emit(vm.id)"
-    [attr.aria-label]="
-      'home.shoppingList.open' | rokuT: { name: vm.name, count: outstanding() }
-    "
-    class="card"
-    type="button"
-  >
-    <div class="head">
-      <div class="titles">
-        <span class="list-name">{{ vm.name }}</span>
-        <span class="meta">
-          @if (generatedToday()) {
-            {{ 'home.shoppingList.generatedToday' | rokuT }}
-          } @else {
+  The accessible name is stated rather than read off the parts: left to itself a screen
+  reader would say the name, then "4 of 12 got", then the date, which is three facts in
+  the order they happen to be laid out. Section 7 asks for the name and what is left.
+-->
+<button
+  (click)="open.emit(vm.id)"
+  [attr.aria-label]="
+    'home.shoppingList.open' | rokuT: { name: vm.name, count: outstanding() }
+  "
+  class="card"
+  type="button"
+>
+  <span class="titles">
+    <span class="list-name">{{ vm.name }}</span>
+
+    <!--
+      Everything that is true about the basket, on one line, separated by middots the
+      stylesheet draws between the parts rather than the template writing them out. A
+      separator written into the markup has to be conditional on what follows it, and
+      the one that is drawn by `+` cannot be wrong.
+
+      One line rather than the three the page card used, because this thing is docked
+      now: every row it takes is a row of the shop list above it that somebody cannot
+      see. What survived the cut is what answers "which basket, and how far in".
+    -->
+    <span class="meta">
+      @if (vm.breakdown; as outcome) {
+        <span class="meta-part">
+          {{
+            'home.shoppingList.got'
+              | rokuT: { bought: outcome.bought, total: vm.lineCount }
+          }}
+          @if (outcome.notAvailable > 0) {
             {{
-              'home.shoppingList.generatedOn' | rokuT: { date: generatedOn() }
+              'home.shoppingList.unavailable'
+                | rokuT: { count: outcome.notAvailable }
             }}
           }
         </span>
-      </div>
-      <lib-chevron-right-icon class="chevron" />
-    </div>
-
-    <!--
-      Hidden from the reader, because the sentence under it says the same thing in
-      words and the aria-label above already said what is left. A progressbar here
-      would make the card announce its fraction three times.
-    -->
-    @if (progress(); as percent) {
-      <div class="progress">
-        <div aria-hidden="true" class="track">
-          <div [style.width.%]="percent" class="fill"></div>
-        </div>
-        <!--
-          "3 of 4 got, 1 not available" once the summary carries the breakdown, and
-          "finished" until then (plan 0049, section 2). Same branch and same reasoning
-          as the history row, which is the screen this sentence really belongs to.
-        -->
-        <span class="progress-label">
-          @if (vm.breakdown; as outcome) {
-            {{
-              'home.shoppingList.got'
-                | rokuT: { bought: outcome.bought, total: vm.lineCount }
-            }}
-            @if (outcome.notAvailable > 0) {
-              {{
-                'home.shoppingList.unavailable'
-                  | rokuT: { count: outcome.notAvailable }
-              }}
-            }
-          } @else {
-            {{
-              'home.shoppingList.progress'
-                | rokuT: { settled: vm.settledLineCount, total: vm.lineCount }
-            }}
-          }
+      } @else {
+        <span class="meta-part">
+          {{
+            'home.shoppingList.progress'
+              | rokuT: { settled: vm.settledLineCount, total: vm.lineCount }
+          }}
         </span>
-      </div>
-    }
+      }
 
-    <!--
-      Who has this basket open right now (plan 0049, section 4).
-
-      A count and no names: the summary carries the number and nothing else, and naming
-      people would need the participant surface, which answers who *may* open this
-      rather than who has. It is drawn inside the card's own button because it is a fact
-      about this basket rather than a second destination, unlike the "and N more" link
-      below, and it is `aria-hidden` because the button's stated label already says the
-      name and what is left, and section 7 asks for that label to be the whole of it.
-
-      Nothing at zero, which is the ordinary state of a basket nobody is carrying.
-    -->
-    @if (vm.presentCount > 0) {
-      <span aria-hidden="true" class="present">
-        {{ 'home.presence.hereCount' | rokuT: { count: vm.presentCount } }}
+      <span class="meta-part">
+        @if (generatedToday()) {
+          {{ 'home.shoppingList.generatedToday' | rokuT }}
+        } @else {
+          {{ 'home.shoppingList.generatedOn' | rokuT: { date: generatedOn() } }}
+        }
       </span>
-    }
-  </button>
 
-  <!--
-    The other live baskets, which is a link to the history and not a part of the card
-    above it (section 7). Drawn only when there is more than one, because "and 0 more"
-    is furniture.
-  -->
-  @if (vm.otherActiveCount > 0) {
-    <button (click)="openHistory.emit()" class="more" type="button">
-      {{ 'home.shoppingList.more' | rokuT: { count: vm.otherActiveCount } }}
-    </button>
-  }
-</section>
+      <!--
+        Who has this basket open right now (plan 0049, section 4). A count and no names:
+        the summary carries the number and nothing else, and naming people would need
+        the participant surface, which answers who *may* open this rather than who has.
+
+        Nothing at zero, which is the ordinary state of a basket nobody is carrying.
+      -->
+      @if (vm.presentCount > 0) {
+        <span aria-hidden="true" class="meta-part present">
+          {{ 'home.presence.hereCount' | rokuT: { count: vm.presentCount } }}
+        </span>
+      }
+    </span>
+  </span>
+
+  <lib-chevron-right-icon class="chevron" />
+</button>
+
+<!--
+  The other live baskets, which is a link to the history and not a part of the strip
+  above it (section 7). Drawn only when there is more than one, because "and 0 more" is
+  furniture, and it is **the only History entry point left on this screen**: the section
+  header that used to carry one went with the move into the dock, where a row of chrome
+  costs a row of the dashboard. Somebody with one basket reaches their history through
+  the sheet the button below opens, which carries the link for exactly this reason.
+-->
+@if (vm.otherActiveCount > 0) {
+  <button (click)="openHistory.emit()" class="more" type="button">
+    {{ 'home.shoppingList.more' | rokuT: { count: vm.otherActiveCount } }}
+  </button>
+}

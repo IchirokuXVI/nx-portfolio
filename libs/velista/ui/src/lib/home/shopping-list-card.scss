@@ -1,74 +1,65 @@
-.wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-2);
+// The strip is the **top half of the dock**, not a card on the page, so it draws the
+// ground and the rule that used to belong to the bar alone and it draws no card of its
+// own: no raised surface, no radius, no inset. Sitting flush on the same ground as the
+// action row beneath it is the whole point, because the two are one thing to look at
+// and one thing to reason about ("here is your basket, and here is how to get another").
+//
+// The rule is on **this** element rather than on a wrapper in the page, and that is
+// what keeps the dock right in both of its states: with a basket, this rule caps the
+// dock and `BottomActionBar`'s own becomes the divider between the strip and the
+// buttons; with no basket this element is absent entirely and the bar's rule caps the
+// dock by itself. A wrapper carrying a rule would draw a second line under the first.
+:host {
+  display: block;
+  background: var(--app-surface-ground);
+  border-top: 1px solid var(--app-border-subtle);
 }
 
-// The label and the History link share a row, which is the shape the zone section
-// above already uses for its own label and New group. Two sections that read the same
-// way should be built the same way.
-.head-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--app-space-3);
+// Full bleed, and square: it spans the container edge to edge because that is what
+// makes the strip and the action row read as one surface. A fill only has to clear
+// 3:1, not 4.5:1, which is why the bright ramp is correct here in both themes (plan
+// 0002, layer 1 note). Success rather than the accent: this measures a trip being
+// finished, not something needing attention.
+.track {
+  block-size: var(--app-progress-height);
+  background: var(--app-surface-sunken);
+  overflow: hidden;
 }
 
-.section-label {
-  margin: 0;
-  font-size: var(--app-text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--app-text-muted);
-}
-
-// Matching `.new-zone` on the dashboard, since it is the same kind of control in the
-// same position: a quiet action beside a section label.
-.history {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-block-size: var(--app-touch-target);
-  padding: 0 var(--app-space-2);
-  background: transparent;
-  border: none;
-  border-radius: var(--app-button-radius);
-  color: var(--app-action-quiet-fg);
-  font: inherit;
-  font-size: var(--app-text-sm);
-  font-weight: 600;
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
+.fill {
+  block-size: 100%;
+  background: var(--app-status-success-fg);
+  transition: inline-size var(--app-motion-base) var(--app-motion-ease);
 }
 
 .card {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--app-space-3);
-  width: 100%;
-  padding: var(--app-space-4);
-  background: var(--app-surface-raised);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-card-radius);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-3) var(--app-space-5);
+  background: transparent;
+  border: none;
   font: inherit;
   text-align: start;
   cursor: pointer;
 
+  &:hover {
+    background: var(--app-surface-raised);
+  }
+
+  &:active {
+    background: var(--app-surface-sunken);
+  }
+
+  // Inside the element rather than around it. The strip runs to both edges of the
+  // screen, so a ring drawn outside would be clipped by the viewport on the left and
+  // the right and appear as two stray verticals.
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
+    outline-offset: calc(-1 * var(--app-focus-ring-width));
   }
-}
-
-.head {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-3);
 }
 
 .titles {
@@ -76,11 +67,13 @@
   flex-direction: column;
   gap: var(--app-space-hair);
   flex: 1;
-  min-width: 0;
+  min-inline-size: 0;
 }
 
+// A step down from the page card's `lg`: the name is the biggest thing in a strip two
+// lines tall, and it no longer has to hold its own against a section heading above it.
 .list-name {
-  font-size: var(--app-text-lg);
+  font-size: var(--app-text-base);
   font-weight: 600;
   color: var(--app-text-primary);
   overflow: hidden;
@@ -89,64 +82,39 @@
 }
 
 .meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);
 }
 
+// The separator is drawn **between** parts rather than written into the template, so it
+// cannot be left stranded by a part that turned out to be absent. `+` is exactly the
+// condition "there is something before this one", which is the only condition a
+// separator has ever had.
+.meta-part + .meta-part::before {
+  content: '·';
+  margin-inline: 0.45em;
+}
+
 .chevron {
+  flex-shrink: 0;
   font-size: var(--app-icon-md);
   color: var(--app-text-muted);
 }
 
-.progress {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-2);
-}
-
-.track {
-  height: var(--app-progress-height);
-  border-radius: var(--app-radius-full);
-  background: var(--app-surface-sunken);
-  overflow: hidden;
-}
-
-// A fill only has to clear 3:1, not 4.5:1, which is why the bright ramp is correct
-// here in both themes (plan 0002, layer 1 note). Success rather than the accent: this
-// bar measures a trip being finished, not something needing attention.
-.fill {
-  height: 100%;
-  border-radius: var(--app-radius-full);
-  background: var(--app-status-success-fg);
-  transition: width var(--app-motion-base) var(--app-motion-ease);
-}
-
-.progress-label {
-  font-size: var(--app-text-xs);
-  color: var(--app-text-secondary);
-}
-
-// Who is here now, quieter still than the progress line beneath the bar: it is context
-// rather than the card's own answer, and it appears and disappears while somebody is
-// looking at the card, so it must not move the layout around it more than one line.
-.present {
-  display: block;
-  margin-block-start: var(--app-space-1);
-  font-size: var(--app-text-xs);
-  color: var(--app-text-secondary);
-}
-
-// Quiet, and outside the card: it is the second destination on this section, and
-// making it look like part of the card would hide that it goes somewhere else.
+// Quiet, and outside the tap target above it: it is the second destination on this
+// strip, and making it look like part of the strip would hide that it goes somewhere
+// else. Its padding lines its text up with the name above rather than with the edge.
 .more {
-  align-self: flex-start;
   display: flex;
   align-items: center;
   min-block-size: var(--app-touch-target);
-  padding: 0 var(--app-space-2);
+  padding-inline: var(--app-space-5);
+  padding-block-end: var(--app-space-1);
   background: transparent;
   border: none;
-  border-radius: var(--app-button-radius);
   color: var(--app-text-secondary);
   font: inherit;
   font-size: var(--app-text-xs);
@@ -154,7 +122,7 @@
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
+    outline-offset: calc(-1 * var(--app-focus-ring-width));
   }
 }
 
