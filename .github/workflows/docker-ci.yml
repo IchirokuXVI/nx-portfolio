@@ -87,6 +87,13 @@ env:
   STAGING_MFE_REMOTE_URLS: velista=https://staging.velista.app
   # Which backend the staging velista image talks to (velista plan 0014). On
   # velista's domain too, since these two exist only to serve it.
+  #
+  # The gateway URL now serves **two** images, not one: luna-shopper-admin reads the
+  # same `LUNA_GATEWAY_URL` on its own build (its plan 0001, section 7), because it
+  # talks to the same gateway on different routes. That is why there is no second
+  # variable for it — one deployment has one gateway, and a second name for it could
+  # only ever disagree with this one. The realtime URL stays velista's alone: the
+  # back office polls and never subscribes.
   STAGING_LUNA_GATEWAY_URL: https://api.staging.velista.app
   STAGING_LUNA_REALTIME_URL: https://rt.staging.velista.app
   # Options for every SSH in this file, rsync's transport included.

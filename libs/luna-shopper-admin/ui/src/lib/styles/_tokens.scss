@@ -1,0 +1,68 @@
+// The one entry point for this app's tokens. Everything that needs one writes
+// `@use '../styles/tokens' as tokens;` and reaches no further.
+//
+// Deliberately much smaller than velista's three layer system. This is an internal
+// tool for one operator on a desktop and a phone browser, and the thing it actually
+// has to get right is the environment accent below; a full primitive/semantic/theme
+// split would be scaffolding around one decision.
+//
+// It lands on the app's own root element rather than on `:root`, which costs
+// nothing here (this app is never mounted inside anything) and keeps the habit that
+// makes velista extractable.
+
+/// Everything the app root carries.
+@mixin admin-root {
+  // Surfaces and ink. One scheme: an operator tool that is read in a lit room, and
+  // a second theme is a decision nothing in these plans asks for.
+  --admin-surface: #f7f7f8;
+  --admin-surface-raised: #ffffff;
+  --admin-border: #d8d9de;
+  --admin-ink: #16171c;
+  --admin-ink-muted: #5c5f6b;
+
+  --admin-space-1: 0.25rem;
+  --admin-space-2: 0.5rem;
+  --admin-space-3: 0.75rem;
+  --admin-space-4: 1rem;
+  --admin-space-6: 1.5rem;
+  --admin-space-8: 2rem;
+
+  --admin-radius: 0.5rem;
+
+  // The environment accent, and the reason this file exists (plan 0001, section 6).
+  //
+  // The resting value is the one for an environment the app could not establish:
+  // grey, saying nothing. Every named deployment overrides it below, so a colour is
+  // only ever shown because the API named the environment it belongs to — an app
+  // that failed to ask cannot end up wearing production's red or staging's amber.
+  --admin-accent: #6b7280;
+  --admin-accent-ink: #ffffff;
+  --admin-accent-wash: #eeeff1;
+}
+
+/// The per deployment accent, keyed off the attribute the app root stamps.
+///
+/// Three colours that stay distinguishable at a glance and in a screenshot: red
+/// carries production because it is the one an operator must never mistake, amber
+/// carries staging, and development is the calm one nobody needs to be warned
+/// about. They differ in lightness as well as hue, so the pair is still told apart
+/// by someone who does not see red and green apart.
+@mixin admin-deployments {
+  &[data-deployment='production'] {
+    --admin-accent: #b4232a;
+    --admin-accent-ink: #ffffff;
+    --admin-accent-wash: #fbeaeb;
+  }
+
+  &[data-deployment='staging'] {
+    --admin-accent: #8a5a06;
+    --admin-accent-ink: #ffffff;
+    --admin-accent-wash: #fdf3e0;
+  }
+
+  &[data-deployment='development'] {
+    --admin-accent: #1f5f8b;
+    --admin-accent-ink: #ffffff;
+    --admin-accent-wash: #e8f1f8;
+  }
+}

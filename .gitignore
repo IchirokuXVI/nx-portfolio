@@ -58,6 +58,7 @@ tools/dev/.env.ng-slot
 tools/dev/.run/
 apps/shell/.env
 apps/velista/.env
+apps/luna-shopper-admin/.env
 # Jest JSON summaries and per service logs from the stack targets (plan 0015);
 # CI reads them to prove the infra-backed suites actually executed, then uploads
 # them as failure artifacts. Nothing here is worth committing.

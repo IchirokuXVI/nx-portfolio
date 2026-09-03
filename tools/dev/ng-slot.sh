@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# ng-slot.sh — run the Angular apps (shell plus the four remotes) from a git
+# ng-slot.sh — run the Angular apps (the shell, its four remotes, and the back
+# office, which is neither) from a git
 # worktree on an isolated "slot", so several worktrees, and therefore several
 # agents, can serve the front end at the same time without fighting over ports.
 #
@@ -39,17 +40,18 @@
 #
 # Slot 0 is exactly the ports the project.json files already name, and stays that
 # way: shell 4200, static remotes 4201, odontogram 4202, damoclesSword 4203,
-# landingV2 4204, velista 4205. It is the developer's own, so a lone worktree needs
-# no slot at all and the plain `npx nx serve shell` workflow is unchanged.
+# landingV2 4204, velista 4205, luna-shopper-admin 4206. It is the developer's own,
+# so a lone worktree needs no slot at all and the plain `npx nx serve shell` workflow
+# is unchanged.
 #
 # Every other slot gets a 100 port block up in the 42000s, keeping the shape of
 # the defaults so the numbers stay readable:
 #
 #   slot 1  shell 42000  (static 42001)  odontogram 42002  dSword 42003
-#           landingV2 42004  velista 42005
-#   slot 2  the same, plus 100: 42100..42105
+#           landingV2 42004  velista 42005  luna-shopper-admin 42006
+#   slot 2  the same, plus 100: 42100..42106
 #   ...
-#   slot 9  42800..42805
+#   slot 9  42800..42806
 #
 # The high band is not decoration. `default + N*100` put slot 1 on 4300 and slot 4
 # on 4600, right in the range everything else on a developer machine also wants,
@@ -85,6 +87,7 @@
 #   tools/dev/.env.ng-slot   the slot descriptor, read back by --up/--down/--list
 #   apps/shell/.env          MFE_REMOTE_URLS for this slot
 #   apps/velista/.env        LUNA_GATEWAY_URL / LUNA_REALTIME_URL for the backend slot
+#   apps/luna-shopper-admin/.env  LUNA_GATEWAY_URL for the same backend slot
 #   tools/dev/.run/          one .pid and one .log per served app
 #
 # The two app level files are picked up on their own: Nx loads `{projectRoot}/.env`
@@ -107,7 +110,13 @@ PROBE="$here/probe-ports.mjs"
 
 # Every app this script can serve. The order is the order --up starts them and
 # --list prints them; `shell` is first because it is the host.
-APPS=(shell odontogram damoclesSword landingV2 velista)
+#
+# luna-shopper-admin is the one that is not a remote and has no host: it is the back
+# office, served from its own origin (its plan 0001), so `--up --apps
+# luna-shopper-admin` starts it alone, without the shell or any remote. That is the
+# normal way to work on it, and it is roughly a gigabyte rather than the three or
+# four a full front end slot costs.
+APPS=(shell odontogram damoclesSword landingV2 velista luna-shopper-admin)
 
 # Slot 0 is exactly the ports `project.json` names, and nothing here may change
 # them: they are the developer's own, the ones their browser and their tools point
@@ -119,6 +128,7 @@ declare -A DEFAULT_PORT=(
   [damoclesSword]=4203
   [landingV2]=4204
   [velista]=4205
+  [luna-shopper-admin]=4206
 )
 
 # Every OTHER slot lives up here instead, one 100 port block per slot.
@@ -147,6 +157,7 @@ declare -A SLOT_OFFSET=(
   [damoclesSword]=3
   [landingV2]=4
   [velista]=5
+  [luna-shopper-admin]=6
 )
 
 # How high --auto and --list will look. Ten concurrent front ends is far past what
@@ -367,12 +378,13 @@ detect_backend_slot() {
 write_config() {
   local slot="$1" backend_slot="$2"
 
-  local shell_port odontogram_port damocles_port landing_port velista_port
+  local shell_port odontogram_port damocles_port landing_port velista_port admin_port
   shell_port=$(port_for shell "$slot")
   odontogram_port=$(port_for odontogram "$slot")
   damocles_port=$(port_for damoclesSword "$slot")
   landing_port=$(port_for landingV2 "$slot")
   velista_port=$(port_for velista "$slot")
+  admin_port=$(port_for luna-shopper-admin "$slot")
 
   local gateway_port realtime_port
   gateway_port=$(backend_port gateway "$backend_slot")
@@ -392,8 +404,10 @@ NG_ODONTOGRAM_PORT=${odontogram_port}
 NG_DAMOCLESSWORD_PORT=${damocles_port}
 NG_LANDINGV2_PORT=${landing_port}
 NG_VELISTA_PORT=${velista_port}
+NG_LUNA_SHOPPER_ADMIN_PORT=${admin_port}
 NG_SHELL_URL=http://localhost:${shell_port}
 NG_VELISTA_URL=http://localhost:${velista_port}
+NG_LUNA_SHOPPER_ADMIN_URL=http://localhost:${admin_port}
 # What the e2e suites read. Every front end suite drives its app through the
 # shell, so this slot's shell origin is the answer for all four of them; see
 # --e2e-env, which prints it as an export for \`eval\`.
@@ -412,16 +426,25 @@ EOF
 MFE_REMOTE_URLS=odontogram=http://localhost:${odontogram_port},damoclesSword=http://localhost:${damocles_port},landingV2=http://localhost:${landing_port},velista=http://localhost:${velista_port}
 EOF
 
-  # velista is the only front end that talks to a backend, so it is the only one
-  # this half of the slot reaches. The backend it names is a separate number
-  # (see detect_backend_slot): one backend commonly serves several front end
-  # slots, and its CORS list allows every one of them.
+  # velista and luna-shopper-admin are the two front ends that talk to a backend,
+  # so they are the two this half of the slot reaches. The backend they name is a
+  # separate number (see detect_backend_slot): one backend commonly serves several
+  # front end slots, and its CORS list allows every one of them.
   cat > "$root/apps/velista/.env" <<EOF
 # Generated by ng-slot.sh (slot ${slot}, luna-shopper slot ${backend_slot}). Git ignored.
 # Read by apps/velista/webpack.config.ts and substituted into environment.ts at
 # compile time, the same way webpack.prod.config.ts supplies the deployed hosts.
 LUNA_GATEWAY_URL=http://localhost:${gateway_port}
 LUNA_REALTIME_URL=http://localhost:${realtime_port}
+EOF
+
+  # The back office reaches the same gateway on different routes, and no realtime
+  # service at all: it polls and never subscribes (its plan 0001, section 4).
+  cat > "$root/apps/luna-shopper-admin/.env" <<EOF
+# Generated by ng-slot.sh (slot ${slot}, luna-shopper slot ${backend_slot}). Git ignored.
+# Read by apps/luna-shopper-admin/webpack.config.ts and substituted into
+# environment.ts at compile time.
+LUNA_GATEWAY_URL=http://localhost:${gateway_port}
 EOF
 
   cat <<EOF
@@ -432,6 +455,7 @@ Configured this worktree for Angular slot ${slot}.
   damoclesSword http://localhost:${damocles_port}
   landingV2     http://localhost:${landing_port}
   velista       http://localhost:${velista_port}   (own origin, plan 0013)
+  admin         http://localhost:${admin_port}   (own origin, not a remote)
   reserved      $(port_for staticRemotes "$slot"), held for Nx's static remote server
   backend       luna-shopper slot ${backend_slot}: gateway ${gateway_port}, realtime ${realtime_port}
                 (an independent number, not this slot's; --backend-slot <n> moves it)
@@ -857,7 +881,7 @@ list() {
   echo
   echo "Angular dev slots (slot 0 is the project.json ports; 1 and up are 42000 + (slot-1)*100)"
   echo
-  printf '  %-4s %-7s %-46s %s\n' 'SLOT' 'STATE' 'PORTS  shell/odtg/dsword/landing/velista' 'CLAIMED BY'
+  printf '  %-4s %-7s %-46s %s\n' 'SLOT' 'STATE' 'PORTS  shell/odtg/dsword/landing/velista/admin' 'CLAIMED BY'
   for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
     local -a ports=()
     mapfile -t ports < <(slot_ports "$slot")
@@ -888,10 +912,10 @@ list() {
     fi
 
     local ports_col
-    ports_col="$(printf '%s %s %s %s %s' \
+    ports_col="$(printf '%s %s %s %s %s %s' \
       "$(port_for shell "$slot")" "$(port_for odontogram "$slot")" \
       "$(port_for damoclesSword "$slot")" "$(port_for landingV2 "$slot")" \
-      "$(port_for velista "$slot")")"
+      "$(port_for velista "$slot")" "$(port_for luna-shopper-admin "$slot")")"
 
     if [[ -z "$claim" ]]; then
       # Something is listening that no checkout of this repository configured.
