@@ -182,7 +182,7 @@ lunaShopperBackend:
   # assortment is going too, restore the dump BEFORE the seed, never after —
   # `uq_items_ean` will refuse the second writer.
   referenceSeed:
-    enabled: false
+    enabled: true
 
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
