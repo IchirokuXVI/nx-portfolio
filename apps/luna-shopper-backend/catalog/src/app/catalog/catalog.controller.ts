@@ -11,6 +11,7 @@ import {
   SUPERMARKET_PATTERNS,
   type CountLocationsByPostalCodeRequest,
   type CreateItemRequest,
+  type AdminListSupermarketItemsRequest,
   type CreatePriceScopeRequest,
   type CreateProductGroupRequest,
   type CreateSupermarketLocationRequest,
@@ -442,5 +443,12 @@ export class CatalogController {
     @Payload() req: ListSupermarketItemsByScopeRequest
   ): Promise<SupermarketItemPage> {
     return this.supermarketItems.listByScope(req);
+  }
+
+  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.adminList)
+  adminListSupermarketItems(
+    @Payload() req: AdminListSupermarketItemsRequest
+  ): Promise<SupermarketItemPage> {
+    return this.supermarketItems.adminList(req);
   }
 }

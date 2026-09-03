@@ -213,6 +213,51 @@ describe('ItemService', () => {
     expect(items.query).not.toHaveBeenCalled();
   });
 
+  /**
+   * Plan 0073, section 4: what curation has not reached.
+   *
+   * An ungrouped product is invisible to every "show me milk" read, so a filter
+   * that spells "no group" is the only way the back office can find one. It has
+   * to be a flag rather than a null `productGroupId`, since absent already means
+   * "any group".
+   */
+  it('lists the products belonging to no group at all', async () => {
+    const rows: Item[] = [];
+    const qb = makeQb(rows);
+    const items = {
+      query: jest.fn(async () => rows),
+      createQueryBuilder: jest.fn(() => qb),
+    } as unknown as Repository<Item>;
+    const { service } = build({ items });
+
+    await service.search({ userId: 'operator', withoutProductGroup: true });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('i."productGroupId" IS NULL');
+  });
+
+  /**
+   * The filter applies on the ranked branch too. It would be easy to add it only
+   * to the listing branch, and a filter that silently stopped applying when the
+   * caller typed a word would be worse than one that was never offered.
+   */
+  it('applies the ungrouped filter to a ranked search as well', async () => {
+    const rows: Item[] = [];
+    const items = {
+      query: jest.fn(async () => rows),
+      createQueryBuilder: jest.fn(() => makeQb(rows)),
+    } as unknown as Repository<Item>;
+    const { service } = build({ items });
+
+    await service.search({
+      userId: 'operator',
+      query: 'leche',
+      withoutProductGroup: true,
+    });
+
+    const sql = (items.query as jest.Mock).mock.calls[0][0] as string;
+    expect(sql).toContain('i."productGroupId" IS NULL');
+  });
+
   it('quotes no price when the caller names no scopes (section 3.1)', async () => {
     const rows = [
       {

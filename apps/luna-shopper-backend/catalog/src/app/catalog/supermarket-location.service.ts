@@ -218,6 +218,14 @@ export class SupermarketLocationService {
       // price keyed by scope becomes somewhere a person can go.
       qb.andWhere('l."priceScopeId" = :scope', { scope: req.priceScopeId });
     }
+    if (req.postalCodeSource) {
+      // Plan 0073, section 4: the shops whose postal code was guessed, which is
+      // the operator's review list. A shop with no postal code has no source
+      // either, so it is excluded by the comparison rather than by a clause.
+      qb.andWhere('l."postalCodeSource" = :pcs', {
+        pcs: req.postalCodeSource,
+      });
+    }
     if (cursor) {
       qb.andWhere('(l."createdAt", l.id) < (:cv, :cid)', {
         cv: cursor.value,

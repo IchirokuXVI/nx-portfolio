@@ -155,6 +155,17 @@ export const SUPERMARKET_ITEM_PATTERNS = {
   listByItem: 'supermarketItem.listByItem',
   listByLocation: 'supermarketItem.listByLocation',
   listByScope: 'supermarketItem.listByScope',
+  /**
+   * Every price, filtered the way an operator filters them (plan 0073, section
+   * 4).
+   *
+   * A fourth list rather than optional arguments on the three above, because
+   * those all start from something the caller already named: a product, a shop,
+   * a scope. This one starts from nothing, which is the question "what have I
+   * pinned by hand" and is the whole reason the price screen exists. It is
+   * reachable only through `/v2/admin/catalog/supermarket-items`.
+   */
+  adminList: 'supermarketItem.adminList',
 } as const;
 
 /**
@@ -601,6 +612,16 @@ export interface ListSupermarketLocationsRequest extends PageQuery {
    * into somewhere to go. Absent lists the whole chain, as before.
    */
   priceScopeId?: string;
+  /**
+   * Only the shops whose postal code came from here (plan 0073, section 4).
+   *
+   * {@link PostalCodeSource.DERIVED} is the one an operator asks for: it means
+   * the code was inferred from the nearest centroid rather than known, and
+   * `apps/luna-shopper-admin/plans/0005` section 3 is the screen that lists them.
+   * A shop with no postal code at all is a third state and not this one, so it
+   * is absent from every value of this filter rather than folded into `DERIVED`.
+   */
+  postalCodeSource?: PostalCodeSource;
 }
 
 /**
@@ -781,6 +802,20 @@ export interface SearchItemsRequest extends PageQuery {
   /** Only this group's members (plan 0048). What "show me every milk" asks. */
   productGroupId?: string;
   /**
+   * Only the products belonging to no group at all (plan 0073, section 4).
+   *
+   * The one filter the back office needs that a shopper never would: an
+   * ungrouped product is invisible to every "show me milk" read, so this is how
+   * the operator finds the ones curation has not reached. It is a separate flag
+   * rather than a null {@link productGroupId} because absent already means "any
+   * group", and a filter cannot spell "no group" by leaving itself out.
+   *
+   * `false` is the same as absent. Setting it beside a `productGroupId` asks for
+   * the members of a group that have no group, which is nothing, and the service
+   * answers exactly that rather than picking one of the two.
+   */
+  withoutProductGroup?: boolean;
+  /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *
    * **Absent and empty are the same answer since plan 0069, section 2**: the
@@ -930,6 +965,32 @@ export interface ListSupermarketItemsByLocationRequest extends PageQuery {
 export interface ListSupermarketItemsByScopeRequest extends PageQuery {
   userId: string;
   priceScopeId: string;
+}
+
+/**
+ * The back office's price list (plan 0073, section 4). Every filter is optional
+ * and an empty request pages the whole table, newest first.
+ *
+ * It carries an {@link AdminCredential} although it reads nothing a catalog read
+ * does not already expose. That is deliberate and it is the point of the
+ * namespace: the answer is unscoped and unranked, which is wrong for a shopper
+ * and is the only useful shape for somebody looking for the row they just broke,
+ * so it is reachable by an operator token and by nothing else.
+ */
+export interface AdminListSupermarketItemsRequest
+  extends PageQuery,
+    AdminCredential {
+  /** One product's prices across every scope. */
+  itemId?: string;
+  /** One scope's prices, which is what a chain's price table is. */
+  priceScopeId?: string;
+  /**
+   * `ADMIN` answers "what have I overridden", which plan 0038 section 6.5 makes
+   * permanent and invisible and which nothing else can currently ask.
+   */
+  priceSourceKind?: PriceSourceKind;
+  /** The scope wide flag, not the per store override on `SupermarketLocationItem`. */
+  available?: boolean;
 }
 
 // --- Price scope requests --------------------------------------------------
