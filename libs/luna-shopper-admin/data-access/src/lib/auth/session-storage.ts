@@ -1,0 +1,115 @@
+import { Injectable } from '@angular/core';
+import {
+  toAdminSession,
+  type AdminSession,
+} from '@portfolio/luna-shopper-admin/models';
+
+/** The one key this app writes, namespaced so it cannot collide on an origin. */
+const SESSION_KEY = 'luna-shopper-admin.session';
+
+/**
+ * Where the token lives: `sessionStorage`, and nowhere else (plan 0002,
+ * section 3).
+ *
+ * The plan originally said memory only, and this is a deliberate change from it.
+ * Memory only means every reload is a new login, and a back office is a tool
+ * somebody keeps open across a working day and reloads constantly while a
+ * rebuild lands. `sessionStorage` buys back the reload and keeps the property
+ * the design was actually aiming at: **closing the browser ends the session.**
+ * The store is scoped to the tab and cleared when it closes, so nothing outlives
+ * the sitting.
+ *
+ * Not `localStorage`, which survives a browser restart and would turn a fifteen
+ * minute token into a credential sitting on a disk overnight. Not a cookie,
+ * which this app has no server of its own to set one from.
+ *
+ * The honest limit, so nobody is surprised by it: `sessionStorage` is **per
+ * tab**. A reload keeps the session, and a tab opened from this one inherits a
+ * copy of it, but a brand new tab typed or bookmarked into the address bar
+ * starts empty and asks for a password. Sharing a session across unrelated tabs
+ * would take a `localStorage` handshake broadcasting the token between them,
+ * which is a lot of machinery and a wider exposure than the thing it saves.
+ *
+ * Every access is wrapped, because reading storage *throws* rather than
+ * answering empty in more browsers than one expects: a private window with site
+ * data blocked, an embedded webview, or an origin the user has denied storage
+ * to. An operator whose browser refuses storage still gets a working app, one
+ * that signs in again after every reload.
+ */
+@Injectable()
+export class SessionStorage {
+  /**
+   * The stored session, or `null`.
+   *
+   * Everything unusable is `null` and is **cleared on the way out**: a body that
+   * is not JSON, one that no longer matches the shape this build expects, and
+   * one whose token has already expired. Leaving a rejected value behind means
+   * parsing and rejecting it again on every reload, and an expired token in
+   * particular is a credential with no remaining purpose.
+   */
+  read(): AdminSession | null {
+    const raw = this.get();
+    if (raw === null) {
+      return null;
+    }
+
+    const session = parse(raw);
+    if (session === null || session.expiresAt.getTime() <= Date.now()) {
+      this.clear();
+      return null;
+    }
+
+    return session;
+  }
+
+  /** Write the session, ISO expiry and all. A failed write is not an error. */
+  write(session: AdminSession): void {
+    try {
+      globalThis.sessionStorage?.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          adminId: session.adminId,
+          username: session.username,
+          displayName: session.displayName,
+          accessToken: session.accessToken,
+          expiresAt: session.expiresAt.toISOString(),
+        })
+      );
+    } catch {
+      // Storage refused. The session still works for this page: it is held in a
+      // signal either way, and this is only what makes it survive a reload.
+    }
+  }
+
+  clear(): void {
+    try {
+      globalThis.sessionStorage?.removeItem(SESSION_KEY);
+    } catch {
+      // Nothing to do, and nothing that can be done.
+    }
+  }
+
+  private get(): string | null {
+    try {
+      return globalThis.sessionStorage?.getItem(SESSION_KEY) ?? null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Stored text as a session.
+ *
+ * Through the same {@link toAdminSession} the network answer goes through, not a
+ * looser check. What comes back out of storage is no more trustworthy than what
+ * came off the wire: it was written by an older build, or by hand in a dev
+ * console, and it is about to be presented as a credential.
+ */
+function parse(raw: string): AdminSession | null {
+  try {
+    return toAdminSession(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}

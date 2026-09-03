@@ -67,6 +67,24 @@ export const ERROR_CODES = {
    * been bought means the flat cannot retroactively have wanted one.
    */
   BELOW_SETTLED: 'below_settled',
+  /**
+   * The account itself is refusing attempts, having failed too many times in a
+   * row (plan 0071, section 7; `apps/luna-shopper-admin/plans/0002`, section 2).
+   *
+   * Its own code rather than a {@link RATE_LIMITED}, because the two are
+   * different mechanisms that resolve differently and the operator has to be
+   * able to tell them apart. Throttling limits a *source*: another address, or
+   * the same one a minute later, gets through. A lockout protects an *account*:
+   * changing network does nothing, and it clears when the window passes or when
+   * somebody with the server clears it. Answering both with one code makes the
+   * lockout invisible, and the lockout is the one an operator most needs to
+   * understand.
+   *
+   * It confirms nothing. The count is kept by username whether or not that
+   * username exists, so a caller only ever meets this for a name they have
+   * already failed against themselves.
+   */
+  ACCOUNT_LOCKED: 'account_locked',
   INTERNAL: 'internal',
 } as const;
 
@@ -117,5 +135,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // state that moved or state that has already happened.
   [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,
   [ERROR_CODES.BELOW_SETTLED]: HttpStatus.CONFLICT,
+  // 423 rather than 429. A 429 is a statement about how fast the caller is
+  // going, and slowing down fixes it; this one is a statement about the state
+  // the account is in, which no amount of waiting between requests changes. It
+  // stays apart from `rate_limited` at the status level as well as the code
+  // level so a proxy or a log reader sees the difference too.
+  [ERROR_CODES.ACCOUNT_LOCKED]: HttpStatus.LOCKED,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

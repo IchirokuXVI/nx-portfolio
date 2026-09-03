@@ -1,6 +1,6 @@
 import {
+  AccountLockedException,
   NotConfiguredException,
-  RateLimitedException,
   UnauthorizedException,
 } from '@portfolio/luna-shopper/platform';
 import type { AdminLoginFailure, AdminUser } from '../entities';
@@ -217,8 +217,8 @@ describe('AdminIdentityService', () => {
 
       const locked = await service
         .login({ username: 'ops', password: 'wrong' })
-        .catch((e) => e as RateLimitedException);
-      expect(locked).toBeInstanceOf(RateLimitedException);
+        .catch((e) => e as AccountLockedException);
+      expect(locked).toBeInstanceOf(AccountLockedException);
       expect(locked.details?.retryAfterSeconds).toBe(LOCKOUT.windowMs / 1000);
     });
 

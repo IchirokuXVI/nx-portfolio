@@ -12,8 +12,24 @@
     "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does.",
     "sourcedFromApi": "Reported by the gateway this app is talking to, not by the build."
   },
+  "signIn": {
+    "heading": "Sign in",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "error": {
+      "invalidCredentials": "That username and password did not match. Check both and try again.",
+      "throttled": "Too many attempts from here. Wait a moment and try again.",
+      "throttledFor": "Too many attempts from here. Try again in {{seconds}} seconds.",
+      "lockedOut": "This account is locked after too many failed attempts. It unlocks once the window passes, or sooner if somebody with the server clears it.",
+      "lockedOutFor": "This account is locked after too many failed attempts. It unlocks in {{seconds}} seconds, or sooner if somebody with the server clears it.",
+      "notAvailable": "This deployment cannot sign you in. Trying again will not help; the server needs configuring.",
+      "unknown": "Signing in failed, and the server did not say why. Check that the backend is reachable and try again."
+    }
+  },
   "placeholder": {
-    "heading": "The app exists",
-    "body": "Signing in arrives next. Until then this page reports which deployment answered, and nothing else."
+    "heading": "Signed in",
+    "body": "Signed in as {{name}}. The screens arrive next; until then this page reports who you are and which deployment answered, and nothing else."
   }
 }

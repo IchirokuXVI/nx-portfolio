@@ -42,19 +42,43 @@ lockout invisible, which is the one an operator most needs to understand.
 Throttled and locked out are different states from different mechanisms (one limits a source, one
 protects an account) and they resolve differently, so they read differently.
 
+**As built, this table has three rows and not four.** `0071` answers a disabled account with exactly
+the same 401 as a wrong password, deliberately, so that a disabled account cannot be told apart from
+a typo by whoever is guessing usernames. That reasoning is right and was not overturned to satisfy
+this table, so the client has no branch for it: a disabled operator reads "that username and password
+did not match". The row is left above as the record of what was intended and why it is not there.
+
+Telling the throttle from the lockout **did** need a change, because both arrived as `rate_limited`
+and were indistinguishable on the wire. Since the lockout is the outcome this section exists to keep
+visible, `account_locked` was added to the backend's error codes (423, its own catalog message) and
+`AdminIdentityService` raises it. It confirms nothing that the throttle does not: the count is kept
+by username whether or not that username exists, so a caller only meets it for a name they have
+already failed against themselves.
+
 ## 3. Where the token lives
 
-**In memory only.** A signal in a root provided service, and nowhere else.
+**In `sessionStorage`, and nowhere else.** A signal in a provided service, mirrored into that one
+store.
 
-Not `localStorage`, not `sessionStorage`, not a cookie the app can read. A token in web storage
-survives a tab close, is readable by anything running on the origin, and outlives the session it
-belongs to. Holding it in memory means closing the tab ends the session, which is the behaviour
-this whole design is aiming at, and reloading the page means signing in again, which is acceptable
-for a tool with one user and a fifteen minute token.
+This is a revision of what this section originally said, which was memory only. The property the
+design is aiming at has not changed — **closing the browser ends the session** — but memory only
+bought that at the price of every reload being a new login, and a back office is a tool somebody
+keeps open across a working day and reloads constantly while a rebuild lands. `sessionStorage` is
+cleared when the browser closes, so it keeps the property and gives the reload back.
 
-The consequence for `0003` is worth stating now: a reload is a new session and the form state it
-was protecting is gone. `0003`'s overlay exists precisely so that the common case, expiry while
-working, never becomes a reload.
+Not `localStorage`, which survives a browser restart and would leave a token on a disk overnight.
+Not a cookie, which this app has no server of its own to set.
+
+The limit, stated so nobody is surprised by it: `sessionStorage` is **per tab**. A reload keeps the
+session and a tab opened from an existing one inherits a copy, but a brand new tab typed or
+bookmarked into the address bar starts empty and asks for a password. Sharing a session between
+unrelated tabs would take a `localStorage` handshake broadcasting the token between them, which is
+more machinery and a wider exposure than the thing it saves.
+
+What this changes for `0003`: a reload is **not** a new session any more, so the overlay is no
+longer the only thing standing between an expiry and a re-login. It is still worth having for the
+case it was designed for — expiry while working, with form state on screen — which a reload would
+still lose.
 
 ## 4. The interceptor, in its first form
 
@@ -83,9 +107,16 @@ thing that ships wrong, and it is unnecessary: the server already knows.
 The token from auto login is an ordinary admin token belonging to a real row, so audit rows written
 during local work are attributable exactly as they are in production.
 
+**How it asks**, since `0071` left no channel for the question: the unauthenticated
+`GET /v1/admin/environment` that `0001` added for the accent colour grew a second field,
+`devAutologin`, read from the same `ADMIN_DEV_AUTOLOGIN` the gateway already consults. One call
+answers both questions the app has before it renders anything, and the client treats every way of
+not being told — an unreachable gateway, a body it cannot read, a deployment predating the field —
+as `false`, so the login screen is what an unanswered question produces.
+
 ## 6. After a successful login
 
-- The token is stored in memory.
+- The token is held in a signal and mirrored into `sessionStorage` (section 3).
 - `GET /v1/admin/auth/me` supplies the identity shown in the app chrome and the environment name and
   colour that `0001` section 6 introduced. From here on that call is authenticated, and the
   unauthenticated environment read `0001` used is only for the login screen itself.
@@ -94,9 +125,14 @@ during local work are attributable exactly as they are in production.
 ## 7. Tests
 
 - Submitting valid credentials stores a token and navigates away.
-- Each of section 2's four outcomes renders its own message, and the wrong-password case renders
+- Each of section 2's outcomes renders its own message, and the wrong-password case renders
   the same text for an unknown username as for a wrong password.
-- The token never reaches `localStorage` or `sessionStorage`, asserted directly.
+- The token never reaches `localStorage`, asserted directly. It **does** reach `sessionStorage`,
+  and a stored session is visible on construction rather than a tick later, because the route
+  guard runs during the router's first navigation.
+- A stored value this build cannot use — bad JSON, a shape it does not recognise, an expiry that
+  has passed — is discarded *and removed*, and a browser that refuses storage entirely still
+  produces a working app.
 - The interceptor attaches the header to gateway requests and to nothing else.
 - With dev auto login reported unavailable, the screen is shown; with it available, it is skipped.
 - Specs are zoneless. `whenStable` hangs under fake timers, so drain microtasks instead, and jsdom
@@ -105,8 +141,10 @@ during local work are attributable exactly as they are in production.
 ## 8. Exit criteria
 
 - An admin created by `0071`'s command can sign in and reach the landing page.
-- A wrong password, a throttle, a lockout and a disabled account each produce their own message.
-- Closing the tab ends the session.
+- A wrong password, a throttle and a lockout each produce their own message. A disabled account
+  produces the wrong-password one, for the reason in section 2.
+- Closing the **browser** ends the session; a reload does not. (Originally "closing the tab", which
+  the section 3 revision changed.)
 - Development skips the screen, and only because the server said it may.
 
 ## 9. Out of scope
