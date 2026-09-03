@@ -13,6 +13,7 @@ import {
   Supermarket,
   SupermarketLocation,
 } from '../entities';
+import { CatalogAuditService } from './catalog-audit.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
@@ -32,7 +33,10 @@ import { SupermarketLocationService } from './supermarket-location.service';
  *     npx nx run luna-shopper-backend-catalog:test-integration
  */
 const SCHEMA = 'plan0068_shops_test';
-const OWNER = 'owner';
+// A uuid, because plan 0075 records it in `catalog_audit.actorId`, which is a
+// uuid column. Every real actor id already is one: an admin's is `admin_users.id`
+// and the harvester's configured `SERVICE_ACTOR_IDS` entry is a uuid too.
+const OWNER = 'ac700000-0000-4000-a000-000000000001';
 
 /** Córdoba, Madrid, and a Sevilla code nobody in these tests holds. */
 const CORDOBA = '14010';
@@ -82,16 +86,20 @@ describeIntegration('the shops in your postal codes (real Postgres)', () => {
     const config = {
       getOrThrow: () => ({ postalCodeDeriveMaxMetres: 5000 }),
     } as never;
+    // Plan 0075: the real one, on the real DataSource.
+    const audit = new CatalogAuditService(dataSource);
     scopes = new PriceScopeService(
       dataSource.getRepository(PriceScope),
       dataSource.getRepository(Supermarket),
-      admin
+      admin,
+      audit
     );
     locations = new SupermarketLocationService(
       dataSource.getRepository(SupermarketLocation),
       dataSource.getRepository(Supermarket),
       scopes,
       admin,
+      audit,
       new PostalCodeService(dataSource.getRepository(PostalCodePoint)),
       config
     );

@@ -9,6 +9,7 @@ import {
   CATALOG_NATS_EVENTS,
   CatalogEventsPublisher,
 } from '../events/catalog-events.publisher';
+import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogController } from './catalog.controller';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
@@ -53,6 +54,8 @@ import { SupermarketService } from './supermarket.service';
   providers: [
     CatalogEventsPublisher,
     PlatformAdminService,
+    // Every write below it runs inside a transaction this opens (plan 0075).
+    CatalogAuditService,
     SupermarketService,
     PriceScopeService,
     SupermarketLocationService,

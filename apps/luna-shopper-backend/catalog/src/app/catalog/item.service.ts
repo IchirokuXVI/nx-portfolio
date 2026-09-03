@@ -28,6 +28,7 @@ import {
 import { In, Repository, type SelectQueryBuilder } from 'typeorm';
 import { Item, ProductGroup, SupermarketItem } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
+import { CatalogAuditService } from './catalog-audit.service';
 import {
   toItemOfferView,
   toItemView,
@@ -106,6 +107,7 @@ export class ItemService {
     private readonly prices: Repository<SupermarketItem>,
     private readonly productGroups: ProductGroupService,
     private readonly admin: PlatformAdminService,
+    private readonly audit: CatalogAuditService,
     // Where a product's group moves is where plan 0070's fan out starts. Fire and
     // forget: an admin's write must not fail because nobody was listening.
     private readonly events: CatalogEventsPublisher
@@ -121,20 +123,19 @@ export class ItemService {
    * write coming that would tell them.
    */
   async create(req: CreateItemRequest): Promise<ItemView> {
-    await this.admin.requireAdmin(req);
-    const saved = await this.items.save(
-      this.items.create({
-        name: req.name,
-        brand: req.brand ?? null,
-        imageUrl: req.imageUrl ?? null,
-        sku: req.sku ?? null,
-        ean: req.ean ?? null,
-        unitSize: req.unitSize ?? null,
-        category: req.category,
-        defaultUnit: req.defaultUnit,
-        productGroupId: await this.resolveGroup(req.productGroupId ?? null),
-      })
-    );
+    const actor = await this.admin.requireAdmin(req);
+    const draft = this.items.create({
+      name: req.name,
+      brand: req.brand ?? null,
+      imageUrl: req.imageUrl ?? null,
+      sku: req.sku ?? null,
+      ean: req.ean ?? null,
+      unitSize: req.unitSize ?? null,
+      category: req.category,
+      defaultUnit: req.defaultUnit,
+      productGroupId: await this.resolveGroup(req.productGroupId ?? null),
+    });
+    const saved = await this.audit.write(actor, (tx) => tx.create(Item, draft));
     if (saved.productGroupId !== null) {
       this.events.itemGroupChanged(saved.id, null, saved.productGroupId);
     }
@@ -156,8 +157,9 @@ export class ItemService {
    * group, so an event for a rename would be a fan out over nothing.
    */
   async update(req: UpdateItemRequest): Promise<ItemView> {
-    await this.admin.requireAdmin(req);
+    const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.itemId);
+    const before = { ...row };
     const groupBefore = row.productGroupId;
     if (req.name !== undefined) {
       row.name = req.name;
@@ -186,7 +188,9 @@ export class ItemService {
     if (req.productGroupId !== undefined) {
       row.productGroupId = await this.resolveGroup(req.productGroupId);
     }
-    const saved = await this.items.save(row);
+    const saved = await this.audit.write(actor, (tx) =>
+      tx.update(Item, before, row)
+    );
     if (saved.productGroupId !== groupBefore) {
       this.events.itemGroupChanged(
         saved.id,
@@ -198,11 +202,9 @@ export class ItemService {
   }
 
   async delete(req: ItemIdRequest): Promise<{ id: string }> {
-    await this.admin.requireAdmin(req);
-    const result = await this.items.delete({ id: req.itemId });
-    if (!result.affected) {
-      throw new NotFoundException('Item not found');
-    }
+    const actor = await this.admin.requireAdmin(req);
+    const row = await this.load(req.itemId);
+    await this.audit.write(actor, (tx) => tx.delete(Item, row));
     return { id: req.itemId };
   }
 
