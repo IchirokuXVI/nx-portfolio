@@ -23,6 +23,14 @@ describe('authValidationSchema', () => {
     AUTH_JWT_PUBLIC_KEY:
       '-----BEGIN PUBLIC KEY-----\nx\n-----END PUBLIC KEY-----',
     AUTH_JWT_KID: 'prod-1',
+    // The operator keypair (plan 0071, section 3). Required, and a second key
+    // rather than the auth one with a different audience, so it belongs in the
+    // set the chart supplies unconditionally.
+    ADMIN_JWT_PRIVATE_KEY:
+      '-----BEGIN PRIVATE KEY-----\ny\n-----END PRIVATE KEY-----',
+    ADMIN_JWT_PUBLIC_KEY:
+      '-----BEGIN PUBLIC KEY-----\ny\n-----END PUBLIC KEY-----',
+    ADMIN_JWT_KID: 'prod-admin-1',
     MAIL_FROM: 'Luna Shopper <no-reply@ichirokuxvi.com>',
     MAIL_VERIFY_BASE_URL: 'https://ichirokuxvi.com/verify-email',
     MAIL_RESET_BASE_URL: 'https://ichirokuxvi.com/reset-password',

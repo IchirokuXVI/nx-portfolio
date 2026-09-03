@@ -76,6 +76,27 @@ them.
       key: AUTH_JWT_PUBLIC_KEY
 {{- end }}
 {{- if eq $svc.role "gateway" }}
+# The operator trust root (plan 0071, section 3), and a SECOND key rather than the
+# auth key with a different audience. Five services hold AUTH_JWT_PUBLIC_KEY, so one
+# key for both kinds of token would leave every one of them treating an admin token
+# as structurally valid, rejecting it only if it remembered to check the audience.
+# Only the gateway receives this one today; catalog and harvester join it in plan
+# 0072, and realtime never does.
+- name: ADMIN_JWT_PUBLIC_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: ADMIN_JWT_PUBLIC_KEY
+# The name this deployment answers with under GET /v1/admin/auth/me, which is where
+# the back office gets its accent colour from (apps/luna-shopper-admin/plans/0001,
+# section 6). It comes from the API rather than the bundle because the failure being
+# guarded against is believing you are in staging when you are in production, and a
+# build time constant is exactly what is wrong in that scenario.
+- name: ENVIRONMENT_NAME
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: ENVIRONMENT_NAME
 # Google sign in (plan 0023). The passport dance runs at the gateway, so it needs
 # the same OAuth credentials auth holds, plus the app URL its callback redirects
 # to. All four are empty by default, and with an empty client id the routes stay
@@ -211,6 +232,18 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
+# Auth is the only service that receives the operator private key, exactly as it is
+# the only one that receives the user facing one (plan 0071, section 3).
+- name: ADMIN_JWT_PRIVATE_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: ADMIN_JWT_PRIVATE_KEY
+- name: ADMIN_JWT_PUBLIC_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: ADMIN_JWT_PUBLIC_KEY
 - name: GOOGLE_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
@@ -221,7 +254,7 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: SMTP_PASS
-{{- range $key := (list "AUTH_JWT_KID" "ACCESS_TOKEN_TTL" "REFRESH_TOKEN_TTL" "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "MAIL_VERIFY_BASE_URL" "MAIL_RESET_BASE_URL") }}
+{{- range $key := (list "AUTH_JWT_KID" "ACCESS_TOKEN_TTL" "REFRESH_TOKEN_TTL" "ADMIN_JWT_KID" "ADMIN_ACCESS_TOKEN_TTL" "ADMIN_LOGIN_LOCKOUT_THRESHOLD" "ADMIN_LOGIN_LOCKOUT_WINDOW" "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "MAIL_VERIFY_BASE_URL" "MAIL_RESET_BASE_URL") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

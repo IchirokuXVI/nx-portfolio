@@ -88,6 +88,30 @@ export const gatewayValidationSchema = Joi.object({
   ...redisValidationSchema,
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
   AUTH_JWT_PUBLIC_KEY_FILE: Joi.string(),
+
+  // The operator public key (plan 0071, section 3), and a SECOND trust root
+  // rather than the auth key with a different audience. Five services hold the
+  // auth public key; one key for both kinds of token would make every one of them
+  // find an admin token structurally valid and reject it only if it remembered to
+  // check `aud`. Two keys make that mistake unrepresentable instead.
+  ADMIN_JWT_PUBLIC_KEY: Joi.string(),
+  ADMIN_JWT_PUBLIC_KEY_FILE: Joi.string(),
+
+  // The name this deployment answers with under `GET /v1/admin/auth/me`
+  // (`apps/luna-shopper-admin/plans/0001`, section 6). The back office renders a
+  // different accent colour per environment so an operator cannot mistake which
+  // database they are about to write to, and the colour has to come from the API
+  // actually being talked to: a build time constant is exactly what is wrong in
+  // the scenario being guarded against.
+  ENVIRONMENT_NAME: Joi.string().default('development'),
+
+  // Sign the operator in with no password (plan 0071, section 8). The gateway
+  // half is only a switch that decides which subject to send; auth refuses to
+  // boot with it on against a non local database, so a deployment where this
+  // could do harm cannot start.
+  ADMIN_DEV_AUTOLOGIN: Joi.boolean().default(false),
+  ADMIN_DEV_AUTOLOGIN_USERNAME: Joi.string().allow('').default(''),
+
   CORS_ORIGINS: Joi.string().allow('').default(''),
 
   // Google OAuth (login with Google): the passport dance runs at the gateway,
@@ -192,13 +216,24 @@ export const gatewayValidationSchema = Joi.object({
   // did before, and what the validation buys is failing fast on a malformed
   // value rather than silently sampling everything.
   ...telemetryValidationSchema,
-}).or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE');
+})
+  .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE')
+  .or('ADMIN_JWT_PUBLIC_KEY', 'ADMIN_JWT_PUBLIC_KEY_FILE');
 
 export interface GatewayConfig {
   port: number;
   natsUrl: string;
   redisUrl: string;
   authJwtPublicKey: string;
+  /** The operator trust root. Verifies admin tokens and nothing else. */
+  adminJwtPublicKey: string;
+  /** 'development', 'staging' or 'production', as this deployment reports itself. */
+  environmentName: string;
+  /** The operator identity's development shortcuts (plan 0071, section 8). */
+  admin: {
+    devAutologin: boolean;
+    devAutologinUsername: string;
+  };
   corsOrigins: string[];
   /**
    * Origin (and optional path prefix) of the frontend the Google callback
@@ -260,6 +295,15 @@ export const gatewayConfiguration = registerAs(
       process.env.AUTH_JWT_PUBLIC_KEY,
       process.env.AUTH_JWT_PUBLIC_KEY_FILE
     ),
+    adminJwtPublicKey: readKey(
+      process.env.ADMIN_JWT_PUBLIC_KEY,
+      process.env.ADMIN_JWT_PUBLIC_KEY_FILE
+    ),
+    environmentName: process.env.ENVIRONMENT_NAME ?? 'development',
+    admin: {
+      devAutologin: process.env.ADMIN_DEV_AUTOLOGIN === 'true',
+      devAutologinUsername: process.env.ADMIN_DEV_AUTOLOGIN_USERNAME ?? '',
+    },
     corsOrigins: (process.env.CORS_ORIGINS ?? '')
       .split(',')
       .map((origin) => origin.trim())

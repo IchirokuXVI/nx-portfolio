@@ -265,6 +265,22 @@ lunaShopperBackend:
     redisUrl: redis://luna-shopper-backend-redis:6379
     accessTokenTtl: 15m
     refreshTokenTtl: 30d
+    # The operator session (plan 0071, section 4). Short, and there is no refresh
+    # token behind it: the back office renews the token while it is still valid
+    # and once it is dead it is dead, so the whole design holds no long lived
+    # credential for an account that can read every user's data.
+    adminAccessTokenTtl: 15m
+    # Lockout (plan 0071, section 7). Five consecutive failures for one username,
+    # counted over fifteen minutes and reset by a successful sign in. Separate
+    # from the gateway's per IP throttle because throttling limits a source and
+    # this protects an account.
+    adminLoginLockoutThreshold: '5'
+    adminLoginLockoutWindow: 15m
+    # Overridden by each environment file. The default is the safe half of the
+    # mistake: an operator told they are in development while looking at
+    # production data has been warned about the wrong thing in the harmless
+    # direction only if the colour is alarming, so both clusters state their own.
+    environmentName: development
     # Google sign in is optional (plan 0026): with an empty client id every
     # service still boots, and the two interactive Google routes answer 501
     # `not_configured` instead of failing. Set all three to turn it on.

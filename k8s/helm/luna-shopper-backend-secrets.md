@@ -62,6 +62,8 @@ The application secret — `luna-shopper-backend-secrets`:
 | `CATALOG_DB_URL`       | `postgres://<user>:<pw>@luna-shopper-backend-catalog-db:5432/<db>`|
 | `AUTH_JWT_PRIVATE_KEY` | PEM private key — **only** the auth pod receives it    |
 | `AUTH_JWT_PUBLIC_KEY`  | PEM public key — every service verifies tokens with it |
+| `ADMIN_JWT_PRIVATE_KEY` | PEM private key for operator tokens — **only** the auth pod receives it (plan 0071) |
+| `ADMIN_JWT_PUBLIC_KEY` | PEM public key for operator tokens — the gateway today, catalog and harvester after plan 0072 |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret. May be empty (plan 0026)   |
 | `SMTP_PASS`            | SMTP submission password. May be empty (plan 0026)     |
 
