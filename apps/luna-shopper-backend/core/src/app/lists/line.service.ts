@@ -744,36 +744,41 @@ export class LineService {
 
   /**
    * Edit a line (plan 0007, section 2; plan 0036, section 4.1; plan 0037,
-   * section 4). Bumps version.
+   * section 4; plan 0076). Bumps version.
    *
-   * ## Three different answers about who may touch a line
+   * ## Who may touch a line
    *
+   * - **`WRITE` covers every field of every line except one**, whatever its
+   *   approval. A writer who typed "Mile" can fix it, and does not have to find
+   *   somebody holding `MANAGE` to do it. Two ordinary configurations made that
+   *   necessary rather than convenient: a list with `autoApproveLines` set
+   *   approves every line at creation, and a member holding `DECIDE` has theirs
+   *   approved at creation too, so a line can be `APPROVED` before its author has
+   *   read it back (plan 0076).
+   * - **An approved line's quantity is the exception, and needs `DECIDE` or
+   *   `MANAGE`.** That single field is what a person in the aisle learns that the
+   *   list did not know, and it is also what velista's quantity reel writes
+   *   through {@link addQuantity}, one request per unit a thumb passes over. A
+   *   request from a writer naming it is refused whole rather than silently
+   *   trimmed, because a client that thought it was changing the number must find
+   *   out that it did not.
    * - **`MANAGE` may edit any field of any line**, whatever its approval. A list
-   *   admin governs the list, and a governed thing needs somebody who can fix it:
-   *   a line approved with a typo in it, an item the group agreed to that turns
-   *   out to be the wrong one.
-   * - **`WRITE` covers `PENDING` and `REJECTED` lines only.** A writer whose line
-   *   has been agreed to cannot quietly change what was agreed to.
-   * - **`DECIDE` may change an `APPROVED` line's quantity, and nothing else.**
-   *   That single field is what a person in the aisle learns that the list did
-   *   not know. Content, item reference, position and **adoption** are untouched,
-   *   and a request from such a caller naming any other field is refused rather
-   *   than silently trimmed, because a client that thought it was renaming a line
-   *   must find out that it did not.
+   *   admin governs the list, and a governed thing needs somebody who can fix it.
    *
-   * Holding `WRITE` **and** `DECIDE` does not add up to editing an approved
-   * line's content: the path for that is un-approve, edit, approve, which is
-   * three taps and leaves the line's approval state saying what happened. The
-   * `MANAGE` bypass is the shortcut for the person who governs the list, not the
-   * only way through.
+   * That leaves a writer who can rewrite an approved line's content but cannot
+   * add one unit to it, which is odd read aloud and correct in practice: quantity
+   * is not what the group agreed to (plan 0043 made it how many the household
+   * wants right now, and settling moves it without anybody deciding anything),
+   * and the case resolves itself, because the content edit returns the line to
+   * `PENDING` and a `PENDING` line's quantity is a writer's to change.
    *
-   * ## Editing a rejected line puts it back to `PENDING` (0036, section 4.2)
+   * ## An edit to a decided line asks the group again (0036, 4.2; 0076, 4.2)
    *
-   * ...and clears its approver, which is what makes a rejection a conversation
-   * rather than a dead end. On **any** edit, including a quantity-only one, and
-   * including on a list that auto approves: that option decides what a **new**
-   * line starts as, and a rejection somebody made on purpose is not undone by an
-   * edit. A `PENDING` line stays `PENDING`.
+   * A `REJECTED` line returns to `PENDING` on any edit, and so does an `APPROVED`
+   * one unless the caller holds `DECIDE` or `MANAGE` or the list auto approves.
+   * Both clear the approver, a `PENDING` line stays `PENDING`, and
+   * {@link reopenAfterEdit} holds the whole rule and the reasoning for each
+   * exemption.
    *
    * ## Lowering a quantity no longer leaves a remainder behind
    *
@@ -827,7 +832,7 @@ export class LineService {
     if (nextItemIds !== undefined) {
       line.itemSetHash = itemSetHash(nextItemIds);
     }
-    this.reopenIfRejected(line);
+    this.reopenAfterEdit(line, list, permissions);
     line.version += 1;
 
     if (!touchesSet) {
@@ -874,11 +879,17 @@ export class LineService {
    *
    * That is the claim the whole thing rests on. The delta is **arithmetic in
    * front of the edit that already exists**: it reaches the same
-   * {@link authorizeEdit} and the same rejected-to-pending reset, and it emits
-   * the same event. So an approved line's quantity still moves only for a caller
-   * holding `DECIDE`, and adding to a rejected line still returns it to
-   * `PENDING` and clears its approver. Adding units is an edit, and this does not
-   * get to be a softer edit.
+   * {@link authorizeEdit} and the same {@link reopenAfterEdit}, and it emits the
+   * same event. So an approved line's quantity still moves only for a caller
+   * holding `DECIDE` or `MANAGE`, and adding to a rejected line still returns it
+   * to `PENDING` and clears its approver. Adding units is an edit, and this does
+   * not get to be a softer edit.
+   *
+   * Plan 0076 let a writer edit an approved line, at the price of returning it to
+   * `PENDING`, and **this path never pays that price**. It cannot: the callers it
+   * admits to an approved line are exactly the ones exempt from the reversion. A
+   * delta that un-approved a line would un-approve it several times while a
+   * finger is still moving over the reel.
    *
    * It is also what velista's quantity reel writes, one delta per settled
    * adjustment (plan 0047, section 2.1). A control that follows a thumb emits a
@@ -938,7 +949,7 @@ export class LineService {
       );
 
       line.quantity = quantity;
-      this.reopenIfRejected(line);
+      this.reopenAfterEdit(line, list, permissions);
       line.version += 1;
 
       return this.writeEdit(manager, line);
@@ -972,19 +983,61 @@ export class LineService {
   }
 
   /**
-   * Editing a rejected line puts it back to `PENDING` (plan 0036, section 4.2).
+   * An edit puts a decided line back in front of whoever decides (plan 0036,
+   * section 4.2, generalised by plan 0076, section 4.2).
    *
-   * ...and clears its approver, which is what makes a rejection a conversation
-   * rather than a dead end. On **any** edit, including a quantity-only one, a
-   * delta, and one on a list that auto approves: that option decides what a
-   * **new** line starts as, and a rejection somebody made on purpose is not
-   * undone by an edit. A `PENDING` line stays `PENDING`.
+   * Both transitions clear the approver, and both exist for one reason: somebody
+   * changed what the group was asked to agree to, so the group is asked again. A
+   * `PENDING` line stays `PENDING`.
+   *
+   * - **`REJECTED` to `PENDING`, on any edit**, including a quantity-only one, a
+   *   delta, and one on a list that auto approves. That is what makes a rejection
+   *   a conversation rather than a dead end.
+   * - **`APPROVED` to `PENDING`**, unless the caller holds `DECIDE` or `MANAGE`,
+   *   or the list auto approves.
+   *
+   * The three exemptions on the second transition are not exemptions on the
+   * first, and that asymmetry is deliberate. A rejection is a decision somebody
+   * made on purpose, and an edit does not undo it. An approval on an auto
+   * approving list is not a decision anybody made, and reverting one would leave
+   * the line `PENDING` on a list whose whole configuration says nobody is
+   * watching for that. `DECIDE` is exempt because the reversion would be
+   * ceremony: such a caller can un-approve, edit and approve today, so the only
+   * thing it adds is two requests and a row that flickers into "awaiting
+   * approval" on every open list in the household. `MANAGE` is exempt because a
+   * `MANAGE` holder who does not also hold `DECIDE` cannot approve, so a
+   * reversion would put the line into a state they cannot get it out of.
+   *
+   * One function and not two, because it is one question asked at one moment, and
+   * because {@link update} and {@link addQuantity} must not be able to answer it
+   * differently. `addQuantity` passes the same arguments and never satisfies the
+   * second condition: {@link authorizeEdit} lets it move an approved line only
+   * for a caller holding `DECIDE` or `MANAGE`, who is exempt (plan 0076, section
+   * 3). A reversion on that path would un-approve a line several times while a
+   * finger is still moving over velista's quantity reel.
    */
-  private reopenIfRejected(line: ListLine): void {
+  private reopenAfterEdit(
+    line: ListLine,
+    list: ShoppingList,
+    permissions: ReadonlySet<ListPermission>
+  ): void {
     if (line.approvalStatus === LineApprovalStatus.REJECTED) {
       line.approvalStatus = LineApprovalStatus.PENDING;
       line.approvedByUserId = null;
+      return;
     }
+    if (line.approvalStatus !== LineApprovalStatus.APPROVED) {
+      return;
+    }
+    if (
+      list.autoApproveLines ||
+      permissions.has(ListPermission.DECIDE) ||
+      permissions.has(ListPermission.MANAGE)
+    ) {
+      return;
+    }
+    line.approvalStatus = LineApprovalStatus.PENDING;
+    line.approvedByUserId = null;
   }
 
   /**
@@ -1052,14 +1105,20 @@ export class LineService {
   }
 
   /**
-   * Which of the three answers above applies to this request (0036, section 4.1).
+   * Which of the two answers above applies to this request (0036, section 4.1,
+   * as revised by 0076, section 4.1).
    *
-   * Written as one method rather than inline so the branch reads in the order the
-   * plan states it, and so the refusal for "you may change the quantity and you
-   * tried to change the content" is distinguishable from "you may not touch this
-   * line at all". `READ` reaches neither and falls out of the last branch, which
-   * is worth saying twice because "can see everything" is easy to read as "can
-   * correct a small thing".
+   * Two questions and not three. **An approved line's quantity needs `DECIDE` or
+   * `MANAGE`**, and every other field of every line needs `WRITE`. The branch
+   * that refused a writer an approved line outright is gone: a writer may now fix
+   * one, and {@link reopenAfterEdit} is what makes that safe, by putting the line
+   * back in front of whoever approves it.
+   *
+   * The quantity refusal stays a refusal of its own so that "you may not change
+   * this one field" does not arrive as "you may not touch this line", which is
+   * what a client renaming a line would otherwise be told. `READ` reaches neither
+   * exemption and falls out of the last branch, which is worth saying twice
+   * because "can see everything" is easy to read as "can correct a small thing".
    */
   private authorizeEdit(
     req: UpdateLineRequest,
@@ -1069,27 +1128,27 @@ export class LineService {
     if (permissions.has(ListPermission.MANAGE)) {
       return;
     }
+    const decides = permissions.has(ListPermission.DECIDE);
     if (line.approvalStatus === LineApprovalStatus.APPROVED) {
-      if (!permissions.has(ListPermission.DECIDE)) {
+      if (req.quantity !== undefined && !decides) {
         throw new ForbiddenException(
-          'This line has been approved, so only its quantity can be changed and only by somebody who can approve lines'
+          'Only somebody who can approve lines can change the quantity of an approved line. Change anything else and the line goes back to pending'
         );
       }
+      // A `DECIDE` holder carrying no `WRITE` still reaches an approved line's
+      // quantity on its own, which is where plan 0040's delta path arrives and
+      // is the one thing section 3 keeps exactly as it was. A request naming any
+      // other field alongside it drops through to the `WRITE` check below, so a
+      // caller who may move the number but not rename the line is refused the
+      // whole request rather than half of it.
       if (
-        req.content !== undefined ||
-        req.itemIds !== undefined ||
-        // Adoption changes no product on the line, only who owns each one, and
-        // it is still refused here (plan 0070, section 3). It decides whether
-        // the catalog may go on correcting the set somebody agreed to, which is
-        // exactly the kind of change this branch exists to keep out of a
-        // `DECIDE` holder's reach: un-approve, adopt, approve.
-        req.adoptItemIds !== undefined
+        decides &&
+        req.content === undefined &&
+        req.itemIds === undefined &&
+        req.adoptItemIds === undefined
       ) {
-        throw new ForbiddenException(
-          'Only the quantity of an approved line can be changed. Set it back to pending first to change anything else'
-        );
+        return;
       }
-      return;
     }
     if (!permissions.has(ListPermission.WRITE)) {
       throw new ForbiddenException('You need write access to this list');

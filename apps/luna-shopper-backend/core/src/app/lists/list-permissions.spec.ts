@@ -438,7 +438,10 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
     ).rejects.toThrow();
   });
 
-  it('may not touch an approved line at all', async () => {
+  it("may not change an approved line's quantity, or delete it", async () => {
+    // Plan 0076 opened the rest of an approved line to a writer and left these
+    // two shut. The quantity because a delta from velista's reel shares this
+    // path (section 3), the deletion because the plan does not touch it.
     const w = world({
       permissions: WRITER,
       line: { approvalStatus: LineApprovalStatus.APPROVED },
@@ -524,9 +527,10 @@ describe('a member holding {READ, DECIDE} (acceptance 4)', () => {
   });
 
   it("is refused when it changes an approved line's content", async () => {
-    // Acceptance 7 of plan 0037 as well. Quantity is the one field, and a request
-    // naming any other is refused rather than silently trimmed, so a client that
-    // thought it was renaming a line finds out that it did not.
+    // Not because the line is approved, which stopped mattering with plan 0076,
+    // but because content is a writer's field on any line and this caller holds
+    // no `WRITE`. The caller who edits an approved line's content without
+    // un-approving it holds both, which is the case below.
     const w = world({
       permissions: DECIDER,
       line: { approvalStatus: LineApprovalStatus.APPROVED },
@@ -628,6 +632,139 @@ describe('editing a rejected line (acceptance 6, plan 0036 section 4.2)', () => 
     });
 
     expect(view.approvalStatus).toBe(LineApprovalStatus.PENDING);
+  });
+});
+
+/**
+ * A writer may now fix an approved line, and the edit says so (plan 0076).
+ *
+ * The rule is one sentence: an edit to an approved line returns it to `PENDING`
+ * and clears its approver, unless the caller holds `DECIDE` or `MANAGE`, or the
+ * list has `autoApproveLines` set. What makes it worth a block of its own is that
+ * every one of those three exemptions is a cell where the line does **not** move,
+ * and a rule with three exemptions is only visible in the cells that use them.
+ */
+describe('editing an approved line (plan 0076)', () => {
+  const APPROVER = 'the-approver';
+  const APPROVED_LINE = {
+    approvalStatus: LineApprovalStatus.APPROVED,
+    approvedByUserId: APPROVER,
+  };
+
+  it('returns it to PENDING and clears its approver, for a writer', async () => {
+    const w = world({ permissions: WRITER, line: APPROVED_LINE });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Passata',
+    });
+
+    expect(view.content).toBe('Passata');
+    expect(view.approvalStatus).toBe(LineApprovalStatus.PENDING);
+    expect(view.approvedByUserId).toBeNull();
+  });
+
+  it('leaves it approved on a list that auto approves', async () => {
+    // Section 2.3: nothing re-reads `autoApproveLines` after creation, so a line
+    // put back to `PENDING` on such a list waits for an approval its owner
+    // switched off. The list would slowly fill with lines nobody is watching for.
+    const w = world({
+      permissions: WRITER,
+      autoApproveLines: true,
+      line: APPROVED_LINE,
+    });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Passata',
+    });
+
+    expect(view.content).toBe('Passata');
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    expect(view.approvedByUserId).toBe(APPROVER);
+  });
+
+  it('leaves it approved for a caller who also holds DECIDE', async () => {
+    // Section 2.1: such a caller reaches the same end state today in three
+    // requests, un-approve then edit then approve, so the reversion is ceremony.
+    const w = world({
+      permissions: [...WRITER, ListPermission.DECIDE],
+      line: APPROVED_LINE,
+    });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Passata',
+    });
+
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    expect(view.approvedByUserId).toBe(APPROVER);
+  });
+
+  it('leaves it approved for a MANAGE holder who cannot approve', async () => {
+    // Section 2.2: `MANAGE` does not grant approval, so reverting the line would
+    // put it into a state this caller cannot get it out of.
+    const w = world({ permissions: LIST_ADMIN, line: APPROVED_LINE });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Passata',
+    });
+
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    expect(view.approvedByUserId).toBe(APPROVER);
+  });
+
+  it('refuses a writer the quantity, in words about the quantity', async () => {
+    // Section 3: the delta path shares this authorization, and it is what
+    // velista's quantity reel writes, one request per unit a thumb passes over.
+    // The refusal has to say which field it is about, or a client that thought it
+    // was renaming the line reads it as "you may not touch this line".
+    const w = world({ permissions: WRITER, line: APPROVED_LINE });
+
+    await expect(
+      w.lines.update({ userId: USER_ID, lineId: 'li1', quantity: 7 })
+    ).rejects.toThrow(/quantity/);
+    expect(w.saved).toHaveLength(0);
+  });
+
+  it('refuses a reader every field of it', async () => {
+    const w = world({ permissions: READ_ONLY, line: APPROVED_LINE });
+
+    for (const patch of [
+      { content: 'Passata' },
+      { quantity: 7 },
+      { itemIds: ['i1'] },
+      { adoptItemIds: ['i1'] },
+    ]) {
+      await expect(
+        w.lines.update({ userId: USER_ID, lineId: 'li1', ...patch })
+      ).rejects.toThrow();
+    }
+    expect(w.saved).toHaveLength(0);
+  });
+
+  it('bumps the version exactly once, reversion and all', async () => {
+    // The reversion rides the edit rather than being a second write, which is
+    // what lets it ride the `LineUpdated` the edit already emits (section 5).
+    const w = world({
+      permissions: WRITER,
+      line: { ...APPROVED_LINE, version: 1 },
+    });
+
+    const view = await w.lines.update({
+      userId: USER_ID,
+      lineId: 'li1',
+      content: 'Passata',
+    });
+
+    expect(view.version).toBe(2);
+    expect(w.saved).toHaveLength(1);
+    expect(w.events).toHaveLength(1);
   });
 });
 

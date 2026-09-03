@@ -311,6 +311,23 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     expect(delta.saved).toHaveLength(0);
   });
 
+  it('leaves an approved line approved, which plan 0076 did not change', async () => {
+    // Plan 0076 let an edit un-approve a line, and this path never does it. It
+    // cannot: the only callers it admits to an approved line are the ones exempt
+    // from the reversion. A delta that un-approved a line would un-approve it
+    // several times while a finger is still moving over the reel (section 3).
+    const w = build({ permissions: DECIDER, quantity: 3 });
+
+    const view = await w.service.addQuantity({
+      userId: SHOPPER,
+      lineId: 'li1',
+      delta: 2,
+    });
+
+    expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    expect(view.approvedByUserId).toBe(APPROVER);
+  });
+
   it('puts a rejected line back to PENDING and clears its approver', async () => {
     // Plan 0036, section 4.2: an edit reopens a rejection into a conversation,
     // and a delta is an edit.
