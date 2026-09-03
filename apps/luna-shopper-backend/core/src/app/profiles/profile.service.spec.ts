@@ -1,28 +1,43 @@
+import type { ConfigService } from '@nestjs/config';
 import {
   GenerationScope,
   PROFILE_LIMITS,
+  ProfilePostalCodeSource,
   RealtimeEvent,
+  type PostalCodeDistanceView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import type { DataSource, Repository } from 'typeorm';
-import type {
+import { FindOperator, type DataSource, type Repository } from 'typeorm';
+import {
   ProfileGenerationSource,
+  ProfileLocationPreference,
   ProfilePostalCode,
   ProfileSupermarketPreference,
-  ShoppingProfile,
+  type ShoppingProfile,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import type { PostalCodeClient } from './postal-code.client';
 import { ProfileService } from './profile.service';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const STRANGER = '22222222-2222-4222-8222-222222222222';
 
 /**
- * An in memory stand in for the four repositories.
+ * What catalog would answer for each code, as `postalCode -> neighbours`,
+ * nearest first (plan 0062).
+ *
+ * The distances are made up and the order is the contract: `nearby` answers
+ * nearest first, and the recompute takes the first N of that.
+ */
+type Neighbourhood = Record<string, string[]>;
+
+/**
+ * An in memory stand in for the four repositories, plus the two collaborators
+ * plan 0062 added.
  *
  * The invariants that live in the database (the partial unique index that makes
  * the lazy default idempotent, the cascade) are proven against real Postgres in
@@ -30,7 +45,10 @@ const STRANGER = '22222222-2222-4222-8222-222222222222';
  * it does not have. What is left here is the half that lives in the service:
  * which rule fires, what is refused, and what the answer looks like.
  */
-function build(seed: Partial<ShoppingProfile>[] = []) {
+function build(
+  seed: Partial<ShoppingProfile>[] = [],
+  neighbourhood: Neighbourhood = {}
+) {
   let profiles = seed.map((row, index) => ({
     id: row.id ?? `profile-${index}`,
     userId: row.userId ?? USER,
@@ -135,17 +153,137 @@ function build(seed: Partial<ShoppingProfile>[] = []) {
       delete: jest.fn(async () => ({ affected: 0 })),
     }) as unknown as Repository<T>;
 
-  const postalCodes = childRepo<ProfilePostalCode>();
+  /**
+   * The postal codes are a real in memory table rather than the empty double the
+   * other two children get, because plan 0062's rules are about what a row
+   * survives: the recompute deletes, keeps and inserts, and a `find` that always
+   * answers empty would let every one of those pass.
+   *
+   * `In(...)` reaches it as a `FindOperator`, which is why the match is not a
+   * plain equality.
+   */
+  let codes: ProfilePostalCode[] = [];
+  let mintedCodes = 0;
+  const matchesValue = (actual: unknown, expected: unknown) =>
+    expected instanceof FindOperator
+      ? (expected.value as unknown[]).includes(actual)
+      : actual === expected;
+  const postalCodes = {
+    find: jest.fn(async (options?: { where?: Record<string, unknown> }) =>
+      codes
+        .filter((row) =>
+          Object.entries(options?.where ?? {}).every(([key, value]) =>
+            matchesValue(
+              (row as unknown as Record<string, unknown>)[key],
+              value
+            )
+          )
+        )
+        .sort(
+          (a, b) =>
+            a.position - b.position ||
+            a.createdAt.getTime() - b.createdAt.getTime()
+        )
+    ),
+    create: jest.fn((row: Partial<ProfilePostalCode>) => ({
+      label: null,
+      position: 0,
+      country: 'es',
+      source: ProfilePostalCodeSource.TYPED,
+      expandNearby: false,
+      suppressed: false,
+      ...row,
+    })),
+    save: jest.fn(async (input: ProfilePostalCode | ProfilePostalCode[]) => {
+      for (const row of Array.isArray(input) ? input : [input]) {
+        if (!row.id) {
+          row.id = `code-${mintedCodes++}`;
+          row.createdAt = new Date(2026, 0, mintedCodes);
+          codes.push(row);
+        }
+      }
+      return input;
+    }),
+    delete: jest.fn(async (where: Record<string, unknown>) => {
+      const before = codes.length;
+      codes = codes.filter(
+        (row) =>
+          !Object.entries(where).every(([key, value]) =>
+            matchesValue(
+              (row as unknown as Record<string, unknown>)[key],
+              value
+            )
+          )
+      );
+      return { affected: before - codes.length };
+    }),
+  } as unknown as Repository<ProfilePostalCode>;
+
   const supermarkets = childRepo<ProfileSupermarketPreference>();
   const sources = childRepo<ProfileGenerationSource>();
 
-  const repositoriesByEntity = new Map<unknown, unknown>();
+  /**
+   * A real in memory table for the same reason the postal codes get one: plan
+   * 0064's rules are about what a row survives. A `false` deletes, a `true`
+   * upserts, and an unmentioned shop is left alone, none of which a double
+   * answering empty could tell apart.
+   */
+  let locationRows: ProfileLocationPreference[] = [];
+  let mintedLocations = 0;
+  const locations = {
+    find: jest.fn(async (options?: { where?: Record<string, unknown> }) =>
+      locationRows.filter((row) =>
+        Object.entries(options?.where ?? {}).every(([key, value]) =>
+          matchesValue((row as unknown as Record<string, unknown>)[key], value)
+        )
+      )
+    ),
+    create: jest.fn((row: Partial<ProfileLocationPreference>) => ({
+      excluded: false,
+      ...row,
+    })),
+    save: jest.fn(
+      async (
+        input: ProfileLocationPreference | ProfileLocationPreference[]
+      ) => {
+        for (const row of Array.isArray(input) ? input : [input]) {
+          if (!row.id) {
+            row.id = `loc-${mintedLocations++}`;
+            row.createdAt = new Date(2026, 0, mintedLocations);
+            locationRows.push(row);
+          }
+        }
+        return input;
+      }
+    ),
+    delete: jest.fn(async (where: Record<string, unknown>) => {
+      const before = locationRows.length;
+      locationRows = locationRows.filter(
+        (row) =>
+          !Object.entries(where).every(([key, value]) =>
+            matchesValue(
+              (row as unknown as Record<string, unknown>)[key],
+              value
+            )
+          )
+      );
+      return { affected: before - locationRows.length };
+    }),
+  } as unknown as Repository<ProfileLocationPreference>;
+
+  // Named rather than a fallback: a catch all `getRepository` would hand the
+  // postal code writes the profile table and every assertion below would be
+  // about the wrong rows.
+  const repositoriesByEntity = new Map<unknown, unknown>([
+    [ProfilePostalCode, postalCodes],
+    [ProfileSupermarketPreference, supermarkets],
+    [ProfileLocationPreference, locations],
+    [ProfileGenerationSource, sources],
+  ]);
   const manager = {
     getRepository: (entity: unknown) =>
       repositoriesByEntity.get(entity) ?? profileRepo,
   };
-  // Every entity but the profile resolves to a child double; the profile is the
-  // fallback above, which keeps the map from having to name imported classes.
   const dataSource = {
     transaction: jest.fn(async (run: (m: typeof manager) => Promise<unknown>) =>
       run(manager)
@@ -155,16 +293,81 @@ function build(seed: Partial<ShoppingProfile>[] = []) {
 
   const events = { emitToUsers: jest.fn() } as unknown as CoreEventsPublisher;
 
+  const geography = {
+    nearby: jest.fn(async (_country: string, postalCode: string) =>
+      (neighbourhood[postalCode] ?? []).map(
+        (code, index): PostalCodeDistanceView => ({
+          postalCode: code,
+          distanceMetres: (index + 1) * 100,
+        })
+      )
+    ),
+    // The point lookup (`apps/velista/plans/0058`). Null beyond the configured
+    // distance, which is the server saying it does not know rather than failing.
+    nearest: jest.fn(async (_country: string, latitude: number) =>
+      latitude > 60 ? null : '14001'
+    ),
+    announceAdded: jest.fn(),
+  } as unknown as PostalCodeClient;
+
+  const config = {
+    getOrThrow: () => ({
+      nearbyRadius: { defaultMetres: 2000, byCountry: {} },
+      locationMaxDistanceMetres: 10000,
+    }),
+  } as unknown as ConfigService;
+
   const service = new ProfileService(
     dataSource,
     profileRepo,
     postalCodes,
     supermarkets,
+    locations,
     sources,
-    events
+    events,
+    geography,
+    config
   );
 
-  return { service, events, profileRepo, read: () => profiles };
+  return {
+    service,
+    events,
+    geography,
+    profileRepo,
+    read: () => profiles,
+    readCodes: () => codes,
+    readLocations: () => locationRows,
+    seedLocations: (rows: Partial<ProfileLocationPreference>[]) => {
+      for (const row of rows) {
+        locationRows.push({
+          id: `loc-${mintedLocations++}`,
+          profileId: 'p1',
+          excluded: true,
+          createdAt: new Date(2026, 0, mintedLocations),
+          ...row,
+        } as ProfileLocationPreference);
+      }
+    },
+  };
+}
+
+/** The codes on a profile, suppressed ones included, in position order. */
+function codesOf(
+  rows: ProfilePostalCode[],
+  profileId = 'p1'
+): {
+  postalCode: string;
+  source: ProfilePostalCodeSource;
+  suppressed: boolean;
+}[] {
+  return rows
+    .filter((row) => row.profileId === profileId)
+    .sort((a, b) => a.position - b.position)
+    .map((row) => ({
+      postalCode: row.postalCode,
+      source: row.source,
+      suppressed: row.suppressed,
+    }));
 }
 
 describe('ProfileService', () => {
@@ -188,8 +391,8 @@ describe('ProfileService', () => {
       const selector = await service.resolveScopes({ userId: USER });
 
       expect(selector.profileId).toBeTruthy();
-      // Nothing in it yet, which is what the gateway turns into
-      // CATALOG_SCOPE_REQUIRED rather than into everything.
+      // Nothing in it yet, which is what the gateway turns into a read with no
+      // scopes: the whole catalog, with no price on any of it (plan 0069).
       expect(selector.empty).toBe(true);
     });
 
@@ -360,6 +563,7 @@ describe('ProfileService', () => {
         postalCodes: [],
         supermarketIds: [],
         excludedSupermarketIds: [],
+        excludedSupermarketLocationIds: [],
         empty: true,
       });
     });
@@ -384,6 +588,681 @@ describe('ProfileService', () => {
       await expect(
         service.resolveScopes({ userId: USER, profileId: 'theirs' })
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  /**
+   * A postal code brings its neighbours (plan 0062).
+   *
+   * Every test here is about the derived set being a **pure function** of the
+   * profile's own state rather than something maintained incrementally, which is
+   * section 3's whole argument: the three bugs it names are a shared child, an
+   * orphan and a changed radius, and each one has a test below.
+   */
+  describe('a postal code brings its neighbours', () => {
+    const NEIGHBOURS: Neighbourhood = {
+      // Two Córdoba codes about two kilometres apart, sharing 14005.
+      '14010': ['14004', '14005'],
+      '14013': ['14005', '14012'],
+      // Nothing near this one, which is the rural case section 4 warns about.
+      '14550': [],
+    };
+
+    const profile = () => [{ id: 'p1', isDefault: true }];
+
+    it('writes the parent and its neighbours when asked, and only the parent when not', async () => {
+      const { service, readCodes } = build(profile(), NEIGHBOURS);
+
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14550',
+      });
+
+      expect(codesOf(readCodes())).toEqual([
+        {
+          postalCode: '14010',
+          source: ProfilePostalCodeSource.TYPED,
+          suppressed: false,
+        },
+        {
+          postalCode: '14550',
+          source: ProfilePostalCodeSource.TYPED,
+          suppressed: false,
+        },
+        {
+          postalCode: '14004',
+          source: ProfilePostalCodeSource.NEARBY,
+          suppressed: false,
+        },
+        {
+          postalCode: '14005',
+          source: ProfilePostalCodeSource.NEARBY,
+          suppressed: false,
+        },
+      ]);
+    });
+
+    it('leaves a neighbour two parents share when one of them goes', async () => {
+      const { service, readCodes } = build(profile(), NEIGHBOURS);
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14013',
+        expandNearby: true,
+      });
+
+      await service.removePostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+      });
+
+      // 14005 was reachable from both. An incremental scheme would delete it
+      // with its first parent and leave the second parent unjustified.
+      const remaining = codesOf(readCodes()).map((row) => row.postalCode);
+      expect(remaining).toContain('14005');
+      expect(remaining).not.toContain('14004');
+      expect(remaining).not.toContain('14010');
+    });
+
+    it('suppresses a derived code rather than deleting it, and an unrelated add does not resurrect it', async () => {
+      const { service, readCodes } = build(profile(), NEIGHBOURS);
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+
+      await service.removePostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14004',
+      });
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14550',
+      });
+
+      // Still a row, still suppressed: the recompute the second add triggered
+      // put it back in `derived(profile)` and left the user's removal alone.
+      expect(
+        codesOf(readCodes()).find((row) => row.postalCode === '14004')
+      ).toEqual({
+        postalCode: '14004',
+        source: ProfilePostalCodeSource.NEARBY,
+        suppressed: true,
+      });
+    });
+
+    it('hides a suppressed code from the view and from the scope selector', async () => {
+      const { service } = build(profile(), NEIGHBOURS);
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+
+      const view = await service.removePostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14004',
+      });
+      const selector = await service.resolveScopes({ userId: USER });
+
+      expect(view.postalCodes.map((c) => c.postalCode)).toEqual([
+        '14010',
+        '14005',
+      ]);
+      expect(selector.postalCodes).toEqual(['14010', '14005']);
+    });
+
+    it('deletes a suppressed code once its last parent is gone, leaving nothing behind', async () => {
+      const { service, readCodes } = build(profile(), NEIGHBOURS);
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+      await service.removePostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14004',
+      });
+
+      await service.removePostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+      });
+
+      expect(codesOf(readCodes())).toEqual([]);
+    });
+
+    it('promotes a suppressed code when the user types it', async () => {
+      const { service, readCodes } = build(profile(), NEIGHBOURS);
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+      await service.removePostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14004',
+      });
+
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14004',
+      });
+
+      // Theirs rather than ours, which is a more honest description of what
+      // happened than a derived row with the suppression quietly cleared.
+      expect(
+        codesOf(readCodes()).find((row) => row.postalCode === '14004')
+      ).toEqual({
+        postalCode: '14004',
+        source: ProfilePostalCodeSource.TYPED,
+        suppressed: false,
+      });
+    });
+
+    it('converges on the same set as a profile built from scratch at a wider radius', async () => {
+      const narrow: Neighbourhood = { '14010': ['14004'] };
+      const wide: Neighbourhood = { '14010': ['14004', '14005', '14012'] };
+
+      const grown = build(profile(), narrow);
+      await grown.service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+      // The radius is configuration, so this is what changing it looks like from
+      // the recompute's side: the same rows, a different answer from catalog.
+      (grown.geography.nearby as jest.Mock).mockImplementation(
+        async (_c: string, code: string) =>
+          (wide[code] ?? []).map((postalCode, index) => ({
+            postalCode,
+            distanceMetres: (index + 1) * 100,
+          }))
+      );
+      await grown.service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+
+      const fresh = build(profile(), wide);
+      await fresh.service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+
+      expect(codesOf(grown.readCodes())).toEqual(codesOf(fresh.readCodes()));
+    });
+
+    it('never derives a code the user already holds', async () => {
+      const { service, readCodes } = build(profile(), NEIGHBOURS);
+
+      await service.update({
+        userId: USER,
+        profileId: 'p1',
+        postalCodes: [
+          { postalCode: '14010', expandNearby: true },
+          { postalCode: '14004' },
+        ],
+      });
+
+      expect(codesOf(readCodes())).toEqual([
+        {
+          postalCode: '14010',
+          source: ProfilePostalCodeSource.TYPED,
+          suppressed: false,
+        },
+        {
+          postalCode: '14004',
+          source: ProfilePostalCodeSource.TYPED,
+          suppressed: false,
+        },
+        {
+          postalCode: '14005',
+          source: ProfilePostalCodeSource.NEARBY,
+          suppressed: false,
+        },
+      ]);
+    });
+
+    it('asks catalog once per expanding parent and not at all without one', async () => {
+      const { service, geography } = build(profile(), NEIGHBOURS);
+
+      await service.update({
+        userId: USER,
+        profileId: 'p1',
+        postalCodes: [
+          { postalCode: '14010', expandNearby: true },
+          { postalCode: '14013', expandNearby: true },
+          { postalCode: '14550' },
+        ],
+      });
+
+      expect(
+        (geography.nearby as jest.Mock).mock.calls.map((c) => c[1])
+      ).toEqual(['14010', '14013']);
+    });
+
+    it('announces the codes it wrote, parent and neighbours alike', async () => {
+      const { service, geography } = build(profile(), NEIGHBOURS);
+
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+
+      expect(geography.announceAdded).toHaveBeenCalledWith('es', [
+        '14010',
+        '14004',
+        '14005',
+      ]);
+    });
+
+    it('counts only the user’s own codes against the cap', async () => {
+      const { service } = build(profile(), NEIGHBOURS);
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14010',
+        expandNearby: true,
+      });
+
+      // Two derived rows are already on the profile; the cap is about the codes
+      // somebody chose, and a set they never sized cannot use one up.
+      await expect(
+        service.addPostalCode({
+          userId: USER,
+          profileId: 'p1',
+          postalCode: '14013',
+        })
+      ).resolves.toBeDefined();
+    });
+
+    it('refuses a code the caller claims we derived', async () => {
+      const { service } = build(profile(), NEIGHBOURS);
+
+      await expect(
+        service.addPostalCode({
+          userId: USER,
+          profileId: 'p1',
+          postalCode: '14010',
+          source: ProfilePostalCodeSource.NEARBY as never,
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
+    });
+
+    it('keeps a code the device resolved as the user’s own', async () => {
+      const { service, readCodes } = build(profile(), NEIGHBOURS);
+
+      await service.addPostalCode({
+        userId: USER,
+        profileId: 'p1',
+        postalCode: '14550',
+        source: ProfilePostalCodeSource.DEVICE,
+      });
+
+      expect(codesOf(readCodes())).toEqual([
+        {
+          postalCode: '14550',
+          source: ProfilePostalCodeSource.DEVICE,
+          suppressed: false,
+        },
+      ]);
+    });
+  });
+  /**
+   * The finer axis (plan 0064). What these prove is what a row *survives*: a
+   * partial write leaves unmentioned shops alone, switching one back on deletes
+   * its row rather than storing a `false`, and a chain exclusion never touches
+   * these rows at all.
+   */
+  describe('a profile excludes a shop, not only a chain', () => {
+    const SHOP_A = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const SHOP_B = 'bbbbbbbb-2222-4222-8222-222222222222';
+    const SHOP_C = 'cccccccc-3333-4333-8333-333333333333';
+
+    const profile = () => [{ id: 'p1', isDefault: true }];
+
+    const excludedShops = (
+      rows: { supermarketLocationId: string; excluded: boolean }[]
+    ) =>
+      rows
+        .filter((row) => row.excluded)
+        .map((row) => row.supermarketLocationId)
+        .sort();
+
+    it('writes an exclusion and reads it back on the profile', async () => {
+      const { service, readLocations } = build(profile());
+
+      const view = await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+
+      expect(excludedShops(readLocations())).toEqual([SHOP_A]);
+      expect(view.locations).toEqual([
+        expect.objectContaining({
+          supermarketLocationId: SHOP_A,
+          excluded: true,
+        }),
+      ]);
+    });
+
+    it('hands the gateway the shops it refuses, and nothing about the ones it does not', async () => {
+      const { service, seedLocations } = build(profile());
+      seedLocations([
+        { supermarketLocationId: SHOP_A, excluded: true },
+        { supermarketLocationId: SHOP_B, excluded: false },
+      ]);
+
+      const selector = await service.resolveScopes({ userId: USER });
+
+      expect(selector.excludedSupermarketLocationIds).toEqual([SHOP_A]);
+    });
+
+    it('does not make a profile non empty: refusing a shop is not a place to shop', async () => {
+      const { service, seedLocations } = build(profile());
+      seedLocations([{ supermarketLocationId: SHOP_A, excluded: true }]);
+
+      const selector = await service.resolveScopes({ userId: USER });
+
+      expect(selector.empty).toBe(true);
+    });
+
+    it('leaves the shops it was not told about alone', async () => {
+      const { service, readLocations } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [
+          { supermarketLocationId: SHOP_A, excluded: true },
+          { supermarketLocationId: SHOP_B, excluded: true },
+        ],
+      });
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_C, excluded: true }],
+      });
+
+      // A replacement would have dropped the first two, which is the whole
+      // reason this write is a partial one (plan 0064, section 5).
+      expect(excludedShops(readLocations())).toEqual(
+        [SHOP_A, SHOP_B, SHOP_C].sort()
+      );
+    });
+
+    it('deletes the row rather than storing a false when a shop is switched back on', async () => {
+      const { service, readLocations } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: false }],
+      });
+
+      // Absence already means included, so a row saying so is a row worth
+      // nothing, and a shop imported later must not need one to be visible.
+      expect(readLocations()).toEqual([]);
+    });
+
+    it('writes one row when the same shop is toggled twice before saving', async () => {
+      const { service, readLocations } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [
+          { supermarketLocationId: SHOP_A, excluded: false },
+          { supermarketLocationId: SHOP_A, excluded: true },
+        ],
+      });
+
+      expect(excludedShops(readLocations())).toEqual([SHOP_A]);
+    });
+
+    it('is idempotent: excluding a shop twice leaves one row', async () => {
+      const { service, readLocations } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+
+      expect(readLocations()).toHaveLength(1);
+    });
+
+    it('is not found for somebody else’s profile', async () => {
+      const { service } = build([
+        { id: 'mine', userId: USER, isDefault: true },
+        { id: 'theirs', userId: STRANGER, isDefault: true },
+      ]);
+
+      await expect(
+        service.setLocationPreferences({
+          userId: USER,
+          profileId: 'theirs',
+          locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+        })
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('refuses an entry with no shop', async () => {
+      const { service } = build(profile());
+
+      await expect(
+        service.setLocationPreferences({
+          userId: USER,
+          profileId: 'p1',
+          locations: [{ supermarketLocationId: '  ', excluded: true }],
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
+    });
+
+    it('caps what the profile ends up holding, not what one request states', async () => {
+      const { service, seedLocations } = build(profile());
+      seedLocations(
+        Array.from(
+          { length: PROFILE_LIMITS.maxLocationPreferences },
+          (_, index) => ({ supermarketLocationId: `shop-${index}` })
+        )
+      );
+
+      // One more shop on a profile already at the limit is exactly the case the
+      // cap exists for, and counting only the request would never see it.
+      await expect(
+        service.setLocationPreferences({
+          userId: USER,
+          profileId: 'p1',
+          locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+        })
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('survives excluding the chain and un excluding it, intact', async () => {
+      const { service, readLocations } = build(profile());
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+
+      // The chain axis is written through `update`, and it writes a different
+      // table. A row under an excluded chain is inert rather than deleted
+      // (plan 0064, section 2.1), which is what lets un excluding the chain
+      // restore exactly the selection the user last had.
+      await service.update({
+        userId: USER,
+        profileId: 'p1',
+        supermarkets: [{ supermarketId: 'chain-dia', excluded: true }],
+      });
+      await service.update({
+        userId: USER,
+        profileId: 'p1',
+        supermarkets: [{ supermarketId: 'chain-dia', excluded: false }],
+      });
+
+      expect(excludedShops(readLocations())).toEqual([SHOP_A]);
+    });
+
+    it('says nothing about a shop imported after the user made their choices', async () => {
+      const { service } = build(profile());
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [
+          { supermarketLocationId: SHOP_A, excluded: true },
+          { supermarketLocationId: SHOP_B, excluded: true },
+        ],
+      });
+
+      const selector = await service.resolveScopes({ userId: USER });
+
+      // A blacklist has never heard of the shop that opens next month, so it is
+      // included by default. That is the failure a person can actually detect,
+      // which is why this axis is not an allowlist (plan 0064, section 1).
+      expect(selector.excludedSupermarketLocationIds).not.toContain(SHOP_C);
+    });
+
+    it('tells the owner’s own sessions and nobody else’s', async () => {
+      const { service, events } = build(profile());
+
+      await service.setLocationPreferences({
+        userId: USER,
+        profileId: 'p1',
+        locations: [{ supermarketLocationId: SHOP_A, excluded: true }],
+      });
+
+      expect(events.emitToUsers).toHaveBeenCalledWith(
+        RealtimeEvent.ProfilesChanged,
+        [USER],
+        expect.anything()
+      );
+    });
+  });
+
+  /**
+   * Turning a device's point into a postal code (`apps/velista/plans/0058`,
+   * section 3).
+   *
+   * The one profile message that writes nothing, which is what most of these
+   * assert: nothing is stored, nothing is emitted, and the answer is a code the
+   * caller is about to show somebody for confirmation.
+   */
+  describe('resolvePostalCode', () => {
+    const profile = () => [{ id: 'p1', isDefault: true }];
+
+    it('answers the code catalog placed the point in', async () => {
+      const { service } = build(profile());
+
+      await expect(
+        service.resolvePostalCode({
+          userId: USER,
+          latitude: 37.88,
+          longitude: -4.78,
+        })
+      ).resolves.toEqual({ country: 'es', postalCode: '14001' });
+    });
+
+    it('answers null rather than a confident wrong code', async () => {
+      // Beyond the configured distance the honest answer is that we do not know:
+      // the table holds centroids and not boundaries.
+      const { service } = build(profile());
+
+      await expect(
+        service.resolvePostalCode({
+          userId: USER,
+          latitude: 64.13,
+          longitude: -21.9,
+        })
+      ).resolves.toEqual({ country: 'es', postalCode: null });
+    });
+
+    it('asks against the configured distance and the default country', async () => {
+      const { service, geography } = build(profile());
+
+      await service.resolvePostalCode({
+        userId: USER,
+        latitude: 37.88,
+        longitude: -4.78,
+      });
+
+      expect(geography.nearest).toHaveBeenCalledWith('es', 37.88, -4.78, 10000);
+    });
+
+    it('writes nothing and tells nobody', async () => {
+      // Section 3.3: the coordinates are answered and forgotten. No row moves, no
+      // event goes out, and no profile is touched.
+      const { service, events, readCodes, read } = build(profile());
+      const before = JSON.stringify(read());
+
+      await service.resolvePostalCode({
+        userId: USER,
+        latitude: 37.88,
+        longitude: -4.78,
+      });
+
+      expect(readCodes()).toEqual([]);
+      expect(events.emitToUsers).not.toHaveBeenCalled();
+      expect(JSON.stringify(read())).toBe(before);
+    });
+
+    it('refuses a country that is not two letters', async () => {
+      const { service } = build(profile());
+
+      await expect(
+        service.resolvePostalCode({
+          userId: USER,
+          country: 'esp',
+          latitude: 37.88,
+          longitude: -4.78,
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
     });
   });
 });

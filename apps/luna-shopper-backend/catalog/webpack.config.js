@@ -39,5 +39,21 @@ module.exports = {
       outputHashing: 'none',
       generatePackageJson: false,
     }),
+    // The reference catalog seeder (plan 0067, section 7), a third entry for the
+    // same reason as the second: the chart runs `node seed-reference.js` in a
+    // Job, and only a bundled entry point is reachable from inside the image.
+    //
+    // generatePackageJson stays false here too. The main entry writes the
+    // manifest and two more writers would race it.
+    new NxAppWebpackPlugin({
+      target: 'node',
+      compiler: 'tsc',
+      main: './src/seed-reference.ts',
+      outputFileName: 'seed-reference.js',
+      tsConfig: './tsconfig.app.json',
+      optimization: false,
+      outputHashing: 'none',
+      generatePackageJson: false,
+    }),
   ],
 };

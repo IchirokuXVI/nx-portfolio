@@ -1,0 +1,51 @@
+<ul class="grid">
+  @for (row of rows(); track row.key) {
+    <li>
+      <!--
+        A real button with real text, and its state announced by `aria-pressed` rather
+        than by the shade it is drawn in (section 7).
+      -->
+      <button
+        (click)="select.emit(row.key)"
+        [attr.aria-pressed]="row.open"
+        [class.excluded-chain]="row.state === 'chain'"
+        [class.excluded-some]="row.state === 'some'"
+        [class.open]="row.open"
+        class="chip"
+        type="button"
+      >
+        <span class="name">
+          @if (row.other) {
+            {{ 'shops.other' | rokuT }}
+          } @else {
+            {{ row.label }}
+          }
+        </span>
+
+        <span class="count">
+          {{ 'shops.chain.count' | rokuT: { count: row.locations } }}
+        </span>
+
+        <!--
+          The two exclusion states, in words and with a glyph each. They are different
+          promises and must not look the same: the chain covers shops that do not exist
+          yet, the other covers exactly the rows underneath.
+        -->
+        @if (row.state === 'chain') {
+          <span class="state">
+            <lib-slash-circle-icon class="state-glyph" />
+            {{ 'shops.state.chain' | rokuT }}
+          </span>
+        } @else if (row.state === 'some') {
+          <span class="state">
+            <lib-half-circle-icon class="state-glyph" />
+            {{
+              'shops.state.some'
+                | rokuT: { count: row.excluded, total: row.locations }
+            }}
+          </span>
+        }
+      </button>
+    </li>
+  }
+</ul>

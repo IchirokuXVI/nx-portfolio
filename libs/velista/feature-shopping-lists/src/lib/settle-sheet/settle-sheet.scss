@@ -166,23 +166,88 @@
   }
 }
 
+// One line of an option: the name and the price on the first, the place and the
+// unit price on the second (velista 0062, section 5.1). The trailing figure is
+// right aligned and never shrinks, so eleven prices line up down the pane, and
+// the leading text wraps under it rather than pushing it off the row.
+.option-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+}
+
 .option-name {
   font-size: var(--app-text-sm);
   color: var(--app-text-primary);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+// The same weight as the name: it is the other half of what is being decided.
+// Tabular numerals so 0.95 and 10.95 share their decimal point down the list.
+.option-price {
+  flex: none;
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+// Drawn only in a mix of priced and unpriced options (section 5.3), muted and
+// in the price's place so the blank reads as unknown rather than as free.
+.option-price.is-unknown {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  font-style: italic;
 }
 
 .option-brand {
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+// The comparison figure, muted, under the price it belongs to. This is the one
+// pane in the app that puts two comparable products next to each other.
+.option-unit-price {
+  flex: none;
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+}
+
+.option-marks {
+  display: flex;
+  gap: var(--app-space-2);
 }
 
 // The chosen one is marked with a word as well as a border, never with colour
-// alone (section 7).
-.option-chosen {
+// alone (section 7). The cheapest carries a second word beside it (velista
+// 0062, section 5.2); both can be on one row and often are not, which is the
+// case the mark exists for.
+.option-chosen,
+.option-cheapest {
   font-size: var(--app-text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.option-chosen {
   color: var(--app-action-quiet-fg);
+}
+
+.option-cheapest {
+  color: var(--app-text-secondary);
+}
+
+// How old the prices are, once under the pane (section 5.4). A sentence and not
+// a timestamp, in the hint's own treatment.
+.prices-as-of {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
 }
 
 // --- The allocation ---------------------------------------------------------

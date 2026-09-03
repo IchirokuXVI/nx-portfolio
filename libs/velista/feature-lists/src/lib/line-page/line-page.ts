@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,6 +15,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_SERVICE,
+  GroupNames,
   ItemNames,
   LINE_SERVICE,
   LineStore,
@@ -27,11 +29,14 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  inLocale,
+  LINE_ITEM_SET_MAX,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
   type CatalogSuggestion,
+  type LineProductsFullVm,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -75,7 +80,12 @@ import { selectLinePage } from './select-line-page';
  */
 @Component({
   selector: 'lib-line-page',
-  imports: [RokuTranslatorPipe, ChevronLeftIcon, SuggestionList],
+  imports: [
+    NgTemplateOutlet,
+    RokuTranslatorPipe,
+    ChevronLeftIcon,
+    SuggestionList,
+  ],
   templateUrl: './line-page.html',
   styleUrl: './line-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -86,6 +96,7 @@ export class LinePage {
   private readonly _zones = inject(ZoneStore);
   private readonly _names = inject(MemberNames);
   private readonly _itemNames = inject(ItemNames);
+  private readonly _groupNames = inject(GroupNames);
   private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
   /**
    * The transport, for the one read that is this page's alone.
@@ -139,12 +150,51 @@ export class LinePage {
    * again. Nothing waits for it: the chips draw with no names until it lands.
    */
   private readonly _loadNames = effect(() => {
-    const itemIds = this._line()?.itemIds ?? [];
+    const itemIds = this._itemIds();
     untracked(() => void this._itemNames.ensure(itemIds));
+  });
+
+  /**
+   * The name of the group this line follows (velista plan 0065, section 2.1).
+   *
+   * A fourth effect rather than a branch inside the third, keyed on the binding rather
+   * than on the products: a line gains and loses products constantly and its group
+   * changes at most once, so folding this into `_loadNames` would re-ask on every edit
+   * for an answer that had not moved. Nothing waits for it either: the cluster draws
+   * under `From a group` until it lands, which is the same heading it keeps if the
+   * lookup never answers at all.
+   */
+  private readonly _loadGroupName = effect(() => {
+    const productGroupId = this._line()?.productGroupId ?? null;
+    if (productGroupId !== null) {
+      untracked(() => void this._groupNames.ensure([productGroupId]));
+    }
   });
 
   private readonly _line = computed(() =>
     this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
+  );
+
+  /**
+   * The line's product set, compared by value.
+   *
+   * `LineStore` replaces the whole `Line` object on every write to it, and one edit is
+   * more than one write: the optimistic patch, the server's row and the realtime echo
+   * of that same change each land separately, as do a quantity adjustment, a claim and
+   * a settlement. Keyed on the object, the two reads below woke for all of them, and
+   * the "also on" read is one request per product, so adding a product to a line
+   * carrying eight asked twenty seven times over for an answer that had changed once.
+   *
+   * So the effects that care about *which* products the line carries watch this rather
+   * than the line, and a write that leaves the set alone wakes neither. Compared by
+   * value because the array is rebuilt with the row.
+   */
+  private readonly _itemIds = computed<readonly string[]>(
+    () => this._line()?.itemIds ?? [],
+    {
+      equal: (a, b) =>
+        a.length === b.length && a.every((itemId, i) => itemId === b[i]),
+    }
   );
 
   private readonly _permissions = computed(
@@ -188,6 +238,10 @@ export class LinePage {
       canEdit: this._canEdit(),
       canDelete: this._canEdit(),
       busy: this.busy(),
+      // Null while it has not answered, for a group that is gone, and for a lookup
+      // that failed. The heading is the same in all three cases, and the selector is
+      // where that is decided (section 2.1).
+      groupNameOf: (groupId) => this._groupNames.nameOf(groupId),
     });
   });
 
@@ -236,19 +290,20 @@ export class LinePage {
   readonly alsoOn = signal<AlsoOnVm | null>(null);
 
   private readonly _loadAlsoOn = effect(() => {
-    const line = this._line();
+    const itemIds = this._itemIds();
     const listId = this.listId();
 
     untracked(() => {
       // A line with no product has no question to ask, and the server refuses it
       // rather than answering empty. Asking anyway would turn a legitimate absence
-      // into an error in the console.
-      if (line === undefined || line.itemIds.length === 0) {
+      // into an error in the console. A line that has not loaded yet reads the same
+      // way, and gains its products the moment it does.
+      if (itemIds.length === 0) {
         this.alsoOn.set(null);
         return;
       }
 
-      void this._resolveAlsoOn(line.itemIds, listId);
+      void this._resolveAlsoOn(itemIds, listId);
     });
   });
 
@@ -262,11 +317,7 @@ export class LinePage {
     // this is an indicator, and a partial answer is more useful than none. What it must
     // never do is become null-because-it-failed on top of an answer it already has.
     const answers = await Promise.all(
-      itemIds.map((itemId) =>
-        this._lineService
-          .listsHoldingItem(itemId, { excludeListId: listId })
-          .catch(() => null)
-      )
+      itemIds.map((itemId) => this._askAbout(itemId, listId))
     );
 
     if (seq !== this._alsoOnSeq) {
@@ -303,6 +354,41 @@ export class LinePage {
   private _alsoOnSeq = 0;
 
   /**
+   * One product's answer, asked once for the visit.
+   *
+   * The union is rebuilt whenever the set changes, and the ordinary way it changes is a
+   * product being added: the products already on the line are unaffected by that, so
+   * re-asking for them is a request per product for an answer this page is holding.
+   * With the set watched by value above, adding a product to a line carrying eight is
+   * one request rather than twenty seven.
+   *
+   * Safe to keep because the section is a snapshot of the visit by design: it is held
+   * by nothing, nothing invalidates it, and the page is the only thing that would
+   * (section 5). A **failure is not kept**, though, so the next change to the set
+   * retries rather than leaving the section a product short for the rest of the visit.
+   * The list is part of the key because it is what the answer leaves out.
+   */
+  private readonly _answers = new Map<string, Promise<AlsoOnVm | null>>();
+
+  private _askAbout(itemId: string, listId: string): Promise<AlsoOnVm | null> {
+    const key = `${listId} ${itemId}`;
+    const held = this._answers.get(key);
+    if (held !== undefined) {
+      return held;
+    }
+
+    const answer = this._lineService
+      .listsHoldingItem(itemId, { excludeListId: listId })
+      .catch(() => {
+        this._answers.delete(key);
+        return null;
+      });
+
+    this._answers.set(key, answer);
+    return answer;
+  }
+
+  /**
    * The next page of one history, appended (section 4).
    *
    * Two methods rather than one taking a scope, because they are two different reads:
@@ -330,11 +416,32 @@ export class LinePage {
    * composer to add a product to a line they are looking at is the long way round.
    *
    * The **composer's own list component**, not a second one, so the ranking rules have
-   * one place to live. What differs is the free text row: the composer offers it,
-   * because a line is free text first, and this does not, because attaching a catalog
-   * product that is not in the catalog is not a thing.
+   * one place to live. Two things differ, and both come from what this search is for:
+   *
+   * - **No free text row.** The composer offers it, because a line is free text first.
+   *   This attaches a catalog product, and attaching a product the catalog has never
+   *   heard of is not a thing.
+   * - **No group rows.** The composer offers them, because choosing "milk" there is how
+   *   a line becomes every milk at once. Here the line already _is_ that set, and a row
+   *   that offers to pour one group into another reads as though it were adding a
+   *   second group to the line rather than moving products across. What it actually did
+   *   was correct; what it looked like was not, and a search whose rows have to be
+   *   explained is a worse search than one product at a time. See {@link suggestions}.
    */
   readonly searching = signal(false);
+
+  /**
+   * What to offer, products only, in the server's order among themselves.
+   *
+   * The groups are dropped as the answer arrives rather than hidden in the template, so
+   * there is one place that decides what this screen offers and the list component stays
+   * the same list component the composer draws. Dropping rather than asking for fewer is
+   * what the catalog allows: `suggest` takes a limit per kind and no kind selector, so
+   * the products come back whole either way and nothing is lost by discarding the rest.
+   *
+   * The surviving order is untouched, which is the rule `CatalogApi.suggest` states:
+   * removing rows is not re-ranking the ones that stay.
+   */
   readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
 
   private readonly _query = signal('');
@@ -371,7 +478,7 @@ export class LinePage {
         .suggest(query, profileId === undefined ? undefined : { profileId })
         .then((found) => {
           if (seq === this._seq) {
-            this.suggestions.set(found);
+            this.suggestions.set(found.filter((row) => row.kind === 'item'));
           }
         });
     }, SUGGEST_DEBOUNCE_MS);
@@ -397,17 +504,40 @@ export class LinePage {
     this.searching.set(false);
     this._query.set('');
     this.suggestions.set([]);
+    // And the refusal, for the same reason: it was about the product somebody was
+    // choosing, and reopening the search should not begin with an answer to a
+    // question nobody has asked yet.
+    this.productsFull.set(null);
   }
 
   /**
    * Attach what was chosen.
    *
-   * A group attaches its members, an item attaches the one, which is exactly what the
-   * composer does with the same row: choosing "milk" gives the household every milk to
-   * trim down, and that trimming is what this page's chips are for.
+   * **One product**, because that is all this screen offers: {@link suggestions} keeps
+   * no group rows, so trimming a group down is the composer's job on the way in and this
+   * page's chips are what trims it afterwards.
+   *
+   * The group branch survives anyway, and not as a leftover. The row type is the
+   * catalog's union and this method is what a `chose` output hands its payload to, so
+   * the case has to be answered; answering it by attaching the members is the only
+   * answer that is not a tap that silently does nothing.
    *
    * The set is **unioned** rather than replaced, and a product already on the line is a
    * no-op rather than a duplicate: the line's set is a set.
+   *
+   * ## The cap, checked before anything is sent (velista plan 0065, section 3.2)
+   *
+   * The same expression the server enforces, `next.length <= max(cap, current.length)`,
+   * so an over cap line the catalog's sync produced can still be shrunk and can never
+   * be grown (backend plan 0070, section 7.1). When it fails **nothing is sent**,
+   * nothing on the line changes, and the sentence says the whole thing: a group is all
+   * or nothing, because a partial fill would be the server choosing which two of Milk's
+   * ten land on somebody's shopping list.
+   *
+   * This is what makes `list-error-copy.ts`'s note about a `validation_failed` true of
+   * the product set, which it was not before: caught in the field before the request,
+   * with the server's own refusal left exactly as it is as the belt on top of the
+   * braces.
    */
   async addProduct(suggestion: CatalogSuggestion): Promise<void> {
     const line = this._line();
@@ -419,23 +549,105 @@ export class LinePage {
       suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
     const merged = [...new Set([...line.itemIds, ...chosen])];
     if (merged.length === line.itemIds.length) {
+      this.productsFull.set(null);
       this.stopAdding();
       return;
     }
 
+    if (merged.length > Math.max(LINE_ITEM_SET_MAX, line.itemIds.length)) {
+      this.productsFull.set(
+        suggestion.kind === 'group'
+          ? {
+              key: 'list.page.productsFull.group',
+              args: {
+                count: line.itemIds.length,
+                cap: LINE_ITEM_SET_MAX,
+                name: inLocale(
+                  suggestion.group.name,
+                  this._localeStore.locale()
+                ),
+                // What the group **adds**, not how big it is: the products already on
+                // the line are not being added again, and a number that counted them
+                // twice would not add up against the count beside it.
+                adds: merged.length - line.itemIds.length,
+              },
+            }
+          : {
+              key: 'list.page.productsFull.one',
+              args: { count: line.itemIds.length, cap: LINE_ITEM_SET_MAX },
+            }
+      );
+      // The search stays open. Somebody who has just been told the line is full is
+      // more likely to want a different product than to want the panel gone, and
+      // closing it would take the sentence away with it.
+      return;
+    }
+
+    this.productsFull.set(null);
     this.busy.set(true);
     await this._lines.updateLine(line.id, { itemIds: merged });
     this.busy.set(false);
     this.stopAdding();
   }
 
-  /** Take one product off the line. An ordinary edit: the set is rewritten whole. */
+  /**
+   * Why the last add was refused, or null (velista plan 0065, section 3.3).
+   *
+   * A sentence on the screen rather than a thrown error, because nothing failed: the
+   * request was never sent. Cleared by anything that changes the products, so it
+   * cannot outlive the state it describes.
+   */
+  readonly productsFull = signal<LineProductsFullVm | null>(null);
+
+  /**
+   * Keep a product the catalog put there (velista plan 0065, section 4).
+   *
+   * `adoptItemIds` and **nothing else**, which is what makes the gesture legible: the
+   * set does not change, only who owns one product in it, and afterwards the catalog's
+   * sync stops touching it (backend plan 0070, section 9).
+   *
+   * **The feedback is the chip moving.** It leaves `From Milk` and appears under
+   * `Added by you`, on the frame of the tap, because the store patches optimistically.
+   * No toast and no confirmation: the result of the gesture is the whole point of the
+   * gesture, and it is already on screen.
+   *
+   * There is no un-adopt and there will not be one: provenance moves one way, and a
+   * control that hands a product back to the catalog is a control for a state nobody
+   * wants to be in.
+   */
+  async adoptProduct(itemId: string): Promise<void> {
+    const line = this._line();
+    if (line === undefined || this.busy()) {
+      return;
+    }
+
+    // Nothing to adopt, so nothing is sent. A product the person already owns reaching
+    // here is a stale frame rather than a gesture, and a request for it would bump the
+    // line's version to say nothing at all.
+    if (!line.groupItemIds.includes(itemId)) {
+      return;
+    }
+
+    this.productsFull.set(null);
+    this.busy.set(true);
+    await this._lines.updateLine(line.id, { adoptItemIds: [itemId] });
+    this.busy.set(false);
+  }
+
+  /**
+   * Take one product off the line. An ordinary edit: the set is rewritten whole.
+   *
+   * Never refused by the cap. Removing shrinks the set, and `max(cap, current.length)`
+   * is what lets an over cap line be brought back under the cap rather than frozen by
+   * the rule that exists to keep it under one (backend plan 0070, section 7.2).
+   */
   async removeProduct(itemId: string): Promise<void> {
     const line = this._line();
     if (line === undefined || this.busy()) {
       return;
     }
 
+    this.productsFull.set(null);
     this.busy.set(true);
     await this._lines.updateLine(line.id, {
       itemIds: line.itemIds.filter((id) => id !== itemId),

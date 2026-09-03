@@ -3,7 +3,9 @@ import type {
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
+  PriceSourceKind,
   SettlementOutcome,
+  UnitOfMeasure,
   UserKind,
   ZoneRole,
   ZoneStatus,
@@ -243,12 +245,38 @@ export interface Line {
    *
    * A **set**, where this was a single nullable `itemId` that was null on every
    * line ever created, because `0012` put the catalog out of scope. Picking a
-   * group in the composer copies that group's members here and the line
-   * references no group afterwards: a line is its own hand made group, so
-   * dropping a brand the household never buys is an ordinary edit rather than a
-   * change to somebody else's taxonomy.
+   * group in the composer copies that group's members here, so dropping a brand
+   * the household never buys is an ordinary edit rather than a change to
+   * somebody else's taxonomy.
+   *
+   * The line no longer **forgets** the group it came from, which is the half of
+   * `0048` section 1.1 that backend `0070` revises: see
+   * {@link productGroupId} and {@link groupItemIds}.
    */
   readonly itemIds: readonly string[];
+  /**
+   * The product group this line follows, or null for a hand made set (backend
+   * plan 0070, section 9).
+   *
+   * Null on every line `0048` ever created, and on every line the composer adds
+   * without choosing a group, so it is the ordinary case rather than the
+   * exception. When it is set, the catalog keeps adding and removing products on
+   * this line by itself, and velista `0065` is what tells the reader which ones.
+   */
+  readonly productGroupId: string | null;
+  /**
+   * The subset of {@link itemIds} the catalog put there and nobody has adopted
+   * (backend plan 0070, section 9).
+   *
+   * A subset of the ids rather than an array of objects, because there are
+   * exactly two sources and one subset determines the other: everything not in
+   * here was put on the line by a person, by hand or by adopting it.
+   *
+   * **Empty is the answer for a line that follows no group**, and it is also
+   * what a server that predates `0070` produces, so the mapper needs no
+   * distinction between the two.
+   */
+  readonly groupItemIds: readonly string[];
   readonly position: number;
   readonly approvalStatus: LineApprovalStatus;
   /**
@@ -351,13 +379,46 @@ export interface LineSettlement {
 }
 
 /**
+ * What one product costs, at the cheapest scope the reader was priced against
+ * (velista `0062`, section 3; `ItemOfferView` on the wire).
+ *
+ * A fact and not a recommendation. The pick is still the first option added
+ * and not the cheapest, so a row quoting this is quoting what its product
+ * costs, and the pick sheet is where two of them are put next to each other.
+ *
+ * It lives here, beside {@link CatalogItem}, because an offer is a fact about a
+ * catalog product rather than a fact about a basket (velista `0063`, section
+ * 4.1). The basket was merely the first screen to draw one.
+ */
+export interface ProductOffer {
+  /** In {@link currency}. Null is a scope that carries the product with no price on it. */
+  readonly price: number | null;
+  readonly currency: string | null;
+  /** The source's own figure, never recomputed here. Null when it published none. */
+  readonly unitPrice: number | null;
+  /** "EUR/L", "EUR/lv". Text for a human, not a unit to parse. */
+  readonly unitPriceLabel: string | null;
+  /** Without it a price has no age. */
+  readonly observedAt: Date | null;
+  readonly sourceKind: PriceSourceKind;
+  /**
+   * The scope that quoted this price. Opaque.
+   *
+   * The basket resolves it against `BasketView.scopes` to name a chain and a
+   * shop. No other screen resolves it at all: the suggestion response is one
+   * array and carries no scopes to resolve against, and a typeahead row draws
+   * no place anyway (velista `0063`, section 6.5).
+   */
+  readonly priceScopeId: string;
+}
+
+/**
  * One catalog product, as much of it as this app draws.
  *
- * Far narrower than the gateway's `ItemView`, and deliberately: the suggestion
- * row and the product chip need a name and a brand, and every price field on the
- * wire is out of scope until the backend's backlog `0004` exists (velista plan
- * 0043, section 9). Widening it later is a mapper change; carrying fields nothing
- * renders is a promise the screen cannot keep.
+ * Far narrower than the gateway's `ItemView`, and deliberately: it carries the
+ * one price a row draws rather than every price field the wire has. Widening it
+ * later is a mapper change; carrying fields nothing renders is a promise the
+ * screen cannot keep.
  */
 export interface CatalogItem {
   readonly id: string;
@@ -372,15 +433,34 @@ export interface CatalogItem {
    */
   readonly name: LocalizedName;
   readonly brand: string | null;
+  /**
+   * How much of it is in the packet: `1` with {@link CatalogItem.unit} `LITER`,
+   * `0.35` with `KILOGRAM`. Null when the catalog does not know.
+   *
+   * **Read because the catalog holds one record per size.** Without it a search
+   * for "leche" offers the same name and the same brand three times over, once
+   * per carton size, and the rows are indistinguishable. It is the same field
+   * `BasketProduct.size` already reads, under the same name.
+   */
+  readonly size: number | null;
+  /** What {@link CatalogItem.size} is counted in. Never null; see the fallback. */
+  readonly unit: UnitOfMeasure;
   readonly productGroupId: string | null;
+  /**
+   * The cheapest price this product has at the scopes the reader was resolved to,
+   * or null where nothing has been harvested for it.
+   *
+   * It is the price of **this packet**, which is the price of this record: the
+   * catalog holds one record per size, so the six pack row's offer is the six
+   * pack's price and is never derived from a smaller one.
+   */
+  readonly offer: ProductOffer | null;
 }
 
 /** One catalog group: the thing "milk" means before it means a brand of it. */
 export interface ProductGroup {
   readonly id: string;
   readonly name: LocalizedName;
-  /** How many products it carries, which is what the composer row says it adds. */
-  readonly itemCount: number;
 }
 
 /**
@@ -396,8 +476,25 @@ export type CatalogSuggestion =
   | {
       readonly kind: 'group';
       readonly group: ProductGroup;
-      /** The group's products, which choosing it attaches to the line whole. */
+      /**
+       * The group's products, which choosing it attaches to the line whole.
+       *
+       * The one place the size of a group is stated, and therefore what the row
+       * says it will add. `ProductGroup` used to carry an `itemCount` beside it;
+       * nothing on the wire ever set it, so every group row offered to add zero
+       * products while attaching none.
+       */
       readonly itemIds: readonly string[];
+      /**
+       * The group's cheapest way to buy, at the reader's scopes, or null.
+       *
+       * On the variant and not on {@link ProductGroup}, for the reason
+       * {@link itemIds} is: a group's identity is its name, and what it costs is
+       * an answer to a question asked with a set of scopes. A group read
+       * anywhere else has no offer to carry, and a field that is null on every
+       * other read is a field nothing can trust.
+       */
+      readonly offer: ProductOffer | null;
     }
   | { readonly kind: 'item'; readonly item: CatalogItem };
 

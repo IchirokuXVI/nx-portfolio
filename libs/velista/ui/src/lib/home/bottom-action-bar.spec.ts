@@ -1,3 +1,4 @@
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { BottomActionBar } from './bottom-action-bar';
@@ -12,6 +13,12 @@ import { BottomActionBar } from './bottom-action-bar';
  * gone along with the state that held it. What is left to assert is that the button is
  * live, that it says nothing about being unbuilt, and that it raises the output the
  * dashboard turns into a route.
+ *
+ * Plan 0061 made the bar the shell both screens that end in one use, so the second
+ * group of cases guards the refactor rather than the measurements: projected content
+ * replaces the dashboard's pair, and with nothing projected the pair is still there and
+ * its outputs still fire. Nothing here asserts a size, because jsdom computes no layout
+ * and a spec on a class name would assert nothing about one (section 3).
  */
 async function render(): Promise<ComponentFixture<BottomActionBar>> {
   TestBed.resetTestingModule();
@@ -97,5 +104,57 @@ describe('BottomActionBar', () => {
     secondary?.click();
 
     expect(joined).toBe(1);
+  });
+});
+
+/** A caller that supplies its own row, the way the shopping list history does. */
+@Component({
+  imports: [BottomActionBar],
+  template: `
+    <lib-bottom-action-bar>
+      <button class="projected" type="button">get list</button>
+    </lib-bottom-action-bar>
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+class ProjectingHost {}
+
+describe('BottomActionBar as a shell', () => {
+  async function renderHost(): Promise<ComponentFixture<ProjectingHost>> {
+    TestBed.resetTestingModule();
+
+    await TestBed.configureTestingModule({
+      imports: [ProjectingHost, RokuTranslatorTestingModule.forTesting()],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectingHost);
+    fixture.detectChanges();
+
+    return fixture;
+  }
+
+  it('renders a projected row inside the bar', async () => {
+    const fixture = await renderHost();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.bar > .projected')).not.toBeNull();
+  });
+
+  // The whole point of the fallback: a caller with a row of its own gets its row and
+  // nothing else, so the history page does not also grow the dashboard's join button.
+  it('drops the dashboard pair when a row is projected', async () => {
+    const fixture = await renderHost();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.primary')).toBeNull();
+    expect(host.querySelector('.secondary')).toBeNull();
+  });
+
+  it('keeps the dashboard pair when nothing is projected', async () => {
+    const fixture = await render();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.bar > .primary')).not.toBeNull();
+    expect(host.querySelector('.bar > .secondary')).not.toBeNull();
   });
 });

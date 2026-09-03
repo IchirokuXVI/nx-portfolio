@@ -41,7 +41,13 @@ const TARGET_LIST = 'l-flat';
 interface Harness {
   service: GeneratedListLineService;
   /** Every zone line `LineService.add` was asked to create. */
-  zoneAdds: { listId: string; content: string; quantity?: number }[];
+  zoneAdds: {
+    listId: string;
+    content: string;
+    quantity?: number;
+    /** The candidate set a promotion carried over (plan 0065). */
+    itemIds?: string[];
+  }[];
   /** Provenance rows written by a promotion. */
   promotions: unknown[][];
   saved: Partial<GeneratedListLine>[];
@@ -127,7 +133,17 @@ function build(options: {
   };
 
   const optionRepo = {
-    find: async () => optionRows,
+    // Sorted when the caller asks for it, so that a test seeding rows out of
+    // order proves the service ordered them rather than proving that the array
+    // literal was already right (plan 0065).
+    find: async (query?: { order?: { position?: 'ASC' | 'DESC' } }) =>
+      query?.order?.position
+        ? [...optionRows].sort(
+            (a, b) =>
+              ((a.position ?? 0) - (b.position ?? 0)) *
+              (query.order?.position === 'DESC' ? -1 : 1)
+          )
+        : optionRows,
     findOne: async ({ where }: { where: { itemId: string } }) =>
       optionRows.find((row) => row.itemId === where.itemId) ?? null,
     insert: async () => undefined,
@@ -400,6 +416,126 @@ describe('promoting an added line later', () => {
     });
 
     expect(zoneAdds).toHaveLength(1);
+  });
+});
+
+/**
+ * A line sent to a list keeps its products (plan 0065).
+ *
+ * The property pinned here is that a promotion carries the basket line's whole
+ * **option set** and not its pick alone. The two are different things: the pick
+ * is the one product somebody means to buy today, the options are what the line
+ * is about, and a zone line's `itemIds` is the second of those under another
+ * name.
+ *
+ * The case worth the most attention is the second test's absence of a pick. The
+ * dropdown leads with group suggestions, a group attaches its members and leaves
+ * the pick null on purpose (plan 0055, section 3), so the ordinary gesture used
+ * to reach a household's list as free text naming nothing at all. It is the
+ * common path, not the edge.
+ */
+describe('the products a promoted line carries', () => {
+  it('sends every option, in position order, when there is no pick', async () => {
+    // A group suggestion: the whole member set, and no pick, because the row
+    // still has to ask "which one did you get?" at the shelf.
+    const { service, zoneAdds } = build({
+      line: { origin: GeneratedLineOrigin.ADDED, itemId: null },
+      optionRows: [
+        { itemId: 'milk-c', position: 2 } as never,
+        { itemId: 'milk-a', position: 0 } as never,
+        { itemId: 'milk-b', position: 1 } as never,
+      ],
+    });
+
+    await service.updateLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      lineId: 'gll-1',
+      targetListId: TARGET_LIST,
+    });
+
+    expect(zoneAdds).toHaveLength(1);
+    expect(zoneAdds[0].itemIds).toEqual(['milk-a', 'milk-b', 'milk-c']);
+  });
+
+  it('leads with the pick and keeps the rest behind it', async () => {
+    // Not decorative: `resolvePick` takes options[0] when a later run composes a
+    // basket from this list, so the front of the set is what the next trip
+    // defaults to.
+    const { service, zoneAdds } = build({
+      line: { origin: GeneratedLineOrigin.ADDED, itemId: 'milk-b' },
+      optionRows: [
+        { itemId: 'milk-a', position: 0 } as never,
+        { itemId: 'milk-b', position: 1 } as never,
+        { itemId: 'milk-c', position: 2 } as never,
+      ],
+    });
+
+    await service.updateLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      lineId: 'gll-1',
+      targetListId: TARGET_LIST,
+    });
+
+    expect(zoneAdds[0].itemIds).toEqual(['milk-b', 'milk-a', 'milk-c']);
+  });
+
+  it('sends the pick alone when the line has no options', async () => {
+    // The regression guard for lines created before plan 0055, which is the one
+    // shape that already worked and must keep working unchanged.
+    const { service, zoneAdds } = build({
+      line: { origin: GeneratedLineOrigin.ADDED, itemId: 'milk-a' },
+      optionRows: [],
+    });
+
+    await service.updateLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      lineId: 'gll-1',
+      targetListId: TARGET_LIST,
+    });
+
+    expect(zoneAdds[0].itemIds).toEqual(['milk-a']);
+  });
+
+  it('sends nothing for a free text line, which stays free text', async () => {
+    const { service, zoneAdds } = build({
+      line: { origin: GeneratedLineOrigin.ADDED, itemId: null },
+      optionRows: [],
+    });
+
+    await service.updateLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      lineId: 'gll-1',
+      targetListId: TARGET_LIST,
+    });
+
+    expect(zoneAdds[0].itemIds).toEqual([]);
+  });
+
+  it('reaches the same set when the basket default promotes on add', async () => {
+    // Both callers go through the one function, and neither may grow its own
+    // copy of the rule.
+    const { service, zoneAdds } = build({
+      defaultTargetListId: TARGET_LIST,
+      optionRows: [
+        { itemId: 'milk-a', position: 0 } as never,
+        { itemId: 'milk-b', position: 1 } as never,
+      ],
+    });
+
+    await service.addLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      content: 'Milk',
+      quantity: 1,
+      options: ['milk-a', 'milk-b'],
+    });
+
+    expect(zoneAdds).toHaveLength(1);
+    expect(zoneAdds[0].itemIds).toEqual(['milk-a', 'milk-b']);
   });
 });
 

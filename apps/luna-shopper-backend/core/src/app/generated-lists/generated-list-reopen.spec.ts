@@ -1,4 +1,5 @@
 import {
+  GeneratedListStatus,
   ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
@@ -223,7 +224,13 @@ function build(options: {
 
   const service = new GeneratedListReopenService(
     dataSource,
-    { findOne: async () => ({ id: BASKET, ownerUserId: OWNER }) } as never,
+    {
+      findOne: async () => ({
+        id: BASKET,
+        ownerUserId: OWNER,
+        status: GeneratedListStatus.ACTIVE,
+      }),
+    } as never,
     { findOne: async () => basketLine } as never,
     sharing,
     generated,

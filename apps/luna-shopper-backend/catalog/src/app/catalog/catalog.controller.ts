@@ -2,12 +2,14 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ITEM_PATTERNS,
+  POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type CountLocationsByPostalCodeRequest,
   type CreateItemRequest,
   type CreatePriceScopeRequest,
   type CreateProductGroupRequest,
@@ -22,6 +24,7 @@ import {
   type ItemIdRequest,
   type ItemPage,
   type ItemView,
+  type ListNearbyPostalCodesRequest,
   type ListPriceScopesRequest,
   type ListProductGroupsRequest,
   type ListSupermarketItemsByItemRequest,
@@ -30,6 +33,9 @@ import {
   type ListSupermarketLocationItemsRequest,
   type ListSupermarketLocationsRequest,
   type ListSupermarketsRequest,
+  type NearbyPostalCodesView,
+  type NearestPostalCodeView,
+  type PostalCodeLocationCountsView,
   type PriceScopeIdRequest,
   type PriceScopePage,
   type PriceScopeView,
@@ -38,13 +44,18 @@ import {
   type ProductGroupPage,
   type ProductGroupView,
   type ResolvedScopesView,
+  type ResolveNearestPostalCodeRequest,
   type ResolvePriceScopesRequest,
   type SearchItemsRequest,
   type SearchOffersRequest,
+  type SearchShopsRequest,
+  type ShopPage,
+  type SummarizeLocationsByChainRequest,
   type SupermarketIdRequest,
   type SupermarketItemIdRequest,
   type SupermarketItemPage,
   type SupermarketItemView,
+  type SupermarketLocationChainSummariesView,
   type SupermarketLocationIdRequest,
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
@@ -63,6 +74,7 @@ import {
   type UpsertSupermarketLocationItemRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { ItemService } from './item.service';
+import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
 import { ProductGroupService } from './product-group.service';
 import { ScopeResolverService } from './scope-resolver.service';
@@ -87,7 +99,8 @@ export class CatalogController {
     private readonly priceScopes: PriceScopeService,
     private readonly locationItems: SupermarketLocationItemService,
     private readonly productGroups: ProductGroupService,
-    private readonly scopeResolver: ScopeResolverService
+    private readonly scopeResolver: ScopeResolverService,
+    private readonly postalCodes: PostalCodeService
   ) {}
 
   // --- Supermarkets --------------------------------------------------------
@@ -162,6 +175,41 @@ export class CatalogController {
     @Payload() req: ListSupermarketLocationsRequest
   ): Promise<SupermarketLocationPage> {
     return this.locations.list(req);
+  }
+
+  /**
+   * How many shops we hold in each of these postal codes (plan 0063, section 5).
+   *
+   * Service to service and carrying no `userId`, like the two postal code reads
+   * above it: the harvester asks it to decide which announced codes are unknown,
+   * and it counts rows over a table catalog already serves openly.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.countByPostalCode)
+  countLocationsByPostalCode(
+    @Payload() req: CountLocationsByPostalCodeRequest
+  ): Promise<PostalCodeLocationCountsView> {
+    return this.locations.countByPostalCode(req);
+  }
+
+  /**
+   * The chains with a shop in the caller's postal codes, and how many they have
+   * (plan 0068, section 3.1).
+   *
+   * The refusals arrive as ids because the gateway resolved them from core:
+   * catalog knows which shop belongs to which chain and nothing else, which is
+   * exactly the split every priced read has kept since plan 0049.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.summarizeByChain)
+  summarizeLocationsByChain(
+    @Payload() req: SummarizeLocationsByChainRequest
+  ): Promise<SupermarketLocationChainSummariesView> {
+    return this.locations.summarizeByChain(req);
+  }
+
+  /** The shops themselves, in those codes (plan 0068, section 3.2). */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.search)
+  searchShops(@Payload() req: SearchShopsRequest): Promise<ShopPage> {
+    return this.locations.search(req);
   }
 
   // --- Items ---------------------------------------------------------------
@@ -299,6 +347,27 @@ export class CatalogController {
     @Payload() req: ResolvePriceScopesRequest
   ): Promise<ResolvedScopesView> {
     return this.scopeResolver.resolve(req);
+  }
+
+  // --- Postal code geography (plan 0060, section 5) ------------------------
+  //
+  // Internal reads over the shipped centroids, with no `userId` and no gateway
+  // route: core asks them (plans 0058 and 0062), nothing user facing does.
+
+  /** Which postal code a point is in, or null when no centroid is close enough. */
+  @MessagePattern(POSTAL_CODE_PATTERNS.nearest)
+  nearestPostalCode(
+    @Payload() req: ResolveNearestPostalCodeRequest
+  ): Promise<NearestPostalCodeView> {
+    return this.postalCodes.nearest(req);
+  }
+
+  /** Which postal codes sit within a radius of one, centroid to centroid. */
+  @MessagePattern(POSTAL_CODE_PATTERNS.nearby)
+  nearbyPostalCodes(
+    @Payload() req: ListNearbyPostalCodesRequest
+  ): Promise<NearbyPostalCodesView> {
+    return this.postalCodes.nearby(req);
   }
 
   // --- Per store rows (plan 0038, section 5.2) -----------------------------

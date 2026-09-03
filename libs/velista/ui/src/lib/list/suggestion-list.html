@@ -7,9 +7,26 @@
   the free text row keeps it reachable by way of its own control rather than through an
   empty list.
 -->
-@if (suggestions().length > 0 || asWritten() !== null) {
-  <ul [attr.aria-label]="label() | rokuT" class="suggestions" role="listbox">
-    @for (suggestion of suggestions(); track $index) {
+@if (rows().length > 0 || asWritten() !== null) {
+  <!--
+    `above` is opaque and opens at its last row, which is what a panel drawn over
+    somebody's shopping list has to be. Stated by the caller through `placement`,
+    because the direction this list grows in is the caller's and always was.
+  -->
+  <ul
+    [attr.aria-label]="label() | rokuT"
+    [class.above]="placement() === 'above'"
+    #panel
+    class="suggestions"
+    role="listbox"
+  >
+    <!--
+      `rows`, not `suggestions`: a panel that opens at its bottom is read from the
+      bottom, so the server's ranking is drawn upward there and downward everywhere
+      else. Which way round is decided in the component, once, rather than by anything
+      here.
+    -->
+    @for (suggestion of rows(); track $index) {
       <li role="none">
         <!--
           `aria-selected="false"` on every row, always. Nothing here is ever selected:
@@ -42,12 +59,31 @@
                 What choosing it will do, said before it is pressed. A group adds
                 several products at once, and a row that quietly did that would be a
                 surprise the first three times.
+
+                The best price follows it on the **same line**, so a priced group row
+                and an unpriced one are the same height. One line can truncate, and
+                this order decides which half is lost: "adds its 4 products" is what
+                stops a row quietly attaching four things to somebody's list, and
+                losing the price is the ordinary state everywhere the harvester is
+                off. The separator is written here because both halves are copy, so
+                there is no string for a method to have joined.
               -->
-              <span class="suggestion-note">{{
-                'list.add.groupAdds' | rokuT: groupSummaryArgs(suggestion)
-              }}</span>
-            } @else if (suggestion.item.brand) {
-              <span class="suggestion-note">{{ suggestion.item.brand }}</span>
+              <span class="suggestion-note"
+                >{{
+                  'list.add.groupAdds' | rokuT: groupSummaryArgs(suggestion)
+                }}
+                @if (bestPriceOf(suggestion); as best) {
+                  · {{ best.key | rokuT: best.args }}
+                }
+              </span>
+            } @else if (noteOf(suggestion); as note) {
+              <!--
+                The brand, the price, or both, joined in the component. It is the note
+                line and not the row's end because the row's end is the packet size,
+                which is the only field telling two otherwise identical rows apart and
+                may never be squeezed to make room for a thing that is usually absent.
+              -->
+              <span class="suggestion-note">{{ note }}</span>
             }
           </span>
 
@@ -59,6 +95,20 @@
           @if (suggestion.kind === 'group') {
             <span class="suggestion-badge">{{
               'list.add.groupBadge' | rokuT
+            }}</span>
+          } @else if (sizeOf(suggestion); as size) {
+            <!--
+              How big the packet is, and it is here rather than on the note line
+              underneath the name for one reason: the catalog holds one record per size,
+              so this is the **only** field telling two otherwise identical rows apart.
+              The name and the note both truncate, and two cartons of the same milk
+              truncate to the same string; this end of the row never does.
+
+              Only ever drawn for an item. A group is sizes, plural, and quoting one of
+              them would name a carton the row does not add.
+            -->
+            <span class="suggestion-size">{{
+              size.key | rokuT: size.args
             }}</span>
           }
         </button>

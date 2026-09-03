@@ -18,6 +18,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, Repository } from 'typeorm';
 import { ProductGroup } from '../entities';
+import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { toProductGroupView } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import {
@@ -53,7 +54,11 @@ export class ProductGroupService {
   constructor(
     @InjectRepository(ProductGroup)
     private readonly groups: Repository<ProductGroup>,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    // For {@link delete} alone (plan 0070, section 5). Nothing else here changes
+    // a fact a subscribed line depends on: membership is `items.productGroupId`,
+    // and this service does not assign it.
+    private readonly events: CatalogEventsPublisher
   ) {}
 
   async create(req: CreateProductGroupRequest): Promise<ProductGroupView> {
@@ -102,6 +107,15 @@ export class ProductGroupService {
    * sets their `productGroupId` to null, which fires the item search trigger and
    * drops the group's words out of their search documents by itself. Undoing a
    * curation decision must not be blocked by the products it was about.
+   *
+   * ## It announces itself, and that is not a convenience (plan 0070, section 5)
+   *
+   * The nulling above happens **inside Postgres** and emits nothing, so without
+   * its own event a deletion would be invisible to core and the next unrelated
+   * item write would be the first hint. Worse, if the deletion did somehow arrive
+   * as a burst of per item changes, core would read it as "the admin removed every
+   * product from Milk" and empty every subscribed line, where what it must
+   * actually do is unbind them and leave every product where it is.
    */
   async delete(req: ProductGroupIdRequest): Promise<{ id: string }> {
     this.admin.requireAdmin(req.userId);
@@ -109,6 +123,7 @@ export class ProductGroupService {
     if (!result.affected) {
       throw new NotFoundException('Product group not found');
     }
+    this.events.productGroupDeleted(req.productGroupId);
     return { id: req.productGroupId };
   }
 

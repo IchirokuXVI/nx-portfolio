@@ -53,6 +53,8 @@ const MILK: CatalogItem = {
   id: 'item-milk-a',
   name: { es: 'Leche entera', en: 'Whole milk' },
   brand: 'Hacendado',
+  size: 1,
+  unit: 'LITER',
   productGroupId: null,
 };
 
@@ -63,6 +65,8 @@ function line(overrides: Partial<Line> = {}): Line {
     content: 'Milk',
     quantity: 2,
     itemIds: ['item-milk-a'],
+    productGroupId: null,
+    groupItemIds: [],
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,

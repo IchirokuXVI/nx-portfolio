@@ -1,9 +1,14 @@
 // ------------------------------------------------------ The suggestions (0043, §6)
 //
-// A list rather than a popover over the page. Where it goes relative to its field is
-// the **caller's**, not this component's: the composer is pinned to the bottom with the
-// keyboard under it, so its list grows upward, and the line page's sits under the field
-// where there is nothing in the way. Both get the same rows.
+// Where it goes relative to its field is the **caller's**, not this component's: the
+// composer is pinned to the bottom with the keyboard under it, so its list grows
+// upward over the lines, and the line page's sits under the field where there is
+// nothing in the way. Both get the same rows and the same ranking; the one that grows
+// upward is read from the bottom, so it is drawn from the bottom too, which the
+// component decides in `rows`.
+//
+// The caller says which through `placement`, and the one that grows over the page is
+// the one that has to be opaque. See `.suggestions.above`.
 :host {
   display: contents;
 }
@@ -18,6 +23,29 @@
   max-height: var(--app-suggestions-max-height);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+// Drawn over the lines rather than on the page's own ground, which is the composer's
+// placement and only the composer's.
+//
+// **Opaque, and that is the whole of it.** This panel covers rows of somebody's
+// shopping list, and until it had a surface of its own those rows read straight
+// through the suggestions: two lists of words in the same place, one of them the
+// person's own. The composer's surface, so the panel and the field under it are one
+// container rather than two things that happen to be adjacent.
+//
+// The hairline and the elevation are what separate it from the row it covers. On a
+// light ground that is the shadow; on a dark one it is `elevation-2`'s top edge
+// highlight, since a shadow over near black is invisible. Both are already in the
+// tokens, in both themes, which is why neither is written here as a colour.
+//
+// The trailing padding closes the panel: the rows used to sit flush against the
+// composer's top border, which read as the last row having been cut off.
+.suggestions.above {
+  padding-block-end: var(--app-space-2);
+  background: var(--app-surface-raised);
+  border-block-start: 1px solid var(--app-border-subtle);
+  box-shadow: var(--app-elevation-2);
 }
 
 .suggestion {
@@ -48,7 +76,7 @@
 }
 
 // A group is the answer most people want, so it is the one that stands out: tinted,
-// badged, and at the top where the server put it.
+// badged, and at whichever end of the panel the server's best answer sits at.
 .suggestion.group {
   background: var(--app-action-quiet-bg);
 }
@@ -94,6 +122,27 @@
   color: var(--app-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// How big the packet is, at the trailing edge and **never truncated**, which is the
+// whole reason it is not on the note line under the name.
+//
+// The catalog holds one record per size, so two cartons of the same milk carry the
+// same name and the same brand and this is the only field that tells them apart. Both
+// of the fields beside it ellipsize, and a long product name ellipsizes to the same
+// string on both rows, so a disambiguator that could be cut off is not one.
+//
+// Quieter than the group badge on purpose: it is a fact about the product rather than
+// a claim about what pressing the row will do, and two things competing for the same
+// corner would make every row look like it had a badge.
+.suggestion-size {
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  // The sizes sit in a column down the trailing edge, so the digits line up rather
+  // than shuffling by a fraction of a character from row to row.
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

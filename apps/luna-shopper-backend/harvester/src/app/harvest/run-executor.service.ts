@@ -62,7 +62,23 @@ export class RunExecutor implements OnApplicationShutdown {
     });
   }
 
-  private async execute(runId: string): Promise<void> {
+  /**
+   * The same execution, awaited, answering the status it finalized with.
+   *
+   * The postal code discovery worker (plan 0063, section 2) is the one caller
+   * that needs this: it drains its queue **one run at a time**, because the
+   * active run index already forbids two, and because `OsmPlacesClient` rate
+   * limits per instance so concurrent runs would be a multiple of the rate
+   * Nominatim's policy allows. Waiting is how it stays serial.
+   *
+   * Nothing on a request path may call it. A NATS request/reply that waited for
+   * a run would time out many times over, which is why {@link start} exists.
+   */
+  runToCompletion(runId: string): Promise<HarvestRunStatus> {
+    return this.execute(runId);
+  }
+
+  private async execute(runId: string): Promise<HarvestRunStatus> {
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
     const run = await this.store.load(runId);
     const controller = new AbortController();
@@ -134,7 +150,7 @@ export class RunExecutor implements OnApplicationShutdown {
         status,
         status === HarvestRunStatus.FAILED
           ? `${finished.failed} of ${finished.totalPlanned ?? '?'} items failed, ` +
-            `which is over the ${settings.failureRatio} threshold.`
+              `which is over the ${settings.failureRatio} threshold.`
           : undefined
       );
       if (source) {
@@ -143,6 +159,7 @@ export class RunExecutor implements OnApplicationShutdown {
           status === HarvestRunStatus.COMPLETED
         );
       }
+      return status;
     } catch (error) {
       // Whatever the run managed before it died is still worth keeping.
       await context.flush().catch(() => undefined);
@@ -153,7 +170,10 @@ export class RunExecutor implements OnApplicationShutdown {
       if (source) {
         await this.sources.recordRunFinished(source, false);
       }
-      this.logger.error(`Harvest run ${runId} ended as ${status}: ${String(error)}`);
+      this.logger.error(
+        `Harvest run ${runId} ended as ${status}: ${String(error)}`
+      );
+      return status;
     } finally {
       clearInterval(pollAbort);
       this.inFlight.delete(runId);

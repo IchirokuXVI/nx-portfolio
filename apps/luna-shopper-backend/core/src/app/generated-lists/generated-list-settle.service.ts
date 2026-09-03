@@ -1,14 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  isLiveGeneratedList,
   NO_LINE_CLAIM,
   RealtimeEvent,
   SettlementOutcome,
   type GeneratedListAllocationEntry,
   type GeneratedListLineMovedEvent,
+  type GeneratedListSettlementRef,
   type GeneratedListSettleResult,
   type GeneratedListSettleSkip,
-  type GeneratedListSettlementRef,
   type LineClaim,
   type LineSettlementSummary,
   type SettleGeneratedListLineRequest,
@@ -16,6 +17,7 @@ import {
 import {
   ConflictException,
   ForbiddenException,
+  GeneratedListFinishedException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -31,6 +33,10 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import {
+  toLineItemSet,
+  type LineItemSet,
+} from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
@@ -94,6 +100,16 @@ export class GeneratedListSettleService {
     });
     if (!list) {
       throw new NotFoundException('Generated list not found');
+    }
+    if (!isLiveGeneratedList(list.status)) {
+      // The write that matters most (plan 0059, section 3.1): a finished trip
+      // that still took settlements could write into a household's zone lines
+      // days after the shopper went home, from a link shared with somebody who
+      // is no longer shopping. Its own code, so the screen can say the trip is
+      // over rather than that something failed.
+      throw new GeneratedListFinishedException(
+        'This basket is finished, so nothing more can be settled in it'
+      );
     }
     const line = await this.lines.findOne({
       where: { id: req.lineId, generatedListId: list.id },
@@ -249,7 +265,7 @@ export class GeneratedListSettleService {
           // The set is read rather than assumed empty: `toLineView` takes it as
           // an argument precisely so a line with two products is never reported
           // as a free text line.
-          itemIds: await this.zoneLineItemIds(manager, zoneLine.id),
+          items: await this.zoneLineItemSet(manager, zoneLine.id),
           // And the two indicators, for the same reason and with more force
           // (plan 0047, section 5). This is the path a purchase normally takes,
           // so announcing the zero summary here would take the bought indicator
@@ -334,7 +350,7 @@ export class GeneratedListSettleService {
         {
           line: toLineView(
             announcement.line,
-            announcement.itemIds,
+            announcement.items,
             announcement.settlementSummary,
             announcement.claim ?? NO_LINE_CLAIM
           ),
@@ -439,16 +455,23 @@ export class GeneratedListSettleService {
     return participant ? await this.sharing.seesZoneData(participant) : false;
   }
 
-  /** A zone line's product set, in attachment order (plan 0048, section 1.1). */
-  private async zoneLineItemIds(
+  /**
+   * A zone line's product set, in attachment order, and which of it the line's
+   * group is still responsible for (plan 0048, section 1.1; plan 0070, section 9).
+   *
+   * Both halves, because the announcement carries a whole `LineView` and a client
+   * reconciles off it: one that reported only the products would take velista
+   * `0065`'s marks off every subscribed line the moment anybody bought anything.
+   */
+  private async zoneLineItemSet(
     manager: EntityManager,
     lineId: string
-  ): Promise<string[]> {
+  ): Promise<LineItemSet> {
     const rows = await manager.getRepository(ListLineItem).find({
       where: { lineId },
       order: { position: 'ASC', createdAt: 'ASC' },
     });
-    return rows.map((row) => row.itemId);
+    return toLineItemSet(rows);
   }
 
   /**
@@ -565,7 +588,7 @@ interface ZoneAnnouncement {
   listId: string;
   line: ListLine;
   settlement: LineSettlement;
-  itemIds: string[];
+  items: LineItemSet;
   /**
    * The zone line's two indicators as this settle leaves them (plan 0047,
    * section 5).

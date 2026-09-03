@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_LIMITS,
+  isLiveGeneratedList,
   LineApprovalStatus,
   OriginUnavailableReason,
   RealtimeEvent,
@@ -18,6 +19,7 @@ import {
 import {
   BelowSettledException,
   ForbiddenException,
+  GeneratedListFinishedException,
   NotFoundException,
   StaleQuantityException,
   ValidationException,
@@ -33,6 +35,10 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import {
+  toLineItemSet,
+  type LineItemSet,
+} from '../lists/line-item-set';
 import { toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
@@ -340,6 +346,15 @@ export class GeneratedListOriginsService {
     req: SetGeneratedListOriginQuantityRequest
   ): Promise<SetGeneratedListOriginQuantityResult> {
     const { list, line, seesZoneData, actorUserId } = await this.resolve(req);
+    if (!isLiveGeneratedList(list.status)) {
+      // Not in plan 0059's table of nine, and refused by its one rule all the
+      // same (section 3.2): this saves the basket line as well as the zone line,
+      // and a household changing what it wants belongs on the list page once
+      // the trip that drew from it is over.
+      throw new GeneratedListFinishedException(
+        'This basket is finished, so what its lines came from cannot be changed'
+      );
+    }
     const quantity = this.checkQuantity(req.quantity, 'quantity');
     this.checkQuantity(req.from, 'from');
 
@@ -417,7 +432,7 @@ export class GeneratedListOriginsService {
       zone.zoneId,
       toLineView(
         written.source,
-        written.itemIds,
+        written.items,
         written.settlements,
         written.claim
       ),
@@ -542,7 +557,7 @@ export class GeneratedListOriginsService {
         // repositories, which would take a second connection while this
         // transaction holds one; enough concurrent edits and every connection in
         // the pool is a transaction waiting for one that will never come free.
-        itemIds: await this.zoneLineItemIds(manager, source.id),
+        items: await this.zoneLineItemSet(manager, source.id),
         settlements: await this.settlementsOf(manager, source.id),
         claim: await this.claims.claimOf(source.id, manager),
       };
@@ -728,16 +743,23 @@ export class GeneratedListOriginsService {
     return new Map(rows.map((row) => [row.id, row]));
   }
 
-  /** A zone line's product set, in attachment order (plan 0048, section 1.1). */
-  private async zoneLineItemIds(
+  /**
+   * A zone line's product set, in attachment order, and which of it the line's
+   * group is still responsible for (plan 0048, section 1.1; plan 0070, section 9).
+   *
+   * Both halves, because the `line.updated` this feeds carries a whole `LineView`
+   * and a client reconciles off it: one that reported only the products would take
+   * velista `0065`'s marks off a subscribed line over a quantity change.
+   */
+  private async zoneLineItemSet(
     manager: EntityManager,
     lineId: string
-  ): Promise<string[]> {
+  ): Promise<LineItemSet> {
     const rows = await manager.getRepository(ListLineItem).find({
       where: { lineId },
       order: { position: 'ASC', createdAt: 'ASC' },
     });
-    return rows.map((row) => row.itemId);
+    return toLineItemSet(rows);
   }
 
   /**
@@ -835,7 +857,7 @@ interface WrittenOrigin {
   source: ListLine;
   /** The provenance row, or null when the contribution was set to zero. */
   origin: GeneratedListLineOrigin | null;
-  itemIds: string[];
+  items: LineItemSet;
   settlements: LineSettlementSummary;
   claim: Awaited<ReturnType<LineClaimService['claimOf']>>;
 }

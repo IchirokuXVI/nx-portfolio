@@ -10,6 +10,9 @@ import { GeneratedListSharing1756001100000 } from './1756001100000-GeneratedList
 import { SettlementParticipants1756001200000 } from './1756001200000-SettlementParticipants';
 import { ParticipantUsernameAndReopen1756001300000 } from './1756001300000-ParticipantUsernameAndReopen';
 import { BasketLineAuthor1756001400000 } from './1756001400000-BasketLineAuthor';
+import { PostalCodeSourceAndNearby1756001500000 } from './1756001500000-PostalCodeSourceAndNearby';
+import { ProfileLocationPreferences1756001600000 } from './1756001600000-ProfileLocationPreferences';
+import { LineProductGroupSubscription1756001700000 } from './1756001700000-LineProductGroupSubscription';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -45,4 +48,14 @@ export const CORE_MIGRATIONS = [
   // they touch different columns and neither depends on the other, so the order
   // between them is only the order they arrived in.
   BasketLineAuthor1756001400000,
+  // Additive on `profile_postal_codes`, which plan 0049's migration created, so
+  // it follows that one and nothing else (plan 0062, section 7).
+  PostalCodeSourceAndNearby1756001500000,
+  // A new table hanging off `shopping_profiles`, so it follows the migration
+  // that created that and nothing else (plan 0064, section 6).
+  ProfileLocationPreferences1756001600000,
+  // Additive on `list_lines` and `list_line_items`, which plan 0048's migration
+  // shaped, plus a new table hanging off the lines. It follows those and nothing
+  // else (plan 0070, section 10).
+  LineProductGroupSubscription1756001700000,
 ];

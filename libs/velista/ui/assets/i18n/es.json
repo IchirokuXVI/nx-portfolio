@@ -300,7 +300,6 @@
     },
     "zoneExplainer": "Un grupo es la casa o los compañeros de piso con quienes compartes listas. Puedes empezar sin cuenta.",
     "section": {
-      "shoppingList": "Tu lista de la compra",
       "zones": "Tus grupos"
     },
     "shoppingList": {
@@ -325,7 +324,8 @@
       "items_other": "{{count}} artículos"
     },
     "progress": {
-      "ready": "{{ready}} de {{total}} listos"
+      "pending": "{{pending}} de {{total}} pendientes",
+      "done": "Nada pendiente"
     },
     "presence": {
       "here_one": "{{names}} está aquí ahora",
@@ -364,7 +364,8 @@
   "list": {
     "header": {
       "inGroup": "en {{name}}",
-      "ready": "{{ready}} de {{total}} listos",
+      "pending": "{{pending}} de {{total}} pendientes",
+      "done": "Nada pendiente",
       "notLive": "No se está actualizando ahora",
       "back": "Volver al grupo"
     },
@@ -399,7 +400,16 @@
       "dismissHeard": "Cerrar",
       "suggestions": "Productos que coinciden",
       "groupAdds": "añade sus {{count}} productos",
+      "bestPrice": "Mejor precio: {{price}}",
       "groupBadge": "GRUPO",
+      "size": {
+        "UNIT": "{{size}} uds",
+        "GRAM": "{{size}} g",
+        "KILOGRAM": "{{size}} kg",
+        "MILLILITER": "{{size}} ml",
+        "LITER": "{{size}} L",
+        "PACK": "{{size}} packs"
+      },
       "asWritten": "Añadir “{{text}}” tal cual"
     },
     "empty": {
@@ -566,6 +576,16 @@
       "noProducts": "Aún sin productos",
       "products": "PRODUCTOS DE ESTA LÍNEA",
       "addProduct": "Añadir un producto",
+      "productsCount": "{{count}}/{{cap}}",
+      "fromGroup": "De {{name}}",
+      "fromGroupUnnamed": "De un grupo",
+      "addedByYou": "Añadidos por ti",
+      "keepProduct": "Conservar",
+      "keepProductLabel": "Conservar {{name}} en esta línea",
+      "productsFull": {
+        "one": "Esta línea tiene {{count}} de {{cap}} productos. Quita alguno primero.",
+        "group": "Esta línea tiene {{count}} de {{cap}} productos y {{name}} añade {{adds}}. Quita algunos productos primero."
+      },
       "searchProduct": "Buscar un producto",
       "add": "Añadir",
       "removeProduct": "Quitar {{name}}",
@@ -823,11 +843,6 @@
       "label": "Nombre",
       "hint": "Hasta que le pongas nombre, aparece como {{name}}"
     },
-    "address": {
-      "label": "Dirección",
-      "optional": "Opcional",
-      "placeholder": "Calle y número"
-    },
     "postal": {
       "label": "Códigos postales",
       "add": "Añadir código postal",
@@ -836,7 +851,22 @@
       "submit": "Añadir",
       "remove": "Quitar {{code}}",
       "full": "Puedes guardar hasta {{count}} códigos postales",
-      "uncovered": "Ningún supermercado que conozcamos llega aún a este código"
+      "uncovered": "Ningún supermercado que conozcamos llega aún a este código",
+      "nearby": "Añadir también los códigos cercanos",
+      "nearbySource": "cercano",
+      "nearbyAdded": "También añadimos {{count}} códigos cercanos"
+    },
+    "location": {
+      "title": "Usar mi ubicación",
+      "explain": "Tu dispositivo nos dice dónde está, lo convertimos en un código postal y guardamos el código postal. La posición en sí no se guarda.",
+      "use": "Usar mi ubicación",
+      "resolved": "Creemos que estás en",
+      "confirm": "Añadir este código",
+      "refused": "Este navegador no tiene permiso para compartir tu ubicación, y solo tú puedes cambiarlo en sus ajustes. Puedes escribir tu código postal.",
+      "unplaceable": "No hemos podido averiguar qué código postal es. Puedes escribirlo.",
+      "unavailable": "Tu dispositivo no ha podido decir dónde está. Puedes intentarlo otra vez o escribir tu código postal.",
+      "failed": "No hemos podido consultarlo. Inténtalo otra vez.",
+      "typeInstead": "Escribirlo"
     },
     "chains": {
       "label": "Supermercados",
@@ -862,6 +892,52 @@
       "retry": "Inténtalo de nuevo",
       "save": "No se ha guardado. Inténtalo de nuevo",
       "delete": "No se pudo completar. Inténtalo de nuevo"
+    },
+    "shops": {
+      "open": "Elige tus tiendas"
+    }
+  },
+  "shops": {
+    "title": "Supermercados",
+    "loading": "Cargando las tiendas cerca de ti",
+    "other": "Otras tiendas",
+    "search": {
+      "label": "Buscar una tienda",
+      "placeholder": "Cadena, calle, ciudad o código postal",
+      "results_one": "{{count}} tienda coincide",
+      "results_other": "{{count}} tiendas coinciden"
+    },
+    "chain": {
+      "count_one": "{{count}} tienda",
+      "count_other": "{{count}} tiendas",
+      "exclude": "Excluir esta marca",
+      "include": "Incluir esta marca",
+      "excludeAll": "Excluir estas marcas",
+      "includeAll": "Incluir estas marcas",
+      "hint": "Excluir la marca también cubre las tiendas que abra más adelante. Apagar tiendas sueltas no"
+    },
+    "state": {
+      "chain": "Marca excluida",
+      "some": "{{count}} de {{total}} apagadas"
+    },
+    "row": {
+      "excluded": "Apagada",
+      "chainExcluded": "Marca apagada"
+    },
+    "empty": {
+      "noCodes": {
+        "title": "Este perfil aún no tiene código postal",
+        "body": "Buscamos tiendas en los códigos postales desde los que compras, así que no hay nada que mostrar hasta que añadas uno.",
+        "action": "Añadir un código postal"
+      },
+      "noShops": "Todavía no tenemos supermercados para ese código postal",
+      "noMatch": "Ninguna tienda coincide con eso. Prueba con una cadena, una calle o una ciudad",
+      "missing": "No hemos encontrado ese perfil",
+      "toProfiles": "Tus perfiles"
+    },
+    "error": {
+      "load": "No hemos podido leer las tiendas",
+      "save": "No se ha guardado. Inténtalo otra vez"
     }
   },
   "basket": {
@@ -934,7 +1010,11 @@
       "title": "¿Cuál has cogido?",
       "hint": "Cualquiera de estos cuenta para esta línea. Elige el que llevas en el carro.",
       "current": "Elegido",
-      "none": "Esta línea no nombra ningún producto"
+      "none": "Esta línea no nombra ningún producto",
+      "cheapest": "Más barato",
+      "noPrice": "Sin precio",
+      "asOf": "Precios de {{when}}",
+      "asOfTyped": "Precios de {{when}}, introducidos a mano"
     },
     "allocate": {
       "open": "Repartir entre listas",

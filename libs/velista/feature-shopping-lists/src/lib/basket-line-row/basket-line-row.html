@@ -74,9 +74,10 @@
     <span class="content">{{ line().content }}</span>
 
     <!--
-      The picked product, named and never priced: the pick is the first option
-      added rather than the cheapest (backend 0050), so a "best price" badge
-      would be a claim nothing behind it computes.
+      The picked product, named, and priced after the separator when the run's
+      scopes have a price for it (velista 0062, section 4). The pick is still the
+      first option added rather than the cheapest (backend 0050), so there is no
+      "best price" badge here; that comparison is the pick sheet's.
     -->
     @if (productName(); as product) {
       <span class="product">{{ product }}</span>

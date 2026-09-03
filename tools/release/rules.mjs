@@ -69,6 +69,12 @@ export const SCOPES = [
   'assistant',
   'contracts',
 
+  // The back office for that backend. It administers luna-shopper rather than
+  // velista, which is only one of the interfaces consuming it, so it is named
+  // after the backend and sits here. `admin` is the short form.
+  'admin',
+  'luna-shopper-admin',
+
   // Shared code.
   'shared',
   'i18n',

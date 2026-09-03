@@ -5,6 +5,7 @@ import type {
   HarvestRunTrigger,
   ItemSourceMatch,
   ItemSourceRefStatus,
+  PostalCodeDiscoveryStatus,
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
 
@@ -148,6 +149,12 @@ export interface DiscoveredPlaceView {
   street: string | null;
   city: string | null;
   postalCode: string | null;
+  /**
+   * The country the run that found it was searching, not an OSM tag (plan 0061,
+   * section 4). It reaches catalog on import, where it keys the centroid lookup
+   * that fills the postcode two thirds of these places lack.
+   */
+  country: string | null;
   website: string | null;
   openingHours: string | null;
   tags: Record<string, string>;
@@ -359,3 +366,50 @@ export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
 export type ItemSourceRefPage = Paginated<ItemSourceRefView>;
 export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
+
+// --- The postal code discovery queue (plan 0063) ---------------------------
+
+/**
+ * The queue's own rows, for backlog `0009` to render (plan 0063, section 8).
+ *
+ * A read and **nothing else**. There is deliberately no enqueue subject and no
+ * gateway route: nothing user facing may start a discovery run, because exposing
+ * one would let anybody spend our Nominatim budget. Enqueueing happens one way
+ * only, by the harvester consuming core's `postalCode.added` event.
+ *
+ * Defined here with its consumer unwritten on purpose: the shape is cheaper to
+ * state now, beside the queue that produces it, than to retrofit later.
+ */
+export const POSTAL_CODE_DISCOVERY_PATTERNS = {
+  list: 'postalCodeDiscovery.list',
+} as const;
+
+/** One code the queue has been asked about, and what became of it. */
+export interface PostalCodeDiscoveryRequestView {
+  id: string;
+  /** ISO 3166-1 alpha-2, lowercase. */
+  country: string;
+  postalCode: string;
+  status: PostalCodeDiscoveryStatus;
+  /** When the code was first announced, not when it was last asked about. */
+  requestedAt: string;
+  lastAttemptedAt: string | null;
+  /** When a run last **completed** for it. The cooldown counts from here. */
+  discoveredAt: string | null;
+  /** When a backed off retry becomes eligible. Null once the row is terminal. */
+  nextAttemptAt: string | null;
+  attempts: number;
+  /** The last run this row produced, if any. Opaque outside the harvester. */
+  runId: string | null;
+  /** Why the last attempt failed, kept on a FAILED row for a person to read. */
+  error: string | null;
+}
+
+export interface ListPostalCodeDiscoveryRequestsRequest extends PageQuery {
+  userId: string;
+  country?: string;
+  status?: PostalCodeDiscoveryStatus;
+}
+
+export type PostalCodeDiscoveryRequestPage =
+  Paginated<PostalCodeDiscoveryRequestView>;

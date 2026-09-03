@@ -115,7 +115,6 @@ export class ProfilesPage {
     viewChild<ElementRef<HTMLInputElement>>('nameField');
 
   protected readonly nameMaxLength = PROFILE_LIMITS.nameMaxLength;
-  protected readonly addressMaxLength = PROFILE_LIMITS.addressMaxLength;
 
   protected readonly state = this._store.state;
   protected readonly profiles = this._store.profiles;
@@ -167,6 +166,15 @@ export class ProfilesPage {
   protected readonly displayName = computed(() =>
     nameOf(this.selected(), this.defaultName())
   );
+
+  /**
+   * How many derived codes the last add brought in (plan 0058, section 5).
+   *
+   * Read off the store rather than returned to whichever control did the adding,
+   * because one of the two writers is the location sheet, which is a routed child that
+   * has closed by the time this sentence is drawn.
+   */
+  protected readonly nearbyAdded = this._store.nearbyAdded;
 
   /** The codes the catalog says nobody we know serves, for the flag under each chip. */
   protected readonly uncovered = computed(() =>
@@ -250,6 +258,31 @@ export class ProfilesPage {
     );
   }
 
+  /**
+   * The shops in the selected profile's postal codes (plan 0059).
+   *
+   * An absolute URL through `appPath` rather than a relative navigation, because the
+   * supermarkets page is a **sibling** of this one rather than a child: it is not a sheet
+   * over this screen, so it is not below this route.
+   */
+  async openSupermarkets(): Promise<void> {
+    const profile = this.selected();
+    if (profile === null) {
+      return;
+    }
+
+    await this._router.navigateByUrl(
+      appPath(
+        this._locale(),
+        this._basePath,
+        'account',
+        'profiles',
+        profile.id,
+        'supermarkets'
+      )
+    );
+  }
+
   /** The confirm sheet, as a child of this route (rule E1). */
   openDelete(): void {
     void this._router.navigate(sheetSegments('confirm', 'delete'), {
@@ -281,27 +314,6 @@ export class ProfilesPage {
       ...current,
       name: next,
     }));
-  }
-
-  /** The address, on blur. Optional, display only, and nothing is geocoded from it. */
-  async saveAddress(event: Event): Promise<void> {
-    const profile = this.selected();
-    if (profile === null) {
-      return;
-    }
-
-    const typed = (event.target as HTMLInputElement).value.trim();
-    const next = typed === '' ? null : typed;
-    if (next === profile.addressText) {
-      return;
-    }
-
-    await this._store.save(
-      profile.id,
-      'addressText',
-      { addressText: next },
-      (current) => ({ ...current, addressText: next })
-    );
   }
 
   /**
@@ -336,11 +348,15 @@ export class ProfilesPage {
   }
 
   /**
-   * Add a postal code.
+   * Add a postal code, and optionally the ones near it (plan 0058, section 5).
    *
-   * The whole list is sent, because the wire replaces collections rather than patching
-   * them, and the optimistic row carries a temporary id: the server mints the real one
-   * and the answer replaces this the moment it lands.
+   * **One row rather than the whole list.** A profile's codes are no longer all the
+   * user's: sending the list back would promote every derived row to theirs, which is
+   * not what rendering a list and saving it means. The store holds the optimistic chip.
+   *
+   * A code the profile already holds is **not** skipped here any more. Re-adding one is
+   * how a derived row is promoted to the user's, and it is the way back from having
+   * dismissed a neighbour, so the request the page used to swallow is now the point.
    */
   async addPostalCode(entry: NewPostalCode): Promise<void> {
     const profile = this.selected();
@@ -348,48 +364,43 @@ export class ProfilesPage {
       return;
     }
 
-    // The same code twice is not two places. The server would refuse the duplicate and
-    // the chip list would carry two rows with the same key until it did, so the second
-    // add is simply not a change.
-    if (
-      profile.postalCodes.some((code) => code.postalCode === entry.postalCode)
-    ) {
-      return;
-    }
-
-    const next = [
-      ...profile.postalCodes,
-      {
-        id: `pending-${entry.postalCode}`,
-        postalCode: entry.postalCode,
-        label: entry.label,
-        position: profile.postalCodes.length,
-      },
-    ];
-
-    await this._savePostalCodes(profile, next);
+    await this._store.addPostalCode(profile.id, {
+      postalCode: entry.postalCode,
+      label: entry.label,
+      expandNearby: entry.expandNearby,
+    });
   }
 
-  async removePostalCode(codeId: string): Promise<void> {
+  /** Remove one code by the code itself, whoever it belongs to. */
+  async removePostalCode(postalCode: string): Promise<void> {
     const profile = this.selected();
     if (profile === null) {
       return;
     }
 
-    await this._savePostalCodes(
-      profile,
-      profile.postalCodes.filter((code) => code.id !== codeId)
-    );
+    await this._store.removePostalCode(profile.id, postalCode);
+  }
+
+  /**
+   * Open the sheet that asks the device (plan 0058, section 3).
+   *
+   * A child of this route by rule E1, addressed under the `sheet` marker like every
+   * other sheet in this app, and stamped by `sheetSegments` rather than typed out.
+   */
+  openLocation(): void {
+    void this._router.navigate(sheetSegments('location'), {
+      relativeTo: this._route,
+    });
   }
 
   /**
    * Include or exclude a chain.
    *
    * A chain with no preference row is included, so the first press on an untouched chain
-   * adds an excluded row and the next one removes it. Removing rather than flipping
-   * `excluded` back to false is deliberate: an included chain and a chain nobody has an
-   * opinion about are the same thing to the resolver, and keeping the row would leave
-   * the profile carrying a decision that was undone.
+   * adds an excluded row and the next one removes it. What that costs on the wire is
+   * `ShoppingProfileStore.setChainsExcluded`, which the supermarkets screen's brand
+   * control also calls: the rule about what an included chain looks like is written once,
+   * where both writers can reach it.
    */
   async toggleChain(supermarketId: string): Promise<void> {
     const profile = this.selected();
@@ -401,52 +412,7 @@ export class ProfilesPage {
       (chain) => chain.supermarketId === supermarketId && chain.excluded
     );
 
-    const next = excluded
-      ? profile.chains.filter((chain) => chain.supermarketId !== supermarketId)
-      : [
-          ...profile.chains.filter(
-            (chain) => chain.supermarketId !== supermarketId
-          ),
-          {
-            id: `pending-${supermarketId}`,
-            supermarketId,
-            excluded: true,
-          },
-        ];
-
-    await this._store.save(
-      profile.id,
-      'chains',
-      {
-        supermarkets: next.map((chain) => ({
-          supermarketId: chain.supermarketId,
-          excluded: chain.excluded,
-        })),
-      },
-      (current) => ({ ...current, chains: next })
-    );
-  }
-
-  private async _savePostalCodes(
-    profile: ShoppingProfile,
-    next: readonly {
-      readonly id: string;
-      readonly postalCode: string;
-      readonly label: string | null;
-      readonly position: number;
-    }[]
-  ): Promise<void> {
-    await this._store.save(
-      profile.id,
-      'postalCodes',
-      {
-        postalCodes: next.map((code) => ({
-          postalCode: code.postalCode,
-          label: code.label,
-        })),
-      },
-      (current) => ({ ...current, postalCodes: next })
-    );
+    await this._store.setChainsExcluded(profile.id, [supermarketId], !excluded);
   }
 }
 

@@ -132,6 +132,13 @@
       "options": {
         "command": "node apps/luna-shopper-backend/catalog/src/app/db/seed/cli.js"
       }
+    },
+    "seed:reference": {
+      "// ": "The normalized reference catalog (plan 0067): product groups, the two receipt-priced chains and their products. Separate from `seed`, which writes the demo world: this one never deletes and is safe to run against a database that already holds a harvest.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper-backend/catalog/src/app/db/reference/cli.js"
+      }
     }
   }
 }

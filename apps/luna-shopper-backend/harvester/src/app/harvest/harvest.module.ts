@@ -7,11 +7,14 @@ import { HARVESTER_ENTITIES } from '../entities';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
-import { HarvestController } from './harvest.controller';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
+import { HarvestController } from './harvest.controller';
 import { ItemSourceRefService } from './item-source-ref.service';
 import { PlatformAdminService } from './platform-admin.service';
+import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
+import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
+import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { RefreshRunner } from './refresh.runner';
 import { RunExecutor } from './run-executor.service';
 import { SourceEntryService } from './source-entry.service';
@@ -37,9 +40,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
         useFactory: (config: ConfigService) => ({
           transport: Transport.NATS,
           options: {
-            servers: [
-              config.getOrThrow<HarvesterConfig>('harvester').natsUrl,
-            ],
+            servers: [config.getOrThrow<HarvesterConfig>('harvester').natsUrl],
           },
         }),
       },
@@ -59,6 +60,9 @@ import { SupermarketSourceService } from './supermarket-source.service';
     DiscoveredPlaceService,
     SourceEntryService,
     ItemSourceRefService,
+    PostalCodeDiscoveryStore,
+    PostalCodeDiscoveryService,
+    PostalCodeDiscoveryWorker,
   ],
 })
 export class HarvestModule {}

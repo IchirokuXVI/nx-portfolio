@@ -32,6 +32,27 @@ export enum PriceScopeKind {
 }
 
 /**
+ * Where a location's postal code came from (plan 0061, section 5).
+ *
+ * Nullable on the row, alongside a null `postalCode`, so "we have no idea" stays
+ * expressible: a store whose nearest centroid is beyond the bound keeps both
+ * columns null rather than taking a confident wrong code.
+ *
+ * An enum rather than `isDerived: boolean` because `MANUAL` and `SOURCE` behave
+ * identically today and will not forever: a person correcting a bad OSM tag
+ * should not have their correction overwritten the next time that place is re
+ * discovered, and a boolean cannot express that.
+ */
+export enum PostalCodeSource {
+  /** The discovery source gave it, and a source value is never overridden. */
+  SOURCE = 'SOURCE',
+  /** The nearest centroid, within the bound. This is the review flag. */
+  DERIVED = 'DERIVED',
+  /** A person typed it, and it outranks a later re discovery. */
+  MANUAL = 'MANUAL',
+}
+
+/**
  * Where a stored price came from (plan 0038, section 5.3).
  *
  * It ships with backlog 0001's full value set even though only OFFICIAL_API and

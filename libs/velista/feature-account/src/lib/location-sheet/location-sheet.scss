@@ -1,0 +1,61 @@
+@use '../account-sheet';
+
+@include account-sheet.sheet-form;
+
+// A sentence about what happened, in the ordinary text colour: none of these states is
+// an error, and colouring them like one would tell somebody a refused permission was a
+// fault of theirs.
+.note {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// The answer, drawn as the thing being confirmed rather than as body copy: it is the
+// one piece of information on the sheet that a person has to read before pressing.
+.resolved {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  margin: 0 0 var(--app-space-5);
+  padding: var(--app-space-4) var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+}
+
+.resolved-label {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+// Tabular figures, so the code reads as a code rather than as a word.
+.resolved-code {
+  font-size: var(--app-text-xl);
+  font-weight: 650;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+// The whole row is the target, so the tap area is the option and not the box.
+.nearby {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  // On the label, because the checkbox inside it is the real control: `:focus-within`
+  // puts the ring around what a keyboard user is actually on.
+  &:focus-within {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

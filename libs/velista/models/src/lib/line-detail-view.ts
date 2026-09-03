@@ -98,6 +98,86 @@ export interface LineItemChipVm {
   readonly removable: boolean;
 }
 
+/** Who put a product on a line (backend plan 0070, section 3). */
+export type LineProductSource = 'group' | 'user';
+
+/**
+ * One product on the **line page**, with who put it there (velista plan 0065).
+ *
+ * A type of its own rather than two more fields on {@link LineItemChipVm},
+ * because the sheet draws that one and does not draw this (section 7): its chips
+ * are the settle choices, the answer to "which one did you get?", and provenance
+ * answers a question nobody is asking at the shelf.
+ */
+export interface LineProductChipVm extends LineItemChipVm {
+  readonly source: LineProductSource;
+  /**
+   * Whether the `Keep` control is offered on this chip (section 4).
+   *
+   * Only on a product the catalog put there, only where the reader may edit, and
+   * never while a write is in flight, which are the same three conditions
+   * {@link LineItemChipVm.removable} answers. It is **not** the same field: a
+   * product a person already owns is removable and has nothing to adopt.
+   */
+  readonly adoptable: boolean;
+}
+
+/**
+ * One labelled run of chips on the line page (velista plan 0065, section 2).
+ *
+ * Two clusters rather than a mark on every catalog added chip, because the most
+ * common case in the product is a line where **all** of them are: immediately
+ * after somebody picks Milk, a mark would be on all eleven and would distinguish
+ * nothing. A mark that is on everything is not a mark.
+ *
+ * When every product is one source there is one cluster, and its heading reads as
+ * a statement about the line rather than as a distinction drawn for its own sake.
+ */
+export interface LineProductClusterVm {
+  readonly source: LineProductSource;
+  /**
+   * The heading's translation key, already chosen.
+   *
+   * The named and unnamed group headings are two keys rather than one key with an
+   * empty argument: a group whose name did not resolve is owed `From a group`,
+   * never `From `, which is the rule the unnamed product chip already follows.
+   */
+  readonly headingKey: string;
+  /** What the heading interpolates. Empty for a heading that names nothing. */
+  readonly headingArgs: Readonly<Record<string, string>>;
+  readonly products: readonly LineProductChipVm[];
+}
+
+/**
+ * The product count against the cap, as the section heading says it (section 3.1).
+ *
+ * **Neither number is clamped**, and the flag is what a screen reads rather than
+ * comparing them itself. `0070` section 7.2 makes `104/100` a legitimate state:
+ * the catalog's sync ignores the cap so that a subscription does not silently stop
+ * working at a number nobody can see. Clamping to `100/100` would claim the line
+ * is exactly full when it is not, and would leave the refused add with no visible
+ * explanation.
+ */
+export interface LineProductCounterVm {
+  /** The **whole** set, both clusters, because the cap is on the whole set. */
+  readonly count: number;
+  readonly cap: number;
+  readonly overCap: boolean;
+}
+
+/**
+ * Why an add was refused before it was sent (velista plan 0065, section 3.3).
+ *
+ * The key and its arguments rather than a sentence, because this app formats in
+ * the selector and the translator is the only thing that interpolates. Two keys,
+ * because one product and a group are different sentences in every language and
+ * the group one carries a count the other does not have.
+ */
+export interface LineProductsFullVm {
+  readonly key: string;
+  readonly args: Readonly<Record<string, string | number>>;
+}
+
 /**
  * How often the household gets through this, when that can honestly be said.
  *
@@ -297,7 +377,36 @@ export interface LinePageVm {
   /** "on Weekly shop, in Flat 3B", as parts, so the copy can order them. */
   readonly listName: string | null;
   readonly zoneName: string | null;
-  readonly products: readonly LineItemChipVm[];
+  /**
+   * Every product on the line, in the order they were attached.
+   *
+   * Kept whole beside {@link clusters}, and it is what the template draws when
+   * there are no clusters to draw. The two are the same chips: a product is in
+   * exactly one cluster and appears once here.
+   */
+  readonly products: readonly LineProductChipVm[];
+  /**
+   * The products split by who put them there, or **null on a line that follows no
+   * group** (velista plan 0065, section 2).
+   *
+   * Null rather than one cluster with a heading, because that is every line
+   * `0048` ever created and a heading over the only run of chips there is would
+   * be a distinction drawn for its own sake. The headings appear exactly when
+   * there is something for them to tell apart, and nothing regresses for a line
+   * that follows nothing.
+   *
+   * Non-null it holds one or two clusters: a cluster with no products in it is
+   * omitted rather than drawn empty.
+   */
+  readonly clusters: readonly LineProductClusterVm[] | null;
+  /**
+   * The count against the cap, or null on a line with no products.
+   *
+   * **Always drawn once the line has any**, never only once it is close to full:
+   * a counter that appears at 90 teaches somebody that a limit exists at the exact
+   * moment the news is bad, which is the worst moment to introduce it.
+   */
+  readonly counter: LineProductCounterVm | null;
   /** Whether the product names could not be read, per `LineDetailVm.namesUnavailable`. */
   readonly namesUnavailable: boolean;
   readonly estimate: ConsumptionEstimateVm | null;

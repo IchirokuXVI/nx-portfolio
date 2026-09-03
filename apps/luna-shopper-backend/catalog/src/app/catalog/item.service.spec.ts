@@ -8,6 +8,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 import type { Item, ProductGroup, SupermarketItem } from '../entities';
+import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -50,14 +51,22 @@ function build(overrides: {
   const groups = {
     load: jest.fn(async (id: string) => ({ id }) as ProductGroup),
   } as unknown as jest.Mocked<ProductGroupService>;
+  // Plan 0070: a write that moves a product's group announces it. Fire and
+  // forget, so nothing here waits on it, but a spec that left it out would fail
+  // on the write rather than on what it is testing.
+  const events = {
+    itemGroupChanged: jest.fn(),
+    productGroupDeleted: jest.fn(),
+  } as unknown as jest.Mocked<CatalogEventsPublisher>;
   const service = new ItemService(
     overrides.items as Repository<Item>,
     {} as Repository<ProductGroup>,
     (overrides.prices ?? {}) as Repository<SupermarketItem>,
     groups,
-    admin
+    admin,
+    events
   );
-  return { service, admin, groups };
+  return { service, admin, groups, events };
 }
 
 describe('ItemService', () => {
@@ -141,6 +150,49 @@ describe('ItemService', () => {
     // column the query builder can order by.
     expect(items.query).toHaveBeenCalled();
     expect(items.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('a barcode query filters and ranks on ean, in that order', async () => {
+    const rows: Item[] = [];
+    const items = {
+      query: jest.fn(async () => rows),
+      createQueryBuilder: jest.fn(() => makeQb(rows)),
+    } as unknown as Repository<Item>;
+    const { service } = build({ items });
+
+    await service.search({ userId: 'reader', query: '8480000181077' });
+
+    const [sql, values] = (items.query as jest.Mock).mock.calls[0] as [
+      string,
+      unknown[],
+    ];
+    // Read the placeholder out of the SQL and then check what was bound to it,
+    // rather than searching the values for the digits: the raw term is the same
+    // string, so looking it up by value finds the trigram parameter instead.
+    const position = Number(/i\."ean" = \$(\d+)/.exec(sql)?.[1] ?? 0);
+    expect(position).toBeGreaterThan(0);
+    // Bound, never interpolated, like every other value in this query.
+    expect(values[position - 1]).toBe('8480000181077');
+    // First key of the ordering, so the scanned product cannot be pushed under a
+    // text hit that happened to score above the zero this query earns.
+    expect(sql).toContain(`ORDER BY (i."ean" = $${position}) DESC`);
+  });
+
+  it('leaves the ean test out when the query is words', async () => {
+    const rows: Item[] = [];
+    const items = {
+      query: jest.fn(async () => rows),
+      createQueryBuilder: jest.fn(() => makeQb(rows)),
+    } as unknown as Repository<Item>;
+    const { service } = build({ items });
+
+    await service.search({ userId: 'reader', query: 'leche' });
+
+    const [sql] = (items.query as jest.Mock).mock.calls[0] as [string];
+    expect(sql).not.toContain('i."ean" = $');
+    // And no ranking key standing in for it: Postgres refuses a constant in
+    // ORDER BY, which is what a `false` written there would be.
+    expect(sql).toContain('ORDER BY round(GREATEST(');
   });
 
   it('no query still lists, because the admin surface uses it that way', async () => {

@@ -1,4 +1,8 @@
-import { GenerationScope } from '@portfolio/luna-shopper/contracts';
+import type { ConfigService } from '@nestjs/config';
+import {
+  GenerationScope,
+  ProfilePostalCodeSource,
+} from '@portfolio/luna-shopper/contracts';
 import {
   describeIntegration,
   requiredEnv,
@@ -8,11 +12,13 @@ import { DataSource } from 'typeorm';
 import {
   CORE_ENTITIES,
   ProfileGenerationSource,
+  ProfileLocationPreference,
   ProfilePostalCode,
   ProfileSupermarketPreference,
   ShoppingProfile,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import type { PostalCodeClient } from './postal-code.client';
 import { ProfileService } from './profile.service';
 
 /**
@@ -20,7 +26,7 @@ import { ProfileService } from './profile.service';
  *
  * Three of this plan's rules are the database's and can only be proven here:
  *
- * - **the migration ran**, creating four tables and, crucially, the partial
+ * - **the migrations ran**, creating five tables and, crucially, the partial
  *   unique index that the rest depends on;
  * - **the lazy default is idempotent under concurrency**, which is the exit
  *   criterion phrased as "it survives being listed twice concurrently". A mocked
@@ -41,6 +47,30 @@ describeIntegration('shopping profiles (real Postgres)', () => {
     emitTo: jest.fn(),
   } as unknown as CoreEventsPublisher;
 
+  /**
+   * Catalog is not up here, and the neighbours it would answer are not what this
+   * file proves: the geography is arithmetic over a shipped table and is covered
+   * by `postal-code.service.spec.ts`. What this stub lets through is the half
+   * that is the database's — the columns, the enum type, the unique index the
+   * promotion in section 3.2 leans on, and the cascade.
+   */
+  const neighbours = new Map<string, string[]>();
+  const geography = {
+    nearby: jest.fn(async (_country: string, postalCode: string) =>
+      (neighbours.get(postalCode) ?? []).map((code, index) => ({
+        postalCode: code,
+        distanceMetres: (index + 1) * 100,
+      }))
+    ),
+    announceAdded: jest.fn(),
+  } as unknown as PostalCodeClient;
+
+  const config = {
+    getOrThrow: () => ({
+      nearbyRadius: { defaultMetres: 2000, byCountry: {} },
+    }),
+  } as unknown as ConfigService;
+
   /** A fresh user per test, so parallel runs and reruns never collide. */
   const newUser = () => randomUUID();
 
@@ -58,16 +88,24 @@ describeIntegration('shopping profiles (real Postgres)', () => {
       dataSource.getRepository(ShoppingProfile),
       dataSource.getRepository(ProfilePostalCode),
       dataSource.getRepository(ProfileSupermarketPreference),
+      dataSource.getRepository(ProfileLocationPreference),
       dataSource.getRepository(ProfileGenerationSource),
-      events
+      events,
+      geography,
+      config
     );
+  });
+
+  beforeEach(() => {
+    neighbours.clear();
+    jest.clearAllMocks();
   });
 
   afterAll(async () => {
     await dataSource?.destroy();
   });
 
-  it('has the four tables the migration creates', async () => {
+  it('has the five tables the migrations create', async () => {
     const rows = await dataSource.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`
     );
@@ -78,6 +116,8 @@ describeIntegration('shopping profiles (real Postgres)', () => {
       'shopping_profiles',
       'profile_postal_codes',
       'profile_supermarket_preferences',
+      // Plan 0064's, beside the chain preferences rather than instead of them.
+      'profile_location_preferences',
       'profile_generation_sources',
     ]) {
       expect(names.has(table)).toBe(true);
@@ -230,6 +270,11 @@ describeIntegration('shopping profiles (real Postgres)', () => {
       postalCodes: [{ postalCode: '41001' }],
       generationSources: [{ zoneId: randomUUID(), listId: null }],
     });
+    await profiles.setLocationPreferences({
+      userId,
+      profileId: extra.id,
+      locations: [{ supermarketLocationId: randomUUID(), excluded: true }],
+    });
 
     await profiles.delete({ userId, profileId: extra.id });
 
@@ -239,8 +284,14 @@ describeIntegration('shopping profiles (real Postgres)', () => {
     const sources = await dataSource
       .getRepository(ProfileGenerationSource)
       .count({ where: { profileId: extra.id } });
+    // Plan 0064's exit criterion, and only a real database can answer it: the
+    // cascade is a foreign key rather than anything the service does.
+    const shops = await dataSource
+      .getRepository(ProfileLocationPreference)
+      .count({ where: { profileId: extra.id } });
     expect(orphans).toBe(0);
     expect(sources).toBe(0);
+    expect(shops).toBe(0);
     // And the default is untouched, because it was not the one deleted.
     const left = await profiles.list({ userId });
     expect(left.profiles.map((row) => row.id)).toEqual([rows[0].id]);
@@ -295,5 +346,113 @@ describeIntegration('shopping profiles (real Postgres)', () => {
 
     const theirs = await profiles.list({ userId: stranger });
     expect(theirs.profiles.map((row) => row.id)).not.toContain(mine[0].id);
+  });
+
+  /**
+   * The database's half of plan 0062: the four columns, the enum type, and the
+   * unique index that turns "type a code we already derived" from a failed insert
+   * into a promotion. The recompute's arithmetic is unit tested; what needs real
+   * Postgres is that the constraint it relies on is the one that is actually
+   * there.
+   */
+  describe('a postal code brings its neighbours (plan 0062)', () => {
+    it('gave every existing row a source of TYPED and the flags off', async () => {
+      const columns = await dataSource.query(
+        `SELECT column_name, column_default, is_nullable
+           FROM information_schema.columns
+          WHERE table_name = 'profile_postal_codes'
+            AND column_name IN ('country', 'source', 'expandNearby', 'suppressed')`
+      );
+      expect(columns).toHaveLength(4);
+      for (const column of columns as { is_nullable: string }[]) {
+        expect(column.is_nullable).toBe('NO');
+      }
+      const source = (
+        columns as { column_name: string; column_default: string }[]
+      ).find((c) => c.column_name === 'source');
+      expect(source?.column_default).toContain('TYPED');
+    });
+
+    it('keeps the unique index that makes typing a derived code a promotion', async () => {
+      const indexes = await dataSource.query(
+        `SELECT indexdef FROM pg_indexes
+          WHERE tablename = 'profile_postal_codes'
+            AND indexname = 'uq_profile_postal_code'`
+      );
+      expect(indexes).toHaveLength(1);
+      expect(indexes[0].indexdef).toMatch(/UNIQUE/i);
+    });
+
+    it('writes the parent and its neighbours, then promotes one that is typed', async () => {
+      const userId = newUser();
+      const { profiles: rows } = await profiles.list({ userId });
+      neighbours.set('14010', ['14004', '14005']);
+
+      const widened = await profiles.addPostalCode({
+        userId,
+        profileId: rows[0].id,
+        postalCode: '14010',
+        expandNearby: true,
+      });
+      expect(
+        widened.postalCodes.map((row) => [row.postalCode, row.source])
+      ).toEqual([
+        ['14010', ProfilePostalCodeSource.TYPED],
+        ['14004', ProfilePostalCodeSource.NEARBY],
+        ['14005', ProfilePostalCodeSource.NEARBY],
+      ]);
+
+      // The insert would fail on `uq_profile_postal_code`, so this is the case
+      // section 3.2 says cannot be overlooked.
+      const promoted = await profiles.addPostalCode({
+        userId,
+        profileId: rows[0].id,
+        postalCode: '14004',
+      });
+      expect(
+        promoted.postalCodes.find((row) => row.postalCode === '14004')?.source
+      ).toBe(ProfilePostalCodeSource.TYPED);
+    });
+
+    it('suppresses a derived code and deletes it once its parent is gone', async () => {
+      const userId = newUser();
+      const { profiles: rows } = await profiles.list({ userId });
+      neighbours.set('14010', ['14004']);
+      await profiles.addPostalCode({
+        userId,
+        profileId: rows[0].id,
+        postalCode: '14010',
+        expandNearby: true,
+      });
+
+      const suppressed = await profiles.removePostalCode({
+        userId,
+        profileId: rows[0].id,
+        postalCode: '14004',
+      });
+      expect(suppressed.postalCodes.map((row) => row.postalCode)).toEqual([
+        '14010',
+      ]);
+      // Absent from the view and still a row, which is what stops the next
+      // recompute putting it back on screen.
+      const stored = await dataSource
+        .getRepository(ProfilePostalCode)
+        .find({ where: { profileId: rows[0].id } });
+      expect(stored.map((row) => row.postalCode).sort()).toEqual([
+        '14004',
+        '14010',
+      ]);
+
+      const emptied = await profiles.removePostalCode({
+        userId,
+        profileId: rows[0].id,
+        postalCode: '14010',
+      });
+      expect(emptied.postalCodes).toEqual([]);
+      const left = await dataSource
+        .getRepository(ProfilePostalCode)
+        .find({ where: { profileId: rows[0].id } });
+      expect(left).toEqual([]);
+    });
   });
 });

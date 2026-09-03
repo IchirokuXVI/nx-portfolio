@@ -37,8 +37,8 @@ metadata:
     app: {{ $pg.name }}-backup
     app.kubernetes.io/part-of: luna-shopper-backend
 spec:
-  # Staggered across the instances (17, 37, 57 past 02:00) so three dumps never
-  # contend for the single node at once.
+  # Staggered across the instances (17, 37 and 57 past 02:00, then 7 past 03:00
+  # for the harvester) so no two dumps contend for the single node at once.
   schedule: {{ $pg.backupSchedule | quote }}
   # A dump that is still running when the next window opens means something is
   # wrong; starting a second one alongside it makes it worse.

@@ -9,6 +9,7 @@ import {
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
+import { CATALOG_MIGRATIONS } from '../db/migrations';
 import {
   CATALOG_ENTITIES,
   Item,
@@ -17,7 +18,7 @@ import {
   Supermarket,
   SupermarketItem,
 } from '../entities';
-import { CATALOG_MIGRATIONS } from '../db/migrations';
+import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -42,6 +43,9 @@ import { ProductGroupService } from './product-group.service';
 const SCHEMA = 'plan0048_search_test';
 const OWNER = 'owner';
 const SHOPPER = 'shopper';
+
+/** A real EAN-13, on the Pascual carton the seed below creates. */
+const PASCUAL_EAN = '8480000181077';
 
 describeIntegration('catalog search (real Postgres)', () => {
   let dataSource: DataSource;
@@ -96,16 +100,25 @@ describeIntegration('catalog search (real Postgres)', () => {
     const admin = new PlatformAdminService({
       getOrThrow: () => ({ platformAdminUserIds: [OWNER] }),
     } as never);
+    // Plan 0070: a write that moves a product's group, or deletes one,
+    // announces it. Fire and forget and nothing here consumes it, but both
+    // services call it, so the double has to exist.
+    const events = {
+      itemGroupChanged: jest.fn(),
+      productGroupDeleted: jest.fn(),
+    } as unknown as CatalogEventsPublisher;
     groups = new ProductGroupService(
       dataSource.getRepository(ProductGroup),
-      admin
+      admin,
+      events
     );
     items = new ItemService(
       dataSource.getRepository(Item),
       dataSource.getRepository(ProductGroup),
       dataSource.getRepository(SupermarketItem),
       groups,
-      admin
+      admin,
+      events
     );
 
     await seed();
@@ -147,6 +160,9 @@ describeIntegration('catalog search (real Postgres)', () => {
       userId: OWNER,
       name: { en: 'Semi Skimmed 1L', es: 'Semidesnatada 1L' },
       brand: 'Pascual',
+      // The only carton with a barcode, so "finds the one carrying it" is a
+      // claim about the code and not about there being a single milk.
+      ean: PASCUAL_EAN,
       category: ItemCategory.DAIRY,
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: milkGroup.id,
@@ -299,6 +315,60 @@ describeIntegration('catalog search (real Postgres)', () => {
       }
     });
 
+    it('finds the product a whole barcode names', async () => {
+      // Nothing in any document holds these digits: the trigger builds the
+      // vectors from the name, the brand and the group's words. Before the `ean`
+      // test was added to the filter this answered with an empty page.
+      const page = await items.search({ userId: SHOPPER, query: PASCUAL_EAN });
+      expect(page.items.map((i) => i.id)).toEqual([ids.pascualMilk]);
+    });
+
+    it('finds it through the separators a printed code carries', async () => {
+      const page = await items.search({
+        userId: SHOPPER,
+        query: '8 480000 181077',
+      });
+      expect(page.items.map((i) => i.id)).toEqual([ids.pascualMilk]);
+    });
+
+    it('puts the scanned product above everything the digits also read as', async () => {
+      // A product actually named for the code, so the barcode row has to beat a
+      // genuine text hit rather than merely be present. The name is the only
+      // place these digits can be matched as words.
+      const impostor = await items.create({
+        userId: OWNER,
+        name: { en: PASCUAL_EAN, es: PASCUAL_EAN },
+        category: ItemCategory.OTHER,
+        defaultUnit: UnitOfMeasure.UNIT,
+      });
+
+      try {
+        const page = await items.search({
+          userId: SHOPPER,
+          query: PASCUAL_EAN,
+        });
+
+        // The impostor carries no barcode, and `NULL = '848…'` is NULL, which a
+        // descending sort puts first unless it is told otherwise. This asserts
+        // the `NULLS LAST` that stops every unbarcoded product outranking the
+        // one that was actually scanned.
+        expect(page.items[0]?.id).toBe(ids.pascualMilk);
+        expect(page.items.map((i) => i.id)).toContain(impostor.id);
+      } finally {
+        // In a `finally` so a failure above cannot leave a product named for a
+        // barcode behind for the tests that follow.
+        await items.delete({ userId: OWNER, itemId: impostor.id });
+      }
+    });
+
+    it('does not read a part of a code, or a quantity, as a barcode', async () => {
+      // Six digits is no barcode length, so this runs as text, and the carton
+      // carrying the code is not findable by part of it: nothing puts an `ean`
+      // into a search document.
+      const partial = await items.search({ userId: SHOPPER, query: '848000' });
+      expect(partial.items.map((i) => i.id)).not.toContain(ids.pascualMilk);
+    });
+
     it('still lists everything when no query is given (the admin surface)', async () => {
       const page = await items.search({ userId: SHOPPER });
       expect(page.items.length).toBeGreaterThanOrEqual(3);
@@ -347,10 +417,40 @@ describeIntegration('catalog search (real Postgres)', () => {
       expect(page.items[0].group.slug).toBe('bread');
       expect(page.items[0].cheapestItem).toBeNull();
       expect(page.items[0].offer).toBeNull();
+      // Unpriced and still choosable: the members are the point of the row.
+      expect(page.items[0].itemIds.length).toBeGreaterThan(0);
+    });
+
+    it('carries every member of the group, which choosing it copies onto a line', async () => {
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        query: 'leche',
+        priceScopeIds: [ids.scopeA],
+      });
+
+      // The whole membership, not just the cheapest one the offer names: picking
+      // a group in the composer copies its members onto the line (plan 0048,
+      // section 1.1), and the household trims the set afterwards.
+      expect([...page.items[0].itemIds].sort()).toEqual(
+        [ids.pascualMilk, ids.hacendadoMilk].sort()
+      );
+    });
+
+    it('carries the members with no scopes given, where nothing is priced', async () => {
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        query: 'leche',
+      });
+      expect([...page.items[0].itemIds].sort()).toEqual(
+        [ids.pascualMilk, ids.hacendadoMilk].sort()
+      );
     });
 
     it('works with no scopes at all, quoting nothing', async () => {
-      const page = await items.searchOffers({ userId: SHOPPER, query: 'leche' });
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        query: 'leche',
+      });
       expect(page.items.map((g) => g.group.id)).toEqual([ids.milkGroup]);
       expect(page.items[0].offer).toBeNull();
     });
@@ -362,6 +462,18 @@ describeIntegration('catalog search (real Postgres)', () => {
       });
       expect(page.items.map((g) => g.group.id)).toEqual([ids.milkGroup]);
     });
+
+    it('answers nothing for a barcode, which names a product and not a kind', async () => {
+      // The group of the scanned carton is deliberately absent. "A group beats
+      // an item for a bare word" is a rule about words, and somebody holding a
+      // barcode has already chosen which milk they mean, so the suggest endpoint
+      // draws that one product and no category above it.
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        query: PASCUAL_EAN,
+      });
+      expect(page.items).toHaveLength(0);
+    });
   });
 
   describe('the triggers keep the documents current', () => {
@@ -369,7 +481,10 @@ describeIntegration('catalog search (real Postgres)', () => {
       // Nothing about the items changed, and both of them have to become
       // findable by a word that did not exist a moment ago. This is the second
       // trigger, and the reason the vectors are columns rather than generated.
-      const before = await items.search({ userId: SHOPPER, query: 'mantequilla' });
+      const before = await items.search({
+        userId: SHOPPER,
+        query: 'mantequilla',
+      });
       expect(before.items).toHaveLength(0);
 
       await groups.update({
@@ -378,7 +493,10 @@ describeIntegration('catalog search (real Postgres)', () => {
         synonyms: { en: ['milk'], es: ['leche', 'lácteo', 'mantequilla'] },
       });
 
-      const after = await items.search({ userId: SHOPPER, query: 'mantequilla' });
+      const after = await items.search({
+        userId: SHOPPER,
+        query: 'mantequilla',
+      });
       expect(after.items.map((i) => i.id).sort()).toEqual(
         [ids.pascualMilk, ids.hacendadoMilk].sort()
       );

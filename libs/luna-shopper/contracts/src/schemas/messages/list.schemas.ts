@@ -1,6 +1,7 @@
 import {
   COMMENT_PATTERNS,
   LINE_BATCH_MAX_ITEMS,
+  LINE_ITEM_SET_CEILING,
   LINE_ITEM_SET_MAX,
   LINE_PATTERNS,
   LINE_QUANTITY_MAX,
@@ -145,6 +146,13 @@ const lineView = object(
     // both honest when empty: `[]` and `null` say "this is a free text line".
     itemIds: array(nonEmptyString()),
     itemSetHash: nullableString(),
+    // The subscription, and the part of the set it accounts for (plan 0070,
+    // section 9). Both required for the reason the indicators below are: an
+    // absent `groupItemIds` would make "nothing on this line came from a group"
+    // indistinguishable from "this build of the server does not say", and velista
+    // `0065` draws a different row for each.
+    productGroupId: nullableString(),
+    groupItemIds: array(nonEmptyString()),
     position: integer(),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
     createdByUserId: nonEmptyString(),
@@ -176,6 +184,8 @@ const lineView = object(
     'quantity',
     'itemIds',
     'itemSetHash',
+    'productGroupId',
+    'groupItemIds',
     'position',
     'approvalStatus',
     'createdByUserId',
@@ -404,7 +414,13 @@ const addLineRequest = object(
     }),
     // The line's product set (plan 0048, section 1.1). Absent or empty is a free
     // text line, which is deliberately still the ordinary case.
+    //
+    // The cap is the right one here and stays: a new line starts empty, so
+    // `max(LINE_ITEM_SET_MAX, 0)` is the cap itself (plan 0070, section 7.2).
     itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
+    // Which group the set came from, subscribing the new line to it (plan 0070,
+    // section 9). The set is taken as sent and never re-derived from the group.
+    productGroupId: nonEmptyString(),
   },
   ['userId', 'listId', 'content']
 );
@@ -457,7 +473,20 @@ const updateLineRequest = object(
       maximum: LINE_QUANTITY_MAX,
     }),
     // Replace the line's product set (plan 0048, section 1.1); `[]` clears it.
-    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
+    //
+    // The **ceiling** and not the cap (plan 0070, section 7.2). A subscribed line
+    // can pass the cap as its group grows, and stating the cap here would 400 the
+    // request that shrinks it back: the real rule is
+    // `max(LINE_ITEM_SET_MAX, current.length)` and only core can see the second
+    // half of it.
+    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_CEILING },
+    // The adoption gesture (plan 0070, section 9): move these from `GROUP` to
+    // `USER` without otherwise changing the set. Bounded by the ceiling for the
+    // same reason, because adopting a whole over cap line is one request.
+    adoptItemIds: {
+      ...array(nonEmptyString()),
+      maxItems: LINE_ITEM_SET_CEILING,
+    },
   },
   ['userId', 'lineId']
 );

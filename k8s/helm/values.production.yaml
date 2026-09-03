@@ -105,21 +105,55 @@ lunaShopperBackend:
     # page exists. Nothing sends a reset mail from this cluster today.
     mailResetBaseUrl: https://velista.app/reset-password
 
-  # The harvester (plan 0038) is NOT deployed to production, and this line is here
-  # to say so out loud rather than to change anything: `harvester.enabled` is
-  # already false in values.yaml.
+  # The harvester (plan 0038) is not deployed to production YET, and "yet" is the
+  # whole content of this line: k8s plan 0008 turns it on for store discovery, and
+  # it says staging goes first and production follows only after a soak long
+  # enough to see real traffic, not on the same day. Staging has it. This is the
+  # flag that follows.
   #
-  # The reason is capacity, not caution. A catalog discovery run is 4,383 HTTP
-  # requests over eighteen minutes at the default rate, and running it costs a
-  # third Postgres with its own 2Gi volume plus a sixth Node process on a VPS
-  # whose Postgres instances are capped at 256Mi each. The development machine has
-  # room for that and this node does not, so the harvester runs locally against
-  # the compose stack and writes its results to the local catalog.
+  # The old reason was capacity, and it came apart into two halves. The fetching
+  # half is gone for this workload: a catalog discovery run is 4,383 HTTP requests
+  # over eighteen minutes, but a STORE_DISCOVERY run is two, one geocode and one
+  # Overpass query, once per postal code per thirty day cooldown. The resident
+  # half stands and is what production would be paying: a FOURTH Postgres (auth,
+  # core and catalog come first, and this file used to miscount it as the third)
+  # with its own 2Gi volume on a node whose Postgres instances are capped at 256Mi
+  # each, plus another Node process at roughly 230 MB. Section 5 of that plan
+  # sizes it: store discovery writes tens of thousands of small rows, which is
+  # comfortable inside both numbers.
   #
-  # Nothing about that is provisional: the chart describes the harvester fully, so
-  # the files do not drift, and turning it on here later is this flag plus the two
-  # Secret keys provision-release.sh already knows how to write.
+  # TO FOLLOW STAGING, once the soak has shown real profile edits producing runs:
+  # set `enabled` and `harvestEnabled` true here, and leave `mercadonaEnabled`
+  # alone. That third switch is a separate decision about one storefront, and
+  # store discovery never touches one. Then run
+  # `k8s/bootstrap/provision-release.sh --check --env production` BEFORE the
+  # deploy: it renders the chart and asserts every secretKeyRef exists, which is
+  # exactly the failure a newly enabled service introduces. The two keys it needs
+  # (HARVESTER_DB_URL and the harvester-db instance secret) are already written
+  # unconditionally, so --check should pass on the first try; if it does not, that
+  # is the answer arriving in seconds instead of at rollout.
+  #
+  # The nightly backup of the harvester's database is not optional when that
+  # happens. Its places are regenerable and its import decisions are not: see the
+  # note beside `backupSchedule` in values.yaml.
   harvester:
+    enabled: false
+
+  # The reference catalog, off (plan 0067), and this is a deliberate difference
+  # from staging rather than an oversight.
+  #
+  # It is meant to be production's starting catalog, so this gets turned on
+  # once — but the Job runs on `pre-upgrade`, which fires on every deploy, and a
+  # standing job that rewrites catalog rows each time a micro-frontend ships is
+  # not something to inherit without deciding. The seed is idempotent and
+  # preserves hand-entered prices, so a re-run is not destructive; it is simply
+  # not free, and not automatic.
+  #
+  # Section 8 of plan 0067 is the ordered procedure. In short: staging first,
+  # then set this true, deploy, verify, set it false again. If the full Mercadona
+  # assortment is going too, restore the dump BEFORE the seed, never after —
+  # `uq_items_ean` will refuse the second writer.
+  referenceSeed:
     enabled: false
 
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds

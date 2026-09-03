@@ -91,19 +91,28 @@
             <!--
               `=== 0` and never a falsy check. `undefined` means the count has not
               arrived and still renders nothing; `0` means the list is empty and says
-              so, because "0 of 0 ready" is a sentence about progress through a shop
+              so, because "0 of 0 pending" is a sentence about progress through a shop
               nobody has described yet (plan 0019, section 3).
+
+              A list with lines but nothing wanted is shopped rather than empty, and
+              gets its own sentence one branch below (plan 0060, section 3.1).
             -->
             @if (list.lineCount === 0) {
               <span class="list-progress">{{
                 'list.empty.short' | rokuT
               }}</span>
             } @else if (
+              list.lineCount !== undefined && list.wantedCount === 0
+            ) {
+              <span class="list-progress">{{
+                'home.progress.done' | rokuT
+              }}</span>
+            } @else if (
               list.wantedCount !== undefined && list.lineCount !== undefined
             ) {
               <span class="list-progress">{{
-                'home.progress.ready'
-                  | rokuT: { ready: list.wantedCount, total: list.lineCount }
+                'home.progress.pending'
+                  | rokuT: { pending: list.wantedCount, total: list.lineCount }
               }}</span>
             } @else if (list.lineCount !== undefined) {
               <span class="list-meta">{{

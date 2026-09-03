@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GeneratedLineOrigin,
+  isLiveGeneratedList,
   RealtimeEvent,
   type AddGeneratedListLineRequest,
   type GeneratedListLineIdRequest,
@@ -12,6 +13,7 @@ import {
   type UpdateGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  GeneratedListFinishedException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -37,6 +39,24 @@ import { LineClaimService } from './line-claim.service';
 
 /** Answered for a line that is not on the basket the request named. */
 const NO_SUCH_LINE = 'Generated list line not found';
+
+/**
+ * A finished basket refuses every write, the owner's included (plan 0059,
+ * section 3.2). The owner's remedy is to unfinish it, which is one write and is
+ * already built, rather than a special case that lets a finished trip be edited
+ * while everybody else looks at a screen that disagrees with itself.
+ *
+ * Checked on the row the caller already holds, never re-read: every write here
+ * loads the basket first, and a helper that fetched it again would add a query
+ * per write to save three lines.
+ */
+function requireLive(list: GeneratedList): void {
+  if (!isLiveGeneratedList(list.status)) {
+    throw new GeneratedListFinishedException(
+      'This basket is finished, so its lines cannot be edited'
+    );
+  }
+}
 
 /**
  * What a write back created: the zone line, the zone it landed in, and what it
@@ -119,6 +139,7 @@ export class GeneratedListLineService {
       req.userId,
       req.generatedListId
     );
+    requireLive(list);
     const content = checkContent(req.content);
     const quantity = checkQuantity(req.quantity ?? 1);
     const target =
@@ -183,6 +204,7 @@ export class GeneratedListLineService {
       req.userId,
       req.generatedListId
     );
+    requireLive(list);
     const line = await this.loadLine(list.id, req.lineId);
 
     if (req.content !== undefined) {
@@ -228,6 +250,7 @@ export class GeneratedListLineService {
       req.userId,
       req.generatedListId
     );
+    requireLive(list);
     const line = await this.loadLine(list.id, req.lineId);
     // Read before the delete, because the provenance rows cascade with it (plan
     // 0052, section 3.3). Taking a line out of the basket is the "I decided not
@@ -253,6 +276,7 @@ export class GeneratedListLineService {
       req.userId,
       req.generatedListId
     );
+    requireLive(list);
     const lines = await this.lines.find({
       where: { generatedListId: list.id },
     });
@@ -333,7 +357,7 @@ export class GeneratedListLineService {
       listId: targetListId,
       content: line.content,
       quantity,
-      itemIds: line.itemId ? [line.itemId] : [],
+      itemIds: await this.promotedItemIds(line),
     });
     const list = await this.listAccess.getList(targetListId);
 
@@ -358,6 +382,48 @@ export class GeneratedListLineService {
     );
 
     return { line: created, zoneId: list.zoneId, quantity };
+  }
+
+  /**
+   * The products a promoted line names (plan 0065).
+   *
+   * A basket line's product identity is two fields, not one: the pick, which is
+   * the single product somebody means to buy today, and the option rows behind
+   * it, which are what the line is **about**. A zone line's `itemIds` is a set
+   * of candidates (plan 0007, a household wants milk rather than a SKU), which
+   * is the same concept under another name in another service, so the promotion
+   * carries the whole set rather than the pick alone.
+   *
+   * The pick leads where there is one, and that ordering is load bearing rather
+   * than decorative: `GeneratedListService.resolvePick` takes `options[0]` when
+   * a later run composes a basket from this list, so leading with the pick is
+   * what makes the next trip default to the product this trip actually bought.
+   *
+   * The case this exists for is the ordinary one. A group suggestion attaches
+   * its whole member set as options and leaves the pick null on purpose (plan
+   * 0055, section 3), so that the row can still ask "which one did you get?" at
+   * the shelf, and the dropdown leads with groups. Such a line used to reach a
+   * household's list naming no product at all, which the client draws as `Not
+   * linked to a product`. A line carrying a pick and no options is the shape
+   * everything promoted before this plan, and it still promotes naming that one
+   * product.
+   *
+   * There is no truncation branch and none should be invented: a basket line
+   * holds at most `GENERATED_LIST_LIMITS.maxOptions`, which is 50, and a zone
+   * line accepts `LINE_ITEM_SET_MAX`, which is 100, so the smaller cap always
+   * fits inside the larger. Dropping products from a household's list with
+   * nothing to say about it is not something this may do.
+   */
+  private async promotedItemIds(line: GeneratedListLine): Promise<string[]> {
+    const options = await this.options.find({
+      where: { generatedListLineId: line.id },
+      order: { position: 'ASC' },
+    });
+    const itemIds = options.map((option) => option.itemId);
+    if (!line.itemId) {
+      return itemIds;
+    }
+    return [line.itemId, ...itemIds.filter((itemId) => itemId !== line.itemId)];
   }
 
   /**

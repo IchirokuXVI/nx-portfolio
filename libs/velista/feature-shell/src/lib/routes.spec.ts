@@ -596,9 +596,12 @@ describe('AppShellRoutes', () => {
       expect(profiles?.canMatch).toBeUndefined();
     });
 
-    it('offers the delete confirm as a sheet over it', () => {
+    it('offers the delete confirm and the location ask as sheets over it', () => {
       expect(profiles?.children?.map((route) => route.path)).toEqual([
         'sheet/confirm/delete',
+        // Plan 0058, section 3: the permission prompt is raised from inside a sheet
+        // that has already said what it is for, and `sheet()` stamped the marker.
+        'sheet/location',
       ]);
     });
 
@@ -608,6 +611,51 @@ describe('AppShellRoutes', () => {
       expect(added.every((route) => route?.loadComponent !== undefined)).toBe(
         true
       );
+    });
+  });
+
+  describe('the supermarkets page (plan 0059)', () => {
+    const path = 'account/profiles/:profileId/supermarkets';
+    const supermarkets = pages.find((route) => route.path === path);
+
+    it('is a page of its own, not a child of the profiles page', () => {
+      // The profiles page renders its children into a sheet outlet at the bottom of its
+      // own scroll, so a child here would draw a whole page under the profile rows
+      // rather than instead of them.
+      const profiles = pages.find((route) => route.path === 'account/profiles');
+
+      expect(supermarkets).toBeDefined();
+      expect(profiles?.children?.map((route) => route.path)).not.toContain(
+        ':profileId/supermarkets'
+      );
+    });
+
+    it('is declared before `account/profiles`, whose prefix it shares', () => {
+      // The router would backtrack to it anyway once the profiles page's sheet children
+      // declined the remainder. Stating the order makes the match a decision rather than
+      // a piece of luck about how backtracking works.
+      const paths = pages.map((route) => route.path);
+
+      expect(paths.indexOf(path)).toBeLessThan(
+        paths.indexOf('account/profiles')
+      );
+      expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('names the profile in the URL', () => {
+      // Deep linkable, so the profile cannot come from a store's selection: a link
+      // opened cold has nothing selected.
+      expect(path).toContain(':profileId');
+    });
+
+    it('is authenticated, and guarded by nothing else', () => {
+      expect(supermarkets?.canActivate).toHaveLength(1);
+      expect(supermarkets?.canMatch).toBeUndefined();
+    });
+
+    it('draws no sheet of its own, and stays lazy', () => {
+      expect(supermarkets?.children).toBeUndefined();
+      expect(supermarkets?.loadComponent).toBeDefined();
     });
   });
 
@@ -803,12 +851,12 @@ describe('the sheets and their exit animation', () => {
   const sheets = all.filter(({ route }) => isSheet(route));
 
   it('addresses every sheet in the table, so none has quietly been lost', () => {
-    // Twenty six entries rather than twenty sheets: the entry pair, Get shopping
+    // Twenty seven entries rather than twenty one sheets: the entry pair, Get shopping
     // list and the three confirms are each declared over more than one page, because
     // a sheet has to cover the page it was opened from. A count rather than a list of
     // paths: it fails when a sheet is deleted or stops being addressed as one, and
     // needs no edit here when a page gains a sheet it already had elsewhere.
-    expect(sheets).toHaveLength(26);
+    expect(sheets).toHaveLength(27);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

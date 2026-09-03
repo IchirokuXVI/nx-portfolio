@@ -1,4 +1,6 @@
 import { InitialHarvesterSchema1756200000000 } from './1756200000000-InitialHarvesterSchema';
+import { DiscoveredPlaceCountry1756300000000 } from './1756300000000-DiscoveredPlaceCountry';
+import { PostalCodeDiscoveryRequests1756400000000 } from './1756400000000-PostalCodeDiscoveryRequests';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -8,4 +10,8 @@ import { InitialHarvesterSchema1756200000000 } from './1756200000000-InitialHarv
  * bundled `migrate.js` the deploy Job runs would otherwise find zero migrations
  * and report success without creating anything.
  */
-export const HARVESTER_MIGRATIONS = [InitialHarvesterSchema1756200000000];
+export const HARVESTER_MIGRATIONS = [
+  InitialHarvesterSchema1756200000000,
+  DiscoveredPlaceCountry1756300000000,
+  PostalCodeDiscoveryRequests1756400000000,
+];

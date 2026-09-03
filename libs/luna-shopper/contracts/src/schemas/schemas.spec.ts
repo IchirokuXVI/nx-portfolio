@@ -1,8 +1,10 @@
 import { IDENTITY_EVENTS } from '../lib/events/identity.events';
+import { POSTAL_CODE_EVENTS } from '../lib/events/postal-code.events';
 import { RealtimeEvent } from '../lib/events/realtime.events';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ITEM_PATTERNS,
+  POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
@@ -13,6 +15,7 @@ import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   ITEM_SOURCE_REF_PATTERNS,
+  POSTAL_CODE_DISCOVERY_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
 } from '../lib/messages/harvest.messages';
@@ -63,11 +66,13 @@ describe('contract schemas', () => {
       ...Object.values(SUPERMARKET_ITEM_PATTERNS),
       ...Object.values(SUPERMARKET_LOCATION_ITEM_PATTERNS),
       ...Object.values(PRICE_SCOPE_PATTERNS),
+      ...Object.values(POSTAL_CODE_PATTERNS),
       ...Object.values(HARVEST_PATTERNS),
       ...Object.values(DISCOVERED_PLACE_PATTERNS),
       ...Object.values(ITEM_SOURCE_REF_PATTERNS),
       ...Object.values(SOURCE_ENTRY_PATTERNS),
       ...Object.values(SUPERMARKET_SOURCE_PATTERNS),
+      ...Object.values(POSTAL_CODE_DISCOVERY_PATTERNS),
       ...Object.values(STATS_PATTERNS),
     ];
 
@@ -84,6 +89,7 @@ describe('contract schemas', () => {
     const allEventNames = [
       ...Object.values(IDENTITY_EVENTS),
       ...Object.values(RealtimeEvent),
+      ...Object.values(POSTAL_CODE_EVENTS),
     ];
 
     it.each(allEventNames)('has a payload schema for event %s', (event) => {
@@ -259,6 +265,10 @@ describe('contract schemas', () => {
           // null hash, both stated rather than left out (plan 0048, 1.1).
           itemIds: [],
           itemSetHash: null,
+          // Subscribed to nothing, stated rather than left out for the same
+          // reason (plan 0070, section 9): a hand made line says so.
+          productGroupId: null,
+          groupItemIds: [],
           position: 1,
           approvalStatus: 'PENDING',
           createdByUserId: 'u',
@@ -292,6 +302,11 @@ describe('contract schemas', () => {
             quantity: 0,
             itemIds: ['3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13'],
             itemSetHash: 'h',
+            // Subscribed to Milk, and the one product on it is still the
+            // group's: nobody has adopted it, so a sync still looks after it
+            // (plan 0070, section 9).
+            productGroupId: '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f52',
+            groupItemIds: ['3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13'],
             position: 1,
             approvalStatus: 'APPROVED',
             createdByUserId: 'u',
@@ -463,6 +478,55 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
+    it('catalog.itemGroupChanged, with a null on each end (plan 0070)', () => {
+      // A move between two groups, a join, and a departure. All three are one
+      // event shape, and both ends are **null** rather than absent when the
+      // product belongs to no group: an absent field would leave the consumer
+      // guessing which half of the sync to run.
+      expect(
+        validateEvent('catalog.itemGroupChanged', {
+          eventId: 'e1',
+          itemId: 'i1',
+          from: 'g-old',
+          to: 'g-new',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateEvent('catalog.itemGroupChanged', {
+          eventId: 'e2',
+          itemId: 'i1',
+          from: null,
+          to: 'g-new',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateEvent('catalog.itemGroupChanged', {
+          eventId: 'e3',
+          itemId: 'i1',
+          from: 'g-old',
+          to: null,
+        }).valid
+      ).toBe(true);
+      // Without the event id there is nothing for the consumer's inbox to
+      // dedupe on, which is the whole of its at least once protection.
+      expect(
+        validateEvent('catalog.itemGroupChanged', {
+          itemId: 'i1',
+          from: null,
+          to: 'g-new',
+        }).valid
+      ).toBe(false);
+    });
+
+    it('catalog.productGroupDeleted (plan 0070, section 5)', () => {
+      expect(
+        validateEvent('catalog.productGroupDeleted', {
+          eventId: 'e1',
+          productGroupId: 'g1',
+        }).valid
+      ).toBe(true);
+    });
+
     it('user.deleted event and auth.deleteAccount response (plan 0011)', () => {
       expect(validateEvent('user.deleted', { userId: 'u' }).valid).toBe(true);
       expect(
@@ -575,11 +639,39 @@ describe('contract schemas', () => {
               },
               cheapestItem: null,
               offer: null,
+              // Unpriced and still worth choosing: the members are what the
+              // composer attaches, and they exist whether or not anybody has a
+              // price for them.
+              itemIds: ['i1', 'i2'],
             },
           ],
           nextCursor: null,
         }).valid
       ).toBe(true);
+    });
+
+    it('item.searchOffers must say which products a group holds (plan 0048, section 1.1)', () => {
+      // Required rather than optional, because the client's whole use of a group
+      // suggestion is the set: a response without it produces a row that offers
+      // to add zero products and a line with none attached.
+      expect(
+        validateMessageResponse('item.searchOffers', {
+          items: [
+            {
+              group: {
+                id: 'g',
+                name: { en: 'Milk', es: 'Leche' },
+                slug: 'milk',
+                referenceUnit: 'LITER',
+                synonyms: { en: ['milk'], es: ['leche'] },
+              },
+              cheapestItem: null,
+              offer: null,
+            },
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(false);
     });
 
     it('item.searchOffers takes scopes, and takes none (plan 0048, section 3.1)', () => {

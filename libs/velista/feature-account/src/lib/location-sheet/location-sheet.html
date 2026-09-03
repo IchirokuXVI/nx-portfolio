@@ -1,0 +1,154 @@
+<!--
+  `dismissible` is false only while a request is out, which is the one state where
+  closing is genuinely wrong: the write has already gone, and dismissing would leave the
+  person unable to see what happened to it.
+-->
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!busy()"
+  #shell
+  labelledBy="profiles-location-title"
+>
+  <h2 class="title" id="profiles-location-title">
+    {{ 'profiles.location.title' | rokuT }}
+  </h2>
+
+  <!--
+    Said before the press and true because of it: the point is turned into a postal code
+    and nothing keeps the point (section 3.3). It stays on screen through every state,
+    because it is the terms of the whole exchange rather than a caption on one step.
+  -->
+  <p class="body">{{ 'profiles.location.explain' | rokuT }}</p>
+
+  @switch (state()) {
+    @case ('refused') {
+      <!--
+        Sticky, and nothing this app does can change it: the browser will not prompt
+        again. So the copy says so plainly and hands over to typing, which is a complete
+        path and not a consolation (section 3.4).
+      -->
+      <p class="note" role="status">
+        {{ 'profiles.location.refused' | rokuT }}
+      </p>
+      <button (click)="shell.requestDismiss()" class="primary" type="button">
+        {{ 'profiles.location.typeInstead' | rokuT }}
+      </button>
+    }
+
+    @case ('unplaceable') {
+      <!--
+        The server holds centroids rather than boundaries and declined to guess across
+        the distance. Worth saying as its own sentence: it is about where the person is,
+        not about anything being broken, and unlike a failure it is not worth retrying.
+      -->
+      <p class="note" role="status">
+        {{ 'profiles.location.unplaceable' | rokuT }}
+      </p>
+      <button (click)="shell.requestDismiss()" class="primary" type="button">
+        {{ 'profiles.location.typeInstead' | rokuT }}
+      </button>
+    }
+
+    @case ('resolved') {
+      <!--
+        Announced, because somebody who cannot see the code needs to know what they are
+        confirming before they press (section 7). The region is here rather than around
+        the whole sheet so that it holds one sentence and gains its text once.
+      -->
+      <p class="resolved" role="status">
+        <span class="resolved-label">
+          {{ 'profiles.location.resolved' | rokuT }}
+        </span>
+        <span class="resolved-code">{{ resolved() }}</span>
+      </p>
+
+      <!--
+        Ticked by default here and unticked on the page's own add control, which is the
+        asymmetry section 5 asks for: somebody who has just handed over their location
+        has asked to be found.
+      -->
+      <label class="nearby">
+        <input
+          (change)="toggleNearby($event)"
+          [checked]="expandNearby()"
+          type="checkbox"
+        />
+        <span>{{ 'profiles.postal.nearby' | rokuT }}</span>
+      </label>
+
+      <button
+        (click)="confirm()"
+        [attr.aria-busy]="busy()"
+        [disabled]="busy()"
+        class="primary"
+        type="button"
+      >
+        @if (busy()) {
+          <lib-spinner-icon class="spinning" />
+        }
+        <span>{{ 'profiles.location.confirm' | rokuT }}</span>
+      </button>
+    }
+
+    @case ('saving') {
+      <p class="resolved" role="status">
+        <span class="resolved-label">
+          {{ 'profiles.location.resolved' | rokuT }}
+        </span>
+        <span class="resolved-code">{{ resolved() }}</span>
+      </p>
+
+      <button [attr.aria-busy]="true" class="primary" disabled type="button">
+        <lib-spinner-icon class="spinning" />
+        <span>{{ 'profiles.location.confirm' | rokuT }}</span>
+      </button>
+    }
+
+    @default {
+      <!--
+        The failure states share this branch with the first offer, because what they
+        need is the same button: they are all "we could not, try". Only the sentence
+        above it differs, and `unavailable` and `failed` each get their own.
+      -->
+      @if (state() === 'unavailable') {
+        <p class="note" role="status">
+          {{ 'profiles.location.unavailable' | rokuT }}
+        </p>
+      }
+      @if (state() === 'failed') {
+        <p class="error" role="alert">
+          {{ 'profiles.location.failed' | rokuT }}
+        </p>
+      }
+
+      <!--
+        The label names the outcome rather than the mechanism, and it is a button with
+        words rather than a pin glyph (section 7). This press is what raises the
+        browser's own dialog, and nothing before it does.
+      -->
+      <button
+        (click)="locate()"
+        [attr.aria-busy]="busy()"
+        [disabled]="busy()"
+        class="primary"
+        type="button"
+      >
+        @if (busy()) {
+          <lib-spinner-icon class="spinning" />
+        }
+        <span>{{ 'profiles.location.use' | rokuT }}</span>
+      </button>
+    }
+  }
+
+  <!--
+    Through the shell rather than emitting straight out, so Cancel plays the same fall
+    the scrim and Escape do. Cancelling from the confirm step writes nothing, which is
+    what makes showing the code before adopting it worth anything.
+  -->
+  @if (!busy()) {
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'entry.cancel' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

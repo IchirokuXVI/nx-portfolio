@@ -5,7 +5,7 @@ import type {
   ParticipantKind,
 } from '../enums/generated-list.enums';
 import type { SettlementOutcome } from '../enums/list.enums';
-import type { ItemView } from './catalog.messages';
+import type { ItemView, LocalizedText } from './catalog.messages';
 import type {
   GeneratedListLineOriginView,
   GeneratedListSourceSnapshot,
@@ -1053,8 +1053,58 @@ export interface GeneratedListSourceName {
  * caption rather than treating the page as broken.
  */
 export interface GeneratedListBasketResult extends GeneratedListBasketView {
-  /** Every product named by a line's pick or its options, deduplicated. */
+  /**
+   * Every product named by a line's pick or its options, deduplicated.
+   *
+   * Since plan 0066 each carries `bestOffer`, the cheapest price at the scopes
+   * the run's profile resolves to, and null wherever nothing was harvested at
+   * them. The scope is the **run's** and never the reader's: a registered
+   * participant's own profile is refused as firmly as a guest's absent one.
+   */
   products: ItemView[];
+  /**
+   * What each scope an offer names **is**: one entry per scope id that appears
+   * on any `bestOffer` above, and no others (plan 0066, section 4).
+   *
+   * A price scope is the set of stores a chain charges the same in. It is the
+   * right key for a price and not something to show a person, so this is how
+   * "0.95 EUR at scope 3f2a…" becomes "0.95 EUR at Mercadona, Ronda de los
+   * Tejares". Empty when nothing is priced, and empty too when the gateway could
+   * not name the scopes it priced against: a price with no place is a smaller
+   * answer, and the client draws it as one.
+   */
+  scopes: BasketPriceScopeView[];
+}
+
+/**
+ * One price scope, described for a person (plan 0066, section 4).
+ *
+ * The chain reaches every participant, guests included, because a chain's name
+ * is a product fact of the same class as the price it explains. The **shops**
+ * reach only a reader who passes the all or nothing rule (section 5): a street
+ * address is the owner's geography, and it is an empty array for everybody
+ * else, which is the same shape a scope whose stores we cannot place answers
+ * with. There is deliberately no third state for the client to branch on.
+ */
+export interface BasketPriceScopeView {
+  priceScopeId: string;
+  supermarketId: string;
+  /** The chain, both locales, resolved by the client. */
+  supermarketName: LocalizedText;
+  /**
+   * The shops of this scope. Empty for a reader the server withheld them from,
+   * and empty for a scope catalog cannot place; both draw the chain alone.
+   */
+  locations: BasketScopeLocationView[];
+}
+
+/** One shop of a scope, as much of it as the pick sheet draws. */
+export interface BasketScopeLocationView {
+  supermarketLocationId: string;
+  label: LocalizedText | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
 }
 
 /**

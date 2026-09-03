@@ -1,0 +1,58 @@
+@for (group of groups(); track group.key) {
+  <section class="group">
+    @if (grouped()) {
+      <!--
+        A real heading, so the postal code structure is navigable rather than only
+        visible (section 7). `h3`, because the page's title is `h1` and the franchise
+        section it sits inside is `h2`.
+      -->
+      <h3 class="heading">
+        <span>{{ group.heading }}</span>
+        @if (group.code !== null) {
+          <span class="code">{{ group.code }}</span>
+        }
+      </h3>
+    }
+
+    <div class="card">
+      @for (shop of group.shops; track shop.id) {
+        <label
+          [class.excluded]="shop.excluded || shop.excludedChain"
+          class="row"
+        >
+          <input
+            (change)="toggle.emit(shop.id)"
+            [checked]="!shop.excluded && !shop.excludedChain"
+            [disabled]="shop.excludedChain"
+            class="checkbox"
+            type="checkbox"
+          />
+
+          <span class="what">
+            <span class="chain">{{ shop.chain }}</span>
+            @if (shop.name !== null) {
+              <span class="name">{{ shop.name }}</span>
+            }
+            @if (shop.where !== null) {
+              <span class="where">{{ shop.where }}</span>
+            }
+          </span>
+
+          <!--
+            The word, beside the dimming and the unticked box. Three signals, and none of
+            them is the colour.
+          -->
+          @if (shop.excludedChain) {
+            <span class="mark">{{ 'shops.row.chainExcluded' | rokuT }}</span>
+          } @else if (shop.excluded) {
+            <span class="mark">{{ 'shops.row.excluded' | rokuT }}</span>
+          }
+        </label>
+
+        @if (shop.failed) {
+          <p class="error" role="alert">{{ 'shops.error.save' | rokuT }}</p>
+        }
+      }
+    </div>
+  </section>
+}

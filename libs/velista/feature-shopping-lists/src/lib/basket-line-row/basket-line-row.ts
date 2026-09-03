@@ -24,6 +24,7 @@ import {
   type BasketParticipant,
   type BasketProduct,
 } from '@portfolio/velista/models';
+import { formatMoney } from '@portfolio/velista/platform';
 import {
   CheckFilledIcon,
   CircleIcon,
@@ -92,12 +93,15 @@ export type BasketStatusGlyph = 'wanted' | 'partly' | 'bought' | 'unavailable';
  * for the rule to be got wrong. Section 4.1's whole point is that a control or a
  * caption you may not have is not drawn rather than disabled.
  *
- * ## The product is named, and never priced
+ * ## The product is named, and priced when there is a price
  *
  * Backend `0050` picks the first option added rather than the cheapest, so the
- * mock's "best price at your shops" caption and its price are not drawn: they
- * would be claims nothing computes (section 9). The name is drawn, and tapping
- * the row is what leads to changing it.
+ * mock's "best price at your shops" caption is still not drawn: it would be a
+ * claim nothing computes. What is drawn since velista `0062` is the pick's own
+ * price, as a suffix on the caption line, wherever the run's scopes have one.
+ * In staging and production the harvester is off and every offer is null, so
+ * the row there is exactly the row it was; no layout depends on a price
+ * existing, and there is no placeholder where one is missing (section 2).
  */
 @Component({
   selector: 'lib-basket-line-row',
@@ -404,7 +408,20 @@ export class BasketLineRow {
     this.settle.emit();
   }
 
-  /** The picked product's name, or null for a free text line. */
+  /**
+   * The picked product's name, with its price after it when there is one, or
+   * null for a free text line (velista `0062`, section 4).
+   *
+   * One string and not two fields, so a row with a price and a row without are
+   * the same shape: the price is a suffix on the caption line, joined by the
+   * separator the app already uses, and when the offer is null the caption is
+   * exactly the string it was before. No unit price here; it is a second number
+   * in a place with room for one, and its whole value is comparison, which is
+   * the pick sheet's job.
+   *
+   * A line with options and no pick draws no price (section 4.1): quoting the
+   * cheapest option there would put a number on a product nobody has chosen.
+   */
   protected readonly productName = computed<string | null>(() => {
     const pickId = this.line().pickId;
     if (pickId === null) {
@@ -413,7 +430,15 @@ export class BasketLineRow {
     const product = this.products().get(pickId);
     // A pick catalog no longer has: the basket outlives the catalog it was built
     // from, and a line with an unnameable product is still a line to buy.
-    return product ? inLocale(product.name, this._locale()) : null;
+    if (!product) {
+      return null;
+    }
+    const locale = this._locale();
+    const name = inLocale(product.name, locale);
+    const offer = product.offer;
+    return offer !== null && offer.price !== null
+      ? `${name} · ${formatMoney(offer.price, offer.currency, locale)}`
+      : name;
   });
 
   protected readonly quantity = computed(() =>

@@ -74,20 +74,59 @@ lunaShopperBackend:
     # Staging is the natural place to switch tracing on first, once a collector
     # lands in the cluster. Off until then, same as production.
 
-  # The harvester (plan 0038) is NOT deployed to staging either, and staging has a
-  # second reason on top of production's capacity one.
+  # The harvester (plan 0038) IS deployed to staging, for store discovery only
+  # (k8s plan 0008). This file said staging is where it would go first if it ever
+  # went anywhere; this is that.
   #
-  # Section 8.1: staging and production must never hit the same third party twice
-  # for the same data. Two clusters both walking Mercadona's assortment is double
-  # the requests for one copy of the answer, and it is exactly the behaviour the
-  # politeness argument in that section rests on not doing. Since the runs happen
-  # locally, neither cluster fetches anything at all, which settles it.
+  # Plan 0063 puts a STORE_DISCOVERY run in the path of an ordinary user adding a
+  # postal code, and a service that does not exist in a cluster cannot run there.
+  # Nothing in backend plans 0060 through 0064 is observable outside a dev slot
+  # until this is on, which is why staging gets it before production rather than
+  # alongside it: the point of the soak is to watch real profile edits produce
+  # real runs.
   #
-  # If the harvester is ever turned on in a cluster, staging is where it goes
-  # first and MERCADONA_ENABLED stays false there: the run machinery can be
-  # exercised against a stub without touching the chain.
+  # `harvestEnabled` is the second switch and it has to be true too, or the pod
+  # boots, passes its probes and refuses to spawn anything. The queue fills either
+  # way, so this being false would simply build a backlog.
+  #
+  # `mercadonaEnabled` stays false, and this is the section 8.1 separation working
+  # as designed rather than a leftover. Store discovery is two requests to
+  # OpenStreetMap (one geocode, one Overpass query, once per postal code per
+  # thirty day cooldown) and never touches a storefront. Catalog discovery is
+  # 4,383 requests into somebody's shop, and it stays a decision of its own to
+  # make later, on its own evidence. The double fetch objection this file used to
+  # raise is about that second thing: two clusters walking one assortment is twice
+  # the requests for one copy of the answer. Two OSM lookups a month for a postal
+  # code a real person lives in is a different order of thing, and if the overlap
+  # with production ever stops being comfortable the answer is a shared cache, not
+  # switching a cluster off.
+  #
+  # `actorId` is deliberately left empty, which is the base file's value and not
+  # an omission here. Store discovery writes `DiscoveredPlace` rows into the
+  # harvester's own database and never calls catalog, so it needs no identity;
+  # `CatalogClient` is the only thing that reads the uuid and it throws a named
+  # error rather than writing anonymously. So a run works and an ADMIN IMPORT of a
+  # discovered place into catalog does not, until somebody sets this and adds the
+  # same uuid to `config.platformAdminUserIds`. That is the correct order: the
+  # exit criteria for this plan want discovery observed and no catalog location
+  # created.
   harvester:
-    enabled: false
+    enabled: true
+    harvestEnabled: true
+    mercadonaEnabled: false
+
+  # The reference catalog, on (plan 0067). This is what staging is for: a
+  # deployed environment with real products and real prices to click through, and
+  # the normalized groups are what search and the basket composer are exercised
+  # against.
+  #
+  # The harvester above runs store discovery only, so it contributes no products
+  # and the seed does not need one. The seed creates the 239 products the receipts
+  # name, across all three chains, priced from the receipts. Should a Mercadona
+  # harvest ever run here, the same seed adopts those rows by barcode instead of
+  # creating a second copy.
+  referenceSeed:
+    enabled: true
 
   # No backups in staging. It is disposable by design, and a restore drill is
   # rehearsed here by restoring a PRODUCTION dump into it (plan 0005, section 6),

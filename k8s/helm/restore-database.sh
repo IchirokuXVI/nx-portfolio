@@ -23,9 +23,10 @@
 #   the database size it was measured at, because the two are only meaningful
 #   together.
 #
-#     luna_auth     <size>   <duration>   <date>
-#     luna_core     <size>   <duration>   <date>
-#     luna_catalog  <size>   <duration>   <date>
+#     luna_auth      <size>   <duration>   <date>
+#     luna_core      <size>   <duration>   <date>
+#     luna_catalog   <size>   <duration>   <date>
+#     luna_harvester <size>   <duration>   <date>
 # ---------------------------------------------------------------------------
 #
 # Environment overrides:
@@ -68,9 +69,20 @@ case "$INSTANCE" in
   luna-shopper-backend-auth-db)    DB_NAME=luna_auth;    URL_KEY=AUTH_DB_URL ;;
   luna-shopper-backend-core-db)    DB_NAME=luna_core;    URL_KEY=CORE_DB_URL ;;
   luna-shopper-backend-catalog-db) DB_NAME=luna_catalog; URL_KEY=CATALOG_DB_URL ;;
+  # The harvester's database (k8s plan 0008, section 6). It looks like the one
+  # instance that would not need this, because running discovery again brings the
+  # places back. The places come back; the DECISIONS do not. DiscoveredPlaceStatus
+  # records which places an admin imported and which they rejected, and a re-run
+  # deliberately does not resurrect a rejected place, so losing this database
+  # replays every rejection ever made as new work.
+  #
+  # Only present where harvester.enabled is true, so this arm answers on a cluster
+  # that has the instance and the instance's absence is the error on one that does
+  # not, which is the same shape as the other three.
+  luna-shopper-backend-harvester-db) DB_NAME=luna_harvester; URL_KEY=HARVESTER_DB_URL ;;
   *)
     echo "Unknown instance '$INSTANCE'." >&2
-    echo "Expected one of: luna-shopper-backend-{auth,core,catalog}-db" >&2
+    echo "Expected one of: luna-shopper-backend-{auth,core,catalog,harvester}-db" >&2
     exit 1
     ;;
 esac

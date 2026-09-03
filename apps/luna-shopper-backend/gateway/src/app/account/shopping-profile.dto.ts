@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  DEFAULT_POSTAL_CODE_COUNTRY,
   GenerationScope,
   PROFILE_LIMITS,
+  ProfilePostalCodeSource,
 } from '@portfolio/luna-shopper/contracts';
 import { Type } from 'class-transformer';
 import {
@@ -9,7 +11,9 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -29,6 +33,14 @@ import {
  * slips past validation still meets the service's own rules.
  */
 
+/**
+ * One postal code of the user's own.
+ *
+ * `source` accepts `TYPED` and `DEVICE` and not `NEARBY` (plan 0062, section 2):
+ * a derived code is a thing the server concluded, never a thing the client says.
+ * Naming one that is already derived is an ordinary add and promotes it, so
+ * there is no error state here for a client to handle.
+ */
 export class ProfilePostalCodeDto {
   @ApiProperty({ maxLength: PROFILE_LIMITS.postalCodeMaxLength })
   @IsString()
@@ -46,13 +58,92 @@ export class ProfilePostalCodeDto {
   @IsString()
   @MaxLength(PROFILE_LIMITS.labelMaxLength)
   label?: string | null;
+
+  @ApiPropertyOptional({
+    default: DEFAULT_POSTAL_CODE_COUNTRY,
+    minLength: 2,
+    maxLength: 2,
+    description:
+      'ISO 3166-1 alpha-2. The centroid table is keyed on (country, postalCode), and a lookup without one searches every shipped country at once.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(2)
+  country?: string;
+
+  @ApiPropertyOptional({
+    enum: [ProfilePostalCodeSource.TYPED, ProfilePostalCodeSource.DEVICE],
+    default: ProfilePostalCodeSource.TYPED,
+    description:
+      'Whose code this is. NEARBY is a conclusion of the server’s and is refused here.',
+  })
+  @IsOptional()
+  @IsIn([ProfilePostalCodeSource.TYPED, ProfilePostalCodeSource.DEVICE])
+  source?: ProfilePostalCodeSource.TYPED | ProfilePostalCodeSource.DEVICE;
+
+  @ApiPropertyOptional({
+    description:
+      'Also add the codes near this one, marked as ours: visible, removable, and recomputed rather than maintained.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  expandNearby?: boolean;
+}
+
+/** The body of the add route; the code itself comes from the body too. */
+export class AddPostalCodeDto extends ProfilePostalCodeDto {}
+
+/**
+ * Where a device says it is (`apps/velista/plans/0058`, section 3).
+ *
+ * **A body and not a query string**, on a route that stores nothing. The point is
+ * the one piece of this feature we promise not to keep, and a query parameter is
+ * kept by every access log between the phone and the process whether we mean to
+ * or not. A body is the only shape in which "the coordinates appear in exactly one
+ * request and in no stored field" can be true of the whole system rather than only
+ * of our own tables.
+ */
+export class ResolvePostalCodeDto {
+  @ApiProperty({
+    minimum: -90,
+    maximum: 90,
+    description: 'Degrees, as the device reported them. Not stored.',
+  })
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude!: number;
+
+  @ApiProperty({
+    minimum: -180,
+    maximum: 180,
+    description: 'Degrees, as the device reported them. Not stored.',
+  })
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude!: number;
+
+  @ApiPropertyOptional({
+    default: DEFAULT_POSTAL_CODE_COUNTRY,
+    minLength: 2,
+    maxLength: 2,
+    description:
+      'ISO 3166-1 alpha-2. The centroid table is keyed on (country, postalCode), and a lookup without one searches every shipped country at once.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(2)
+  country?: string;
 }
 
 export class ProfileSupermarketDto {
   @ApiProperty({
     format: 'uuid',
     description:
-      'The chain, never one of its locations: "no DIA" means no DIA anywhere.',
+      'The chain: "no DIA" means no DIA anywhere, including the DIA that opens next month. Refusing one particular shop is the separate, finer choice below.',
   })
   @IsUUID()
   supermarketId!: string;
@@ -64,6 +155,50 @@ export class ProfileSupermarketDto {
   @IsOptional()
   @IsBoolean()
   excluded?: boolean;
+}
+
+/**
+ * One shop, and whether the profile refuses it (plan 0064).
+ *
+ * The finer axis beside {@link ProfileSupermarketDto}, not a replacement for it:
+ * "not that shop" is about parking and a route home, "not DIA" is about the
+ * brand, and an excluded chain hides its shops whatever these say.
+ */
+export class ProfileLocationDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'One shop of a chain, rather than the chain.',
+  })
+  @IsUUID()
+  supermarketLocationId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'False switches the shop back on, and deletes the row rather than storing it: absence already means included, so a shop imported later is one you can see rather than one silently missing.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  excluded?: boolean;
+}
+
+/**
+ * Several shops at once (plan 0064, section 5).
+ *
+ * A **partial** write, unlike the collections on the profile body: shops it does
+ * not name keep whatever they had. A profile can see hundreds of shops and a
+ * screen holds a screenful, so a replacement would make one toggle require the
+ * client to send every shop it has ever seen.
+ */
+export class SetProfileLocationsDto {
+  @ApiProperty({
+    type: [ProfileLocationDto],
+    maxItems: PROFILE_LIMITS.maxLocationPreferences,
+  })
+  @IsArray()
+  @ArrayMaxSize(PROFILE_LIMITS.maxLocationPreferences)
+  @ValidateNested({ each: true })
+  @Type(() => ProfileLocationDto)
+  locations!: ProfileLocationDto[];
 }
 
 export class ProfileGenerationSourceDto {
@@ -143,6 +278,8 @@ export class ShoppingProfileBodyDto {
   @ApiPropertyOptional({
     type: [ProfilePostalCodeDto],
     maxItems: PROFILE_LIMITS.maxPostalCodes,
+    description:
+      'The profile’s **own** codes, TYPED and DEVICE (plan 0062). Codes derived from these are the server’s and are not stated here: a client that omits them loses nothing, and one that echoes them back promotes them. Add and remove a single code with the two routes below instead.',
   })
   @IsOptional()
   @IsArray()

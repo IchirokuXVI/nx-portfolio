@@ -1,6 +1,10 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type { ZoneCardVm, ZoneRole } from '@portfolio/velista/models';
+import type {
+  ListRowVm,
+  ZoneCardVm,
+  ZoneRole,
+} from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { ZoneCard } from './zone-card';
 
@@ -102,6 +106,51 @@ describe('ZoneCard', () => {
 
       expect(badges).toHaveLength(1);
       expect(badges[0].classList).toContain('badge-pending');
+    });
+  });
+
+  // Plan 0060. The sentence under a list on the card counts `wantedCount`, which is
+  // what the household still wants, and it was passed to a key that said "ready": a
+  // card where nothing had been bought read "12 of 12 ready".
+  //
+  // Asserted on the **key**, never on the sentence. The testing translator returns the
+  // key without interpolating, so an assertion on "7 of 12 pending" passes on nothing.
+  describe('the progress under each list', () => {
+    async function progress(list: Partial<ListRowVm>): Promise<string> {
+      const fixture = await render(
+        card({
+          lists: [{ id: 'l1', name: 'Weekly shop', viewers: [], ...list }],
+        })
+      );
+      const element = (fixture.nativeElement as HTMLElement).querySelector(
+        '.list-progress'
+      );
+
+      return element?.textContent?.trim() ?? '';
+    }
+
+    it('counts what is still pending', async () => {
+      expect(await progress({ lineCount: 12, wantedCount: 7 })).toBe(
+        'home.progress.pending'
+      );
+    });
+
+    it('says nothing is left rather than 0 of 12 pending', async () => {
+      expect(await progress({ lineCount: 12, wantedCount: 0 })).toBe(
+        'home.progress.done'
+      );
+    });
+
+    it('still says the list is empty at zero lines', async () => {
+      // A shopped list and a list with nothing on it both have nothing pending, and
+      // they stay different sentences (plan 0019, section 3).
+      expect(await progress({ lineCount: 0, wantedCount: 0 })).toBe(
+        'list.empty.short'
+      );
+    });
+
+    it('says nothing while the counts have not arrived', async () => {
+      expect(await progress({})).toBe('');
     });
   });
 });

@@ -8,11 +8,13 @@ import { GeneratedList } from './generated-list.entity';
 import { LineComment } from './line-comment.entity';
 import { LineSettlement } from './line-settlement.entity';
 import { ListAccess } from './list-access.entity';
+import { ListLineGroupRemoval } from './list-line-group-removal.entity';
 import { ListLineItem } from './list-line-item.entity';
 import { ListLine } from './list-line.entity';
 import { MergeRequest } from './merge-request.entity';
 import { ProcessedEvent } from './processed-event.entity';
 import { ProfileGenerationSource } from './profile-generation-source.entity';
+import { ProfileLocationPreference } from './profile-location-preference.entity';
 import { ProfilePostalCode } from './profile-postal-code.entity';
 import { ProfileSupermarketPreference } from './profile-supermarket-preference.entity';
 import { ShoppingList } from './shopping-list.entity';
@@ -31,11 +33,13 @@ export { GeneratedList } from './generated-list.entity';
 export { LineComment } from './line-comment.entity';
 export { LineSettlement } from './line-settlement.entity';
 export { ListAccess } from './list-access.entity';
+export { ListLineGroupRemoval } from './list-line-group-removal.entity';
 export { ListLineItem } from './list-line-item.entity';
 export { ListLine } from './list-line.entity';
 export { MergeRequest } from './merge-request.entity';
 export { ProcessedEvent } from './processed-event.entity';
 export { ProfileGenerationSource } from './profile-generation-source.entity';
+export { ProfileLocationPreference } from './profile-location-preference.entity';
 export { ProfilePostalCode } from './profile-postal-code.entity';
 export { ProfileSupermarketPreference } from './profile-supermarket-preference.entity';
 export { ShoppingList } from './shopping-list.entity';
@@ -51,6 +55,9 @@ export const CORE_ENTITIES = [
   ListAccess,
   ListLine,
   ListLineItem,
+  // What a person took off the set their line's group put there (plan 0070).
+  // After the line it hangs off, like every other child table here.
+  ListLineGroupRemoval,
   LineComment,
   // What happened to a line on a trip (plan 0047). After the line it references.
   LineSettlement,
@@ -62,6 +69,9 @@ export const CORE_ENTITIES = [
   ShoppingProfile,
   ProfilePostalCode,
   ProfileSupermarketPreference,
+  // The finer axis beside the chain preference (plan 0064). Same parent, same
+  // cascade, so it sits with its siblings.
+  ProfileLocationPreference,
   ProfileGenerationSource,
   // Generated shopping lists (plan 0050). The basket comes first: its lines
   // reference it, and the origins and options reference the lines.

@@ -10,8 +10,14 @@ import {
   LIST_PERMISSIONS,
   MEMBERSHIP_STATUS_FALLBACK,
   MEMBERSHIP_STATUSES,
+  POSTAL_CODE_SOURCE_FALLBACK,
+  POSTAL_CODE_SOURCES,
+  PRICE_SOURCE_KIND_FALLBACK,
+  PRICE_SOURCE_KINDS,
   SETTLEMENT_OUTCOME_FALLBACK,
   SETTLEMENT_OUTCOMES,
+  UNIT_OF_MEASURE_FALLBACK,
+  UNITS_OF_MEASURE,
   USER_KIND_FALLBACK,
   USER_KINDS,
   ZONE_ROLE_FALLBACK,
@@ -47,8 +53,10 @@ import {
   type PresenceEditor,
   type PresenceUser,
   type ProductGroup,
+  type ProductOffer,
   type ProfileGenerationScope,
   type ProfilePostalCode,
+  type ResolvedPostalCode,
   type SessionTokens,
   type ShoppingList,
   type ShoppingListSummary,
@@ -63,6 +71,7 @@ import {
   date,
   isRecord,
   mapArray,
+  nullableNum,
   nullableStr,
   numOr,
   oneOf,
@@ -353,6 +362,14 @@ export function toLine(raw: unknown): Line | null {
     // section 1.1). Ids that are not strings are dropped rather than kept as
     // holes: a product reference nobody can resolve is not a product.
     itemIds: mapArray(raw['itemIds'], str),
+    // Which group the line follows, and which of its products the catalog put
+    // there (backend plan 0070, section 9). **Both default to "no group"**, and
+    // that is the one safe direction: a missing `groupItemIds` is `[]`, which is
+    // the correct reading for a server that predates `0070` and for every line
+    // that follows nothing, so the two need no distinction. Defaulting the other
+    // way would offer a `Keep` control for a subscription that does not exist.
+    productGroupId: nullableStr(raw['productGroupId']),
+    groupItemIds: mapArray(raw['groupItemIds'], str),
     position: numOr(raw['position'], 0),
     approvalStatus: oneOf(
       raw['approvalStatus'],
@@ -461,12 +478,63 @@ export function toLineSettlement(raw: unknown): LineSettlement | null {
 }
 
 /**
+ * From catalog's `ItemOfferView` (velista `0062`, section 3).
+ *
+ * Null for anything that is not an offer, which is the ordinary case: absent
+ * on a read that priced nothing, null on a product with no price at the
+ * reader's scopes, and both draw the same nothing. The scope id is the one
+ * thing required, because an offer that cannot say where it came from cannot be
+ * resolved against `BasketView.scopes`; a price without one would still be a
+ * number, and it is dropped rather than drawn unplaceable, so that the pick
+ * sheet never says "cheapest" about a figure it cannot account for.
+ *
+ * It lives here rather than in `basket-mappers.ts`, which is where `0062` wrote
+ * it, because the typeahead reads offers too and that file already imports from
+ * this one (velista `0063`, section 5). One mapper and not two: a second, laxer
+ * one for the suggestion row would be two functions disagreeing about what an
+ * offer is. A caller with no scope map simply ignores a field it cannot resolve.
+ */
+export function toProductOffer(raw: unknown): ProductOffer | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const priceScopeId = str(raw['priceScopeId']);
+  if (priceScopeId === null) {
+    return null;
+  }
+
+  return {
+    price: typeof raw['price'] === 'number' ? raw['price'] : null,
+    currency: nullableStr(raw['currency']),
+    unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
+    unitPriceLabel: nullableStr(raw['unitPriceLabel']),
+    observedAt: date(raw['priceObservedAt']),
+    sourceKind: oneOf(
+      raw['priceSourceKind'],
+      PRICE_SOURCE_KINDS,
+      PRICE_SOURCE_KIND_FALLBACK
+    ),
+    priceScopeId,
+  };
+}
+
+/**
  * From `catalog.ItemView` (backend plan 0048).
  *
- * Deliberately narrow: an id, a name, a brand and the group it belongs to.
- * Everything about price is out of scope until the backend's backlog `0004`
- * exists (velista plan 0043, section 9), and carrying fields nothing renders
- * would be a promise the screen cannot keep.
+ * Deliberately narrow: an id, a name, a brand, how big the packet is, the group
+ * it belongs to and the one price a row draws. Narrower than `ItemView` on
+ * purpose, rather than carrying every price field the wire has, which would be a
+ * promise the screen cannot keep.
+ *
+ * `bestOffer` is read since velista `0063`: the cheapest price at the scopes the
+ * caller was resolved to, or null. It is the price of **this packet**, since the
+ * catalog holds one record per size, and nothing here divides it by anything.
+ *
+ * `unitSize` and `defaultUnit` are read because **the catalog holds one record
+ * per size**, so a search for "leche" answers with the same name and the same
+ * brand once per carton size. They were on the wire all along and dropped here,
+ * which is what made those rows identical on screen.
  */
 export function toCatalogItem(raw: unknown): CatalogItem | null {
   if (!isRecord(raw)) {
@@ -482,7 +550,10 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
     id,
     name: toLocalizedName(raw['name']),
     brand: nullableStr(raw['brand']),
+    size: nullableNum(raw['unitSize']),
+    unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     productGroupId: nullableStr(raw['productGroupId']),
+    offer: toProductOffer(raw['bestOffer']),
   };
 }
 
@@ -506,11 +577,14 @@ export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
   }
 
   if (raw['kind'] === 'group') {
-    const offer = raw['group'];
-    if (!isRecord(offer)) {
+    // The whole `ProductGroupOfferView`, named for what it is: the price on it
+    // is under `offer`, so a variable called `offer` here would have to be read
+    // as `offer['offer']` one line down (velista `0063`, section 5).
+    const groupOffer = raw['group'];
+    if (!isRecord(groupOffer)) {
       return null;
     }
-    const group = toProductGroup(offer['group']);
+    const group = toProductGroup(groupOffer['group']);
     return group === null
       ? null
       : {
@@ -519,7 +593,12 @@ export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
           // The products choosing it attaches, whole (section 6). An offer that
           // names none is still a legitimate suggestion: it adds a line with the
           // group's name and no set, which the line page can fill in later.
-          itemIds: mapArray(offer['itemIds'], str),
+          itemIds: mapArray(groupOffer['itemIds'], str),
+          // `offer`, and never `bestOffer`: the wire calls a group's price one
+          // and an item's the other, and they are the same shape, so the wrong
+          // key here reads as a catalog with no prices in it rather than as a
+          // mistake.
+          offer: toProductOffer(groupOffer['offer']),
         };
   }
 
@@ -541,7 +620,6 @@ export function toProductGroup(raw: unknown): ProductGroup | null {
   return {
     id,
     name: toLocalizedName(raw['name']),
-    itemCount: numOr(raw['itemCount'], 0),
   };
 }
 
@@ -933,6 +1011,26 @@ export function toSupermarket(raw: unknown): Supermarket | null {
   return id === null ? null : { id, name: toLocalizedName(raw['name']) };
 }
 
+/**
+ * From `ResolvedPostalCodeView` (`POST /v1/account/postal-code-lookups`).
+ *
+ * A **null `postalCode` is renderable**, unlike a missing id elsewhere in this file:
+ * "we could not place you" is what the sheet draws when the point is too far from
+ * anything the server ships, and dropping the record would turn an answer into a
+ * failure. What is not renderable is a body with no country at all, which is a
+ * response this app cannot reason about.
+ */
+export function toResolvedPostalCode(raw: unknown): ResolvedPostalCode | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const country = str(raw['country']);
+  return country === null
+    ? null
+    : { country, postalCode: nullableStr(raw['postalCode']) };
+}
+
 /** From `ProfilePostalCodeView`. */
 function toProfilePostalCode(raw: unknown): ProfilePostalCode | null {
   if (!isRecord(raw)) {
@@ -943,8 +1041,8 @@ function toProfilePostalCode(raw: unknown): ProfilePostalCode | null {
   const postalCode = str(raw['postalCode']);
 
   // The code itself is required and is not defaulted to the empty string: a chip with
-  // no code is a chip nobody can act on, and the page sends the whole list back on the
-  // next edit, so an invented empty code would become one the server refuses.
+  // no code is a chip nobody can act on, and every write names a code, so an invented
+  // empty one would become a request the server refuses.
   return id === null || postalCode === null
     ? null
     : {
@@ -952,6 +1050,13 @@ function toProfilePostalCode(raw: unknown): ProfilePostalCode | null {
         postalCode,
         label: nullableStr(raw['label']),
         position: numOr(raw['position'], 0),
+        // Whose code this is (plan 0058, section 4). An unrecognised source reads as
+        // the user's own, for the reason on `POSTAL_CODE_SOURCE_FALLBACK`.
+        source: oneOf(
+          raw['source'],
+          POSTAL_CODE_SOURCES,
+          POSTAL_CODE_SOURCE_FALLBACK
+        ),
       };
 }
 
@@ -991,7 +1096,6 @@ export function toShoppingProfile(raw: unknown): ShoppingProfile | null {
     name: nullableStr(raw['name']),
     isDefault: raw['isDefault'] === true,
     position: numOr(raw['position'], 0),
-    addressText: nullableStr(raw['addressText']),
     minSavingCents: numOr(raw['minSavingCents'], 0),
     postalCodes: mapArray(raw['postalCodes'], toProfilePostalCode),
     // `supermarkets` on the wire, `chains` here, because the preference names the

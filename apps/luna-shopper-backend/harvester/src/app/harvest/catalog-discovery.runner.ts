@@ -11,7 +11,11 @@ import {
 } from '@portfolio/luna-shopper/mercadona';
 import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import { ItemSourceRef, SourceCatalogEntry, SupermarketSource } from '../entities';
+import {
+  ItemSourceRef,
+  SourceCatalogEntry,
+  SupermarketSource,
+} from '../entities';
 import { runWorkerPool } from '../runner/worker-pool';
 import { CatalogClient } from './catalog-client.service';
 import { ItemMatchIndex } from './matching';
@@ -115,10 +119,19 @@ export class CatalogDiscoveryRunner {
       workers: source.workers,
       signal: context.signal,
       handle: async (listProduct) => {
-        const detail = await client.fetchProduct(listProduct.externalId, ['es'], {
-          categoryPath: listProduct.categoryPath.map((name) => ({ name })),
-          observedAt: seenAt,
-        });
+        const detail = await client.fetchProduct(
+          listProduct.externalId,
+          ['es'],
+          {
+            // The walk's own path, passed straight through. It used to be a list
+            // of bare names that had to be wrapped into nodes here; it carries
+            // each node's id now, and rewrapping it made a node whose `name` was
+            // a node. Section 5.6 splits cheese from cured meat on the level 2
+            // id, so the ids have to survive this hop.
+            categoryPath: listProduct.categoryPath,
+            observedAt: seenAt,
+          }
+        );
 
         // A 404 is "not stocked in this warehouse" (section 2.6): a value, not a
         // failure, and it neither fails the run nor deletes what we know.

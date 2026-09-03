@@ -20,10 +20,13 @@
 # it is the cache, the presence store and the socket backplane; the services are
 # only correct at more than one replica because it exists.
 #
-# The harvester's database is on by default HERE and its service is switched off in
-# both clusters. That asymmetry is deliberate: a catalog discovery run is 4,383
-# requests over tens of minutes plus a third Postgres, which a developer machine
-# has room for and a small VPS does not.
+# The harvester's database is on by default HERE, and in a cluster it is on only
+# where an environment values file says so: staging as of k8s plan 0008,
+# production after that plan's soak. The asymmetry is about which RUN MODE each
+# place is for. A cluster runs store discovery, which is two requests per postal
+# code per month, and it pays a fourth Postgres to do it. Catalog discovery is
+# 4,383 requests over tens of minutes, and it happens here, on a machine with room
+# for it, and nowhere else: MERCADONA_ENABLED is false in both clusters.
 
 # The project name (container/network/volume namespace) is overridable so that
 # several git worktrees can each run a fully isolated copy of this stack at the

@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import type {
+  AddPostalCodeRequest,
   CatalogScope,
   ShoppingProfile,
   Supermarket,
@@ -22,7 +23,6 @@ function profile(overrides: Partial<ShoppingProfile> = {}): ShoppingProfile {
     name: null,
     isDefault: true,
     position: 0,
-    addressText: null,
     minSavingCents: 0,
     postalCodes: [],
     chains: [],
@@ -42,6 +42,12 @@ interface FakeOptions {
   readonly unserved?: readonly string[];
   /** What the server answers to an update, which is not what was sent. */
   readonly normalizeTo?: Partial<ShoppingProfile>;
+  /** The neighbours each code brings, stated rather than invented (plan 0058). */
+  readonly nearby?: Readonly<Record<string, readonly string[]>>;
+  /** What a point resolves to. Null is "we don't know", which is an answer. */
+  readonly resolvesTo?: string | null;
+  /** Whether the lookup itself fails, which is a different thing from null. */
+  readonly resolveRejects?: boolean;
 }
 
 /** A `ShoppingProfileServiceI` that records what it was asked, with no transport. */
@@ -50,6 +56,10 @@ function fakeService(options: FakeOptions = {}) {
     method: string;
     profileId?: string;
     body?: WriteShoppingProfileRequest;
+    postal?: AddPostalCodeRequest;
+    postalCode?: string;
+    latitude?: number;
+    longitude?: number;
   }[] = [];
   let held = [...(options.profiles ?? [profile()])];
 
@@ -89,19 +99,9 @@ function fakeService(options: FakeOptions = {}) {
         ...(body.minSavingCents === undefined
           ? {}
           : { minSavingCents: body.minSavingCents }),
-        // The collections are full replacements on the wire, so the fake replaces
-        // them too: a fake that ignored them would let the store's coverage refresh
-        // pass against a profile the server never actually changed.
-        ...(body.postalCodes === undefined
-          ? {}
-          : {
-              postalCodes: body.postalCodes.map((entry, position) => ({
-                id: `pc-${position}`,
-                postalCode: entry.postalCode,
-                label: entry.label ?? null,
-                position,
-              })),
-            }),
+        // `supermarkets` is a full replacement on the wire, so the fake replaces it
+        // too. The postal codes are not here at all any more: plan 0058 moved them
+        // onto their own routes, and this body cannot state them.
         ...(body.supermarkets === undefined
           ? {}
           : {
@@ -115,6 +115,83 @@ function fakeService(options: FakeOptions = {}) {
       };
       held = held.map((entry) => (entry.id === profileId ? after : entry));
       return after;
+    },
+
+    addPostalCode: async (profileId, body) => {
+      calls.push({ method: 'addPostalCode', profileId, postal: body });
+      if (options.updateRejectsWith !== undefined) {
+        throw options.updateRejectsWith;
+      }
+
+      const before = held.find((entry) => entry.id === profileId) ?? profile();
+      const kept = before.postalCodes.filter(
+        (code) => code.postalCode !== body.postalCode
+      );
+      // The neighbours come from the spec's own table, because how many a code has is
+      // a fact about geography no fake can invent.
+      const derived =
+        body.expandNearby === true
+          ? (options.nearby?.[body.postalCode] ?? [])
+          : [];
+
+      const after: ShoppingProfile = {
+        ...before,
+        postalCodes: [
+          ...kept,
+          {
+            id: `pc-${body.postalCode}`,
+            postalCode: body.postalCode,
+            label: body.label ?? null,
+            position: kept.length,
+            source: body.source ?? 'TYPED',
+          },
+          ...derived.map((code, at) => ({
+            id: `pc-${code}`,
+            postalCode: code,
+            label: null,
+            position: kept.length + 1 + at,
+            source: 'NEARBY' as const,
+          })),
+        ],
+      };
+
+      held = held.map((entry) => (entry.id === profileId ? after : entry));
+      return after;
+    },
+
+    removePostalCode: async (profileId, postalCode) => {
+      calls.push({ method: 'removePostalCode', profileId, postalCode });
+      if (options.updateRejectsWith !== undefined) {
+        throw options.updateRejectsWith;
+      }
+
+      const before = held.find((entry) => entry.id === profileId) ?? profile();
+      const after: ShoppingProfile = {
+        ...before,
+        postalCodes: before.postalCodes.filter(
+          (code) => code.postalCode !== postalCode
+        ),
+      };
+
+      held = held.map((entry) => (entry.id === profileId ? after : entry));
+      return after;
+    },
+
+    resolvePostalCode: async (latitude, longitude) => {
+      calls.push({ method: 'resolvePostalCode', latitude, longitude });
+      if (options.resolveRejects === true) {
+        throw new GatewayError({
+          code: 'internal',
+          status: 500,
+          correlationId: 'spec',
+        });
+      }
+      // Not `??`: null is a stated answer here and must not fall through to a code.
+      return {
+        country: 'es',
+        postalCode:
+          options.resolvesTo === undefined ? '14001' : options.resolvesTo,
+      };
     },
 
     makeDefault: async (profileId) => {
@@ -356,17 +433,7 @@ describe('ShoppingProfileStore', () => {
         (call) => call.method === 'describeScope'
       ).length;
 
-      await store.save(
-        'p1',
-        'postalCodes',
-        { postalCodes: [{ postalCode: '14013', label: null }] },
-        (current) => ({
-          ...current,
-          postalCodes: [
-            { id: 'pending', postalCode: '14013', label: null, position: 0 },
-          ],
-        })
-      );
+      await store.addPostalCode('p1', { postalCode: '14013' });
 
       expect(
         service.calls.filter((call) => call.method === 'describeScope').length
@@ -520,12 +587,15 @@ describe('ShoppingProfileStore', () => {
             id: 'p1',
             name: 'Theirs',
             isDefault: true,
-            addressText: 'Calle Mayor 12',
+            minSavingCents: 250,
           },
         ],
       });
 
-      expect(store.selected()?.addressText).toBe('Calle Mayor 12');
+      // The name is claimed by the write in flight and keeps the local value; the
+      // threshold is not, so the event wins there.
+      expect(store.selected()?.name).toBe('Mine');
+      expect(store.selected()?.minSavingCents).toBe(250);
       await pending;
     });
 
@@ -536,6 +606,149 @@ describe('ShoppingProfileStore', () => {
       realtime.emit('profiles.changed', { profiles: [] });
 
       expect(store.profiles()).toHaveLength(1);
+    });
+  });
+
+  describe('postal codes (plan 0058)', () => {
+    it('sends one row and never the list, so a derived code cannot be promoted', async () => {
+      const service = fakeService();
+      const { store } = setUp(service);
+      await store.load();
+
+      await store.addPostalCode('p1', {
+        postalCode: '14001',
+        label: 'home',
+        expandNearby: true,
+      });
+
+      expect(
+        service.calls.find((call) => call.method === 'addPostalCode')?.postal
+      ).toEqual({ postalCode: '14001', label: 'home', expandNearby: true });
+      // The replacement collection is never touched, which is the property that keeps
+      // the server's own rows out of this app's writes.
+      expect(
+        service.calls.filter((call) => call.method === 'updateProfile')
+      ).toEqual([]);
+    });
+
+    it('counts the neighbours an expansion actually added', async () => {
+      const service = fakeService({ nearby: { '14001': ['14002', '14003'] } });
+      const { store } = setUp(service);
+      await store.load();
+
+      await store.addPostalCode('p1', {
+        postalCode: '14001',
+        expandNearby: true,
+      });
+
+      expect(store.nearbyAdded()).toBe(2);
+    });
+
+    it('counts nothing for a code that brings nothing', async () => {
+      const service = fakeService();
+      const { store } = setUp(service);
+      await store.load();
+
+      await store.addPostalCode('p1', { postalCode: '14001' });
+
+      expect(store.nearbyAdded()).toBe(0);
+    });
+
+    it('forgets the count when another profile is selected', async () => {
+      // A number left standing would sit under the next profile's chips, describing
+      // codes that are not on it.
+      const service = fakeService({
+        profiles: [profile(), profile({ id: 'p2', isDefault: false })],
+        nearby: { '14001': ['14002'] },
+      });
+      const { store } = setUp(service);
+      await store.load();
+      await store.addPostalCode('p1', {
+        postalCode: '14001',
+        expandNearby: true,
+      });
+
+      store.select('p2');
+
+      expect(store.nearbyAdded()).toBe(0);
+    });
+
+    it('removes by the code rather than by the row id', async () => {
+      const service = fakeService();
+      const { store } = setUp(service);
+      await store.load();
+      await store.addPostalCode('p1', { postalCode: '14001' });
+
+      await store.removePostalCode('p1', '14001');
+
+      expect(
+        service.calls.find((call) => call.method === 'removePostalCode')
+      ).toMatchObject({ profileId: 'p1', postalCode: '14001' });
+      expect(store.selected()?.postalCodes).toEqual([]);
+    });
+
+    it('reports a failed write against the chip list, and puts the chips back', async () => {
+      const service = fakeService({
+        updateRejectsWith: new GatewayError({
+          code: 'internal',
+          status: 500,
+          correlationId: 'spec',
+        }),
+      });
+      const { store } = setUp(service);
+      await store.load();
+
+      const outcome = await store.addPostalCode('p1', { postalCode: '14001' });
+
+      expect(outcome).toBe('failed');
+      expect(store.saveState('p1', 'postalCodes')).toBe('failed');
+      expect(store.selected()?.postalCodes).toEqual([]);
+    });
+  });
+
+  describe('resolving a point (plan 0058)', () => {
+    it('sends the coordinates once and writes them nowhere', async () => {
+      const service = fakeService();
+      const { store } = setUp(service);
+      await store.load();
+
+      const answer = await store.resolvePostalCode(37.88, -4.78);
+
+      expect(answer).toEqual({ country: 'es', postalCode: '14001' });
+      // Exactly one request carries the point, and no write followed it: adopting the
+      // code is a separate, confirmed act.
+      expect(
+        service.calls.filter((call) => call.method === 'resolvePostalCode')
+      ).toEqual([
+        {
+          method: 'resolvePostalCode',
+          latitude: 37.88,
+          longitude: -4.78,
+        },
+      ]);
+      expect(
+        service.calls.filter((call) => call.method === 'addPostalCode')
+      ).toEqual([]);
+      expect(store.selected()?.postalCodes).toEqual([]);
+    });
+
+    it('passes a null code through rather than turning it into a failure', async () => {
+      const service = fakeService({ resolvesTo: null });
+      const { store } = setUp(service);
+      await store.load();
+
+      await expect(store.resolvePostalCode(64.13, -21.9)).resolves.toEqual({
+        country: 'es',
+        postalCode: null,
+      });
+    });
+
+    it('throws when the lookup could not be made, which is not the same answer', async () => {
+      const service = fakeService({ resolveRejects: true });
+      const { store } = setUp(service);
+      await store.load();
+
+      await expect(store.resolvePostalCode(37.88, -4.78)).rejects.toBeDefined();
     });
   });
 

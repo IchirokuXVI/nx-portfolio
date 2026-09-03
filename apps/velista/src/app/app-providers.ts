@@ -36,6 +36,8 @@ import {
   MembershipApi,
   REALTIME_CLIENT,
   RealtimeSocket,
+  SHOP_SERVICE,
+  ShopApi,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
   VELISTA_DATA_ACCESS_PROVIDERS,
@@ -207,6 +209,13 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // about the screen rather than about the transport, and both are the same base URL
   // through the same `HttpClient`.
   provideService(SHOPPING_PROFILE_SERVICE, ShoppingProfileApi),
+
+  // The shops in a profile's postal codes (plan 0059). Bound apart from the profile
+  // service above even though one of its three calls is a profile route, for the reason
+  // the catalog search below is bound apart: they fail apart. A shop listing that does
+  // not answer costs the supermarkets screen its rows and must not be able to take the
+  // profiles page down with it.
+  provideService(SHOP_SERVICE, ShopApi),
 
   // The catalog search behind the composer's suggestions (plan 0043, section 6). A
   // tenth time, and separate from the profile service beside it even though both

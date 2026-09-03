@@ -29,6 +29,8 @@ function line(overrides: Partial<Line> = {}): Line {
     content: 'Milk',
     quantity: 2,
     itemIds: [],
+    productGroupId: null,
+    groupItemIds: [],
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,
@@ -64,7 +66,14 @@ function bought(
 }
 
 function item(id: string, en: string, brand: string | null = null): CatalogItem {
-  return { id, name: { es: en, en }, brand, productGroupId: null };
+  return {
+    id,
+    name: { es: en, en },
+    brand,
+    size: 1,
+    unit: 'LITER',
+    productGroupId: null,
+  };
 }
 
 const CATALOG: readonly CatalogItem[] = [

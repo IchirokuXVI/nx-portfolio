@@ -1,0 +1,14 @@
+<!--
+  Not translated, and deliberately: both sentences are the credit the licences ask for,
+  and they are the strings the licences are argued about. Translating one would be
+  writing a new sentence and calling it the same attribution.
+-->
+<p class="note">
+  <a [href]="osmUrl" rel="noopener noreferrer" target="_blank">{{ osm }}</a>
+  @if (derived()) {
+    <span class="separator">·</span>
+    <a [href]="geonamesUrl" rel="noopener noreferrer" target="_blank">{{
+      geonames
+    }}</a>
+  }
+</p>

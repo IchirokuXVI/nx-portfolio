@@ -300,7 +300,6 @@
     },
     "zoneExplainer": "A group is the household or flatmates you share lists with. You can start without an account.",
     "section": {
-      "shoppingList": "Your shopping list",
       "zones": "Your groups"
     },
     "shoppingList": {
@@ -325,7 +324,8 @@
       "items_other": "{{count}} items"
     },
     "progress": {
-      "ready": "{{ready}} of {{total}} ready"
+      "pending": "{{pending}} of {{total}} pending",
+      "done": "Nothing left"
     },
     "presence": {
       "here_one": "{{names}} is here now",
@@ -364,7 +364,8 @@
   "list": {
     "header": {
       "inGroup": "in {{name}}",
-      "ready": "{{ready}} of {{total}} ready",
+      "pending": "{{pending}} of {{total}} pending",
+      "done": "Nothing left",
       "notLive": "Not updating right now",
       "back": "Back to the group"
     },
@@ -399,7 +400,16 @@
       "dismissHeard": "Close",
       "suggestions": "Matching products",
       "groupAdds": "adds its {{count}} products",
+      "bestPrice": "Best price: {{price}}",
       "groupBadge": "GROUP",
+      "size": {
+        "UNIT": "{{size}} units",
+        "GRAM": "{{size}} g",
+        "KILOGRAM": "{{size}} kg",
+        "MILLILITER": "{{size}} ml",
+        "LITER": "{{size}} L",
+        "PACK": "{{size}} packs"
+      },
       "asWritten": "Add “{{text}}” as written"
     },
     "empty": {
@@ -566,6 +576,16 @@
       "noProducts": "No products yet",
       "products": "PRODUCTS ON THIS LINE",
       "addProduct": "Add a product",
+      "productsCount": "{{count}}/{{cap}}",
+      "fromGroup": "From {{name}}",
+      "fromGroupUnnamed": "From a group",
+      "addedByYou": "Added by you",
+      "keepProduct": "Keep",
+      "keepProductLabel": "Keep {{name}} on this line",
+      "productsFull": {
+        "one": "This line holds {{count}} of {{cap}} products. Remove one first.",
+        "group": "This line holds {{count}} of {{cap}} products, and {{name}} adds {{adds}}. Remove a few products first."
+      },
       "searchProduct": "Search for a product",
       "add": "Add",
       "removeProduct": "Remove {{name}}",
@@ -823,11 +843,6 @@
       "label": "Name",
       "hint": "Until you name it, it shows as {{name}}"
     },
-    "address": {
-      "label": "Address",
-      "optional": "Optional",
-      "placeholder": "Street and number"
-    },
     "postal": {
       "label": "Postal codes",
       "add": "Add postal code",
@@ -836,7 +851,22 @@
       "submit": "Add",
       "remove": "Remove {{code}}",
       "full": "You can keep up to {{count}} postal codes",
-      "uncovered": "No supermarket we know reaches this code yet"
+      "uncovered": "No supermarket we know reaches this code yet",
+      "nearby": "Also add nearby codes",
+      "nearbySource": "nearby",
+      "nearbyAdded": "We also added {{count}} nearby codes"
+    },
+    "location": {
+      "title": "Use my location",
+      "explain": "Your device tells us where it is, we turn that into a postal code, and we keep the postal code. The position itself is not stored.",
+      "use": "Use my location",
+      "resolved": "We think you are in",
+      "confirm": "Add this code",
+      "refused": "This browser is not allowed to share your location, and only you can change that in its settings. You can type your postal code instead.",
+      "unplaceable": "We could not work out which postal code that is. You can type it instead.",
+      "unavailable": "Your device could not say where it is. You can try again, or type your postal code.",
+      "failed": "We could not look that up. Please try again.",
+      "typeInstead": "Type it instead"
     },
     "chains": {
       "label": "Supermarkets",
@@ -862,6 +892,52 @@
       "retry": "Try again",
       "save": "That did not save. Try again",
       "delete": "That did not go through. Try again"
+    },
+    "shops": {
+      "open": "Choose your shops"
+    }
+  },
+  "shops": {
+    "title": "Supermarkets",
+    "loading": "Loading the shops near you",
+    "other": "Other shops",
+    "search": {
+      "label": "Find a shop",
+      "placeholder": "Chain, street, town or postal code",
+      "results_one": "{{count}} shop matches",
+      "results_other": "{{count}} shops match"
+    },
+    "chain": {
+      "count_one": "{{count}} shop",
+      "count_other": "{{count}} shops",
+      "exclude": "Exclude this brand",
+      "include": "Include this brand",
+      "excludeAll": "Exclude these brands",
+      "includeAll": "Include these brands",
+      "hint": "Excluding the brand also covers shops it opens later. Switching off single shops does not"
+    },
+    "state": {
+      "chain": "Brand excluded",
+      "some": "{{count}} of {{total}} off"
+    },
+    "row": {
+      "excluded": "Off",
+      "chainExcluded": "Brand off"
+    },
+    "empty": {
+      "noCodes": {
+        "title": "This profile has no postal code yet",
+        "body": "We look for shops in the postal codes you shop from, so there is nothing to show until you add one.",
+        "action": "Add a postal code"
+      },
+      "noShops": "We don't have supermarkets for that postal code yet",
+      "noMatch": "No shop here matches that. Try a chain, a street or a town",
+      "missing": "We could not find that profile",
+      "toProfiles": "Your profiles"
+    },
+    "error": {
+      "load": "We could not read the shops",
+      "save": "That did not save. Try again"
     }
   },
   "basket": {
@@ -934,7 +1010,11 @@
       "title": "Which one did you get?",
       "hint": "Any of these counts as this line. Pick the one in your trolley.",
       "current": "Chosen",
-      "none": "This line names no product"
+      "none": "This line names no product",
+      "cheapest": "Cheapest",
+      "noPrice": "No price",
+      "asOf": "Prices from {{when}}",
+      "asOfTyped": "Prices from {{when}}, entered by hand"
     },
     "allocate": {
       "open": "Split between lists",

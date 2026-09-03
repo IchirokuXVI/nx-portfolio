@@ -1,5 +1,7 @@
 import {
   toAssistantReply,
+  toCatalogItem,
+  toCatalogSuggestion,
   toComment,
   toGeneratedListFromView,
   toGeneratedListRun,
@@ -295,6 +297,10 @@ describe('toLine', () => {
     // A product set, where this was a single nullable `itemId` that was null on every
     // line ever created (backend plan 0048, section 1.1).
     itemIds: ['item-milk'],
+    // The subscription, and which of the products the catalog put there (backend
+    // plan 0070, section 9).
+    productGroupId: 'group-milk',
+    groupItemIds: ['item-milk'],
     position: 3,
     approvalStatus: 'APPROVED',
     // The two derived indicators, which replaced the trip status (backend plan 0047,
@@ -354,6 +360,30 @@ describe('toLine', () => {
 
     expect(bare?.boughtCount).toBe(0);
     expect(bare?.lastSettlementOutcome).toBeNull();
+  });
+
+  it('reads an absent subscription as a hand made set', () => {
+    // The safe direction, and the same answer for two different servers: one that
+    // predates backend `0070` and one describing a line that follows no group. Both
+    // are lines nothing syncs, so neither draws a provenance heading or a `Keep`
+    // control, and the two need no distinction.
+    const bare = toLine({
+      ...valid,
+      productGroupId: undefined,
+      groupItemIds: undefined,
+    });
+
+    expect(bare?.productGroupId).toBeNull();
+    expect(bare?.groupItemIds).toEqual([]);
+  });
+
+  it('drops a group product id that is not a string', () => {
+    // The same rule `itemIds` follows: a reference nobody can resolve is not a
+    // product, and keeping it as a hole would put an unnamed chip in the catalog's
+    // cluster for something that is not on the line.
+    expect(
+      toLine({ ...valid, groupItemIds: [1, null, 'ok'] })?.groupItemIds
+    ).toEqual(['ok']);
   });
 
   it('reads an absent claim as nobody buying it, in the safe direction', () => {
@@ -952,5 +982,250 @@ describe('toGeneratedListRun', () => {
   it('drops a run whose basket cannot be read', () => {
     expect(toGeneratedListRun({ ...run, list: null })).toBeNull();
     expect(toGeneratedListRun(null)).toBeNull();
+  });
+});
+
+/**
+ * How big the packet is, which the catalog has always sent and this mapper used to
+ * drop.
+ *
+ * The catalog holds **one record per size**, so a search for "leche" answers with the
+ * same name and the same brand once per carton. With `unitSize` dropped here, every
+ * field that reached a suggestion row was identical across those records and the
+ * dropdown looked like it was repeating itself.
+ */
+describe('toCatalogItem: the size the catalog was always sending', () => {
+  const item = {
+    id: 'item-milk-1l',
+    name: { es: 'Leche entera', en: 'Whole milk' },
+    brand: 'Hacendado',
+    unitSize: 0.5,
+    defaultUnit: 'LITER',
+    productGroupId: 'group-milk',
+  };
+
+  it('reads the size and the unit off the wire', () => {
+    expect(toCatalogItem(item)).toEqual({
+      id: 'item-milk-1l',
+      name: { es: 'Leche entera', en: 'Whole milk' },
+      brand: 'Hacendado',
+      size: 0.5,
+      unit: 'LITER',
+      productGroupId: 'group-milk',
+      offer: null,
+    });
+  });
+
+  /**
+   * Absent is a fact worth keeping: a product whose size the catalog does not know is
+   * not a product of size zero, and no default could stand in for it without stating
+   * something about the packet that nobody measured.
+   */
+  it('keeps an unknown size as null rather than defaulting it', () => {
+    expect(toCatalogItem({ ...item, unitSize: undefined })?.size).toBeNull();
+    expect(toCatalogItem({ ...item, unitSize: null })?.size).toBeNull();
+    expect(toCatalogItem({ ...item, unitSize: 'a lot' })?.size).toBeNull();
+    // `NaN` passes a typeof check and then renders in the middle of a row.
+    expect(toCatalogItem({ ...item, unitSize: Number.NaN })?.size).toBeNull();
+  });
+
+  /**
+   * A unit this build has never heard of lands on the count, which is the value whose
+   * size is suppressed below two, so an unrecognised unit draws nothing rather than
+   * announcing a number in a unit nobody here can name.
+   */
+  it('falls back to a count for a unit it does not recognise', () => {
+    expect(toCatalogItem({ ...item, defaultUnit: 'FURLONG' })?.unit).toBe(
+      'UNIT'
+    );
+    expect(toCatalogItem({ ...item, defaultUnit: undefined })?.unit).toBe(
+      'UNIT'
+    );
+  });
+
+  it('carries the size through a suggestion, which is where it is drawn', () => {
+    const mapped = toCatalogSuggestion({ kind: 'item', group: null, item });
+
+    expect(mapped).toEqual({
+      kind: 'item',
+      item: expect.objectContaining({ size: 0.5, unit: 'LITER' }),
+    });
+  });
+});
+
+/**
+ * The price the suggestion row draws (velista `0063`).
+ *
+ * It was on the wire as `bestOffer` from backend `0048` and dropped here, which
+ * is why three screens searched the catalog and answered with no prices at all.
+ *
+ * The one distinction worth a test of its own: **an absent offer and an offer
+ * with no price are different values and the same nothing on screen.** A scope
+ * can carry a product with no number on it, and that is an offer whose `price`
+ * is null rather than an absence, so no caller has to know which one it got.
+ */
+describe('toCatalogItem: the price it used to drop', () => {
+  const item = {
+    id: 'item-milk-1l',
+    name: { es: 'Leche entera', en: 'Whole milk' },
+    brand: 'Hacendado',
+    unitSize: 1,
+    defaultUnit: 'LITER',
+    productGroupId: 'group-milk',
+    bestOffer: {
+      price: 1.05,
+      currency: 'EUR',
+      unitPrice: 1.05,
+      unitPriceLabel: 'EUR/L',
+      priceObservedAt: '2026-09-01T08:00:00.000Z',
+      priceSourceKind: 'OFFICIAL_WEB',
+      priceScopeId: 'scope-cordoba',
+    },
+  };
+
+  it('maps the whole offer, not only the number on it', () => {
+    expect(toCatalogItem(item)?.offer).toEqual({
+      price: 1.05,
+      currency: 'EUR',
+      unitPrice: 1.05,
+      unitPriceLabel: 'EUR/L',
+      observedAt: new Date('2026-09-01T08:00:00.000Z'),
+      sourceKind: 'OFFICIAL_WEB',
+      priceScopeId: 'scope-cordoba',
+    });
+  });
+
+  /**
+   * Every product in staging and production, where the harvester is off on
+   * purpose, and the row is the row it has always been.
+   */
+  it('reads an absent offer as no offer', () => {
+    expect(toCatalogItem({ ...item, bestOffer: undefined })?.offer).toBeNull();
+    expect(toCatalogItem({ ...item, bestOffer: null })?.offer).toBeNull();
+  });
+
+  it('keeps an offer whose price is null as an offer', () => {
+    const mapped = toCatalogItem({
+      ...item,
+      bestOffer: { ...item.bestOffer, price: null },
+    });
+
+    expect(mapped?.offer).not.toBeNull();
+    expect(mapped?.offer?.price).toBeNull();
+    expect(mapped?.offer?.priceScopeId).toBe('scope-cordoba');
+  });
+
+  it('carries the offer through an item suggestion', () => {
+    const mapped = toCatalogSuggestion({ kind: 'item', group: null, item });
+
+    expect(mapped?.kind === 'item' ? mapped.item.offer?.price : null).toBe(
+      1.05
+    );
+  });
+});
+
+/**
+ * The composer's dropdown, where a group row is only worth drawing because of the
+ * products it carries: choosing one adds a line with the group's whole set
+ * attached (backend plan 0048, section 1.1).
+ *
+ * The field names here are the wire's, and that is the point of the test. The
+ * mapper read `itemIds` off the offer while nothing on the server ever wrote one,
+ * so every group row offered to add zero products and added none.
+ */
+describe('toCatalogSuggestion', () => {
+  const offer = {
+    kind: 'group',
+    group: {
+      group: { id: 'g1', name: { en: 'Milk', es: 'Leche' } },
+      cheapestItem: null,
+      offer: null,
+      itemIds: ['i1', 'i2'],
+    },
+    item: null,
+  };
+
+  it("carries the group's products, which choosing it attaches whole", () => {
+    const mapped = toCatalogSuggestion(offer);
+
+    expect(mapped?.kind).toBe('group');
+    expect(mapped?.kind === 'group' ? mapped.itemIds : null).toEqual([
+      'i1',
+      'i2',
+    ]);
+  });
+
+  it('reads an offer that names no products as an empty set, not a failure', () => {
+    // A legitimate suggestion: it adds a line with the group's name and no set,
+    // which the line page can fill in later.
+    const mapped = toCatalogSuggestion({
+      ...offer,
+      group: { ...offer.group, itemIds: undefined },
+    });
+
+    expect(mapped?.kind === 'group' ? mapped.itemIds : null).toEqual([]);
+  });
+
+  it('drops a group suggestion with no group on it', () => {
+    expect(toCatalogSuggestion({ ...offer, group: null })).toBeNull();
+  });
+
+  it('maps an item suggestion to the one product', () => {
+    const mapped = toCatalogSuggestion({
+      kind: 'item',
+      group: null,
+      item: {
+        id: 'i1',
+        name: { en: 'Milk', es: 'Leche' },
+        brand: 'Pascual',
+        productGroupId: 'g1',
+      },
+    });
+
+    expect(mapped?.kind === 'item' ? mapped.item.id : null).toBe('i1');
+  });
+
+  const priced = {
+    price: 1.05,
+    currency: 'EUR',
+    unitPrice: 1.05,
+    unitPriceLabel: 'EUR/L',
+    priceObservedAt: '2026-09-01T08:00:00.000Z',
+    priceSourceKind: 'OFFICIAL_WEB',
+    priceScopeId: 'scope-cordoba',
+  };
+
+  it("carries the group's best price, which the row draws labelled", () => {
+    const mapped = toCatalogSuggestion({
+      ...offer,
+      group: { ...offer.group, offer: priced },
+    });
+
+    expect(mapped?.kind === 'group' ? mapped.offer?.price : null).toBe(1.05);
+  });
+
+  /**
+   * **The wire calls a group's price `offer` and an item's `bestOffer`**, and
+   * they are the same shape, so a copy paste between the two branches of the
+   * mapper produces a null that looks like an unpriced catalog rather than like
+   * a mistake. This is the assertion that catches it.
+   */
+  it('reads only `offer` on a group, never `bestOffer`', () => {
+    const mapped = toCatalogSuggestion({
+      ...offer,
+      group: { ...offer.group, offer: null, bestOffer: priced },
+    });
+
+    expect(mapped?.kind === 'group' ? mapped.offer : 'wrong kind').toBeNull();
+  });
+
+  /**
+   * Every group in a cluster with the harvester off, and any group none of whose
+   * members is priced at the reader's scopes. The row is the row it is today.
+   */
+  it('reads a group with no priced member as no offer', () => {
+    const mapped = toCatalogSuggestion(offer);
+
+    expect(mapped?.kind === 'group' ? mapped.offer : 'wrong kind').toBeNull();
   });
 });

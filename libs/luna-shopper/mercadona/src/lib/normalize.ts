@@ -85,7 +85,7 @@ function toListProduct(
     price: readNumber(price, 'unit_price'),
     unitPrice: readNumber(price, 'bulk_price'),
     unitPriceLabel: readString(price, 'reference_format'),
-    categoryPath: path.map((node) => node.name),
+    categoryPath: path,
   };
 }
 

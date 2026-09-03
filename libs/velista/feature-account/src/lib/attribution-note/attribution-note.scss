@@ -1,0 +1,27 @@
+:host {
+  display: block;
+}
+
+.note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+
+  a {
+    color: inherit;
+
+    &:focus-visible {
+      outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+      outline-offset: var(--app-focus-ring-offset);
+    }
+  }
+}
+
+.separator {
+  // Decorative on a line that is already two links, so it is not read out as a word.
+  color: var(--app-text-muted);
+}

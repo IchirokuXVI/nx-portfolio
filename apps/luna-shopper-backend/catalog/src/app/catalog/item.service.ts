@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ITEM_LOOKUP_LIMITS,
+  LINE_ITEM_SET_MAX,
   type CreateItemRequest,
   type FindItemByEanRequest,
   type FindItemByEanResult,
@@ -26,6 +27,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { In, Repository, type SelectQueryBuilder } from 'typeorm';
 import { Item, ProductGroup, SupermarketItem } from '../entities';
+import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import {
   toItemOfferView,
   toItemView,
@@ -45,26 +47,6 @@ interface ItemCursor {
   /** A sort value for a keyset order; an offset for `relevance`. */
   value: string;
   id: string;
-}
-
-const EMPTY_ITEM_PAGE: ItemPage = { items: [], nextCursor: null };
-const EMPTY_GROUP_PAGE: ProductGroupOfferPage = { items: [], nextCursor: null };
-
-/**
- * Whether the caller stated where they shop and reached no chain we know (plan
- * 0049, section 3).
- *
- * **Absent and empty are different, and this is the whole of the difference.**
- * Absent is an unscoped read, which still ranks the catalog and quotes no price;
- * that is what the admin surface does and it is not reachable through the
- * gateway any more. An empty array is a place: a postal code nobody serves, or
- * chains that were all excluded. Listing the global product table for it would
- * answer a question the caller did not ask, so the answer is an empty page,
- * which the client explains from the coverage flags the resolver returned
- * alongside (section 5).
- */
-function resolvedToNothing(priceScopeIds: string[] | undefined): boolean {
-  return Array.isArray(priceScopeIds) && priceScopeIds.length === 0;
 }
 
 /** Collects positional parameters while a query is assembled around them. */
@@ -101,15 +83,18 @@ function params() {
  * caller's shopping profile is the gateway's job (plan 0049, section 2.1), which
  * is what keeps catalog stateless about users.
  *
- * Since plan 0049, section 3, the two ways of sending nothing mean different
- * things. **Absent** is an unscoped read: it ranks, it quotes no price, and it is
- * how the admin surface lists the catalog. **An empty array** is a caller who
- * said where they shop and reached no chain we know, and it answers with an empty
- * page rather than with the global product table.
+ * **Absent and empty scopes are the same answer** (plan 0069, section 2): a
+ * ranked, paged read with every price field null. They were different for a
+ * while, an empty array answering an empty page, and that was the wrong shape of
+ * rule: the catalog is a list of things that exist, and a scope is how a price
+ * gets attached to one, so having none says something about prices and nothing
+ * about products. Which of the three states a caller is in — nothing said, a
+ * place nobody serves, everywhere refused — is read from `coverage` on the scope
+ * view, not from the size of this page.
  *
- * What did not change is that a group with no priced member still comes back
- * whenever there are scopes at all: the composer is attaching identity, not
- * quoting a price, and the harvester is off outside development.
+ * A group with no priced member still comes back for the same reason: the
+ * composer is attaching identity, not quoting a price, and the harvester is off
+ * outside development.
  */
 @Injectable()
 export class ItemService {
@@ -120,9 +105,21 @@ export class ItemService {
     @InjectRepository(SupermarketItem)
     private readonly prices: Repository<SupermarketItem>,
     private readonly productGroups: ProductGroupService,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    // Where a product's group moves is where plan 0070's fan out starts. Fire and
+    // forget: an admin's write must not fail because nobody was listening.
+    private readonly events: CatalogEventsPublisher
   ) {}
 
+  /**
+   * A new product (plan 0012).
+   *
+   * It announces its group when it is created into one (plan 0070, section 5).
+   * That is "joined", with nothing on the other side, and it is the same fact as
+   * an update that moves a product into a group: a household subscribed to Milk
+   * should get a milk the catalog has only just heard of, and there is no second
+   * write coming that would tell them.
+   */
   async create(req: CreateItemRequest): Promise<ItemView> {
     this.admin.requireAdmin(req.userId);
     const saved = await this.items.save(
@@ -138,12 +135,30 @@ export class ItemService {
         productGroupId: await this.resolveGroup(req.productGroupId ?? null),
       })
     );
+    if (saved.productGroupId !== null) {
+      this.events.itemGroupChanged(saved.id, null, saved.productGroupId);
+    }
     return toItemView(saved);
   }
 
+  /**
+   * Edit a product (plan 0012).
+   *
+   * **This is where group membership moves**, and therefore where plan 0070's fan
+   * out is triggered from. `ProductGroupService` says so in its own class doc:
+   * nothing there assigns items to groups, so "an admin adds three products to
+   * Milk" is three calls to this method, and a sync hung off the group service
+   * would watch a service that never fires.
+   *
+   * Announced only when the group actually moved, and only after the write. Every
+   * other field an admin can change here means nothing to a subscribed line, and
+   * the consumer's work is proportional to how many households subscribe to the
+   * group, so an event for a rename would be a fan out over nothing.
+   */
   async update(req: UpdateItemRequest): Promise<ItemView> {
     this.admin.requireAdmin(req.userId);
     const row = await this.load(req.itemId);
+    const groupBefore = row.productGroupId;
     if (req.name !== undefined) {
       row.name = req.name;
     }
@@ -171,7 +186,15 @@ export class ItemService {
     if (req.productGroupId !== undefined) {
       row.productGroupId = await this.resolveGroup(req.productGroupId);
     }
-    return toItemView(await this.items.save(row));
+    const saved = await this.items.save(row);
+    if (saved.productGroupId !== groupBefore) {
+      this.events.itemGroupChanged(
+        saved.id,
+        groupBefore,
+        saved.productGroupId
+      );
+    }
+    return toItemView(saved);
   }
 
   async delete(req: ItemIdRequest): Promise<{ id: string }> {
@@ -198,6 +221,19 @@ export class ItemService {
    * It exists so the basket screen can name every line's pick and every option
    * behind it in one round trip. Without it, twenty lines with three options each
    * would be sixty {@link get} calls to draw one page.
+   *
+   * ## Priced when asked (plan 0066, section 2)
+   *
+   * With `priceScopeIds` every item carries `bestOffer`: the cheapest of its rows
+   * across exactly those scopes, or **null** when it has none there, so a caller
+   * can tell "not priced at your shops" from "this read quotes no prices".
+   * Absent and empty scopes are the same answer here, unlike {@link search}: a
+   * lookup by id returns the same items either way, so the only question is
+   * whether a price is attached.
+   *
+   * Cheapest **by price, not by unit price** (section 2.1). The price is what the
+   * till charges; ranking by unit price is the better answer to "which milk is
+   * cheaper" and belongs to backlog 0004 with the threshold that makes it usable.
    */
   async getMany(req: GetItemsRequest): Promise<GetItemsResult> {
     const ids = [...new Set(req.ids)].slice(0, ITEM_LOOKUP_LIMITS.maxIds);
@@ -205,9 +241,23 @@ export class ItemService {
       return { items: [] };
     }
     const rows = await this.items.find({ where: { id: In(ids) } });
-    // An arrow rather than a bare reference: `map` passes the index as the
-    // second argument, which `toItemView` reads as `bestOffer`.
-    return { items: rows.map((row) => toItemView(row)) };
+    const scopeIds = req.priceScopeIds ?? [];
+    if (scopeIds.length === 0) {
+      // An arrow rather than a bare reference: `map` passes the index as the
+      // second argument, which `toItemView` reads as `bestOffer`.
+      return { items: rows.map((row) => toItemView(row)) };
+    }
+    const offers = await this.offersFor(
+      rows.map((row) => row.id),
+      scopeIds,
+      'price'
+    );
+    return {
+      items: rows.map((row) => ({
+        ...toItemView(row),
+        bestOffer: offers.get(row.id) ?? null,
+      })),
+    };
   }
 
   /**
@@ -232,11 +282,19 @@ export class ItemService {
    * key anything to break: `ts_rank` is a float, two genuinely equal matches
    * differ in the fifteenth digit, and without the rounding "exact match wins"
    * would be a rule that never fired.
+   *
+   * ## A barcode is one of the things a query can be
+   *
+   * A query that is a whole barcode also matches `ean`, and the row carrying it
+   * sorts above every text hit. This is a **search** and {@link findByEan} is
+   * still a lookup: the two differ in what they are for, not in how they compare
+   * the digits. The lookup answers the harvester's matching ladder, where the
+   * only acceptable answer is that one product or none; this puts the scanned
+   * product at the top of a dropdown that goes on offering the text matches
+   * underneath, because somebody typing digits may not have been scanning at
+   * all.
    */
   async search(req: SearchItemsRequest): Promise<ItemPage> {
-    if (resolvedToNothing(req.priceScopeIds)) {
-      return EMPTY_ITEM_PAGE;
-    }
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
     const term = parseSearchTerm(req.query);
@@ -274,11 +332,14 @@ export class ItemService {
    * outside development, so in staging and production almost every group is in
    * it, and a composer that dropped unpriced groups would show an empty dropdown
    * on a catalog full of exactly the right answers.
+   *
+   * **Barcodes are matched by {@link search} and not here**, which is why this
+   * read gained nothing when they were. The rule the suggest endpoint enforces
+   * is that a group beats an item for a bare *word*, and it holds because a word
+   * names a kind of thing while a barcode names one product. Somebody who scans
+   * a carton is not asking to be shown milk.
    */
   async searchOffers(req: SearchOffersRequest): Promise<ProductGroupOfferPage> {
-    if (resolvedToNothing(req.priceScopeIds)) {
-      return EMPTY_GROUP_PAGE;
-    }
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
     const term = parseSearchTerm(req.query);
@@ -383,8 +444,14 @@ export class ItemService {
         : await this.items.find({ where: { id: In(itemIds) } });
     const byId = new Map(members.map((item) => [item.id, item]));
 
+    // The whole membership of every group on the page, which is what choosing one
+    // attaches to a line. One query for the page rather than one per group.
+    const membership = await this.membersOf(page.map((row) => row.id));
+
     return {
-      items: page.map((row) => this.toOfferView(row, byId)),
+      items: page.map((row) =>
+        this.toOfferView(row, byId, membership.get(row.id) ?? [])
+      ),
       nextCursor: hasMore
         ? encodeCursor({
             order: 'relevance',
@@ -395,9 +462,59 @@ export class ItemService {
     };
   }
 
+  /**
+   * The members of each of these groups, capped per group, in one query.
+   *
+   * The cap is applied **in the database** with a window function rather than by
+   * slicing what came back, because the unbounded read is the thing worth
+   * avoiding: ten groups on a page and no cap is ten whole product ranges pulled
+   * out of Postgres to answer one keystroke.
+   *
+   * Ordered by English name, then id. Any deterministic order would do for the
+   * cap to be stable, and this one also decides the order the products sit in on
+   * the line the composer is about to create, where alphabetical is a better
+   * answer than insertion order.
+   */
+  private async membersOf(groupIds: string[]): Promise<Map<string, string[]>> {
+    if (groupIds.length === 0) {
+      return new Map();
+    }
+    const p = params();
+    const rows: { id: string; productGroupId: string }[] =
+      await this.items.query(
+        `
+      SELECT "id", "productGroupId"
+      FROM (
+        SELECT i."id", i."productGroupId",
+               row_number() OVER (
+                 PARTITION BY i."productGroupId"
+                 ORDER BY i."name" ->> 'en' ASC, i."id" ASC
+               ) AS rn
+        FROM "items" i
+        WHERE i."productGroupId" = ANY(${p.bind(groupIds)})
+      ) ranked
+      WHERE rn <= ${p.bind(LINE_ITEM_SET_MAX)}
+      ORDER BY "productGroupId" ASC, rn ASC
+      `,
+        p.values
+      );
+
+    const byGroup = new Map<string, string[]>();
+    for (const row of rows) {
+      const current = byGroup.get(row.productGroupId);
+      if (current === undefined) {
+        byGroup.set(row.productGroupId, [row.id]);
+      } else {
+        current.push(row.id);
+      }
+    }
+    return byGroup;
+  }
+
   private toOfferView(
     row: RankedGroupRow,
-    members: Map<string, Item>
+    members: Map<string, Item>,
+    itemIds: string[]
   ): ProductGroupOfferView {
     const group = toProductGroupView({
       id: row.id,
@@ -409,7 +526,7 @@ export class ItemService {
 
     const member = row.offerItemId ? members.get(row.offerItemId) : undefined;
     if (!member || !row.offerScopeId) {
-      return { group, cheapestItem: null, offer: null };
+      return { group, cheapestItem: null, offer: null, itemIds };
     }
     const offer: ItemOfferView = {
       itemId: member.id,
@@ -424,26 +541,34 @@ export class ItemService {
         : null,
       priceSourceKind: row.offerSourceKind,
     };
-    return { group, cheapestItem: toItemView(member, offer), offer };
+    return { group, cheapestItem: toItemView(member, offer), offer, itemIds };
   }
 
   /**
    * The cheapest price each of these items has at these scopes.
    *
    * `DISTINCT ON` rather than a group by with a self join: one pass, and the
-   * ordering inside it is the definition of cheapest. Unit price first because
+   * ordering inside it is the definition of cheapest, which is the one thing the
+   * two callers disagree on. {@link search} ranks by **unit price** first because
    * that is the field whose only purpose is comparison (plan 0038, section 2.4),
    * then the shelf price for a product whose source published no unit price at
-   * all, which would otherwise never be quotable.
+   * all, which would otherwise never be quotable. {@link getMany} ranks by
+   * **price** first (plan 0066, section 2.1): it quotes what the till charges for
+   * one product, and a unit price ranking there would be half of backlog 0004.
    */
   private async offersFor(
     itemIds: string[],
-    priceScopeIds?: string[]
+    priceScopeIds?: string[],
+    rank: 'unitPrice' | 'price' = 'unitPrice'
   ): Promise<Map<string, ItemOfferView>> {
     const offers = new Map<string, ItemOfferView>();
     if (itemIds.length === 0 || !priceScopeIds || priceScopeIds.length === 0) {
       return offers;
     }
+    const [first, second] =
+      rank === 'price'
+        ? ['si."price"', 'si."unitPrice"']
+        : ['si."unitPrice"', 'si."price"'];
     const rows = await this.prices
       .createQueryBuilder('si')
       .distinctOn(['si."itemId"'])
@@ -453,8 +578,8 @@ export class ItemService {
       })
       .andWhere('si."available"')
       .orderBy('si."itemId"', 'ASC')
-      .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
-      .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
+      .addOrderBy(first, 'ASC', 'NULLS LAST')
+      .addOrderBy(second, 'ASC', 'NULLS LAST')
       .getMany();
     for (const row of rows) {
       offers.set(row.itemId, toItemOfferView(row));
@@ -474,6 +599,29 @@ export class ItemService {
     const query = p.bind(term.tsquery);
     const raw = p.bind(term.raw);
     const threshold = p.bind(TRIGRAM_THRESHOLD);
+    // The barcode test, bound once and spent in both the filter and the
+    // ordering, or the constant `false` when the query is words. A barcode names
+    // one product, so the row carrying it is not merely the most relevant
+    // answer, it is the answer, and it has to beat a text hit that scored above
+    // the zero an all digit query earns from `ts_rank`.
+    const barcode =
+      term.ean === null ? 'false' : `i."ean" = ${p.bind(term.ean)}`;
+    // The same test as a ranking key, with the two things SQL three valued logic
+    // does to it spelled out.
+    //
+    // **`NULLS LAST`, because most products have no barcode at all**, and
+    // `NULL = '8480000181077'` is NULL rather than false. A descending sort puts
+    // nulls first by default, so without this every unbarcoded text match would
+    // rank above the very product that was scanned.
+    //
+    // **Written only when there is a barcode to rank on**: Postgres refuses a
+    // bare constant in `ORDER BY`, so the `false` that is harmless in the filter
+    // is a syntax error here. Leaving the key out is the same ordering anyway,
+    // since a key every row ties on decides nothing.
+    const barcodeKey =
+      term.ean === null
+        ? ''
+        : `(${barcode}) DESC NULLS LAST,\n               `;
 
     const filters: string[] = [];
     if (req.category) {
@@ -502,14 +650,15 @@ export class ItemService {
       SELECT i.*
       FROM "items" i
       WHERE (
-        i."search_es" @@ to_tsquery('spanish', ${query})
+        ${barcode}
+        OR i."search_es" @@ to_tsquery('spanish', ${query})
         OR i."search_en" @@ to_tsquery('english', ${query})
         OR similarity(coalesce(i."brand", ''), ${raw}) > ${threshold}
         OR similarity(i."name" ->> 'es', ${raw}) > ${threshold}
         OR similarity(i."name" ->> 'en', ${raw}) > ${threshold}
       )
       ${filters.map((clause) => `AND ${clause}`).join('\n      ')}
-      ORDER BY round(GREATEST(
+      ORDER BY ${barcodeKey}round(GREATEST(
                  ts_rank(i."search_es", to_tsquery('spanish', ${query})),
                  ts_rank(i."search_en", to_tsquery('english', ${query})),
                  GREATEST(
@@ -550,7 +699,8 @@ export class ItemService {
     if (term) {
       qb.andWhere(
         `(
-          i."search_es" @@ to_tsquery('spanish', :tsquery)
+          ${term.ean === null ? 'false' : 'i."ean" = :ean'}
+          OR i."search_es" @@ to_tsquery('spanish', :tsquery)
           OR i."search_en" @@ to_tsquery('english', :tsquery)
           OR similarity(coalesce(i."brand", ''), :raw) > :threshold
           OR similarity(i."name" ->> 'es', :raw) > :threshold
@@ -560,6 +710,10 @@ export class ItemService {
           tsquery: term.tsquery,
           raw: term.raw,
           threshold: TRIGRAM_THRESHOLD,
+          // The barcode filters here too, so an admin who pastes one into a
+          // table ordered by name finds the product rather than an empty table.
+          // Only the ordering is the ranked branch's alone.
+          ...(term.ean === null ? {} : { ean: term.ean }),
         }
       );
     }

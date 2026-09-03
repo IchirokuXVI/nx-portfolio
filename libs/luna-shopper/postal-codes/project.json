@@ -1,0 +1,27 @@
+{
+  "name": "luna-shopper/postal-codes",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/postal-codes/src",
+  "prefix": "lib",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/luna-shopper/postal-codes/jest.config.cts"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "refresh-dataset": {
+      "//": "Regenerates the committed dataset from a fresh GeoNames download (plan 0060, section 3). Never run by CI, and never edit the output by hand: the reducer is the only thing allowed to write src/data/*.json. GEONAMES_COUNTRY picks the country (default ES); GEONAMES_FILE points at an already downloaded export to skip the download.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx tsx libs/luna-shopper/postal-codes/tools/refresh-dataset.ts"
+      }
+    }
+  }
+}

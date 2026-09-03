@@ -220,6 +220,7 @@ async function render(options: Options = {}): Promise<{
             name: 'Saturday shop',
             generatedAt: null,
             products: new Map(),
+            scopes: new Map(),
           }),
           state: signal('ready'),
           lines: store.lines,

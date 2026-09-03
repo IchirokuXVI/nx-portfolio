@@ -161,6 +161,7 @@ function storeDouble(world: World) {
     me,
     seesZoneData: true,
     products: new Map(),
+    scopes: new Map(),
     listNames: new Map(),
   });
 

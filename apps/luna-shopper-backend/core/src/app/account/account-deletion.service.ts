@@ -13,7 +13,7 @@ import { GeneratedListService } from '../generated-lists/generated-list.service'
 import { ZoneCountsService } from '../zones/zone-counts.service';
 import { toMembershipView, toZoneView } from '../zones/zone.mappers';
 import { anonymizedUsername } from './anonymize';
-import { ProcessedEventStore } from './idempotency.store';
+import { ProcessedEventStore } from '../events/idempotency.store';
 
 /**
  * Core's reaction to a user being deleted (plan 0011, section 2). Auth removes the

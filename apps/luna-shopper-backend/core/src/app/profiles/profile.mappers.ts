@@ -1,21 +1,24 @@
 import type {
   ProfileGenerationSourceView,
+  ProfileLocationPreferenceView,
   ProfilePostalCodeView,
   ProfileSupermarketPreferenceView,
   ShoppingProfileView,
 } from '@portfolio/luna-shopper/contracts';
 import type {
   ProfileGenerationSource,
+  ProfileLocationPreference,
   ProfilePostalCode,
   ProfileSupermarketPreference,
   ShoppingProfile,
 } from '../entities';
 
 /**
- * Rows to wire views (plan 0049). The children are passed in rather than read
- * from a relation, because the parent declares none: three `OneToMany`s exist
- * only to be eagerly loaded once and would otherwise be a lazy relation nobody
- * asked for on every read of a profile.
+ * Rows to wire views (plan 0049, and the fourth child in plan 0064). The
+ * children are passed in rather than read from a relation, because the parent
+ * declares none: the `OneToMany`s would exist only to be eagerly loaded once and
+ * would otherwise be a lazy relation nobody asked for on every read of a
+ * profile.
  */
 
 export function toPostalCodeView(
@@ -26,6 +29,9 @@ export function toPostalCodeView(
     postalCode: row.postalCode,
     label: row.label,
     position: row.position,
+    country: row.country,
+    source: row.source,
+    expandNearby: row.expandNearby,
   };
 }
 
@@ -35,6 +41,16 @@ export function toSupermarketPreferenceView(
   return {
     id: row.id,
     supermarketId: row.supermarketId,
+    excluded: row.excluded,
+  };
+}
+
+export function toLocationPreferenceView(
+  row: ProfileLocationPreference
+): ProfileLocationPreferenceView {
+  return {
+    id: row.id,
+    supermarketLocationId: row.supermarketLocationId,
     excluded: row.excluded,
   };
 }
@@ -50,6 +66,7 @@ export function toShoppingProfileView(
   children: {
     postalCodes: ProfilePostalCode[];
     supermarkets: ProfileSupermarketPreference[];
+    locations: ProfileLocationPreference[];
     generationSources: ProfileGenerationSource[];
   }
 ): ShoppingProfileView {
@@ -66,6 +83,7 @@ export function toShoppingProfileView(
     generationScope: row.generationScope,
     postalCodes: children.postalCodes.map(toPostalCodeView),
     supermarkets: children.supermarkets.map(toSupermarketPreferenceView),
+    locations: children.locations.map(toLocationPreferenceView),
     generationSources: children.generationSources.map(toGenerationSourceView),
   };
 }

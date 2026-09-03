@@ -42,20 +42,12 @@ export interface ProblemResponseOptions {
    */
   notConfigured?: boolean;
   /**
-   * The route is a catalog read that returns items or prices, so it can refuse a
-   * caller who has not said where they shop (plan 0049, section 3). Documented
-   * separately from `body` even though both are 400s, because the two are told
-   * apart by `code` and a client branches on it to open the profile page.
-   */
-  scopeRequired?: boolean;
-  /**
    * The route writes to a basket that may be over, so it can answer 409 with a
    * code the client tells apart from a plain conflict (plan 0055, section 3.3).
    *
-   * Documented separately from `conflict` for the same reason `scopeRequired` is
-   * documented separately from `body`: they share a status and are told apart by
-   * `code`, and this is the one a client turns into "this basket is finished"
-   * rather than into a retry.
+   * Documented separately from `conflict` for the same reason `staleQuantity`
+   * is: they share a status and are told apart by `code`, and this is the one a
+   * client turns into "this basket is finished" rather than into a retry.
    */
   finishedBasket?: boolean;
 }
@@ -122,9 +114,6 @@ export function ApiProblemResponses(
   if (options.notConfigured) {
     codes.push(ERROR_CODES.NOT_CONFIGURED);
   }
-  if (options.scopeRequired) {
-    codes.push(ERROR_CODES.CATALOG_SCOPE_REQUIRED);
-  }
   if (options.finishedBasket) {
     codes.push(ERROR_CODES.GENERATED_LIST_FINISHED);
   }
@@ -135,10 +124,10 @@ export function ApiProblemResponses(
 
   // Grouped by status before anything is applied, so a status with several codes
   // is documented once with all of them (see `problem`). This is what lets
-  // `scopeRequired` sit beside `body`, and `finishedBasket` and `staleQuantity`
-  // beside `conflict`: they share a status, and before the grouping the later of
-  // two declarations replaced the earlier rather than adding to it, so a route
-  // had to choose which of its own 409s to publish and hide the rest.
+  // `finishedBasket` and `staleQuantity` sit beside `conflict`: they share a
+  // status, and before the grouping the later of two declarations replaced the
+  // earlier rather than adding to it, so a route had to choose which of its own
+  // 409s to publish and hide the rest.
   const byStatus = new Map<HttpStatus, ErrorCode[]>();
   for (const code of codes) {
     const status = ERROR_STATUS[code];

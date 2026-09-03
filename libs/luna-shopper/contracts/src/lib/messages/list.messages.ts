@@ -87,14 +87,43 @@ export const LINE_QUANTITY_MAX = 100000;
 export const LINE_BATCH_MAX_ITEMS = 50;
 
 /**
- * How many products one line's set may hold (plan 0048, section 1.1).
+ * The largest set **a person may grow a line to** (plan 0048, section 1.1; plan
+ * 0070, section 7).
  *
- * A bound rather than a budget, like the batch above it. Picking a group copies
- * that group's members onto the line, and a group is a few dozen products at
- * most; a request naming more than this is a client bug or an attempt to write an
- * unbounded number of join rows from one call.
+ * A bound rather than a budget, like the batch above it: a group is a few dozen
+ * products at most, and a request naming more than this is a client bug or an
+ * attempt to write an unbounded number of join rows from one call.
+ *
+ * It is not, and cannot be, a bound on the set's **size**. A line stays
+ * subscribed to its group since plan 0070, so a growing group can carry one past
+ * this number, and that is an accepted state rather than a bug: the alternative
+ * is a subscription that silently stops working at a number the person cannot
+ * see. The rule a client write is held to is therefore
+ * `next.length <= max(LINE_ITEM_SET_MAX, current.length)`, which lets an over cap
+ * line shrink and refuses to let it grow, and it lives in `LineService.update`
+ * because that is the only place that knows the current size.
  */
 export const LINE_ITEM_SET_MAX = 100;
+
+/**
+ * The structural bound on an `itemIds` array, which is a different number from
+ * {@link LINE_ITEM_SET_MAX} and exists for a different reason (plan 0070,
+ * section 7.2).
+ *
+ * `updateLine` used to state the cap as `maxItems: LINE_ITEM_SET_MAX`, and that
+ * made an over cap line **uneditable**: at 104, a person removing one product
+ * sends an array of 103 and gets a 400 before any service sees it, so they could
+ * not shrink the line back under the cap by the rule that exists to keep it under
+ * the cap. This is what that schema states instead: generous enough that no
+ * curated group approaches it, small enough that a request body stays bounded.
+ *
+ * The sync respects it too and truncates a larger group in English name order,
+ * which is the order `item.searchOffers` already caps by, so the two agree.
+ *
+ * `addLine` and `addLines` keep {@link LINE_ITEM_SET_MAX}: a new line starts
+ * empty, so `max(100, 0)` is 100 and the schema is exactly right there.
+ */
+export const LINE_ITEM_SET_CEILING = 500;
 
 export const COMMENT_PATTERNS = {
   add: 'comment.add',
@@ -214,11 +243,45 @@ export interface LineView {
    * were attached. Empty for a free text line, which stays first class.
    *
    * It replaced a single nullable `itemId` that was null on every line ever
-   * created. Picking a group in the composer **copies the group's members here**
-   * and the line references no group afterwards, so removing a product the
-   * household never buys is an ordinary edit: a line is its own hand made group.
+   * created. Picking a group in the composer copies the group's members here, and
+   * removing a product the household never buys is an ordinary edit: a line is
+   * its own hand made set, and the divergence always wins.
+   *
+   * The line no longer **forgets** where the set came from, which is the half of
+   * plan 0048 section 1.1 that plan 0070 revises. Forgetting is one way to protect
+   * a divergence and it is the way that also throws away every correction the
+   * catalog will ever make; recording the divergence protects it just as well.
+   * See {@link productGroupId} and {@link groupItemIds}.
+   *
+   * It keeps its meaning and its shape: it is what the hash is computed from,
+   * what `0050` dedups on, what velista `0043` matches on and what a basket's
+   * options are built from. Replacing it with an array of objects would rewrite
+   * all of those to derive the array back.
    */
   itemIds: string[];
+  /**
+   * The product group this line is subscribed to, or null for a hand made set
+   * (plan 0070, section 9).
+   *
+   * Null on every line plan 0048 created, and on every line since that was
+   * assembled by hand. Existing lines are **not** retro bound by matching their
+   * `itemSetHash` against a group's members: a line whose set happens to match
+   * Milk's members today was still assembled by a person, and enrolling it into a
+   * subscription it never asked for is an edit nobody asked for, applied to every
+   * household at once (section 10).
+   */
+  productGroupId: string | null;
+  /**
+   * The subset of {@link itemIds} the group put there and nobody has adopted.
+   * Empty for every line that is not subscribed, which is every line 0048
+   * created.
+   *
+   * A subset rather than a second array of objects, because there are exactly two
+   * sources: what is not here was put there by a person, whether they typed it or
+   * adopted what the group offered. Velista `0065` draws the chip from it, and the
+   * adoption gesture is what moves an id out of it for good.
+   */
+  groupItemIds: string[];
   /**
    * A digest of the sorted distinct {@link itemIds}, or null while the set is
    * empty (plan 0048, section 1.1).
@@ -516,6 +579,20 @@ export interface AddLineRequest {
    * case: typing something and ignoring the dropdown adds a plain line.
    */
   itemIds?: string[];
+  /**
+   * The group the composer says this set came from (plan 0070, section 9), which
+   * subscribes the new line to it.
+   *
+   * **The server does not re-derive the set from the group.** The suggestion
+   * already carries the members it offers and one tap adds the line, so a second
+   * read of the group here would let the line be created with different products
+   * than the row the person tapped said it would add.
+   *
+   * Only on a single add and not on {@link AddLinesItem}: a batch is a paste, an
+   * import or the assistant, none of which is somebody picking a group in the
+   * composer.
+   */
+  productGroupId?: string;
 }
 
 /** One line of a {@link AddLinesRequest} batch (plan 0040, section 6.5). */
@@ -562,8 +639,28 @@ export interface UpdateLineRequest {
    * the whole order: the client holds the set it is drawing, and two callers
    * trimming different products from one line should race over a value somebody
    * chose rather than compose into a set neither of them meant.
+   *
+   * Bounded by {@link LINE_ITEM_SET_CEILING} on the wire and by
+   * `max(LINE_ITEM_SET_MAX, current.length)` in core (plan 0070, section 7). The
+   * schema cannot state the real rule, because only core knows how many products
+   * the line holds right now, and a schema that stated the cap alone would leave
+   * an over cap line unable to shrink.
    */
   itemIds?: string[];
+  /**
+   * Products to move from `GROUP` to `USER` without otherwise changing the set
+   * (plan 0070, section 9): the adoption gesture velista `0065` draws.
+   *
+   * A separate field rather than an inference from {@link itemIds}, because a set
+   * replacement that happens to keep a product is not a statement about who owns
+   * it. Reading adoption out of it would adopt the whole line every time somebody
+   * removed one product, which is the opposite of what they did.
+   *
+   * Ids the line does not hold are ignored, and adopting an already adopted
+   * product is a no op: provenance moves one way (section 3), so this can only
+   * ever settle a product onto the person holding the line.
+   */
+  adoptItemIds?: string[];
 }
 
 /**
@@ -745,10 +842,12 @@ export const LIST_HOLDING_ITEM_LIMITS = {
  * have left takes its lists with it (plan 0047, section 9). It is the same
  * privacy question and it gets the same answer.
  *
- * **Items only, never groups** (plan 0053, section 6). A line references no group
- * once the composer has copied its members, and answering for a group would need
- * a rule for partial overlap that nothing yet asks for. A client holding a line
- * with several products asks once per product and merges.
+ * **Items only, never groups** (plan 0053, section 6), and plan 0070 does not
+ * change that even though a line now remembers its group: answering for a group
+ * would need a rule for partial overlap that nothing yet asks for, and two lines
+ * subscribed to Milk that hold different milks are exactly the case that rule
+ * would have to decide. A client holding a line with several products asks once
+ * per product and merges.
  *
  * The item id is required and must name a product. A line carrying **no** product
  * has no question to ask here and is refused rather than answered with an empty

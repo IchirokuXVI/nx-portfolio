@@ -150,7 +150,7 @@ payload that reached the broker without passing the interceptor.
       key: PLATFORM_ADMIN_USER_IDS
 {{- end }}
 {{- if eq $svc.role "harvester" }}
-# The harvester (plan 0038). It owns the third database, verifies tokens offline
+# The harvester (plan 0038). It owns the fourth database, verifies tokens offline
 # with the auth public key like catalog does, and gates EVERY subject it exposes
 # on the platform admin allowlist rather than only its writes.
 - name: HARVESTER_DB_URL
@@ -163,7 +163,7 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
-{{- range $key := (list "PLATFORM_ADMIN_USER_IDS" "HARVESTER_ACTOR_ID" "HARVEST_ENABLED" "HARVEST_USER_AGENT" "HARVEST_BATCH_SIZE" "HARVEST_DEFAULT_WORKERS" "HARVEST_DEFAULT_MAX_RPS" "HARVEST_STALE_AFTER" "HARVEST_FAILURE_RATIO" "MERCADONA_ENABLED" "OVERPASS_URL" "NOMINATIM_URL") }}
+{{- range $key := (list "PLATFORM_ADMIN_USER_IDS" "HARVESTER_ACTOR_ID" "HARVEST_ENABLED" "HARVEST_USER_AGENT" "HARVEST_BATCH_SIZE" "HARVEST_DEFAULT_WORKERS" "HARVEST_DEFAULT_MAX_RPS" "HARVEST_STALE_AFTER" "HARVEST_FAILURE_RATIO" "HARVEST_DISCOVERY_RADIUS" "HARVEST_DISCOVERY_COOLDOWN_DAYS" "HARVEST_DISCOVERY_MAX_ATTEMPTS" "HARVEST_DISCOVERY_POLL_SECONDS" "MERCADONA_ENABLED" "OVERPASS_URL" "NOMINATIM_URL") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

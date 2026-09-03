@@ -1,4 +1,7 @@
-import { GenerationScope } from '../../lib/enums/profile.enums';
+import {
+  GenerationScope,
+  ProfilePostalCodeSource,
+} from '../../lib/enums/profile.enums';
 import {
   PROFILE_LIMITS,
   PROFILE_PATTERNS,
@@ -26,10 +29,12 @@ import { COMMON_IDS } from '../common.schemas';
  */
 export const PROFILE_SCHEMA_IDS = {
   generationScope: schemaId('enums/GenerationScope'),
+  postalCodeSource: schemaId('enums/ProfilePostalCodeSource'),
   postalCodeView: schemaId('profile/ProfilePostalCodeView'),
   supermarketPreferenceView: schemaId(
     'profile/ProfileSupermarketPreferenceView'
   ),
+  locationPreferenceView: schemaId('profile/ProfileLocationPreferenceView'),
   generationSourceView: schemaId('profile/ProfileGenerationSourceView'),
   shoppingProfileView: schemaId('profile/ShoppingProfileView'),
   shoppingProfileListResult: schemaId('profile/ShoppingProfileListResult'),
@@ -38,12 +43,20 @@ export const PROFILE_SCHEMA_IDS = {
   supermarketPreferenceInput: schemaId(
     'profile/ProfileSupermarketPreferenceInput'
   ),
+  locationPreferenceInput: schemaId('profile/ProfileLocationPreferenceInput'),
   generationSourceInput: schemaId('profile/ProfileGenerationSourceInput'),
   listRequest: schemaId('msg/profiles.list/request'),
   createRequest: schemaId('msg/profiles.create/request'),
   updateRequest: schemaId('msg/profiles.update/request'),
   idRequest: schemaId('msg/profiles.id/request'),
   resolveScopesRequest: schemaId('msg/profiles.resolveScopes/request'),
+  addPostalCodeRequest: schemaId('msg/profiles.addPostalCode/request'),
+  removePostalCodeRequest: schemaId('msg/profiles.removePostalCode/request'),
+  resolvePostalCodeRequest: schemaId('msg/profiles.resolvePostalCode/request'),
+  resolvedPostalCodeView: schemaId('profile/ResolvedPostalCodeView'),
+  setLocationPreferencesRequest: schemaId(
+    'msg/profiles.setLocationPreferences/request'
+  ),
 } as const;
 
 const postalCodeView = object(
@@ -53,8 +66,11 @@ const postalCodeView = object(
     postalCode: nonEmptyString(),
     label: nullableString(),
     position: integer({ minimum: 0 }),
+    country: nonEmptyString({ maxLength: 2 }),
+    source: ref(PROFILE_SCHEMA_IDS.postalCodeSource),
+    expandNearby: boolean(),
   },
-  ['id', 'postalCode', 'label', 'position']
+  ['id', 'postalCode', 'label', 'position', 'country', 'source', 'expandNearby']
 );
 
 const supermarketPreferenceView = object(
@@ -65,6 +81,16 @@ const supermarketPreferenceView = object(
     excluded: boolean(),
   },
   ['id', 'supermarketId', 'excluded']
+);
+
+const locationPreferenceView = object(
+  PROFILE_SCHEMA_IDS.locationPreferenceView,
+  {
+    id: nonEmptyString(),
+    supermarketLocationId: nonEmptyString(),
+    excluded: boolean(),
+  },
+  ['id', 'supermarketLocationId', 'excluded']
 );
 
 const generationSourceView = object(
@@ -92,6 +118,7 @@ const shoppingProfileView = object(
     generationScope: ref(PROFILE_SCHEMA_IDS.generationScope),
     postalCodes: array(ref(PROFILE_SCHEMA_IDS.postalCodeView)),
     supermarkets: array(ref(PROFILE_SCHEMA_IDS.supermarketPreferenceView)),
+    locations: array(ref(PROFILE_SCHEMA_IDS.locationPreferenceView)),
     generationSources: array(ref(PROFILE_SCHEMA_IDS.generationSourceView)),
   },
   [
@@ -105,6 +132,7 @@ const shoppingProfileView = object(
     'generationScope',
     'postalCodes',
     'supermarkets',
+    'locations',
     'generationSources',
   ]
 );
@@ -122,6 +150,7 @@ const scopeSelector = object(
     postalCodes: array(nonEmptyString()),
     supermarketIds: array(nonEmptyString()),
     excludedSupermarketIds: array(nonEmptyString()),
+    excludedSupermarketLocationIds: array(nonEmptyString()),
     empty: boolean(),
   },
   [
@@ -129,9 +158,19 @@ const scopeSelector = object(
     'postalCodes',
     'supermarketIds',
     'excludedSupermarketIds',
+    'excludedSupermarketLocationIds',
     'empty',
   ]
 );
+
+/**
+ * `source` is the two the user may state and not the three the column holds:
+ * `NEARBY` is a conclusion, never an input (plan 0062, section 2).
+ */
+const userStatedSource = {
+  type: 'string',
+  enum: [ProfilePostalCodeSource.TYPED, ProfilePostalCodeSource.DEVICE],
+};
 
 const postalCodeInput = object(
   PROFILE_SCHEMA_IDS.postalCodeInput,
@@ -140,6 +179,9 @@ const postalCodeInput = object(
       maxLength: PROFILE_LIMITS.postalCodeMaxLength,
     }),
     label: nullableString(),
+    country: nonEmptyString({ maxLength: 2 }),
+    source: userStatedSource,
+    expandNearby: boolean(),
   },
   ['postalCode']
 );
@@ -148,6 +190,12 @@ const supermarketPreferenceInput = object(
   PROFILE_SCHEMA_IDS.supermarketPreferenceInput,
   { supermarketId: nonEmptyString(), excluded: boolean() },
   ['supermarketId']
+);
+
+const locationPreferenceInput = object(
+  PROFILE_SCHEMA_IDS.locationPreferenceInput,
+  { supermarketLocationId: nonEmptyString(), excluded: boolean() },
+  ['supermarketLocationId']
 );
 
 const generationSourceInput = object(
@@ -205,22 +253,99 @@ const resolveScopesRequest = object(
   ['userId']
 );
 
+const addPostalCodeRequest = object(
+  PROFILE_SCHEMA_IDS.addPostalCodeRequest,
+  {
+    userId: nonEmptyString(),
+    profileId: nonEmptyString(),
+    postalCode: nonEmptyString({
+      maxLength: PROFILE_LIMITS.postalCodeMaxLength,
+    }),
+    label: nullableString(),
+    country: nonEmptyString({ maxLength: 2 }),
+    source: userStatedSource,
+    expandNearby: boolean(),
+  },
+  ['userId', 'profileId', 'postalCode']
+);
+
+const removePostalCodeRequest = object(
+  PROFILE_SCHEMA_IDS.removePostalCodeRequest,
+  {
+    userId: nonEmptyString(),
+    profileId: nonEmptyString(),
+    postalCode: nonEmptyString({
+      maxLength: PROFILE_LIMITS.postalCodeMaxLength,
+    }),
+  },
+  ['userId', 'profileId', 'postalCode']
+);
+
+/**
+ * A point, bounded by the globe (`apps/velista/plans/0058`, section 3).
+ *
+ * The country is the same optional alpha-2 every other postal code request takes:
+ * the centroid table is keyed on `(country, postalCode)`, and a lookup with no
+ * country would search every shipped country at once.
+ */
+const resolvePostalCodeRequest = object(
+  PROFILE_SCHEMA_IDS.resolvePostalCodeRequest,
+  {
+    userId: nonEmptyString(),
+    country: nonEmptyString({ maxLength: 2 }),
+    latitude: { type: 'number', minimum: -90, maximum: 90 },
+    longitude: { type: 'number', minimum: -180, maximum: 180 },
+  },
+  ['userId', 'latitude', 'longitude']
+);
+
+/** Null is "we don't know", which is a real answer here (plan 0060, section 6). */
+const resolvedPostalCodeView = object(
+  PROFILE_SCHEMA_IDS.resolvedPostalCodeView,
+  {
+    country: nonEmptyString({ maxLength: 2 }),
+    postalCode: nullableString(),
+  },
+  ['country', 'postalCode']
+);
+
+const setLocationPreferencesRequest = object(
+  PROFILE_SCHEMA_IDS.setLocationPreferencesRequest,
+  {
+    userId: nonEmptyString(),
+    profileId: nonEmptyString(),
+    locations: array(ref(PROFILE_SCHEMA_IDS.locationPreferenceInput)),
+  },
+  ['userId', 'profileId', 'locations']
+);
+
 export const profileSchemas: JsonSchema[] = [
   enumOf(PROFILE_SCHEMA_IDS.generationScope, Object.values(GenerationScope)),
+  enumOf(
+    PROFILE_SCHEMA_IDS.postalCodeSource,
+    Object.values(ProfilePostalCodeSource)
+  ),
   postalCodeView,
   supermarketPreferenceView,
+  locationPreferenceView,
   generationSourceView,
   shoppingProfileView,
   shoppingProfileListResult,
   scopeSelector,
   postalCodeInput,
   supermarketPreferenceInput,
+  locationPreferenceInput,
   generationSourceInput,
   listRequest,
   createRequest,
   updateRequest,
   idRequest,
   resolveScopesRequest,
+  addPostalCodeRequest,
+  removePostalCodeRequest,
+  resolvePostalCodeRequest,
+  resolvedPostalCodeView,
+  setLocationPreferencesRequest,
 ];
 
 export const profileMessageContracts: Record<
@@ -250,5 +375,27 @@ export const profileMessageContracts: Record<
   [PROFILE_PATTERNS.resolveScopes]: {
     request: PROFILE_SCHEMA_IDS.resolveScopesRequest,
     response: PROFILE_SCHEMA_IDS.scopeSelector,
+  },
+  // Both answer the whole profile rather than the row they touched: one add can
+  // write a parent and its neighbours, and one remove can prune several.
+  [PROFILE_PATTERNS.addPostalCode]: {
+    request: PROFILE_SCHEMA_IDS.addPostalCodeRequest,
+    response: PROFILE_SCHEMA_IDS.shoppingProfileView,
+  },
+  [PROFILE_PATTERNS.removePostalCode]: {
+    request: PROFILE_SCHEMA_IDS.removePostalCodeRequest,
+    response: PROFILE_SCHEMA_IDS.shoppingProfileView,
+  },
+  // The one profile message that answers something other than a profile, because
+  // it is the one that writes nothing (`apps/velista/plans/0058`, section 3.3).
+  [PROFILE_PATTERNS.resolvePostalCode]: {
+    request: PROFILE_SCHEMA_IDS.resolvePostalCodeRequest,
+    response: PROFILE_SCHEMA_IDS.resolvedPostalCodeView,
+  },
+  // The whole profile again, for the same reason: one call writes several rows,
+  // and some of them by deleting (plan 0064, section 5).
+  [PROFILE_PATTERNS.setLocationPreferences]: {
+    request: PROFILE_SCHEMA_IDS.setLocationPreferencesRequest,
+    response: PROFILE_SCHEMA_IDS.shoppingProfileView,
   },
 };

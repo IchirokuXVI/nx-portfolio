@@ -1,5 +1,6 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  AddPostalCodeRequest,
   CatalogItem,
   Comment,
   GeneratedListSummary,
@@ -12,7 +13,10 @@ import type {
   MyZone,
   PresenceEditor,
   PresenceUser,
+  ProductGroup,
   ProfileLoad,
+  ProfilePostalCode,
+  ResolvedPostalCode,
   SessionTokens,
   SettlementOutcome,
   ShoppingListsLoad,
@@ -24,6 +28,7 @@ import type {
   UserProfile,
   WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
+import { isLiveGeneratedList } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
 import {
@@ -33,6 +38,7 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
 import { GeneratedListStore } from '../generated-lists/generated-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
@@ -687,6 +693,15 @@ export type LineWriteCall =
       readonly lineId: string;
       readonly content?: string;
       readonly itemIds?: readonly string[];
+      /**
+       * The products this edit adopted (velista plan 0065, section 4).
+       *
+       * Recorded because the rule under test is what the request **carries**: `Keep`
+       * sends this field and nothing else, so a spec asserting on the resulting set
+       * alone could not tell adoption from an ordinary edit that happened to leave
+       * the set where it was.
+       */
+      readonly adoptItemIds?: readonly string[];
     }
   | { readonly kind: 'delete'; readonly lineId: string }
   | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] }
@@ -811,6 +826,11 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         content,
         quantity,
         itemIds: [...(itemIds ?? [])],
+        // Following no group, like every line the composer adds: nothing on the
+        // client creates a binding, so a double that invented one would put a `Keep`
+        // control on a subscription no server would agree exists.
+        productGroupId: null,
+        groupItemIds: [],
         position: lines().length + 1,
         approvalStatus: addedApproval,
         boughtCount: 0,
@@ -837,10 +857,18 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
      */
     updateLine: async (
       lineId: string,
-      patch?: { content?: string; itemIds?: readonly string[] }
+      patch?: {
+        content?: string;
+        itemIds?: readonly string[];
+        adoptItemIds?: readonly string[];
+      }
     ) => {
       calls.push({ kind: 'update', lineId, ...patch });
       if (outcome === 'succeeded' && patch !== undefined) {
+        const adopting = new Set(patch.adoptItemIds ?? []);
+        const stillOn =
+          patch.itemIds === undefined ? null : new Set(patch.itemIds);
+
         lines.update((current) =>
           current.map((l) =>
             l.id === lineId
@@ -852,6 +880,15 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
                   ...(patch.itemIds === undefined
                     ? {}
                     : { itemIds: patch.itemIds }),
+                  // Provenance moves one way (backend plan 0070, section 3), and the
+                  // double has to move it: the feedback for `Keep` is the chip
+                  // changing cluster, so a double that left this alone would let a
+                  // spec pass over a gesture that visibly did nothing.
+                  groupItemIds: l.groupItemIds.filter(
+                    (itemId) =>
+                      !adopting.has(itemId) &&
+                      (stillOn === null || stillOn.has(itemId))
+                  ),
                 }
               : l
           )
@@ -1139,6 +1176,49 @@ export function provideFakeItemNames(
   store: FakeItemNames = fakeItemNames()
 ): Provider {
   return { provide: ItemNames, useValue: store };
+}
+
+/** What a fake catalog says a group is called (velista plan 0065, section 2.1). */
+export interface FakeGroupNamesOptions {
+  /** The groups it knows. An id not in here resolves to null, as a gone group does. */
+  readonly groups?: readonly ProductGroup[];
+  /**
+   * Ids whose lookup **failed**, as opposed to answering with nothing.
+   *
+   * `FakeItemNames`' distinction, kept here for the same reason even though both
+   * cases draw the same heading today: the page is entitled to start telling them
+   * apart, and a double that could not say which one it was in would make that
+   * change untestable.
+   */
+  readonly failed?: readonly string[];
+}
+
+/** A `GroupNames` that simply knows what you told it. `fakeItemNames`' twin. */
+export function fakeGroupNames(options: FakeGroupNamesOptions = {}) {
+  const groups = options.groups ?? [];
+  const failed = new Set(options.failed ?? []);
+  const asked: string[][] = [];
+
+  return {
+    nameOf: (groupId: string) =>
+      groups.find((row) => row.id === groupId) ?? null,
+    anyFailed: (groupIds: readonly string[]) =>
+      groupIds.some((groupId) => failed.has(groupId)),
+    ensure: async (groupIds: readonly string[]) => {
+      asked.push([...groupIds]);
+    },
+    prime: () => undefined,
+    /** Every set that was asked for, in order, so a spec can assert one request. */
+    asked,
+  };
+}
+
+export type FakeGroupNames = ReturnType<typeof fakeGroupNames>;
+
+export function provideFakeGroupNames(
+  store: FakeGroupNames = fakeGroupNames()
+): Provider {
+  return { provide: GroupNames, useValue: store };
 }
 
 /** Who a fake says is present, per zone and per list (plan 0017). */
@@ -1490,10 +1570,29 @@ export function shoppingProfileFor(
     name: null,
     isDefault: true,
     position: 0,
-    addressText: null,
     minSavingCents: 0,
     postalCodes: [],
     chains: [],
+    ...overrides,
+  };
+}
+
+/**
+ * A `ProfilePostalCode`, defaulting to one the user typed (plan 0058, section 4).
+ *
+ * `TYPED` is the default because it is the ordinary row: a spec about a derived chip
+ * says `source: 'NEARBY'` and thereby says what it is about, and every other spec gets
+ * a chip with no story attached.
+ */
+export function profilePostalCodeFor(
+  overrides: Partial<ProfilePostalCode> = {}
+): ProfilePostalCode {
+  return {
+    id: 'pc1',
+    postalCode: '14001',
+    label: null,
+    position: 0,
+    source: 'TYPED',
     ...overrides,
   };
 }
@@ -1511,6 +1610,21 @@ export interface FakeShoppingProfileOptions {
   readonly createFails?: boolean;
   /** Whether `remove` fails rather than deleting. */
   readonly removeFails?: boolean;
+  /**
+   * The codes an expansion finds, by the code that brings them (plan 0058, section 5).
+   *
+   * Stated by the spec rather than invented here, because how many neighbours a code
+   * has is a fact about geography that only the server holds: a fake that guessed would
+   * be asserting its own guess.
+   */
+  readonly nearby?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * What a device point resolves to, or null for "we don't know".
+   *
+   * Undefined means the lookup **throws**, which is the third case and a different one:
+   * a server that could not be asked is not a server saying it cannot place you.
+   */
+  readonly resolvesTo?: string | null;
 }
 
 /** One recorded call to a faked `ShoppingProfileStore`. */
@@ -1523,6 +1637,26 @@ export type ShoppingProfileCall =
       readonly profileId: string;
       readonly field: ProfileField;
       readonly body: WriteShoppingProfileRequest;
+    }
+  | {
+      readonly method: 'addPostalCode';
+      readonly profileId: string;
+      readonly body: AddPostalCodeRequest;
+    }
+  | {
+      readonly method: 'removePostalCode';
+      readonly profileId: string;
+      readonly postalCode: string;
+    }
+  | {
+      /**
+       * The point, recorded so a spec can assert it appears **here and nowhere else**
+       * (plan 0058, section 3.3). It is on the call and not on any profile this fake
+       * holds, which is the shape the acceptance criterion is about.
+       */
+      readonly method: 'resolvePostalCode';
+      readonly latitude: number;
+      readonly longitude: number;
     }
   | { readonly method: 'makeDefault'; readonly profileId: string }
   | { readonly method: 'remove'; readonly profileId: string }
@@ -1555,6 +1689,7 @@ export function fakeShoppingProfileStore(
   const saves = signal<ReadonlyMap<string, FieldSaveState>>(new Map());
   const failing = new Set<ProfileField>(options.failing ?? []);
   const unserved = new Set(options.unserved ?? []);
+  const nearbyAdded = signal(0);
   let minted = 0;
 
   const selected = computed<ShoppingProfile | null>(() => {
@@ -1588,6 +1723,28 @@ export function fakeShoppingProfileStore(
       : (held.find((profile) => profile.id !== profileId) ?? null);
   };
 
+  const save = async (
+    profileId: string,
+    field: ProfileField,
+    body: WriteShoppingProfileRequest,
+    apply: (profile: ShoppingProfile) => ShoppingProfile
+  ): Promise<'saved' | 'failed'> => {
+    calls.push({ method: 'save', profileId, field, body });
+
+    if (failing.has(field)) {
+      setSave(`${profileId}:${field}`, 'failed');
+      return 'failed';
+    }
+
+    profiles.update((held) =>
+      held.map((profile) =>
+        profile.id === profileId ? apply(profile) : profile
+      )
+    );
+    setSave(`${profileId}:${field}`, 'idle');
+    return 'saved';
+  };
+
   return {
     profiles: profiles.asReadonly(),
     state: state.asReadonly(),
@@ -1608,6 +1765,10 @@ export function fakeShoppingProfileStore(
       saves().get(`${profileId}:${field}`) ?? 'idle',
 
     isUnserved: (postalCode: string): boolean => unserved.has(postalCode),
+
+    nearbyAdded: nearbyAdded.asReadonly(),
+
+    acknowledgeNearby: () => nearbyAdded.set(0),
 
     successorOf,
 
@@ -1640,26 +1801,163 @@ export function fakeShoppingProfileStore(
       return created;
     },
 
-    save: async (
-      profileId: string,
-      field: ProfileField,
-      body: WriteShoppingProfileRequest,
-      apply: (profile: ShoppingProfile) => ShoppingProfile
-    ): Promise<'saved' | 'failed'> => {
-      calls.push({ method: 'save', profileId, field, body });
+    save,
 
-      if (failing.has(field)) {
-        setSave(`${profileId}:${field}`, 'failed');
+    /**
+     * Add one code, and the neighbours the spec said it brings (plan 0058, section 5).
+     *
+     * It reports `nearbyAdded` from those neighbours rather than from a count it was
+     * handed, so a screen that says "we added three" is saying it about three chips a
+     * spec can also see in the list.
+     */
+    addPostalCode: async (
+      profileId: string,
+      body: AddPostalCodeRequest
+    ): Promise<'saved' | 'failed'> => {
+      calls.push({ method: 'addPostalCode', profileId, body });
+
+      if (failing.has('postalCodes')) {
+        setSave(`${profileId}:postalCodes`, 'failed');
+        return 'failed';
+      }
+
+      const profile = profiles().find((held) => held.id === profileId);
+      if (profile === undefined) {
+        return 'failed';
+      }
+
+      const kept = profile.postalCodes.filter(
+        (code) => code.postalCode !== body.postalCode
+      );
+      const added =
+        body.expandNearby === true
+          ? (options.nearby?.[body.postalCode] ?? []).filter(
+              (code) =>
+                code !== body.postalCode &&
+                !kept.some((existing) => existing.postalCode === code)
+            )
+          : [];
+
+      const next: ProfilePostalCode[] = [
+        ...kept,
+        profilePostalCodeFor({
+          id: `pc-${body.postalCode}`,
+          postalCode: body.postalCode,
+          label: body.label ?? null,
+          position: kept.length,
+          source: body.source ?? 'TYPED',
+        }),
+        ...added.map((code, at) =>
+          profilePostalCodeFor({
+            id: `pc-${code}`,
+            postalCode: code,
+            position: kept.length + 1 + at,
+            source: 'NEARBY',
+          })
+        ),
+      ];
+
+      profiles.update((held) =>
+        held.map((entry) =>
+          entry.id === profileId ? { ...entry, postalCodes: next } : entry
+        )
+      );
+      setSave(`${profileId}:postalCodes`, 'idle');
+      nearbyAdded.set(added.length);
+
+      return 'saved';
+    },
+
+    /** Remove one code by the code itself, whoever it belongs to. */
+    removePostalCode: async (
+      profileId: string,
+      postalCode: string
+    ): Promise<'saved' | 'failed'> => {
+      calls.push({ method: 'removePostalCode', profileId, postalCode });
+
+      if (failing.has('postalCodes')) {
+        setSave(`${profileId}:postalCodes`, 'failed');
         return 'failed';
       }
 
       profiles.update((held) =>
         held.map((profile) =>
-          profile.id === profileId ? apply(profile) : profile
+          profile.id === profileId
+            ? {
+                ...profile,
+                postalCodes: profile.postalCodes.filter(
+                  (code) => code.postalCode !== postalCode
+                ),
+              }
+            : profile
         )
       );
-      setSave(`${profileId}:${field}`, 'idle');
+      setSave(`${profileId}:postalCodes`, 'idle');
       return 'saved';
+    },
+
+    /**
+     * Answer a point with a code, with null, or by throwing.
+     *
+     * The three are the three the sheet has to draw, and they are chosen by the spec
+     * rather than derived from the coordinates: this fake models no geography.
+     */
+    resolvePostalCode: async (
+      latitude: number,
+      longitude: number
+    ): Promise<ResolvedPostalCode> => {
+      calls.push({ method: 'resolvePostalCode', latitude, longitude });
+
+      if (options.resolvesTo === undefined) {
+        throw new Error('the lookup could not be made');
+      }
+
+      return { country: 'es', postalCode: options.resolvesTo };
+    },
+
+    /**
+     * The real store's chain write, through this fake's own `save`.
+     *
+     * It goes through `save` rather than editing the profiles signal directly, so a spec
+     * asserting what a chain toggle sends sees the same recorded call the page's other
+     * controls produce, and a spec that made `chains` fail still gets a failure here.
+     */
+    setChainsExcluded: async (
+      profileId: string,
+      supermarketIds: readonly string[],
+      excluded: boolean
+    ): Promise<'saved' | 'failed'> => {
+      const profile = profiles().find((held) => held.id === profileId);
+      if (profile === undefined) {
+        return 'failed';
+      }
+
+      const named = new Set(supermarketIds);
+      const kept = profile.chains.filter(
+        (chain) => !named.has(chain.supermarketId)
+      );
+      const next = excluded
+        ? [
+            ...kept,
+            ...supermarketIds.map((supermarketId) => ({
+              id: `pending-${supermarketId}`,
+              supermarketId,
+              excluded: true,
+            })),
+          ]
+        : kept;
+
+      return save(
+        profileId,
+        'chains',
+        {
+          supermarkets: next.map((chain) => ({
+            supermarketId: chain.supermarketId,
+            excluded: chain.excluded,
+          })),
+        },
+        (current) => ({ ...current, chains: next })
+      );
     },
 
     makeDefault: async (profileId: string): Promise<'saved' | 'failed'> => {
@@ -1759,7 +2057,12 @@ export function fakeGeneratedListStore(
     loadingMore: loadingMore.asReadonly(),
     hasMore: hasMore.asReadonly(),
     pagesLoaded: pagesLoaded.asReadonly(),
-    active: computed(() => lists().filter((list) => list.status === 'ACTIVE')),
+    // `isLiveGeneratedList` rather than a status comparison, for the reason the real
+    // store now uses it: a double that filtered differently from the thing it stands in
+    // for is how a card stayed green in every spec and drew on no phone.
+    active: computed(() =>
+      lists().filter((list) => isLiveGeneratedList(list.status))
+    ),
 
     load: async () => {
       calls.push('load');

@@ -109,39 +109,20 @@
           }
         </div>
 
-        <div class="field-block">
-          <label class="field-label field-label-row" for="profiles-address">
-            <span>{{ 'profiles.address.label' | rokuT }}</span>
-            <span class="optional">{{
-              'profiles.address.optional' | rokuT
-            }}</span>
-          </label>
-          <input
-            (blur)="saveAddress($event)"
-            (keydown.enter)="$any($event).target.blur()"
-            [attr.aria-busy]="saving('addressText')"
-            [attr.maxlength]="addressMaxLength"
-            [placeholder]="'profiles.address.placeholder' | rokuT"
-            [value]="profile.addressText ?? ''"
-            autocapitalize="words"
-            autocomplete="street-address"
-            class="field"
-            enterkeyhint="done"
-            id="profiles-address"
-            type="text"
-          />
-          @if (failed('addressText')) {
-            <p class="field-error" role="alert">
-              {{ 'profiles.error.save' | rokuT }}
-            </p>
-          }
-        </div>
-
+        <!--
+          The free text address is gone (plan 0058, section 2). It was never geocoded
+          and nothing read it, sitting above the postal codes that do the work, and a
+          field that asks somebody where they live and then ignores the answer invites
+          them to believe the app knows. What took its place on the screen is the chip
+          list's own label, which is what it was pretending to be.
+        -->
         <lib-postal-code-list
           (addCode)="addPostalCode($event)"
           (removeCode)="removePostalCode($event)"
+          (useLocation)="openLocation()"
           [codes]="profile.postalCodes"
           [failed]="failed('postalCodes')"
+          [nearbyAdded]="nearbyAdded()"
           [uncovered]="uncovered()"
         />
 
@@ -151,6 +132,15 @@
           [failed]="failed('chains')"
           [preferences]="profile.chains"
         />
+
+        <!--
+          The way to the shops themselves (plan 0059). A button rather than a section of
+          this page: the shops in a profile's codes are a screen's worth of rows with a
+          search over them, and the list above is about brands.
+        -->
+        <button (click)="openSupermarkets()" class="quiet" type="button">
+          {{ 'profiles.shops.open' | rokuT }}
+        </button>
 
         <div class="threshold">
           <label class="threshold-label" for="profiles-threshold">

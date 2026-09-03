@@ -19,16 +19,19 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  formatDay,
   inLocale,
   outstanding,
   toSettlementRow,
   type BasketLine,
   type BasketParticipant,
+  type BasketPriceScope,
   type BasketSettleResult,
   type SettlementOutcome,
   type SettlementRowVm,
 } from '@portfolio/velista/models';
 import {
+  formatMoney,
   generatedListIdOf,
   SheetNavigation,
   sheetSegments,
@@ -41,6 +44,35 @@ import {
 } from '../basket-error-copy';
 import { participantName, touchedCaption } from '../basket-labels';
 import { basketPath } from '../basket-paths';
+
+/**
+ * Where a price is from, as one line under the option's name (velista `0062`,
+ * section 5.1): the chain, and the first shop when the reader has one.
+ *
+ * Null for a scope the basket does not describe, which is a partially failed
+ * gateway composition and draws no place under a price that is still a price.
+ * A scope with more than one location names the first and does not enumerate
+ * them: a list of four addresses on each of eleven options is a wall, and which
+ * of a chain's shops somebody is standing in is not a question this sheet can
+ * answer. The place takes no translation key; it is server data joined by the
+ * separator the app already uses.
+ */
+function placeOf(
+  scope: BasketPriceScope | undefined,
+  locale: string
+): string | null {
+  if (!scope) {
+    return null;
+  }
+  const chain = inLocale(scope.supermarketName, locale);
+  const shop = scope.locations[0];
+  if (!shop) {
+    return chain;
+  }
+  const label = shop.label ? inLocale(shop.label, locale) : '';
+  const where = label !== '' ? label : (shop.address ?? shop.city ?? '');
+  return where !== '' ? `${chain} · ${where}` : chain;
+}
 
 /**
  * Which pane of the sheet is showing.
@@ -298,28 +330,127 @@ export class SettleSheet {
     return product ? inLocale(product.name, this._locale()) : null;
   });
 
-  /** Every product this line may be switched to, named, in the order given. */
+  /**
+   * Every product this line may be switched to, named and priced, **in the
+   * order given** (velista `0062`, section 5).
+   *
+   * The order is the line's own option order and never changes: sorting by
+   * price would move rows under the thumb of somebody reading them at a shelf,
+   * and reorder the list every time a harvest changed a number. The cheapest is
+   * *marked* instead, and only when at least two options are priced, because on
+   * one priced option the mark says nothing and looks like a recommendation.
+   * The mark lands on the cheapest and not on the pick, which is the useful
+   * case: the sheet shows in one glance that the default is not the cheapest.
+   *
+   * Every string is decided here and carried on the row (`price`, `unitPrice`,
+   * `place`), so a row that has decided what it says cannot say it differently
+   * on a re render. `noPrice` is drawn only in a mix (section 5.3): when no
+   * option is priced the pane is exactly today's pane, and when some are, the
+   * blank one has to say it is unknown rather than free.
+   *
+   * There is **no branch on who is reading**. The place is whatever the scope
+   * carries: the chain, and the first shop when the server sent any. A guest
+   * reads "Mercadona" and an owner reads "Mercadona · Ronda de los Tejares",
+   * and this component cannot tell which it is drawing (section 6).
+   */
   protected readonly options = computed(() => {
     const line = this.line();
-    const products = this._store.basket()?.products;
-    if (line === null || products === undefined) {
+    const basket = this._store.basket();
+    if (line === null || basket === undefined || basket === null) {
       return [];
     }
-    return line.optionIds.flatMap((id) => {
+    const locale = this._locale();
+    const { products, scopes } = basket;
+
+    const rows = line.optionIds.flatMap((id) => {
       const product = products.get(id);
       // A product catalog no longer has is dropped rather than drawn as an id:
       // a basket outlives the catalog it was composed from.
-      return product
-        ? [
-            {
-              id,
-              name: inLocale(product.name, this._locale()),
-              brand: product.brand,
-              chosen: id === line.pickId,
-            },
-          ]
-        : [];
+      if (!product) {
+        return [];
+      }
+      const offer = product.offer;
+      const priced = offer !== null && offer.price !== null;
+      return [
+        {
+          id,
+          name: inLocale(product.name, locale),
+          brand: product.brand,
+          chosen: id === line.pickId,
+          price: priced
+            ? formatMoney(offer.price, offer.currency, locale)
+            : null,
+          amount: priced ? offer.price : null,
+          unitPrice:
+            offer !== null && offer.unitPrice !== null
+              ? `${formatMoney(offer.unitPrice, null, locale)} ${offer.unitPriceLabel ?? ''}`.trim()
+              : null,
+          place:
+            offer === null
+              ? null
+              : placeOf(scopes.get(offer.priceScopeId), locale),
+          cheapest: false,
+          noPrice: false,
+        },
+      ];
     });
+
+    const pricedRows = rows.filter((row) => row.amount !== null);
+    if (pricedRows.length === 0) {
+      return rows;
+    }
+    const cheapest =
+      pricedRows.length >= 2
+        ? pricedRows.reduce((best, row) =>
+            (row.amount ?? Infinity) < (best.amount ?? Infinity) ? row : best
+          )
+        : null;
+    return rows.map((row) => ({
+      ...row,
+      cheapest: row === cheapest,
+      noPrice: row.amount === null,
+    }));
+  });
+
+  /**
+   * How old the prices on the pane are, once, under it (section 5.4): the
+   * oldest `observedAt` among the options shown, and whether any of them was
+   * typed in by a person rather than published by a chain, in the same
+   * sentence. Null when nothing is priced, so the pane draws nothing.
+   *
+   * The two are interpolated keys, so what is held here is the key and its
+   * argument rather than a sentence: the template hands both to the pipe.
+   */
+  protected readonly pricesAsOf = computed<{
+    key: 'basket.product.asOf' | 'basket.product.asOfTyped';
+    when: string;
+  } | null>(() => {
+    const line = this.line();
+    const basket = this._store.basket();
+    if (line === null || !basket) {
+      return null;
+    }
+    let oldest: Date | null = null;
+    let typed = false;
+    for (const id of line.optionIds) {
+      const offer = basket.products.get(id)?.offer;
+      if (!offer || offer.price === null) {
+        continue;
+      }
+      if (offer.sourceKind === 'ADMIN') {
+        typed = true;
+      }
+      if (offer.observedAt && (oldest === null || offer.observedAt < oldest)) {
+        oldest = offer.observedAt;
+      }
+    }
+    if (oldest === null) {
+      return null;
+    }
+    return {
+      key: typed ? 'basket.product.asOfTyped' : 'basket.product.asOf',
+      when: formatDay(oldest, this._locale()),
+    };
   });
 
   /**

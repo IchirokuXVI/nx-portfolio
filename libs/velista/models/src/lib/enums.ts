@@ -230,13 +230,13 @@ export const PARTICIPANT_KIND_FALLBACK: ParticipantKind = 'UNKNOWN';
  * through, `COMPLETED` is a trip that is over, and `ARCHIVED` hides a trip from the
  * default listing without deleting it.
  *
- * `ACTIVE` is the only value this app derives anything from: it is what puts a basket
- * on the dashboard card and marks a row in the history as being shopped now. The other
- * three are carried so the history can be read back, and nothing branches on them.
+ * What this app derives from is not one of them but a **pair**: see
+ * {@link LIVE_GENERATED_LIST_STATUSES}. The other two are carried so the history can be
+ * read back, and nothing branches on them.
  *
  * `UNKNOWN` is the fallback for a status this build does not recognise, following
- * `ZONE_STATUSES`: an unrecognised value must not read as `ACTIVE`, because that would
- * put a basket the server considers finished back on the dashboard.
+ * `ZONE_STATUSES`: an unrecognised value must not read as live, because that would put
+ * a basket the server considers finished back on the dashboard.
  */
 export const GENERATED_LIST_STATUSES = [
   'DRAFT',
@@ -247,6 +247,41 @@ export const GENERATED_LIST_STATUSES = [
 ] as const;
 export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
 export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';
+
+/**
+ * The statuses of a basket somebody is still going to shop.
+ *
+ * **`DRAFT` is in it, and leaving it out is what kept the dashboard card off every
+ * screen in the app since plan 0045 shipped it.** The server composes a run as `DRAFT`
+ * (core's `GeneratedListService.write`) and has no path that promotes one to `ACTIVE`,
+ * so a filter written as `status === 'ACTIVE'` matched nothing a run had ever produced.
+ * The card was correct, tested and unreachable, and so was the history's Shopping now
+ * badge, which asked the same question the same wrong way.
+ *
+ * It mirrors the server's `LIVE_GENERATED_LIST_STATUSES` deliberately, and mirrors the
+ * reasoning with it: the question worth asking about a basket is whether somebody is
+ * still going to shop it, and `DRAFT` and `ACTIVE` are both yes. Asking about one value
+ * is how the two ended up disagreeing.
+ *
+ * `UNKNOWN` is outside it, which is the safe direction: a status this build has never
+ * heard of costs a card, where the other way round would offer somebody a way back into
+ * a trip the server considers over.
+ */
+export const LIVE_GENERATED_LIST_STATUSES = [
+  'DRAFT',
+  'ACTIVE',
+] as const satisfies readonly GeneratedListStatus[];
+
+/**
+ * Whether this basket is one somebody is still going to shop.
+ *
+ * Takes a `string` rather than a {@link GeneratedListStatus} so a caller holding a raw
+ * status off the wire can ask without a cast, which is the shape {@link basketTakesLines}
+ * already had and the reason it can delegate here.
+ */
+export function isLiveGeneratedList(status: string): boolean {
+  return (LIVE_GENERATED_LIST_STATUSES as readonly string[]).includes(status);
+}
 
 /**
  * Where a basket line came from (backend `0055`, section 3; velista `0056`).
@@ -308,3 +343,58 @@ export type GenerationScope = (typeof GENERATION_SCOPES)[number];
  * either, which is a sheet that draws nothing ticked and a submit that refuses.
  */
 export const GENERATION_SCOPE_FALLBACK: GenerationScope = 'ALL';
+
+/**
+ * Where a price came from (backend `0038`; `PriceSourceKind` on the wire).
+ *
+ * Read for one distinction only: `ADMIN` is a number somebody typed in by hand,
+ * and the pick sheet says so rather than passing it off as the chain's own
+ * figure (velista `0062`, section 5.4). Everything else is drawn the same way.
+ */
+export const PRICE_SOURCE_KINDS = [
+  'OFFICIAL_API',
+  'OFFICIAL_WEB',
+  'OFFICIAL_LEAFLET',
+  'ADMIN',
+  'USER_RECEIPT',
+  'USER_REPORTED',
+  'UNKNOWN',
+] as const;
+export type PriceSourceKind = (typeof PRICE_SOURCE_KINDS)[number];
+
+/**
+ * A kind this build has never heard of. It is not `ADMIN`, which is the only
+ * value that changes a sentence, so an unknown source reads as the chain's own.
+ */
+export const PRICE_SOURCE_KIND_FALLBACK: PriceSourceKind = 'UNKNOWN';
+
+/**
+ * What a product's size is measured in (`UnitOfMeasure` on the wire, backend
+ * plan 0038 section 2.4).
+ *
+ * Read for one thing: saying how big a product is beside its name. The catalog
+ * holds **one record per size**, so "Leche entera Hacendado" at 1 L and the same
+ * milk at 0.5 L are two products with the same name and the same brand, and a
+ * suggestion row that drew neither size drew the same row twice.
+ */
+export const UNITS_OF_MEASURE = [
+  'UNIT',
+  'GRAM',
+  'KILOGRAM',
+  'MILLILITER',
+  'LITER',
+  'PACK',
+] as const;
+export type UnitOfMeasure = (typeof UNITS_OF_MEASURE)[number];
+
+/**
+ * A unit this build has never heard of, and the fallback is the one that says
+ * the least.
+ *
+ * `UNIT` is a count, and a count is the one unit whose size is suppressed below
+ * two (see `SuggestionList.sizeOf`), so an unrecognised unit on a 0.35 lands on
+ * a row that says nothing rather than on a row that confidently says "0.35
+ * units" about a value the backend measured in kilograms. Guessing a mass or a
+ * volume here would be inventing the very fact the row exists to state.
+ */
+export const UNIT_OF_MEASURE_FALLBACK: UnitOfMeasure = 'UNIT';

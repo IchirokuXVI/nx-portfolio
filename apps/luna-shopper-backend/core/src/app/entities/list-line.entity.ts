@@ -19,6 +19,14 @@ import { ShoppingList } from './shopping-list.entity';
  * Since plan 0048 the products it stands for are a **set**, in `list_line_items`,
  * summarised here by `itemSetHash`. The single nullable `itemId` it used to carry
  * is gone; it was null on every line ever created.
+ *
+ * Since plan 0070 the set **remembers where it came from**. Picking a group in
+ * the composer used to be a one time copy, and the line forgot the group the
+ * moment it was written, so a catalog that later learned about three more milks
+ * had no way to tell a line that said eleven. It keeps a reference to its group
+ * now, in {@link productGroupId}, and a record of how it differs from it: a
+ * `source` per membership row and a tombstone per product a person took off. The
+ * divergence still wins, and every edit that was possible before still is.
  */
 @Entity({ name: 'list_lines' })
 // Serves both line counts, total and wanted (plan 0017, section 4.3; plan 0047,
@@ -57,6 +65,24 @@ export class ListLine extends BaseEntity {
   @Index('ix_lines_item_set_hash', { where: '"itemSetHash" IS NOT NULL' })
   @Column({ type: 'varchar', nullable: true })
   itemSetHash!: string | null;
+
+  /**
+   * The catalog product group this line is subscribed to, or null for a hand made
+   * set (plan 0070, section 4).
+   *
+   * Opaque and carrying no foreign key, exactly as `ListLineItem.itemId` is and
+   * for the same reason: it names a row in catalog's database, which core cannot
+   * reference. One at most, because per item attribution of which of several
+   * groups contributed a product is a different feature and nothing asks for it.
+   *
+   * The index is partial on `NOT NULL`, which is what makes the fan out bounded
+   * by the binding rather than by the catalog (section 6.4): one product joining
+   * a group touches only the lines bound to that one group, and almost every line
+   * in the product is null here.
+   */
+  @Index('ix_lines_product_group', { where: '"productGroupId" IS NOT NULL' })
+  @Column({ type: 'uuid', nullable: true })
+  productGroupId!: string | null;
 
   @Column({ type: 'double precision', default: 0 })
   position!: number;

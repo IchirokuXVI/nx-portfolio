@@ -13,6 +13,30 @@ import { ChevronRightIcon } from '../icons/icons';
  * The basket being shopped right now, and the fastest path back into it (plan 0045,
  * section 3.2).
  *
+ * ## It is the top half of the dock, not a card on the page
+ *
+ * It spent its whole life at the top of the dashboard's scrolling content, above the
+ * groups, while **Get shopping list** sat pinned at the other end of the screen. Two
+ * things about that were wrong at once. The smaller one is that a couple of groups
+ * scroll it out of sight, so the one control whose entire purpose is a fast way back
+ * into a trip was the first thing to leave the screen. The larger one is that the
+ * dashboard's two answers to "I want my shopping list" were as far apart as a phone
+ * allows, and nothing said they were about the same thing.
+ *
+ * So it moved down and joined the bar: same ground, no gap, no card of its own, with
+ * `BottomActionBar`'s existing top rule doing the work of the divider between the strip
+ * and the buttons. Getting back into the basket you have and composing a new one are
+ * now one object on the screen, read top to bottom, and the strip's progress hairline
+ * runs the full width of it to say so.
+ *
+ * **What the move cost is a row of chrome, and that was the right thing to spend.** The
+ * section header, which carried the label and a History link, is gone: a docked element
+ * takes its height off the dashboard permanently rather than off a scroll, so a heading
+ * that repeats what the strip plainly is could not earn its place. History survives on
+ * the "and N more" link when there is more than one live basket, and otherwise through
+ * the sheet the button below opens, which carries that link for precisely this case and
+ * says so in its own template.
+ *
  * It replaces `ResumeListCard`, and the replacement is the whole argument rather than a
  * change of layout. "Pick up where you left off" answered "what was I doing" from a
  * list id this **device** happened to remember, so it had to be talked out of showing a

@@ -1,0 +1,127 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+// The code, beside a heading that is a label. Both are drawn because "home" does not say
+// which code it is and the code alone does not say which of two places it is.
+.code {
+  font-weight: 500;
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.card {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-3) var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+  cursor: pointer;
+
+  &:first-child {
+    border-block-start: none;
+  }
+
+  // The ring goes on the row rather than on the box, because the row is what the
+  // keyboard is on.
+  &:has(.checkbox:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+
+  &:has(.checkbox:disabled) {
+    cursor: default;
+  }
+}
+
+.excluded {
+  .chain,
+  .name {
+    color: var(--app-text-muted);
+    text-decoration: line-through;
+  }
+}
+
+.checkbox {
+  flex: none;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.what {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+}
+
+// The chain leads, always. A location name does not identify a shop on its own, which is
+// why a search result has to name the brand it belongs to (section 3.1).
+.chain {
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.name {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.where {
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.mark {
+  flex: none;
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.error {
+  margin: 0;
+  padding: 0 var(--app-space-4) var(--app-space-3);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}

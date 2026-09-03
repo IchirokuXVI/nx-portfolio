@@ -51,7 +51,10 @@ export class StoreDiscoveryRunner {
       signal: context.signal,
     });
 
-    await context.setStage('GEOCODE', `Locating postal code ${input.postalCode}`);
+    await context.setStage(
+      'GEOCODE',
+      `Locating postal code ${input.postalCode}`
+    );
     const centre = await client.geocodePostalCode(
       input.postalCode,
       input.country
@@ -76,6 +79,10 @@ export class StoreDiscoveryRunner {
 
     await context.setStage('UPSERT', `Recording ${found.length} place(s)`);
     const seenAt = new Date();
+    // The run's own country, recorded on every place it touches (plan 0061,
+    // section 4). OSM does not tag one and the run has always known it; it is
+    // what keys the centroid lookup that fills the postcode on import.
+    const country = input.country.trim().toLowerCase();
 
     for (const place of found) {
       if (context.signal.aborted) {
@@ -97,6 +104,7 @@ export class StoreDiscoveryRunner {
         existing.street = place.street;
         existing.city = place.city;
         existing.postalCode = place.postalCode;
+        existing.country = country;
         existing.website = place.website;
         existing.openingHours = place.openingHours;
         existing.tags = place.tags;
@@ -120,6 +128,7 @@ export class StoreDiscoveryRunner {
           street: place.street,
           city: place.city,
           postalCode: place.postalCode,
+          country,
           website: place.website,
           openingHours: place.openingHours,
           tags: place.tags,

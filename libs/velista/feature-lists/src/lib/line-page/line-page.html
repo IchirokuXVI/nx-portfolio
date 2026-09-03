@@ -83,57 +83,79 @@
         after the fact (backend plan 0048, section 1.1).
       -->
       <section class="section">
-        <h2 class="section-title">{{ 'list.page.products' | rokuT }}</h2>
-
-        <div class="chips">
-          @for (product of line.products; track product.itemId) {
-            <span class="chip">
-              <!--
-                A product with no name is drawn as **unnamed**, never as "No products
-                yet" (plan 0047, section 1.2). It is a product this line carries, on
-                screen, with a remove button beside it; saying the line has none of them
-                on the chip for one of them was the defect this plan is about.
-              -->
-              <span class="chip-name">{{
-                product.name ?? ('list.detail.unnamedProduct' | rokuT)
-              }}</span>
-
-              @if (product.removable) {
-                <button
-                  (click)="removeProduct(product.itemId)"
-                  [attr.aria-label]="
-                    'list.page.removeProduct'
-                      | rokuT: { name: product.name ?? '' }
-                  "
-                  class="chip-remove"
-                  type="button"
-                >
-                  <span aria-hidden="true">&times;</span>
-                </button>
-              }
-            </span>
-          }
+        <h2 class="section-title">
+          {{ 'list.page.products' | rokuT }}
 
           <!--
-            **A control, not a decoration** (plan 0047, section 2). It was a static chip
-            that drew the affordance and then did nothing, which is the one shape a
-            screen must not have: either the gesture is offered or it is not.
-
-            It opens the composer's own suggestion list rather than a second one, so the
-            ranking rules have one place to live. Drawn whatever the line already
-            carries, because a line with two products is exactly the line somebody is
-            most likely to be adding a third to.
+            The count against the cap, **always** once the line has products and never
+            only once it is close to full (plan 0065, section 3.1). A counter that
+            appears at 90 teaches somebody that a limit exists at the exact moment the
+            news is bad. Neither number is clamped: `104/100` is a state the catalog's
+            own sync produces, and `100/100` would claim the line is exactly full when
+            it is not.
           -->
-          @if (line.canEdit && !searching()) {
-            <button
-              (click)="startAdding()"
-              class="chip add"
-              type="button"
-            >
+          @if (line.counter; as counter) {
+            <span [class.over-cap]="counter.overCap" class="counter">
+              {{
+                'list.page.productsCount'
+                  | rokuT: { count: counter.count, cap: counter.cap }
+              }}
+            </span>
+          }
+        </h2>
+
+        <!--
+          Two labelled clusters when the line follows a group, and the flat run of
+          chips that shipped before when it does not (plan 0065, section 2). The
+          headings appear exactly when there is something for them to tell apart: a
+          mark on every chip would be on all eleven of them the moment somebody picks
+          Milk, and a mark that is on everything is not a mark.
+        -->
+        @if (line.clusters; as clusters) {
+          @for (cluster of clusters; track cluster.source) {
+            <h3 class="cluster-title">
+              {{ cluster.headingKey | rokuT: cluster.headingArgs }}
+            </h3>
+
+            <div class="chips">
+              @for (product of cluster.products; track product.itemId) {
+                <ng-container
+                  [ngTemplateOutletContext]="{ $implicit: product }"
+                  [ngTemplateOutlet]="chip"
+                />
+              }
+            </div>
+          }
+        } @else {
+          <div class="chips">
+            @for (product of line.products; track product.itemId) {
+              <ng-container
+                [ngTemplateOutletContext]="{ $implicit: product }"
+                [ngTemplateOutlet]="chip"
+              />
+            }
+          </div>
+        }
+
+        <!--
+          **A control, not a decoration** (plan 0047, section 2). It was a static chip
+          that drew the affordance and then did nothing, which is the one shape a
+          screen must not have: either the gesture is offered or it is not.
+
+          It opens the composer's own suggestion list rather than a second one, so the
+          ranking rules have one place to live. Drawn whatever the line already
+          carries, because a line with two products is exactly the line somebody is
+          most likely to be adding a third to. It sits in its own run of chips rather
+          than at the end of the products, because with the clusters drawn there are
+          two runs and it belongs to neither: it adds to the line, not to a cluster.
+        -->
+        @if (line.canEdit && !searching()) {
+          <div class="chips">
+            <button (click)="startAdding()" class="chip add" type="button">
               {{ 'list.page.addProduct' | rokuT }}
             </button>
-          }
-        </div>
+          </div>
+        }
 
         @if (searching()) {
           <div class="search">
@@ -156,12 +178,26 @@
             exists, and there is no such thing as attaching a product the catalog has
             never heard of. The composer offers it, because a line is free text first;
             this is the other half of that same rule, not an exception to it.
+
+            No group rows either, and the filtering is the component's, not a style
+            here: a line already holds a set of products, so a group row on this screen
+            reads as a group being added to a group. See `suggestions`.
           -->
           <lib-suggestion-list
             (chose)="addProduct($event)"
             [label]="'list.page.searchProduct'"
             [suggestions]="suggestions()"
           />
+        }
+
+        <!--
+          The add that was refused **before it was sent** (plan 0065, section 3.3). It
+          says all three numbers, because "98 of 100" and "adds 10" together read like
+          two of them should fit: they do not, and a partial fill would be the server
+          choosing which two of Milk's ten land on somebody's shopping list.
+        -->
+        @if (productsFull(); as full) {
+          <p class="products-full">{{ full.key | rokuT: full.args }}</p>
         }
       </section>
 
@@ -326,3 +362,59 @@
     }
   </main>
 }
+
+<!--
+  One chip, drawn identically inside a cluster and outside one.
+
+  A template rather than a copy in each branch: the clustered and unclustered runs
+  are the same chips and differ only in what surrounds them, and two copies of this
+  would be two places for the `Keep` control to be added to and one of them to be
+  forgotten in.
+-->
+<ng-template #chip let-product>
+  <span class="chip">
+    <!--
+      A product with no name is drawn as **unnamed**, never as "No products yet"
+      (plan 0047, section 1.2). It is a product this line carries, on screen, with a
+      remove button beside it; saying the line has none of them on the chip for one of
+      them was the defect that plan is about.
+    -->
+    <span class="chip-name">{{
+      product.name ?? ('list.detail.unnamedProduct' | rokuT)
+    }}</span>
+
+    <!--
+      **Text, not an icon** (plan 0065, section 4). There is no pin, lock or check
+      glyph in `libs/shared/ui`, adoption is a rare and genuinely unobvious action, and
+      an unlabelled mark for it would need a visible label anyway.
+
+      Only on a chip the catalog put there, and the feedback is the chip moving to the
+      other cluster. There is no un-adopt: provenance goes one way.
+    -->
+    @if (product.adoptable) {
+      <button
+        (click)="adoptProduct(product.itemId)"
+        [attr.aria-label]="
+          'list.page.keepProductLabel' | rokuT: { name: product.name ?? '' }
+        "
+        class="chip-keep"
+        type="button"
+      >
+        {{ 'list.page.keepProduct' | rokuT }}
+      </button>
+    }
+
+    @if (product.removable) {
+      <button
+        (click)="removeProduct(product.itemId)"
+        [attr.aria-label]="
+          'list.page.removeProduct' | rokuT: { name: product.name ?? '' }
+        "
+        class="chip-remove"
+        type="button"
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
+    }
+  </span>
+</ng-template>

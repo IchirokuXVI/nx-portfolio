@@ -175,7 +175,22 @@ describe('GeneratedListStore', () => {
   });
 
   describe('the active baskets', () => {
-    it('keeps only the ones being shopped, in the listing order', async () => {
+    /**
+     * **`DRAFT` is in the set, and this assertion used to say the opposite.**
+     *
+     * It asserted that a draft is left out, on the reasoning that a draft has not been
+     * taken to a shop yet and so is not what somebody is in the middle of. That was a
+     * defensible thing to believe about the word and a wrong thing to believe about
+     * this server: core composes every run as `DRAFT` and has no path that promotes one
+     * to `ACTIVE`, so the filter this spec was protecting matched nothing velista had
+     * ever generated. The dashboard card and the history's Shopping now badge both drew
+     * for nobody from the day they shipped, with a green suite over them, because the
+     * fixtures said `ACTIVE` and the server never did.
+     *
+     * The lesson worth keeping in the spec is the one about fixtures: `summary()`
+     * defaults to `ACTIVE` here, so the draft row is written out explicitly.
+     */
+    it('keeps every basket still to be shopped, in the listing order', async () => {
       const { store } = harness({
         pages: [
           {
@@ -192,11 +207,32 @@ describe('GeneratedListStore', () => {
 
       await store.load();
 
-      expect(store.active().map((list) => list.id)).toEqual(['live', 'live2']);
+      expect(store.active().map((list) => list.id)).toEqual([
+        'live',
+        'draft',
+        'live2',
+      ]);
     });
 
-    // An unrecognised status must never read as ACTIVE, or a basket the server
-    // considers finished goes back on the dashboard.
+    // The other half of the pair, stated on its own so a regression names itself: what
+    // a run actually produces is a draft, and a draft has to reach the dashboard.
+    it('keeps a draft, which is what a run composes', async () => {
+      const { store } = harness({
+        pages: [
+          {
+            items: [summary({ id: 'fresh', status: 'DRAFT' })],
+            nextCursor: null,
+          },
+        ],
+      });
+
+      await store.load();
+
+      expect(store.active().map((list) => list.id)).toEqual(['fresh']);
+    });
+
+    // An unrecognised status must never read as live, or a basket the server considers
+    // finished goes back on the dashboard.
     it('leaves out a status this build does not recognise', async () => {
       const { store } = harness({
         pages: [
