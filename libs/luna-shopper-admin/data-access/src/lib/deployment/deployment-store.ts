@@ -1,5 +1,16 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
-import type { AdminEnvironment } from '@portfolio/luna-shopper-admin/models';
+import {
+  computed,
+  effect,
+  inject,
+  Injectable,
+  signal,
+  untracked,
+} from '@angular/core';
+import {
+  UNKNOWN_ENVIRONMENT,
+  type AdminEnvironment,
+} from '@portfolio/luna-shopper-admin/models';
+import { ServerReachability } from '../health/server-reachability';
 import { DEPLOYMENT_SERVICE } from './deployment-service';
 
 /**
@@ -20,9 +31,11 @@ import { DEPLOYMENT_SERVICE } from './deployment-service';
 @Injectable()
 export class DeploymentStore {
   private readonly _service = inject(DEPLOYMENT_SERVICE);
+  private readonly _reachability = inject(ServerReachability);
   private readonly _environment = signal<AdminEnvironment | undefined>(
     undefined
   );
+  private readonly _unreachable = signal(false);
 
   /** The deployment, `null` if unknown, `undefined` until the read settles. */
   readonly deployment = computed(() => {
@@ -45,6 +58,32 @@ export class DeploymentStore {
   readonly settled = computed(() => this._environment() !== undefined);
 
   /**
+   * Whether the one read produced no response at all.
+   *
+   * Distinct from `deployment() === null`, which also covers a gateway that
+   * answered with a name this app does not recognise. That one is a fact about
+   * the deployment, and this one is a fact about the server.
+   */
+  readonly unreachable = this._unreachable.asReadonly();
+
+  constructor() {
+    // The environment read is the first request the app makes, so it is the
+    // first thing an outage breaks. Without this the badge and the accent stay
+    // "unknown" for the life of a tab that recovered in its first second.
+    //
+    // `untracked` because the re-read writes the very signals this effect would
+    // otherwise depend on.
+    effect(() => {
+      const reachable = !this._reachability.down();
+      untracked(() => {
+        if (reachable) {
+          this.reload();
+        }
+      });
+    });
+  }
+
+  /**
    * Start the one read.
    *
    * Called from an environment initializer rather than from a component, so the
@@ -55,11 +94,39 @@ export class DeploymentStore {
    * request to do it.
    */
   load(): Promise<void> {
-    this._loading ??= this._service
-      .read()
-      .then((environment) => this._environment.set(environment));
+    this._loading ??= this._service.read().then(
+      (environment) => {
+        this._unreachable.set(false);
+        this._environment.set(environment);
+      },
+      () => {
+        // Nothing arrived (plan 0008, section 3). The read still settles, so the
+        // app renders and the accent stays the resting grey; what changes is
+        // that the caller can now tell this apart from a gateway that answered
+        // something unreadable, and ask whether anything is there at all.
+        this._unreachable.set(true);
+        this._environment.set(UNKNOWN_ENVIRONMENT);
+      }
+    );
 
     return this._loading;
+  }
+
+  /**
+   * Ask again, once the server is back.
+   *
+   * Only for a read that never arrived. A gateway that answered has answered:
+   * the response cannot change under a running app, which is why {@link load}
+   * holds one promise for the life of the tab, and re-reading it would cost a
+   * request per outage to confirm what it already said.
+   */
+  private reload(): void {
+    if (!this._unreachable()) {
+      return;
+    }
+
+    this._loading = undefined;
+    void this.load();
   }
 
   private _loading?: Promise<void>;

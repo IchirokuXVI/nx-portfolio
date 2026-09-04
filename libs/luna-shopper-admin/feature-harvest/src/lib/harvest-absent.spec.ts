@@ -1,14 +1,15 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   DEPLOYMENT_SERVICE,
+  type DeploymentServiceI,
   DeploymentStore,
   GatewayError,
   HARVEST_SERVICE,
-  type DeploymentServiceI,
   type HarvestServiceI,
+  ServerReachability,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { Deployment } from '@portfolio/luna-shopper-admin/models';
 import { ItemRefsQueuePage } from './item-refs-queue-page';
@@ -78,6 +79,7 @@ async function render<T>(
   await TestBed.configureTestingModule({
     imports: [component as never, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter([]),
       provideLocationMocks(),
       { provide: HARVEST_SERVICE, useValue: silent() },

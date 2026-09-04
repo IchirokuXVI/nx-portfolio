@@ -1,16 +1,17 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   DEPLOYMENT_SERVICE,
+  type DeploymentServiceI,
   DeploymentStore,
   GatewayError,
+  ServerReachability,
   SESSION_SERVICE,
+  type SessionServiceI,
   SessionStorage,
   SessionStore,
-  type DeploymentServiceI,
-  type SessionServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   type AdminMe,
@@ -89,6 +90,7 @@ async function render(
   await TestBed.configureTestingModule({
     imports: [SignInPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter([]),
       provideLocationMocks(),
       { provide: SESSION_SERVICE, useValue: sessionService },

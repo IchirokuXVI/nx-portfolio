@@ -7,6 +7,7 @@ import {
   DeploymentStore,
   HARVEST_SERVICE,
   HarvestMemory,
+  ServerReachability,
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { EntriesQueuePage } from './entries-queue-page';
@@ -61,6 +62,7 @@ async function render<T>(component: new (...args: never[]) => T) {
   await TestBed.configureTestingModule({
     imports: [component as never, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter([]),
       provideLocationMocks(),
       { provide: HARVEST_SERVICE, useValue: service },

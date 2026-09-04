@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { DeploymentStore } from '../deployment/deployment-store';
+import { ServerReachability } from '../health/server-reachability';
 import { SessionStore } from './session-store';
 
 /**
@@ -16,7 +17,8 @@ import { SessionStore } from './session-store';
  * Three things make this safe to be small:
  *
  * - The environment read answers `devAutologin: false` for every way of not
- *   being told, so an unreachable gateway shows the login screen.
+ *   being told, so an unreachable gateway shows the login screen, or from
+ *   `0008` the cover that replaces it.
  * - A held session short circuits it, so a reload of a signed in tab neither
  *   waits on the network nor asks for a second token.
  * - A refused autologin is swallowed. The screen it would have skipped is the
@@ -27,6 +29,7 @@ import { SessionStore } from './session-store';
 export class SessionBootstrap {
   private readonly _deployments = inject(DeploymentStore);
   private readonly _sessions = inject(SessionStore);
+  private readonly _reachability = inject(ServerReachability);
 
   /**
    * Resolves when the app knows whether it has a session.
@@ -48,6 +51,20 @@ export class SessionBootstrap {
     }
 
     await this._deployments.load();
+
+    // The read produced no response at all (plan 0008, section 3). Ask once
+    // whether anything is there, and let the answer decide between a login
+    // screen and a cover. This is the one probe the app awaits: the router's
+    // first navigation is behind it, and a screen drawn before the answer is a
+    // login form that may not be able to work.
+    if (this._deployments.unreachable()) {
+      await this._reachability.check();
+    }
+
+    // Nothing to ask for a token, and nothing to sign in to.
+    if (this._reachability.down()) {
+      return;
+    }
 
     if (this._deployments.devAutologin()) {
       await this._sessions.signInForDevelopment();

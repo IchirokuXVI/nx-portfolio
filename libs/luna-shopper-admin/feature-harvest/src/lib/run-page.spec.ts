@@ -6,6 +6,7 @@ import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
+  ServerReachability,
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { HarvestRun } from '@portfolio/luna-shopper-admin/models';
@@ -66,6 +67,7 @@ async function render(answer: HarvestRun): Promise<ComponentFixture<RunPage>> {
   await TestBed.configureTestingModule({
     imports: [RunPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter([]),
       provideLocationMocks(),
       { provide: HARVEST_SERVICE, useValue: service },

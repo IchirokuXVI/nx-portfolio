@@ -4,7 +4,9 @@ import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   DeploymentStore,
+  ServerReachability,
   SessionLifecycle,
+  SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { Deployment } from '@portfolio/luna-shopper-admin/models';
 import { AppRoot } from './app-root';
@@ -24,7 +26,7 @@ import { AppRoot } from './app-root';
  */
 async function render(
   deployment: Deployment | null | undefined,
-  session: { warning?: boolean; locked?: boolean } = {}
+  session: { warning?: boolean; locked?: boolean; down?: boolean } = {}
 ) {
   TestBed.resetTestingModule();
 
@@ -48,6 +50,18 @@ async function render(
           reauthenticate: async () => null,
         },
       },
+      {
+        provide: ServerReachability,
+        useValue: {
+          down: signal(session.down ?? false).asReadonly(),
+          checking: signal(false).asReadonly(),
+          automaticAttemptsLeft: signal(10).asReadonly(),
+          exhausted: signal(false).asReadonly(),
+          retry: async () => true,
+        },
+      },
+      // Read by the cover, to decide whether to warn about reloading.
+      { provide: SessionStore, useValue: { signedIn: () => true } },
     ],
   }).compileComponents();
 
@@ -118,6 +132,39 @@ describe('AppRoot', () => {
       const host = await render('development', { locked: true });
 
       expect(host.querySelector('.app router-outlet')).not.toBeNull();
+    });
+  });
+
+  /**
+   * Plan 0008, section 5. The two covers are stacked and reachability is on top,
+   * because the app is usually in both states at once: an outage long enough to
+   * notice is long enough for the token to expire behind it, and a password
+   * prompt against a server that cannot check one is not the screen to show.
+   */
+  describe('the server', () => {
+    it('covers the app when the gateway stopped answering', async () => {
+      const host = await render('development', { down: true });
+
+      expect(host.querySelector('lib-server-down-overlay')).not.toBeNull();
+      expect(host.querySelector('.app')?.hasAttribute('inert')).toBe(true);
+      expect(host.querySelector('.app router-outlet')).not.toBeNull();
+    });
+
+    it('draws the outage over the expired session, not beside it', async () => {
+      const host = await render('development', { down: true, locked: true });
+
+      expect(host.querySelector('lib-server-down-overlay')).not.toBeNull();
+      expect(host.querySelector('lib-reauth-overlay')).toBeNull();
+    });
+
+    /**
+     * The warning is about a session running down, which is not the operator's
+     * problem while the thing that renews it is unreachable.
+     */
+    it('hides the idle warning while the server is gone', async () => {
+      const host = await render('development', { down: true, warning: true });
+
+      expect(host.querySelector('lib-session-warning')).toBeNull();
     });
   });
 });
