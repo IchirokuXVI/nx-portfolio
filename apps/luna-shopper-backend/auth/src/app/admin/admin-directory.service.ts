@@ -18,6 +18,7 @@ import {
   type ResendAdminVerificationResult,
   type ResolveAdminUsersRequest,
   type ResolveAdminUsersResult,
+  type UpdateAdminUserRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
@@ -39,13 +40,20 @@ interface UserCursor {
 /**
  * The back office's user directory (plan 0074).
  *
- * **Read, plus two named actions.** Both actions call {@link IdentityService},
- * the same class the user's own routes call, so an operator deleting an account
- * runs the identical cascade and emits the identical `user.deleted` event that
- * core is already listening for. Nothing here writes a row directly, and section
- * 9 puts a row editor over `users` permanently out of scope: the invariants that
- * survive a deletion live in services across three databases, and a `UPDATE
- * users SET ...` reaches none of them.
+ * **Read, plus an edit and two named actions.** Every write calls
+ * {@link IdentityService}, the same class the user's own routes call, so an
+ * operator deleting an account runs the identical cascade and emits the identical
+ * `user.deleted` event that core is already listening for, and an operator
+ * renaming somebody publishes the rename core propagates into every zone.
+ * Nothing here writes a row, and there is still no generic row editor over
+ * `users`: the invariants live in services across three databases, and an
+ * `UPDATE users SET ...` reaches none of them (plan 0077, section 1).
+ *
+ * The edit is plan 0077 section 3, and it reaches two columns. `email`,
+ * `emailVerifiedAt` and `kind` are not among them, and their absence is a
+ * decision recorded in sections 6.1 and 6.2 rather than an omission:
+ * `admin-user-immutable-fields.spec.ts` asserts that no request shape carries
+ * one. Admins are not editable either, permanently, by plan 0071 section 6.
  *
  * Every method gates first, on the token rather than on a uuid, and the gate is
  * auth's own (`AuthPlatformAdminService`) rather than something the gateway
@@ -152,8 +160,52 @@ export class AdminDirectoryService {
    */
   async get(req: GetAdminUserRequest): Promise<AdminUserDetailView> {
     await this.gate.requireAdmin(req);
+    return this.detail(req.targetUserId);
+  }
 
-    const user = await this.users.findOne({ where: { id: req.targetUserId } });
+  /**
+   * Change somebody's username or display name (plan 0077, section 3).
+   *
+   * Both fields are optional and each is applied only when the request carries
+   * it, so a form saved unchanged reaches no write and records no audit row. For
+   * `displayName` the distinction is three ways rather than two: absent leaves
+   * the column alone, and an explicit null clears it.
+   *
+   * The two are not the same kind of write, which is the whole of section 3.
+   * `username` goes through {@link IdentityService.setUsernameAsOperator},
+   * because the rename has to publish the event core propagates into every zone.
+   * `displayName` is a direct column write, because nothing derives from it.
+   *
+   * The gate runs once, here, and hands down the actor id every audited write
+   * records. Reading the answer back afterwards therefore calls {@link detail}
+   * rather than {@link get}: verifying the operator token a second time to
+   * produce a view this method already earned is work with no question behind it.
+   */
+  async update(req: UpdateAdminUserRequest): Promise<AdminUserDetailView> {
+    const actorId = await this.gate.requireAdmin(req);
+
+    if (req.username !== undefined) {
+      await this.identity.setUsernameAsOperator(
+        req.targetUserId,
+        req.username,
+        actorId,
+        req.usernamePropagation
+      );
+    }
+    if (req.displayName !== undefined) {
+      await this.identity.setDisplayNameAsOperator(
+        req.targetUserId,
+        req.displayName,
+        actorId
+      );
+    }
+
+    return this.detail(req.targetUserId);
+  }
+
+  /** One user's detail view, for a caller that has already passed the gate. */
+  private async detail(targetUserId: string): Promise<AdminUserDetailView> {
+    const user = await this.users.findOne({ where: { id: targetUserId } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -216,8 +268,8 @@ export class AdminDirectoryService {
   async deleteUser(
     req: DeleteAdminUserRequest
   ): Promise<DeleteAdminUserResult> {
-    await this.gate.requireAdmin(req);
-    return this.identity.deleteAccount({ userId: req.targetUserId });
+    const actorId = await this.gate.requireAdmin(req);
+    return this.identity.deleteAccountAsOperator(req.targetUserId, actorId);
   }
 
   /**
@@ -232,11 +284,12 @@ export class AdminDirectoryService {
   async resendVerification(
     req: ResendAdminVerificationRequest
   ): Promise<ResendAdminVerificationResult> {
-    await this.gate.requireAdmin(req);
-    return this.identity.resendVerification({
-      userId: req.targetUserId,
-      locale: req.locale,
-    });
+    const actorId = await this.gate.requireAdmin(req);
+    return this.identity.resendVerificationAsOperator(
+      req.targetUserId,
+      actorId,
+      req.locale
+    );
   }
 
   /**

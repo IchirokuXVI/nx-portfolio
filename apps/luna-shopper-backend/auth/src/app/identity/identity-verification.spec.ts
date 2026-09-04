@@ -5,6 +5,7 @@ import {
   THROTTLE_LIMITS,
   throttleWaitSeconds,
 } from '@portfolio/luna-shopper/platform';
+import { fakeAudit } from '../audit/auth-audit.testing';
 import {
   Credential,
   EmailVerification,
@@ -113,6 +114,7 @@ function build(users: Row[] = []) {
     mail as never,
     events as never,
     new UsernameGenerator(),
+    fakeAudit([]).service,
     {
       getOrThrow: () => ({
         smtp: { verifyBaseUrl: 'https://x', enabled: true },

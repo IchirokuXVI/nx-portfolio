@@ -467,6 +467,13 @@ export type ResolvePostalCodeDto = {
 };
 
 /**
+ * `SetAdminLineApprovalDto` in the gateway's OpenAPI document.
+ */
+export type SetAdminLineApprovalDto = {
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+};
+
+/**
  * `SetApprovalDto` in the gateway's OpenAPI document.
  */
 export type SetApprovalDto = {
@@ -585,6 +592,51 @@ export type SpawnHarvestRunDto = {
 export type TurnScopeDto = {
   zoneId: string;
   listId: string;
+};
+
+/**
+ * `UpdateAdminLineDto` in the gateway's OpenAPI document.
+ */
+export type UpdateAdminLineDto = {
+  content?: string;
+  quantity?: number;
+  itemIds?: string[];
+};
+
+/**
+ * `UpdateAdminListDto` in the gateway's OpenAPI document.
+ */
+export type UpdateAdminListDto = {
+  name?: string;
+  autoApproveLines?: boolean;
+  sharedWithZone?: boolean;
+};
+
+/**
+ * `UpdateAdminMembershipDto` in the gateway's OpenAPI document.
+ */
+export type UpdateAdminMembershipDto = {
+  role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+  username?: string;
+};
+
+/**
+ * `UpdateAdminUserDto` in the gateway's OpenAPI document.
+ */
+export type UpdateAdminUserDto = {
+  username?: string;
+  displayName?: string | null;
+  usernamePropagation?: 'GLOBAL_ONLY' | 'MATCHING_ZONES' | 'ALL_ZONES';
+};
+
+/**
+ * `UpdateAdminZoneDto` in the gateway's OpenAPI document.
+ */
+export type UpdateAdminZoneDto = {
+  name?: string;
+  config?: {
+    [key: string]: unknown;
+  };
 };
 
 /**
@@ -891,6 +943,16 @@ export type AdminCoreAdminListDetailView = {
 };
 
 /**
+ * `admin-core.AdminListLinePage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type AdminCoreAdminListLinePage = {
+  items: AdminCoreAdminListLineView[];
+  nextCursor: string | null;
+};
+
+/**
  * `admin-core.AdminListLineView` in the gateway's OpenAPI document.
  */
 export type AdminCoreAdminListLineView = {
@@ -927,6 +989,16 @@ export type AdminCoreAdminListView = {
   lineCount: number;
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * `admin-core.AdminMembershipPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type AdminCoreAdminMembershipPage = {
+  items: AdminCoreAdminZoneMemberView[];
+  nextCursor: string | null;
 };
 
 /**

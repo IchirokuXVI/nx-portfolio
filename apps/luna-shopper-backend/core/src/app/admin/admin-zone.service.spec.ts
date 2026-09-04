@@ -163,7 +163,7 @@ describe('AdminZoneService named actions delegate rather than write', () => {
 
     await service.kick({ ...CREDENTIAL, zoneId: 'z1', membershipId: 'm1' });
 
-    expect(kickAsOperator).toHaveBeenCalledWith('z1', 'm1');
+    expect(kickAsOperator).toHaveBeenCalledWith('z1', 'm1', 'a1');
   });
 
   it('bans through MembershipService', async () => {
@@ -174,7 +174,7 @@ describe('AdminZoneService named actions delegate rather than write', () => {
 
     await service.ban({ ...CREDENTIAL, zoneId: 'z1', membershipId: 'm1' });
 
-    expect(banAsOperator).toHaveBeenCalledWith('z1', 'm1');
+    expect(banAsOperator).toHaveBeenCalledWith('z1', 'm1', 'a1');
   });
 
   it('regenerates the join code through ZoneService', async () => {
@@ -185,7 +185,7 @@ describe('AdminZoneService named actions delegate rather than write', () => {
 
     await service.regenerateJoinCode({ ...CREDENTIAL, zoneId: 'z1' });
 
-    expect(regenerateJoinCodeAsOperator).toHaveBeenCalledWith('z1');
+    expect(regenerateJoinCodeAsOperator).toHaveBeenCalledWith('z1', 'a1');
   });
 
   it('transfers ownership through ZoneService', async () => {
@@ -200,31 +200,37 @@ describe('AdminZoneService named actions delegate rather than write', () => {
       membershipId: 'm1',
     });
 
-    expect(transferOwnershipAsOperator).toHaveBeenCalledWith('z1', 'm1');
+    expect(transferOwnershipAsOperator).toHaveBeenCalledWith(
+      'z1',
+      'm1',
+      'a1'
+    );
   });
 
   it('deletes through the reaper, which is where deleting a zone is defined', async () => {
-    const deleteZone = jest.fn(async () => ({ id: 'z1' }));
-    const { service } = makeService({ reaper: { deleteZone } as never });
+    const deleteZoneAsOperator = jest.fn(async () => ({ id: 'z1' }));
+    const { service } = makeService({
+      reaper: { deleteZoneAsOperator } as never,
+    });
 
     await service.remove({ ...CREDENTIAL, zoneId: 'z1' });
 
-    expect(deleteZone).toHaveBeenCalledWith('z1');
+    expect(deleteZoneAsOperator).toHaveBeenCalledWith('z1', 'a1');
   });
 
   it('answers 404 for a zone that does not exist rather than acting on nothing', async () => {
     // The user facing routes get this free from `requireApproved`, which the
     // operator paths skip by design, so it has to be asked for explicitly.
-    const deleteZone = jest.fn();
+    const deleteZoneAsOperator = jest.fn();
     const { service } = makeService({
-      reaper: { deleteZone } as never,
+      reaper: { deleteZoneAsOperator } as never,
       zoneRepoOver: { findOne: async () => null },
     });
 
     await expect(
       service.remove({ ...CREDENTIAL, zoneId: 'gone' })
     ).rejects.toThrow('Zone not found');
-    expect(deleteZone).not.toHaveBeenCalled();
+    expect(deleteZoneAsOperator).not.toHaveBeenCalled();
   });
 });
 

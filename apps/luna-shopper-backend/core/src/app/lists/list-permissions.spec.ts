@@ -212,7 +212,9 @@ function world(options: {
     settlementRepo as never,
     listAccess,
     fakeLineClaims().service,
-    publisher
+    publisher,
+    // No operator write here, so nothing reaches the trail.
+    {} as never
   );
 
   const settlements = new SettlementService(

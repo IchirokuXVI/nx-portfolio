@@ -44,6 +44,7 @@ import {
   type EntityManager,
   type SelectQueryBuilder,
 } from 'typeorm';
+import { CoreAuditService } from '../audit/core-audit.service';
 import {
   LineSettlement,
   ListLine,
@@ -94,6 +95,56 @@ interface WrittenLine {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * What an operator edits with (plan 0077, section 5.2).
+ *
+ * `MANAGE`, and nothing beside it, because `MANAGE` is the bit both halves of an
+ * edit read: {@link LineService.authorizeEdit} returns on it, and
+ * {@link LineService.reopenAfterEdit} exempts it. Every other permission in the
+ * set would be a permission nothing here asks about, which is a way of saying
+ * that widening it later would change nothing and mean something.
+ */
+const OPERATOR_PERMISSIONS: ReadonlySet<ListPermission> = new Set([
+  ListPermission.MANAGE,
+]);
+
+/**
+ * The fields an edit may name, on either path.
+ *
+ * Narrower than `UpdateLineRequest`, which also carries the caller. An operator
+ * has no `userId` to put there and nothing below the authorization reads one, so
+ * stating what an edit is **about** is what lets the two paths share a body
+ * (plan 0077, section 5.2).
+ */
+interface LineEdit {
+  content?: string;
+  quantity?: number;
+  itemIds?: string[];
+  adoptItemIds?: string[];
+}
+
+/**
+ * How an edit reaches the database.
+ *
+ * Two methods rather than one, because {@link LineService.update} opens a
+ * transaction only when it is also rewriting the product set, and that decision
+ * belongs to the edit rather than to who is making it. A member's writes through
+ * this service's repositories and records nothing; an operator's writes and
+ * records inside one transaction, so the change and its trail commit together
+ * (plan 0077, section 8).
+ */
+interface LineWriter {
+  /** Save the row on its own, for an edit that touches no join rows. */
+  save(line: ListLine): Promise<ListLine>;
+  /** Run the whole edit in one transaction, for one that rewrites the set. */
+  transaction(
+    work: (manager: EntityManager, record: RecordLine) => Promise<WrittenLine>
+  ): Promise<WrittenLine>;
+}
+
+/** What a write inside a transaction leaves in the trail, or nothing. */
+type RecordLine = ((saved: ListLine) => Promise<void>) | undefined;
+
 @Injectable()
 export class LineService {
   constructor(
@@ -120,7 +171,10 @@ export class LineService {
     // (plan 0052, section 4), and a read that left it out would take the "Ana is
     // buying this" mark off a line the moment anybody edited it.
     private readonly claims: LineClaimService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // `@Global()`, so the operator writes below reach the trail without any
+    // caller having to hand it one (plan 0077, section 8).
+    private readonly audit: CoreAuditService
   ) {}
 
   /**
@@ -805,6 +859,62 @@ export class LineService {
       line.listId,
       req.userId
     );
+    return this.applyLineEdit(line, list, req, permissions, {
+      save: (row) => this.lines.save(row),
+      transaction: (work) =>
+        this.dataSource.transaction((manager) => work(manager, undefined)),
+    });
+  }
+
+  /**
+   * Edit a line, for an operator who is not in the zone (plan 0077, section 5.2).
+   *
+   * ## An operator edits with `MANAGE`
+   *
+   * An operator resolves to no membership and therefore to no permissions, and
+   * {@link update} uses the caller's set **twice**: {@link authorizeEdit} decides
+   * whether they may make this edit, and {@link reopenAfterEdit} decides what the
+   * edit does to the line's approval. Both need an answer rather than a default,
+   * and `MANAGE` answers both the way an operator wants.
+   *
+   * It allows the edit, and it leaves an approved line approved, because `MANAGE`
+   * is one of the reversion's exemptions. Resolving the operator as a plain
+   * writer instead was rejected on the second half alone: an operator fixing a
+   * typo in an approved line would move it to `PENDING`, and the household would
+   * have to approve their own line again for reasons no screen can explain. A
+   * correction that silently un-approved the line is a second change nobody asked
+   * for, visible to every member in the zone.
+   *
+   * A `REJECTED` line still reopens on any edit, because that rule applies to
+   * everyone and is a decision the group made rather than a permission.
+   *
+   * The line is checked against the list it was addressed under, so an id from
+   * another list is a 404 rather than an edit of somebody else's row.
+   */
+  async updateAsOperator(
+    listId: string,
+    lineId: string,
+    changes: { content?: string; quantity?: number; itemIds?: string[] },
+    actorId: string
+  ): Promise<LineView> {
+    const { line, list } = await this.loadLineOfList(listId, lineId);
+    const before = { ...line };
+    return this.applyLineEdit(
+      line,
+      list,
+      changes,
+      OPERATOR_PERMISSIONS,
+      this.auditedWriter(actorId, before)
+    );
+  }
+
+  private async applyLineEdit(
+    line: ListLine,
+    list: ShoppingList,
+    req: LineEdit,
+    permissions: ReadonlySet<ListPermission>,
+    writer: LineWriter
+  ): Promise<LineView> {
     this.authorizeEdit(req, line, permissions);
 
     if (req.content !== undefined) {
@@ -845,7 +955,7 @@ export class LineService {
       // chose, and there is nothing to lock it against.
       // No transaction on this path (see above), so the pooled repositories are
       // free to answer in parallel.
-      const saved = await this.lines.save(line);
+      const saved = await writer.save(line);
       const [items, settlements, claim] = await Promise.all([
         this.itemSetOf(saved.id),
         this.settlementsOf(saved.id),
@@ -868,10 +978,51 @@ export class LineService {
     // rows, so it belongs in the same transaction and produces the same event.
     return this.announce(
       list,
-      await this.dataSource.transaction((manager) =>
-        this.writeEdit(manager, line, { next: nextItemIds, adopt: adoptItemIds })
+      await writer.transaction((manager, record) =>
+        this.writeEdit(
+          manager,
+          line,
+          { next: nextItemIds, adopt: adoptItemIds },
+          record
+        )
       )
     );
+  }
+
+  /**
+   * The line an operator addressed, and the list they addressed it under.
+   *
+   * The two are checked against each other because the operator routes are
+   * nested, `lists/:id/lines/:lineId`, and a line id from another list is a
+   * mistake rather than a shortcut to a row nobody named.
+   */
+  private async loadLineOfList(
+    listId: string,
+    lineId: string
+  ): Promise<{ line: ListLine; list: ShoppingList }> {
+    const line = await this.listAccess.getLine(lineId);
+    if (line.listId !== listId) {
+      throw new NotFoundException('Line not found in this list');
+    }
+    return { line, list: await this.listAccess.getList(listId) };
+  }
+
+  /**
+   * A writer that puts the change and its audit row in one transaction.
+   *
+   * Both halves record the same edit against the same `before`, so which of the
+   * two the edit takes, one row or a rewritten product set, does not decide
+   * whether it leaves a trail.
+   */
+  private auditedWriter(actorId: string, before: ListLine): LineWriter {
+    return {
+      save: (line) =>
+        this.audit.write(actorId, (tx) => tx.update(ListLine, before, line)),
+      transaction: (work) =>
+        this.audit.write(actorId, (tx) =>
+          work(tx.manager, (saved) => tx.recordUpdate(ListLine, before, saved))
+        ),
+    };
   }
 
   /**
@@ -944,11 +1095,7 @@ export class LineService {
       const quantity = this.validateQuantity(line.quantity + req.delta);
       // The request an absolute edit of the same field would have been, so the
       // refusal a caller gets is word for word the one the PATCH gives them.
-      this.authorizeEdit(
-        { userId: req.userId, lineId: req.lineId, quantity },
-        line,
-        permissions
-      );
+      this.authorizeEdit({ quantity }, line, permissions);
 
       line.quantity = quantity;
       this.reopenAfterEdit(line, list, permissions);
@@ -1049,11 +1196,17 @@ export class LineService {
    * {@link addQuantity} is already inside one because a delta has to read under
    * the lock it writes with. The event is returned rather than emitted, so the
    * caller announces it after its commit, as everywhere else here.
+   *
+   * `record` is how an operator's edit leaves a trail without this method having
+   * to know whose edit it is: the row is saved through the caller's manager
+   * either way, and the recording is the only thing the operator path adds (plan
+   * 0077, section 8).
    */
   private async writeEdit(
     manager: EntityManager,
     line: ListLine,
-    set?: { next?: string[]; adopt: string[] }
+    set?: { next?: string[]; adopt: string[] },
+    record?: RecordLine
   ): Promise<WrittenLine> {
     const repo = manager.getRepository(ListLine);
     if (set !== undefined) {
@@ -1083,6 +1236,7 @@ export class LineService {
     const claim = await this.claims.claimOf(line.id, manager);
 
     const saved = await repo.save(line);
+    await record?.(saved);
     return {
       view: toLineView(saved, items, settlements, claim),
       line: saved,
@@ -1141,7 +1295,7 @@ export class LineService {
    * requests on.
    */
   private authorizeEdit(
-    req: UpdateLineRequest,
+    req: LineEdit,
     line: ListLine,
     permissions: ReadonlySet<ListPermission>
   ): void {
@@ -1190,11 +1344,50 @@ export class LineService {
   async setApproval(req: SetLineApprovalRequest): Promise<LineView> {
     const line = await this.listAccess.getLine(req.lineId);
     const list = await this.listAccess.requireDecide(line.listId, req.userId);
-    line.approvalStatus = req.approvalStatus;
+    return this.applyApproval(
+      line,
+      list,
+      req.approvalStatus,
+      req.userId,
+      (row) => this.lines.save(row)
+    );
+  }
+
+  /**
+   * Approve, reject or un-approve a line, for an operator (plan 0077, section
+   * 5.2).
+   *
+   * `approvedByUserId` is **null** whichever way the decision goes, for the
+   * reason `MembershipService.approveAsOperator` writes null into its own: an
+   * operator is not a member of the zone, every other reader treats that column
+   * as a `users.id`, and an admin's id there resolves to nothing. Who decided is
+   * the audit row's answer rather than the line's.
+   */
+  async setApprovalAsOperator(
+    listId: string,
+    lineId: string,
+    status: LineApprovalStatus,
+    actorId: string
+  ): Promise<LineView> {
+    const { line, list } = await this.loadLineOfList(listId, lineId);
+    const before = { ...line };
+    return this.applyApproval(line, list, status, null, (row) =>
+      this.audit.write(actorId, (tx) => tx.update(ListLine, before, row))
+    );
+  }
+
+  private async applyApproval(
+    line: ListLine,
+    list: ShoppingList,
+    status: LineApprovalStatus,
+    approvedByUserId: string | null,
+    persist: (line: ListLine) => Promise<ListLine>
+  ): Promise<LineView> {
+    line.approvalStatus = status;
     line.approvedByUserId =
-      req.approvalStatus === LineApprovalStatus.PENDING ? null : req.userId;
+      status === LineApprovalStatus.PENDING ? null : approvedByUserId;
     line.version += 1;
-    const saved = await this.lines.save(line);
+    const saved = await persist(line);
     const [items, settlements, claim] = await Promise.all([
       this.itemSetOf(saved.id),
       this.settlementsOf(saved.id),
@@ -1272,17 +1465,47 @@ export class LineService {
         throw new ForbiddenException('You need write access to this list');
       }
     }
-    await this.lines.delete({ id: line.id });
+    return this.applyLineDeletion(line, list, async (row) => {
+      await this.lines.delete({ id: row.id });
+    });
+  }
+
+  /**
+   * Delete a line, for an operator (plan 0077, section 5.2).
+   *
+   * No approval branch, because the branch above is about which permission the
+   * caller holds and an operator edits with `MANAGE`, which reaches an approved
+   * line. That is the same answer a list admin gets, and it is the case the
+   * asymmetry exists for: somebody has to be able to remove an approved line that
+   * should never have existed.
+   */
+  async deleteAsOperator(
+    listId: string,
+    lineId: string,
+    actorId: string
+  ): Promise<{ id: string }> {
+    const { line, list } = await this.loadLineOfList(listId, lineId);
+    return this.applyLineDeletion(line, list, (row) =>
+      this.audit.write(actorId, (tx) => tx.delete(ListLine, row))
+    );
+  }
+
+  private async applyLineDeletion(
+    line: ListLine,
+    list: ShoppingList,
+    remove: (line: ListLine) => Promise<void>
+  ): Promise<{ id: string }> {
+    // Read before the removal: the trail's delete strips the primary key off the
+    // object it is handed, so an id read afterwards is undefined.
+    const { id, listId } = line;
+    await remove(line);
     this.events.emit(
       RealtimeEvent.LineDeleted,
       list.zoneId,
-      {
-        id: line.id,
-        listId: line.listId,
-      },
-      line.listId
+      { id, listId },
+      listId
     );
-    return { id: line.id };
+    return { id };
   }
 
   /**

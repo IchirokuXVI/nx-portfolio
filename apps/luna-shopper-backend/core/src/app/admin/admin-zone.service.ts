@@ -4,14 +4,21 @@ import {
   MembershipStatus,
   type AdminMembershipActionRequest,
   type AdminMembershipActionResult,
+  type AdminMembershipPage,
   type AdminZoneDetailView,
   type AdminZoneIdRequest,
   type AdminZoneListView,
   type AdminZoneMemberView,
   type AdminZonePage,
   type AdminZoneView,
+  type GetAdminMembershipRequest,
   type GetAdminZoneRequest,
+  type ListAdminMembershipsRequest,
   type ListAdminZonesRequest,
+  type MembershipView,
+  type SetAdminZoneDeletionMarkRequest,
+  type UpdateAdminMembershipRequest,
+  type UpdateAdminZoneRequest,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -19,6 +26,7 @@ import {
   decodeCursor,
   encodeCursor,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { ZoneReaperService } from '../account/zone-reaper.service';
@@ -34,6 +42,18 @@ interface ZoneCursor {
 }
 
 /**
+ * Where a page of memberships left off: **oldest** first, ties broken by id.
+ *
+ * The opposite direction from a zone page, and deliberately: the zone detail read
+ * already lists its membership oldest first, so paging it the other way would put
+ * one membership in two places depending on which screen fetched it.
+ */
+interface MembershipCursor {
+  value: string;
+  id: string;
+}
+
+/**
  * Zones, for the back office (plan 0074).
  *
  * **Every read here is unscoped and every one of them is gated.** That pair is
@@ -42,12 +62,22 @@ interface ZoneCursor {
  * do not ask it and {@link CorePlatformAdminService} answers a different question
  * first instead.
  *
- * The five named actions delegate, and none of them writes a row. Each one calls
- * the service that owns the invariant: `MembershipService` for a kick or a ban,
- * `ZoneService` for the join code and for ownership, `ZoneReaperService` for a
- * deletion. Section 9 puts a generic row editor over core permanently out of
- * scope, and the reason is visible in what those services do that a row write
- * does not: emit the events other clients have already applied.
+ * **Every write delegates, and none of them writes a row.** Each one calls the
+ * service that owns the invariant: `MembershipService` for the four membership
+ * status verbs and the per zone name, `ZoneService` for the name, the config, the
+ * deletion mark, the role, the join code and ownership, `ZoneReaperService` for a
+ * deletion. What those services do that a row write does not is emit the events
+ * other clients have already applied.
+ *
+ * Plan 0074 read that same fact as a reason to offer no editing at all. Plan 0077
+ * reverses the conclusion and keeps the reason: what was ruled out was the
+ * **generic row editor**, and an update that calls `ZoneService.update` is not
+ * one. So a field with no service behind it is still not editable, and section 6
+ * of that plan lists every one of them with the reason.
+ *
+ * The actor threaded into each write is the id `requireAdmin` returns from the
+ * verified token, not a value the caller supplied. Nothing here can record an
+ * actor the gate did not verify (plan 0077, section 8).
  */
 @Injectable()
 export class AdminZoneService {
@@ -198,15 +228,190 @@ export class AdminZoneService {
    * typed the wrong id should be told.
    */
   async remove(req: AdminZoneIdRequest): Promise<{ id: string }> {
-    await this.gate.requireAdmin(req);
+    const actorId = await this.gate.requireAdmin(req);
     await this.requireZone(req.zoneId);
-    return this.reaper.deleteZone(req.zoneId);
+    return this.reaper.deleteZoneAsOperator(req.zoneId, actorId);
   }
 
   /** Regenerate the join code, through `ZoneService` (plan 0074, section 1). */
   async regenerateJoinCode(req: AdminZoneIdRequest): Promise<ZoneView> {
+    const actorId = await this.gate.requireAdmin(req);
+    return this.zoneService.regenerateJoinCodeAsOperator(req.zoneId, actorId);
+  }
+
+  /**
+   * Change a zone's name or its config, through `ZoneService` (plan 0077,
+   * section 4.1).
+   *
+   * Those two columns are the whole of what a zone's own owner may change, and an
+   * operator gets exactly the same two. The other four are not fields, and each
+   * is excluded for a reason rather than an oversight: `joinCode` is unique and
+   * random on purpose, so regenerating it is the action that exists;
+   * `ownerUserId` is two role changes and a column in one transaction, so
+   * transfer is the action; and `status` and `markedForDeletionAt` are one state
+   * machine, which is {@link setDeletionMark}.
+   */
+  async update(req: UpdateAdminZoneRequest): Promise<ZoneView> {
+    const actorId = await this.gate.requireAdmin(req);
+    return this.zoneService.updateAsOperator(
+      req.zoneId,
+      { name: req.name, config: req.config },
+      actorId
+    );
+  }
+
+  /**
+   * Mark a zone for deletion, or restore it (plan 0077, section 4.2).
+   *
+   * One action rather than two fields, because `status` and `markedForDeletionAt`
+   * are written together and read together everywhere else: `AccountDeletionService`
+   * sets both when a zone loses its owner, the reaper reads both to decide what to
+   * remove after the grace period, and `claimOwnership` clears both when an admin
+   * rescues the zone. Typing either alone produces a zone the reaper never removes
+   * or one it removes anyway, and neither state has a repair.
+   */
+  async setDeletionMark(
+    req: SetAdminZoneDeletionMarkRequest
+  ): Promise<ZoneView> {
+    const actorId = await this.gate.requireAdmin(req);
+    return this.zoneService.setDeletionMarkAsOperator(
+      req.zoneId,
+      req.marked,
+      actorId
+    );
+  }
+
+  /**
+   * A page of one zone's memberships (plan 0077, section 9).
+   *
+   * The zone detail read keeps its embedded `members` array, unchanged: the zone
+   * screen renders its membership without a second call. This collection exists
+   * for the screens that edit one membership, which address a row directly rather
+   * than through its parent.
+   *
+   * Ordered oldest first, which is the order the detail read already uses, so a
+   * membership does not move between the two views of it.
+   */
+  async listMemberships(
+    req: ListAdminMembershipsRequest
+  ): Promise<AdminMembershipPage> {
     await this.gate.requireAdmin(req);
-    return this.zoneService.regenerateJoinCodeAsOperator(req.zoneId);
+    await this.requireZone(req.zoneId);
+
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor(req.cursor) as MembershipCursor | undefined;
+    const qb = this.memberships
+      .createQueryBuilder('m')
+      .where('m."zoneId" = :zoneId', { zoneId: req.zoneId })
+      .orderBy('m."createdAt"', 'ASC')
+      .addOrderBy('m.id', 'ASC')
+      .take(limit + 1);
+    if (cursor) {
+      qb.andWhere('(m."createdAt", m.id) > (:cv, :cid)', {
+        cv: cursor.value,
+        cid: cursor.id,
+      });
+    }
+
+    const rows = await qb.getMany();
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+
+    return {
+      items: page.map(toMemberView),
+      nextCursor:
+        hasMore && last
+          ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
+          : null,
+    };
+  }
+
+  /** One membership, read through its own address (plan 0077, section 9). */
+  async getMembership(
+    req: GetAdminMembershipRequest
+  ): Promise<AdminZoneMemberView> {
+    await this.gate.requireAdmin(req);
+    return toMemberView(
+      await this.requireMembership(req.zoneId, req.membershipId)
+    );
+  }
+
+  /**
+   * A membership's role and its per zone name (plan 0077, section 4.3).
+   *
+   * Two writes rather than one, because they are two services: the role goes
+   * through `ZoneService.setRoleAsOperator`, which keeps `setRole`'s refusals,
+   * and the name through `MembershipService.setUsernameAsOperator`. A request
+   * carrying both applies both and answers with the row after the second.
+   *
+   * `status` is not a field here, and section 4.4 is why: it moves along a state
+   * machine with a service method per edge, and each edge does more than write
+   * the enum. A `PATCH` carrying it would dispatch to four methods by inspecting
+   * the value, which is a switch statement whose branches drift.
+   */
+  async updateMembership(
+    req: UpdateAdminMembershipRequest
+  ): Promise<MembershipView> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.requireMembership(req.zoneId, req.membershipId);
+
+    if (req.role === undefined && req.username === undefined) {
+      throw new ValidationException('Name a field to change');
+    }
+
+    let view: MembershipView | undefined;
+    if (req.role !== undefined) {
+      view = await this.zoneService.setRoleAsOperator(
+        req.zoneId,
+        req.membershipId,
+        req.role,
+        actorId
+      );
+    }
+    if (req.username !== undefined) {
+      view = await this.membershipService.setUsernameAsOperator(
+        req.zoneId,
+        req.membershipId,
+        req.username,
+        actorId
+      );
+    }
+    // One of the two branches ran, because the refusal above is the only way
+    // neither does.
+    return view as MembershipView;
+  }
+
+  /**
+   * Approve a pending member, through `MembershipService` (plan 0077, section
+   * 4.4).
+   *
+   * The same write the zone's own owner makes, which is more than the enum: it
+   * hands the new member the lists their group shares, in the same transaction,
+   * and emits `MemberApproved`. `approvedByUserId` is null on this path, because
+   * an operator holds no membership in the zone to record there.
+   */
+  async approve(
+    req: AdminMembershipActionRequest
+  ): Promise<AdminMembershipActionResult> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.requireZone(req.zoneId);
+    return this.membershipService.approveAsOperator(
+      req.zoneId,
+      req.membershipId,
+      actorId
+    );
+  }
+
+  /** Reject a pending member, which removes the row (plan 0077, section 4.4). */
+  async reject(req: AdminMembershipActionRequest): Promise<{ id: string }> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.requireZone(req.zoneId);
+    return this.membershipService.rejectAsOperator(
+      req.zoneId,
+      req.membershipId,
+      actorId
+    );
   }
 
   /**
@@ -217,11 +422,12 @@ export class AdminZoneService {
   async transferOwnership(
     req: AdminMembershipActionRequest
   ): Promise<ZoneView> {
-    await this.gate.requireAdmin(req);
+    const actorId = await this.gate.requireAdmin(req);
     await this.requireZone(req.zoneId);
     return this.zoneService.transferOwnershipAsOperator(
       req.zoneId,
-      req.membershipId
+      req.membershipId,
+      actorId
     );
   }
 
@@ -229,18 +435,26 @@ export class AdminZoneService {
   async kick(
     req: AdminMembershipActionRequest
   ): Promise<AdminMembershipActionResult> {
-    await this.gate.requireAdmin(req);
+    const actorId = await this.gate.requireAdmin(req);
     await this.requireZone(req.zoneId);
-    return this.membershipService.kickAsOperator(req.zoneId, req.membershipId);
+    return this.membershipService.kickAsOperator(
+      req.zoneId,
+      req.membershipId,
+      actorId
+    );
   }
 
   /** Ban a member, through `MembershipService` (plan 0074, section 1). */
   async ban(
     req: AdminMembershipActionRequest
   ): Promise<AdminMembershipActionResult> {
-    await this.gate.requireAdmin(req);
+    const actorId = await this.gate.requireAdmin(req);
     await this.requireZone(req.zoneId);
-    return this.membershipService.banAsOperator(req.zoneId, req.membershipId);
+    return this.membershipService.banAsOperator(
+      req.zoneId,
+      req.membershipId,
+      actorId
+    );
   }
 
   /**
@@ -258,6 +472,28 @@ export class AdminZoneService {
       throw new NotFoundException('Zone not found');
     }
     return zone;
+  }
+
+  /**
+   * One membership in one zone, or a 404, for the same reason {@link requireZone}
+   * exists.
+   *
+   * Scoped to the zone rather than looked up by id alone, so a membership id from
+   * another zone is not found here. An operator reaches a membership through the
+   * zone it is in, and a route that answered for any id would let a mistyped zone
+   * silently address somebody else's household.
+   */
+  private async requireMembership(
+    zoneId: string,
+    membershipId: string
+  ): Promise<ZoneMembership> {
+    const membership = await this.memberships.findOne({
+      where: { id: membershipId, zoneId },
+    });
+    if (!membership) {
+      throw new NotFoundException('Membership not found in this zone');
+    }
+    return membership;
   }
 
   private async countApprovedMembers(

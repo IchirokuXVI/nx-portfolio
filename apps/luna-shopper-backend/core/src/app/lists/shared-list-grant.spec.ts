@@ -260,7 +260,9 @@ describe('MembershipService.approve (plan 0042, section 2.3)', () => {
       {
         emit: () => undefined,
         emitTo: () => undefined,
-      } as unknown as CoreEventsPublisher
+      } as unknown as CoreEventsPublisher,
+      // This is the member facing approval, which records nothing.
+      {} as never
     );
 
     await service.approve({
@@ -408,7 +410,9 @@ function listServiceFor(world: World) {
         emitted.push({ event, payload }),
       emitTo: (event: RealtimeEvent, _audience: unknown, payload: unknown) =>
         emitted.push({ event, payload }),
-    } as unknown as CoreEventsPublisher
+    } as unknown as CoreEventsPublisher,
+    // These are the member facing edits, which record nothing.
+    {} as never
   );
   return { service, emitted };
 }

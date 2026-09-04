@@ -21,6 +21,8 @@ import {
   type ResendAdminVerificationResult,
   type ResolveAdminUsersRequest,
   type ResolveAdminUsersResult,
+  type UpdateAdminUserRequest,
+  type UpdateAdminUserResult,
 } from '@portfolio/luna-shopper/contracts';
 import { AdminDirectoryService } from './admin-directory.service';
 import { AdminIdentityService } from './admin-identity.service';
@@ -34,15 +36,20 @@ import { AdminIdentityService } from './admin-identity.service';
  * a reader who opens the other one cannot accidentally add a fifth admin subject
  * beside a user one.
  *
- * There is no create, update or delete handler, and nothing here can make an
- * admin. That is section 6: changing an admin means having the server.
+ * There is no handler that creates, changes or removes an **admin**, and there
+ * never will be. That is section 6: changing an admin means having the server,
+ * because a back office that can make back office accounts is a back office where
+ * one compromised session is permanent. `admin-user-immutable-fields.spec.ts`
+ * asserts it over every pattern this controller answers, so the rule survives a
+ * future author who only reads the code.
  *
- * Plan 0074 adds the second half: the directory an operator reads, and the two
- * actions they may take on somebody else's account. Those handlers delegate to
- * {@link AdminDirectoryService}, which gates on the forwarded operator token
- * before it touches a table. The identity handlers above them do not, and must
- * not: `adminAuth.login` is how a caller **obtains** a token, so requiring one
- * would make signing in impossible.
+ * Plan 0074 adds the second half: the directory an operator reads, and the
+ * actions they may take on somebody else's account. Plan 0077 adds the third,
+ * `adminUser.update`, which reaches a user's username and display name and no
+ * other column. All of them delegate to {@link AdminDirectoryService}, which
+ * gates on the forwarded operator token before it touches a table. The identity
+ * handlers above them do not, and must not: `adminAuth.login` is how a caller
+ * **obtains** a token, so requiring one would make signing in impossible.
  */
 @Controller()
 export class AdminController {
@@ -95,6 +102,13 @@ export class AdminController {
     @Payload() req: ResolveAdminUsersRequest
   ): Promise<ResolveAdminUsersResult> {
     return this.directory.resolveMany(req);
+  }
+
+  @MessagePattern(ADMIN_USER_PATTERNS.update)
+  updateUser(
+    @Payload() req: UpdateAdminUserRequest
+  ): Promise<UpdateAdminUserResult> {
+    return this.directory.update(req);
   }
 
   @MessagePattern(ADMIN_USER_PATTERNS.delete)

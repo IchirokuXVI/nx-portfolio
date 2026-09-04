@@ -55,7 +55,8 @@ function makeService(failWith?: unknown) {
     {} as never,
     {} as never,
     {} as never,
-    events as never
+    events as never,
+    {} as never
   );
   return { svc, events, repository };
 }
