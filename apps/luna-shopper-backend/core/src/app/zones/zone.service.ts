@@ -35,8 +35,13 @@ import {
   DataSource,
   QueryFailedError,
   Repository,
+  type EntityManager,
   type SelectQueryBuilder,
 } from 'typeorm';
+import {
+  CoreAuditService,
+  type AuditedWrite,
+} from '../audit/core-audit.service';
 import { Zone, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { generateJoinCode } from './join-code';
@@ -68,6 +73,29 @@ interface MyZoneCursor {
   id: string;
 }
 
+/** The two zone fields an edit may name (plan 0077, section 4.1). */
+interface ZoneChanges {
+  name?: string;
+  config?: Record<string, unknown>;
+}
+
+/** What a write moved, and what it changed, once its transaction has run. */
+interface OwnershipTransfer {
+  view: ZoneView;
+  outgoing: ZoneMembership | null;
+  incoming: ZoneMembership;
+}
+
+/**
+ * The recording half of an {@link AuditedWrite}, or nothing.
+ *
+ * A write whose member facing path and operator path share one body needs the
+ * trail to be something that body is handed rather than something it reaches
+ * for, because only one of the two paths has one: a member changing their own
+ * zone is not an operator write and records nothing (plan 0077, section 8).
+ */
+type Trail = Pick<AuditedWrite, 'recordUpdate'> | null;
+
 @Injectable()
 export class ZoneService {
   constructor(
@@ -77,7 +105,10 @@ export class ZoneService {
     private readonly memberships: Repository<ZoneMembership>,
     private readonly authz: ZoneAuthzService,
     private readonly counts: ZoneCountsService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // Injected rather than passed in, because it is `@Global()` and every method
+    // that writes on an operator's behalf needs it (plan 0077, section 8).
+    private readonly audit: CoreAuditService
   ) {}
 
   private isUniqueViolation(error: unknown): boolean {
@@ -212,15 +243,102 @@ export class ZoneService {
       ZoneRole.ADMIN,
     ]);
     const zone = await this.zones.findOneOrFail({ where: { id: req.zoneId } });
-    if (req.name !== undefined) {
-      zone.name = req.name;
+    return this.applyZoneUpdate(zone, req, (row) => this.zones.save(row));
+  }
+
+  /**
+   * Edit the zone name/config for an operator who is not in the zone (plan 0077,
+   * section 4.1).
+   *
+   * Two fields and no third, because those two are the whole of what a zone's own
+   * owner may change and an operator gets exactly the same two. Each of the other
+   * four columns carries something a column write does not maintain: the join
+   * code is regenerated, the owner is transferred, and the two deletion columns
+   * are a pair, which is {@link setDeletionMarkAsOperator}.
+   *
+   * The change and its audit row commit together, and the event goes out after
+   * that commit. An event for a transaction that then rolls back is a lie every
+   * open client acts on.
+   */
+  async updateAsOperator(
+    zoneId: string,
+    changes: ZoneChanges,
+    actorId: string
+  ): Promise<ZoneView> {
+    const zone = await this.loadZone(zoneId);
+    const before = { ...zone };
+    return this.applyZoneUpdate(zone, changes, (row) =>
+      this.audit.write(actorId, (tx) => tx.update(Zone, before, row))
+    );
+  }
+
+  /**
+   * The fields an edit assigns and the event it announces, with the
+   * authorization already decided.
+   *
+   * One body, so an operator's edit is the same write rather than a second one
+   * that agrees for now: a field added here reaches both callers, and neither can
+   * come to emit something the other does not. `persist` is the only difference
+   * between them, the plain repository on one side and the audited transaction on
+   * the other, and it resolves after its commit so the emit below is safe on both.
+   */
+  private async applyZoneUpdate(
+    zone: Zone,
+    changes: ZoneChanges,
+    persist: (zone: Zone) => Promise<Zone>
+  ): Promise<ZoneView> {
+    if (changes.name !== undefined) {
+      zone.name = changes.name;
     }
-    if (req.config !== undefined) {
-      zone.config = req.config;
+    if (changes.config !== undefined) {
+      zone.config = changes.config;
     }
-    const view = toZoneView(await this.zones.save(zone));
-    this.events.emit(RealtimeEvent.ZoneUpdated, req.zoneId, view);
+    const view = toZoneView(await persist(zone));
+    this.events.emit(RealtimeEvent.ZoneUpdated, zone.id, view);
     return view;
+  }
+
+  /**
+   * Mark a zone for deletion, or restore it, for an operator (plan 0077, section
+   * 4.2).
+   *
+   * One action rather than two editable fields, because `status` and
+   * `markedForDeletionAt` are written together and read together everywhere else
+   * in core. `AccountDeletionService` sets both when a zone loses its owner, the
+   * zone reaper reads both to decide what to remove after the grace period, and
+   * `claimOwnership` clears both when an admin rescues the zone. Typing either
+   * one alone produces one of two broken zones: a `MARKED_FOR_DELETION` row with
+   * no marker, which the reaper never removes, or an `ACTIVE` row with one, which
+   * it removes anyway. Neither state is reachable through any other code path and
+   * neither has a repair.
+   *
+   * It deletes nothing itself. What it writes is the state an ownerless zone is
+   * left in, so the grace period and the reaper's own rules decide the rest, and
+   * "restore" is the same rescue an admin performs by claiming the zone.
+   */
+  async setDeletionMarkAsOperator(
+    zoneId: string,
+    marked: boolean,
+    actorId: string
+  ): Promise<ZoneView> {
+    const zone = await this.loadZone(zoneId);
+    const before = { ...zone };
+    zone.status = marked ? ZoneStatus.MARKED_FOR_DELETION : ZoneStatus.ACTIVE;
+    zone.markedForDeletionAt = marked ? new Date() : null;
+    const view = toZoneView(
+      await this.audit.write(actorId, (tx) => tx.update(Zone, before, zone))
+    );
+    this.events.emit(RealtimeEvent.ZoneUpdated, zoneId, view);
+    return view;
+  }
+
+  /** One zone, or a 404. */
+  private async loadZone(zoneId: string): Promise<Zone> {
+    const zone = await this.zones.findOne({ where: { id: zoneId } });
+    if (!zone) {
+      throw new NotFoundException('Zone not found');
+    }
+    return zone;
   }
 
   /** Delete the zone (plan 0006, section 4): owner only. */
@@ -237,7 +355,8 @@ export class ZoneService {
       ZoneRole.OWNER,
       ZoneRole.ADMIN,
     ]);
-    return this.applyJoinCodeRegeneration(req.zoneId);
+    const zone = await this.loadZone(req.zoneId);
+    return this.applyJoinCodeRegeneration(zone, (row) => this.zones.save(row));
   }
 
   /**
@@ -249,39 +368,101 @@ export class ZoneService {
    * regenerated code invalidates every invitation already handed out, and a
    * second implementation that forgot `ZoneUpdated` would leave every open client
    * showing a code that no longer works.
+   *
+   * It records who did it since plan 0077 section 8. This is a write by an
+   * operator against somebody else's data, which is the whole category the trail
+   * exists for, and the table it goes in did not exist when the action did.
    */
-  async regenerateJoinCodeAsOperator(zoneId: string): Promise<ZoneView> {
-    return this.applyJoinCodeRegeneration(zoneId);
+  async regenerateJoinCodeAsOperator(
+    zoneId: string,
+    actorId: string
+  ): Promise<ZoneView> {
+    const zone = await this.loadZone(zoneId);
+    const before = { ...zone };
+    return this.applyJoinCodeRegeneration(zone, (row) =>
+      this.audit.write(actorId, (tx) => tx.update(Zone, before, row))
+    );
   }
 
-  private async applyJoinCodeRegeneration(zoneId: string): Promise<ZoneView> {
-    const zone = await this.zones.findOne({ where: { id: zoneId } });
-    if (!zone) {
-      throw new NotFoundException('Zone not found');
-    }
+  private async applyJoinCodeRegeneration(
+    zone: Zone,
+    persist: (zone: Zone) => Promise<Zone>
+  ): Promise<ZoneView> {
     zone.joinCode = generateJoinCode();
-    const view = toZoneView(await this.zones.save(zone));
-    this.events.emit(RealtimeEvent.ZoneUpdated, zoneId, view);
+    const view = toZoneView(await persist(zone));
+    this.events.emit(RealtimeEvent.ZoneUpdated, zone.id, view);
     return view;
   }
 
   /** Promote/demote an admin (plan 0006, section 4): owner only. */
   async setRole(req: SetRoleRequest): Promise<MembershipView> {
     await this.authz.requireRole(req.zoneId, req.userId, [ZoneRole.OWNER]);
-    if (req.role === ZoneRole.OWNER) {
+    const target = await this.loadRoleTarget(
+      req.zoneId,
+      req.membershipId,
+      req.role
+    );
+    return this.applyRoleChange(target, req.role, (row) =>
+      this.memberships.save(row)
+    );
+  }
+
+  /**
+   * Promote or demote a member, for an operator who is not in the zone (plan
+   * 0077, section 4.3).
+   *
+   * It keeps both refusals {@link setRole} carries, because both are facts about
+   * the zone rather than about who asked. Assigning `OWNER` is refused since
+   * ownership is two role changes and a column in one transaction, which is
+   * {@link transferOwnershipAsOperator}; demoting the current owner is refused
+   * for the same reason, and doing it by column would leave a zone whose
+   * `ownerUserId` names an ordinary member.
+   */
+  async setRoleAsOperator(
+    zoneId: string,
+    membershipId: string,
+    role: ZoneRole,
+    actorId: string
+  ): Promise<MembershipView> {
+    const target = await this.loadRoleTarget(zoneId, membershipId, role);
+    const before = { ...target };
+    return this.applyRoleChange(target, role, (row) =>
+      this.audit.write(actorId, (tx) => tx.update(ZoneMembership, before, row))
+    );
+  }
+
+  /**
+   * The membership a role change is about, once both refusals have been made.
+   *
+   * Split out rather than folded into {@link applyRoleChange} so the two checks
+   * stay in the order they were written in: an attempt to assign `OWNER` is
+   * refused before anything is looked up, and only then does a missing membership
+   * become the answer.
+   */
+  private async loadRoleTarget(
+    zoneId: string,
+    membershipId: string,
+    role: ZoneRole
+  ): Promise<ZoneMembership> {
+    if (role === ZoneRole.OWNER) {
       throw new ValidationException(
         'Use transfer ownership to assign an owner'
       );
     }
-    const target = await this.loadTargetMembership(
-      req.zoneId,
-      req.membershipId
-    );
+    const target = await this.loadTargetMembership(zoneId, membershipId);
     if (target.role === ZoneRole.OWNER) {
       throw new ForbiddenException('Cannot change the owner’s role here');
     }
-    target.role = req.role;
-    const saved = await this.memberships.save(target);
+    return target;
+  }
+
+  private async applyRoleChange(
+    target: ZoneMembership,
+    role: ZoneRole,
+    persist: (membership: ZoneMembership) => Promise<ZoneMembership>
+  ): Promise<MembershipView> {
+    target.role = role;
+    const saved = await persist(target);
     this.emitMember(RealtimeEvent.MemberRoleChanged, saved);
     return toMembershipView(saved);
   }
@@ -295,7 +476,9 @@ export class ZoneService {
       req.zoneId,
       req.membershipId
     );
-    return this.applyOwnershipTransfer(req.zoneId, owner, target);
+    return this.applyOwnershipTransfer(req.zoneId, owner, target, (work) =>
+      this.dataSource.transaction((manager) => work(manager, null))
+    );
   }
 
   /**
@@ -309,13 +492,18 @@ export class ZoneService {
    */
   async transferOwnershipAsOperator(
     zoneId: string,
-    membershipId: string
+    membershipId: string,
+    actorId: string
   ): Promise<ZoneView> {
     const target = await this.loadTargetMembership(zoneId, membershipId);
     const outgoing = await this.memberships.findOne({
       where: { zoneId, role: ZoneRole.OWNER },
     });
-    return this.applyOwnershipTransfer(zoneId, outgoing, target);
+    return this.applyOwnershipTransfer(zoneId, outgoing, target, (work) =>
+      // The audit rows land in the transaction that moves the three rows, so a
+      // transfer that rolls back leaves no trail claiming it happened.
+      this.audit.write(actorId, (tx) => work(tx.manager, tx))
+    );
   }
 
   /**
@@ -325,11 +513,19 @@ export class ZoneService {
    * `outgoingOwner` is null only on the operator path, over an ownerless zone.
    * Passing the caller's own membership on the user path is what keeps the two
    * from being two transactions that agree by inspection.
+   *
+   * `write` is where that one transaction comes from, and it is the only thing
+   * the two paths differ in: a member's is opened on the data source and records
+   * nothing, an operator's is opened by the audit service and records all three
+   * rows (plan 0077, section 8).
    */
   private async applyOwnershipTransfer(
     zoneId: string,
     outgoingOwner: ZoneMembership | null,
-    target: ZoneMembership
+    target: ZoneMembership,
+    write: (
+      work: (manager: EntityManager, trail: Trail) => Promise<OwnershipTransfer>
+    ) => Promise<OwnershipTransfer>
   ): Promise<ZoneView> {
     // Transferring a zone to the member who already owns it would otherwise save
     // two instances of one row with opposite roles, and which of them landed
@@ -338,27 +534,34 @@ export class ZoneService {
       throw new ValidationException('That member already owns this zone');
     }
 
-    const { view, outgoing, incoming } = await this.dataSource.transaction(
-      async (manager) => {
-        if (outgoingOwner) {
-          outgoingOwner.role = ZoneRole.ADMIN;
-        }
-        target.role = ZoneRole.OWNER;
-        target.status = MembershipStatus.APPROVED;
-        const saved = await manager
-          .getRepository(ZoneMembership)
-          .save(outgoingOwner ? [outgoingOwner, target] : [target]);
-        const incoming = saved[saved.length - 1];
-        const outgoing = outgoingOwner ? saved[0] : null;
-
-        const zone = await manager
-          .getRepository(Zone)
-          .findOneOrFail({ where: { id: zoneId } });
-        zone.ownerUserId = target.userId;
-        const view = toZoneView(await manager.getRepository(Zone).save(zone));
-        return { view, outgoing, incoming };
+    const { view, outgoing, incoming } = await write(async (manager, trail) => {
+      const wasOutgoing = outgoingOwner ? { ...outgoingOwner } : null;
+      const wasTarget = { ...target };
+      if (outgoingOwner) {
+        outgoingOwner.role = ZoneRole.ADMIN;
       }
-    );
+      target.role = ZoneRole.OWNER;
+      target.status = MembershipStatus.APPROVED;
+      const saved = await manager
+        .getRepository(ZoneMembership)
+        .save(outgoingOwner ? [outgoingOwner, target] : [target]);
+      const incoming = saved[saved.length - 1];
+      const outgoing = outgoingOwner ? saved[0] : null;
+
+      const zone = await manager
+        .getRepository(Zone)
+        .findOneOrFail({ where: { id: zoneId } });
+      const wasZone = { ...zone };
+      zone.ownerUserId = target.userId;
+      const view = toZoneView(await manager.getRepository(Zone).save(zone));
+
+      if (outgoing && wasOutgoing) {
+        await trail?.recordUpdate(ZoneMembership, wasOutgoing, outgoing);
+      }
+      await trail?.recordUpdate(ZoneMembership, wasTarget, incoming);
+      await trail?.recordUpdate(Zone, wasZone, zone);
+      return { view, outgoing, incoming };
+    });
 
     // A role is a permission, so a role the server changes is a role the server
     // publishes (plan 0029). Two memberships change here and neither used to be

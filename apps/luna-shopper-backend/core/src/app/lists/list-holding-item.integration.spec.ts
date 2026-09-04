@@ -11,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { CoreAuditService } from '../audit/core-audit.service';
 import {
   CORE_ENTITIES,
   ListAccess,
@@ -151,7 +152,8 @@ describeIntegration('which other lists hold this item (real Postgres)', () => {
       listAccess,
       new SharedListGrantService(),
       new ZoneCountsService(memberships, { emit: jest.fn() } as never),
-      { emit: jest.fn() } as never
+      { emit: jest.fn() } as never,
+      new CoreAuditService(dataSource)
     );
 
     ids.homeZone = await seedZone('Home', ids.shopper);

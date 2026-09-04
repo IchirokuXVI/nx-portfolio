@@ -11,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { CoreAuditService } from '../audit/core-audit.service';
 import {
   CORE_ENTITIES,
   ListAccess,
@@ -79,7 +80,8 @@ describeIntegration('zone summary (real Postgres)', () => {
       membershipRepo,
       authz,
       counts,
-      events as never
+      events as never,
+      new CoreAuditService(dataSource)
     );
     members = new MemberListingService(membershipRepo, authz);
 

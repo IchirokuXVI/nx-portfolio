@@ -65,7 +65,9 @@ function build(rows: Partial<ZoneMembership>[]) {
     authz,
     sharedGrant,
     counts as never,
-    events as never
+    events as never,
+    // Member facing paths only, which record nothing.
+    {} as never
   );
   return { service, events, memberships };
 }

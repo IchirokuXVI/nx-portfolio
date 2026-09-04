@@ -147,7 +147,9 @@ describe('MembershipService republishes the counts', () => {
       authz,
       sharedGrant,
       counts as never,
-      events
+      events,
+      // Member facing paths only, which record nothing.
+      {} as never
     );
     return { svc, counts, memberships };
   }

@@ -5,6 +5,7 @@ import {
   Get,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -19,6 +20,7 @@ import {
   type AdminUserPage,
   type DeleteAdminUserResult,
   type ResendAdminVerificationResult,
+  type UpdateAdminUserResult,
 } from '@portfolio/luna-shopper/contracts';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
@@ -27,6 +29,7 @@ import {
   ListAdminUsersQueryDto,
   ResendAdminVerificationDto,
 } from './admin-directory.dto';
+import { UpdateAdminUserDto } from './admin-edit.dto';
 import { AdminJwtGuard } from './admin-jwt.guard';
 import type { CurrentAdmin } from './admin-jwt.strategy';
 import { ActingAdmin } from './current-admin.decorator';
@@ -34,12 +37,26 @@ import { ActingAdmin } from './current-admin.decorator';
 /**
  * The people using velista, for the back office (plan 0074).
  *
- * Everything an operator can learn about a user, and the two things they can do
- * to one. **Read, plus named actions, not CRUD** (section 1): there is no PATCH
- * here and section 9 puts one permanently out of scope. Deleting an account runs
- * a cascade across three databases and a raw row editor over `users` reaches none
- * of it, so the only writes are the two that call the service the user's own
- * routes call.
+ * Everything an operator can learn about a user, and everything they can do to
+ * one. Every write calls the service the user's own routes call: deleting an
+ * account runs a cascade across three databases, and renaming somebody rewrites
+ * the per zone name on every membership they hold, neither of which a raw row
+ * editor over `users` reaches.
+ *
+ * **Two fields are editable and three are not** (plan 0077, section 3).
+ * `username` and `displayName` are the two. `email`, `emailVerifiedAt` and `kind`
+ * are the three, and each is a decision rather than an omission: there is no
+ * service that changes a registered user's email, because velista does not offer
+ * it and writing the column alone would leave the credential, the linked
+ * providers, the outstanding verifications and every live refresh token pointing
+ * at an address the account no longer claims; setting `emailVerifiedAt` by hand
+ * asserts that somebody proved control of an address, which is the one thing the
+ * column exists to record and the one thing an operator cannot observe; and
+ * flipping `kind` produces a registered account with no way to sign in and no
+ * error anywhere. Sections 6.1 and 6.2 carry the full argument, and the back
+ * office shows each field with the reason in place, so an operator looking for a
+ * missing control finds the reason rather than concluding the screen is
+ * unfinished.
  *
  * Guarded by {@link AdminJwtGuard} like everything under `/v1/admin/**`, and
  * gated **again** inside auth against the forwarded token, which is plan 0072
@@ -143,6 +160,38 @@ export class AdminUsersController {
       ADMIN_USER_PATTERNS.resendVerification,
       { ...adminCredential(admin), targetUserId: id, locale: dto.locale }
     );
+  }
+
+  /**
+   * Change a user's username or display name (plan 0077, section 3).
+   *
+   * **The two are not the same kind of write**, and that is the interesting part
+   * of this route. `username` goes through `IdentityService.setUsername`, which
+   * publishes `user.usernameChanged`; core consumes that event and rewrites the
+   * per zone `zone_memberships.username` of every membership the user holds. A
+   * direct column write would produce a user whose global name changed and whose
+   * name in every zone did not, and the two would then disagree forever, because
+   * the propagation is driven by the event and nothing reconciles them afterwards.
+   *
+   * `displayName` is a direct column write, and that is not an exception to the
+   * rule: it has no service, no event and no consumer, core has never seen it, and
+   * nothing derives from it, so there is no invariant to route around.
+   */
+  @Patch(':id')
+  @ApiContractResponse(ADMIN_USER_PATTERNS.update)
+  @ApiProblemResponses({ body: true, conflict: true })
+  update(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: UpdateAdminUserDto
+  ): Promise<UpdateAdminUserResult> {
+    return this.nats.send<UpdateAdminUserResult>(ADMIN_USER_PATTERNS.update, {
+      ...adminCredential(admin),
+      targetUserId: id,
+      username: dto.username,
+      displayName: dto.displayName,
+      usernamePropagation: dto.usernamePropagation,
+    });
   }
 }
 

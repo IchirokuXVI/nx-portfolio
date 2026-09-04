@@ -1,4 +1,5 @@
 import { NotConfiguredException } from '@portfolio/luna-shopper/platform';
+import { fakeAudit } from '../audit/auth-audit.testing';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
@@ -46,6 +47,7 @@ describe('IdentityService with a feature unconfigured', () => {
       mail as never,
       {} as never,
       new UsernameGenerator(),
+      fakeAudit([]).service,
       { getOrThrow: () => config } as never
     );
 

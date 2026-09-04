@@ -1,4 +1,8 @@
-import type { AuthProvider, UserKind } from '../enums/auth.enums';
+import type {
+  AuthProvider,
+  UserKind,
+  UsernamePropagation,
+} from '../enums/auth.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
 import type {
@@ -17,12 +21,16 @@ import type {
  * everything the back office can learn or do about a user, which is the list
  * worth being able to read in one place.
  *
- * **Read, plus named actions. Not CRUD** (plan 0074, section 1). There is no
- * update subject and no create subject. The two writes here delegate to the
- * service methods the user facing routes already call, so an operator deleting an
- * account runs the same cascade and emits the same event a person deleting their
- * own account does. A row editor over `users` would let an operator produce
- * states no code path can reach and none can repair.
+ * **Every write goes through the service, and never through the row** (plan
+ * 0077, section 1). Deleting an account runs the same cascade and emits the same
+ * event a person deleting their own account does, and a rename runs the same
+ * propagation. There is still no create subject, and the one direct column write
+ * here, `displayName`, is direct because nothing derives from it (section 3.2).
+ *
+ * Three of the five columns worth an operator's attention stay fixed:
+ * `email`, `emailVerifiedAt` and `kind`. Each is a decision rather than an
+ * omission, recorded in sections 6.1 and 6.2 of plan 0077, and no request shape
+ * in this file carries one.
  *
  * Every request carries an {@link AdminCredential}, and auth verifies the token
  * for itself rather than trusting the gateway to have done so. That is plan 0072
@@ -61,6 +69,24 @@ export const ADMIN_USER_PATTERNS = {
    * is a conflict here exactly as it is there.
    */
   resendVerification: 'adminUser.resendVerification',
+  /**
+   * Change somebody's username or display name (plan 0077, section 3).
+   *
+   * **Two fields, and no third.** The email address, whether it is verified, and
+   * the account kind are each a column an operator can see and cannot change,
+   * for reasons sections 6.1 and 6.2 give in full. None of them appears on
+   * {@link UpdateAdminUserRequest}, and `admin-user-immutable-fields.spec.ts`
+   * asserts that no route accepts one.
+   *
+   * The two are not the same kind of write, which is the interesting part.
+   * `username` goes through `IdentityService.setUsername`, because a direct
+   * column write produces a user whose global name changed and whose name in
+   * every zone did not: core rewrites the per zone `zone_memberships.username`
+   * from the `user.usernameChanged` event, and nothing reconciles the two
+   * afterwards. `displayName` has no service, no event and no consumer, so a
+   * direct column write is correct there and is not an exception to the rule.
+   */
+  update: 'adminUser.update',
 } as const;
 
 export type AdminUserPattern =
@@ -191,5 +217,33 @@ export interface ResendAdminVerificationRequest extends AdminCredential {
   /** Locale for the confirmation email; defaults to the request locale. */
   locale?: string;
 }
+
+/**
+ * Change somebody else's username or display name (plan 0077, section 3).
+ *
+ * `targetUserId` rather than `userId`, for the reason
+ * {@link DeleteAdminUserRequest} gives: `userId` on an {@link AdminCredential}
+ * is already the operator, and a single field would make an operator renaming
+ * themselves and an operator renaming a user the same message.
+ *
+ * `displayName` is nullable **and** optional, and the two mean different things.
+ * Absent leaves the column alone; null clears it. A display name holds whatever
+ * an identity provider supplied, which for a Google sign in is somebody's real
+ * full name, so clearing it is a thing an operator asks for on purpose.
+ */
+export interface UpdateAdminUserRequest extends AdminCredential {
+  targetUserId: string;
+  username?: string;
+  /** Absent leaves it alone. Null clears it. */
+  displayName?: string | null;
+  /**
+   * How far the rename reaches, defaulted exactly as the user facing path
+   * defaults it. An operator renaming somebody is doing what that person could
+   * do to themselves, so it behaves the same.
+   */
+  usernamePropagation?: UsernamePropagation;
+}
+
+export type UpdateAdminUserResult = AdminUserDetailView;
 
 export type ResendAdminVerificationResult = ResendVerificationResult;

@@ -194,7 +194,9 @@ function build(options: Options = {}) {
     {
       emit: (event: RealtimeEvent, _zoneId: string, payload: LineView) =>
         events.push({ event, line: payload }),
-    } as unknown as CoreEventsPublisher
+    } as unknown as CoreEventsPublisher,
+    // No operator write here, so nothing reaches the trail.
+    {} as never
   );
 
   return { service, lineItems, groupRemovals, saved, events, line };

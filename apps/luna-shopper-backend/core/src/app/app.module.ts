@@ -13,6 +13,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { AccountModule } from './account/account.module';
 import { CoreAdminModule } from './admin/admin.module';
+import { AuditModule } from './audit/audit.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
 import { CORE_ENTITIES } from './entities';
@@ -46,6 +47,10 @@ import { ZonesModule } from './zones/zones.module';
         synchronize: false,
       }),
     }),
+    // The audit trail, global so the three slices that write on an operator's
+    // behalf reach it without each importing it (plan 0077, section 8). Before
+    // them, so it is provided by the time they resolve.
+    AuditModule,
     ZonesModule,
     ListsModule,
     MergeModule,

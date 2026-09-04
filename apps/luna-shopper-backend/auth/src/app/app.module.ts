@@ -17,6 +17,7 @@ import { AdminIdentityService } from './admin/admin-identity.service';
 import { AdminTokenService } from './admin/admin-token.service';
 import { AdminController } from './admin/admin.controller';
 import { AuthPlatformAdminService } from './admin/platform-admin.service';
+import { AuditModule } from './audit/audit.module';
 import type { AuthConfig } from './config/app-config';
 import { authConfiguration, authValidationSchema } from './config/app-config';
 import { AUTH_ENTITIES } from './entities';
@@ -59,6 +60,10 @@ import { UsernameGenerator } from './username/username-generator.service';
       }),
     }),
     TypeOrmModule.forFeature(AUTH_ENTITIES),
+    // The operator audit trail (plan 0077, section 8), before anything that
+    // writes on an operator's behalf. Global, so `IdentityService` reaches it
+    // without every user facing slice importing a module it never uses.
+    AuditModule,
     // JwtService for RS256 signing; keys/algorithm are passed per call by
     // TokenService, so no global secret is configured here.
     JwtModule.register({}),

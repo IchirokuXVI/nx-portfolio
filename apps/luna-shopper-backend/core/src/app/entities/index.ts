@@ -1,4 +1,5 @@
 import { CommentAudio } from './comment-audio.entity';
+import { CoreAudit } from './core-audit.entity';
 import { GeneratedListParticipant } from './generated-list-participant.entity';
 import { GeneratedListShareLink } from './generated-list-share-link.entity';
 import { GeneratedListLineOption } from './generated-list-line-option.entity';
@@ -24,6 +25,11 @@ import { Zone } from './zone.entity';
 
 export { BaseEntity } from './base.entity';
 export { CommentAudio } from './comment-audio.entity';
+export {
+  CoreAudit,
+  CoreAuditAction,
+  CoreAuditActorKind,
+} from './core-audit.entity';
 export { GeneratedListParticipant } from './generated-list-participant.entity';
 export { GeneratedListShareLink } from './generated-list-share-link.entity';
 export { GeneratedListLineOption } from './generated-list-line-option.entity';
@@ -83,4 +89,8 @@ export const CORE_ENTITIES = [
   // before the participants, which reference the link they arrived by.
   GeneratedListShareLink,
   GeneratedListParticipant,
+  // The audit trail (plan 0077, section 8). Last, because it references
+  // nothing and nothing references it: the actor lives in auth's database and
+  // the row it describes is named by table and id rather than by a foreign key.
+  CoreAudit,
 ];

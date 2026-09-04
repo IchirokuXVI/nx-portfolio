@@ -209,7 +209,9 @@ function build(options: {
     listAccess,
     new SharedListGrantService(),
     { emitZoneCounts: async () => undefined } as unknown as ZoneCountsService,
-    events
+    events,
+    // No operator write here, so nothing reaches the trail.
+    {} as never
   );
 
   return { service, written, emitted };

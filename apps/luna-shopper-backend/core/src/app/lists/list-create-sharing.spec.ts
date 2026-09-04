@@ -112,7 +112,9 @@ function serviceWith(
     {} as unknown as ListAccessService,
     new SharedListGrantService(),
     { emitZoneCounts: async () => undefined } as unknown as ZoneCountsService,
-    { emit: () => undefined } as unknown as CoreEventsPublisher
+    { emit: () => undefined } as unknown as CoreEventsPublisher,
+    // No operator write here, so nothing reaches the trail.
+    {} as never
   );
 
   return { service, written };

@@ -20,12 +20,21 @@ import type { MembershipView } from './zone.messages';
  * platform wide bypass inside the authorization path every ordinary request takes.
  * A separate namespace keeps the bypass in files that are entirely about it.
  *
- * **Read, plus named actions. Not CRUD** (plan 0074, section 1). A list line
- * participates in settlements, generated list bindings, permission sets and
- * realtime broadcasts other clients have already applied, and the invariants live
- * in services rather than in constraints. So the writes here are the five actions
- * of section 1 and each delegates to the code that maintains the invariant. There
- * is no update subject over any core row and, by section 9, there will not be one.
+ * **Every write goes through the service, and never through the row** (plan
+ * 0077, section 1). A list line participates in settlements, generated list
+ * bindings, permission sets and realtime broadcasts other clients have already
+ * applied, and the invariants live in services rather than in constraints. So
+ * every subject here that writes delegates to the service method the user facing
+ * route calls, with the authorization check removed and nothing else changed.
+ *
+ * Plan 0074 read that same fact as "read, plus named actions, and no update
+ * subject, permanently". Plan 0077 reverses the conclusion and keeps the reason.
+ * What was ruled out was the **generic row editor**, which offers a way to
+ * corrupt state that no code path can repair; an update subject that calls
+ * `ZoneService.update` is not one. Three consequences follow and they decide
+ * every shape below: a field with no service behind it is not editable, an
+ * operator write emits the events a member write emits, and an operator write is
+ * refused wherever a member write is refused.
  *
  * Core verifies the operator token for itself, exactly as catalog does. Plan 0072
  * gave catalog and the harvester `ADMIN_JWT_PUBLIC_KEY`; this plan gives core the
@@ -55,6 +64,25 @@ export const ADMIN_ZONE_PATTERNS = {
    * with all three events (plan 0029).
    */
   transferOwnership: 'adminZone.transferOwnership',
+  /**
+   * Change a zone's name or its config, the write `zone.update` performs (plan
+   * 0077, section 4.1).
+   *
+   * Those two columns are the whole of what a zone's own owner may change, and
+   * an operator gets exactly the same two. The join code, the owner, the status
+   * and the deletion marker are not fields here, each for a reason section 4.1
+   * states.
+   */
+  update: 'adminZone.update',
+  /**
+   * Mark a zone for deletion, or restore it (plan 0077, section 4.2).
+   *
+   * `status` and `markedForDeletionAt` are written together and read together,
+   * so this writes the pair in one transaction rather than offering either as a
+   * field. Typing one alone produces a zone the reaper either never removes or
+   * removes anyway, and neither state is reachable through any other code path.
+   */
+  setDeletionMark: 'adminZone.setDeletionMark',
 } as const;
 
 export const ADMIN_MEMBERSHIP_PATTERNS = {
@@ -62,6 +90,29 @@ export const ADMIN_MEMBERSHIP_PATTERNS = {
   kick: 'adminMembership.kick',
   /** Ban a member, the write `membership.ban` performs. */
   ban: 'adminMembership.ban',
+  /**
+   * A page of one zone's memberships (plan 0077, section 9).
+   *
+   * The zone detail read carries its membership as an embedded array and keeps
+   * it, because the zone screen renders that without a second call. This
+   * collection serves the screens that edit one membership, which read and write
+   * a row through its own address rather than through its parent.
+   */
+  list: 'adminMembership.list',
+  /** One membership, read on its own. */
+  get: 'adminMembership.get',
+  /**
+   * A membership's role and its per zone name (plan 0077, section 4.3).
+   *
+   * Two fields and no third. `status` is not here: it moves along a state
+   * machine with a service method per edge, which is the four verbs below rather
+   * than a value on this message.
+   */
+  update: 'adminMembership.update',
+  /** Approve a PENDING member, the write `membership.approve` performs. */
+  approve: 'adminMembership.approve',
+  /** Reject a PENDING member, the write `membership.reject` performs. */
+  reject: 'adminMembership.reject',
 } as const;
 
 export const ADMIN_LIST_PATTERNS = {
@@ -75,6 +126,43 @@ export const ADMIN_LIST_PATTERNS = {
    * and counts; the lines are only here.
    */
   get: 'adminList.get',
+  /**
+   * Change a list's name and its two flags, the write `list.update` performs
+   * (plan 0077, section 5.1).
+   *
+   * `sharedWithZone` is asymmetric and the screen has to say so: turning it on
+   * grants `{READ, WRITE, DECIDE}` to every currently approved non staff member,
+   * and turning it off revokes nobody. That is the member facing behaviour and
+   * this does not soften it.
+   */
+  update: 'adminList.update',
+  /** Delete a list, the write `list.delete` performs. */
+  delete: 'adminList.delete',
+  /**
+   * A page of one list's lines (plan 0077, section 9).
+   *
+   * The detail read keeps its embedded array; this collection serves the screen
+   * that edits one line.
+   */
+  listLines: 'adminList.listLines',
+  /** One line, read on its own. */
+  getLine: 'adminList.getLine',
+  /**
+   * Edit a line's content, quantity or product set, the write `line.update`
+   * performs, **with `MANAGE`** (plan 0077, section 5.2).
+   *
+   * An operator resolves to no membership and therefore to no permissions, and
+   * `LineService.update` uses the caller's permissions twice: once to authorize
+   * the edit and once to decide what the edit does to the line's approval. So
+   * the operator is resolved as `MANAGE`, which allows the edit and leaves an
+   * approved line approved. A correction that silently un-approved the line is a
+   * second change nobody asked for, visible to every member in the zone.
+   */
+  updateLine: 'adminList.updateLine',
+  /** Approve or reject a line, the write `line.setApproval` performs. */
+  setLineApproval: 'adminList.setLineApproval',
+  /** Delete a line, the write `line.delete` performs. */
+  deleteLine: 'adminList.deleteLine',
 } as const;
 
 export const ADMIN_BASKET_PATTERNS = {
@@ -227,6 +315,67 @@ export interface AdminMembershipActionRequest extends AdminCredential {
 export type AdminMembershipActionResult = MembershipView;
 
 /**
+ * Change a zone's name, its config, or both (plan 0077, section 4.1).
+ *
+ * A field left `undefined` is left alone, which is the same rule
+ * `UpdateZoneRequest` carries: a partial edit must not be a way to blank the
+ * field the screen did not render.
+ */
+export interface UpdateAdminZoneRequest extends AdminCredential {
+  zoneId: string;
+  name?: string;
+  config?: Record<string, unknown>;
+}
+
+/**
+ * Mark a zone for deletion, or restore it (plan 0077, section 4.2).
+ *
+ * One boolean rather than two nullable columns, because `status` and
+ * `markedForDeletionAt` are one decision: a `MARKED_FOR_DELETION` zone with no
+ * marker is never removed by the reaper, and an `ACTIVE` zone with one is removed
+ * anyway.
+ */
+export interface SetAdminZoneDeletionMarkRequest extends AdminCredential {
+  zoneId: string;
+  /** True marks the zone and stamps the moment; false clears both. */
+  marked: boolean;
+}
+
+/** A page of one zone's memberships (plan 0077, section 9). */
+export interface ListAdminMembershipsRequest extends AdminCredential, PageQuery {
+  zoneId: string;
+}
+
+export type AdminMembershipPage = Paginated<AdminZoneMemberView>;
+
+/** One membership, read through its own address. */
+export interface GetAdminMembershipRequest extends AdminCredential {
+  zoneId: string;
+  membershipId: string;
+}
+
+/**
+ * A membership's role and its per zone name (plan 0077, section 4.3).
+ *
+ * `role` keeps the refusals `setRole` already carries: assigning `OWNER` is
+ * refused, because ownership is a transfer and the transfer is a transaction, and
+ * demoting the current owner is refused for the same reason. `status` is absent
+ * on purpose; it is the four verbs beside this one.
+ */
+export interface UpdateAdminMembershipRequest extends AdminCredential {
+  zoneId: string;
+  membershipId: string;
+  role?: ZoneRole;
+  /** The per zone name, which is the only personal field a membership holds. */
+  username?: string;
+}
+
+/** A rejected membership is removed, so the result is the id that is gone. */
+export interface AdminMembershipRejectResult {
+  id: string;
+}
+
+/**
  * A shopping list as the back office lists them.
  *
  * `zoneName` is carried because it is a join core can actually make, unlike the
@@ -278,6 +427,81 @@ export type AdminListPage = Paginated<AdminListView>;
 
 export interface GetAdminListRequest extends AdminCredential {
   listId: string;
+}
+
+/**
+ * A list's name and its two flags (plan 0077, section 5.1), which is everything
+ * `UpdateListRequest` carries.
+ *
+ * `sharedWithZone` is a real field and not a trap, and it is asymmetric: turning
+ * it on grants `{READ, WRITE, DECIDE}` to every currently approved non staff
+ * member, and turning it off revokes nobody. The mistake to prevent is an
+ * operator who toggles it off and expects the list to close.
+ */
+export interface UpdateAdminListRequest extends AdminCredential {
+  listId: string;
+  name?: string;
+  autoApproveLines?: boolean;
+  sharedWithZone?: boolean;
+}
+
+/** Delete a list, or address one for a read that takes no other argument. */
+export interface AdminListIdRequest extends AdminCredential {
+  listId: string;
+}
+
+/** A page of one list's lines (plan 0077, section 9). */
+export interface ListAdminListLinesRequest
+  extends AdminCredential,
+    PageQuery {
+  listId: string;
+}
+
+export type AdminListLinePage = Paginated<AdminListLineView>;
+
+/** One line, read through its own address. */
+export interface GetAdminListLineRequest extends AdminCredential {
+  listId: string;
+  lineId: string;
+}
+
+/**
+ * Edit a line's content, quantity or product set (plan 0077, section 5.2).
+ *
+ * The operator edits with `MANAGE`, so this reaches every field a member holding
+ * `MANAGE` reaches and the edit leaves an approved line approved. A `REJECTED`
+ * line still reopens, because that rule applies to everyone.
+ *
+ * Reordering is not here: it is a whole order rather than a field, and it has no
+ * meaning outside the screen a member drags rows on. Creating a line is not here
+ * either, because `createdByUserId` is not nullable and an operator is not a
+ * user (section 6.4).
+ */
+export interface UpdateAdminListLineRequest extends AdminCredential {
+  listId: string;
+  lineId: string;
+  content?: string;
+  quantity?: number;
+  /** The whole product set. An empty array returns the line to free text. */
+  itemIds?: string[];
+}
+
+/** Approve or reject one line. */
+export interface SetAdminLineApprovalRequest extends AdminCredential {
+  listId: string;
+  lineId: string;
+  status: LineApprovalStatus;
+}
+
+/** Delete one line. */
+export interface DeleteAdminListLineRequest extends AdminCredential {
+  listId: string;
+  lineId: string;
+}
+
+/** A deleted line is gone, so the result is the id that was. */
+export interface AdminLineDeleteResult {
+  id: string;
 }
 
 /**
