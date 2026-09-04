@@ -1,6 +1,7 @@
 import { UserKind } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import { createHash } from 'node:crypto';
+import { fakeAudit } from '../audit/auth-audit.testing';
 import {
   Credential,
   EmailVerification,
@@ -96,6 +97,7 @@ function build() {
     {} as never,
     {} as never,
     new UsernameGenerator(),
+    fakeAudit([]).service,
     {
       getOrThrow: () => ({
         // Configured, which is what every spec here exercises. The

@@ -67,7 +67,9 @@ function build(rows: ListHoldingItemRow[]) {
     {} as unknown as ListAccessService,
     {} as unknown as SharedListGrantService,
     {} as unknown as ZoneCountsService,
-    { emit: () => undefined } as unknown as CoreEventsPublisher
+    { emit: () => undefined } as unknown as CoreEventsPublisher,
+    // No operator write here, so nothing reaches the trail.
+    {} as never
   );
 
   return { service, calls };

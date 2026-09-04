@@ -6,6 +6,7 @@ import {
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
 import { GatewayError } from '../gateway-error';
+import { ServerReachability } from '../health/server-reachability';
 import { SessionLifecycle } from './session-lifecycle';
 import { SESSION_SERVICE, type SessionServiceI } from './session-service';
 import { SessionStorage } from './session-storage';
@@ -127,6 +128,7 @@ describe('SessionLifecycle', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        ServerReachability,
         { provide: SESSION_SERVICE, useValue: service },
         SessionStorage,
         SessionStore,
@@ -434,6 +436,7 @@ describe('SessionLifecycle', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
+        ServerReachability,
         { provide: SESSION_SERVICE, useValue: service },
         {
           provide: ADMIN_SESSION_POLICY,

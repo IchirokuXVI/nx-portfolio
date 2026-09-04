@@ -10,7 +10,12 @@
 // exists so a developer with a checkout does not have to build an image first.
 const path = require('node:path');
 
-const toolsDb = path.resolve(__dirname, '../../../../../../tools/db');
+// Five levels, not six: this file sits at the same depth as `db/seed/cli.js`
+// (app/admin/cli against app/db/seed), so both reach the backend's own `tools/db`
+// with the same climb. Six landed on `apps/tools/db`, which does not exist, and
+// every developer invocation died at require time before it could read an env
+// file or say anything useful about the database.
+const toolsDb = path.resolve(__dirname, '../../../../../tools/db');
 const { resolveDbUrl } = require(path.join(toolsDb, 'env'));
 
 // Resolving it here fails with the "copy .env.example" message rather than

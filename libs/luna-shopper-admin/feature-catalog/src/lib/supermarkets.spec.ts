@@ -5,6 +5,7 @@ import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   DeploymentStore,
+  ServerReachability,
   SessionStorage,
   SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -42,6 +43,7 @@ async function boot(url: string): Promise<ComponentFixture<TestHost>> {
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter(adminRoutes([SUPERMARKETS])),
       provideLocationMocks(),
       provideResources(SUPERMARKETS),
@@ -99,6 +101,20 @@ describe('the supermarkets descriptor', () => {
     expect(SUPERMARKETS.list.compact.length).toBeLessThan(
       SUPERMARKETS.list.columns.length
     );
+  });
+
+  /**
+   * The filter is what makes a reference picker over chains work. Without one,
+   * `ResourceReferences.search` has no parameter to put the operator's term in,
+   * so it drops the term and asks for the first page: the picker then answers
+   * every search with the same twenty chains.
+   */
+  it('offers the search its reference picker needs', () => {
+    const search = (SUPERMARKETS.filters ?? []).find(
+      (filter) => filter.kind === 'search'
+    );
+
+    expect(search?.param).toBe('query');
   });
 
   /**

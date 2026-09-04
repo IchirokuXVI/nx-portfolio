@@ -45,10 +45,10 @@ import {
   AdminListLocationItemsQueryDto,
   AdminListLocationsQueryDto,
   AdminListSupermarketItemsQueryDto,
+  AdminListSupermarketsQueryDto,
   AdminSearchItemsQueryDto,
 } from './catalog-admin.dto';
 import {
-  CatalogListQueryDto,
   CreateItemDto,
   CreatePriceScopeDto,
   CreateProductGroupDto,
@@ -121,18 +121,23 @@ export class AdminCatalogSupermarketsController {
   }
 
   /**
-   * Every chain. The same subject the open read calls, because a chain listing
-   * was never scoped to anybody: it is reference data, and the two callers want
-   * the identical answer.
+   * Every chain, or the ones a search term names.
+   *
+   * The same subject the open read calls, because a chain listing was never
+   * scoped to anybody: it is reference data, and the two callers want the
+   * identical answer. The term is the one thing they do not share, and the
+   * handler treats an absent one as no filter, so the two reads stay identical
+   * when nobody is searching.
    */
   @Get()
   @ApiContractResponse(SUPERMARKET_PATTERNS.list)
   list(
     @ActingAdmin() admin: CurrentAdmin,
-    @Query() query: CatalogListQueryDto
+    @Query() query: AdminListSupermarketsQueryDto
   ): Promise<SupermarketPage> {
     return this.nats.send<SupermarketPage>(SUPERMARKET_PATTERNS.list, {
       userId: admin.adminId,
+      query: query.query,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,

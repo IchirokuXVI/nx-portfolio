@@ -25,6 +25,7 @@ function makeService(zone: Zone | null, approvedMembers = 0) {
     memberships as never,
     {} as never,
     {} as never,
+    {} as never,
     {} as never
   );
   return { svc, zones, memberships };

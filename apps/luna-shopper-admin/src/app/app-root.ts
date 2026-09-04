@@ -1,11 +1,18 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import {
   DeploymentStore,
+  ServerReachability,
   SessionLifecycle,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   ReauthOverlay,
+  ServerDownOverlay,
   SessionWarning,
 } from '@portfolio/luna-shopper-admin/feature-auth';
 
@@ -45,20 +52,37 @@ import {
  * oversight. The overlay has to be able to appear in the same frame the session
  * ends in, and the library it lives in holds the login screen, which is the first
  * thing this app draws anyway.
+ *
+ * ## And where an absent server is drawn (plan 0008)
+ *
+ * Two covers, stacked, and reachability is on top. The app can be in both states
+ * at once and usually will be: an outage long enough to notice is long enough for
+ * the token to expire behind it, and `0003` then raises a password prompt against
+ * a server that cannot check one.
+ *
+ * Stacking them is also what makes recovery need no machinery of its own. The
+ * probe succeeds, the outer cover is removed, and what is underneath is already
+ * right: the screen exactly as it was, or the password prompt with the operator's
+ * username on it.
  */
 @Component({
   selector: 'app-luna-shopper-admin-root',
-  imports: [RouterOutlet, ReauthOverlay, SessionWarning],
+  imports: [RouterOutlet, ReauthOverlay, ServerDownOverlay, SessionWarning],
   template: `
-    <div [attr.inert]="locked() ? '' : null" class="app">
+    <div [attr.inert]="covered() ? '' : null" class="app">
       <router-outlet />
     </div>
 
-    @if (warning()) {
+    <!-- Not while the server is gone. The warning is about a session running
+         down, and the cover over it is about something the operator can do
+         nothing about yet. -->
+    @if (warning() && !down()) {
       <lib-session-warning />
     }
 
-    @if (locked()) {
+    @if (down()) {
+      <lib-server-down-overlay />
+    } @else if (locked()) {
       <lib-reauth-overlay />
     }
   `,
@@ -85,6 +109,7 @@ import {
 export class AppRoot {
   private readonly _deployments = inject(DeploymentStore);
   private readonly _lifecycle = inject(SessionLifecycle);
+  private readonly _reachability = inject(ServerReachability);
 
   /** `undefined` while the read is in flight, `null` when it could not be made. */
   readonly deployment = this._deployments.deployment;
@@ -94,4 +119,10 @@ export class AppRoot {
 
   /** The expired session, covered rather than navigated away from (section 5). */
   readonly locked = this._lifecycle.locked;
+
+  /** The gateway that stopped answering (plan 0008). */
+  readonly down = this._reachability.down;
+
+  /** Whether anything is over the app, and therefore whether it is `inert`. */
+  readonly covered = computed(() => this.down() || this.locked());
 }

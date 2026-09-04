@@ -90,21 +90,33 @@ describe('DeploymentApi', () => {
   });
 
   /**
-   * An unreachable gateway must not throw. Nothing is waiting on this call, and the
-   * page has to be able to draw itself and say the environment is unknown; an
-   * unhandled rejection during bootstrap would give an operator a blank screen and
-   * less information than that.
-   *
-   * It is also the safe answer to the second question: a gateway that could not be
-   * reached offers no autologin, so the app draws its login screen rather than
-   * skipping it on a request that never arrived.
+   * A gateway that answered something this app could not use is still a gateway
+   * that answered, so the read settles rather than rejecting and the page draws
+   * itself saying the environment is unknown. It is also the safe answer to the
+   * second question: no autologin, so the login screen appears rather than being
+   * skipped on the strength of a failed request.
    */
-  it('answers unknown rather than throwing when the gateway does not answer', async () => {
+  it('answers unknown for a refusal the gateway answered with', async () => {
+    const read = api.read();
+    http
+      .expectOne(URL)
+      .flush(null, { status: 500, statusText: 'Server Error' });
+
+    await expect(read).resolves.toEqual(UNKNOWN_ENVIRONMENT);
+  });
+
+  /**
+   * The one case that rejects (plan 0008, section 3). A request that produced no
+   * response at all is a fact about the server rather than about the deployment,
+   * and the app answers the two differently: it probes, and covers the login
+   * screen rather than offering a password field that cannot work.
+   */
+  it('throws when the request produced no response at all', async () => {
     const read = api.read();
     http
       .expectOne(URL)
       .error(new ProgressEvent('error'), { status: 0 } as HttpErrorResponse);
 
-    await expect(read).resolves.toEqual(UNKNOWN_ENVIRONMENT);
+    await expect(read).rejects.toBeDefined();
   });
 });

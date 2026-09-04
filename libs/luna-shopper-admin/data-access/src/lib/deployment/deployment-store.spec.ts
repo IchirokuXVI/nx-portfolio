@@ -3,6 +3,7 @@ import {
   UNKNOWN_ENVIRONMENT,
   type AdminEnvironment,
 } from '@portfolio/luna-shopper-admin/models';
+import { ServerReachability } from '../health/server-reachability';
 import {
   DEPLOYMENT_SERVICE,
   type DeploymentServiceI,
@@ -37,6 +38,7 @@ describe('DeploymentStore', () => {
   function setup(service: DeploymentServiceI) {
     TestBed.configureTestingModule({
       providers: [
+        ServerReachability,
         { provide: DEPLOYMENT_SERVICE, useValue: service },
         DeploymentStore,
       ],

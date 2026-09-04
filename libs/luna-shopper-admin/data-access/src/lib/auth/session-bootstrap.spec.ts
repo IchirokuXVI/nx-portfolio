@@ -10,6 +10,8 @@ import {
 } from '../deployment/deployment-service';
 import { DeploymentStore } from '../deployment/deployment-store';
 import { GatewayError } from '../gateway-error';
+import { HEALTH_SERVICE, type HealthServiceI } from '../health/health-service';
+import { ServerReachability } from '../health/server-reachability';
 import { SessionBootstrap } from './session-bootstrap';
 import { SESSION_SERVICE, type SessionServiceI } from './session-service';
 import { SessionStorage } from './session-storage';
@@ -35,8 +37,16 @@ const session: AdminSession = {
   receivedAt: new Date(),
 };
 
-function build(environment: AdminEnvironment, autologinFails = false) {
-  const calls = { signIn: 0, signInForDevelopment: 0 };
+/**
+ * `null` for a read that produced no response at all, which is the one thing
+ * `DeploymentServiceI` rejects for (plan 0008, section 3).
+ */
+function build(
+  environment: AdminEnvironment | null,
+  autologinFails = false,
+  reachable = true
+) {
+  const calls = { signIn: 0, signInForDevelopment: 0, probes: 0 };
 
   const sessionService: SessionServiceI = {
     signIn: async () => {
@@ -67,14 +77,32 @@ function build(environment: AdminEnvironment, autologinFails = false) {
   };
 
   const deploymentService: DeploymentServiceI = {
-    read: async () => environment,
+    read: async () => {
+      if (environment === null) {
+        throw new GatewayError({
+          code: '',
+          status: 0,
+          correlationId: '',
+        });
+      }
+      return environment;
+    },
+  };
+
+  const healthService: HealthServiceI = {
+    probe: async () => {
+      calls.probes += 1;
+      return reachable;
+    },
   };
 
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
+      ServerReachability,
       { provide: SESSION_SERVICE, useValue: sessionService },
       { provide: DEPLOYMENT_SERVICE, useValue: deploymentService },
+      { provide: HEALTH_SERVICE, useValue: healthService },
       SessionStorage,
       SessionStore,
       DeploymentStore,
@@ -87,6 +115,7 @@ function build(environment: AdminEnvironment, autologinFails = false) {
     bootstrap: TestBed.inject(SessionBootstrap),
     sessions: TestBed.inject(SessionStore),
     deployments: TestBed.inject(DeploymentStore),
+    reachability: TestBed.inject(ServerReachability),
   };
 }
 
@@ -159,6 +188,47 @@ describe('SessionBootstrap', () => {
 
     await expect(bootstrap.run()).resolves.toBeUndefined();
     expect(sessions.signedIn()).toBe(false);
+  });
+
+  /**
+   * Plan 0008, section 3. The environment read is the first request the app
+   * makes, so it is the first thing an outage breaks, and the answer decides
+   * between a login screen and a cover over one.
+   */
+  describe('when the environment read never arrived', () => {
+    it('asks whether the server is there, and says so when it is not', async () => {
+      const { bootstrap, reachability, calls } = build(null, false, false);
+
+      await bootstrap.run();
+
+      expect(calls.probes).toBe(1);
+      expect(reachability.down()).toBe(true);
+    });
+
+    /**
+     * One failed request against a server that is up is a blink, and a blink must
+     * not stop an operator from signing in.
+     */
+    it('carries on to the login screen when the probe answers', async () => {
+      const { bootstrap, reachability, calls } = build(null, false, true);
+
+      await bootstrap.run();
+
+      expect(calls.probes).toBe(1);
+      expect(reachability.down()).toBe(false);
+    });
+
+    /** A gateway that answered has answered. Nothing to probe about. */
+    it('asks nothing when the gateway answered', async () => {
+      const { bootstrap, calls } = build({
+        deployment: 'development',
+        devAutologin: false,
+      });
+
+      await bootstrap.run();
+
+      expect(calls.probes).toBe(0);
+    });
   });
 
   describe('with a session already held', () => {

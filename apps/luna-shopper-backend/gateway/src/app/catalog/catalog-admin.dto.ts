@@ -62,6 +62,25 @@ export class AdminSearchItemsQueryDto extends SearchOrderQueryDto {
   withoutProductGroup?: boolean;
 }
 
+/**
+ * The chain list, with the one parameter its picker needs.
+ *
+ * Admin only, and the shopper's read of the same subject keeps taking a cursor
+ * and an order and nothing else. A chain listing is reference data a shopper
+ * scrolls; the operator reaches this one through a reference field on another
+ * form, where scrolling a page they cannot narrow is what the field is for.
+ */
+export class AdminListSupermarketsQueryDto extends CatalogListQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'Only the chains whose name, in either content language, or whose brand key contains this text.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
+}
+
 /** One chain's shops, with the review filter of plan 0005, section 3. */
 export class AdminListLocationsQueryDto extends CatalogListQueryDto {
   @ApiPropertyOptional({

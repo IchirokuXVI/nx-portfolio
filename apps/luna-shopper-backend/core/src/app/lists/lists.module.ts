@@ -70,6 +70,12 @@ import { SharedListGrantModule } from './shared-list-grant.module';
   // an added line with a target list is created through `add` rather than by an
   // insert of its own, so the ordinary access check, the ordinary approval rules
   // and the ordinary `line.added` event all apply to it.
-  exports: [ListAccessService, LineService],
+  //
+  // `ListService` and the same `LineService` are exported for the back office
+  // (plan 0077, sections 5.1 and 5.2): its edits call the operator variants on
+  // these two classes, so an operator's change to a household's list is the write
+  // that household's own admin makes. Exporting them is what stops the admin
+  // module reaching for the repositories and reimplementing the effect.
+  exports: [ListAccessService, ListService, LineService],
 })
 export class ListsModule {}

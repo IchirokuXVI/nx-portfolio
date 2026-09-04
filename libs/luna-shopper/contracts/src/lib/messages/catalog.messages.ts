@@ -537,6 +537,15 @@ export interface SupermarketIdRequest extends AdminCredential {
 
 export interface ListSupermarketsRequest extends PageQuery {
   userId: string;
+  /**
+   * Free text over the chain's own name, in either content language, and over
+   * its brand key. Absent lists them all.
+   *
+   * A plain substring match rather than the ranked read a product group gets. A
+   * chain has no search document and no synonyms, its name is one or two words,
+   * and the operator typing here completes a name they already know.
+   */
+  query?: string;
 }
 
 // --- Supermarket location requests -----------------------------------------

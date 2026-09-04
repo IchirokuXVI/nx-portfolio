@@ -136,6 +136,37 @@ describe('the admin catalog lists, over HTTP', () => {
     }
   });
 
+  /**
+   * The chain search the reference picker sends. Before the route declared it,
+   * the pipe refused the request, so the back office sent no term at all and
+   * every chain came back whatever the operator typed.
+   */
+  it('carries a chain search term through to the broker', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/supermarkets?query=merca`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['query']).toBe('merca');
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('lists every chain when no term is typed', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/catalog/supermarkets`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['query']).toBeUndefined();
+    } finally {
+      await nest.close();
+    }
+  });
+
   /** The one admin list that starts from something rather than from nothing. */
   it('requires a shop before it lists what is in one', async () => {
     const { nest, origin } = await boot();

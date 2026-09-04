@@ -21,6 +21,7 @@ import {
 import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
 import { ENUM_IDS } from '../enums.schemas';
 import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
+import { LIST_SCHEMA_IDS } from './list.schemas';
 import { ZONE_SCHEMA_IDS } from './zone.schemas';
 
 /**
@@ -56,8 +57,19 @@ export const ADMIN_CORE_SCHEMA_IDS = {
   basketLineView: schemaId('admin-core/AdminBasketLineView'),
   basketDetailView: schemaId('admin-core/AdminBasketDetailView'),
   basketPage: schemaId('admin-core/AdminBasketPage'),
+  membershipPage: schemaId('admin-core/AdminMembershipPage'),
+  listLinePage: schemaId('admin-core/AdminListLinePage'),
   listZonesRequest: schemaId('msg/adminZone.list/request'),
   zoneIdRequest: schemaId('msg/adminZone.zoneId/request'),
+  updateZoneRequest: schemaId('msg/adminZone.update/request'),
+  setDeletionMarkRequest: schemaId('msg/adminZone.setDeletionMark/request'),
+  listMembershipsRequest: schemaId('msg/adminMembership.list/request'),
+  updateMembershipRequest: schemaId('msg/adminMembership.update/request'),
+  updateAdminListRequest: schemaId('msg/adminList.update/request'),
+  listLinesRequest: schemaId('msg/adminList.listLines/request'),
+  lineIdRequest: schemaId('msg/adminList.lineId/request'),
+  updateLineRequest: schemaId('msg/adminList.updateLine/request'),
+  setLineApprovalRequest: schemaId('msg/adminList.setLineApproval/request'),
   membershipActionRequest: schemaId('msg/adminZone.membershipAction/request'),
   listListsRequest: schemaId('msg/adminList.list/request'),
   getListRequest: schemaId('msg/adminList.get/request'),
@@ -328,6 +340,137 @@ const getBasketRequest = object(
   ['userId', 'basketId']
 );
 
+/**
+ * A page of memberships and a page of lines (plan 0077, section 9).
+ *
+ * The row shapes are the ones the zone and list detail reads already embed, so a
+ * membership rendered in a collection and the same membership rendered inside its
+ * zone are one shape rather than two that agree today.
+ */
+const membershipPage = paginated(
+  ADMIN_CORE_SCHEMA_IDS.membershipPage,
+  ADMIN_CORE_SCHEMA_IDS.zoneMemberView
+);
+
+const listLinePage = paginated(
+  ADMIN_CORE_SCHEMA_IDS.listLinePage,
+  ADMIN_CORE_SCHEMA_IDS.listLineView
+);
+
+// Name and config, and no third field. The join code, the owner, the status and
+// the deletion marker are each excluded for a reason plan 0077 section 4.1
+// states, and `admin-core-immutable-fields.spec.ts` asserts their absence here.
+const updateZoneRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.updateZoneRequest,
+  {
+    ...adminCredentialProperties,
+    zoneId: nonEmptyString(),
+    name: nonEmptyString(),
+    config: freeObject(),
+  },
+  ['userId', 'zoneId']
+);
+
+// One boolean, because the two columns behind it are one decision (section 4.2).
+const setDeletionMarkRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.setDeletionMarkRequest,
+  {
+    ...adminCredentialProperties,
+    zoneId: nonEmptyString(),
+    marked: boolean(),
+  },
+  ['userId', 'zoneId', 'marked']
+);
+
+const listMembershipsRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.listMembershipsRequest,
+  {
+    ...adminCredentialProperties,
+    zoneId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'zoneId']
+);
+
+// Role and per zone name. `status` is deliberately absent: it moves along a
+// state machine with a service method per edge (section 4.4), so it is the four
+// verbs beside this subject rather than a value on it.
+const updateMembershipRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.updateMembershipRequest,
+  {
+    ...adminCredentialProperties,
+    zoneId: nonEmptyString(),
+    membershipId: nonEmptyString(),
+    role: ref(ENUM_IDS.zoneRole),
+    username: nonEmptyString(),
+  },
+  ['userId', 'zoneId', 'membershipId']
+);
+
+const updateAdminListRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.updateAdminListRequest,
+  {
+    ...adminCredentialProperties,
+    listId: nonEmptyString(),
+    name: nonEmptyString(),
+    autoApproveLines: boolean(),
+    sharedWithZone: boolean(),
+  },
+  ['userId', 'listId']
+);
+
+const listLinesRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.listLinesRequest,
+  {
+    ...adminCredentialProperties,
+    listId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'listId']
+);
+
+const lineIdRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.lineIdRequest,
+  {
+    ...adminCredentialProperties,
+    listId: nonEmptyString(),
+    lineId: nonEmptyString(),
+  },
+  ['userId', 'listId', 'lineId']
+);
+
+// Content, quantity and the product set. The schema states the wire ceiling on
+// the set and not the real bound, for the reason `UpdateLineRequest` gives: only
+// core knows how many products the line holds right now, and a schema stating
+// the cap alone would leave an over cap line unable to shrink.
+const updateLineRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.updateLineRequest,
+  {
+    ...adminCredentialProperties,
+    listId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    content: nonEmptyString(),
+    quantity: integer({ minimum: 0 }),
+    itemIds: array(nonEmptyString()),
+  },
+  ['userId', 'listId', 'lineId']
+);
+
+const setLineApprovalRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.setLineApprovalRequest,
+  {
+    ...adminCredentialProperties,
+    listId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    status: ref(ENUM_IDS.lineApprovalStatus),
+  },
+  ['userId', 'listId', 'lineId', 'status']
+);
+
 export const adminCoreSchemas: JsonSchema[] = [
   zoneView,
   zoneMemberView,
@@ -351,6 +494,17 @@ export const adminCoreSchemas: JsonSchema[] = [
   getListRequest,
   listBasketsRequest,
   getBasketRequest,
+  membershipPage,
+  listLinePage,
+  updateZoneRequest,
+  setDeletionMarkRequest,
+  listMembershipsRequest,
+  updateMembershipRequest,
+  updateAdminListRequest,
+  listLinesRequest,
+  lineIdRequest,
+  updateLineRequest,
+  setLineApprovalRequest,
 ];
 
 export const adminCoreMessageContracts: Record<
@@ -400,5 +554,67 @@ export const adminCoreMessageContracts: Record<
   [ADMIN_BASKET_PATTERNS.get]: {
     request: ADMIN_CORE_SCHEMA_IDS.getBasketRequest,
     response: ADMIN_CORE_SCHEMA_IDS.basketDetailView,
+  },
+  // Every write below answers with the **user facing** view its member facing
+  // twin answers with, because the row after an operator edit is the row after
+  // any other edit. Only the reads answer with an admin shape, and they do so
+  // because those shapes are not caller relative (plan 0077, section 1).
+  [ADMIN_ZONE_PATTERNS.update]: {
+    request: ADMIN_CORE_SCHEMA_IDS.updateZoneRequest,
+    response: ZONE_SCHEMA_IDS.zoneView,
+  },
+  [ADMIN_ZONE_PATTERNS.setDeletionMark]: {
+    request: ADMIN_CORE_SCHEMA_IDS.setDeletionMarkRequest,
+    response: ZONE_SCHEMA_IDS.zoneView,
+  },
+  [ADMIN_MEMBERSHIP_PATTERNS.list]: {
+    request: ADMIN_CORE_SCHEMA_IDS.listMembershipsRequest,
+    response: ADMIN_CORE_SCHEMA_IDS.membershipPage,
+  },
+  [ADMIN_MEMBERSHIP_PATTERNS.get]: {
+    request: ADMIN_CORE_SCHEMA_IDS.membershipActionRequest,
+    response: ADMIN_CORE_SCHEMA_IDS.zoneMemberView,
+  },
+  [ADMIN_MEMBERSHIP_PATTERNS.update]: {
+    request: ADMIN_CORE_SCHEMA_IDS.updateMembershipRequest,
+    response: ZONE_SCHEMA_IDS.membershipView,
+  },
+  [ADMIN_MEMBERSHIP_PATTERNS.approve]: {
+    request: ADMIN_CORE_SCHEMA_IDS.membershipActionRequest,
+    response: ZONE_SCHEMA_IDS.membershipView,
+  },
+  // A rejection removes the pending row, so it answers with the id that is gone
+  // rather than with a membership that no longer exists.
+  [ADMIN_MEMBERSHIP_PATTERNS.reject]: {
+    request: ADMIN_CORE_SCHEMA_IDS.membershipActionRequest,
+    response: COMMON_IDS.idResult,
+  },
+  [ADMIN_LIST_PATTERNS.update]: {
+    request: ADMIN_CORE_SCHEMA_IDS.updateAdminListRequest,
+    response: LIST_SCHEMA_IDS.listView,
+  },
+  [ADMIN_LIST_PATTERNS.delete]: {
+    request: ADMIN_CORE_SCHEMA_IDS.getListRequest,
+    response: COMMON_IDS.idResult,
+  },
+  [ADMIN_LIST_PATTERNS.listLines]: {
+    request: ADMIN_CORE_SCHEMA_IDS.listLinesRequest,
+    response: ADMIN_CORE_SCHEMA_IDS.listLinePage,
+  },
+  [ADMIN_LIST_PATTERNS.getLine]: {
+    request: ADMIN_CORE_SCHEMA_IDS.lineIdRequest,
+    response: ADMIN_CORE_SCHEMA_IDS.listLineView,
+  },
+  [ADMIN_LIST_PATTERNS.updateLine]: {
+    request: ADMIN_CORE_SCHEMA_IDS.updateLineRequest,
+    response: LIST_SCHEMA_IDS.lineView,
+  },
+  [ADMIN_LIST_PATTERNS.setLineApproval]: {
+    request: ADMIN_CORE_SCHEMA_IDS.setLineApprovalRequest,
+    response: LIST_SCHEMA_IDS.lineView,
+  },
+  [ADMIN_LIST_PATTERNS.deleteLine]: {
+    request: ADMIN_CORE_SCHEMA_IDS.lineIdRequest,
+    response: COMMON_IDS.idResult,
   },
 };

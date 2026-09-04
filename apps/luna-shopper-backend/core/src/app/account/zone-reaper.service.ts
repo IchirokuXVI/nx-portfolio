@@ -6,8 +6,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RealtimeEvent, ZoneStatus } from '@portfolio/luna-shopper/contracts';
+import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
 import { LessThan, Repository } from 'typeorm';
+import { CoreAuditService } from '../audit/core-audit.service';
 import type { CoreConfig } from '../config/app-config';
 import { Zone } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
@@ -31,6 +33,9 @@ export class ZoneReaperService
     @InjectRepository(Zone) private readonly zones: Repository<Zone>,
     private readonly events: CoreEventsPublisher,
     private readonly logger: Logger,
+    // Only the operator path writes to it. A scheduled run has no actor to
+    // record (plan 0077, section 8), which is why the two paths are two methods.
+    private readonly audit: CoreAuditService,
     configService: ConfigService
   ) {
     this.cfg = configService.getOrThrow<CoreConfig>('core').reaper;
@@ -105,14 +110,53 @@ export class ZoneReaperService
    * operator's delete and the reaper's are one write and cannot come to mean two
    * different things.
    *
+   * This is the **scheduled** path, and it writes no audit row. A cron run has no
+   * actor, and a trail row naming nobody is worse than the absence of one,
+   * because the table's whole subject is who did it (plan 0077, section 8). The
+   * operator's is {@link deleteZoneAsOperator}, which is a separate entry point
+   * rather than an optional argument for exactly that reason.
+   */
+  async deleteZone(zoneId: string): Promise<{ id: string }> {
+    await this.zones.delete({ id: zoneId });
+    return this.announceDeletion(zoneId);
+  }
+
+  /**
+   * Delete one zone on an operator's say so (plan 0074, section 1; plan 0077,
+   * section 8).
+   *
+   * The same deletion and the same announcement, recorded. The row is **loaded**
+   * first rather than deleted by id, because what the zone said is the part of a
+   * deletion worth keeping: a trail saying only that something with this id used
+   * to exist cannot answer what was lost. That load is also why a zone that is
+   * already gone answers 404 here and not on the scheduled path, which reads its
+   * batch before it deletes anything.
+   *
    * No grace period and no marking on this path, deliberately. The grace period
    * exists so an admin can rescue a zone whose owner vanished by accident (plan
    * 0011, section 3); an operator deleting a zone on purpose is the decision the
    * grace period was waiting for, and leaving the zone up for a week afterwards
    * would only mean it is still there when they check.
    */
-  async deleteZone(zoneId: string): Promise<{ id: string }> {
-    await this.zones.delete({ id: zoneId });
+  async deleteZoneAsOperator(
+    zoneId: string,
+    actorId: string
+  ): Promise<{ id: string }> {
+    const zone = await this.zones.findOne({ where: { id: zoneId } });
+    if (!zone) {
+      throw new NotFoundException('Zone not found');
+    }
+    await this.audit.write(actorId, (tx) => tx.delete(Zone, zone));
+    return this.announceDeletion(zoneId);
+  }
+
+  /**
+   * What a committed deletion tells everybody holding the zone.
+   *
+   * After the write on both paths, since an event for a transaction that then
+   * rolls back is a lie every open client acts on.
+   */
+  private announceDeletion(zoneId: string): { id: string } {
     this.events.emit(RealtimeEvent.ZoneDeleted, zoneId, { id: zoneId });
     return { id: zoneId };
   }

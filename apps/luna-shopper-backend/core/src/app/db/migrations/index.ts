@@ -13,6 +13,7 @@ import { BasketLineAuthor1756001400000 } from './1756001400000-BasketLineAuthor'
 import { PostalCodeSourceAndNearby1756001500000 } from './1756001500000-PostalCodeSourceAndNearby';
 import { ProfileLocationPreferences1756001600000 } from './1756001600000-ProfileLocationPreferences';
 import { LineProductGroupSubscription1756001700000 } from './1756001700000-LineProductGroupSubscription';
+import { CoreAudit1756001800000 } from './1756001800000-CoreAudit';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -58,4 +59,7 @@ export const CORE_MIGRATIONS = [
   // shaped, plus a new table hanging off the lines. It follows those and nothing
   // else (plan 0070, section 10).
   LineProductGroupSubscription1756001700000,
+  // A new table that references nothing, so it follows everything and depends on
+  // none of it (plan 0077, section 8).
+  CoreAudit1756001800000,
 ];

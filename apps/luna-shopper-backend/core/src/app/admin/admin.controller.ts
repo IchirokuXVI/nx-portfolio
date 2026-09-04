@@ -8,18 +8,37 @@ import {
   type AdminBasketDetailView,
   type AdminBasketPage,
   type AdminListDetailView,
+  type AdminListIdRequest,
+  type AdminListLinePage,
+  type AdminListLineView,
   type AdminListPage,
   type AdminMembershipActionRequest,
   type AdminMembershipActionResult,
+  type AdminMembershipPage,
   type AdminZoneDetailView,
   type AdminZoneIdRequest,
+  type AdminZoneMemberView,
   type AdminZonePage,
+  type DeleteAdminListLineRequest,
   type GetAdminBasketRequest,
+  type GetAdminListLineRequest,
   type GetAdminListRequest,
+  type GetAdminMembershipRequest,
   type GetAdminZoneRequest,
+  type LineView,
   type ListAdminBasketsRequest,
+  type ListAdminListLinesRequest,
   type ListAdminListsRequest,
+  type ListAdminMembershipsRequest,
   type ListAdminZonesRequest,
+  type ListView,
+  type MembershipView,
+  type SetAdminLineApprovalRequest,
+  type SetAdminZoneDeletionMarkRequest,
+  type UpdateAdminListLineRequest,
+  type UpdateAdminListRequest,
+  type UpdateAdminMembershipRequest,
+  type UpdateAdminZoneRequest,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
 import { AdminListService } from './admin-list.service';
@@ -36,9 +55,16 @@ import { AdminZoneService } from './admin-zone.service';
  * copying the handler above it, and nobody widens a user facing subject by
  * copying one from here.
  *
- * **Every handler gates before it reads**, inside the service rather than at the
- * controller, so the check cannot be skipped by a future caller that reaches the
- * service another way.
+ * **Every handler gates before it reads or writes**, inside the service rather
+ * than at the controller, so the check cannot be skipped by a future caller that
+ * reaches the service another way. The gate returns the admin id from the
+ * verified token, and that id is the actor every audited write records (plan
+ * 0077, section 8), so nothing here can attribute a change to somebody the gate
+ * did not let through.
+ *
+ * **No handler writes a row.** Each write delegates to the service that owns the
+ * invariant, which is plan 0077 section 1 and the reason this file grew from
+ * seven actions to a full editing surface without becoming a row editor.
  */
 @Controller()
 export class CoreAdminController {
@@ -88,6 +114,53 @@ export class CoreAdminController {
     return this.zones.ban(req);
   }
 
+  @MessagePattern(ADMIN_ZONE_PATTERNS.update)
+  updateZone(@Payload() req: UpdateAdminZoneRequest): Promise<ZoneView> {
+    return this.zones.update(req);
+  }
+
+  @MessagePattern(ADMIN_ZONE_PATTERNS.setDeletionMark)
+  setDeletionMark(
+    @Payload() req: SetAdminZoneDeletionMarkRequest
+  ): Promise<ZoneView> {
+    return this.zones.setDeletionMark(req);
+  }
+
+  @MessagePattern(ADMIN_MEMBERSHIP_PATTERNS.list)
+  listMemberships(
+    @Payload() req: ListAdminMembershipsRequest
+  ): Promise<AdminMembershipPage> {
+    return this.zones.listMemberships(req);
+  }
+
+  @MessagePattern(ADMIN_MEMBERSHIP_PATTERNS.get)
+  getMembership(
+    @Payload() req: GetAdminMembershipRequest
+  ): Promise<AdminZoneMemberView> {
+    return this.zones.getMembership(req);
+  }
+
+  @MessagePattern(ADMIN_MEMBERSHIP_PATTERNS.update)
+  updateMembership(
+    @Payload() req: UpdateAdminMembershipRequest
+  ): Promise<MembershipView> {
+    return this.zones.updateMembership(req);
+  }
+
+  @MessagePattern(ADMIN_MEMBERSHIP_PATTERNS.approve)
+  approve(
+    @Payload() req: AdminMembershipActionRequest
+  ): Promise<AdminMembershipActionResult> {
+    return this.zones.approve(req);
+  }
+
+  @MessagePattern(ADMIN_MEMBERSHIP_PATTERNS.reject)
+  reject(
+    @Payload() req: AdminMembershipActionRequest
+  ): Promise<{ id: string }> {
+    return this.zones.reject(req);
+  }
+
   @MessagePattern(ADMIN_LIST_PATTERNS.list)
   listLists(@Payload() req: ListAdminListsRequest): Promise<AdminListPage> {
     return this.lists.list(req);
@@ -96,6 +169,49 @@ export class CoreAdminController {
   @MessagePattern(ADMIN_LIST_PATTERNS.get)
   getList(@Payload() req: GetAdminListRequest): Promise<AdminListDetailView> {
     return this.lists.get(req);
+  }
+
+  @MessagePattern(ADMIN_LIST_PATTERNS.update)
+  updateList(@Payload() req: UpdateAdminListRequest): Promise<ListView> {
+    return this.lists.update(req);
+  }
+
+  @MessagePattern(ADMIN_LIST_PATTERNS.delete)
+  deleteList(@Payload() req: AdminListIdRequest): Promise<{ id: string }> {
+    return this.lists.remove(req);
+  }
+
+  @MessagePattern(ADMIN_LIST_PATTERNS.listLines)
+  listLines(
+    @Payload() req: ListAdminListLinesRequest
+  ): Promise<AdminListLinePage> {
+    return this.lists.listLines(req);
+  }
+
+  @MessagePattern(ADMIN_LIST_PATTERNS.getLine)
+  getLine(
+    @Payload() req: GetAdminListLineRequest
+  ): Promise<AdminListLineView> {
+    return this.lists.getLine(req);
+  }
+
+  @MessagePattern(ADMIN_LIST_PATTERNS.updateLine)
+  updateLine(@Payload() req: UpdateAdminListLineRequest): Promise<LineView> {
+    return this.lists.updateLine(req);
+  }
+
+  @MessagePattern(ADMIN_LIST_PATTERNS.setLineApproval)
+  setLineApproval(
+    @Payload() req: SetAdminLineApprovalRequest
+  ): Promise<LineView> {
+    return this.lists.setLineApproval(req);
+  }
+
+  @MessagePattern(ADMIN_LIST_PATTERNS.deleteLine)
+  deleteLine(
+    @Payload() req: DeleteAdminListLineRequest
+  ): Promise<{ id: string }> {
+    return this.lists.deleteLine(req);
   }
 
   @MessagePattern(ADMIN_BASKET_PATTERNS.list)

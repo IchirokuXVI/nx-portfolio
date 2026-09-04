@@ -165,7 +165,9 @@ function build(rows: ShoppingList[], counts: ListCounts) {
     listAccess,
     new SharedListGrantService(),
     zoneCounts as never,
-    events
+    events,
+    // No operator write here, so nothing reaches the trail.
+    {} as never
   );
   return { svc, qb, lists, access, authz, zoneCounts, events };
 }

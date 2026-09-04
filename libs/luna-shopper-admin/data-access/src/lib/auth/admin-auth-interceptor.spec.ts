@@ -11,11 +11,15 @@ import {
 import { TestBed } from '@angular/core/testing';
 import {
   ADMIN_API_CONFIG,
+  DEFAULT_REACHABILITY_POLICY,
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { GatewayError } from '../gateway-error';
+import { HEALTH_SERVICE, type HealthServiceI } from '../health/health-service';
+import { probeContext } from '../health/probe-http-context';
+import { ServerReachability } from '../health/server-reachability';
 import { adminAuthInterceptor } from './admin-auth-interceptor';
 import { withoutSessionRecovery } from './session-http-context';
 import { SessionLifecycle } from './session-lifecycle';
@@ -64,6 +68,21 @@ const renewed: AdminSession = {
 /** Driven per test: how many renewals were asked for, and whether they work. */
 const control = { refreshes: 0, refreshFails: false };
 
+/**
+ * The health probe, counted rather than performed.
+ *
+ * What is under test here is which failures ask the question, not what the
+ * answer does, which is `ServerReachability`'s own spec.
+ */
+const health = { probes: 0 };
+
+const healthService: HealthServiceI = {
+  probe: async () => {
+    health.probes += 1;
+    return false;
+  },
+};
+
 const service: SessionServiceI = {
   signIn: async () => session,
   signInForDevelopment: async () => session,
@@ -99,12 +118,15 @@ describe('adminAuthInterceptor', () => {
     sessionStorage.clear();
     control.refreshes = 0;
     control.refreshFails = false;
+    health.probes = 0;
     TestBed.configureTestingModule({
       providers: [
+        ServerReachability,
         provideHttpClient(withInterceptors([adminAuthInterceptor])),
         provideHttpClientTesting(),
         { provide: ADMIN_API_CONFIG, useValue: { gatewayBaseUrl: GATEWAY } },
         { provide: SESSION_SERVICE, useValue: service },
+        { provide: HEALTH_SERVICE, useValue: healthService },
         ApiUrl,
         SessionStorage,
         SessionStore,
@@ -325,6 +347,96 @@ describe('adminAuthInterceptor', () => {
 
       expect(control.refreshes).toBe(0);
       expect(sessions.signedIn()).toBe(true);
+    });
+  });
+
+  /**
+   * Plan 0008, section 2. This is the only place in the app that tells "the
+   * server is gone" apart from "that request failed", so a service cannot forget
+   * to, and the line between the two is drawn once: no response at all, and
+   * nothing else.
+   */
+  describe('a request that produced no response', () => {
+    const PATH = `${GATEWAY}/v1/admin/things`;
+
+    function send(): Promise<unknown> {
+      return firstValueFrom(http.get(PATH)).catch((error: unknown) => error);
+    }
+
+    it('asks whether the server is there', async () => {
+      const answer = send();
+      backend.expectOne(PATH).error(new ProgressEvent('error'));
+      await answer;
+      await settle();
+
+      expect(health.probes).toBe(1);
+    });
+
+    /** The request stays failed. Section 7: a timeout proves nothing was not applied. */
+    it('is never retried', async () => {
+      const answer = send();
+      backend.expectOne(PATH).error(new ProgressEvent('error'));
+
+      expect(await answer).toBeInstanceOf(HttpErrorResponse);
+      await settle();
+    });
+
+    /**
+     * A 5xx proves the server answered, and the screen that made the request has
+     * copy for it. An app that treated one as an outage covers itself over a
+     * single broken endpoint.
+     */
+    it.each([
+      ['a refusal', 403],
+      ['a server error', 500],
+      ['a bad gateway', 502],
+    ])('is not what %s is', async (_case, status) => {
+      const answer = send();
+      backend.expectOne(PATH).flush(null, { status, statusText: 'Failed' });
+      await answer;
+      await settle();
+
+      expect(health.probes).toBe(0);
+    });
+
+    /**
+     * `fetch` has no timeout of its own, so without the one the interceptor adds
+     * a gateway that accepts the connection and never answers hangs forever: the
+     * request never fails, and nothing notices the outage.
+     */
+    it('is what a request that hangs becomes', async () => {
+      jest.useFakeTimers();
+      try {
+        const answer = send();
+        const request = backend.expectOne(PATH);
+
+        jest.advanceTimersByTime(DEFAULT_REACHABILITY_POLICY.requestTimeoutMs);
+
+        const error = await answer;
+        expect(error).toBeInstanceOf(HttpErrorResponse);
+        expect((error as HttpErrorResponse).status).toBe(0);
+        // Unsubscribing aborts it rather than leaving the socket open.
+        expect(request.cancelled).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * Without this the probe answers its own failure by probing: a service
+     * reporting to itself, and a state machine much harder to read.
+     */
+    it('does not ask about the probe itself', async () => {
+      const answer = firstValueFrom(
+        http.get(`${GATEWAY}/health/live`, { context: probeContext() })
+      ).catch((error: unknown) => error);
+      backend
+        .expectOne(`${GATEWAY}/health/live`)
+        .error(new ProgressEvent('error'));
+      await answer;
+      await settle();
+
+      expect(health.probes).toBe(0);
     });
   });
 });

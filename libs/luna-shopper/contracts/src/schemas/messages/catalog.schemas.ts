@@ -460,6 +460,7 @@ const listSupermarketsRequest = object(
   CATALOG_SCHEMA_IDS.listSupermarketsRequest,
   {
     userId: nonEmptyString(),
+    query: string(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),

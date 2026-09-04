@@ -45,6 +45,7 @@ export const ADMIN_USERS_SCHEMA_IDS = {
   resendVerificationRequest: schemaId(
     'msg/adminUser.resendVerification/request'
   ),
+  updateRequest: schemaId('msg/adminUser.update/request'),
 } as const;
 
 const userFields = {
@@ -153,6 +154,31 @@ const resendVerificationRequest = object(
   ['userId', 'targetUserId']
 );
 
+/**
+ * The two editable fields, and no third (plan 0077, section 3).
+ *
+ * `email`, `emailVerifiedAt` and `kind` are absent here on purpose, and their
+ * absence is asserted rather than left to inspection: an operator who could type
+ * an address would leave the credential, the linked providers, the outstanding
+ * verifications and every live refresh token pointing at the address the account
+ * no longer claims, and setting `emailVerifiedAt` by hand asserts the one thing
+ * an operator cannot observe.
+ *
+ * `displayName` is `nullableString`, so clearing it is expressible. Absent leaves
+ * the column alone and null clears it, which are different requests.
+ */
+const updateRequest = object(
+  ADMIN_USERS_SCHEMA_IDS.updateRequest,
+  {
+    ...adminCredentialProperties,
+    targetUserId: nonEmptyString(),
+    username: nonEmptyString(),
+    displayName: nullableString(),
+    usernamePropagation: ref(ENUM_IDS.usernamePropagation),
+  },
+  ['userId', 'targetUserId']
+);
+
 export const adminUsersSchemas: JsonSchema[] = [
   adminUserView,
   adminUserDetailView,
@@ -164,6 +190,7 @@ export const adminUsersSchemas: JsonSchema[] = [
   resolveManyRequest,
   deleteRequest,
   resendVerificationRequest,
+  updateRequest,
 ];
 
 export const adminUsersMessageContracts: Record<
@@ -191,5 +218,12 @@ export const adminUsersMessageContracts: Record<
   [ADMIN_USER_PATTERNS.resendVerification]: {
     request: ADMIN_USERS_SCHEMA_IDS.resendVerificationRequest,
     response: AUTH_SCHEMA_IDS.retryAfterResult,
+  },
+  // The detail view, because a rename is the moment an operator wants to see the
+  // whole account again, and the two extra fields on it are the ones that answer
+  // why the person cannot sign in.
+  [ADMIN_USER_PATTERNS.update]: {
+    request: ADMIN_USERS_SCHEMA_IDS.updateRequest,
+    response: ADMIN_USERS_SCHEMA_IDS.adminUserDetailView,
   },
 };

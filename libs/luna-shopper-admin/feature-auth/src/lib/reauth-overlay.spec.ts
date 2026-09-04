@@ -4,6 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   GatewayError,
+  ServerReachability,
   SESSION_SERVICE,
   SessionLifecycle,
   SessionStorage,
@@ -87,6 +88,7 @@ async function render(reauthFailure?: unknown) {
   await TestBed.configureTestingModule({
     imports: [ReauthOverlay, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter([]),
       provideLocationMocks(),
       { provide: SESSION_SERVICE, useValue: service },

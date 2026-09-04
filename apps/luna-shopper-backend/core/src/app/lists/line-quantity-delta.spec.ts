@@ -197,7 +197,9 @@ function build(options: {
     settlements.repo as never,
     listAccess,
     fakeLineClaims().service,
-    publisher
+    publisher,
+    // No operator write here, so nothing reaches the trail.
+    {} as never
   );
 
   return { service, saved, events };

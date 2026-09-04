@@ -6,13 +6,23 @@ import type {
   AdminBasketPage,
   AdminBasketView,
   AdminListDetailView,
+  AdminListIdRequest,
+  AdminListLinePage,
   AdminListLineView,
   AdminListPage,
   AdminListView,
+  DeleteAdminListLineRequest,
   GetAdminBasketRequest,
+  GetAdminListLineRequest,
   GetAdminListRequest,
+  LineView,
   ListAdminBasketsRequest,
+  ListAdminListLinesRequest,
   ListAdminListsRequest,
+  ListView,
+  SetAdminLineApprovalRequest,
+  UpdateAdminListLineRequest,
+  UpdateAdminListRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
@@ -28,11 +38,25 @@ import {
   ListLine,
   ShoppingList,
 } from '../entities';
+import { LineService } from '../lists/line.service';
+import { ListService } from '../lists/list.service';
 import { CorePlatformAdminService } from './platform-admin.service';
 
 /** Where a page left off: newest first, ties broken by id. */
 interface RowCursor {
   value: string;
+  id: string;
+}
+
+/**
+ * Where a page of lines left off: the household's own order, ties broken by id.
+ *
+ * `position` rather than a timestamp, because that is the order the list means
+ * and the order every other view of it uses. It is a number rather than a string,
+ * so it is its own field on the cursor rather than reusing {@link RowCursor}.
+ */
+interface LineCursor {
+  position: number;
   id: string;
 }
 
@@ -50,11 +74,20 @@ interface RowCursor {
  * two listings carry a count, so an operator can see that a list is large without
  * having read it, and opening one is a deliberate act.
  *
- * Read only, entirely. There is no line write here, no reorder, no approval and
- * no delete, and section 9 says there will not be: a line participates in
- * settlements, generated list bindings and permission sets, and the invariants
- * that hold those together live in `LineService` and its neighbours rather than in
- * constraints.
+ * **Lists are editable and baskets are not**, which is plan 0077 rather than an
+ * inconsistency. A list's writes all delegate to `ListService` and `LineService`,
+ * so an operator's edit is the edit a member with `MANAGE` makes and it emits
+ * what that emits. A basket has no such service to delegate to, because the app
+ * offers no basket line editor either: a `GeneratedList` is **output**, composed
+ * from the lines of the lists somebody chose at the moment its `sourceSnapshot`
+ * records, and a changed line contradicts both the origin that explains where it
+ * came from and any settlement already written against it. So baskets stay read
+ * only in full (plan 0077, section 6.4).
+ *
+ * Creating a list line is absent for a narrower reason: `createdByUserId` is not
+ * nullable and an operator is not a user, so a created line would be attributed
+ * to nobody, or to an admin id that resolves to no user, and every list screen
+ * renders that attribution.
  */
 @Injectable()
 export class AdminListService {
@@ -69,7 +102,9 @@ export class AdminListService {
     private readonly basketLines: Repository<GeneratedListLine>,
     @InjectRepository(GeneratedListLineOrigin)
     private readonly origins: Repository<GeneratedListLineOrigin>,
-    private readonly gate: CorePlatformAdminService
+    private readonly gate: CorePlatformAdminService,
+    private readonly listService: ListService,
+    private readonly lineService: LineService
   ) {}
 
   /**
@@ -175,6 +210,170 @@ export class AdminListService {
       order: { position: 'ASC', id: 'ASC' },
     });
     return { ...toListRow(row), lines: lines.map(toLineView) };
+  }
+
+  /**
+   * A list's name and its two flags, through `ListService` (plan 0077, section
+   * 5.1), which is everything `UpdateListRequest` carries.
+   *
+   * `sharedWithZone` is a real field and not a trap, and it is **asymmetric**:
+   * turning it on grants `{READ, WRITE, DECIDE}` to every currently approved non
+   * staff member, and turning it off revokes nobody. That is the member facing
+   * behaviour and this does not soften it. The mistake it exists to prevent is an
+   * operator who toggles it off and expects the list to close, which is why the
+   * back office states the rule beside the field rather than here alone.
+   *
+   * The per member grant set is not reachable from this plan. It is a set of
+   * entries rather than a field, and editing it well needs a screen of its own.
+   */
+  async update(req: UpdateAdminListRequest): Promise<ListView> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.requireList(req.listId);
+    return this.listService.updateAsOperator(
+      req.listId,
+      {
+        name: req.name,
+        autoApproveLines: req.autoApproveLines,
+        sharedWithZone: req.sharedWithZone,
+      },
+      actorId
+    );
+  }
+
+  /** Delete a list, through `ListService` (plan 0077, section 5.1). */
+  async remove(req: AdminListIdRequest): Promise<{ id: string }> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.requireList(req.listId);
+    return this.listService.deleteAsOperator(req.listId, actorId);
+  }
+
+  /**
+   * A page of one list's lines (plan 0077, section 9).
+   *
+   * The detail read keeps its embedded `lines` array, unchanged. This collection
+   * serves the screen that edits one line, and it pages in the household's own
+   * order rather than by time, because that is the order the line's position
+   * means and the order every other view of the list uses.
+   */
+  async listLines(req: ListAdminListLinesRequest): Promise<AdminListLinePage> {
+    await this.gate.requireAdmin(req);
+    await this.requireList(req.listId);
+
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor(req.cursor) as LineCursor | undefined;
+    const qb = this.lines
+      .createQueryBuilder('n')
+      .where('n."listId" = :listId', { listId: req.listId })
+      .orderBy('n.position', 'ASC')
+      .addOrderBy('n.id', 'ASC')
+      .take(limit + 1);
+    if (cursor) {
+      qb.andWhere('(n.position, n.id) > (:cv, :cid)', {
+        cv: cursor.position,
+        cid: cursor.id,
+      });
+    }
+
+    const rows = await qb.getMany();
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+
+    return {
+      items: page.map(toLineView),
+      nextCursor:
+        hasMore && last
+          ? encodeCursor({ position: last.position, id: last.id })
+          : null,
+    };
+  }
+
+  /** One line, read through its own address (plan 0077, section 9). */
+  async getLine(req: GetAdminListLineRequest): Promise<AdminListLineView> {
+    await this.gate.requireAdmin(req);
+    return toLineView(await this.requireLine(req.listId, req.lineId));
+  }
+
+  /**
+   * Edit a line's content, quantity or product set, through `LineService` (plan
+   * 0077, section 5.2).
+   *
+   * **The operator edits with `MANAGE`**, which `LineService.updateAsOperator`
+   * resolves for itself. That decides two separate questions at once, and both
+   * answers are the ones an operator wants: the edit is allowed, and an approved
+   * line stays approved. Resolving the operator as a plain writer was rejected for
+   * the second half alone, because an operator fixing a typo in an approved line
+   * would move it to `PENDING` and the household would have to approve their own
+   * line again, for reasons no screen can explain.
+   *
+   * A `REJECTED` line still reopens, because that rule applies to everyone.
+   */
+  async updateLine(req: UpdateAdminListLineRequest): Promise<LineView> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.requireLine(req.listId, req.lineId);
+    return this.lineService.updateAsOperator(
+      req.listId,
+      req.lineId,
+      {
+        content: req.content,
+        quantity: req.quantity,
+        itemIds: req.itemIds,
+      },
+      actorId
+    );
+  }
+
+  /** Approve or reject a line, through `LineService` (plan 0077, section 5.2). */
+  async setLineApproval(req: SetAdminLineApprovalRequest): Promise<LineView> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.requireLine(req.listId, req.lineId);
+    return this.lineService.setApprovalAsOperator(
+      req.listId,
+      req.lineId,
+      req.status,
+      actorId
+    );
+  }
+
+  /** Delete a line, through `LineService` (plan 0077, section 5.2). */
+  async deleteLine(req: DeleteAdminListLineRequest): Promise<{ id: string }> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.requireLine(req.listId, req.lineId);
+    return this.lineService.deleteAsOperator(req.listId, req.lineId, actorId);
+  }
+
+  /**
+   * A list that exists, or a 404.
+   *
+   * Asked for explicitly, for the reason `AdminZoneService.requireZone` gives:
+   * the user facing routes get this from the permission resolution they perform
+   * first, and the operator paths skip that by design, so an action on a mistyped
+   * id would otherwise report whatever the delegated service happened to say.
+   */
+  private async requireList(listId: string): Promise<ShoppingList> {
+    const list = await this.lists.findOne({ where: { id: listId } });
+    if (!list) {
+      throw new NotFoundException('List not found');
+    }
+    return list;
+  }
+
+  /**
+   * One line **on this list**, or a 404.
+   *
+   * Scoped to the list rather than looked up by id alone. A line id from another
+   * list is not found here, so a mistyped list id cannot silently address a line
+   * in somebody else's household.
+   */
+  private async requireLine(
+    listId: string,
+    lineId: string
+  ): Promise<ListLine> {
+    const line = await this.lines.findOne({ where: { id: lineId, listId } });
+    if (!line) {
+      throw new NotFoundException('Line not found on this list');
+    }
+    return line;
   }
 
   /**

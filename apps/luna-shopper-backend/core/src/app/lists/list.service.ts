@@ -27,7 +27,14 @@ import {
   ForbiddenException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, In, Repository, type SelectQueryBuilder } from 'typeorm';
+import {
+  DataSource,
+  In,
+  Repository,
+  type EntityManager,
+  type SelectQueryBuilder,
+} from 'typeorm';
+import { CoreAuditService } from '../audit/core-audit.service';
 import { ListAccess, ShoppingList, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -62,6 +69,29 @@ interface ListCursor {
   value: string;
   id: string;
 }
+
+/** The three list fields an edit may name (plan 0077, section 5.1). */
+interface ListChanges {
+  name?: string;
+  autoApproveLines?: boolean;
+  sharedWithZone?: boolean;
+}
+
+/**
+ * Where a list edit is written, and how the row it saves is recorded.
+ *
+ * The edit's transaction has to hold the grant beside the list (plan 0042,
+ * section 2.2) and, on the operator path, the audit row as well (plan 0077,
+ * section 8). Handing the body both the manager and the save is what lets one
+ * body serve a member's write, which records nothing, and an operator's, which
+ * records the row it saved in the transaction that saved it.
+ */
+type ListWrite = (
+  work: (
+    manager: EntityManager,
+    save: (list: ShoppingList) => Promise<ShoppingList>
+  ) => Promise<ShoppingList>
+) => Promise<ShoppingList>;
 
 /**
  * The set `setAccess` will actually store for one entry (plan 0036, rule 4).
@@ -111,7 +141,10 @@ export class ListService {
     private readonly listAccess: ListAccessService,
     private readonly sharedGrant: SharedListGrantService,
     private readonly zoneCounts: ZoneCountsService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // `@Global()`, so the operator writes below reach the trail without any
+    // caller having to hand it one (plan 0077, section 8).
+    private readonly audit: CoreAuditService
   ) {}
 
   /**
@@ -474,34 +507,87 @@ export class ListService {
         'You need to be an admin of this list to change it'
       );
     }
-    if (req.name !== undefined) {
-      list.name = req.name;
+    return this.applyListUpdate(list, req, permissions, (work) =>
+      this.dataSource.transaction((manager) =>
+        work(manager, (row) => manager.getRepository(ShoppingList).save(row))
+      )
+    );
+  }
+
+  /**
+   * Rename a list, or change its configuration, for an operator (plan 0077,
+   * section 5.1).
+   *
+   * The three fields are everything `UpdateListRequest` carries, and
+   * `sharedWithZone` keeps its asymmetry exactly: turning it **on** grants
+   * `{READ, WRITE, DECIDE}` to every currently approved non staff member, and
+   * turning it **off revokes nobody**. That is the member facing behaviour rather
+   * than an omission, and it is not something an operator write gets to correct:
+   * a control that silently removed eight people from a list they have been using
+   * all week does something other than what it says. The back office carries that
+   * sentence beside the field.
+   *
+   * The answer the caller gets says `MANAGE`, because that is what the operator
+   * did, and the alternative is a view whose `myPermissions` claims the writer of
+   * the change could not have made it.
+   */
+  async updateAsOperator(
+    listId: string,
+    changes: ListChanges,
+    actorId: string
+  ): Promise<ListView> {
+    const list = await this.listAccess.getList(listId);
+    const before = { ...list };
+    return this.applyListUpdate(
+      list,
+      changes,
+      new Set(ALL_LIST_PERMISSIONS),
+      (work) =>
+        this.audit.write(actorId, (tx) =>
+          work(tx.manager, (row) => tx.update(ShoppingList, before, row))
+        )
+    );
+  }
+
+  /**
+   * The fields an edit assigns, the grant a flip performs and the events both
+   * announce, with the authorization already decided.
+   *
+   * One body, so an operator's edit is the same write as a list admin's. The
+   * grant is the half that makes it matter: a `sharedWithZone` column write on
+   * its own would mark a list shared with nobody granted, and nothing later
+   * reconciles the two.
+   */
+  private async applyListUpdate(
+    list: ShoppingList,
+    changes: ListChanges,
+    permissions: Set<ListPermission>,
+    write: ListWrite
+  ): Promise<ListView> {
+    if (changes.name !== undefined) {
+      list.name = changes.name;
     }
-    if (req.autoApproveLines !== undefined) {
-      list.autoApproveLines = req.autoApproveLines;
+    if (changes.autoApproveLines !== undefined) {
+      list.autoApproveLines = changes.autoApproveLines;
     }
     // Only the transition matters. Sending `true` on a list that is already
     // shared re-grants nobody, because the grant skips a row that already says
     // everything it would say.
-    const opening = req.sharedWithZone === true && !list.sharedWithZone;
-    if (req.sharedWithZone !== undefined) {
-      list.sharedWithZone = req.sharedWithZone;
+    const opening = changes.sharedWithZone === true && !list.sharedWithZone;
+    if (changes.sharedWithZone !== undefined) {
+      list.sharedWithZone = changes.sharedWithZone;
     }
 
     let granted: GrantedAccess[] = [];
-    const saved = await this.dataSource.transaction(async (manager) => {
-      const saved = await manager.getRepository(ShoppingList).save(list);
+    const saved = await write(async (manager, save) => {
+      const saved = await save(list);
       if (opening) {
         granted = await this.sharedGrant.grantListToZone(manager, saved);
       }
       return saved;
     });
 
-    const view = toListView(
-      saved,
-      await this.countsFor(req.listId),
-      permissions
-    );
+    const view = toListView(saved, await this.countsFor(list.id), permissions);
     this.events.emit(RealtimeEvent.ListUpdated, list.zoneId, view, view.id);
     // One event per person the flip actually reached. Unlike the approval grant
     // (plan 0042, section 2.3), nothing else tells them: they are already members
@@ -510,13 +596,13 @@ export class ListService {
     // already looking.
     for (const member of granted) {
       const payload: ListMyAccessChangedEvent = {
-        listId: req.listId,
+        listId: list.id,
         zoneId: list.zoneId,
         permissions: member.permissions,
       };
       this.events.emitTo(
         RealtimeEvent.ListMyAccessChanged,
-        { userIds: [member.userId], zoneId: list.zoneId, listId: req.listId },
+        { userIds: [member.userId], zoneId: list.zoneId, listId: list.id },
         payload
       );
     }
@@ -526,17 +612,40 @@ export class ListService {
   /** Delete a list (plan 0007, section 2; plan 0036, section 4). `MANAGE`. */
   async delete(req: ListIdRequest): Promise<{ id: string }> {
     const list = await this.listAccess.requireManage(req.listId, req.userId);
-    await this.lists.delete({ id: req.listId });
-    this.events.emit(
-      RealtimeEvent.ListDeleted,
-      list.zoneId,
-      {
-        id: req.listId,
-      },
-      req.listId
+    return this.applyListDeletion(list, async (row) => {
+      await this.lists.delete({ id: row.id });
+    });
+  }
+
+  /**
+   * Delete a list, for an operator (plan 0077, section 5.1).
+   *
+   * The row goes and the cascade takes its lines, their comments and the access
+   * table with it, which is what a list admin's delete does. The zone's counts
+   * are recomputed either way: a list removed from under a zone card that still
+   * counts it is the half a row delete would skip.
+   */
+  async deleteAsOperator(
+    listId: string,
+    actorId: string
+  ): Promise<{ id: string }> {
+    const list = await this.listAccess.getList(listId);
+    return this.applyListDeletion(list, (row) =>
+      this.audit.write(actorId, (tx) => tx.delete(ShoppingList, row))
     );
-    await this.zoneCounts.emitZoneCounts(list.zoneId);
-    return { id: req.listId };
+  }
+
+  private async applyListDeletion(
+    list: ShoppingList,
+    remove: (list: ShoppingList) => Promise<void>
+  ): Promise<{ id: string }> {
+    // Read before the removal: the trail's delete strips the primary key off the
+    // object it is handed, so an id read afterwards is undefined.
+    const { id, zoneId } = list;
+    await remove(list);
+    this.events.emit(RealtimeEvent.ListDeleted, zoneId, { id }, id);
+    await this.zoneCounts.emitZoneCounts(zoneId);
+    return { id };
   }
 
   /**

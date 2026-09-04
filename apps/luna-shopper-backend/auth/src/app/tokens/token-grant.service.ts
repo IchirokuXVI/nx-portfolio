@@ -49,16 +49,38 @@ export class TokenGrantService {
     payload: DeepPartial<T>,
     ttlMs: number
   ): Promise<string> {
+    return (await this.issueRecord(manager, entity, payload, ttlMs)).raw;
+  }
+
+  /**
+   * The same mint, and the row it wrote (plan 0077, section 8).
+   *
+   * {@link issue} answers with the raw token alone because that is all any caller
+   * wanted until an operator action had to be recorded in an audit trail, and a
+   * trail names the row it describes by id. The row comes back rather than being
+   * looked up afterwards, so the caller records what was saved instead of what a
+   * second query found.
+   *
+   * The raw token is still returned exactly once and still stored only as a hash,
+   * and the audit trail drops `tokenHash` on the way in, so recording the grant
+   * does not turn a single use link into a durable one.
+   */
+  async issueRecord<T extends TokenGrant & ObjectLiteral>(
+    manager: EntityManager,
+    entity: EntityTarget<T>,
+    payload: DeepPartial<T>,
+    ttlMs: number
+  ): Promise<{ raw: string; record: T }> {
     const raw = randomBytes(32).toString('base64url');
     const repository = manager.getRepository(entity);
-    await repository.save(
+    const record = await repository.save(
       repository.create({
         ...payload,
         tokenHash: this.hash(raw),
         expiresAt: new Date(Date.now() + ttlMs),
       } as DeepPartial<T>)
     );
-    return raw;
+    return { raw, record };
   }
 
   /**

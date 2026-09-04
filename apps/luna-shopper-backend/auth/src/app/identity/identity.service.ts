@@ -36,6 +36,10 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { randomUUID } from 'node:crypto';
 import { DataSource, type EntityManager } from 'typeorm';
+import {
+  AuthAuditService,
+  type AuditedWrite,
+} from '../audit/auth-audit.service';
 import type { AuthConfig } from '../config/app-config';
 import {
   Credential,
@@ -94,6 +98,16 @@ const INVALID_OAUTH_STATE = 'Invalid or expired sign in request';
  * login, in place upgrade, email verification and refresh rotation. Writes that
  * touch more than one table run in a transaction so a failure leaves no
  * half-created identity.
+ *
+ * ## The `AsOperator` methods
+ *
+ * Four methods end in `AsOperator`, and the suffix is the contract rather than
+ * decoration (plan 0077, section 2). Each one is the write its user facing twin
+ * makes, with the caller's own identity check replaced by an operator gate the
+ * caller has already passed, and each one records what it did in the audit trail
+ * inside the same transaction. Reading the method names is how somebody sees
+ * which writes here can be made against a stranger's account, and a future author
+ * cannot add a fifth without saying so in its name.
  */
 @Injectable()
 export class IdentityService {
@@ -107,6 +121,10 @@ export class IdentityService {
     private readonly mail: MailService,
     private readonly events: IdentityEventsPublisher,
     private readonly usernames: UsernameGenerator,
+    // The operator trail (plan 0077, section 8). Only the `AsOperator` methods
+    // reach it: a person changing their own name is not an operator write, and
+    // recording one would fill the trail with the ordinary use of the product.
+    private readonly audit: AuthAuditService,
     configService: ConfigService
   ) {
     this.config = configService.getOrThrow<AuthConfig>('auth');
@@ -201,7 +219,7 @@ export class IdentityService {
               .create({ userId: user.id, passwordHash })
           );
 
-        const rawVerificationToken = await this.createVerification(
+        const { raw: rawVerificationToken } = await this.createVerification(
           manager,
           user.id
         );
@@ -216,11 +234,19 @@ export class IdentityService {
     return this.tokens.issueTokens(user);
   }
 
+  /**
+   * A fresh confirmation grant: the raw token to mail, and the row that stores
+   * its hash.
+   *
+   * The row comes back because the operator path records it in the audit trail
+   * (plan 0077, section 8), and a trail names the row it describes by id. The
+   * two user facing callers take `raw` and drop it.
+   */
   private createVerification(
     manager: EntityManager,
     userId: string
-  ): Promise<string> {
-    return this.grants.issue(
+  ): Promise<{ raw: string; record: EmailVerification }> {
+    return this.grants.issueRecord(
       manager,
       EmailVerification,
       { userId },
@@ -326,34 +352,83 @@ export class IdentityService {
   ): Promise<ResendVerificationResult> {
     this.requireMail();
     const { email, rawVerificationToken } = await this.dataSource.transaction(
-      async (manager) => {
-        const user = await manager
-          .getRepository(User)
-          .findOne({ where: { id: req.userId } });
-        if (!user) {
-          throw new NotFoundException('User not found');
-        }
-        // Both refusals return a code rather than a quiet success: a wait would
-        // be a lie, because no mail is coming and the client would count down to
-        // nothing.
-        if (!user.email) {
-          throw new ConflictException(
-            'This account has no email address to confirm'
-          );
-        }
-        if (user.emailVerifiedAt) {
-          throw new ConflictException('This email is already confirmed');
-        }
-        return {
-          email: user.email,
-          rawVerificationToken: await this.createVerification(manager, user.id),
-        };
-      }
+      (manager) => this.issueResend(manager, req.userId)
     );
 
     await this.sendVerification(email, rawVerificationToken, req.locale);
     return {
       retryAfterSeconds: throttleWaitSeconds(THROTTLE_LIMITS.verifyResend),
+    };
+  }
+
+  /**
+   * Send the confirmation mail again, on somebody else's behalf (plan 0077,
+   * section 8).
+   *
+   * The same grant {@link resendVerification} mints, from the same helper, with
+   * the role check that never existed here replaced by the operator gate the
+   * caller has already passed. Auth's own refusals still apply: an account with
+   * no address, or one already confirmed, is a conflict for an operator exactly
+   * as it is for the person themselves, because both are statements about the
+   * account rather than about the caller.
+   *
+   * **The grant row is what the trail records**, and it is a real answer rather
+   * than a stand-in for one. `email_verifications` gains a row saying a
+   * confirmation link for this user was minted and when it expires, which is
+   * precisely what the operator did. Its `tokenHash` is dropped on the way in, so
+   * a trail nobody prunes never holds a live link.
+   */
+  async resendVerificationAsOperator(
+    targetUserId: string,
+    actorId: string,
+    locale?: string
+  ): Promise<ResendVerificationResult> {
+    this.requireMail();
+    const { email, rawVerificationToken } = await this.audit.write(
+      actorId,
+      async (tx) => {
+        const issued = await this.issueResend(tx.manager, targetUserId);
+        await tx.recordCreate(EmailVerification, issued.verification);
+        return issued;
+      }
+    );
+
+    await this.sendVerification(email, rawVerificationToken, locale);
+    return {
+      retryAfterSeconds: throttleWaitSeconds(THROTTLE_LIMITS.verifyResend),
+    };
+  }
+
+  /** The refusals and the grant both resend paths share. */
+  private async issueResend(
+    manager: EntityManager,
+    userId: string
+  ): Promise<{
+    email: string;
+    rawVerificationToken: string;
+    verification: EmailVerification;
+  }> {
+    const user = await manager
+      .getRepository(User)
+      .findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    // Both refusals return a code rather than a quiet success: a wait would be a
+    // lie, because no mail is coming and the client would count down to nothing.
+    if (!user.email) {
+      throw new ConflictException(
+        'This account has no email address to confirm'
+      );
+    }
+    if (user.emailVerifiedAt) {
+      throw new ConflictException('This email is already confirmed');
+    }
+    const { raw, record } = await this.createVerification(manager, user.id);
+    return {
+      email: user.email,
+      rawVerificationToken: raw,
+      verification: record,
     };
   }
 
@@ -574,10 +649,9 @@ export class IdentityService {
                 .getRepository(Credential)
                 .create({ userId: user.id, passwordHash })
             );
-          rawVerificationToken = await this.createVerification(
-            manager,
-            user.id
-          );
+          rawVerificationToken = (
+            await this.createVerification(manager, user.id)
+          ).raw;
         } else {
           throw new ValidationException(
             'Provide a Google identity or an email and password to upgrade'
@@ -631,14 +705,63 @@ export class IdentityService {
    * already gone the delete affects no rows and no event is emitted.
    */
   async deleteAccount(req: DeleteAccountRequest): Promise<DeleteAccountResult> {
-    const result = await this.dataSource
-      .getRepository(User)
-      .delete({ id: req.userId });
-    const deleted = (result.affected ?? 0) > 0;
+    const deleted = await this.removeAccount(
+      this.dataSource.manager,
+      req.userId
+    );
     if (deleted) {
       this.events.userDeleted({ userId: req.userId });
     }
     return { userId: req.userId, deleted };
+  }
+
+  /**
+   * Delete somebody else's account (plan 0077, section 8).
+   *
+   * The same delete {@link deleteAccount} makes, so the same cascade runs and the
+   * same `user.deleted` event reaches core, whose `AccountDeletionService` does
+   * its half across its own database. The whole difference is the missing role
+   * check, and the operator gate the caller has already passed.
+   *
+   * The row is read before it is removed, because a deletion whose trail says
+   * only that something with this id used to exist cannot answer what was lost.
+   * Nothing read there is a secret: the password hash lives on `credentials`,
+   * which this never touches.
+   *
+   * Idempotent for the same reason the user facing one is: a repeat affects no
+   * rows, emits nothing and records nothing, and answers `deleted: false`.
+   */
+  async deleteAccountAsOperator(
+    targetUserId: string,
+    actorId: string
+  ): Promise<DeleteAccountResult> {
+    const deleted = await this.audit.write(actorId, async (tx) => {
+      const user = await tx.manager
+        .getRepository(User)
+        .findOne({ where: { id: targetUserId } });
+      if (!user) {
+        return false;
+      }
+      const removed = await this.removeAccount(tx.manager, targetUserId);
+      if (removed) {
+        await tx.recordDelete(User, user, targetUserId);
+      }
+      return removed;
+    });
+
+    if (deleted) {
+      this.events.userDeleted({ userId: targetUserId });
+    }
+    return { userId: targetUserId, deleted };
+  }
+
+  /** The delete both paths make, and the only place that statement is written. */
+  private async removeAccount(
+    manager: EntityManager,
+    userId: string
+  ): Promise<boolean> {
+    const result = await manager.getRepository(User).delete({ id: userId });
+    return (result.affected ?? 0) > 0;
   }
 
   /**
@@ -651,35 +774,136 @@ export class IdentityService {
    */
   async setUsername(req: SetUsernameRequest): Promise<UserProfileView> {
     const username = validateUsername(req.username);
-    const propagation = req.propagation ?? UsernamePropagation.GLOBAL_ONLY;
 
-    const { user, oldUsername } = await this.dataSource.transaction(
-      async (manager) => {
-        const user = await manager
-          .getRepository(User)
-          .findOne({ where: { id: req.userId } });
-        if (!user) {
-          throw new NotFoundException('User not found');
-        }
-        const oldUsername = user.username;
-        user.username = username;
-        return {
-          user: await manager.getRepository(User).save(user),
-          oldUsername,
-        };
-      }
+    const { user, oldUsername } = await this.dataSource.transaction((manager) =>
+      this.renameUser(manager, req.userId, username)
     );
 
-    // Emitted for every mode, GLOBAL_ONLY included, so a consumer sees every
-    // rename; core records a GLOBAL_ONLY event as processed and does nothing.
+    this.emitUsernameChanged(user, oldUsername, req.propagation);
+    return this.toProfile(user);
+  }
+
+  /**
+   * Rename somebody else (plan 0077, section 3.1).
+   *
+   * The same write {@link setUsername} makes, through the same private helper,
+   * and it matters that it is the same one. `users.username` is not a column an
+   * operator may set: the change publishes `user.usernameChanged`, and core's
+   * `UsernamePropagationService` rewrites the per zone `zone_memberships.username`
+   * of every membership the user holds from that event. A direct column write
+   * would leave the global name changed and every per zone name unchanged, and
+   * nothing reconciles the two afterwards, so they would disagree forever.
+   *
+   * The event is emitted **after** the transaction commits, exactly as the user
+   * facing path emits it. An event for a write that then rolled back would have
+   * every zone calling somebody by a name the `users` row never took, which is
+   * the same disagreement by a different route.
+   *
+   * `propagation` is defaulted where both paths default it, in
+   * {@link emitUsernameChanged}. An operator renaming somebody is doing what that
+   * person could do to themselves, so it behaves the same.
+   */
+  async setUsernameAsOperator(
+    targetUserId: string,
+    username: string,
+    actorId: string,
+    propagation?: UsernamePropagation
+  ): Promise<UserProfileView> {
+    const validated = validateUsername(username);
+
+    const { user, oldUsername } = await this.audit.write(actorId, (tx) =>
+      this.renameUser(tx.manager, targetUserId, validated, tx)
+    );
+
+    this.emitUsernameChanged(user, oldUsername, propagation);
+    return this.toProfile(user);
+  }
+
+  /**
+   * Change somebody else's display name (plan 0077, section 3.2).
+   *
+   * A direct column write, and **not an exception** to "write through the
+   * service, never through the row". `displayName` has no service, no event and
+   * no consumer: nothing derives from it, nothing copies it, and core has never
+   * seen it. There is no invariant to route around, so there is nothing for a
+   * service method to protect.
+   *
+   * Null clears it, which is a thing an operator asks for on purpose: the column
+   * holds whatever an identity provider supplied, and for a Google sign in that
+   * is somebody's real full name. Whether a request means "clear it" or "leave it
+   * alone" is decided by the caller, before this is called at all.
+   */
+  async setDisplayNameAsOperator(
+    targetUserId: string,
+    displayName: string | null,
+    actorId: string
+  ): Promise<UserProfileView> {
+    const user = await this.audit.write(actorId, async (tx) => {
+      const user = await tx.manager
+        .getRepository(User)
+        .findOne({ where: { id: targetUserId } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+      const before = { ...user };
+      user.displayName = displayName;
+      return tx.update(User, before, user);
+    });
+
+    return this.toProfile(user);
+  }
+
+  /**
+   * The rename itself, which both paths make.
+   *
+   * `tx` is present only on the operator path, and it is what puts the audit row
+   * in the same transaction as the change. Without it the save is the plain one
+   * the user's own route has always made, because a person renaming themselves is
+   * not an operator write and the trail exists for operator writes.
+   */
+  private async renameUser(
+    manager: EntityManager,
+    userId: string,
+    username: string,
+    tx?: AuditedWrite
+  ): Promise<{ user: User; oldUsername: string }> {
+    const user = await manager
+      .getRepository(User)
+      .findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const before = { ...user };
+    const oldUsername = user.username;
+    user.username = username;
+    return {
+      user: tx
+        ? await tx.update(User, before, user)
+        : await manager.getRepository(User).save(user),
+      oldUsername,
+    };
+  }
+
+  /**
+   * The event both rename paths publish, once the write has committed.
+   *
+   * Emitted for every mode, GLOBAL_ONLY included, so a consumer sees every
+   * rename; core records a GLOBAL_ONLY event as processed and does nothing. The
+   * default lives here rather than at each caller, so the operator path cannot
+   * drift from the user facing one.
+   */
+  private emitUsernameChanged(
+    user: User,
+    oldUsername: string,
+    propagation?: UsernamePropagation
+  ): void {
     this.events.userUsernameChanged({
       eventId: randomUUID(),
       userId: user.id,
       oldUsername,
       newUsername: user.username,
-      propagation,
+      propagation: propagation ?? UsernamePropagation.GLOBAL_ONLY,
     });
-    return this.toProfile(user);
   }
 
   /** The caller's own profile (plan 0018, section 12). */

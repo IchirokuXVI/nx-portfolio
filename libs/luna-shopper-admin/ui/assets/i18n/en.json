@@ -42,6 +42,16 @@
       "signOut": "Sign out and lose unsaved work"
     }
   },
+  "serverDown": {
+    "heading": "The server is not answering",
+    "body": "This back office cannot reach its backend. Nothing on your screen has been lost, and it comes back on its own as soon as the server does.",
+    "doNotReload": "Do not reload this page if you have unsaved work. Reloading is the one thing that throws it away.",
+    "checking": "Checking…",
+    "retry": "Check again",
+    "retriesLeft_one": "Checking again on its own {{count}} more time.",
+    "retriesLeft_other": "Checking again on its own {{count}} more times.",
+    "stopped": "Automatic checking has stopped. Use the button when you think the server is back."
+  },
   "shell": {
     "menu": "Menu",
     "navigation": "Sections",
@@ -148,7 +158,9 @@
       "externalBrandKeyHelp": "The chain's stable identity across discovery runs. It is what splits Carrefour from Carrefour Express, so change it only when that is what you mean.",
       "defaultPriceScopeId": "Default price scope",
       "defaultPriceScopeIdHelp": "Set by the catalog service, not from here.",
-      "search": "Name contains",
+      "filter": {
+        "query": "Name or Wikidata identifier contains"
+      },
       "sort": {
         "name": "By name",
         "created": "Newest first",

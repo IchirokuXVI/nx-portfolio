@@ -12,6 +12,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { CoreAuditService } from '../audit/core-audit.service';
 import {
   CORE_ENTITIES,
   GeneratedList,
@@ -139,7 +140,8 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
       dataSource.getRepository(LineSettlement),
       listAccess,
       claims.service,
-      { emitToUsers: jest.fn(), emit: jest.fn() } as never
+      { emitToUsers: jest.fn(), emit: jest.fn() } as never,
+      new CoreAuditService(dataSource)
     );
     lineWrites = new GeneratedListLineService(
       dataSource.getRepository(GeneratedListLine),

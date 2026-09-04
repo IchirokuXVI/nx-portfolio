@@ -3,6 +3,7 @@ import {
   UsernamePropagation,
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
+import { fakeAudit } from '../audit/auth-audit.testing';
 import type { User } from '../entities';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { UsernameGenerator } from '../username/username-generator.service';
@@ -90,6 +91,7 @@ function build(users: Partial<User>[] = []) {
     { sendVerificationEmail: jest.fn() } as never,
     events as never,
     new UsernameGenerator(),
+    fakeAudit([]).service,
     config as never
   );
   return { service, repo, events, tokens };

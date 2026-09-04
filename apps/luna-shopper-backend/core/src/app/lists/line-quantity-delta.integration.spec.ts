@@ -10,6 +10,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { CoreAuditService } from '../audit/core-audit.service';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -77,7 +78,8 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
       dataSource.getRepository(LineSettlement),
       listAccess,
       fakeLineClaims().service,
-      { emit: jest.fn() } as never
+      { emit: jest.fn() } as never,
+      new CoreAuditService(dataSource)
     );
 
     const zone = await dataSource.getRepository(Zone).save(

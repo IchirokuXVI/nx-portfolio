@@ -7,6 +7,7 @@ import {
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
 import type { EntityManager } from 'typeorm';
+import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
 import { Zone, ZoneMembership } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ZoneAuthzService } from './zone-authz.service';
@@ -56,6 +57,7 @@ interface Harness {
   svc: ZoneService;
   events: EventsSpy;
   zone: Zone;
+  recorded: RecordedChange[];
 }
 
 /**
@@ -94,6 +96,8 @@ function makeEvents(): EventsSpy {
 function makeService(opts: {
   caller: ZoneMembership;
   target?: ZoneMembership;
+  /** Whoever currently owns the zone, for the operator path that looks it up. */
+  owner?: ZoneMembership;
   zone: Zone;
   commits?: boolean;
 }): Harness {
@@ -102,7 +106,14 @@ function makeService(opts: {
     save: jest.fn(async (z: Zone) => z),
   };
   const membershipRepo = {
-    findOne: jest.fn(async () => opts.target ?? null),
+    // The operator path asks twice: once for the membership it was given, and
+    // once for whoever currently owns the zone, which is the query carrying a
+    // role. The member facing path only ever asks the first.
+    findOne: jest.fn(async (options?: { where?: { role?: ZoneRole } }) =>
+      options?.where?.role === ZoneRole.OWNER
+        ? (opts.owner ?? null)
+        : (opts.target ?? null)
+    ),
     // TypeORM hands back what it was given, one entity or an array of them.
     save: jest.fn(async (m: ZoneMembership | ZoneMembership[]) => m),
   };
@@ -127,6 +138,16 @@ function makeService(opts: {
   const authz = {
     requireRole: jest.fn(async () => opts.caller),
   } as unknown as ZoneAuthzService;
+  // Bound to the same two repositories the transaction writes through, so the
+  // operator path saves exactly what the member path saves and the trail is the
+  // only thing added on top.
+  const audit = fakeAudit([
+    [Zone, { name: 'zones', repository: zoneRepo as never }],
+    [
+      ZoneMembership,
+      { name: 'zone_memberships', repository: membershipRepo as never },
+    ],
+  ]);
 
   return {
     svc: new ZoneService(
@@ -135,10 +156,12 @@ function makeService(opts: {
       membershipRepo as never,
       authz,
       {} as ZoneCountsService,
-      events as unknown as CoreEventsPublisher
+      events as unknown as CoreEventsPublisher,
+      audit.service
     ),
     events,
     zone: opts.zone,
+    recorded: audit.recorded,
   };
 }
 
@@ -259,6 +282,94 @@ describe('ZoneService.transferOwnership', () => {
     ).rejects.toThrow('rolled back');
 
     expect(emitted(events)).toEqual([]);
+  });
+});
+
+describe('ZoneService.transferOwnershipAsOperator', () => {
+  const makeOutgoing = () =>
+    makeMembership({
+      id: 'm-owner',
+      userId: 'u-owner',
+      username: 'Vela',
+      role: ZoneRole.OWNER,
+    });
+  const makeIncoming = () =>
+    makeMembership({
+      id: 'm-admin',
+      userId: 'u-admin',
+      username: 'Marta',
+      role: ZoneRole.ADMIN,
+    });
+
+  it('announces exactly what the owner’s own transfer announces', async () => {
+    const viaOwner = makeService({
+      caller: makeOutgoing(),
+      target: makeIncoming(),
+      zone: makeZone(),
+    });
+    const viaOperator = makeService({
+      caller: makeOutgoing(),
+      target: makeIncoming(),
+      owner: makeOutgoing(),
+      zone: makeZone(),
+    });
+
+    const fromOwner = await viaOwner.svc.transferOwnership({
+      zoneId: 'z1',
+      userId: 'u-owner',
+      membershipId: 'm-admin',
+    });
+    const fromOperator = await viaOperator.svc.transferOwnershipAsOperator(
+      'z1',
+      'm-admin',
+      'admin-1'
+    );
+
+    expect(fromOperator).toEqual(fromOwner);
+    expect(emitted(viaOperator.events)).toEqual(emitted(viaOwner.events));
+  });
+
+  it('records the three rows it moved, against the operator', async () => {
+    const { svc, recorded } = makeService({
+      caller: makeOutgoing(),
+      target: makeIncoming(),
+      owner: makeOutgoing(),
+      zone: makeZone(),
+    });
+
+    await svc.transferOwnershipAsOperator('z1', 'm-admin', 'admin-1');
+
+    // Three rows because a transfer is three writes, and a trail that recorded
+    // only the zone would say ownership moved without saying who stopped being
+    // an owner.
+    expect(
+      recorded.map((row) => [row.entity, row.entityId, row.action])
+    ).toEqual([
+      ['zone_memberships', 'm-owner', 'UPDATE'],
+      ['zone_memberships', 'm-admin', 'UPDATE'],
+      ['zones', 'z1', 'UPDATE'],
+    ]);
+    expect(recorded.every((row) => row.actorId === 'admin-1')).toBe(true);
+    expect(recorded[2].after).toEqual({ ownerUserId: 'u-admin' });
+  });
+
+  it('rescues an ownerless zone, with nobody to demote', async () => {
+    const { svc, events, recorded } = makeService({
+      caller: makeOutgoing(),
+      target: makeIncoming(),
+      zone: makeZone({ ownerUserId: null }),
+    });
+
+    await svc.transferOwnershipAsOperator('z1', 'm-admin', 'admin-1');
+
+    // One role change rather than two: a zone whose owner deleted their account
+    // is ownerless by plan 0011 section 2, and rescuing exactly that zone is
+    // what this action is most useful for.
+    expect(emitted(events).map(([name]) => name)).toEqual([
+      RealtimeEvent.MemberRoleChanged,
+      RealtimeEvent.ZoneOwnershipChanged,
+    ]);
+    expect(recorded.map((row) => row.entityId)).toEqual(['m-admin', 'z1']);
   });
 });
 
