@@ -65,7 +65,18 @@ function build(
     /** The acting participant, or null for one that has been revoked. */
     participant?: Partial<GeneratedListParticipant> | null;
     lineCount?: number;
+    /** Whose sources the run read, which is null when the request named them. */
     profileId?: string | null;
+    /** The profile the basket is priced against (plan 0078). */
+    pricingProfileId?: string | null;
+    /**
+     * A snapshot stored before plan 0078, which carries no pricing key at all.
+     *
+     * Written as a cast rather than as a field, because the whole point is a
+     * shape the current contract does not describe: the column is `jsonb` and
+     * the rows already in it were written by the old code.
+     */
+    snapshotWithoutPricingKey?: boolean;
   } = {}
 ): Harness {
   const list = {
@@ -74,10 +85,19 @@ function build(
     name: null,
     status: options.status ?? GeneratedListStatus.ACTIVE,
     generatedAt: new Date('2026-09-01T10:00:00.000Z'),
-    sourceSnapshot: {
-      profileId: options.profileId === undefined ? null : options.profileId,
-      sources: [],
-    },
+    sourceSnapshot: options.snapshotWithoutPricingKey
+      ? ({
+          profileId: null,
+          sources: [],
+        } as unknown as GeneratedList['sourceSnapshot'])
+      : {
+          profileId: options.profileId === undefined ? null : options.profileId,
+          pricingProfileId:
+            options.pricingProfileId === undefined
+              ? null
+              : options.pricingProfileId,
+          sources: [],
+        },
     defaultTargetListId: options.defaultTargetListId ?? null,
     idempotencyKey: null,
   } as GeneratedList;
@@ -407,7 +427,7 @@ describe('a revoked participant is refused on their next action', () => {
 
 describe('where a search inside the basket is priced (section 5.1)', () => {
   it('answers the run’s profile, never the caller’s', async () => {
-    const harness = build({ profileId: 'sp-1' });
+    const harness = build({ profileId: 'sp-1', pricingProfileId: 'sp-1' });
     const scope = await harness.service.searchScope({
       generatedListId: BASKET,
       participantId: GUEST_PARTICIPANT,
@@ -416,10 +436,25 @@ describe('where a search inside the basket is priced (section 5.1)', () => {
     expect(scope).toEqual({ ownerUserId: OWNER, profileId: 'sp-1' });
   });
 
-  it('answers no profile when the run named its sources outright', async () => {
+  it('prices a run that named its sources outright (plan 0078)', async () => {
+    // The case that has never priced. Naming the sources leaves `profileId`
+    // null by plan 0050 section 2, and reading that field here is why every
+    // basket velista creates showed no prices at all.
+    const harness = build({ profileId: null, pricingProfileId: 'sp-1' });
+    const scope = await harness.service.searchScope({
+      generatedListId: BASKET,
+      participantId: GUEST_PARTICIPANT,
+    });
+
+    expect(scope).toEqual({ ownerUserId: OWNER, profileId: 'sp-1' });
+  });
+
+  it('answers no profile for a run composed before plan 0078', async () => {
     // Section 5.1's third row, and the fallback rather than an error: the search
-    // runs unscoped and comes back with products and no prices.
-    const harness = build({ profileId: null });
+    // runs unscoped and comes back with products and no prices. The stored
+    // `jsonb` has no pricing key, and the absence reads as null rather than
+    // leaking `undefined` into the message.
+    const harness = build({ snapshotWithoutPricingKey: true });
     const scope = await harness.service.searchScope({
       generatedListId: BASKET,
       participantId: GUEST_PARTICIPANT,

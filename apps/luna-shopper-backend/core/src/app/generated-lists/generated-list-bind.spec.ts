@@ -112,6 +112,7 @@ function build(
       status: options.status ?? GeneratedListStatus.ACTIVE,
       sourceSnapshot: {
         profileId: null,
+        pricingProfileId: null,
         sources: sources.map((listId) => ({
           listId,
           zoneId: ZONE_OF_LIST[listId],

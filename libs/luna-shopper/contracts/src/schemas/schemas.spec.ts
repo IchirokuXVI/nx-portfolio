@@ -382,6 +382,27 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
+    it('generatedList.get carries both snapshot profiles (plan 0078, section 3)', () => {
+      // The two fields answer two questions, and the run this stands for is the
+      // shape velista always sends: it named its own sources, so no profile's
+      // sources were read, and it still names the profile the basket is priced
+      // against.
+      expect(
+        validateMessageResponse('generatedList.get', {
+          id: 'gl',
+          name: null,
+          status: 'DRAFT',
+          generatedAt: '2026-01-01T00:00:00.000Z',
+          sourceSnapshot: {
+            profileId: null,
+            pricingProfileId: 'sp-1',
+            sources: [{ zoneId: 'z', listId: 'l' }],
+          },
+          lines: [],
+        }).valid
+      ).toBe(true);
+    });
+
     it('generatedList.participant.list response names an account (plan 0054, section 2)', () => {
       // The two names are separate fields, and both are required: a registered
       // participant who typed nothing on the join screen still has an account
@@ -1025,6 +1046,22 @@ describe('contract schemas', () => {
   });
 
   describe('malformed payloads fail', () => {
+    it('rejects a snapshot that omits the pricing profile (plan 0078)', () => {
+      // Required and nullable, not optional. Core reads a pre plan 0078 row's
+      // missing key as null before the view leaves it, so a payload on the wire
+      // without the key is a mapper that stopped doing that.
+      expect(
+        validateMessageResponse('generatedList.get', {
+          id: 'gl',
+          name: null,
+          status: 'DRAFT',
+          generatedAt: '2026-01-01T00:00:00.000Z',
+          sourceSnapshot: { profileId: null, sources: [] },
+          lines: [],
+        }).valid
+      ).toBe(false);
+    });
+
     it('missing a required field', () => {
       expect(
         validateMessageRequest('auth.register', { email: 'a@b.com' }).valid

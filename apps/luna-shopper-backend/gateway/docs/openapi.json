@@ -24402,6 +24402,12 @@
               "null"
             ]
           },
+          "pricingProfileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "sources": {
             "type": "array",
             "items": {
@@ -24411,6 +24417,7 @@
         },
         "required": [
           "profileId",
+          "pricingProfileId",
           "sources"
         ],
         "additionalProperties": false

@@ -71,7 +71,11 @@ function build(options: {
         name: null,
         status: seed.status,
         generatedAt: new Date(NOW - seed.ageMs),
-        sourceSnapshot: { profileId: null, sources: [] },
+        sourceSnapshot: {
+          profileId: null,
+          pricingProfileId: null,
+          sources: [],
+        },
         defaultTargetListId: null,
         idempotencyKey: null,
       }) as GeneratedList

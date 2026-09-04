@@ -3,6 +3,7 @@ import {
   GeneratedListStatus,
   RealtimeEvent,
 } from '@portfolio/luna-shopper/contracts';
+import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, type DataSource } from 'typeorm';
 import {
   GeneratedList,
@@ -73,6 +74,11 @@ function build(options: {
   overlaps?: Record<string, string>;
   profileSources?: { zoneId: string; listId: string | null }[];
   profileId?: string;
+  /**
+   * A profile id the caller does not own, refused by the load the pricing
+   * ladder makes (plan 0078, section 3, rule 1).
+   */
+  unownedProfileId?: string;
   /** An existing basket the idempotency key already produced. */
   existing?: Partial<GeneratedList> | null;
   /**
@@ -229,6 +235,18 @@ function build(options: {
       scope: 'ALL',
       sources: options.profileSources ?? [],
     }),
+    // Plan 0078's ladder, faked at the same depth as the one above it: a named
+    // profile is loaded and answered back, a profile this caller does not own is
+    // refused there rather than here, and no name at all takes the default.
+    pricingProfileId: async (_userId: string, profileId?: string | null) => {
+      if (profileId) {
+        if (profileId === options.unownedProfileId) {
+          throw new NotFoundException('no such profile');
+        }
+        return profileId;
+      }
+      return options.profileId ?? 'p-default';
+    },
   } as unknown as ProfileService;
 
   const publisher = {
@@ -439,6 +457,8 @@ describe('the generation run', () => {
 
     expect(written.lists[0].sourceSnapshot).toEqual({
       profileId: 'p-default',
+      // One profile answered both questions, so the two ids agree here.
+      pricingProfileId: 'p-default',
       sources: [
         { zoneId: ZONE_A, listId: LIST_A },
         { zoneId: ZONE_B, listId: LIST_B },
@@ -463,6 +483,9 @@ describe('the generation run', () => {
 
     expect(written.lists[0].sourceSnapshot).toEqual({
       profileId: null,
+      // Null there and set here: the run read no profile's sources, and it
+      // still belongs to somebody who shops somewhere (plan 0078, section 3).
+      pricingProfileId: 'p-default',
       sources: [{ zoneId: ZONE_A, listId: LIST_A }],
     });
   });
@@ -479,6 +502,7 @@ describe('the generation run', () => {
 
     expect(written.lists[0].sourceSnapshot).toEqual({
       profileId: null,
+      pricingProfileId: 'p-default',
       sources: [{ zoneId: ZONE_B, listId: LIST_B }],
     });
   });
@@ -494,7 +518,54 @@ describe('the generation run', () => {
 
     expect(written.lists[0].sourceSnapshot).toEqual({
       profileId: 'p-weekly',
+      pricingProfileId: 'p-weekly',
       sources: [{ zoneId: ZONE_A, listId: LIST_A }],
+    });
+  });
+
+  describe('what the basket is priced against (plan 0078, section 3)', () => {
+    it('records the named profile for pricing while the sources stay the caller’s own', async () => {
+      // The shape every run velista creates takes: the sheet always sends
+      // `sources`, and sends `profileId` beside them whenever one is chosen.
+      const { service, written } = build({
+        candidates: [
+          { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 },
+        ],
+      });
+
+      await service.create({
+        userId: OWNER,
+        sources: [{ zoneId: ZONE_A }],
+        profileId: 'p-weekly',
+      });
+
+      expect(written.lists[0].sourceSnapshot).toEqual({
+        // Plan 0050 section 2's order is untouched: the profile's sources were
+        // never read, so nothing claims they were.
+        profileId: null,
+        pricingProfileId: 'p-weekly',
+        sources: [{ zoneId: ZONE_A, listId: LIST_A }],
+      });
+    });
+
+    it('refuses a profile the caller does not own before writing anything', async () => {
+      const { service, written } = build({
+        candidates: [
+          { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 },
+        ],
+        unownedProfileId: 'p-stranger',
+      });
+
+      await expect(
+        service.create({
+          userId: OWNER,
+          sources: [{ zoneId: ZONE_A }],
+          profileId: 'p-stranger',
+        })
+      ).rejects.toBeInstanceOf(NotFoundException);
+      // A stranger's profile can never price a run, and a refused run leaves no
+      // basket behind to price.
+      expect(written.lists).toEqual([]);
     });
   });
 
@@ -526,7 +597,11 @@ describe('the generation run', () => {
         name: null,
         status: GeneratedListStatus.DRAFT,
         generatedAt: new Date('2026-09-01T10:00:00.000Z'),
-        sourceSnapshot: { profileId: null, sources: [] },
+        sourceSnapshot: {
+          profileId: null,
+          pricingProfileId: null,
+          sources: [],
+        },
       },
       candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
     });
@@ -553,7 +628,11 @@ describe('the generation run', () => {
         name: null,
         status: GeneratedListStatus.DRAFT,
         generatedAt: new Date('2026-09-01T10:00:00.000Z'),
-        sourceSnapshot: { profileId: null, sources: [] },
+        sourceSnapshot: {
+          profileId: null,
+          pricingProfileId: null,
+          sources: [],
+        },
       },
       candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
     });
@@ -616,6 +695,11 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
         status: GeneratedListStatus.ACTIVE,
         name: null,
         generatedAt: new Date('2026-03-01T00:00:00.000Z'),
+        sourceSnapshot: {
+          profileId: null,
+          pricingProfileId: null,
+          sources: [],
+        },
       },
       claiming: CLAIMING,
     });
@@ -639,6 +723,11 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
         status: GeneratedListStatus.ACTIVE,
         name: null,
         generatedAt: new Date('2026-03-01T00:00:00.000Z'),
+        sourceSnapshot: {
+          profileId: null,
+          pricingProfileId: null,
+          sources: [],
+        },
       },
       claiming: CLAIMING,
     });

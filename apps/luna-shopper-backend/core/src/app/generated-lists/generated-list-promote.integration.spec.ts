@@ -190,7 +190,11 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
         name: 'Saturday',
         status: GeneratedListStatus.ACTIVE,
         generatedAt: new Date(),
-        sourceSnapshot: { profileId: null, sources: [] },
+        sourceSnapshot: {
+          profileId: null,
+          pricingProfileId: null,
+          sources: [],
+        },
         defaultTargetListId: null,
         idempotencyKey: null,
       })

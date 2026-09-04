@@ -150,6 +150,26 @@ export interface GeneratedListLineView {
 export interface GeneratedListSourceSnapshot {
   /** The profile whose sources the run used, or null when the request named them. */
   profileId: string | null;
+  /**
+   * The profile the basket is priced against: the one the request named, else
+   * the owner's default at the moment the run was composed (plan 0078, section
+   * 3).
+   *
+   * Separate from {@link profileId} because the two record different facts.
+   * That one names the profile whose **sources** the run read, and a request
+   * that names its own sources reads none, so it stays null. This one names who
+   * the run belongs to for pricing, and a run composed by hand still belongs to
+   * a person who shops somewhere.
+   *
+   * The **owner's** profile, captured at composition, never the reader's. A
+   * participant who opens the basket a week later, and a guest with no account
+   * at all, both price it by the profile the run was composed against.
+   *
+   * Null only on a run composed before plan 0078, which stays unpriced. There
+   * is no backfill: the owner's default today is a guess about what an old run
+   * was composed against, and this snapshot is a record rather than a guess.
+   */
+  pricingProfileId: string | null;
   /** Every (zone, list) pair the run actually read, after access filtering. */
   sources: { zoneId: string; listId: string }[];
 }
