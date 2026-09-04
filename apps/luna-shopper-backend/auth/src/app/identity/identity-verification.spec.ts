@@ -162,6 +162,44 @@ describe('IdentityService.resendVerification (section 4)', () => {
     );
   });
 
+  /**
+   * The production defect this locks down, found 2026-09-05 on both clusters.
+   *
+   * Every send site already caught a rejection, so a mail server that refused
+   * could not fail a registration. A **blocked port does not refuse**: it hangs.
+   * Both VPSs block outbound 25, 465 and 587, so every send sat on a connection
+   * that never opened, the awaited call never returned, and the ingress answered
+   * 504 for an account that had already been written.
+   *
+   * A promise that never settles is the whole of that condition, and it is the
+   * one thing a rejecting stand in cannot express.
+   */
+  it('answers even when the mail server never responds', async () => {
+    const { service, stores, mail } = build([{ ...unconfirmed }]);
+    mail.sendVerificationEmail.mockReturnValue(new Promise<void>(() => void 0));
+
+    const result = await service.resendVerification({ userId: 'u1' });
+
+    expect(result.retryAfterSeconds).toBe(60);
+    // The grant is written and the message was handed over. What did not happen
+    // is waiting for it.
+    expect(stores.verifications).toHaveLength(1);
+    expect(mail.sendVerificationEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers even when the mail server never responds', async () => {
+    const { service, mail } = build([]);
+    mail.sendVerificationEmail.mockReturnValue(new Promise<void>(() => void 0));
+
+    const tokens = await service.register({
+      email: 'new@b.com',
+      password: 'a-long-enough-password',
+    });
+
+    expect(tokens.accessToken).toBeDefined();
+    expect(mail.sendVerificationEmail).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses an account with no email, because no mail is coming', async () => {
     const { service, mail } = build([
       { ...unconfirmed, email: null, kind: UserKind.TEMPORARY },

@@ -109,7 +109,10 @@ lunaShopperBackend:
     # (smtpHost is empty), so nothing here is live yet.
     mailFrom: Velista <no-reply@velista.app>
     smtpHost: in-v3.mailjet.com
-    smtpPort: 587
+    # 2525 rather than 587, for the reason spelled out beside the staging pair:
+    # this machine's provider blocks 25, 465 and 587 outbound, and Mailjet
+    # answers on 2525. Both clusters were measured, and both are blocked.
+    smtpPort: 2525
     smtpUser: 497721f71489adfcbc3078d2b292aad8
 
     # The links inside those mails, on the other hand, point at the app, and the

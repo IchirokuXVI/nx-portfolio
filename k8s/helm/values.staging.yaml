@@ -77,7 +77,14 @@ lunaShopperBackend:
     # the reasons spelled out in values.production.yaml.
     mailFrom: Velista (staging) <no-reply@velista.app>
     smtpHost: in-v3.mailjet.com
-    smtpPort: 587
+    # **2525, not 587, because the VPS blocks the SMTP ports.** Measured from
+    # inside the auth pod on both clusters: 25, 465 and 587 all time out, and
+    # 2525 answers `220 in.mailjet.com ESMTP Mailjet`. That is the anti spam
+    # block hosting providers apply by default, and 2525 is the alternative
+    # Mailjet publishes for hosts that have it. On 587 no mail ever left either
+    # cluster: the connection hung until the ingress gave up at 15 seconds, so
+    # registration wrote the account and still answered 504.
+    smtpPort: 2525
     smtpUser: 497721f71489adfcbc3078d2b292aad8
     # `auth/verify`, and with no locale segment, for the reasons spelled out
     # beside the production pair. `mailResetBaseUrl` is still a placeholder for a
