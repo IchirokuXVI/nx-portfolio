@@ -2026,6 +2026,7 @@ export type GeneratedListGeneratedListSkippedLineView = {
  */
 export type GeneratedListGeneratedListSourceSnapshot = {
   profileId: string | null;
+  pricingProfileId: string | null;
   sources: GeneratedListGeneratedListSourceSnapshotEntry[];
 };
 

@@ -80,6 +80,7 @@ function basketWith(status: GeneratedListStatus): GeneratedList {
     generatedAt: new Date('2026-08-28T10:00:00.000Z'),
     sourceSnapshot: {
       profileId: null,
+      pricingProfileId: null,
       sources: [{ zoneId: ZONE, listIds: [LIST] }],
     },
     defaultTargetListId: null,

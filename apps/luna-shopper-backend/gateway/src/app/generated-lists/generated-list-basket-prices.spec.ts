@@ -149,7 +149,14 @@ interface World {
   readonly items?: ItemView[] | 'throws';
   /** What the resolver answers with. */
   readonly resolves?: CatalogScopeView;
-  /** The run's profile, null for a run scoped by hand. */
+  /**
+   * The profile core answers with, null for a run composed before plan 0078.
+   *
+   * A run scoped by hand used to answer null here, which is why no basket
+   * velista created ever showed a price. Since plan 0078 core answers the
+   * snapshot's `pricingProfileId`, so only a run older than that plan is
+   * unpriced.
+   */
   readonly profileId?: string | null;
   /** What the run's profile refuses (plan 0064), or a throw. */
   readonly refuses?: ShopperSelection | 'throws';
@@ -282,7 +289,7 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
     expect(result.scopes).toEqual([]);
   });
 
-  it('answers the basket unpriced when the run names no profile', async () => {
+  it('answers the basket unpriced for a run composed before plan 0078', async () => {
     const { controller, describe, lookups } = build({ profileId: null });
 
     const result = await controller.getBasket(participant(), BASKET_ID);
@@ -425,7 +432,7 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
     expect(result.scopes[0].locations).toHaveLength(2);
   });
 
-  it('asks for no refusals when the run names no profile', async () => {
+  it('asks for no refusals for a run composed before plan 0078', async () => {
     const { controller, forShops } = build({
       seesZoneData: true,
       profileId: null,

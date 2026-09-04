@@ -162,7 +162,11 @@ describeIntegration('a run history row (real Postgres)', () => {
         name: 'Saturday',
         status: GeneratedListStatus.ACTIVE,
         generatedAt: new Date('2026-02-01T10:00:00Z'),
-        sourceSnapshot: { profileId: null, sources: [] },
+        sourceSnapshot: {
+          profileId: null,
+          pricingProfileId: null,
+          sources: [],
+        },
         defaultTargetListId: null,
         idempotencyKey: null,
       })

@@ -187,6 +187,7 @@ export class GeneratedListService {
 
     const snapshot: GeneratedListSourceSnapshot = {
       profileId: resolved.profileId,
+      pricingProfileId: resolved.pricingProfileId,
       sources: resolved.sources.map((source) => ({
         zoneId: source.zoneId,
         listId: source.listId,
@@ -223,9 +224,19 @@ export class GeneratedListService {
    * a zone somebody was removed from yesterday contributes nothing rather than
    * failing the run. A list that disappears between two runs simply stops
    * contributing, exactly as section 2 says.
+   *
+   * **Both branches also answer a pricing profile** (plan 0078, section 3), and
+   * it is a second answer rather than the same one because the two questions
+   * differ. `profileId` says whose sources were read, so the explicit branch
+   * answers null and section 2's order is untouched. `pricingProfileId` says
+   * who the run belongs to, and a run that named its own sources still belongs
+   * to somebody who shops somewhere. Resolved here, once, rather than on every
+   * search inside the finished basket: that is the open question at plan 0055
+   * line 217, answered yes by moving the read off the hot path.
    */
   private async resolveSources(req: CreateGeneratedListRequest): Promise<{
     profileId: string | null;
+    pricingProfileId: string;
     sources: WritableListRow[];
   }> {
     const writable = await this.lists.query<WritableListRow[]>(
@@ -235,7 +246,18 @@ export class GeneratedListService {
 
     if (req.sources && req.sources.length > 0) {
       this.checkSources(req.sources);
-      return { profileId: null, sources: narrow(writable, req.sources) };
+      // A named profile is still loaded, and still refused if it is not this
+      // caller's, so the run fails before anything is written rather than
+      // pricing itself against a stranger's shops.
+      const pricingProfileId = await this.profiles.pricingProfileId(
+        req.userId,
+        req.profileId
+      );
+      return {
+        profileId: null,
+        pricingProfileId,
+        sources: narrow(writable, req.sources),
+      };
     }
 
     const profile = await this.profiles.resolveGenerationSources({
@@ -248,7 +270,12 @@ export class GeneratedListService {
       profile.sources.length === 0
         ? writable
         : narrow(writable, profile.sources);
-    return { profileId: profile.profileId, sources };
+    // One profile answered both questions here, so the two ids agree.
+    return {
+      profileId: profile.profileId,
+      pricingProfileId: profile.profileId,
+      sources,
+    };
   }
 
   private checkSources(sources: GeneratedListSourceInput[]): void {
