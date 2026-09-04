@@ -20,7 +20,11 @@ import { QueryFailedError, Repository } from 'typeorm';
 import { ProductGroup } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
-import { toProductGroupView } from './catalog.mappers';
+import {
+  displayName,
+  displayNameSql,
+  toProductGroupView,
+} from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import {
   parseSearchTerm,
@@ -153,11 +157,11 @@ export class ProductGroupService {
     if (!term) {
       const qb = this.groups
         .createQueryBuilder('g')
-        .orderBy(`g.name ->> 'en'`, 'ASC')
+        .orderBy(displayNameSql('g'), 'ASC')
         .addOrderBy('g.id', 'ASC')
         .take(limit + 1);
       if (cursor) {
-        qb.andWhere(`(g.name ->> 'en', g.id) > (:cv, :cid)`, {
+        qb.andWhere(`(${displayNameSql('g')}, g.id) > (:cv, :cid)`, {
           cv: cursor.value,
           cid: cursor.id,
         });
@@ -170,7 +174,7 @@ export class ProductGroupService {
         items: page.map(toProductGroupView),
         nextCursor:
           hasMore && last
-            ? encodeCursor({ value: last.name.en, id: last.id })
+            ? encodeCursor({ value: displayName(last.name), id: last.id })
             : null,
       };
     }

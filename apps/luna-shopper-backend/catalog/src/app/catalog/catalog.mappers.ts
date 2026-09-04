@@ -1,6 +1,7 @@
 import type {
   ItemOfferView,
   ItemView,
+  LocalizedText,
   PriceScopeView,
   ProductGroupView,
   SupermarketItemView,
@@ -17,6 +18,26 @@ import type {
   SupermarketLocation,
   SupermarketLocationItem,
 } from '../entities';
+
+/**
+ * The sort key for a localized name, in SQL: English, else Spanish, never null
+ * (plan 0079, section 3).
+ *
+ * The three admin listings that page by name use it in the `ORDER BY`, in the
+ * keyset seek and, through {@link displayName}, in the cursor value, and the
+ * three must agree. A row comparison with a NULL member yields NULL and a NULL
+ * predicate drops the row, so seeking on `name ->> 'en'` alone made every
+ * Spanish only product appear on no page at all, with nothing to say so. Not
+ * indexed, and not worth indexing: these are admin listings of a few thousand
+ * rows.
+ */
+export const displayNameSql = (alias: string): string =>
+  `coalesce(${alias}.name ->> 'en', ${alias}.name ->> 'es', '')`;
+
+/** The TypeScript half of {@link displayNameSql}: the same rule, for the cursor. */
+export function displayName(name: LocalizedText): string {
+  return name.en ?? name.es ?? '';
+}
 
 /**
  * Postgres `numeric` comes back as a **string** through node-postgres, so every

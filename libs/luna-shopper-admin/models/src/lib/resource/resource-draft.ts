@@ -2,6 +2,7 @@ import {
   emptyLocalizedText,
   fromLocalizedLines,
   missingLocales,
+  presentLocalizedText,
   toLocalizedLines,
   toLocalizedText,
 } from './localized-text';
@@ -278,14 +279,15 @@ function validateField<T extends ResourceRow>(
   const messages: FieldMessage[] = [];
 
   if (field.kind === 'localized-text') {
-    const missing = missingLocales(value, field.locales);
-    if (field.required === true) {
-      // One message per missing locale, rather than one for the field. The
-      // control is several inputs, and "required" under a Spanish box the
-      // operator has not reached says less than naming the language does.
-      for (const locale of missing) {
-        messages.push(fieldMessage('resource.error.missingLocale', { locale }));
-      }
+    if (
+      field.required === true &&
+      missingLocales(value, field.locales).length === field.locales.length
+    ) {
+      // Required means "in at least one language" (plan 0079): a name a chain
+      // prints in Spanish only is a complete name, and the row it lands in
+      // shows the fallback and marks the gap. Only a name in no language at
+      // all is refused, and it is refused once, for the field.
+      messages.push(fieldMessage('resource.error.missingAnyLocale'));
     }
 
     if (
@@ -413,9 +415,12 @@ function toWireValue<T extends ResourceRow>(
   }
 
   if (field.kind === 'localized-text') {
+    // A blank box is a language the name does not have, and the wire spells
+    // that by leaving the key out (plan 0079): `''` and `null` are both
+    // refused there.
     return field.list === true
       ? fromLocalizedLines(value, field.locales)
-      : toLocalizedText(value);
+      : presentLocalizedText(value);
   }
 
   if (field.kind === 'json') {

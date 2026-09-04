@@ -12,8 +12,8 @@ import {
   type SourceCatalogEntryPage,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  MercadonaClient,
   mapSizeFormat,
+  MercadonaClient,
   resolveCategory,
 } from '@portfolio/luna-shopper/mercadona';
 import {
@@ -112,12 +112,12 @@ export class SourceEntryService {
    * **The English name is fetched here**, which is the whole point of section
    * 6.2's `es`-only discovery: paying for `en` during the walk would double a
    * 4,232 request run to 8,464, and it is needed only at this moment, for this
-   * one product. If Mercadona has no English string it falls back to Spanish, so
-   * an English speaking user sees Spanish; refusing to import would be worse.
+   * one product. If Mercadona has no English string the item is created with
+   * its Spanish name alone (plan 0079): a reader in English sees the Spanish
+   * name through the fallback, and the admin can list what still wants
+   * translating. Refusing to import would be worse.
    */
-  async createItem(
-    req: CreateItemFromSourceEntryRequest
-  ): Promise<ItemView> {
+  async createItem(req: CreateItemFromSourceEntryRequest): Promise<ItemView> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
 
@@ -137,10 +137,16 @@ export class SourceEntryService {
     const unitSize = entry.unitSize === null ? null : Number(entry.unitSize);
 
     const item = await this.catalog.createItem({
-      name: {
-        es: entry.name,
-        en: englishName ?? entry.name,
-      },
+      // Plan 0079 reverses plan 0038 section 11: a product Mercadona does not
+      // translate gets no `en` key rather than a copy of the Spanish string. A
+      // copy is indistinguishable from a translation in the row, so nothing
+      // could list the products still waiting for one; an absent key is a
+      // visible gap the admin lists, and a reader sees the Spanish name through
+      // the fallback, which is what the copy gave them anyway.
+      name:
+        englishName === null
+          ? { es: entry.name }
+          : { es: entry.name, en: englishName },
       brand: entry.brand,
       ean: entry.ean,
       unitSize,
@@ -150,9 +156,7 @@ export class SourceEntryService {
       sku: null,
       category:
         (req.category as ItemCategory | undefined) ??
-        resolveCategory(
-          (entry.categoryPath ?? []).map((name) => ({ name }))
-        ),
+        resolveCategory((entry.categoryPath ?? []).map((name) => ({ name }))),
       defaultUnit: mapSizeFormat(entry.sizeFormat) ?? UnitOfMeasure.UNIT,
     });
 
