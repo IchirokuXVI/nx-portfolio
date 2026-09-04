@@ -108,10 +108,20 @@ export const SUPERMARKETS = defineResource<Supermarket>({
     { value: 'updated', label: 'catalog.supermarkets.sort.updated' },
   ],
 
-  // No filters. `GET /v1/admin/catalog/supermarkets` takes a cursor, a limit and
-  // an order and nothing else, and a filter this app applied to the page it
-  // happened to have would hide rows without saying so. Chains are a short list
-  // anyway. `0005` adds one here if the route grows a query parameter.
+  // The route now takes the query parameter this waited for, so the filter the
+  // earlier comment here deferred exists. It matters most where it is least
+  // visible: a reference field pointing at chains is a picker over one page of
+  // twenty, and a descriptor with no search filter has nowhere to put the term,
+  // so it dropped it and asked for that page. The picker answered every search
+  // with the same twenty chains, and a chain past the twentieth could not be
+  // reached by typing its name at all.
+  filters: [
+    {
+      kind: 'search',
+      param: 'query',
+      label: 'catalog.supermarkets.filter.query',
+    },
+  ],
 
   actions: { create: true, edit: true, delete: true },
 

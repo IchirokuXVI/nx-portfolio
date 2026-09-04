@@ -158,7 +158,9 @@
       "externalBrandKeyHelp": "The chain's stable identity across discovery runs. It is what splits Carrefour from Carrefour Express, so change it only when that is what you mean.",
       "defaultPriceScopeId": "Default price scope",
       "defaultPriceScopeIdHelp": "Set by the catalog service, not from here.",
-      "search": "Name contains",
+      "filter": {
+        "query": "Name or Wikidata identifier contains"
+      },
       "sort": {
         "name": "By name",
         "created": "Newest first",
