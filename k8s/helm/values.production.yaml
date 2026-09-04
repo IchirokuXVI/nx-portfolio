@@ -165,7 +165,7 @@ lunaShopperBackend:
   # happens. Its places are regenerable and its import decisions are not: see the
   # note beside `backupSchedule` in values.yaml.
   harvester:
-    enabled: false
+    enabled: true
 
   # The reference catalog, off (plan 0067), and this is a deliberate difference
   # from staging rather than an oversight.
@@ -182,7 +182,7 @@ lunaShopperBackend:
   # assortment is going too, restore the dump BEFORE the seed, never after —
   # `uq_items_ean` will refuse the second writer.
   referenceSeed:
-    enabled: true
+    enabled: false
 
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
