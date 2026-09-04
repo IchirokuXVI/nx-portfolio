@@ -69,6 +69,58 @@ export function emptyLocalizedText(locales: readonly string[]): LocalizedText {
   return Object.fromEntries(locales.map((locale) => [locale, '']));
 }
 
+/**
+ * A `jsonb` column holding one **list** of strings per locale, as the text the
+ * form edits: one entry per line.
+ *
+ * `ProductGroup.synonyms` is the one column shaped this way. A line break is
+ * the separator because it is the one character a synonym cannot contain.
+ */
+export function toLocalizedLines(
+  value: unknown,
+  locales: readonly string[]
+): LocalizedText {
+  const source =
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+
+  const text: Record<string, string> = {};
+  for (const locale of locales) {
+    const entries = source[locale];
+    text[locale] = Array.isArray(entries)
+      ? entries.filter((entry) => typeof entry === 'string').join('\n')
+      : '';
+  }
+
+  return text;
+}
+
+/**
+ * The lines an operator typed, back as one array of entries per locale.
+ *
+ * Blank lines are dropped and entries are trimmed, so a trailing newline is not
+ * a synonym that matches nothing. Every locale is present even when empty,
+ * because the column is one object and a partial one would erase the other
+ * language.
+ */
+export function fromLocalizedLines(
+  value: unknown,
+  locales: readonly string[]
+): Readonly<Record<string, readonly string[]>> {
+  const text = toLocalizedText(value);
+
+  return Object.fromEntries(
+    locales.map((locale) => [
+      locale,
+      (text[locale] ?? '')
+        .split('\n')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== ''),
+    ])
+  );
+}
+
 /** The locales this value is missing, out of the ones it is required to have. */
 export function missingLocales(
   value: unknown,

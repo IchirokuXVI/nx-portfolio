@@ -67,7 +67,7 @@ export class ResourceFormStore<T extends ResourceRow> {
 
   /** Everything this app's own rules object to, by field. */
   private readonly _problems = computed(() =>
-    validateDraft(this._descriptor, this._draft())
+    validateDraft(this._descriptor, this._draft(), this.mode)
   );
 
   /** Whether the draft satisfies this app's rules. */
@@ -194,7 +194,7 @@ export class ResourceFormStore<T extends ResourceRow> {
   }
 
   private _reset(row: T | null): void {
-    const draft = draftFor(this._descriptor, row);
+    const draft = draftFor(this._descriptor, row, this.mode);
     this._draft.set(draft);
     this._original.set(draft);
     this._row.set(row);

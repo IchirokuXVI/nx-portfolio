@@ -180,3 +180,19 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     ? (value as Record<string, unknown>)
     : null;
 }
+
+/**
+ * A row that is not there, shaped the way the gateway's own answer would be.
+ *
+ * Two implementations raise it without a server having said anything: the
+ * in-memory table when it holds no such row, and the HTTP one when a resource
+ * with no read route has walked its collection without finding it. Both are the
+ * same fact to the screen above, so both are the same error.
+ */
+export function notFoundError(): GatewayError {
+  return new GatewayError({
+    code: 'not_found',
+    status: 404,
+    correlationId: '',
+  });
+}

@@ -51,6 +51,7 @@ import {
 import { NatsClient } from '../messaging/nats-client';
 import {
   CatalogListQueryDto,
+  ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
   LookupItemsDto,
   PriceScopedQueryDto,
@@ -720,7 +721,6 @@ export class CatalogSupermarketItemsController {
       priceScopeId,
     });
   }
-
 }
 
 /**
@@ -739,12 +739,11 @@ export class CatalogPriceScopesController {
   @ApiContractResponse(PRICE_SCOPE_PATTERNS.list)
   list(
     @AuthUser() user: CurrentUser,
-    @Query() query: CatalogListQueryDto,
-    @Query('supermarketId') supermarketId?: string
+    @Query() query: ListPriceScopesQueryDto
   ): Promise<PriceScopePage> {
     return this.nats.send<PriceScopePage>(PRICE_SCOPE_PATTERNS.list, {
       userId: user.userId,
-      supermarketId,
+      supermarketId: query.supermarketId,
       cursor: query.cursor,
       limit: query.limit,
     });

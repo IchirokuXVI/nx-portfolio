@@ -36,6 +36,7 @@ import { ReferencePicker } from './reference-picker';
           (valueChange)="valueChange.emit($event)"
           [controlId]="controlId()"
           [disabled]="disabled()"
+          [list]="isList()"
           [locales]="localesOf()"
           [maxLength]="maxLengthOf()"
           [value]="asRecord()"
@@ -43,13 +44,31 @@ import { ReferencePicker } from './reference-picker';
       }
 
       @case ('boolean') {
-        <input
-          (change)="onCheckbox($event)"
-          [checked]="value() === true"
-          [disabled]="disabled()"
-          [id]="controlId()"
-          type="checkbox"
-        />
+        @if (field().nullable === true) {
+          <!-- Three answers, because the column has three. A per shop
+               availability override is yes, no, or "nobody has checked this
+               shop, use what the scope says", and the third is the ordinary
+               one. A checkbox can only say two of those, so it would submit
+               "not available here" for every row an operator merely opened. -->
+          <select
+            (change)="onTriState($event)"
+            [disabled]="disabled()"
+            [id]="controlId()"
+            [value]="triState()"
+          >
+            <option value="">{{ 'resource.field.unset' | rokuT }}</option>
+            <option value="true">{{ 'resource.value.yes' | rokuT }}</option>
+            <option value="false">{{ 'resource.value.no' | rokuT }}</option>
+          </select>
+        } @else {
+          <input
+            (change)="onCheckbox($event)"
+            [checked]="value() === true"
+            [disabled]="disabled()"
+            [id]="controlId()"
+            type="checkbox"
+          />
+        }
       }
 
       @case ('enum') {
@@ -178,6 +197,12 @@ export class FieldControl {
     return field.kind === 'localized-text' ? field.locales : [];
   }
 
+  /** Whether each locale holds a list of entries rather than one string. */
+  isList(): boolean {
+    const field = this.field();
+    return field.kind === 'localized-text' && field.list === true;
+  }
+
   optionsOf() {
     const field = this.field();
     return field.kind === 'enum' ? field.options : [];
@@ -228,6 +253,24 @@ export class FieldControl {
 
   onCheckbox(event: Event): void {
     this.valueChange.emit((event.target as HTMLInputElement).checked);
+  }
+
+  /** Which of the three answers a nullable boolean is showing. */
+  triState(): string {
+    const value = this.value();
+    return typeof value === 'boolean' ? String(value) : '';
+  }
+
+  /**
+   * One of three answers, emitted as what it means rather than as its label.
+   *
+   * The empty option is `null` and not `''`, because null is the column's own
+   * answer: it defers to the scope. An empty string would be a fourth thing the
+   * store would then have to interpret.
+   */
+  onTriState(event: Event): void {
+    const chosen = (event.target as HTMLSelectElement).value;
+    this.valueChange.emit(chosen === '' ? null : chosen === 'true');
   }
 }
 

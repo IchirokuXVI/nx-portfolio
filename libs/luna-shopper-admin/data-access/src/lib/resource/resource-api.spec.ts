@@ -151,3 +151,233 @@ describe('ResourceApiGateways', () => {
     });
   });
 });
+
+/**
+ * The four resources whose routes are not ordinary CRUD (plan 0005, and backend
+ * plan 0073).
+ *
+ * Every mistake available here is silent in a way the screens cannot show. A
+ * collection built at the wrong URL answers 404, a value sent both in the path
+ * and in the body answers 400 because the validation pipe refuses a property no
+ * DTO declares, and a `PUT` that forgot its key writes a row nobody asked for.
+ * So this asserts the URL, the method and the body, which is the whole contract
+ * these options exist to express.
+ */
+describe('ResourceApiGateways, on the routes that are not plain CRUD', () => {
+  let gateways: ResourceApiGateways;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: ADMIN_API_CONFIG, useValue: { gatewayBaseUrl: GATEWAY } },
+        ApiUrl,
+        ResourceApiGateways,
+      ],
+    });
+
+    gateways = TestBed.inject(ResourceApiGateways);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  /** Shops: listed and created under a chain, changed at their own path. */
+  const shops = () =>
+    gateways.for({
+      path: '/v1/admin/catalog/locations',
+      collectionPath: (values) => {
+        const chain = values['supermarketId'];
+        return typeof chain === 'string' && chain !== ''
+          ? `/v1/admin/catalog/supermarkets/${chain}/locations`
+          : null;
+      },
+      pathParams: ['supermarketId'],
+    });
+
+  /** Prices: one `PUT` for both create and change, keyed on a pair. */
+  const prices = () =>
+    gateways.for({
+      path: '/v2/admin/catalog/supermarket-items',
+      upsert: true,
+      key: ['itemId', 'priceScopeId'],
+      keyFilters: ['itemId', 'priceScopeId'],
+      readVia: 'collection' as const,
+    });
+
+  it('lists a chain’s shops under the chain', async () => {
+    const listing = shops().list({ filters: { supermarketId: 'sm1' } });
+    const request = http.expectOne(
+      (candidate) =>
+        candidate.url ===
+        `${GATEWAY}/v1/admin/catalog/supermarkets/sm1/locations`
+    );
+
+    // In the path, so not also in the query string. `AdminListLocationsQueryDto`
+    // does not declare it, and the pipe refuses what no DTO declares.
+    expect(request.request.params.get('supermarketId')).toBeNull();
+
+    request.flush({ items: [], nextCursor: null });
+    await listing;
+  });
+
+  /**
+   * No request at all, rather than one to a URL with a hole in it. The screen
+   * says which filter it is waiting for.
+   */
+  it('asks for nothing while the chain is unnamed', async () => {
+    await expect(shops().list({})).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
+  });
+
+  it('creates a shop under its chain and leaves the chain out of the body', async () => {
+    const created = shops().create({ supermarketId: 'sm1', city: 'Córdoba' });
+    const request = http.expectOne(
+      `${GATEWAY}/v1/admin/catalog/supermarkets/sm1/locations`
+    );
+
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ city: 'Córdoba' });
+
+    request.flush({ id: 'loc1' });
+    await created;
+  });
+
+  it('changes one shop at its own path', async () => {
+    const updated = shops().update('loc1', { city: 'Sevilla' });
+    const request = http.expectOne(
+      `${GATEWAY}/v1/admin/catalog/locations/loc1`
+    );
+
+    expect(request.request.method).toBe('PATCH');
+    request.flush({ id: 'loc1' });
+    await updated;
+  });
+
+  /**
+   * A price has no route that reads it by its own uuid, so a read is a filtered
+   * listing: one request, and an exact answer, because the key doubles as the
+   * collection's filters.
+   */
+  it('reads a price by the pair it is keyed on', async () => {
+    const read = prices().read('it1~ps1');
+    const request = http.expectOne(
+      (candidate) =>
+        candidate.url === `${GATEWAY}/v2/admin/catalog/supermarket-items`
+    );
+
+    expect(request.request.method).toBe('GET');
+    expect(request.request.params.get('itemId')).toBe('it1');
+    expect(request.request.params.get('priceScopeId')).toBe('ps1');
+
+    request.flush({
+      items: [{ id: 'si1', itemId: 'it1', priceScopeId: 'ps1', price: 1 }],
+      nextCursor: null,
+    });
+
+    await expect(read).resolves.toMatchObject({ id: 'si1' });
+  });
+
+  /**
+   * The key goes back into the body, because an upsert is addressed by what is
+   * in it. The form leaves those columns out on purpose: they are what the row
+   * is, and a `PUT` carrying a different pair would write a second price rather
+   * than change this one.
+   */
+  it('puts a change to a price back with its key', async () => {
+    const updated = prices().update('it1~ps1', { price: 2 });
+    const request = http.expectOne(
+      `${GATEWAY}/v2/admin/catalog/supermarket-items`
+    );
+
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({
+      itemId: 'it1',
+      priceScopeId: 'ps1',
+      price: 2,
+    });
+
+    request.flush({ id: 'si1' });
+    await updated;
+  });
+
+  it('creates a price with the same PUT', async () => {
+    const created = prices().create({
+      itemId: 'it1',
+      priceScopeId: 'ps1',
+      price: 2,
+    });
+    const request = http.expectOne(
+      `${GATEWAY}/v2/admin/catalog/supermarket-items`
+    );
+
+    expect(request.request.method).toBe('PUT');
+    request.flush({ id: 'si1' });
+    await created;
+  });
+
+  /**
+   * A delete quotes the row's own uuid, which is the one thing that uuid is good
+   * for. So a keyed resource is read first and deleted by what came back.
+   */
+  it('deletes a price by the uuid the listing gave it', async () => {
+    const removed = prices().remove('it1~ps1');
+
+    http
+      .expectOne(
+        (candidate) =>
+          candidate.url === `${GATEWAY}/v2/admin/catalog/supermarket-items` &&
+          candidate.method === 'GET'
+      )
+      .flush({
+        items: [{ id: 'si1', itemId: 'it1', priceScopeId: 'ps1' }],
+        nextCursor: null,
+      });
+
+    // A macrotask, so the read resolves before the delete is expected.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const del = http.expectOne(
+      `${GATEWAY}/v2/admin/catalog/supermarket-items/si1`
+    );
+    expect(del.request.method).toBe('DELETE');
+    del.flush({ id: 'si1' });
+
+    await removed;
+  });
+
+  /**
+   * The location item list takes the shop and not the product, so the read asks
+   * for the shop's rows and finds the product among them. Sending `itemId` too
+   * would be refused rather than ignored.
+   */
+  it('narrows a read to the key parts the route accepts', async () => {
+    const shopRows = gateways.for({
+      path: '/v1/admin/catalog/location-items',
+      upsert: true,
+      key: ['itemId', 'supermarketLocationId'],
+      keyFilters: ['supermarketLocationId'],
+      readVia: 'collection' as const,
+    });
+
+    const read = shopRows.read('it1~loc1');
+    const request = http.expectOne(
+      (candidate) =>
+        candidate.url === `${GATEWAY}/v1/admin/catalog/location-items`
+    );
+
+    expect(request.request.params.get('supermarketLocationId')).toBe('loc1');
+    expect(request.request.params.get('itemId')).toBeNull();
+
+    request.flush({
+      items: [{ id: 'sli1', itemId: 'it1', supermarketLocationId: 'loc1' }],
+      nextCursor: null,
+    });
+
+    await expect(read).resolves.toMatchObject({ id: 'sli1' });
+  });
+});

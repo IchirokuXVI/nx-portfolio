@@ -66,12 +66,38 @@ export class ResourceListStore<T extends ResourceRow> {
     Object.values(this._filters()).some((value) => value !== '')
   );
 
+  /**
+   * The filters this list cannot be read without, that are still unset.
+   *
+   * A chain's shops are read at `/supermarkets/{id}/locations` and what is in
+   * one shop is read with a shop named, so before either is chosen there is no
+   * collection to ask for. Empty for every resource that lists from nothing,
+   * which is most of them.
+   */
+  readonly missingFilters = computed(() => {
+    const filters = this._filters();
+    return (this._descriptor.requires ?? []).filter(
+      (param) => (filters[param] ?? '') === ''
+    );
+  });
+
+  /**
+   * Whether the list is waiting to be told what to read.
+   *
+   * A **third** state beside empty and no match, and it needs to be: "there are
+   * no shops" and "you have not said whose shops" are different sentences, and
+   * only one of them is true. Drawing the first would be a claim nothing
+   * checked.
+   */
+  readonly blocked = computed(() => this.missingFilters().length > 0);
+
   /** Nothing is here, and nothing was excluded. */
   readonly empty = computed(
     () =>
       this._status() === 'ready' &&
       this._rows().length === 0 &&
-      !this.narrowed()
+      !this.narrowed() &&
+      !this.blocked()
   );
 
   /**
@@ -83,16 +109,26 @@ export class ResourceListStore<T extends ResourceRow> {
    */
   readonly noMatch = computed(
     () =>
-      this._status() === 'ready' && this._rows().length === 0 && this.narrowed()
+      this._status() === 'ready' &&
+      this._rows().length === 0 &&
+      this.narrowed() &&
+      !this.blocked()
   );
 
   /** The first page, from the current filters and order. Replaces the rows. */
   async load(): Promise<void> {
-    this._status.set('loading');
     this._error.set(null);
     this._rows.set([]);
     this._cursor.set(null);
 
+    // Nothing to ask for yet. The request would answer 400, and a spinner while
+    // it did would suggest the screen was busy rather than waiting.
+    if (this.blocked()) {
+      this._status.set('ready');
+      return;
+    }
+
+    this._status.set('loading');
     await this._fetch(undefined, (page) => this._rows.set(page));
   }
 

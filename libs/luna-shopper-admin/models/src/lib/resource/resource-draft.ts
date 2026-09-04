@@ -1,6 +1,8 @@
 import {
   emptyLocalizedText,
+  fromLocalizedLines,
   missingLocales,
+  toLocalizedLines,
   toLocalizedText,
 } from './localized-text';
 import { parseMoney } from './money';
@@ -10,6 +12,7 @@ import {
   isEditable,
   type FieldDescriptor,
   type FieldMessage,
+  type FormMode,
   type ResourceRow,
 } from './resource-field';
 
@@ -46,7 +49,13 @@ export function emptyValue<T extends ResourceRow>(
 ): DraftValue {
   switch (field.kind) {
     case 'boolean':
-      return false;
+      // A nullable boolean starts at null rather than at false, because the
+      // column has three answers and null is the ordinary one. Starting at
+      // false would make every row an operator merely opened submit "no".
+      if (field.nullable === true) {
+        return null;
+      }
+      return field.initial ?? false;
     case 'localized-text':
       return emptyLocalizedText(field.locales);
     default:
@@ -60,10 +69,16 @@ function toDraftValue<T extends ResourceRow>(
   value: unknown
 ): DraftValue {
   if (field.kind === 'boolean') {
+    if (field.nullable === true) {
+      return typeof value === 'boolean' ? value : null;
+    }
     return value === true;
   }
 
   if (field.kind === 'localized-text') {
+    if (field.list === true) {
+      return toLocalizedLines(value, field.locales);
+    }
     const text = toLocalizedText(value);
     return Object.fromEntries(
       field.locales.map((locale) => [locale, text[locale] ?? ''])
@@ -97,12 +112,13 @@ function toDraftValue<T extends ResourceRow>(
  */
 export function draftFor<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>,
-  row: T | null
+  row: T | null,
+  mode: FormMode
 ): ResourceDraft {
   const draft: Record<string, DraftValue> = {};
 
   for (const field of descriptor.fields) {
-    if (!isEditable(field)) {
+    if (!isEditable(field, mode)) {
       continue;
     }
     draft[field.name] =
@@ -172,12 +188,13 @@ export const REQUIRED_KEY = 'resource.error.required';
  */
 export function validateDraft<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>,
-  draft: ResourceDraft
+  draft: ResourceDraft,
+  mode: FormMode
 ): Readonly<Record<string, FieldMessage[]>> {
   const problems: Record<string, FieldMessage[]> = {};
 
   for (const field of descriptor.fields) {
-    if (!isEditable(field)) {
+    if (!isEditable(field, mode)) {
       continue;
     }
 
@@ -319,11 +336,16 @@ function toWireValue<T extends ResourceRow>(
   value: DraftValue
 ): unknown {
   if (field.kind === 'boolean') {
+    if (field.nullable === true) {
+      return typeof value === 'boolean' ? value : null;
+    }
     return value === true;
   }
 
   if (field.kind === 'localized-text') {
-    return toLocalizedText(value);
+    return field.list === true
+      ? fromLocalizedLines(value, field.locales)
+      : toLocalizedText(value);
   }
 
   if (isEmptyValue(value)) {
@@ -341,7 +363,13 @@ function toWireValue<T extends ResourceRow>(
       // branch is unreachable from the form. It returns the text unchanged
       // rather than throwing, because a caller that skipped validation should
       // get the server's answer, not a client side exception.
-      return parsed.ok ? parsed.value : text;
+      if (!parsed.ok) {
+        return text;
+      }
+      // The one route that takes money as a number gets one, here and nowhere
+      // earlier. Everything above this line has been text, so nothing the
+      // operator typed has passed through a float on its way to being checked.
+      return field.wire === 'number' ? Number(parsed.value) : parsed.value;
     }
     case 'date':
       return new Date(text).toISOString();
@@ -349,9 +377,6 @@ function toWireValue<T extends ResourceRow>(
       return text;
   }
 }
-
-/** Whether the form is creating a row or changing one. */
-export type FormMode = 'create' | 'edit';
 
 /**
  * The body to submit.
@@ -376,7 +401,7 @@ export function toInput<T extends ResourceRow>(
   const changed = new Set(changedFields(draft, original));
 
   for (const field of descriptor.fields) {
-    if (!isEditable(field)) {
+    if (!isEditable(field, mode)) {
       continue;
     }
 

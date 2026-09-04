@@ -1,11 +1,12 @@
 import { Injectable } from '@angular/core';
-import type {
-  ResourceGateway,
-  ResourcePage,
-  ResourceQuery,
-  ResourceRow,
+import {
+  compositeIdOf,
+  type ResourceGateway,
+  type ResourcePage,
+  type ResourceQuery,
+  type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { GatewayError } from '../gateway-error';
+import { notFoundError } from '../gateway-error';
 import type { ResourceGatewaysI, ResourceSource } from './resource-gateways';
 
 /**
@@ -27,12 +28,7 @@ export class ResourceMemoryGateways implements ResourceGatewaysI {
   private readonly _tables = new Map<string, ResourceRow[]>();
 
   for<T extends ResourceRow>(source: ResourceSource<T>): ResourceGateway<T> {
-    const rows = this._table(source);
-    return new ResourceMemory<T>(
-      rows,
-      source.pageSize ?? DEFAULT_PAGE_SIZE,
-      source.idField ?? 'id'
-    );
+    return new ResourceMemory<T>(this._table(source), source);
   }
 
   /** The table for a path, seeded the first time it is asked for. */
@@ -54,21 +50,22 @@ const DEFAULT_PAGE_SIZE = 25;
 class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   constructor(
     private readonly _rows: T[],
-    private readonly _pageSize: number,
-    /**
-     * The property a row is found by.
-     *
-     * `id` for most things and not for all of them: a user is keyed by
-     * `userId` and an admin by `adminId`, so a table that assumed `id` would
-     * answer 404 for every row it holds.
-     */
-    private readonly _idField: string
+    private readonly _source: ResourceSource<T>
   ) {}
 
   async list(query: ResourceQuery): Promise<ResourcePage<T>> {
-    const matching = this._rows.filter((row) => matches(row, query.filters));
+    const filters = query.filters ?? {};
+
+    // The collection has no address until the value naming it is given, and a
+    // list of everything would be the wrong answer rather than a convenient
+    // one: a chain's shops are only ever read one chain at a time.
+    if (this._source.collectionPath?.(filters) === null) {
+      return { items: [], nextCursor: null };
+    }
+
+    const matching = this._rows.filter((row) => matches(row, filters));
     const from = cursorIndex(query.cursor);
-    const size = query.limit ?? this._pageSize;
+    const size = query.limit ?? this._source.pageSize ?? DEFAULT_PAGE_SIZE;
     const items = matching.slice(from, from + size);
     const next = from + items.length;
 
@@ -79,16 +76,31 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   }
 
   async read(id: string): Promise<T> {
-    const row = this._rows.find((entry) => entry[this._idField] === id);
+    const row = this._rows[this._indexOf(id)];
     if (row === undefined) {
-      throw notFound();
+      throw notFoundError();
     }
     return row;
   }
 
+  /**
+   * Add a row, or change the one already keyed the same way.
+   *
+   * A keyed resource is written with a `PUT` to the collection, which either
+   * creates or replaces. A memory table that always pushed would let the same
+   * item hold two prices in the same scope, which is a state the column's unique
+   * index makes impossible and a screen would then have to be able to draw.
+   */
   async create(input: ResourceRow): Promise<T> {
+    const existing = this._rows.findIndex((row) => this._sameKey(row, input));
+    if (existing !== -1) {
+      const row = { ...this._rows[existing], ...input } as T;
+      this._rows[existing] = row;
+      return row;
+    }
+
     const row = {
-      [this._idField]: `mem_${this._rows.length + 1}`,
+      [this._idField()]: `mem_${this._rows.length + 1}`,
       ...input,
     } as unknown as T;
     this._rows.push(row);
@@ -96,9 +108,9 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   }
 
   async update(id: string, input: ResourceRow): Promise<T> {
-    const index = this._rows.findIndex((entry) => entry[this._idField] === id);
+    const index = this._indexOf(id);
     if (index === -1) {
-      throw notFound();
+      throw notFoundError();
     }
     const row = { ...this._rows[index], ...input } as T;
     this._rows[index] = row;
@@ -106,21 +118,40 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   }
 
   async remove(id: string): Promise<void> {
-    const index = this._rows.findIndex((entry) => entry[this._idField] === id);
+    const index = this._indexOf(id);
     if (index === -1) {
-      throw notFound();
+      throw notFoundError();
     }
     this._rows.splice(index, 1);
   }
-}
 
-/** A 404 shaped the way the real gateway's would be. */
-function notFound(): GatewayError {
-  return new GatewayError({
-    code: 'not_found',
-    status: 404,
-    correlationId: '',
-  });
+  /**
+   * The property a row is found by.
+   *
+   * `id` for most things and not for all of them: a user is keyed by `userId`
+   * and an admin by `adminId`, so a table that assumed `id` would answer 404 for
+   * every row it holds.
+   */
+  private _idField(): string {
+    return this._source.idField ?? 'id';
+  }
+
+  /** Where a row addressed this way is, or -1. */
+  private _indexOf(id: string): number {
+    const key = this._source.key;
+
+    return key === undefined
+      ? this._rows.findIndex((row) => row[this._idField()] === id)
+      : this._rows.findIndex((row) => compositeIdOf(row, key) === id);
+  }
+
+  /** Whether a row and a submitted body are the same row. */
+  private _sameKey(row: ResourceRow, input: ResourceRow): boolean {
+    const key = this._source.key;
+    return (
+      key !== undefined && compositeIdOf(row, key) === compositeIdOf(input, key)
+    );
+  }
 }
 
 /** The offset a cursor stands for. Anything unreadable starts from the top. */

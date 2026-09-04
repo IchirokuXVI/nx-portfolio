@@ -54,6 +54,7 @@ import {
   CreateProductGroupDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
+  ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
   UpdateItemDto,
   UpdatePriceScopeDto,
@@ -557,14 +558,21 @@ export class AdminCatalogPriceScopesController {
 
   @Get()
   @ApiContractResponse(PRICE_SCOPE_PATTERNS.list)
+  /**
+   * One chain's scopes, which is how the back office finds the thing a price
+   * belongs to (plan 0005, section 2).
+   *
+   * `supermarketId` sits on {@link ListPriceScopesQueryDto} rather than in a
+   * `@Query('supermarketId')` argument of its own, because a bare query argument
+   * beside a `@Query()` DTO makes the validation pipe refuse the request.
+   */
   list(
     @ActingAdmin() admin: CurrentAdmin,
-    @Query() query: CatalogListQueryDto,
-    @Query('supermarketId') supermarketId?: string
+    @Query() query: ListPriceScopesQueryDto
   ): Promise<PriceScopePage> {
     return this.nats.send<PriceScopePage>(PRICE_SCOPE_PATTERNS.list, {
       userId: admin.adminId,
-      supermarketId,
+      supermarketId: query.supermarketId,
       cursor: query.cursor,
       limit: query.limit,
     });
