@@ -198,12 +198,35 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
   **always starts at `0001`** (no `0000`, no unnumbered files). The next plan in a
   directory takes the next free number.
 - A plan in `plans/` is **part of the build order**: it is being built, or it is next.
+- **The plan you were named is the whole job. Read the others, build none of them.**
+  Reading around the task is expected: a plan states the contracts, tokens and rules that
+  neighboring plans already fixed, and the surrounding `plans/` directory is where that
+  context lives, so open whatever you need to understand the one you were given. Writing
+  code for a plan nobody asked for is a different act, and it is not yours to decide. If
+  plan X turns out to need plan Y or plan Z first, say so and stop: name the plans, say what
+  each one is missing, and let the user choose whether to widen the task. That is one round
+  trip, and the alternative is a pull request three times its expected size, reviewed by
+  someone who asked for one plan and was handed three. Build every part of the named plan
+  that the missing dependency does not block, and state plainly which parts you left out and
+  why.
 - A design that is agreed but **not scheduled for development** goes in `plans/backlog/`
   instead, which is its own numbering namespace starting at `0001`. This keeps parked
   designs from burning a number in the build sequence. When one is picked up it moves
   into `plans/` and takes the next free number there. Backlog plans open with a
   `> **Status: backlog. Not scheduled for development.**` blockquote, so the file says
   so on its own and not only by where it sits.
+- **An implemented plan names the pull request that implemented it**, at the top of the
+  file, above the `# NNNN Title` heading, in the same position a backlog plan carries its
+  status blockquote:
+
+  ```markdown
+  > **PR:** [#178](https://github.com/IchirokuXVI/nx-portfolio/pull/178)
+  ```
+
+  Write it once `gh pr create` has returned the URL and push the amendment onto the same
+  branch, so the plan lands inside the PR it names. Otherwise a plan and the change that
+  realised it are linked only through a commit message or a release note, and reading the
+  plan later says nothing about whether it shipped or where the code went.
 
 ## Luna Shopper backend
 
@@ -264,6 +287,22 @@ with each library's `capture-fixtures` target, never by hand.
   checks run it through `nx affected -t lint test`, so a forgotten regeneration is a red PR rather
   than silent drift. Never work around that failure by editing `openapi.json` by hand: it is
   generated output, and the generator is the only thing allowed to write it.
+
+- **`luna-shopper-admin` reads its types out of that document, so regenerating it is two steps.**
+  `tools/openapi/generate-wire-types.mjs` turns `components.schemas` into
+  `libs/luna-shopper-admin/models/src/lib/wire/wire-types.ts`, which the back office uses as its
+  view models (admin plan 0004, section 2, records why that is a deliberate exception to rule D4).
+  Both files are committed output:
+
+  ```sh
+  npx nx run luna-shopper-backend-gateway:openapi     # the document
+  npx nx run luna-shopper-admin/models:wire-types     # the types read from it
+  ```
+
+  `wire-types.spec.ts` fails when the second is stale, and `luna-shopper-admin/models` names the
+  gateway as an implicit dependency so that a gateway change marks it affected. Do not edit the
+  generated file, and do not add hand written types beside it: a shape the document does not
+  describe is a gap in the document.
 
 ## Git workflow
 

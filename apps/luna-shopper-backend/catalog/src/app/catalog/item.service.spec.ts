@@ -7,8 +7,11 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
-import type { Item, ProductGroup, SupermarketItem } from '../entities';
+// `Item` is a value here, not just a type: the audit double keys on the entity
+// class the service hands it.
+import { Item, type ProductGroup, type SupermarketItem } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
+import { fakeAudit } from './catalog-audit.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -17,11 +20,14 @@ const ADMIN = 'owner-1';
 
 function makeAdmin(): jest.Mocked<PlatformAdminService> {
   return {
-    isAdmin: jest.fn((id: string) => id === ADMIN),
-    requireAdmin: jest.fn((id: string) => {
-      if (id !== ADMIN) {
+    // The gate takes the whole request now and answers who it let through
+    // (plan 0072). Reading `userId` keeps every case here meaning what it did:
+    // these files are about the services, not about the gate.
+    requireAdmin: jest.fn(async (credential: { userId: string }) => {
+      if (credential.userId !== ADMIN) {
         throw new ForbiddenException('nope');
       }
+      return { kind: 'admin', actorId: credential.userId };
     }),
   } as unknown as jest.Mocked<PlatformAdminService>;
 }
@@ -58,15 +64,21 @@ function build(overrides: {
     itemGroupChanged: jest.fn(),
     productGroupDeleted: jest.fn(),
   } as unknown as jest.Mocked<CatalogEventsPublisher>;
+  // Plan 0075: every write runs inside a transaction this opens. The double
+  // routes the write back to the same fake repository, and records what moved.
+  const audit = fakeAudit([
+    [Item, { name: 'items', repository: overrides.items ?? {} }],
+  ]);
   const service = new ItemService(
     overrides.items as Repository<Item>,
     {} as Repository<ProductGroup>,
     (overrides.prices ?? {}) as Repository<SupermarketItem>,
     groups,
     admin,
+    audit.service,
     events
   );
-  return { service, admin, groups, events };
+  return { service, admin, groups, events, audit };
 }
 
 describe('ItemService', () => {
@@ -208,6 +220,51 @@ describe('ItemService', () => {
 
     expect(items.createQueryBuilder).toHaveBeenCalled();
     expect(items.query).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Plan 0073, section 4: what curation has not reached.
+   *
+   * An ungrouped product is invisible to every "show me milk" read, so a filter
+   * that spells "no group" is the only way the back office can find one. It has
+   * to be a flag rather than a null `productGroupId`, since absent already means
+   * "any group".
+   */
+  it('lists the products belonging to no group at all', async () => {
+    const rows: Item[] = [];
+    const qb = makeQb(rows);
+    const items = {
+      query: jest.fn(async () => rows),
+      createQueryBuilder: jest.fn(() => qb),
+    } as unknown as Repository<Item>;
+    const { service } = build({ items });
+
+    await service.search({ userId: 'operator', withoutProductGroup: true });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('i."productGroupId" IS NULL');
+  });
+
+  /**
+   * The filter applies on the ranked branch too. It would be easy to add it only
+   * to the listing branch, and a filter that silently stopped applying when the
+   * caller typed a word would be worse than one that was never offered.
+   */
+  it('applies the ungrouped filter to a ranked search as well', async () => {
+    const rows: Item[] = [];
+    const items = {
+      query: jest.fn(async () => rows),
+      createQueryBuilder: jest.fn(() => makeQb(rows)),
+    } as unknown as Repository<Item>;
+    const { service } = build({ items });
+
+    await service.search({
+      userId: 'operator',
+      query: 'leche',
+      withoutProductGroup: true,
+    });
+
+    const sql = (items.query as jest.Mock).mock.calls[0][0] as string;
+    expect(sql).toContain('i."productGroupId" IS NULL');
   });
 
   it('quotes no price when the caller names no scopes (section 3.1)', async () => {

@@ -5,6 +5,7 @@ import type {
   GeneratedListRun,
   GeneratedListSummary,
   Page,
+  WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
 import { GeneratedListApi } from './generated-list-api';
 
@@ -12,16 +13,23 @@ import { GeneratedListApi } from './generated-list-api';
  * The caller's generated shopping lists: making one, and reading the ones already made
  * (plan 0045, section 5).
  *
- * **Two methods, and deliberately only two.** This is the *owner's* surface: the
- * dashboard card, the history page and the generation sheet, all of which resolve the
- * caller from their own token, so no method takes a user id and there is no way to
- * address anybody else's baskets. Everything a **participant** does inside a basket
- * (joining by link, settling, allocating, swapping a pick, the people on it) is plan
- * 0044's, authenticated by a participant session rather than an account token, and it
- * does not belong on an interface whose every method is "mine".
+ * **Every method here is the owner's**: the dashboard card, the history page, the
+ * generation sheet and, since velista `0057`, the control that ends a trip. All of
+ * them resolve the caller from their own token, so no method takes a user id and
+ * there is no way to address anybody else's baskets. Everything a **participant**
+ * does inside a basket (joining by link, settling, allocating, swapping a pick, the
+ * people on it) is plan 0044's, authenticated by a participant session rather than
+ * an account token, and it does not belong on an interface whose every method is
+ * "mine".
  *
  * Reading one whole basket is absent for the same reason: the only screen that needs
  * the lines is the basket screen, which reaches it as a participant.
+ *
+ * {@link setStatus} is the one **write** on this surface that a participant screen
+ * calls, and it is here rather than on `BasketServiceI` precisely because of that
+ * split: finishing a trip is the owner's alone, the route behind it is account
+ * authenticated, and a guest holding a participant session cannot reach it with any
+ * token they have (velista `0057`, section 2).
  */
 export interface GeneratedListServiceI {
   /**
@@ -42,6 +50,26 @@ export interface GeneratedListServiceI {
    * have nothing to show somebody asking where the milk went.
    */
   create(request: CreateGeneratedListRequest): Promise<GeneratedListRun>;
+
+  /**
+   * Move a basket between statuses (`PATCH /v1/generated-lists/:id`, backend `0059`).
+   *
+   * The route has existed since backend `0050` and nothing called it until velista
+   * `0057`: `COMPLETED` was a value the enum carried and no screen could write. What
+   * calls it is the basket's own Finish control and the Reopen on its banner, which
+   * are the same write in opposite directions.
+   *
+   * **It answers nothing**, and that is a decision rather than an omission. The
+   * server replies with a whole `GeneratedListView`, lines included, which is a
+   * different shape from the summaries this surface deals in and would have to be
+   * counted down into one. The two readers of the change both learn it another way:
+   * `GeneratedListStore` flips the status it already holds, and every open basket,
+   * this caller's included, is told over the socket by `generatedList.updated`.
+   */
+  setStatus(
+    generatedListId: string,
+    status: WritableGeneratedListStatus
+  ): Promise<void>;
 }
 
 /**

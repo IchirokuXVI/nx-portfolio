@@ -287,12 +287,13 @@ describe('adopting a product the group put there (plan 0070, section 3)', () => 
     expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineUpdated]);
   });
 
-  it('is out of a DECIDE holder’s reach on an approved line', async () => {
-    // Plan 0036 section 4.1's rule, extended to the new field rather than
-    // sidestepped by it: adoption changes no product on the line, but it decides
-    // whether the catalog may go on correcting a set somebody agreed to, which
-    // is what that branch exists to keep out of a decider's reach. The path is
-    // un-approve, adopt, approve.
+  it('is out of a DECIDE holder’s reach, whatever the line’s approval', async () => {
+    // Plan 0070, section 3's rule, which plan 0076 did not widen and does not
+    // mention: adoption changes no product on the line, but it decides whether
+    // the catalog may go on correcting a set somebody agreed to, and that is a
+    // writer's field. `DECIDE` is a separate permission from `WRITE` rather than
+    // a larger one, so holding it alone reaches an approved line's quantity and
+    // nothing else. The caller who adopts holds `WRITE`, which is the case below.
     const w = build({
       productGroupId: MILK,
       items: [{ itemId: itemId(1) }],
@@ -309,6 +310,28 @@ describe('adopting a product the group put there (plan 0070, section 3)', () => 
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(setOf(w)).toEqual([
       { itemId: itemId(1), source: LineItemSource.GROUP },
+    ]);
+  });
+
+  it('puts the line back to PENDING when a writer adopts on an approved line', async () => {
+    // Plan 0076, section 2: a writer may now change the set an approved line
+    // holds, and the change asks the group again.
+    const w = build({
+      productGroupId: MILK,
+      items: [{ itemId: itemId(1) }],
+      approvalStatus: LineApprovalStatus.APPROVED,
+      permissions: [ListPermission.READ, ListPermission.WRITE],
+    });
+
+    const view = await w.service.update({
+      userId: ACTOR,
+      lineId: LINE_ID,
+      adoptItemIds: [itemId(1)],
+    });
+
+    expect(view.approvalStatus).toBe(LineApprovalStatus.PENDING);
+    expect(setOf(w)).toEqual([
+      { itemId: itemId(1), source: LineItemSource.USER },
     ]);
   });
 

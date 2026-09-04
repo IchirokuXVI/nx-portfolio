@@ -38,6 +38,8 @@ const EXPECTED_TO_HAVE_SPECS = new Set([
   'luna-shopper-backend-auth',
   'luna-shopper-backend-core',
   'luna-shopper-backend-catalog',
+  // Its migrations and the postal code discovery queue (plans 0038 and 0063).
+  'luna-shopper-backend-harvester',
   // The trace propagation guard over a real broker (plan 0016, section 10).
   'luna-shopper/platform',
 ]);

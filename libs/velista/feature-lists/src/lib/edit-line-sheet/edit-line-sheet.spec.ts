@@ -158,96 +158,133 @@ describe('EditLineSheet', () => {
   });
 
   /**
-   * Plan 0030, section 4 and 4.1, and acceptance items 3, 4 and 6.
+   * Plan 0030, section 4; plan 0066, sections 2 and 3.
    *
    * Read off the DOM rather than off a signal, because the claim is about which fields
-   * a person can actually reach: "the quantity and nothing else" is a statement about a
+   * a person can actually reach: "the content and nothing else" is a statement about a
    * sheet, and a mode flag that was right while the template ignored it would pass.
    */
   describe('the two modes, and the warning', () => {
+    const WRITER_ONLY = list({ myPermissions: ['READ', 'WRITE'] });
+
     function host(fixture: ComponentFixture<EditLineSheet>): HTMLElement {
       return fixture.nativeElement as HTMLElement;
     }
 
     it('makes every field live for a list admin, on an approved line', () => {
-      // Acceptance item 6: their edit sheet on an approved row is the full one.
       return render().then(({ fixture }) => {
         expect(
           host(fixture).querySelector('#edit-line-content')
+        ).not.toBeNull();
+        expect(
+          host(fixture).querySelector('lib-quantity-stepper')
         ).not.toBeNull();
         expect(host(fixture).querySelector('.shown')).toBeNull();
       });
     });
 
-    it('shows the content and does not let it be edited, for DECIDE', async () => {
+    it('makes every field live for a writer who also decides, on an approved line', async () => {
+      // `WRITE` is what opens this sheet, and `DECIDE` beside it is what brings the
+      // number back. `DECIDE` on its own reaches neither, which is the case below.
       const { fixture } = await render({
-        list: list({ myPermissions: ['READ', 'DECIDE'] }),
+        list: list({ myPermissions: ['READ', 'WRITE', 'DECIDE'] }),
       });
 
-      expect(host(fixture).querySelector('#edit-line-content')).toBeNull();
-      expect(host(fixture).querySelector('.shown')?.textContent).toContain(
-        'Sourdough loaf'
-      );
-      // The stepper is still there: it is the one field the person in the aisle has.
+      expect(host(fixture).querySelector('#edit-line-content')).not.toBeNull();
       expect(
         host(fixture).querySelector('lib-quantity-stepper')
       ).not.toBeNull();
     });
 
+    it('lets a writer fix an approved line, and shows the number without a control', async () => {
+      const { fixture } = await render({
+        lines: [line({ quantity: 3 })],
+        list: WRITER_ONLY,
+      });
+
+      expect(host(fixture).querySelector('#edit-line-content')).not.toBeNull();
+      expect(host(fixture).querySelector('lib-quantity-stepper')).toBeNull();
+      // Shown rather than hidden: the words being changed are the words for a number of
+      // something, and a sheet that dropped the count is one you have to remember the
+      // row for.
+      expect(host(fixture).querySelector('.shown')?.textContent).toContain('3');
+    });
+
+    it('still opens the sheet for a writer, rather than closing on them', async () => {
+      // It used to dismiss here, because a writer could not touch an approved line at
+      // all. Now the edit is theirs, so the intent is announced like any other.
+      const { realtime } = await render({ list: WRITER_ONLY });
+
+      expect(realtime.editedLines.get(LIST_ID)).toBe(LINE_ID);
+    });
+
     it('closes rather than drawing a sheet whose save would be refused', async () => {
-      // A writer deep linked onto an approved row. The overflow would never have
-      // offered this, and a URL is not a permission (rule G2).
+      // A reader deep linked onto a row. The overflow would never have offered this,
+      // and a URL is not a permission (rule G2).
       const { realtime } = await render({
-        list: list({ myPermissions: ['READ', 'WRITE'] }),
+        list: list({ myPermissions: ['READ'] }),
       });
 
       expect(realtime.editedLines.has(LIST_ID)).toBe(false);
     });
 
-    it('says what a lower quantity is about to leave behind', async () => {
-      const { fixture } = await render({ lines: [line({ quantity: 3 })] });
+    it('closes on a caller holding DECIDE and no WRITE', async () => {
+      // The same rule as the reader above, and worth its own case because "can approve
+      // this line" reads like "can correct it". The server refuses them its content on
+      // an approved line exactly as on a pending one (backend plan 0076, section 4.1),
+      // so the sheet would be a screen whose save is a 403. Their quantity control is
+      // the reel on the row, which this sheet is not.
+      const { realtime } = await render({
+        list: list({ myPermissions: ['READ', 'DECIDE'] }),
+      });
 
-      fixture.componentInstance.quantity.set(1);
-      fixture.detectChanges();
+      expect(realtime.editedLines.has(LIST_ID)).toBe(false);
+    });
 
-      expect(host(fixture).querySelector('.remainder')?.textContent).toContain(
-        'list.edit.remainder'
+    it('says that the save will put the line back to awaiting approval', async () => {
+      const { fixture } = await render({ list: WRITER_ONLY });
+
+      expect(host(fixture).querySelector('.notice')?.textContent).toContain(
+        'list.edit.unapproves'
       );
     });
 
-    it('says nothing when the quantity goes up', async () => {
-      const { fixture } = await render({ lines: [line({ quantity: 1 })] });
+    it('says nothing in the full sheet, where no approval moves', async () => {
+      const { fixture } = await render();
 
-      fixture.componentInstance.quantity.set(3);
-      fixture.detectChanges();
-
-      expect(host(fixture).querySelector('.remainder')).toBeNull();
-    });
-
-    it('says nothing on a line nobody has agreed to yet', async () => {
-      // Nothing was approved, so nothing is being taken back: an ordinary edit.
-      const { fixture } = await render({
-        lines: [line({ quantity: 3, approvalStatus: 'PENDING' })],
-      });
-
-      fixture.componentInstance.quantity.set(1);
-      fixture.detectChanges();
-
-      expect(host(fixture).querySelector('.remainder')).toBeNull();
+      expect(host(fixture).querySelector('.notice')).toBeNull();
     });
 
     it('says nothing on a list that approves by itself', async () => {
-      // The split does not happen there, so the sentence would describe a row that
-      // never appears (backend plan 0037, section 4.5).
+      // Nothing re-reads that option after creation, so the server leaves the line
+      // approved and the sentence would describe something that does not happen
+      // (backend plan 0076, section 2.3).
       const { fixture } = await render({
-        lines: [line({ quantity: 3 })],
-        list: list({ autoApproveLines: true }),
+        list: list({
+          myPermissions: ['READ', 'WRITE'],
+          autoApproveLines: true,
+        }),
       });
 
-      fixture.componentInstance.quantity.set(1);
-      fixture.detectChanges();
+      expect(host(fixture).querySelector('.notice')).toBeNull();
+    });
 
-      expect(host(fixture).querySelector('.remainder')).toBeNull();
+    it('warns about no remainder, on any edit, in any mode', async () => {
+      // Plan 0066, section 3.1. The sentence promised a second line holding the
+      // difference, and backend plan 0047 deleted that behaviour along with the trip
+      // status it was written in, so it warned about a row that is never created.
+      for (const which of [list(), WRITER_ONLY]) {
+        const { fixture } = await render({
+          lines: [line({ quantity: 3 })],
+          list: which,
+        });
+
+        fixture.componentInstance.quantity.set(1);
+        fixture.detectChanges();
+
+        expect(host(fixture).textContent).not.toContain('list.edit.remainder');
+        expect(host(fixture).querySelector('.remainder')).toBeNull();
+      }
     });
   });
 });

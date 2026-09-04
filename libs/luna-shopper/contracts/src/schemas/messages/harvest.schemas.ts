@@ -31,6 +31,7 @@ import {
   schemaId,
   string,
 } from '../builders';
+import { adminCredentialProperties } from '../common.schemas';
 import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
 
 /**
@@ -390,7 +391,7 @@ const postalCodeDiscoveryRequestPage = paginated(
 const spawnRunRequest = object(
   HARVEST_SCHEMA_IDS.spawnRunRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     mode: ref(HARVEST_SCHEMA_IDS.harvestRunMode),
     supermarketId: string(),
     priceScopeId: string(),
@@ -403,13 +404,13 @@ const spawnRunRequest = object(
 );
 const runIdRequest = object(
   HARVEST_SCHEMA_IDS.runIdRequest,
-  { userId: nonEmptyString(), runId: nonEmptyString() },
+  { ...adminCredentialProperties, runId: nonEmptyString() },
   ['userId', 'runId']
 );
 const listRunsRequest = object(
   HARVEST_SCHEMA_IDS.listRunsRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: string(),
     mode: ref(HARVEST_SCHEMA_IDS.harvestRunMode),
     status: ref(HARVEST_SCHEMA_IDS.harvestRunStatus),
@@ -423,7 +424,7 @@ const listRunsRequest = object(
 const listPlacesRequest = object(
   HARVEST_SCHEMA_IDS.listPlacesRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     runId: string(),
     brandKey: string(),
     status: ref(HARVEST_SCHEMA_IDS.discoveredPlaceStatus),
@@ -436,7 +437,7 @@ const listPlacesRequest = object(
 const groupPlacesRequest = object(
   HARVEST_SCHEMA_IDS.groupPlacesRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     runId: string(),
     sampleSize: integer({ minimum: 1 }),
   },
@@ -445,7 +446,7 @@ const groupPlacesRequest = object(
 const importPlaceRequest = object(
   HARVEST_SCHEMA_IDS.importPlaceRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     placeId: nonEmptyString(),
     supermarketId: string(),
     priceScopeId: string(),
@@ -454,14 +455,14 @@ const importPlaceRequest = object(
 );
 const placeIdRequest = object(
   HARVEST_SCHEMA_IDS.placeIdRequest,
-  { userId: nonEmptyString(), placeId: nonEmptyString() },
+  { ...adminCredentialProperties, placeId: nonEmptyString() },
   ['userId', 'placeId']
 );
 
 const listRefsRequest = object(
   HARVEST_SCHEMA_IDS.listRefsRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: string(),
     itemId: string(),
     status: ref(HARVEST_SCHEMA_IDS.itemSourceRefStatus),
@@ -473,13 +474,13 @@ const listRefsRequest = object(
 );
 const refIdRequest = object(
   HARVEST_SCHEMA_IDS.refIdRequest,
-  { userId: nonEmptyString(), refId: nonEmptyString() },
+  { ...adminCredentialProperties, refId: nonEmptyString() },
   ['userId', 'refId']
 );
 const setManualRefRequest = object(
   HARVEST_SCHEMA_IDS.setManualRefRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     itemId: nonEmptyString(),
     supermarketId: nonEmptyString(),
     externalId: nonEmptyString(),
@@ -490,7 +491,7 @@ const setManualRefRequest = object(
 const listEntriesRequest = object(
   HARVEST_SCHEMA_IDS.listEntriesRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     unmatchedOnly: boolean(),
     query: string(),
@@ -503,7 +504,7 @@ const listEntriesRequest = object(
 const createItemFromEntryRequest = object(
   HARVEST_SCHEMA_IDS.createItemFromEntryRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     entryId: nonEmptyString(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
   },
@@ -513,7 +514,7 @@ const createItemFromEntryRequest = object(
 const upsertSourceRequest = object(
   HARVEST_SCHEMA_IDS.upsertSourceRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     adapterKey: ref(HARVEST_SCHEMA_IDS.adapterKey),
     enabled: boolean(),
@@ -525,13 +526,13 @@ const upsertSourceRequest = object(
 );
 const sourceIdRequest = object(
   HARVEST_SCHEMA_IDS.sourceIdRequest,
-  { userId: nonEmptyString(), supermarketId: nonEmptyString() },
+  { ...adminCredentialProperties, supermarketId: nonEmptyString() },
   ['userId', 'supermarketId']
 );
 const setSourceEnabledRequest = object(
   HARVEST_SCHEMA_IDS.setSourceEnabledRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     enabled: boolean(),
   },
@@ -540,7 +541,7 @@ const setSourceEnabledRequest = object(
 const listSourcesRequest = object(
   HARVEST_SCHEMA_IDS.listSourcesRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -551,7 +552,7 @@ const listSourcesRequest = object(
 const listDiscoveryRequestsRequest = object(
   HARVEST_SCHEMA_IDS.listDiscoveryRequestsRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     country: string(),
     status: ref(HARVEST_SCHEMA_IDS.postalCodeDiscoveryStatus),
     cursor: string(),

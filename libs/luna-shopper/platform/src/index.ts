@@ -33,6 +33,9 @@ export * from './lib/swagger/swagger';
 export * from './lib/versioning/client-version';
 export * from './lib/versioning/versioning';
 
+// Operator tokens (plan 0072): the one check catalog and harvester both run.
+export * from './lib/auth/admin-token';
+
 // Validation
 export * from './lib/validation/username';
 export * from './lib/validation/validation-pipe';

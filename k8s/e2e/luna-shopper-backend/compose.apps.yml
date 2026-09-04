@@ -238,6 +238,11 @@ services:
       CORS_ORIGINS: http://localhost:4200,http://localhost:4205
       CORE_DB_URL: postgres://luna_core:luna_core@core-db:5432/luna_core
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
+      # The operator public key (plan 0074). Core gates its own back office
+      # subjects on a verified admin token, so it needs the public half the way
+      # catalog and the harvester below already do. Required at boot: leaving it
+      # out takes core down while the gateway stays up and answers 500s.
+      ADMIN_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/admin-jwt.pub
       ZONE_REAPER_ENABLED: 'false'
       # The basket sweep (plan 0059) is off here for the reason the reaper is: a
       # timer that finishes baskets underneath a suite is a flake, not a test.
@@ -287,7 +292,14 @@ services:
       CORS_ORIGINS: http://localhost:4200,http://localhost:4205
       CATALOG_DB_URL: postgres://luna_catalog:luna_catalog@catalog-db:5432/luna_catalog
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
-      PLATFORM_ADMIN_USER_IDS: ''
+      # The operator trust root (plan 0072). Required, and stated here rather
+      # than inherited: this file does not read luna-slot.sh's output, and a
+      # newly required variable missing here is a catalog that dies at boot while
+      # the gateway stays up and answers 500s.
+      ADMIN_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/admin-jwt.pub
+      # Services allowed to write catalog without a token. The harvester is the
+      # only candidate and this stack does not run it, so nothing is listed.
+      SERVICE_ACTOR_IDS: ''
       PORT: '3004'
       OTEL_SERVICE_NAME: luna-shopper-backend-catalog
       DEPLOYMENT_ENVIRONMENT: development

@@ -50,7 +50,7 @@ export class SupermarketSourceService {
   async upsert(
     req: UpsertSupermarketSourceRequest
   ): Promise<SupermarketSourceView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const defaults = this.defaults();
 
     const existing = await this.sources.findOne({
@@ -85,14 +85,14 @@ export class SupermarketSourceService {
   }
 
   async get(req: SupermarketSourceIdRequest): Promise<SupermarketSourceView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     return toSupermarketSourceView(await this.load(req.supermarketId));
   }
 
   async setEnabled(
     req: SetSupermarketSourceEnabledRequest
   ): Promise<SupermarketSourceView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const row = await this.load(req.supermarketId);
     row.enabled = req.enabled;
     return toSupermarketSourceView(await this.sources.save(row));
@@ -101,7 +101,7 @@ export class SupermarketSourceService {
   async list(
     req: ListSupermarketSourcesRequest
   ): Promise<SupermarketSourcePage> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as SourceCursor | undefined;
 

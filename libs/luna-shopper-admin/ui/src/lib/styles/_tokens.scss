@@ -29,6 +29,14 @@
 
   --admin-radius: 0.5rem;
 
+  // Destructive, and fixed rather than derived from the accent. The accent moves
+  // with the environment, so a delete button drawn in it would be red in
+  // production, amber in staging and blue in development: the one control whose
+  // colour has to mean the same thing everywhere would be the one that does not.
+  --admin-danger: #b4232a;
+  --admin-danger-ink: #ffffff;
+  --admin-danger-wash: #fbeaeb;
+
   // The environment accent, and the reason this file exists (plan 0001, section 6).
   //
   // The resting value is the one for an environment the app could not establish:

@@ -39,6 +39,24 @@ export const coreValidationSchema = Joi.object({
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
   AUTH_JWT_PUBLIC_KEY_FILE: Joi.string(),
 
+  /**
+   * The **second** public key, verified against by the back office gate (plan
+   * 0074).
+   *
+   * A different keypair from the one above and not a second copy of it: since
+   * plan 0071 an operator and a velista user are different principals signed by
+   * different keys, which is what makes a velista access token presented to an
+   * admin subject fail outright rather than merely fail an authorization check.
+   * Catalog and the harvester have held this key since plan 0072; core gains it
+   * here because plan 0074 is the first thing in core an operator may call.
+   *
+   * Required, like its neighbour, and required in the same either or way: inline
+   * in the cluster, a file path locally. A core that cannot verify an operator
+   * token should refuse to boot rather than answer admin subjects it cannot gate.
+   */
+  ADMIN_JWT_PUBLIC_KEY: Joi.string(),
+  ADMIN_JWT_PUBLIC_KEY_FILE: Joi.string(),
+
   // Zone reaper (plan 0011, section 3): deletes zones marked for deletion that
   // are past the grace period with no owner claim, cascading their lists/lines.
   ZONE_REAPER_ENABLED: Joi.boolean().default(true),
@@ -128,18 +146,22 @@ export const coreValidationSchema = Joi.object({
     .default('info'),
 
   // Tracing and metrics (plan 0016, section 7). Declared once in the platform
-  // library so all five services accept the same names. Every one is optional
+  // library so all seven services accept the same names. Every one is optional
   // with a working default: with none of them set the service runs exactly as it
   // did before, and what the validation buys is failing fast on a malformed
   // value rather than silently sampling everything.
   ...telemetryValidationSchema,
-}).or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE');
+})
+  .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE')
+  .or('ADMIN_JWT_PUBLIC_KEY', 'ADMIN_JWT_PUBLIC_KEY_FILE');
 
 export interface CoreConfig {
   port: number;
   natsUrl: string;
   dbUrl: string;
   authJwtPublicKey: string;
+  /** The operator key, verified against by the back office gate (plan 0074). */
+  adminJwtPublicKey: string;
   reaper: {
     enabled: boolean;
     graceMs: number;
@@ -196,6 +218,10 @@ export const coreConfiguration = registerAs(
     authJwtPublicKey: readKey(
       process.env.AUTH_JWT_PUBLIC_KEY,
       process.env.AUTH_JWT_PUBLIC_KEY_FILE
+    ),
+    adminJwtPublicKey: readKey(
+      process.env.ADMIN_JWT_PUBLIC_KEY,
+      process.env.ADMIN_JWT_PUBLIC_KEY_FILE
     ),
     reaper: {
       enabled: process.env.ZONE_REAPER_ENABLED !== 'false',

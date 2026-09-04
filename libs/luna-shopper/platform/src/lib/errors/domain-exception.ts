@@ -153,13 +153,34 @@ export class RateLimitedException extends DomainException {
   readonly code = ERROR_CODES.RATE_LIMITED;
 }
 
-/** The `details` key a {@link RateLimitedException} carries its wait under. */
+/**
+ * The account has failed too many times in a row and is refusing attempts (plan
+ * 0071, section 7).
+ *
+ * Renders as 423 beside {@link RateLimitedException}'s 429 and stays apart from
+ * it by code, because the two protect different things and resolve differently:
+ * throttling limits a source, so another address or another minute gets through,
+ * while this protects one account, so neither does. The client's reaction is a
+ * different sentence rather than a different wait, which is why it cannot be a
+ * detail on the rate limit.
+ *
+ * It carries its wait the same way, under {@link RETRY_AFTER_SECONDS_DETAIL}, so
+ * the screen can say when the window passes.
+ */
+export class AccountLockedException extends DomainException {
+  readonly code = ERROR_CODES.ACCOUNT_LOCKED;
+}
+
+/**
+ * The `details` key a {@link RateLimitedException} or an
+ * {@link AccountLockedException} carries its wait under.
+ */
 export const RETRY_AFTER_SECONDS_DETAIL = 'retryAfterSeconds';
 
 /**
  * Reads a whole second wait out of a domain exception's details bag. Returns
  * undefined for every exception that does not carry one, which is all of them
- * except {@link RateLimitedException}.
+ * except {@link RateLimitedException} and {@link AccountLockedException}.
  */
 export function retryAfterSecondsOf(
   exception: DomainException

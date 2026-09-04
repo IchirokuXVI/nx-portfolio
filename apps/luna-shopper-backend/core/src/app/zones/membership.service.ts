@@ -46,13 +46,7 @@ export class MembershipService {
       ZoneRole.OWNER,
       ZoneRole.ADMIN,
     ]);
-    const target = await this.memberships.findOne({
-      where: { id: req.membershipId, zoneId: req.zoneId },
-    });
-    if (!target) {
-      throw new NotFoundException('Membership not found in this zone');
-    }
-    return target;
+    return this.loadTarget(req.zoneId, req.membershipId);
   }
 
   /**
@@ -138,20 +132,95 @@ export class MembershipService {
     );
   }
 
+  /**
+   * Kick or ban, for an operator who is not in the zone (plan 0074, section 1).
+   *
+   * The **only** difference from {@link kick} and {@link ban} is that the caller
+   * is not asked for a role in a zone they are not in. Everything after that is
+   * `applyStatus`, the identical code path: the same refusal to remove an owner,
+   * the same row, the same two events, the same recount. A named action reuses
+   * the code that maintains the invariant; that is what makes it a named action
+   * rather than a second implementation that agrees with the first for now.
+   *
+   * The operator's own id is not written anywhere by this. Who did it is plan
+   * 0075's question, and answering half of it here would leave an actor recorded
+   * on two of the seven actions and nowhere else.
+   */
+  async kickAsOperator(
+    zoneId: string,
+    membershipId: string
+  ): Promise<MembershipView> {
+    return this.applyStatus(
+      zoneId,
+      await this.loadTarget(zoneId, membershipId),
+      MembershipStatus.KICKED,
+      RealtimeEvent.MemberKicked
+    );
+  }
+
+  /** Ban, for an operator. See {@link kickAsOperator}. */
+  async banAsOperator(
+    zoneId: string,
+    membershipId: string
+  ): Promise<MembershipView> {
+    return this.applyStatus(
+      zoneId,
+      await this.loadTarget(zoneId, membershipId),
+      MembershipStatus.BANNED,
+      RealtimeEvent.MemberBanned
+    );
+  }
+
   private async setStatus(
     req: MembershipActionRequest,
     status: MembershipStatus,
     event: RealtimeEvent
   ): Promise<MembershipView> {
-    const target = await this.governable(req);
+    return this.applyStatus(
+      req.zoneId,
+      await this.governable(req),
+      status,
+      event
+    );
+  }
+
+  /**
+   * The effect of a kick or a ban, with the authorization already decided.
+   *
+   * Split from {@link setStatus} so an operator's kick and a zone admin's kick
+   * are the same write rather than two that look alike. The owner rule lives
+   * here rather than in the caller for the same reason: it is a fact about the
+   * zone, not about who asked, and an operator removing the owner would leave a
+   * zone whose `ownerUserId` names somebody with no membership.
+   */
+  private async applyStatus(
+    zoneId: string,
+    target: ZoneMembership,
+    status: MembershipStatus,
+    event: RealtimeEvent
+  ): Promise<MembershipView> {
     if (target.role === ZoneRole.OWNER) {
       throw new ForbiddenException('The owner cannot be removed');
     }
     target.status = status;
     const saved = await this.memberships.save(target);
     this.emit(event, saved);
-    await this.counts.emitZoneCounts(req.zoneId);
+    await this.counts.emitZoneCounts(zoneId);
     return toMembershipView(saved);
+  }
+
+  /** One membership in one zone, or a 404. The half of `governable` that reads. */
+  private async loadTarget(
+    zoneId: string,
+    membershipId: string
+  ): Promise<ZoneMembership> {
+    const target = await this.memberships.findOne({
+      where: { id: membershipId, zoneId },
+    });
+    if (!target) {
+      throw new NotFoundException('Membership not found in this zone');
+    }
+    return target;
   }
 
   /**

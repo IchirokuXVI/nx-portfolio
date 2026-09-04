@@ -377,24 +377,27 @@ function captionKeyFor(awaiting: boolean, rejected: boolean): string | null {
  * Which fields the edit sheet may make live on this row, or null for no edit at all.
  *
  * A function of the caller's permissions **and** the line's approval together, which is
- * the point of deriving it per row (plan 0030, section 4): a `MANAGE` holder gets the
- * full sheet on every row, while a caller holding only `DECIDE` gets no edit on a
- * pending row and the quantity stepper on an approved one. Writing those two answers
- * down separately is how they end up disagreeing.
+ * the point of deriving it per row (plan 0030, section 4): the same caller gets a
+ * different sheet on two rows of one list. Writing those answers down separately is how
+ * they end up disagreeing.
  *
- * The three cases mirror backend plan 0036 section 4.1 exactly, in the order the server
- * checks them:
+ * The cases mirror backend plan 0076 section 1, in the order the server checks them:
  *
  * - `MANAGE` may edit any field of any line, because a governed thing needs somebody who
  *   can fix a line that was approved with a typo in it;
- * - `WRITE` may edit a `PENDING` or `REJECTED` line and never an `APPROVED` one, so a
- *   writer cannot quietly change what the group agreed to;
- * - `DECIDE` may change the quantity of an `APPROVED` line and nothing else, which is
- *   the single field a person in the aisle learns that the list did not know.
+ * - **`WRITE` is what opens this sheet at all**, on every row. `DECIDE` is a separate
+ *   permission rather than a larger one, so a caller holding it alone edits no content
+ *   anywhere and gets no sheet on any row. They are not left without a control: the
+ *   quantity reel is `LineRowVm.adjustable`, which asks `canDecide` on its own, and
+ *   approving and rejecting are theirs too;
+ * - `WRITE` alone on an `APPROVED` line yields its content and not its number, because
+ *   the content is what a person typed wrong and the quantity is what the group agreed
+ *   to. Held with `DECIDE` the number comes back, since the server's refusal of that one
+ *   field is a refusal of callers who cannot approve.
  *
- * A `DECIDE` holder who needs more than the number still has a way through and it is not
- * this sheet: `DECIDE` puts a line back to `PENDING`, so un-approve, edit, approve reads
- * correctly and leaves the approval saying what happened.
+ * Until plan 0066 a writer got nothing at all on an approved line, which landed on the
+ * person who typed "Mile" and could not fix it: a list that auto approves, or an author
+ * who holds `DECIDE`, approves the line before its author has read it back.
  *
  * Exported for the edit sheet, which is a routed child and has to reach the same answer
  * about the same row without the page handing it down.
@@ -403,17 +406,19 @@ export function editScopeFor(
   line: Line,
   abilities: ListAbilitiesVm
 ): LineEditScope | null {
-  const approved = line.approvalStatus === 'APPROVED';
-
   if (abilities.canManage) {
     return 'full';
   }
 
-  if (!approved && abilities.canWrite) {
-    return 'full';
+  if (!abilities.canWrite) {
+    return null;
   }
 
-  return approved && abilities.canDecide ? 'quantity' : null;
+  if (line.approvalStatus === 'APPROVED') {
+    return abilities.canDecide ? 'full' : 'content';
+  }
+
+  return 'full';
 }
 
 /**

@@ -75,7 +75,7 @@ lunaShopperBackend:
     appBaseUrl: https://staging.velista.app/{locale}
     # Sender on the domain that has mail set up, links on the app's domain, for
     # the reasons spelled out in values.production.yaml.
-    mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
+    mailFrom: Velista (staging) <no-reply@velista.app>
     smtpHost: in-v3.mailjet.com
     smtpPort: 587
     smtpUser: 497721f71489adfcbc3078d2b292aad8

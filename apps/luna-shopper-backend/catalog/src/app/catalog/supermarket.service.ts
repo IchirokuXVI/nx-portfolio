@@ -17,6 +17,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type SelectQueryBuilder } from 'typeorm';
 import { Supermarket } from '../entities';
+import { CatalogAuditService } from './catalog-audit.service';
 import { toSupermarketView } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import { PriceScopeService } from './price-scope.service';
@@ -34,30 +35,33 @@ export class SupermarketService {
     @InjectRepository(Supermarket)
     private readonly supermarkets: Repository<Supermarket>,
     private readonly priceScopes: PriceScopeService,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    private readonly audit: CatalogAuditService
   ) {}
 
   async create(req: CreateSupermarketRequest): Promise<SupermarketView> {
-    this.admin.requireAdmin(req.userId);
-    const saved = await this.supermarkets.save(
-      this.supermarkets.create({
-        name: req.name,
-        logoUrl: req.logoUrl ?? null,
-        websiteUrl: req.websiteUrl ?? null,
-        externalBrandKey: req.externalBrandKey ?? null,
-        // Never set on creation, and not because it was forgotten: a scope
-        // belongs to a chain, so a chain that does not exist yet has none to
-        // point at. It is set by `update`, after the scopes are (plan 0049,
-        // section 3.1).
-        defaultPriceScopeId: null,
-      })
+    const actor = await this.admin.requireAdmin(req);
+    const draft = this.supermarkets.create({
+      name: req.name,
+      logoUrl: req.logoUrl ?? null,
+      websiteUrl: req.websiteUrl ?? null,
+      externalBrandKey: req.externalBrandKey ?? null,
+      // Never set on creation, and not because it was forgotten: a scope
+      // belongs to a chain, so a chain that does not exist yet has none to
+      // point at. It is set by `update`, after the scopes are (plan 0049,
+      // section 3.1).
+      defaultPriceScopeId: null,
+    });
+    const saved = await this.audit.write(actor, (tx) =>
+      tx.create(Supermarket, draft)
     );
     return toSupermarketView(saved);
   }
 
   async update(req: UpdateSupermarketRequest): Promise<SupermarketView> {
-    this.admin.requireAdmin(req.userId);
+    const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.supermarketId);
+    const before = { ...row };
     if (req.name !== undefined) {
       row.name = req.name;
     }
@@ -87,15 +91,20 @@ export class SupermarketService {
               )
             ).id;
     }
-    return toSupermarketView(await this.supermarkets.save(row));
+    return toSupermarketView(
+      await this.audit.write(actor, (tx) =>
+        tx.update(Supermarket, before, row)
+      )
+    );
   }
 
   async delete(req: SupermarketIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
-    const result = await this.supermarkets.delete({ id: req.supermarketId });
-    if (!result.affected) {
-      throw new NotFoundException('Supermarket not found');
-    }
+    const actor = await this.admin.requireAdmin(req);
+    // Loaded rather than deleted by id alone, because the trail records what was
+    // lost (plan 0075, section 1). The missing row is refused here instead of by
+    // an affected count, which says the same thing one query earlier.
+    const row = await this.load(req.supermarketId);
+    await this.audit.write(actor, (tx) => tx.delete(Supermarket, row));
     return { id: req.supermarketId };
   }
 

@@ -502,6 +502,31 @@ export class CatalogListQueryDto extends PageQueryDto {
 }
 
 /**
+ * One chain's price scopes, which is the only question either scope list is
+ * ever asked.
+ *
+ * `supermarketId` is **on the DTO** rather than a second `@Query('supermarketId')`
+ * argument beside it, and that is not a style choice. `createValidationPipe`
+ * sets `whitelist` with `forbidNonWhitelisted`, and for a `@Query()` argument the
+ * pipe validates the **whole** query object against the declared class. A
+ * property the class does not carry is refused with a 400 however correctly the
+ * handler then reads it from a parameter of its own, because the bare
+ * `@Query('name')` argument has metatype `String` and is never validated at all.
+ *
+ * Both scope lists were written that way and neither had been called, so both
+ * answered 400 to the one parameter they document.
+ */
+export class ListPriceScopesQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Only this chain’s scopes.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketId?: string;
+}
+
+/**
  * The same orders plus `relevance` (plan 0048, section 3).
  *
  * A sibling of {@link CatalogListQueryDto} rather than a subclass that widens
@@ -537,7 +562,7 @@ const asArray = ({ value }: { value: unknown }) =>
  * handed on untouched, so `@IsBoolean` refuses it rather than reading it as
  * false, which is what a typo deserves.
  */
-const asBoolean = ({ value }: { value: unknown }) => {
+export const asBoolean = ({ value }: { value: unknown }) => {
   if (value === '' || value === 'true' || value === true) {
     return true;
   }

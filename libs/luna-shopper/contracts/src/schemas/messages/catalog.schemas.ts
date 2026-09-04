@@ -6,6 +6,7 @@ import {
   UnitOfMeasure,
 } from '../../lib/enums/catalog.enums';
 import {
+  ADMIN_POSTAL_CODE_PATTERNS,
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
   POSTAL_CODE_PATTERNS,
@@ -34,7 +35,7 @@ import {
   schemaId,
   string,
 } from '../builders';
-import { COMMON_IDS } from '../common.schemas';
+import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
 
 /**
  * Catalog schemas (plan 0012): supermarkets, locations, items and per-location
@@ -105,6 +106,9 @@ export const CATALOG_SCHEMA_IDS = {
   listByItemRequest: schemaId('msg/supermarketItem.listByItem/request'),
   listByLocationRequest: schemaId('msg/supermarketItem.listByLocation/request'),
   listByScopeRequest: schemaId('msg/supermarketItem.listByScope/request'),
+  adminListSupermarketItemsRequest: schemaId(
+    'msg/supermarketItem.adminList/request'
+  ),
   createPriceScopeRequest: schemaId('msg/priceScope.create/request'),
   updatePriceScopeRequest: schemaId('msg/priceScope.update/request'),
   priceScopeIdRequest: schemaId('msg/priceScope.id/request'),
@@ -126,6 +130,10 @@ export const CATALOG_SCHEMA_IDS = {
   postalCodeLocationCountsView: schemaId(
     'catalog/PostalCodeLocationCountsView'
   ),
+  // The centroid table, read as a table (plan 0074).
+  adminPostalCodeView: schemaId('catalog/AdminPostalCodeView'),
+  adminPostalCodePage: schemaId('catalog/AdminPostalCodePage'),
+  listAdminPostalCodesRequest: schemaId('msg/adminPostalCode.list/request'),
   // The shops in your postal codes (plan 0068).
   summarizeLocationsByChainRequest: schemaId(
     'msg/supermarketLocation.summarizeByChain/request'
@@ -422,7 +430,7 @@ const productGroupOfferPage = paginated(
 const createSupermarketRequest = object(
   CATALOG_SCHEMA_IDS.createSupermarketRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     logoUrl: nullableString(),
     websiteUrl: nullableString(),
@@ -433,7 +441,7 @@ const createSupermarketRequest = object(
 const updateSupermarketRequest = object(
   CATALOG_SCHEMA_IDS.updateSupermarketRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     logoUrl: nullableString(),
@@ -445,7 +453,7 @@ const updateSupermarketRequest = object(
 );
 const supermarketIdRequest = object(
   CATALOG_SCHEMA_IDS.supermarketIdRequest,
-  { userId: nonEmptyString(), supermarketId: nonEmptyString() },
+  { ...adminCredentialProperties, supermarketId: nonEmptyString() },
   ['userId', 'supermarketId']
 );
 const listSupermarketsRequest = object(
@@ -478,7 +486,7 @@ const locationFields = {
 const createLocationRequest = object(
   CATALOG_SCHEMA_IDS.createLocationRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     ...locationFields,
   },
@@ -487,7 +495,7 @@ const createLocationRequest = object(
 const updateLocationRequest = object(
   CATALOG_SCHEMA_IDS.updateLocationRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketLocationId: nonEmptyString(),
     ...locationFields,
   },
@@ -495,7 +503,7 @@ const updateLocationRequest = object(
 );
 const locationIdRequest = object(
   CATALOG_SCHEMA_IDS.locationIdRequest,
-  { userId: nonEmptyString(), supermarketLocationId: nonEmptyString() },
+  { ...adminCredentialProperties, supermarketLocationId: nonEmptyString() },
   ['userId', 'supermarketLocationId']
 );
 const listLocationsRequest = object(
@@ -505,6 +513,8 @@ const listLocationsRequest = object(
     supermarketId: nonEmptyString(),
     // Plan 0066, section 4: only the shops that sell at this scope.
     priceScopeId: nonEmptyString(),
+    // Plan 0073, section 4: the guessed postal codes, for the operator's review.
+    postalCodeSource: ref(CATALOG_SCHEMA_IDS.postalCodeSource),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -515,7 +525,7 @@ const listLocationsRequest = object(
 const createItemRequest = object(
   CATALOG_SCHEMA_IDS.createItemRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     brand: nullableString(),
     imageUrl: nullableString(),
@@ -531,7 +541,7 @@ const createItemRequest = object(
 const updateItemRequest = object(
   CATALOG_SCHEMA_IDS.updateItemRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     itemId: nonEmptyString(),
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     brand: nullableString(),
@@ -561,7 +571,7 @@ const findItemByEanResult = object(
 );
 const itemIdRequest = object(
   CATALOG_SCHEMA_IDS.itemIdRequest,
-  { userId: nonEmptyString(), itemId: nonEmptyString() },
+  { ...adminCredentialProperties, itemId: nonEmptyString() },
   ['userId', 'itemId']
 );
 /**
@@ -599,6 +609,8 @@ const searchItemsRequest = object(
     // Plan 0048: the group filter, and the scopes a price may be quoted from. No
     // default is resolved when the scopes are absent; that is plan 0049.
     productGroupId: string(),
+    // Plan 0073: the back office's "what has curation not reached yet".
+    withoutProductGroup: boolean(),
     priceScopeIds: array(nonEmptyString()),
     cursor: string(),
     limit: integer({ minimum: 1 }),
@@ -624,7 +636,7 @@ const searchOffersRequest = object(
 const createProductGroupRequest = object(
   CATALOG_SCHEMA_IDS.createProductGroupRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     slug: nonEmptyString(),
     referenceUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
@@ -635,7 +647,7 @@ const createProductGroupRequest = object(
 const updateProductGroupRequest = object(
   CATALOG_SCHEMA_IDS.updateProductGroupRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     productGroupId: nonEmptyString(),
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     slug: nonEmptyString(),
@@ -646,7 +658,7 @@ const updateProductGroupRequest = object(
 );
 const productGroupIdRequest = object(
   CATALOG_SCHEMA_IDS.productGroupIdRequest,
-  { userId: nonEmptyString(), productGroupId: nonEmptyString() },
+  { ...adminCredentialProperties, productGroupId: nonEmptyString() },
   ['userId', 'productGroupId']
 );
 const listProductGroupsRequest = object(
@@ -673,7 +685,7 @@ const priceFields = {
 const upsertSupermarketItemRequest = object(
   CATALOG_SCHEMA_IDS.upsertSupermarketItemRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     itemId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
     priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
@@ -689,7 +701,7 @@ const supermarketItemBatchEntry = object(
 const upsertSupermarketItemBatchRequest = object(
   CATALOG_SCHEMA_IDS.upsertSupermarketItemBatchRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     priceScopeId: nonEmptyString(),
     priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
     entries: array(ref(CATALOG_SCHEMA_IDS.supermarketItemBatchEntry)),
@@ -718,7 +730,7 @@ const upsertSupermarketItemBatchResult = object(
 );
 const supermarketItemIdRequest = object(
   CATALOG_SCHEMA_IDS.supermarketItemIdRequest,
-  { userId: nonEmptyString(), supermarketItemId: nonEmptyString() },
+  { ...adminCredentialProperties, supermarketItemId: nonEmptyString() },
   ['userId', 'supermarketItemId']
 );
 const getSupermarketItemRequest = object(
@@ -763,13 +775,30 @@ const listByScopeRequest = object(
   },
   ['userId', 'priceScopeId']
 );
+// Plan 0073, section 4. Every filter optional, so the empty request is the whole
+// table: the three lists above each require the thing they start from, and this
+// one starts from nothing on purpose.
+const adminListSupermarketItemsRequest = object(
+  CATALOG_SCHEMA_IDS.adminListSupermarketItemsRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    priceScopeId: nonEmptyString(),
+    priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    available: boolean(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
+);
 
 // --- Price scopes and per store rows (plan 0038) ---------------------------
 
 const createPriceScopeRequest = object(
   CATALOG_SCHEMA_IDS.createPriceScopeRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     supermarketId: nonEmptyString(),
     kind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
     externalKey: nullableString(),
@@ -780,7 +809,7 @@ const createPriceScopeRequest = object(
 const updatePriceScopeRequest = object(
   CATALOG_SCHEMA_IDS.updatePriceScopeRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     priceScopeId: nonEmptyString(),
     kind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
     externalKey: nullableString(),
@@ -790,7 +819,7 @@ const updatePriceScopeRequest = object(
 );
 const priceScopeIdRequest = object(
   CATALOG_SCHEMA_IDS.priceScopeIdRequest,
-  { userId: nonEmptyString(), priceScopeId: nonEmptyString() },
+  { ...adminCredentialProperties, priceScopeId: nonEmptyString() },
   ['userId', 'priceScopeId']
 );
 const listPriceScopesRequest = object(
@@ -875,7 +904,7 @@ const catalogScopeView = object(
 const upsertLocationItemRequest = object(
   CATALOG_SCHEMA_IDS.upsertLocationItemRequest,
   {
-    userId: nonEmptyString(),
+    ...adminCredentialProperties,
     itemId: nonEmptyString(),
     supermarketLocationId: nonEmptyString(),
     positionInStore: nullableString(),
@@ -1000,6 +1029,41 @@ const postalCodeLocationCountsView = object(
     counts: array(ref(CATALOG_SCHEMA_IDS.postalCodeLocationCount)),
   },
   ['country', 'counts']
+);
+
+// --- The centroid table, for the back office (plan 0074) -------------------
+
+const adminPostalCodeView = object(
+  CATALOG_SCHEMA_IDS.adminPostalCodeView,
+  {
+    country: countryCode(),
+    postalCode: nonEmptyString(),
+    latitude: { type: 'number' },
+    longitude: { type: 'number' },
+    locationCount: integer({ minimum: 0 }),
+  },
+  ['country', 'postalCode', 'latitude', 'longitude', 'locationCount']
+);
+
+const adminPostalCodePage = paginated(
+  CATALOG_SCHEMA_IDS.adminPostalCodePage,
+  CATALOG_SCHEMA_IDS.adminPostalCodeView
+);
+
+// `served` absent is every code, which is the default because a listing that hid
+// the unserved ones would hide the coverage gap it exists to show.
+const listAdminPostalCodesRequest = object(
+  CATALOG_SCHEMA_IDS.listAdminPostalCodesRequest,
+  {
+    ...adminCredentialProperties,
+    country: string(),
+    postalCode: string(),
+    served: boolean(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
 );
 
 // --- The shops in your postal codes (plan 0068) ----------------------------
@@ -1180,6 +1244,7 @@ export const catalogSchemas: JsonSchema[] = [
   listByItemRequest,
   listByLocationRequest,
   listByScopeRequest,
+  adminListSupermarketItemsRequest,
   createPriceScopeRequest,
   updatePriceScopeRequest,
   priceScopeIdRequest,
@@ -1200,6 +1265,9 @@ export const catalogSchemas: JsonSchema[] = [
   countLocationsByPostalCodeRequest,
   postalCodeLocationCount,
   postalCodeLocationCountsView,
+  adminPostalCodeView,
+  adminPostalCodePage,
+  listAdminPostalCodesRequest,
   summarizeLocationsByChainRequest,
   supermarketLocationChainSummaryView,
   supermarketLocationChainSummariesView,
@@ -1334,6 +1402,10 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.listByScopeRequest,
     response: CATALOG_SCHEMA_IDS.supermarketItemPage,
   },
+  [SUPERMARKET_ITEM_PATTERNS.adminList]: {
+    request: CATALOG_SCHEMA_IDS.adminListSupermarketItemsRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketItemPage,
+  },
   [PRICE_SCOPE_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createPriceScopeRequest,
     response: CATALOG_SCHEMA_IDS.priceScopeView,
@@ -1373,6 +1445,10 @@ export const catalogMessageContracts: Record<
   [POSTAL_CODE_PATTERNS.nearby]: {
     request: CATALOG_SCHEMA_IDS.listNearbyPostalCodesRequest,
     response: CATALOG_SCHEMA_IDS.nearbyPostalCodesView,
+  },
+  [ADMIN_POSTAL_CODE_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listAdminPostalCodesRequest,
+    response: CATALOG_SCHEMA_IDS.adminPostalCodePage,
   },
   [SUPERMARKET_LOCATION_PATTERNS.countByPostalCode]: {
     request: CATALOG_SCHEMA_IDS.countLocationsByPostalCodeRequest,

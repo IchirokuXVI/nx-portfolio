@@ -10,8 +10,8 @@ import type {
   GetAdminRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  AccountLockedException,
   NotConfiguredException,
-  RateLimitedException,
   RETRY_AFTER_SECONDS_DETAIL,
   UnauthorizedException,
 } from '@portfolio/luna-shopper/platform';
@@ -172,6 +172,12 @@ export class AdminIdentityService {
    * It counts by username whether or not that username exists, so the answer
    * leaks nothing: a caller only ever meets the lockout for a name they
    * themselves have already failed against.
+   *
+   * It answers with its own code rather than the throttler's, because the back
+   * office has to say a different sentence for each
+   * (`apps/luna-shopper-admin/plans/0002`, section 2). An operator told to slow
+   * down when the account is locked will keep trying and keep failing; the two
+   * states resolve differently and have to read differently.
    */
   private async assertNotLockedOut(username: string): Promise<void> {
     const { threshold, windowMs } = this.config.admin.lockout;
@@ -183,7 +189,7 @@ export class AdminIdentityService {
       return;
     }
 
-    throw new RateLimitedException('Too many failed sign in attempts', {
+    throw new AccountLockedException('Too many failed sign in attempts', {
       details: {
         [RETRY_AFTER_SECONDS_DETAIL]: Math.ceil(windowMs / 1000),
       },

@@ -2,7 +2,7 @@
 .SYNOPSIS
   Configure this checkout (a git worktree, usually) to run the Luna Shopper
   backend on an isolated "slot", so several worktrees can run the compose stack
-  and `nx serve` the five services at once without colliding on ports, container
+  and `nx serve` the seven services at once without colliding on ports, container
   names, or databases. PowerShell twin of luna-slot.sh.
 
 .EXAMPLE
@@ -73,10 +73,14 @@ $slotEnv = Join-Path $here '.env.slot'
 $runDir = Join-Path $here '.run'
 $probe = Join-Path $root 'tools/dev/probe-ports.mjs'
 
-# The five Nest services, in the order -Up starts them. Their ports are not passed
+# The seven Nest services, in the order -Up starts them. Their ports are not passed
 # on the command line: each reads PORT out of its own .env, which this script wrote
 # for this slot, so there is one place a port can be wrong.
-$serviceNames = @('gateway', 'realtime', 'auth', 'core', 'catalog', 'assistant')
+#
+# The harvester (plan 0038) belongs here even though it is switched off: it is a
+# service the compose stack has a database for and stack.sh migrates, so a slot
+# without it is a slot `stack.sh up` refuses to start.
+$serviceNames = @('gateway', 'realtime', 'auth', 'core', 'catalog', 'harvester', 'assistant')
 
 # How high -Auto and -List will look. See the same constant in ng-slot.ps1.
 $maxSlot = 9
@@ -152,11 +156,14 @@ function Get-FrontendOrigins {
 # nine slots on each side.
 #
 # The offsets group by kind so a block stays readable: services at +0, databases at
-# +10, messaging at +20, cache at +30, mail at +40, observability at +50.
+# +10, the `test` profile's databases at +14, messaging at +20, cache at +30, mail
+# at +40, observability at +50.
 $defaultPort = @{
   gateway = 3000; realtime = 3001; auth = 3002; core = 3003; catalog = 3004
-  assistant = 3006
-  auth_db = 5432; core_db = 5433; catalog_db = 5434
+  harvester = 3005; assistant = 3006
+  auth_db = 5432; core_db = 5433; catalog_db = 5434; harvester_db = 5435
+  auth_db_test = 5442; core_db_test = 5443; catalog_db_test = 5444
+  harvester_db_test = 5445
   nats = 4222; nats_mon = 8222
   redis = 6379
   smtp = 1025; mailpit = 8025
@@ -165,8 +172,10 @@ $defaultPort = @{
 $lunaSlotBand = 43000
 $slotOffset = @{
   gateway = 0; realtime = 1; auth = 2; core = 3; catalog = 4
-  assistant = 6
-  auth_db = 10; core_db = 11; catalog_db = 12
+  harvester = 5; assistant = 6
+  auth_db = 10; core_db = 11; catalog_db = 12; harvester_db = 13
+  auth_db_test = 14; core_db_test = 15; catalog_db_test = 16
+  harvester_db_test = 17
   nats = 20; nats_mon = 21
   redis = 30
   smtp = 40; mailpit = 41
@@ -189,7 +198,7 @@ function Get-LunaPort([string]$name, [int]$slot) {
 # some of these open and some closed is genuinely half started.
 function Get-InfraPorts([int]$slot) {
   $ports = @()
-  foreach ($name in @('auth_db', 'core_db', 'catalog_db', 'nats', 'nats_mon', 'redis', 'smtp', 'mailpit')) {
+  foreach ($name in @('auth_db', 'core_db', 'catalog_db', 'harvester_db', 'nats', 'nats_mon', 'redis', 'smtp', 'mailpit')) {
     $ports += (Get-LunaPort $name $slot)
   }
   return $ports
@@ -213,8 +222,25 @@ function Get-ObservabilityPorts([int]$slot) {
   return $ports
 }
 
+# The four databases the `test` compose profile adds, one per migrated service.
+# Reserved per slot and treated exactly like the observability block above: opt in,
+# so they are not counted when deciding whether a slot is up, but they are counted
+# when deciding whether a slot is free.
+#
+# compose declares them as `${LUNA_AUTH_DB_TEST_PORT:-5442}` and the rest, so an
+# unset variable is not "no test databases": it is every slot binding those same
+# four host ports and colliding while believing it is isolated.
+function Get-TestDbPorts([int]$slot) {
+  $ports = @()
+  foreach ($name in @('auth_db_test', 'core_db_test', 'catalog_db_test', 'harvester_db_test')) {
+    $ports += (Get-LunaPort $name $slot)
+  }
+  return $ports
+}
+
 function Get-SlotPorts([int]$slot) {
-  return (Get-InfraPorts $slot) + (Get-ServicePorts $slot) + (Get-ObservabilityPorts $slot)
+  return (Get-InfraPorts $slot) + (Get-ServicePorts $slot) +
+    (Get-ObservabilityPorts $slot) + (Get-TestDbPorts $slot)
 }
 
 # port -> open|closed|unknown, for a batch of ports in one node process. See the
@@ -315,6 +341,13 @@ function Write-SlotConfig([int]$slot, [int]$appSlot) {
   $authDb = Get-LunaPort 'auth_db' $slot
   $coreDb = Get-LunaPort 'core_db' $slot
   $catalogDb = Get-LunaPort 'catalog_db' $slot
+  $harvesterDb = Get-LunaPort 'harvester_db' $slot
+  # The `test` profile's four databases (plan 0013, section 3.1). Reserved per slot
+  # like the observability ports: the profile is opt in, but its host ports are not.
+  $authDbTest = Get-LunaPort 'auth_db_test' $slot
+  $coreDbTest = Get-LunaPort 'core_db_test' $slot
+  $catalogDbTest = Get-LunaPort 'catalog_db_test' $slot
+  $harvesterDbTest = Get-LunaPort 'harvester_db_test' $slot
   $nats = Get-LunaPort 'nats' $slot
   $natsMon = Get-LunaPort 'nats_mon' $slot
   $redis = Get-LunaPort 'redis' $slot
@@ -325,6 +358,7 @@ function Write-SlotConfig([int]$slot, [int]$appSlot) {
   $auth = Get-LunaPort 'auth' $slot
   $core = Get-LunaPort 'core' $slot
   $catalog = Get-LunaPort 'catalog' $slot
+  $harvester = Get-LunaPort 'harvester' $slot
   $assistant = Get-LunaPort 'assistant' $slot
   $otlpGrpc = Get-LunaPort 'otlp_grpc' $slot
   $otlpHttp = Get-LunaPort 'otlp_http' $slot
@@ -371,6 +405,14 @@ COMPOSE_PROJECT_NAME=$project
 LUNA_AUTH_DB_PORT=$authDb
 LUNA_CORE_DB_PORT=$coreDb
 LUNA_CATALOG_DB_PORT=$catalogDb
+LUNA_HARVESTER_DB_PORT=$harvesterDb
+# The ``test`` profile's databases. compose declares them with a hardcoded fallback
+# (5442..5445), so leaving these unset is not "no test databases": it is every slot
+# binding slot 0's ports and colliding with each other.
+LUNA_AUTH_DB_TEST_PORT=$authDbTest
+LUNA_CORE_DB_TEST_PORT=$coreDbTest
+LUNA_CATALOG_DB_TEST_PORT=$catalogDbTest
+LUNA_HARVESTER_DB_TEST_PORT=$harvesterDbTest
 LUNA_NATS_PORT=$nats
 LUNA_NATS_MONITOR_PORT=$natsMon
 LUNA_REDIS_PORT=$redis
@@ -387,6 +429,7 @@ LUNA_REALTIME_PORT=$realtime
 LUNA_AUTH_PORT=$auth
 LUNA_CORE_PORT=$core
 LUNA_CATALOG_PORT=$catalog
+LUNA_HARVESTER_PORT=$harvester
 LUNA_ASSISTANT_PORT=$assistant
 "@
 
@@ -444,6 +487,12 @@ VOICE_COMMENT_MAX_BYTES=2097152
 # WebM/Opus in Chrome, Ogg/Opus in Firefox, MP4/AAC in Safari.
 VOICE_COMMENT_CONTENT_TYPES=
 VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS=45000
+# The oldest client build this deployment serves (velista plan 0034, D5). Empty
+# switches the whole mechanism off, which is how both clusters run and what a
+# local stack wants: no header advertised and no request refused. Set it to a
+# semantic version to exercise the retirement path, and note the value is
+# validated at boot, so a typo fails the process rather than retiring nobody.
+MIN_CLIENT_VERSION=
 $(Get-TelemetryEnv 'gateway' $otlpHttp)
 "@
 
@@ -496,6 +545,18 @@ MAIL_RESET_BASE_URL=http://localhost:$velistaPort/reset-password
 GOOGLE_CLIENT_ID=your-dev-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-dev-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:$gateway/auth/google/callback
+# How long a guest participant's token is good for. Short on purpose, and worth
+# knowing the number when testing a shared link: the guest is signed out again
+# after it, and the handshake is what issues a fresh one.
+PARTICIPANT_TOKEN_TTL=15m
+# The orphan user reaper. It runs on a schedule inside auth, so it runs against
+# whatever database this slot points at, which is why the switch is stated here
+# rather than left to its default: a background job that deletes rows should be
+# visible in the file that configures the service.
+ORPHAN_REAPER_ENABLED=true
+ORPHAN_USER_GRACE=30d
+ORPHAN_REAPER_INTERVAL=1h
+ORPHAN_REAPER_BATCH=200
 PORT=$auth
 $(Get-TelemetryEnv 'auth' $otlpHttp)
 "@
@@ -504,6 +565,11 @@ $(Get-TelemetryEnv 'auth' $otlpHttp)
 # Generated by luna-slot.ps1 (slot $slot). Git ignored.
 CORE_DB_URL=postgres://luna_core:luna_core@localhost:$coreDb/luna_core
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
+# The operator public key (plan 0074). Core verifies an admin token itself before
+# answering any back office subject, so it needs the public half like catalog and
+# the harvester do. Required at boot: without it core refuses to start rather
+# than serving admin reads it cannot gate.
+ADMIN_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/admin-jwt.pub
 PORT=$core
 # The same two numbers the gateway is running with (plan 0045, section 6). Core
 # owns the bytea a recording is written into, so it refuses a payload that
@@ -516,16 +582,96 @@ GENERATED_LIST_CLAIM_WINDOW=60h
 GENERATED_LIST_SWEEP_ENABLED=true
 GENERATED_LIST_SWEEP_INTERVAL=1h
 GENERATED_LIST_SWEEP_BATCH=100
+# The zone reaper, the other scheduled job core runs. Stated for the same reason
+# as auth's orphan reaper: it deletes rows from this slot's database on a timer,
+# so the switch belongs in the file that configures the service and not only in a
+# default nobody reads.
+ZONE_REAPER_ENABLED=true
+ZONE_DELETION_GRACE=7d
+ZONE_REAPER_INTERVAL=1h
+ZONE_REAPER_BATCH=200
+# How far a postal code reaches for its neighbours (plan 0062). The per country
+# list wins for a country it names, and anything else takes the single number:
+# PROFILE_NEARBY_RADIUS_BY_COUNTRY=es=2000,bo=5000
+PROFILE_NEARBY_RADIUS_METRES=2000
+PROFILE_NEARBY_RADIUS_BY_COUNTRY=
+# How far a device may be from a centroid and still be placed in that code
+# (velista plan 0058). Beyond it the screen offers typing the code instead, which
+# is a path worth being able to force by lowering this.
+PROFILE_LOCATION_MAX_DISTANCE_METRES=10000
 $(Get-TelemetryEnv 'core' $otlpHttp)
 "@
+
+  # The uuid the harvester writes to catalog as (plan 0038, section 4.1). It has to
+  # appear in BOTH files below: catalog gates every write on its allowlist, and the
+  # harvester sends this id on every call it makes. A fixed dev constant rather than
+  # a generated one, so the two files cannot drift apart and a developer can
+  # recognise it in a log. The same constant luna-slot.sh writes.
+  $harvesterActorId = 'ac700000-0000-4000-a000-000000000001'
 
   Write-EnvFile (Join-Path $root 'apps/luna-shopper-backend/catalog/.env') @"
 # Generated by luna-slot.ps1 (slot $slot). Git ignored.
 CATALOG_DB_URL=postgres://luna_catalog:luna_catalog@localhost:$catalogDb/luna_catalog
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
-PLATFORM_ADMIN_USER_IDS=
+# Writing the catalog by hand is a matter of holding an admin token, not of
+# listing a uuid (plan 0072): catalog verifies the signature itself with this key.
+ADMIN_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/admin-jwt.pub
+# Services allowed to write without a token, which is the harvester and nothing
+# else. This script brings the harvester up now, so it writes the same uuid
+# luna-slot.sh does, into both files.
+SERVICE_ACTOR_IDS=$harvesterActorId
+# How far a shop may be from a postal code's centroid and still be derived into
+# that code. Comfortably larger than core's nearby radius, and separate from it on
+# purpose: a shop at the edge of a code is still that code's shop.
+POSTAL_CODE_DERIVE_MAX_METRES=5000
 PORT=$catalog
 $(Get-TelemetryEnv 'catalog' $otlpHttp)
+"@
+
+  # The harvester (plan 0038). Both switches are FALSE here, exactly as they are in
+  # every cluster: bringing the service up is not the same decision as letting it
+  # fetch from a third party. Flip HARVEST_ENABLED and MERCADONA_ENABLED by hand
+  # when you actually want a run, and read section 8.1 first.
+  Write-EnvFile (Join-Path $root 'apps/luna-shopper-backend/harvester/.env') @"
+# Generated by luna-slot.ps1 (slot $slot). Git ignored.
+HARVESTER_DB_URL=postgres://luna_harvester:luna_harvester@localhost:$harvesterDb/luna_harvester
+AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
+# Every harvester subject is gated on a valid admin token (plan 0072), so this
+# key is what makes the service reachable at all rather than only its writes.
+ADMIN_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/admin-jwt.pub
+HARVESTER_ACTOR_ID=$harvesterActorId
+HARVEST_ENABLED=false
+MERCADONA_ENABLED=false
+# What a run actually does once both switches above are on. Every one of these is
+# stated in the chart's ConfigMap too, and they are the knobs a local run wants
+# within reach: the pace it fetches at, how much work one run plans, and when a
+# stalled or badly failing run is given up on.
+#
+# HARVEST_DEFAULT_MAX_RPS is the one to think about before flipping the switches.
+# It is a third party's storefront, and the user agent below is how they can tell
+# who is asking, so keep it honest and keep the rate polite.
+HARVEST_USER_AGENT=LunaShopper/0.1 (+https://velista.app; personal price comparison; contact@velista.app)
+HARVEST_BATCH_SIZE=200
+HARVEST_DEFAULT_WORKERS=4
+HARVEST_DEFAULT_MAX_RPS=4
+HARVEST_STALE_AFTER=900
+HARVEST_FAILURE_RATIO=0.25
+# The postal code discovery queue (plan 0063). HARVEST_DISCOVERY_RADIUS is NOT
+# core's PROFILE_NEARBY_RADIUS_METRES and must not be given one key with it: that
+# one decides which codes a person shops in, this one how far around a code's
+# centre to look for shops.
+HARVEST_DISCOVERY_RADIUS=5000
+HARVEST_DISCOVERY_COOLDOWN_DAYS=30
+HARVEST_DISCOVERY_MAX_ATTEMPTS=3
+HARVEST_DISCOVERY_POLL_SECONDS=60
+# Empty means each client's own built in endpoint, which is what a real run wants.
+# Point one at a local recording to exercise the fetch path without leaving the
+# machine; the fixture backed tests never reach any of them.
+MERCADONA_BASE_URL=
+OVERPASS_URL=
+NOMINATIM_URL=
+PORT=$harvester
+$(Get-TelemetryEnv 'harvester' $otlpHttp)
 "@
 
   # The assistant (plan 0039). No database url, because it has no database: rule
@@ -537,6 +683,9 @@ $(Get-TelemetryEnv 'catalog' $otlpHttp)
 # Generated by luna-slot.ps1 (slot $slot). Git ignored.
 GATEWAY_INTERNAL_URL=http://localhost:$gateway
 GEMINI_API_KEY=
+# Empty is the provider's own endpoint. Point it at a local stand in to drive the
+# turn loop without a key and without leaving the machine.
+GEMINI_BASE_URL=
 ASSISTANT_MODEL=gemini-3.5-flash-lite
 # Voice input (plan 0041). An empty transcription model means the model that
 # answers the turn also transcribes it, which is the default everywhere.
@@ -549,17 +698,54 @@ ASSISTANT_MAX_TOOL_CALLS=6
 ASSISTANT_TURNS_PER_MINUTE=8
 ASSISTANT_CONCURRENCY=2
 ASSISTANT_RETRY_AFTER_FALLBACK=30
+# How long a turn waits on the provider before giving up on it.
+ASSISTANT_PROVIDER_TIMEOUT_MS=30000
 PORT=$assistant
 $(Get-TelemetryEnv 'assistant' $otlpHttp)
+"@
+
+  # --- the test profile's databases -------------------------------------------
+  #
+  # One file per migrated service, holding nothing but that service's connection
+  # string (plan 0013, section 3.1). apps/luna-shopper-backend/tools/db/env.js
+  # loads it FIRST when LUNA_ENV=test is set, and dotenv keeps the first value it
+  # sees, so switching a db target between this slot's real data and its test
+  # database is a pure connection string swap with no branching anywhere.
+  #
+  # Generated here rather than copied from the committed .env.test.example
+  # siblings, because those name slot 0's ports: on any other slot they point at
+  # the wrong database, or at a port nothing is listening on.
+  Write-EnvFile (Join-Path $root 'apps/luna-shopper-backend/auth/.env.test') @"
+# Generated by luna-slot.ps1 (slot $slot). Git ignored. Run any db target with
+# LUNA_ENV=test to use it, after bringing the profile up:
+#   bash k8s/e2e/luna-shopper-backend/stack.sh -p test up
+AUTH_DB_URL=postgres://luna_auth:luna_auth@localhost:$authDbTest/luna_auth_test
+"@
+
+  Write-EnvFile (Join-Path $root 'apps/luna-shopper-backend/core/.env.test') @"
+# Generated by luna-slot.ps1 (slot $slot). Git ignored. See auth/.env.test.
+CORE_DB_URL=postgres://luna_core:luna_core@localhost:$coreDbTest/luna_core_test
+"@
+
+  Write-EnvFile (Join-Path $root 'apps/luna-shopper-backend/catalog/.env.test') @"
+# Generated by luna-slot.ps1 (slot $slot). Git ignored. See auth/.env.test.
+CATALOG_DB_URL=postgres://luna_catalog:luna_catalog@localhost:$catalogDbTest/luna_catalog_test
+"@
+
+  Write-EnvFile (Join-Path $root 'apps/luna-shopper-backend/harvester/.env.test') @"
+# Generated by luna-slot.ps1 (slot $slot). Git ignored. See auth/.env.test.
+HARVESTER_DB_URL=postgres://luna_harvester:luna_harvester@localhost:$harvesterDbTest/luna_harvester_test
 "@
 
   Write-Host ""
   Write-Host "Configured this worktree for Luna Shopper slot $slot."
   Write-Host "  compose project : $project"
   Write-Host "  auth-db localhost:$authDb   core-db localhost:$coreDb   catalog-db localhost:$catalogDb"
+  Write-Host "  harvester-db localhost:$harvesterDb"
+  Write-Host "  test dbs: auth $authDbTest  core $coreDbTest  catalog $catalogDbTest  harvester $harvesterDbTest"
   Write-Host "  nats localhost:$nats (mon $natsMon)   redis localhost:$redis"
   Write-Host "  smtp $smtp   mailpit http://localhost:$mailUi"
-  Write-Host "  gateway $gateway   realtime $realtime   auth $auth   core $core   catalog $catalog   assistant $assistant"
+  Write-Host "  gateway $gateway   realtime $realtime   auth $auth   core $core   catalog $catalog   harvester $harvester   assistant $assistant"
   Write-Host "  otlp http/grpc $otlpHttp / $otlpGrpc   jaeger http://localhost:$jaegerUi"
   Write-Host "  prometheus http://localhost:$prometheus   grafana http://localhost:$grafana"
   Write-Host "  cors            every front end slot (0..$maxSlot), shell and velista origins both."
@@ -568,7 +754,7 @@ $(Get-TelemetryEnv 'assistant' $otlpHttp)
   Write-Host "                  callback and the mail links only, which can name just one."
   Write-Host "                  Change it with -AppSlot <n>."
   Write-Host ""
-  Write-Host 'Start the whole thing (compose, migrations, all five services):'
+  Write-Host 'Start the whole thing (compose, migrations, all seven services):'
   Write-Host '  ./k8s/e2e/luna-shopper-backend/luna-slot.ps1 -Up'
 }
 
@@ -804,7 +990,7 @@ function Invoke-Up {
 
   $ports = Start-Services $serviceNames $slotNumber
 
-  Write-Host "==> waiting up to ${Timeout}s for the five services to listen"
+  Write-Host "==> waiting up to ${Timeout}s for the seven services to listen"
   if (Wait-ForPorts $ports $Timeout) {
     Write-Host ""
     Write-Host "Luna Shopper slot $slotNumber is up."
@@ -858,7 +1044,7 @@ function Invoke-Down {
   $slotNumber = [int]$config['LUNA_SLOT']
   Write-Host "==> stopping the services of Luna Shopper slot $slotNumber"
   if (-not (Stop-Services $serviceNames (Get-ServicePorts $slotNumber))) {
-    Write-Host '  none of the five were running'
+    Write-Host '  none of the seven were running'
   }
 
   # Containers only ever hold the infra ports, so they are taken down by compose
@@ -901,42 +1087,45 @@ function Invoke-List {
   Write-Host ""
   Write-Host 'Luna Shopper dev slots (slot 0 is the historic ports; 1 and up are a block at 43000 + (slot-1)*100)'
   Write-Host ""
-  Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5}' -f 'SLOT', 'COMPOSE PROJECT', 'INFRA', 'SERVICES', 'OBSERV', 'CLAIMED BY')
+  Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5,-6} {6}' -f 'SLOT', 'COMPOSE PROJECT', 'INFRA', 'SERVICES', 'OBSERV', 'TEST', 'CLAIMED BY')
 
   for ($slot = 0; $slot -le $maxSlot; $slot++) {
     $infra = Measure-Open (Get-InfraPorts $slot)
     $svc = Measure-Open (Get-ServicePorts $slot)
     $observ = Measure-Open (Get-ObservabilityPorts $slot)
+    $testDb = Measure-Open (Get-TestDbPorts $slot)
 
     $claim = @()
     if ($claimedBy.ContainsKey($slot)) { $claim = $claimedBy[$slot] }
 
     # Nothing running and nobody configured for it: not worth a line.
-    if ($claim.Count -eq 0 -and $infra -like '0/*' -and $svc -like '0/*' -and $observ -like '0/*') {
+    if ($claim.Count -eq 0 -and $infra -like '0/*' -and $svc -like '0/*' -and
+        $observ -like '0/*' -and $testDb -like '0/*') {
       continue
     }
 
     if ($claim.Count -eq 0) {
-      Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5}' -f $slot, (Get-SlotProject $slot), $infra, $svc, $observ, '(no worktree claims it)')
+      Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5,-6} {6}' -f $slot, (Get-SlotProject $slot), $infra, $svc, $observ, $testDb, '(no worktree claims it)')
       continue
     }
 
     for ($i = 0; $i -lt $claim.Count; $i++) {
       if ($i -eq 0) {
-        Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5}' -f $slot, (Get-SlotProject $slot), $infra, $svc, $observ, $claim[$i])
+        Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5,-6} {6}' -f $slot, (Get-SlotProject $slot), $infra, $svc, $observ, $testDb, $claim[$i])
       }
       else {
-        Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5}' -f '', '', '', '', '', $claim[$i])
+        Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5,-6} {6}' -f '', '', '', '', '', '', $claim[$i])
       }
     }
   }
 
   Write-Host ""
-  Write-Host '  INFRA     the three databases, NATS and its monitor, Redis, SMTP, Mailpit'
-  Write-Host '  SERVICES  gateway, realtime, auth, core, catalog, assistant'
+  Write-Host '  INFRA     the four databases, NATS and its monitor, Redis, SMTP, Mailpit'
+  Write-Host '  SERVICES  gateway, realtime, auth, core, catalog, harvester, assistant'
   Write-Host '  OBSERV    collector, Jaeger, Prometheus, Grafana: opt in, so 0/5 is normal'
+  Write-Host '  TEST      the four test-profile databases: opt in too, so 0/4 is normal'
   Write-Host ""
-  Write-Host 'A slot claimed with 0/8 infra is configured but not started: -Up will take it.'
+  Write-Host 'A slot claimed with 0/9 infra is configured but not started: -Up will take it.'
   Write-Host "Slots 0..$maxSlot with neither a claim nor a listener are omitted."
 }
 
@@ -963,7 +1152,7 @@ stack and its volumes alone so a restart never costs you the data.
 
 options:
   -Profile <name>   compose profile for -Up / -Down (e.g. observability)
-  -Services a,b     limit -Restart to these (default: all five)
+  -Services a,b     limit -Restart to these (default: all seven)
   -AppSlot <n>      which Angular slot the Google callback and the mail links
                     send a browser to (default 0). Only those; CORS allows every
                     Angular slot no matter what this says.
@@ -976,7 +1165,7 @@ and several can at the same time. Backend slot 3 does not imply front end slot 3
 
 -Up is the whole thing: it writes the .env files if they are missing, brings the
 compose stack up and waits on its healthchecks, runs the migrations, then serves
-all five services. -Down is its inverse, and by default it removes this slot's
+all seven services. -Down is its inverse, and by default it removes this slot's
 volumes, which is what `stack.sh down` has always meant here.
 '@
 exit 2

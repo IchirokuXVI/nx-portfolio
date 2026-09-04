@@ -1,0 +1,21 @@
+{
+  "name": "luna-shopper-admin/feature-resource",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper-admin/feature-resource/src",
+  "prefix": "lib",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/luna-shopper-admin/feature-resource/jest.config.cts",
+        "tsConfig": "libs/luna-shopper-admin/feature-resource/tsconfig.spec.json"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

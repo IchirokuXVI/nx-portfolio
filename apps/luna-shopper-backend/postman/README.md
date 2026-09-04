@@ -37,7 +37,7 @@ environment selected at all the collection falls back to slot 0.
 | 04 · Zones | Owner lifecycle: create, read, rename, members, join-code rotation |
 | 05 · Lists & lines | Lists, lines, status, approval, reordering, comments, counters |
 | 06 · Catalog (read) | Catalog reads, and that a non-admin write is correctly refused |
-| 06b · Catalog (admin only) | Write CRUD and the price join. Skipped unless `catalogAdmin` is set |
+| 06b · Catalog (admin only) | Operator login, then write CRUD and the price join under `/v1/admin/catalog`. Skipped unless `catalogAdmin` is set |
 | 07 · Account | Global username change, and that `GLOBAL_ONLY` really is scoped |
 | 08 · Contract & errors | 401/404/400 paths return RFC7807 problem documents, not 500s |
 | 09 · Cleanup | Deletes everything the run created |
@@ -63,20 +63,29 @@ name the failing service directly:
 If folder 00 fails, everything after it fails too and there is no point reading the rest
 of the output. Fix the service it names first.
 
-## Catalog writes need the admin allowlist
+## Catalog writes are a different namespace and a different token
 
-Catalog reads are open to any authenticated user, but every catalog **write** is gated to
-`PLATFORM_ADMIN_USER_IDS` in the catalog service — the app owner alone. A normal run gets
-`403` on all of them, so folder 06b skips itself unless you opt in:
+Catalog reads are open to any authenticated user. Every catalog **write** lives under
+`/v1/admin/catalog/**` since plan 0073 and is guarded by `AdminJwtGuard`, which verifies an
+operator token against a different key from the one velista's tokens are signed with. So the
+two principals are not interchangeable in either direction, and folder 06b skips itself unless
+you opt in.
 
-1. Run the suite once and note the `userId` it registered (folder 02).
-2. Add that id to `PLATFORM_ADMIN_USER_IDS` in `apps/luna-shopper-backend/catalog/.env` and
-   restart the catalog service.
-3. Set the collection variable `catalogAdmin` to `true`.
+Opting in is not a variable holding your own user id. Since plan 0072 the gate is a
+**signature**, and since 0073 the gateway forwards it, so an operator has to exist:
 
-Folder 06 covers the part that matters without any of that: it asserts a non-admin write is
-refused with a `403`, which is the check worth having, since that allowlist is the only
-thing standing between a signed-in user and the shared catalog.
+1. `npx nx run luna-shopper-backend-auth:admin:create <username>` (plan 0071, section 6).
+2. Set `adminUsername` and `adminPassword`, and `catalogAdmin` to `true`.
+3. The folder's first request signs in and stores `adminToken` for the rest of it.
+
+`adminToken` is deliberately a second variable rather than the folder overwriting
+`accessToken`. One variable holding either principal is how a request comes to send the wrong
+one, and after 0073 the wrong one is refused rather than ignored.
+
+Folder 06 covers the boundary without any of that, and it is the check worth having: it sends
+a velista access token to `POST /v1/admin/catalog/items` and asserts a `401`, then asserts that
+the route's old path answers `404`. Together those say the write moved rather than merely
+gained a second guard.
 
 ## Two things this suite currently catches
 

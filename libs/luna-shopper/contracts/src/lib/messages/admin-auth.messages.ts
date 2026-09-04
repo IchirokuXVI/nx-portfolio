@@ -22,6 +22,19 @@ export const ADMIN_AUTH_PATTERNS = {
   /** Read one admin by id, for `GET /v1/admin/auth/me`. */
   getAdmin: 'adminAuth.getAdmin',
   /**
+   * Every admin, for `GET /v1/admin/admins` (plan 0074, section 5).
+   *
+   * The read half of section 6 of plan 0071 and, permanently, the only half. The
+   * screen this feeds answers "who has access", which is a question worth
+   * answering from a browser; granting or removing access is not, and stays an
+   * action that requires the server. Adding a create, update or delete subject
+   * beside this one would need plan 0071 changed first, not merely this file.
+   *
+   * No filters and no page. There are a handful of rows and there is no version
+   * of this product where there are enough to paginate.
+   */
+  listAdmins: 'adminAuth.listAdmins',
+  /**
    * Mint a token for a named admin with no password (plan 0071, section 8).
    *
    * Guarded twice over: the gateway only sends it when `ADMIN_DEV_AUTOLOGIN` is
@@ -37,6 +50,44 @@ export type AdminAuthPattern =
 
 /** The audience every admin token carries, and no other token does. */
 export const ADMIN_TOKEN_AUDIENCE = 'platform-admin';
+
+/**
+ * What a caller presents at a downstream admin gate (plan 0072, section 2).
+ *
+ * Catalog and harvester decide who is an admin **for themselves**, and this is
+ * the evidence they decide on. `adminToken` is the operator token the gateway
+ * forwarded, verified offline against `ADMIN_JWT_PUBLIC_KEY` by whichever service
+ * received it. That the gateway also checked it is not the point: a gateway route
+ * that forgets its guard, or a new one added without one, still cannot write the
+ * catalog, because the service behind it proves the signature itself. A trusted
+ * `isPlatformAdmin` boolean in the payload would throw that property away and
+ * replace it with a convention nobody can enforce in review.
+ *
+ * `userId` is who the caller says it is, and it is **not** a credential. It
+ * carries the caller's identity for reads scoped to a person, and it is the only
+ * thing a *service* presents for itself: catalog matches it against its
+ * configured `serviceActorIds`, which is how the harvester writes prices without
+ * holding a credential shaped like a person's (section 4).
+ *
+ * Both fields are optional to a gate in different ways, so neither is optional
+ * here by accident: a request with no `adminToken` can still pass catalog's gate
+ * as a service, and a request whose `userId` is unknown can still pass it as an
+ * admin. What no request can do is pass by naming a uuid, which is what
+ * `PLATFORM_ADMIN_USER_IDS` allowed and why it is gone.
+ *
+ * Some `*IdRequest` shapes below are shared between an open read and a gated
+ * delete. They carry `adminToken` for the delete's sake; a read simply ignores
+ * it.
+ */
+export interface AdminCredential {
+  /** The actor the caller presents for itself: a person's id, or a service's. */
+  userId: string;
+  /**
+   * The operator token the gateway forwarded, when a person made the call.
+   * Absent on a service to service call, which has no token to forward.
+   */
+  adminToken?: string;
+}
 
 /**
  * The claims inside a signed admin token (plan 0071, section 4).
@@ -108,6 +159,24 @@ export interface GetAdminRequest {
 /** Mint a development token for a named admin (plan 0071, section 8). */
 export interface AdminDevAutologinRequest {
   username: string;
+}
+
+/**
+ * Ask for the admin roster. Only the operator's own credential: there is nothing
+ * to filter by and nothing to page through (plan 0074, section 5).
+ */
+export type ListAdminsRequest = AdminCredential;
+
+/**
+ * Every admin, oldest first, so the order matches the order they were created in
+ * and does not shuffle when somebody signs in.
+ *
+ * An object rather than a bare array, so the shape matches every other listing
+ * this API returns and a field can be added beside it without becoming a
+ * breaking change.
+ */
+export interface AdminIdentityListView {
+  admins: AdminIdentityView[];
 }
 
 /**

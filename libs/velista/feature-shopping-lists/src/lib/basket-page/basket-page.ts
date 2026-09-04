@@ -18,6 +18,7 @@ import {
 import {
   BASKET_REOPEN_AVAILABLE,
   BasketStore,
+  GeneratedListStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import {
@@ -35,6 +36,7 @@ import {
 } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
+  FlagIcon,
   LineComposer,
   OfflineIcon,
   PersonIcon,
@@ -102,6 +104,7 @@ import { BASKET_PATHS } from '../basket-paths';
   imports: [
     BasketLineRow,
     ChevronLeftIcon,
+    FlagIcon,
     LineComposer,
     OfflineIcon,
     PersonIcon,
@@ -127,6 +130,15 @@ export class BasketPage {
    * Null for a guest, who has no account and whose own row the server does name.
    */
   private readonly _session = inject(SessionStore);
+  /**
+   * The owner's own surface, for the one write this screen makes that is not a
+   * participant's: finishing the trip, and taking it back (velista `0057`).
+   *
+   * Injected for every reader, guests included, and that costs nothing: the store is
+   * app scoped and already constructed by the dashboard, and nothing here calls it
+   * unless the control that reaches it was drawn, which is the owner's alone.
+   */
+  private readonly _generated = inject(GeneratedListStore);
 
   private readonly _id =
     this._route.snapshot.paramMap.get('generatedListId') ?? '';
@@ -143,6 +155,73 @@ export class BasketPage {
   protected readonly isOwner = computed(
     () => this._store.me()?.kind === 'OWNER'
   );
+
+  /**
+   * Whether the trip is over, which is what takes every control off this screen
+   * (plan 0057, section 6).
+   *
+   * The screen still reads. It is the receipt for a trip somebody took, and the most
+   * likely reason to open one is to see what was bought, so every line, every
+   * settlement, the people, the history, the share sheet and the link are all still
+   * here. What goes is everything that would change it, absent rather than disabled
+   * per `0030`: the settle control on a row, the reel, the composer, the product
+   * swap, the units sheet and the send sheet.
+   */
+  protected readonly finished = this._store.finished;
+
+  /**
+   * Whether to draw the control that ends the trip, and it is the **owner's alone**.
+   *
+   * Absent for a registered participant and absent for a guest, not disabled, which
+   * is `0030`'s rule and the treatment the share control beside it already gets.
+   * Finishing ends the trip for four people at once, which is why it is not handed to
+   * whoever happens to be holding a link; somebody who is not the owner and thinks
+   * the shopping is over can say so in the basket's own chat.
+   *
+   * The server agrees rather than being trusted to: the route behind it is account
+   * authenticated and scoped to the owner, so a guest cannot reach it with any token
+   * they hold. {@link isOwner} already existed for the share control and this is its
+   * second reader.
+   */
+  protected readonly canFinish = computed(
+    () => this.isOwner() && !this.finished()
+  );
+
+  /**
+   * Whether to ask "all done?", which is **all** the last settle does (section 4).
+   *
+   * Settling the last line is not a status change and finishes nothing. The server
+   * does not do it (luna `0059`, section 1.1) and this screen does not pretend it
+   * did: it asks, and a prompt is one tap for the person who is done and nothing at
+   * all for the person who is not. The most common thing that happens after the last
+   * line is settled is remembering milk, and a screen that had closed itself would
+   * have to be reopened by somebody standing in a dairy aisle.
+   *
+   * Only where there were lines to settle, so a basket that arrived empty does not
+   * congratulate anybody, and only for the reader who could act on it.
+   */
+  protected readonly allSettled = computed(
+    () =>
+      this.canFinish() &&
+      this.lines().length > 0 &&
+      this._store.unsettled() === 0
+  );
+
+  /** Whether a finish or a reopen is in flight, so the banner's control can wait. */
+  private readonly _statusBusy = signal(false);
+
+  protected readonly statusBusy = this._statusBusy.asReadonly();
+
+  /**
+   * Whether the last reopen did not land, said on the banner it was pressed from.
+   *
+   * On the banner rather than as a toast, which is `0012` section 3.3's rule: the
+   * control is still there, the sentence belongs beside it, and the basket is still
+   * the finished one it was.
+   */
+  private readonly _reopenFailed = signal(false);
+
+  protected readonly reopenFailed = this._reopenFailed.asReadonly();
 
   /** The reader's own participant id, so their own edits can be named. */
   protected readonly meId = computed(() => this._store.me()?.id ?? null);
@@ -458,6 +537,46 @@ export class BasketPage {
     void this._router.navigate(sheetSegments('share'), {
       relativeTo: this._route,
     });
+  }
+
+  /**
+   * Ask before ending the trip (plan 0057, section 5).
+   *
+   * Both ways in reach the same sheet: the control in the header, pressed at any
+   * point in a trip, and the prompt that appears once every line is settled. Two
+   * gestures asking one question, so there is one place the question is written.
+   */
+  protected openFinish(): void {
+    void this._router.navigate(sheetSegments('finish'), {
+      relativeTo: this._route,
+    });
+  }
+
+  /**
+   * Take the trip back, from the banner, with **no confirmation** (section 8).
+   *
+   * The same write as finishing, in the other direction, and the server re-announces
+   * the claims (luna `0059`, section 2.2). Nothing is destroyed and the act is
+   * trivially repeatable, which is the test `0031` applies before it asks a question,
+   * and it is what makes the finish sheet honest: the owner is confirming something
+   * reversible, which is why that sheet warns about the people rather than about
+   * finality.
+   *
+   * The basket is refetched rather than waited for over the socket. `generatedList.updated`
+   * does arrive, coalesced by a second and a half, and a screen whose controls came
+   * back that long after the tap reads as a button that did not work.
+   */
+  protected async reopenBasket(): Promise<void> {
+    this._statusBusy.set(true);
+    this._reopenFailed.set(false);
+
+    const landed = await this._generated.setStatus(this._id, 'ACTIVE');
+    if (landed) {
+      await this._store.refresh();
+    }
+
+    this._reopenFailed.set(!landed);
+    this._statusBusy.set(false);
   }
 
   protected retry(): void {

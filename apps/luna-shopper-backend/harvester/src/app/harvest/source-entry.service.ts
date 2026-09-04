@@ -59,7 +59,7 @@ export class SourceEntryService {
   ) {}
 
   async list(req: ListSourceEntriesRequest): Promise<SourceCatalogEntryPage> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as EntryCursor | undefined;
 
@@ -118,7 +118,7 @@ export class SourceEntryService {
   async createItem(
     req: CreateItemFromSourceEntryRequest
   ): Promise<ItemView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
 
     // EAN is unique in catalog, so a duplicate would be refused by the database

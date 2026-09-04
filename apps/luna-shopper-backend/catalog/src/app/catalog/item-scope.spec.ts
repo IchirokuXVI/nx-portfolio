@@ -1,6 +1,7 @@
 import type { Repository } from 'typeorm';
 import type { Item, ProductGroup, SupermarketItem } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
+import { fakeAudit } from './catalog-audit.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -47,6 +48,8 @@ function build() {
     prices,
     {} as unknown as ProductGroupService,
     {} as unknown as PlatformAdminService,
+    // Plan 0075. Both reads here, so no transaction is ever opened.
+    fakeAudit([]).service,
     // Plan 0070. Neither read here moves a product's group, so it is never
     // called; the constructor still needs it.
     {} as unknown as CatalogEventsPublisher

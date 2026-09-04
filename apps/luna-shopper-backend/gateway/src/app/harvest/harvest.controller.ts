@@ -28,9 +28,10 @@ import {
   type SupermarketSourcePage,
   type SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
-import { AuthUser } from '../auth/current-user.decorator';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { CurrentUser } from '../auth/jwt.strategy';
+import { adminCredential } from '../admin/admin-credential';
+import { AdminJwtGuard } from '../admin/admin-jwt.guard';
+import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
+import { ActingAdmin } from '../admin/current-admin.decorator';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
@@ -55,13 +56,20 @@ import {
  * the path says so. Nothing in this plan is open to ordinary users; catalog's
  * existing reads are unchanged and still open.
  *
+ * Since plan 0073 the gateway says so too. These routes were already in the
+ * namespace and needed only their guard swapped from `JwtAuthGuard` to
+ * {@link AdminJwtGuard}, so a velista token no longer reaches a handler that the
+ * harvester was always going to refuse. The harvester still verifies the
+ * forwarded token for itself, which is plan 0072's property and is why the token
+ * travels rather than a flag.
+ *
  * There is no push channel: live progress is **polling** `GET runs/:id` (section
  * 6.6, phase one). The realtime `admin:harvest` room stays deferred, and building
  * a second push path here is the thing that plan explicitly says not to do.
  */
 @ApiTags('admin-harvest')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'admin/harvest/runs', version: '1' })
 export class AdminHarvestRunsController {
@@ -81,11 +89,11 @@ export class AdminHarvestRunsController {
   @ApiContractResponse(HARVEST_PATTERNS.spawn, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true, conflict: true })
   spawn(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: SpawnHarvestRunDto
   ): Promise<HarvestRunView> {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.spawn, {
-      userId: user.userId,
+      ...adminCredential(admin),
       ...dto,
     });
   }
@@ -93,11 +101,11 @@ export class AdminHarvestRunsController {
   @Get()
   @ApiContractResponse(HARVEST_PATTERNS.runList)
   list(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Query() query: HarvestRunListQueryDto
   ): Promise<HarvestRunPage> {
     return this.nats.send<HarvestRunPage>(HARVEST_PATTERNS.runList, {
-      userId: user.userId,
+      ...adminCredential(admin),
       supermarketId: query.supermarketId,
       mode: query.mode,
       status: query.status,
@@ -110,11 +118,11 @@ export class AdminHarvestRunsController {
   @Get(':id')
   @ApiContractResponse(HARVEST_PATTERNS.runGet)
   get(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string
   ): Promise<HarvestRunView> {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.runGet, {
-      userId: user.userId,
+      ...adminCredential(admin),
       runId: id,
     });
   }
@@ -127,11 +135,11 @@ export class AdminHarvestRunsController {
   @Post(':id/abort')
   @ApiContractResponse(HARVEST_PATTERNS.abort, { status: HttpStatus.CREATED })
   abort(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string
   ): Promise<HarvestRunView> {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.abort, {
-      userId: user.userId,
+      ...adminCredential(admin),
       runId: id,
     });
   }
@@ -144,7 +152,7 @@ export class AdminHarvestRunsController {
  */
 @ApiTags('admin-harvest')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'admin/harvest/places', version: '1' })
 export class AdminHarvestPlacesController {
@@ -153,11 +161,11 @@ export class AdminHarvestPlacesController {
   @Get()
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.list)
   list(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Query() query: DiscoveredPlaceListQueryDto
   ): Promise<DiscoveredPlacePage> {
     return this.nats.send<DiscoveredPlacePage>(DISCOVERED_PLACE_PATTERNS.list, {
-      userId: user.userId,
+      ...adminCredential(admin),
       runId: query.runId,
       brandKey: query.brandKey,
       status: query.status,
@@ -174,13 +182,13 @@ export class AdminHarvestPlacesController {
   @Get('groups')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.groups)
   groups(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Query() query: DiscoveredPlaceGroupQueryDto
   ): Promise<DiscoveredPlaceGroupsResult> {
     return this.nats.send<DiscoveredPlaceGroupsResult>(
       DISCOVERED_PLACE_PATTERNS.groups,
       {
-        userId: user.userId,
+        ...adminCredential(admin),
         runId: query.runId,
         sampleSize: query.sampleSize,
       }
@@ -193,13 +201,13 @@ export class AdminHarvestPlacesController {
   })
   @ApiProblemResponses({ body: true, conflict: true })
   importPlace(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string,
     @Body() dto: ImportDiscoveredPlaceDto
   ): Promise<DiscoveredPlaceView> {
     return this.nats.send<DiscoveredPlaceView>(
       DISCOVERED_PLACE_PATTERNS.import,
-      { userId: user.userId, placeId: id, ...dto }
+      { ...adminCredential(admin), placeId: id, ...dto }
     );
   }
 
@@ -208,12 +216,12 @@ export class AdminHarvestPlacesController {
     status: HttpStatus.CREATED,
   })
   reject(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string
   ): Promise<DiscoveredPlaceView> {
     return this.nats.send<DiscoveredPlaceView>(
       DISCOVERED_PLACE_PATTERNS.reject,
-      { userId: user.userId, placeId: id }
+      { ...adminCredential(admin), placeId: id }
     );
   }
 }
@@ -225,7 +233,7 @@ export class AdminHarvestPlacesController {
  */
 @ApiTags('admin-harvest')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'admin/harvest/supermarkets/:supermarketId/entries', version: '1' })
 export class AdminHarvestEntriesController {
@@ -234,12 +242,12 @@ export class AdminHarvestEntriesController {
   @Get()
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.list)
   list(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('supermarketId') supermarketId: string,
     @Query() query: SourceEntryListQueryDto
   ): Promise<SourceCatalogEntryPage> {
     return this.nats.send<SourceCatalogEntryPage>(SOURCE_ENTRY_PATTERNS.list, {
-      userId: user.userId,
+      ...adminCredential(admin),
       supermarketId,
       unmatchedOnly: query.unmatchedOnly,
       query: query.query,
@@ -259,12 +267,12 @@ export class AdminHarvestEntriesController {
   })
   @ApiProblemResponses({ body: true, conflict: true })
   createItem(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('entryId') entryId: string,
     @Body() dto: CreateItemFromEntryDto
   ): Promise<ItemView> {
     return this.nats.send<ItemView>(SOURCE_ENTRY_PATTERNS.createItem, {
-      userId: user.userId,
+      ...adminCredential(admin),
       entryId,
       ...dto,
     });
@@ -278,7 +286,7 @@ export class AdminHarvestEntriesController {
  */
 @ApiTags('admin-harvest')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'admin/harvest/item-refs', version: '1' })
 export class AdminHarvestItemRefsController {
@@ -287,11 +295,11 @@ export class AdminHarvestItemRefsController {
   @Get()
   @ApiContractResponse(ITEM_SOURCE_REF_PATTERNS.list)
   list(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Query() query: ItemSourceRefListQueryDto
   ): Promise<ItemSourceRefPage> {
     return this.nats.send<ItemSourceRefPage>(ITEM_SOURCE_REF_PATTERNS.list, {
-      userId: user.userId,
+      ...adminCredential(admin),
       ...query,
     });
   }
@@ -299,12 +307,12 @@ export class AdminHarvestItemRefsController {
   @Get('unresolved')
   @ApiContractResponse(ITEM_SOURCE_REF_PATTERNS.listUnresolved)
   listUnresolved(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Query() query: ItemSourceRefListQueryDto
   ): Promise<ItemSourceRefPage> {
     return this.nats.send<ItemSourceRefPage>(
       ITEM_SOURCE_REF_PATTERNS.listUnresolved,
-      { userId: user.userId, ...query }
+      { ...adminCredential(admin), ...query }
     );
   }
 
@@ -312,12 +320,12 @@ export class AdminHarvestItemRefsController {
   @ApiContractResponse(ITEM_SOURCE_REF_PATTERNS.setManual)
   @ApiProblemResponses({ body: true })
   setManual(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: SetManualItemSourceRefDto
   ): Promise<ItemSourceRefView> {
     return this.nats.send<ItemSourceRefView>(
       ITEM_SOURCE_REF_PATTERNS.setManual,
-      { userId: user.userId, ...dto }
+      { ...adminCredential(admin), ...dto }
     );
   }
 
@@ -326,11 +334,11 @@ export class AdminHarvestItemRefsController {
     status: HttpStatus.CREATED,
   })
   confirm(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string
   ): Promise<ItemSourceRefView> {
     return this.nats.send<ItemSourceRefView>(ITEM_SOURCE_REF_PATTERNS.confirm, {
-      userId: user.userId,
+      ...adminCredential(admin),
       refId: id,
     });
   }
@@ -340,11 +348,11 @@ export class AdminHarvestItemRefsController {
     status: HttpStatus.CREATED,
   })
   reject(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string
   ): Promise<ItemSourceRefView> {
     return this.nats.send<ItemSourceRefView>(ITEM_SOURCE_REF_PATTERNS.reject, {
-      userId: user.userId,
+      ...adminCredential(admin),
       refId: id,
     });
   }
@@ -353,7 +361,7 @@ export class AdminHarvestItemRefsController {
 /** Per chain fetching configuration (plan 0038, sections 4.2 and 6.3). */
 @ApiTags('admin-harvest')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'admin/harvest/sources', version: '1' })
 export class AdminHarvestSourcesController {
@@ -362,24 +370,24 @@ export class AdminHarvestSourcesController {
   @Get()
   @ApiContractResponse(SUPERMARKET_SOURCE_PATTERNS.list)
   list(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Query() query: HarvestRunListQueryDto
   ): Promise<SupermarketSourcePage> {
     return this.nats.send<SupermarketSourcePage>(
       SUPERMARKET_SOURCE_PATTERNS.list,
-      { userId: user.userId, cursor: query.cursor, limit: query.limit }
+      { ...adminCredential(admin), cursor: query.cursor, limit: query.limit }
     );
   }
 
   @Get(':supermarketId')
   @ApiContractResponse(SUPERMARKET_SOURCE_PATTERNS.get)
   get(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('supermarketId') supermarketId: string
   ): Promise<SupermarketSourceView> {
     return this.nats.send<SupermarketSourceView>(
       SUPERMARKET_SOURCE_PATTERNS.get,
-      { userId: user.userId, supermarketId }
+      { ...adminCredential(admin), supermarketId }
     );
   }
 
@@ -387,13 +395,13 @@ export class AdminHarvestSourcesController {
   @ApiContractResponse(SUPERMARKET_SOURCE_PATTERNS.upsert)
   @ApiProblemResponses({ body: true })
   upsert(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('supermarketId') supermarketId: string,
     @Body() dto: UpsertSupermarketSourceDto
   ): Promise<SupermarketSourceView> {
     return this.nats.send<SupermarketSourceView>(
       SUPERMARKET_SOURCE_PATTERNS.upsert,
-      { userId: user.userId, supermarketId, ...dto }
+      { ...adminCredential(admin), supermarketId, ...dto }
     );
   }
 
@@ -405,13 +413,13 @@ export class AdminHarvestSourcesController {
   @ApiContractResponse(SUPERMARKET_SOURCE_PATTERNS.setEnabled)
   @ApiProblemResponses({ body: true })
   setEnabled(
-    @AuthUser() user: CurrentUser,
+    @ActingAdmin() admin: CurrentAdmin,
     @Param('supermarketId') supermarketId: string,
     @Body() dto: SetSourceEnabledDto
   ): Promise<SupermarketSourceView> {
     return this.nats.send<SupermarketSourceView>(
       SUPERMARKET_SOURCE_PATTERNS.setEnabled,
-      { userId: user.userId, supermarketId, enabled: dto.enabled }
+      { ...adminCredential(admin), supermarketId, enabled: dto.enabled }
     );
   }
 }

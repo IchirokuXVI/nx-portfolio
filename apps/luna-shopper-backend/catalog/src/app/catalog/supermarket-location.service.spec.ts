@@ -1,11 +1,14 @@
+import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
-import type {
-  PostalCodePoint,
-  Supermarket,
+// `SupermarketLocation` is a value here: the audit double keys on the class.
+import {
   SupermarketLocation,
+  type PostalCodePoint,
+  type Supermarket,
 } from '../entities';
+import { fakeAudit } from './catalog-audit.testing';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
@@ -88,20 +91,33 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
 
   const config = {
     getOrThrow: () => ({
-      platformAdminUserIds: [OWNER],
+      // The owner writes as a configured SERVICE here (plan 0072). This file is
+      // about location and postal code behaviour rather than about which door
+      // the caller came through, and the service path needs no keypair.
+      adminJwtPublicKey: '',
+      serviceActorIds: [OWNER],
       postalCodeDeriveMaxMetres: MAX_METRES,
     }),
   } as unknown as ConfigService;
 
+  // Plan 0075: a location and the store scope created for it now commit
+  // together, so the create runs inside a transaction this double stands in for.
+  const audit = fakeAudit([
+    [
+      SupermarketLocation,
+      { name: 'supermarket_locations', repository: locations },
+    ],
+  ]);
   const service = new SupermarketLocationService(
     locations,
     supermarkets,
     scopes,
-    new PlatformAdminService(config),
+    new PlatformAdminService(new JwtService(), config),
+    audit.service,
     new PostalCodeService(pointsRepository),
     config
   );
-  return { service, locations, stored };
+  return { service, locations, stored, audit };
 }
 
 /** Everything a create needs beyond the field under test. */
@@ -329,5 +345,63 @@ describe('SupermarketLocationService postal codes', () => {
 
     expect(view.postalCodeSource).toBe(PostalCodeSource.DERIVED);
     expect(view.priceScopeId).toBe(SCOPE);
+  });
+});
+
+/**
+ * The review filter (plan 0073, section 4, for `apps/luna-shopper-admin/plans/0005`
+ * section 3).
+ *
+ * `DERIVED` means the postal code was inferred from the nearest centroid rather
+ * than known, and the point of the filter is that an operator can list exactly
+ * those rows. The case worth pinning is the third state: a location with no
+ * postal code at all has no source either, so it is absent from every value of
+ * the filter rather than folded in with the guesses.
+ */
+describe('SupermarketLocationService.list postal code filter', () => {
+  function listing() {
+    const qb: Record<string, jest.Mock> = {};
+    for (const name of ['where', 'andWhere', 'orderBy', 'addOrderBy', 'take']) {
+      qb[name] = jest.fn(() => qb);
+    }
+    qb.getMany = jest.fn(async () => []);
+
+    const locations = {
+      createQueryBuilder: jest.fn(() => qb),
+    } as unknown as Repository<SupermarketLocation>;
+
+    const service = new SupermarketLocationService(
+      locations,
+      {} as Repository<Supermarket>,
+      {} as PriceScopeService,
+      {} as PlatformAdminService,
+      // A read: nothing here opens a transaction.
+      fakeAudit([]).service,
+      {} as PostalCodeService,
+      { getOrThrow: () => ({}) } as unknown as ConfigService
+    );
+    return { service, qb };
+  }
+
+  it('narrows to one source when the caller names one', async () => {
+    const { service, qb } = listing();
+
+    await service.list({
+      userId: OWNER,
+      supermarketId: CHAIN,
+      postalCodeSource: PostalCodeSource.DERIVED,
+    });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('l."postalCodeSource" = :pcs', {
+      pcs: PostalCodeSource.DERIVED,
+    });
+  });
+
+  it('lists the whole chain when it does not', async () => {
+    const { service, qb } = listing();
+
+    await service.list({ userId: OWNER, supermarketId: CHAIN });
+
+    expect(qb.andWhere).not.toHaveBeenCalled();
   });
 });

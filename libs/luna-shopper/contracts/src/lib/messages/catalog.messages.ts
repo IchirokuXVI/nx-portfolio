@@ -6,6 +6,7 @@ import type {
   UnitOfMeasure,
 } from '../enums/catalog.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { AdminCredential } from './admin-auth.messages';
 
 /**
  * Catalog message contracts (plan 0012). The gateway calls these on the catalog
@@ -154,6 +155,17 @@ export const SUPERMARKET_ITEM_PATTERNS = {
   listByItem: 'supermarketItem.listByItem',
   listByLocation: 'supermarketItem.listByLocation',
   listByScope: 'supermarketItem.listByScope',
+  /**
+   * Every price, filtered the way an operator filters them (plan 0073, section
+   * 4).
+   *
+   * A fourth list rather than optional arguments on the three above, because
+   * those all start from something the caller already named: a product, a shop,
+   * a scope. This one starts from nothing, which is the question "what have I
+   * pinned by hand" and is the whole reason the price screen exists. It is
+   * reachable only through `/v2/admin/catalog/supermarket-items`.
+   */
+  adminList: 'supermarketItem.adminList',
 } as const;
 
 /**
@@ -498,16 +510,14 @@ export interface SupermarketLocationItemView {
 
 // --- Supermarket requests --------------------------------------------------
 
-export interface CreateSupermarketRequest {
-  userId: string;
+export interface CreateSupermarketRequest extends AdminCredential {
   name: LocalizedText;
   logoUrl?: string | null;
   websiteUrl?: string | null;
   externalBrandKey?: string | null;
 }
 
-export interface UpdateSupermarketRequest {
-  userId: string;
+export interface UpdateSupermarketRequest extends AdminCredential {
   supermarketId: string;
   name?: LocalizedText;
   logoUrl?: string | null;
@@ -521,8 +531,7 @@ export interface UpdateSupermarketRequest {
   defaultPriceScopeId?: string | null;
 }
 
-export interface SupermarketIdRequest {
-  userId: string;
+export interface SupermarketIdRequest extends AdminCredential {
   supermarketId: string;
 }
 
@@ -532,8 +541,7 @@ export interface ListSupermarketsRequest extends PageQuery {
 
 // --- Supermarket location requests -----------------------------------------
 
-export interface CreateSupermarketLocationRequest {
-  userId: string;
+export interface CreateSupermarketLocationRequest extends AdminCredential {
   supermarketId: string;
   /**
    * Optional: a location with no scope named is given its chain's STORE scope for
@@ -571,8 +579,7 @@ export interface CreateSupermarketLocationRequest {
   externalProvider?: string | null;
 }
 
-export interface UpdateSupermarketLocationRequest {
-  userId: string;
+export interface UpdateSupermarketLocationRequest extends AdminCredential {
   supermarketLocationId: string;
   priceScopeId?: string;
   label?: LocalizedText | null;
@@ -592,8 +599,7 @@ export interface UpdateSupermarketLocationRequest {
   externalProvider?: string | null;
 }
 
-export interface SupermarketLocationIdRequest {
-  userId: string;
+export interface SupermarketLocationIdRequest extends AdminCredential {
   supermarketLocationId: string;
 }
 
@@ -606,6 +612,16 @@ export interface ListSupermarketLocationsRequest extends PageQuery {
    * into somewhere to go. Absent lists the whole chain, as before.
    */
   priceScopeId?: string;
+  /**
+   * Only the shops whose postal code came from here (plan 0073, section 4).
+   *
+   * {@link PostalCodeSource.DERIVED} is the one an operator asks for: it means
+   * the code was inferred from the nearest centroid rather than known, and
+   * `apps/luna-shopper-admin/plans/0005` section 3 is the screen that lists them.
+   * A shop with no postal code at all is a third state and not this one, so it
+   * is absent from every value of this filter rather than folded into `DERIVED`.
+   */
+  postalCodeSource?: PostalCodeSource;
 }
 
 /**
@@ -687,8 +703,7 @@ export interface SearchShopsRequest extends PageQuery, ShopRefusals {
 
 // --- Item requests ---------------------------------------------------------
 
-export interface CreateItemRequest {
-  userId: string;
+export interface CreateItemRequest extends AdminCredential {
   name: LocalizedText;
   brand?: string | null;
   imageUrl?: string | null;
@@ -701,8 +716,7 @@ export interface CreateItemRequest {
   productGroupId?: string | null;
 }
 
-export interface UpdateItemRequest {
-  userId: string;
+export interface UpdateItemRequest extends AdminCredential {
   itemId: string;
   name?: LocalizedText;
   brand?: string | null;
@@ -731,8 +745,7 @@ export interface FindItemByEanResult {
   item: ItemView | null;
 }
 
-export interface ItemIdRequest {
-  userId: string;
+export interface ItemIdRequest extends AdminCredential {
   itemId: string;
 }
 
@@ -789,6 +802,20 @@ export interface SearchItemsRequest extends PageQuery {
   /** Only this group's members (plan 0048). What "show me every milk" asks. */
   productGroupId?: string;
   /**
+   * Only the products belonging to no group at all (plan 0073, section 4).
+   *
+   * The one filter the back office needs that a shopper never would: an
+   * ungrouped product is invisible to every "show me milk" read, so this is how
+   * the operator finds the ones curation has not reached. It is a separate flag
+   * rather than a null {@link productGroupId} because absent already means "any
+   * group", and a filter cannot spell "no group" by leaving itself out.
+   *
+   * `false` is the same as absent. Setting it beside a `productGroupId` asks for
+   * the members of a group that have no group, which is nothing, and the service
+   * answers exactly that rather than picking one of the two.
+   */
+  withoutProductGroup?: boolean;
+  /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *
    * **Absent and empty are the same answer since plan 0069, section 2**: the
@@ -817,16 +844,14 @@ export interface SearchOffersRequest extends PageQuery {
 
 // --- Product group requests ------------------------------------------------
 
-export interface CreateProductGroupRequest {
-  userId: string;
+export interface CreateProductGroupRequest extends AdminCredential {
   name: LocalizedText;
   slug: string;
   referenceUnit: UnitOfMeasure;
   synonyms?: LocalizedSynonyms;
 }
 
-export interface UpdateProductGroupRequest {
-  userId: string;
+export interface UpdateProductGroupRequest extends AdminCredential {
   productGroupId: string;
   name?: LocalizedText;
   slug?: string;
@@ -834,8 +859,7 @@ export interface UpdateProductGroupRequest {
   synonyms?: LocalizedSynonyms;
 }
 
-export interface ProductGroupIdRequest {
-  userId: string;
+export interface ProductGroupIdRequest extends AdminCredential {
   productGroupId: string;
 }
 
@@ -852,8 +876,7 @@ export interface ListProductGroupsRequest extends PageQuery {
  * it sets `priceSourceKind` to ADMIN and **pins** the row: section 6.5's rule is
  * that an automated fetch will not overwrite it afterwards.
  */
-export interface UpsertSupermarketItemRequest {
-  userId: string;
+export interface UpsertSupermarketItemRequest extends AdminCredential {
   itemId: string;
   priceScopeId: string;
   price?: number | null;
@@ -887,8 +910,7 @@ export interface SupermarketItemBatchEntry {
  * does not make one round trip per item. Section 6.5 is applied per entry, and
  * the entries it declined are reported rather than silently dropped.
  */
-export interface UpsertSupermarketItemBatchRequest {
-  userId: string;
+export interface UpsertSupermarketItemBatchRequest extends AdminCredential {
   priceScopeId: string;
   priceSourceKind: PriceSourceKind;
   entries: SupermarketItemBatchEntry[];
@@ -915,8 +937,7 @@ export interface SupermarketItemPriceDisagreement {
   fetchedPrice: number | null;
 }
 
-export interface SupermarketItemIdRequest {
-  userId: string;
+export interface SupermarketItemIdRequest extends AdminCredential {
   supermarketItemId: string;
 }
 
@@ -946,26 +967,48 @@ export interface ListSupermarketItemsByScopeRequest extends PageQuery {
   priceScopeId: string;
 }
 
+/**
+ * The back office's price list (plan 0073, section 4). Every filter is optional
+ * and an empty request pages the whole table, newest first.
+ *
+ * It carries an {@link AdminCredential} although it reads nothing a catalog read
+ * does not already expose. That is deliberate and it is the point of the
+ * namespace: the answer is unscoped and unranked, which is wrong for a shopper
+ * and is the only useful shape for somebody looking for the row they just broke,
+ * so it is reachable by an operator token and by nothing else.
+ */
+export interface AdminListSupermarketItemsRequest
+  extends PageQuery, AdminCredential {
+  /** One product's prices across every scope. */
+  itemId?: string;
+  /** One scope's prices, which is what a chain's price table is. */
+  priceScopeId?: string;
+  /**
+   * `ADMIN` answers "what have I overridden", which plan 0038 section 6.5 makes
+   * permanent and invisible and which nothing else can currently ask.
+   */
+  priceSourceKind?: PriceSourceKind;
+  /** The scope wide flag, not the per store override on `SupermarketLocationItem`. */
+  available?: boolean;
+}
+
 // --- Price scope requests --------------------------------------------------
 
-export interface CreatePriceScopeRequest {
-  userId: string;
+export interface CreatePriceScopeRequest extends AdminCredential {
   supermarketId: string;
   kind: PriceScopeKind;
   externalKey?: string | null;
   label?: LocalizedText | null;
 }
 
-export interface UpdatePriceScopeRequest {
-  userId: string;
+export interface UpdatePriceScopeRequest extends AdminCredential {
   priceScopeId: string;
   kind?: PriceScopeKind;
   externalKey?: string | null;
   label?: LocalizedText | null;
 }
 
-export interface PriceScopeIdRequest {
-  userId: string;
+export interface PriceScopeIdRequest extends AdminCredential {
   priceScopeId: string;
 }
 
@@ -1109,8 +1152,7 @@ export interface ShopChainSummariesView {
 
 // --- Supermarket location item requests ------------------------------------
 
-export interface UpsertSupermarketLocationItemRequest {
-  userId: string;
+export interface UpsertSupermarketLocationItemRequest extends AdminCredential {
   itemId: string;
   supermarketLocationId: string;
   positionInStore?: string | null;
@@ -1309,3 +1351,60 @@ export interface PostalCodeLocationCountsView {
   country: string;
   counts: PostalCodeLocationCount[];
 }
+
+// --- The postal code table, for the back office (plan 0074) ------------------
+
+/**
+ * Read the shipped centroid table itself (plan 0074, section 2).
+ *
+ * The two reads above answer geography questions and neither can show an
+ * operator what is in the table, which is the question the back office asks:
+ * which codes do we hold, and which of them have a shop in them. So this is a
+ * listing rather than a third distance query, and unlike its neighbours it
+ * carries an {@link AdminCredential}: the centroids are reference data, but a
+ * page of them ordered for administration is a back office screen.
+ */
+export const ADMIN_POSTAL_CODE_PATTERNS = {
+  list: 'adminPostalCode.list',
+} as const;
+
+export type AdminPostalCodePattern =
+  (typeof ADMIN_POSTAL_CODE_PATTERNS)[keyof typeof ADMIN_POSTAL_CODE_PATTERNS];
+
+/**
+ * One shipped postal code, with the number of shops catalog knows in it.
+ *
+ * `locationCount` is the answer to "does anything serve this code", counted the
+ * same way `supermarketLocation.countByPostalCode` counts it, so the back office
+ * and the profile widening path cannot disagree about whether a code is covered.
+ */
+export interface AdminPostalCodeView {
+  /** ISO 3166-1 alpha-2, lowercase. */
+  country: string;
+  postalCode: string;
+  latitude: number;
+  longitude: number;
+  /** Supermarket locations whose `postalCode` is this one. Often zero. */
+  locationCount: number;
+}
+
+/**
+ * The filters of section 2: by code, and by whether anything serves them.
+ *
+ * `served` is the one worth being careful about. False means **zero** locations,
+ * which is a great many of the codes in a shipped national table and is exactly
+ * the set an operator looking for coverage gaps wants; true means at least one.
+ * Omitting it is every code, which is the default because a listing that hid the
+ * empty ones by default would make the gap invisible.
+ */
+export interface ListAdminPostalCodesRequest
+  extends AdminCredential, PageQuery {
+  /** ISO 3166-1 alpha-2, lowercase. Defaults to every country in the table. */
+  country?: string;
+  /** Prefix match on the code, which is how a person narrows a numeric code. */
+  postalCode?: string;
+  /** True for codes with at least one location, false for those with none. */
+  served?: boolean;
+}
+
+export type AdminPostalCodePage = Paginated<AdminPostalCodeView>;

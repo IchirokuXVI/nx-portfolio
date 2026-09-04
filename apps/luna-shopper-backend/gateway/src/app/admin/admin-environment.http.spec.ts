@@ -25,7 +25,12 @@ async function boot(environmentName: string) {
       providers: [
         {
           provide: ConfigService,
-          useValue: { getOrThrow: () => ({ environmentName }) },
+          useValue: {
+            getOrThrow: () => ({
+              environmentName,
+              admin: { devAutologin: false },
+            }),
+          },
         },
       ],
     }).compile()
@@ -44,7 +49,10 @@ describe('GET /admin/environment over HTTP', () => {
       const res = await fetch(`${origin}/admin/environment`);
 
       expect(res.status).toBe(200);
-      await expect(res.json()).resolves.toEqual({ environment: 'staging' });
+      await expect(res.json()).resolves.toEqual({
+        environment: 'staging',
+        devAutologin: false,
+      });
     } finally {
       await nest.close();
     }
@@ -64,7 +72,10 @@ describe('GET /admin/environment over HTTP', () => {
       });
 
       expect(res.status).toBe(200);
-      await expect(res.json()).resolves.toEqual({ environment: 'production' });
+      await expect(res.json()).resolves.toEqual({
+        environment: 'production',
+        devAutologin: false,
+      });
     } finally {
       await nest.close();
     }

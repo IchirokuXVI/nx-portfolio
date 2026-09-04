@@ -441,6 +441,20 @@ export interface LinePageVm {
    * again.
    */
   readonly alsoOn: AlsoOnVm | null;
+  /**
+   * Who put this line on the list, as a word to say rather than an id (velista plan
+   * 0066, section 4).
+   *
+   * A name, or the reader's own word for themselves, or the word for somebody this
+   * zone cannot name. Those last two are the same answer to two different situations:
+   * the author left the zone and their name is no longer this reader's to have, or the
+   * line predates the field and the mapper defaulted it to the empty string. Neither is
+   * worth a distinct sentence, and "somebody" is true of both.
+   *
+   * **A caption and never a control.** There is no profile screen for a member, and
+   * inventing an affordance into one is a plan of its own.
+   */
+  readonly addedBy: string;
   /** Whether this caller may edit the product set and delete the line. */
   readonly canEdit: boolean;
   readonly canDelete: boolean;

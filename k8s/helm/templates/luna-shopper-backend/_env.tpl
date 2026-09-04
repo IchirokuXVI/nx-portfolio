@@ -139,6 +139,17 @@ what actually crossed the broker.
     secretKeyRef:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
+# What proves a caller may read somebody else's household (plan 0074). Core
+# verifies the operator token the gateway forwarded against this key, for itself,
+# so a gateway route that forgets its guard still cannot read a stranger's list.
+# The same key catalog and the harvester have held since plan 0072, and a
+# different keypair from the one above: an operator and a velista user are
+# different principals signed by different keys.
+- name: ADMIN_JWT_PUBLIC_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: ADMIN_JWT_PUBLIC_KEY
 {{- /*
 The second half of plan 0045 section 6's cap, from the same two ConfigMap keys the
 gateway reads. Core owns the `bytea` the recording is written into, so it refuses a
@@ -163,17 +174,28 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
-# The platform-admin allowlist (the app owner) that may write the catalog.
-- name: PLATFORM_ADMIN_USER_IDS
+# What proves a caller may write the catalog (plan 0072). Catalog verifies the
+# operator token the gateway forwarded against this key, for itself, so a gateway
+# route that forgets its guard still cannot write.
+- name: ADMIN_JWT_PUBLIC_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: ADMIN_JWT_PUBLIC_KEY
+# The other door, for callers that are machines rather than people (section 4).
+# The harvester's actor id is its only member, and it is a ConfigMap value rather
+# than a Secret because a uuid is not a secret. That is precisely why it no longer
+# grants admin: it names a service, and services may write catalog.
+- name: SERVICE_ACTOR_IDS
   valueFrom:
     configMapKeyRef:
       name: {{ $cfg }}
-      key: PLATFORM_ADMIN_USER_IDS
+      key: SERVICE_ACTOR_IDS
 {{- end }}
 {{- if eq $svc.role "harvester" }}
 # The harvester (plan 0038). It owns the fourth database, verifies tokens offline
 # with the auth public key like catalog does, and gates EVERY subject it exposes
-# on the platform admin allowlist rather than only its writes.
+# on a valid operator token rather than only its writes (plan 0072).
 - name: HARVESTER_DB_URL
   valueFrom:
     secretKeyRef:
@@ -184,7 +206,14 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
-{{- range $key := (list "PLATFORM_ADMIN_USER_IDS" "HARVESTER_ACTOR_ID" "HARVEST_ENABLED" "HARVEST_USER_AGENT" "HARVEST_BATCH_SIZE" "HARVEST_DEFAULT_WORKERS" "HARVEST_DEFAULT_MAX_RPS" "HARVEST_STALE_AFTER" "HARVEST_FAILURE_RATIO" "HARVEST_DISCOVERY_RADIUS" "HARVEST_DISCOVERY_COOLDOWN_DAYS" "HARVEST_DISCOVERY_MAX_ATTEMPTS" "HARVEST_DISCOVERY_POLL_SECONDS" "MERCADONA_ENABLED" "OVERPASS_URL" "NOMINATIM_URL") }}
+# Required here, and required for more than the writes: with every subject gated,
+# a harvester without this key answers nothing at all.
+- name: ADMIN_JWT_PUBLIC_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: ADMIN_JWT_PUBLIC_KEY
+{{- range $key := (list "HARVESTER_ACTOR_ID" "HARVEST_ENABLED" "HARVEST_USER_AGENT" "HARVEST_BATCH_SIZE" "HARVEST_DEFAULT_WORKERS" "HARVEST_DEFAULT_MAX_RPS" "HARVEST_STALE_AFTER" "HARVEST_FAILURE_RATIO" "HARVEST_DISCOVERY_RADIUS" "HARVEST_DISCOVERY_COOLDOWN_DAYS" "HARVEST_DISCOVERY_MAX_ATTEMPTS" "HARVEST_DISCOVERY_POLL_SECONDS" "MERCADONA_ENABLED" "OVERPASS_URL" "NOMINATIM_URL") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

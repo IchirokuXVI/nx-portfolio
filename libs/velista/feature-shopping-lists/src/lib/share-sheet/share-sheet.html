@@ -24,6 +24,19 @@
           </button>
         </div>
 
+        <!--
+          The way the link actually reaches a group chat on a phone. Drawn only where
+          the browser has the API, because a button that opens nothing is worse than
+          one that is absent, and under the address rather than beside Copy: the row
+          above is what the link *is*, and this is the second of two ways to send it.
+        -->
+        @if (canShare) {
+          <button (click)="share()" class="share" type="button">
+            <lib-share-icon class="share-glyph" />
+            {{ 'basket.share.share' | rokuT }}
+          </button>
+        }
+
         @if (joinedCount() > 0) {
           <p class="joined">
             {{ 'basket.share.joinedWith' | rokuT: { count: joinedCount() } }}

@@ -768,6 +768,17 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.ShareSheet
                   ),
               }),
+              // Ending the trip, confirmed (velista `0057`). Unguarded like its
+              // siblings: the control that reaches it is the owner's alone, drawn
+              // from the page's own facts, and the account authenticated route
+              // behind it is what actually refuses anybody else.
+              sheet({
+                path: 'finish',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.FinishSheet
+                  ),
+              }),
             ],
           },
           {

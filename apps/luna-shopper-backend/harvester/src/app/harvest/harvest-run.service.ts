@@ -85,7 +85,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
   }
 
   async spawn(req: SpawnHarvestRunRequest): Promise<HarvestRunView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const settings = this.settings();
     if (!settings.harvestEnabled) {
       // A statement about the server, not about the request: nothing the caller
@@ -149,19 +149,19 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
    * it. On another replica the run's own abort poll picks it up within seconds.
    */
   async abort(req: HarvestRunIdRequest): Promise<HarvestRunView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const run = await this.store.requestAbort(req.runId);
     this.executor.cancel(req.runId);
     return toHarvestRunView(run);
   }
 
   async get(req: HarvestRunIdRequest): Promise<HarvestRunView> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     return toHarvestRunView(await this.store.load(req.runId));
   }
 
   async list(req: ListHarvestRunsRequest): Promise<HarvestRunPage> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as RunCursor | undefined;
 

@@ -12,6 +12,12 @@
       "sourceType": "github",
       "skillPath": "skills/image-to-code-skill/SKILL.md",
       "computedHash": "3d2ac14d956fdafc5500d2108b90895e134d847f9f199e7f1d18bf1f814cf7c8"
+    },
+    "simple-english": {
+      "source": "AminBlg/SimpleEnglish",
+      "sourceType": "github",
+      "skillPath": "skills/simple-english/SKILL.md",
+      "computedHash": "c782cd274599c23eca9e64f6cbd67ed0d88236a1e532f3841b816539e44e4d2d"
     }
   }
 }

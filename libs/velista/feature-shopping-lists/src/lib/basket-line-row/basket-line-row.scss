@@ -173,6 +173,25 @@
   flex: none;
 }
 
+// The number on a finished trip: read, not moved (velista 0057, section 6).
+//
+// The reel's resting pill without its edges. A bordered pill that could not be
+// dragged would keep offering the gesture the whole basket has stopped accepting, and
+// `0030` takes the control away rather than dressing one up as disabled. The width
+// and the tabular figures stay, so a finished basket's column of numbers lines up
+// exactly where a live one's did and the screen does not shift when the banner lands.
+.settled-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--app-quantity-width);
+  block-size: var(--app-quantity-height);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+}
+
 // What the gesture is about to record, and the progress caption the rest of the
 // time. One line, never wrapped: a caption that grew a second line while a thumb was
 // down would move the number out from under it.

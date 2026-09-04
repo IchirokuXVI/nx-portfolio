@@ -139,7 +139,7 @@ export class PostalCodeDiscoveryService {
   async list(
     req: ListPostalCodeDiscoveryRequestsRequest
   ): Promise<PostalCodeDiscoveryRequestPage> {
-    this.admin.requireAdmin(req.userId);
+    await this.admin.requireAdmin(req);
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as QueueCursor | undefined;
 

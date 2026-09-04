@@ -3,6 +3,7 @@ import {
   ADMIN_TOKEN_AUDIENCE,
 } from '../../lib/messages/admin-auth.messages';
 import {
+  array,
   integer,
   JsonSchema,
   nonEmptyString,
@@ -12,6 +13,7 @@ import {
   schemaId,
   string,
 } from '../builders';
+import { adminCredentialProperties } from '../common.schemas';
 
 /**
  * JSON Schemas for the operator identity subjects (plan 0071).
@@ -26,7 +28,9 @@ export const ADMIN_AUTH_SCHEMA_IDS = {
   adminAuthTokens: schemaId('admin-auth/AdminAuthTokens'),
   adminTokenClaims: schemaId('admin-auth/AdminTokenClaims'),
   adminIdentityView: schemaId('admin-auth/AdminIdentityView'),
+  adminIdentityListView: schemaId('admin-auth/AdminIdentityListView'),
   adminMeView: schemaId('admin-auth/AdminMeView'),
+  listAdminsRequest: schemaId('msg/adminAuth.listAdmins/request'),
   loginRequest: schemaId('msg/adminAuth.login/request'),
   refreshRequest: schemaId('msg/adminAuth.refresh/request'),
   getAdminRequest: schemaId('msg/adminAuth.getAdmin/request'),
@@ -69,6 +73,22 @@ const adminIdentityView = object(
     disabledAt: nullableString(),
   },
   ['adminId', 'username', 'displayName', 'lastLoginAt', 'disabledAt']
+);
+
+// The roster of plan 0074, section 5. Read only in the strongest sense: there is
+// no request that writes one of these rows, here or anywhere, and adding one
+// would need plan 0071 section 6 changed first.
+const adminIdentityListView = object(
+  ADMIN_AUTH_SCHEMA_IDS.adminIdentityListView,
+  { admins: array(ref(ADMIN_AUTH_SCHEMA_IDS.adminIdentityView)) },
+  ['admins']
+);
+
+// Only the operator's own credential: nothing to filter by, nothing to page.
+const listAdminsRequest = object(
+  ADMIN_AUTH_SCHEMA_IDS.listAdminsRequest,
+  { ...adminCredentialProperties },
+  ['userId']
 );
 
 // Composed by the gateway from auth's answer plus its own environment name, so it
@@ -115,7 +135,9 @@ export const adminAuthSchemas: JsonSchema[] = [
   adminAuthTokens,
   adminTokenClaims,
   adminIdentityView,
+  adminIdentityListView,
   adminMeView,
+  listAdminsRequest,
   loginRequest,
   refreshRequest,
   getAdminRequest,
@@ -137,6 +159,10 @@ export const adminAuthMessageContracts: Record<
   [ADMIN_AUTH_PATTERNS.getAdmin]: {
     request: ADMIN_AUTH_SCHEMA_IDS.getAdminRequest,
     response: ADMIN_AUTH_SCHEMA_IDS.adminIdentityView,
+  },
+  [ADMIN_AUTH_PATTERNS.listAdmins]: {
+    request: ADMIN_AUTH_SCHEMA_IDS.listAdminsRequest,
+    response: ADMIN_AUTH_SCHEMA_IDS.adminIdentityListView,
   },
   [ADMIN_AUTH_PATTERNS.devAutologin]: {
     request: ADMIN_AUTH_SCHEMA_IDS.devAutologinRequest,

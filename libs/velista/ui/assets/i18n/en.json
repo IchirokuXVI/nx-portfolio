@@ -453,8 +453,7 @@
       "title": "Change this line",
       "content": "What is it",
       "save": "Save",
-      "remainder_one": "The one you are not bringing back stays on the list, marked as not in the shop",
-      "remainder_other": "The {{count}} you are not bringing back stay on the list, marked as not in the shop"
+      "unapproves": "Saving this will put the line back to awaiting approval."
     },
     "confirm": {
       "deleteLine": {
@@ -580,6 +579,7 @@
       "fromGroup": "From {{name}}",
       "fromGroupUnnamed": "From a group",
       "addedByYou": "Added by you",
+      "addedBy": "Added by {{who}}",
       "keepProduct": "Keep",
       "keepProductLabel": "Keep {{name}} on this line",
       "productsFull": {
@@ -1094,6 +1094,7 @@
       "body": "Anyone with the link can shop it, no account needed. They see the lines, never your groups.",
       "copy": "Copy",
       "copied": "Copied",
+      "share": "Send the link",
       "joinedWith_one": "{{count}} person joined with it",
       "joinedWith_other": "{{count}} people joined with it",
       "made": "made {{date}}",
@@ -1112,6 +1113,22 @@
       "cascadeHint": "They lose the list on their next action. Only tick this if the link reached the wrong hands.",
       "confirm": "Revoke the link",
       "cancel": "Keep it"
+    },
+    "finish": {
+      "open": "Finish shopping",
+      "prompt": "All done. Finish shopping?",
+      "action": "Finish shopping",
+      "title": "Finish shopping?",
+      "body": "Nobody will be able to change this list any more, including the people shopping it with you.",
+      "unsettled_one": "{{count}} line was not settled. It stays on your lists as it is.",
+      "unsettled_other": "{{count}} lines were not settled. They stay on your lists as they are.",
+      "confirm": "Finish shopping",
+      "cancel": "Cancel",
+      "failed": "That did not save. Try again"
+    },
+    "finished": {
+      "title": "This trip is finished.",
+      "reopen": "Reopen"
     },
     "join": {
       "invited": "You’ve been invited to shop",
@@ -1159,7 +1176,7 @@
       "staleLine_other": "Somebody else changed this line. It says {{count}} now",
       "belowSettled_one": "One of these has already been bought for this list",
       "belowSettled_other": "{{count}} of these have already been bought for this list",
-      "basketFinished": "This list is finished, so it cannot be changed",
+      "basketFinished": "The owner finished this shopping trip. It cannot be edited any more",
       "notSendable": "Only a line added here can be sent to a shopping list",
       "alreadySent": "This line has already been sent to a shopping list",
       "reference": "ref {{correlationId}}"
@@ -1170,7 +1187,9 @@
       "undoGot": "{{name}} is got. Undo it",
       "undoNone": "{{name}} was not available. Undo it",
       "isGot": "{{name}} is got",
-      "isNone": "{{name}} was not available"
+      "isNone": "{{name}} was not available",
+      "isWanted": "{{name}} is still to get",
+      "isPartly": "{{name}} is partly got"
     }
   },
   "getList": {
@@ -1200,7 +1219,8 @@
     "title": "Your shopping lists",
     "back": "Back",
     "status": {
-      "active": "Shopping now"
+      "active": "Shopping now",
+      "finished": "Finished"
     },
     "row": {
       "progress": "{{settled}} of {{total}} finished",

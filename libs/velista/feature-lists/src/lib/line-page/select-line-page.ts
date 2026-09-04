@@ -89,6 +89,17 @@ export interface LinePageInput
    * `From ` with an empty name is the shape this null exists to make impossible.
    */
   readonly groupNameOf: (groupId: string) => ProductGroup | null;
+  /**
+   * The two words this screen has for a person it is not naming (velista plan 0066,
+   * section 4): what to call the reader, and what to call somebody the zone cannot name.
+   *
+   * Already translated, because a selector holds no translator and this one is worth
+   * keeping free of Angular. The three way branch that picks between them and a real
+   * name stays here rather than in the template, which is the point: a caption assembled
+   * in a template is a caption assembled again the next time somebody needs it.
+   */
+  readonly youLabel: string;
+  readonly someoneLabel: string;
 }
 
 export function selectLinePage(input: LinePageInput): LinePageVm | null {
@@ -181,9 +192,40 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
     thisList,
     everywhere,
     alsoOn: input.alsoOn,
+    addedBy: addedByOf(line.createdByUserId, input),
     canEdit: input.canEdit,
     canDelete: input.canDelete,
   };
+}
+
+/**
+ * What to call the person who put this line on the list (velista plan 0066, section 4).
+ *
+ * Three cases and one of them covers two situations. The reader gets their own word;
+ * an id the zone resolves gets that name; an id it does not, and the empty string a
+ * line older than the field carries, both get "somebody". Those last two are an author
+ * who left the zone and a line from a server that predated `createdByUserId`, and a
+ * reader is owed the same sentence for each.
+ *
+ * Not the same question as `list.page.addedByYou`, which heads the cluster of products
+ * a person put on the line rather than the catalog (velista plan 0065). Two things named
+ * "added by you" on one screen meaning different things is worth avoiding by naming, so
+ * this caption's key is `list.page.addedBy` and it never appears without its argument.
+ */
+function addedByOf(
+  createdByUserId: string,
+  input: Pick<
+    LinePageInput,
+    'callerUserId' | 'nameOf' | 'youLabel' | 'someoneLabel'
+  >
+): string {
+  if (createdByUserId === '') {
+    return input.someoneLabel;
+  }
+  if (createdByUserId === input.callerUserId) {
+    return input.youLabel;
+  }
+  return input.nameOf(createdByUserId) ?? input.someoneLabel;
 }
 
 /**

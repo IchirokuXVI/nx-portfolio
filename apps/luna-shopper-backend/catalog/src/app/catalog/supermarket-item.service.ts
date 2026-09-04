@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   PriceSourceKind,
+  type AdminListSupermarketItemsRequest,
   type GetSupermarketItemRequest,
   type ListSupermarketItemsByItemRequest,
   type ListSupermarketItemsByLocationRequest,
@@ -29,6 +30,7 @@ import {
   SupermarketItem,
   SupermarketLocation,
 } from '../entities';
+import { CatalogAuditService } from './catalog-audit.service';
 import { toSupermarketItemView } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 
@@ -71,7 +73,8 @@ export class SupermarketItemService {
     private readonly scopes: Repository<PriceScope>,
     @InjectRepository(SupermarketLocation)
     private readonly locations: Repository<SupermarketLocation>,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    private readonly audit: CatalogAuditService
   ) {}
 
   private isUniqueViolation(error: unknown): boolean {
@@ -90,7 +93,7 @@ export class SupermarketItemService {
    * owner's override, and section 6.5 is what keeps an import from undoing it.
    */
   async upsert(req: UpsertSupermarketItemRequest): Promise<SupermarketItemView> {
-    this.admin.requireAdmin(req.userId);
+    const actor = await this.admin.requireAdmin(req);
     await this.requireItemAndScope(req.itemId, req.priceScopeId);
 
     const existing = await this.supermarketItems.findOne({
@@ -104,6 +107,7 @@ export class SupermarketItemService {
         itemId: req.itemId,
         priceScopeId: req.priceScopeId,
       });
+    const before = existing ? { ...existing } : null;
 
     if (sourceKind !== PriceSourceKind.ADMIN && existing) {
       const decision = decidePriceWrite(existing, sourceKind);
@@ -117,7 +121,12 @@ export class SupermarketItemService {
     applyPriceFields(row, req, sourceKind);
 
     try {
-      return toSupermarketItemView(await this.supermarketItems.save(row));
+      const saved = await this.audit.write(actor, (tx) =>
+        before
+          ? tx.update(SupermarketItem, before, row)
+          : tx.create(SupermarketItem, row)
+      );
+      return toSupermarketItemView(saved);
     } catch (error) {
       if (this.isUniqueViolation(error)) {
         throw new ConflictException(
@@ -139,7 +148,7 @@ export class SupermarketItemService {
   async upsertBatch(
     req: UpsertSupermarketItemBatchRequest
   ): Promise<UpsertSupermarketItemBatchResult> {
-    this.admin.requireAdmin(req.userId);
+    const actor = await this.admin.requireAdmin(req);
     await this.requireScope(req.priceScopeId);
 
     const itemIds = req.entries.map((entry) => entry.itemId);
@@ -150,9 +159,15 @@ export class SupermarketItemService {
       })),
     });
     const byItem = new Map(existingRows.map((row) => [row.itemId, row]));
+    // Every row as it was, captured before the loop assigns anything. The trail
+    // needs the old values and the loop overwrites them in place.
+    const wasBefore = new Map(
+      existingRows.map((row) => [row.id, { ...row }] as const)
+    );
 
     const skipped: SupermarketItemPriceDisagreement[] = [];
     const toSave: SupermarketItem[] = [];
+    const fresh = new Set<SupermarketItem>();
     let created = 0;
     let updated = 0;
     let unchanged = 0;
@@ -166,6 +181,7 @@ export class SupermarketItemService {
         });
         applyPriceFields(row, entry, req.priceSourceKind);
         toSave.push(row);
+        fresh.add(row);
         created += 1;
         continue;
       }
@@ -195,22 +211,40 @@ export class SupermarketItemService {
     }
 
     if (toSave.length > 0) {
-      // Chunked so one run's batch does not build a single statement large
-      // enough to be refused by the driver.
-      await this.supermarketItems.save(toSave, { chunk: 200 });
+      await this.audit.write(actor, async (tx) => {
+        // Chunked so one run's batch does not build a single statement large
+        // enough to be refused by the driver.
+        await tx.manager.save(SupermarketItem, toSave, { chunk: 200 });
+        for (const row of toSave) {
+          if (fresh.has(row)) {
+            await tx.recordCreate(SupermarketItem, row);
+            continue;
+          }
+          // The `unchanged` rows go through here too and come out with nothing
+          // recorded: their only moved field is `priceObservedAt`, which the
+          // diff does not read. That is section 4's first mitigation, and it is
+          // the one that keeps a run from growing the trail by a catalog.
+          await tx.recordUpdate(
+            SupermarketItem,
+            wasBefore.get(row.id) ?? {},
+            row
+          );
+        }
+      });
     }
 
     return { created, updated, unchanged, skipped };
   }
 
   async delete(req: SupermarketItemIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
-    const result = await this.supermarketItems.delete({
-      id: req.supermarketItemId,
+    const actor = await this.admin.requireAdmin(req);
+    const row = await this.supermarketItems.findOne({
+      where: { id: req.supermarketItemId },
     });
-    if (!result.affected) {
+    if (!row) {
       throw new NotFoundException('Supermarket item not found');
     }
+    await this.audit.write(actor, (tx) => tx.delete(SupermarketItem, row));
     return { id: req.supermarketItemId };
   }
 
@@ -257,6 +291,65 @@ export class SupermarketItemService {
     req: ListSupermarketItemsByScopeRequest
   ): Promise<SupermarketItemPage> {
     return this.page('priceScopeId', req.priceScopeId, req.cursor, req.limit);
+  }
+
+  /**
+   * The back office's price list (plan 0073, section 4).
+   *
+   * Gated, unlike the three lists above it, and gated for what it returns rather
+   * than for what it changes: with no filter at all it pages the entire price
+   * table, which is not a shape any user facing screen has a use for. The gate
+   * is also what makes `priceSourceKind` answerable — "which prices did I type
+   * in" is a question about the operator's own past writes.
+   */
+  async adminList(
+    req: AdminListSupermarketItemsRequest
+  ): Promise<SupermarketItemPage> {
+    await this.admin.requireAdmin(req);
+
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor(req.cursor) as
+      | SupermarketItemCursor
+      | undefined;
+
+    const qb = this.supermarketItems
+      .createQueryBuilder('si')
+      .orderBy('si.createdAt', 'DESC')
+      .addOrderBy('si.id', 'DESC')
+      .take(limit + 1);
+    if (req.itemId) {
+      qb.andWhere('si."itemId" = :itemId', { itemId: req.itemId });
+    }
+    if (req.priceScopeId) {
+      qb.andWhere('si."priceScopeId" = :scopeId', {
+        scopeId: req.priceScopeId,
+      });
+    }
+    if (req.priceSourceKind) {
+      qb.andWhere('si."priceSourceKind" = :kind', {
+        kind: req.priceSourceKind,
+      });
+    }
+    if (req.available !== undefined) {
+      qb.andWhere('si."available" = :available', { available: req.available });
+    }
+    if (cursor) {
+      qb.andWhere('(si."createdAt", si.id) < (:cv, :cid)', {
+        cv: cursor.value,
+        cid: cursor.id,
+      });
+    }
+
+    const rows = await qb.getMany();
+    const hasMore = rows.length > limit;
+    const list = rows.slice(0, limit);
+    const last = list[list.length - 1];
+    const nextCursor =
+      hasMore && last
+        ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
+        : null;
+
+    return { items: list.map(toSupermarketItemView), nextCursor };
   }
 
   private async page(

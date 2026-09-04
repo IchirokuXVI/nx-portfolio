@@ -19,6 +19,7 @@ import {
 import { QueryFailedError, Repository } from 'typeorm';
 import { ProductGroup } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
+import { CatalogAuditService } from './catalog-audit.service';
 import { toProductGroupView } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import {
@@ -55,6 +56,7 @@ export class ProductGroupService {
     @InjectRepository(ProductGroup)
     private readonly groups: Repository<ProductGroup>,
     private readonly admin: PlatformAdminService,
+    private readonly audit: CatalogAuditService,
     // For {@link delete} alone (plan 0070, section 5). Nothing else here changes
     // a fact a subscribed line depends on: membership is `items.productGroupId`,
     // and this service does not assign it.
@@ -62,15 +64,16 @@ export class ProductGroupService {
   ) {}
 
   async create(req: CreateProductGroupRequest): Promise<ProductGroupView> {
-    this.admin.requireAdmin(req.userId);
+    const actor = await this.admin.requireAdmin(req);
+    const draft = this.groups.create({
+      name: req.name,
+      slug: this.validateSlug(req.slug),
+      referenceUnit: req.referenceUnit,
+      synonyms: normalizeSynonyms(req.synonyms),
+    });
     try {
-      const saved = await this.groups.save(
-        this.groups.create({
-          name: req.name,
-          slug: this.validateSlug(req.slug),
-          referenceUnit: req.referenceUnit,
-          synonyms: normalizeSynonyms(req.synonyms),
-        })
+      const saved = await this.audit.write(actor, (tx) =>
+        tx.create(ProductGroup, draft)
       );
       return toProductGroupView(saved);
     } catch (error) {
@@ -79,8 +82,9 @@ export class ProductGroupService {
   }
 
   async update(req: UpdateProductGroupRequest): Promise<ProductGroupView> {
-    this.admin.requireAdmin(req.userId);
+    const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.productGroupId);
+    const before = { ...row };
     if (req.name !== undefined) {
       row.name = req.name;
     }
@@ -94,7 +98,11 @@ export class ProductGroupService {
       row.synonyms = normalizeSynonyms(req.synonyms);
     }
     try {
-      return toProductGroupView(await this.groups.save(row));
+      return toProductGroupView(
+        await this.audit.write(actor, (tx) =>
+          tx.update(ProductGroup, before, row)
+        )
+      );
     } catch (error) {
       throw this.asConflict(error);
     }
@@ -118,11 +126,9 @@ export class ProductGroupService {
    * actually do is unbind them and leave every product where it is.
    */
   async delete(req: ProductGroupIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
-    const result = await this.groups.delete({ id: req.productGroupId });
-    if (!result.affected) {
-      throw new NotFoundException('Product group not found');
-    }
+    const actor = await this.admin.requireAdmin(req);
+    const row = await this.load(req.productGroupId);
+    await this.audit.write(actor, (tx) => tx.delete(ProductGroup, row));
     this.events.productGroupDeleted(req.productGroupId);
     return { id: req.productGroupId };
   }

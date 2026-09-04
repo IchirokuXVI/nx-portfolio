@@ -13,6 +13,7 @@ export * from './lib/auth/auth-service';
 export * from './lib/auth/http-context';
 export * from './lib/auth/session-store';
 export * from './lib/auth/token-store';
+export * from './lib/auth/unproven-session';
 export * from './lib/catalog/catalog-api';
 export * from './lib/catalog/catalog-memory';
 export * from './lib/catalog/catalog-service';

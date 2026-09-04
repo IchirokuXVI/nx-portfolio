@@ -107,7 +107,7 @@ lunaShopperBackend:
     # values change, and a From: on a domain with no SPF record is how a
     # confirmation mail lands in spam. SMTP is off in this cluster either way
     # (smtpHost is empty), so nothing here is live yet.
-    mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
+    mailFrom: Velista <no-reply@velista.app>
     smtpHost: in-v3.mailjet.com
     smtpPort: 587
     smtpUser: 497721f71489adfcbc3078d2b292aad8

@@ -35,7 +35,12 @@
             Everybody may swap, guests included: the options are catalog products
             and never zone data (backend 0051, section 6.1).
           -->
-          @if (options().length > 1) {
+          <!--
+            Absent once the whole trip is finished, like every other control on this
+            screen: the server refuses a swap on a finished basket, and a correction
+            of the record is still a change to it (velista 0057, section 6).
+          -->
+          @if (options().length > 1 && !basketFinished()) {
             <button
               (click)="openPane('product')"
               class="product-change"
@@ -62,8 +67,13 @@
         stays on a finished line is the product and its change control, because
         swapping the pick is a correction of the record and is still allowed, and the
         history control, for a reader entitled to it.
+
+        Since velista 0057 there is a second way to have nothing to settle, and
+        `canSettle` is where the two meet: this **line** is done, or the whole
+        **trip** is. The second takes the controls off every line at once, including
+        the ones nobody settled, which stay on their households' lists as they are.
       -->
-      @if (!finished()) {
+      @if (canSettle()) {
         <div class="actions">
           <button
             (click)="settleAll()"

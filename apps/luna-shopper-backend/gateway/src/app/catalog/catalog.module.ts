@@ -1,6 +1,15 @@
 import { Module } from '@nestjs/common';
 import { MessagingModule } from '../messaging/messaging.module';
 import {
+  AdminCatalogItemsController,
+  AdminCatalogLocationItemsController,
+  AdminCatalogLocationsController,
+  AdminCatalogPriceScopesController,
+  AdminCatalogProductGroupsController,
+  AdminCatalogSupermarketItemsController,
+  AdminCatalogSupermarketsController,
+} from './catalog-admin.controller';
+import {
   CatalogItemsController,
   CatalogLocationItemsController,
   CatalogLocationsController,
@@ -39,6 +48,18 @@ import { ScopeResolutionService } from './scope-resolution.service';
     CatalogItemsController,
     CatalogSupermarketItemsController,
     CatalogLocationItemsController,
+    // Plan 0073: the same resources for an operator, one namespace over and
+    // behind the other guard. They are declared in this module rather than in
+    // `GatewayAdminModule` because they are catalog, and a back office route
+    // added beside its user facing sibling is one somebody will remember to
+    // update when the resource changes.
+    AdminCatalogSupermarketsController,
+    AdminCatalogLocationsController,
+    AdminCatalogItemsController,
+    AdminCatalogProductGroupsController,
+    AdminCatalogSupermarketItemsController,
+    AdminCatalogPriceScopesController,
+    AdminCatalogLocationItemsController,
   ],
   // Plan 0049: every read that returns items or prices resolves where the caller
   // shops first, from an explicit selector or from their profile.

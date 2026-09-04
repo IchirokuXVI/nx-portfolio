@@ -5,12 +5,14 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, type Repository } from 'typeorm';
-import type {
-  Item,
-  PriceScope,
+// `SupermarketItem` is a value here: the audit double keys on the entity class.
+import {
   SupermarketItem,
-  SupermarketLocation,
+  type Item,
+  type PriceScope,
+  type SupermarketLocation,
 } from '../entities';
+import { fakeAudit } from './catalog-audit.testing';
 import { SupermarketItemService } from './supermarket-item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 
@@ -18,11 +20,14 @@ const ADMIN = 'owner-1';
 
 function makeAdmin(): jest.Mocked<PlatformAdminService> {
   return {
-    isAdmin: jest.fn((id: string) => id === ADMIN),
-    requireAdmin: jest.fn((id: string) => {
-      if (id !== ADMIN) {
+    // The gate takes the whole request now and answers who it let through
+    // (plan 0072). Reading `userId` keeps every case here meaning what it did:
+    // these files are about the services, not about the gate.
+    requireAdmin: jest.fn(async (credential: { userId: string }) => {
+      if (credential.userId !== ADMIN) {
         throw new ForbiddenException('nope');
       }
+      return { kind: 'admin', actorId: credential.userId };
     }),
   } as unknown as jest.Mocked<PlatformAdminService>;
 }
@@ -80,14 +85,24 @@ describe('SupermarketItemService', () => {
     const locations = {
       findOne: jest.fn(async () => location),
     } as unknown as Repository<SupermarketLocation>;
+    // Plan 0075: the write and its audit row share a transaction. The double
+    // routes the write back to `supermarketItems`, so every assertion below
+    // still watches the same `save`.
+    const audit = fakeAudit([
+      [
+        SupermarketItem,
+        { name: 'supermarket_items', repository: supermarketItems },
+      ],
+    ]);
     const svc = new SupermarketItemService(
       supermarketItems,
       items,
       scopes,
       locations,
-      admin
+      admin,
+      audit.service
     );
-    return { svc, admin, supermarketItems, items, scopes, locations };
+    return { svc, admin, supermarketItems, items, scopes, locations, audit };
   }
 
   it('upsert is gated to the platform admin', async () => {
@@ -189,6 +204,87 @@ describe('SupermarketItemService', () => {
 });
 
 /**
+ * The back office's price list (plan 0073, section 4).
+ *
+ * It is the one read in this service behind the gate, and the two properties
+ * worth pinning are why: it starts from nothing, so with no filter it is the
+ * whole price table, and `priceSourceKind` is what makes "which prices did I
+ * type in myself" answerable at all.
+ */
+describe('SupermarketItemService.adminList (plan 0073, section 4)', () => {
+  function build() {
+    const qb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getMany: jest.fn(async () => []),
+    };
+    const admin = makeAdmin();
+    const supermarketItems = {
+      createQueryBuilder: jest.fn(() => qb),
+    } as unknown as Repository<SupermarketItem>;
+    const svc = new SupermarketItemService(
+      supermarketItems,
+      {} as Repository<Item>,
+      {} as Repository<PriceScope>,
+      {} as Repository<SupermarketLocation>,
+      admin,
+      // A read: it opens no transaction, so an unbound double is the honest
+      // double. A write reaching it here would throw rather than pass quietly.
+      fakeAudit([]).service
+    );
+    return { svc, qb, admin };
+  }
+
+  it('is gated, unlike the three lists beside it', async () => {
+    const { svc } = build();
+
+    await expect(svc.adminList({ userId: 'intruder' })).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+  });
+
+  it('with no filter it pages the whole table, newest first', async () => {
+    const { svc, qb } = build();
+
+    await svc.adminList({ userId: ADMIN });
+
+    expect(qb.andWhere).not.toHaveBeenCalled();
+    expect(qb.orderBy).toHaveBeenCalledWith('si.createdAt', 'DESC');
+  });
+
+  it('answers "what have I pinned by hand"', async () => {
+    const { svc, qb } = build();
+
+    await svc.adminList({
+      userId: ADMIN,
+      priceSourceKind: PriceSourceKind.ADMIN,
+    });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('si."priceSourceKind" = :kind', {
+      kind: PriceSourceKind.ADMIN,
+    });
+  });
+
+  /**
+   * `available: false` is a filter and not an absent one. Reading it as "no
+   * filter" is the obvious bug, and it would hide exactly the rows an operator
+   * opened the screen to find.
+   */
+  it('treats available=false as a filter rather than as absent', async () => {
+    const { svc, qb } = build();
+
+    await svc.adminList({ userId: ADMIN, available: false });
+
+    expect(qb.andWhere).toHaveBeenCalledWith('si."available" = :available', {
+      available: false,
+    });
+  });
+});
+
+/**
  * Section 6.5. These are the tests that make "an import does not clobber a price
  * the owner typed in" a property rather than a comment.
  */
@@ -207,6 +303,12 @@ describe('SupermarketItemService overwrite rules (plan 0038, section 6.5)', () =
         return rows;
       }),
     } as unknown as Repository<SupermarketItem>;
+    const audit = fakeAudit([
+      [
+        SupermarketItem,
+        { name: 'supermarket_items', repository: supermarketItems },
+      ],
+    ]);
     const svc = new SupermarketItemService(
       supermarketItems,
       { findOne: jest.fn(async () => ({ id: 'item-1' })) } as unknown as Repository<Item>,
@@ -214,9 +316,10 @@ describe('SupermarketItemService overwrite rules (plan 0038, section 6.5)', () =
       {
         findOne: jest.fn(async () => null),
       } as unknown as Repository<SupermarketLocation>,
-      admin
+      admin,
+      audit.service
     );
-    return { svc, saved };
+    return { svc, saved, audit };
   }
 
   it('does not overwrite an ADMIN price, and reports the disagreement', async () => {

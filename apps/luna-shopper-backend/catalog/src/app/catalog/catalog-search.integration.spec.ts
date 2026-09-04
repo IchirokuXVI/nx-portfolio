@@ -1,3 +1,4 @@
+import { JwtService } from '@nestjs/jwt';
 import {
   ItemCategory,
   PriceScopeKind,
@@ -20,6 +21,7 @@ import {
 } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { ItemService } from './item.service';
+import { CatalogAuditService } from './catalog-audit.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
 
@@ -41,7 +43,10 @@ import { ProductGroupService } from './product-group.service';
  *     npx nx run luna-shopper-backend-catalog:test-integration
  */
 const SCHEMA = 'plan0048_search_test';
-const OWNER = 'owner';
+// A uuid, because plan 0075 records it in `catalog_audit.actorId`, which is a
+// uuid column. Every real actor id already is one: an admin's is `admin_users.id`
+// and the harvester's configured `SERVICE_ACTOR_IDS` entry is a uuid too.
+const OWNER = 'ac700000-0000-4000-a000-000000000001';
 const SHOPPER = 'shopper';
 
 /** A real EAN-13, on the Pascual carton the seed below creates. */
@@ -97,8 +102,11 @@ describeIntegration('catalog search (real Postgres)', () => {
     await dataSource.initialize();
     await dataSource.runMigrations();
 
-    const admin = new PlatformAdminService({
-      getOrThrow: () => ({ platformAdminUserIds: [OWNER] }),
+    const admin = new PlatformAdminService(new JwtService(), {
+      // The owner writes as a configured SERVICE here (plan 0072): these specs
+      // are about catalog's behaviour, not about which door the caller used, and
+      // the service path needs no keypair to set up.
+      getOrThrow: () => ({ adminJwtPublicKey: '', serviceActorIds: [OWNER] }),
     } as never);
     // Plan 0070: a write that moves a product's group, or deletes one,
     // announces it. Fire and forget and nothing here consumes it, but both
@@ -107,9 +115,13 @@ describeIntegration('catalog search (real Postgres)', () => {
       itemGroupChanged: jest.fn(),
       productGroupDeleted: jest.fn(),
     } as unknown as CatalogEventsPublisher;
+    // Plan 0075: the real one, because there is a real DataSource here to open a
+    // real transaction on. Nothing in this file reads the trail it writes.
+    const audit = new CatalogAuditService(dataSource);
     groups = new ProductGroupService(
       dataSource.getRepository(ProductGroup),
       admin,
+      audit,
       events
     );
     items = new ItemService(
@@ -118,6 +130,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       dataSource.getRepository(SupermarketItem),
       groups,
       admin,
+      audit,
       events
     );
 

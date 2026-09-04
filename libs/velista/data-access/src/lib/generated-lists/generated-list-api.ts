@@ -5,6 +5,7 @@ import type {
   GeneratedListRun,
   GeneratedListSummary,
   Page,
+  WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
@@ -90,6 +91,30 @@ export class GeneratedListApi implements GeneratedListServiceI {
     );
 
     return required(toGeneratedListRun(body), 'generatedList.create');
+  }
+
+  /**
+   * Finish a trip, or take it back to being one (velista `0057`).
+   *
+   * The body carries `status` and nothing else, which is what makes it safe to send
+   * from a screen that is showing a basket somebody else may be editing: the route
+   * takes a name and a default target list too, and a request that spread the whole
+   * basket over them would write back whatever this client last read.
+   *
+   * The answer is a `GeneratedListView` and is deliberately dropped. See
+   * `GeneratedListServiceI.setStatus` for who learns about the change instead.
+   */
+  async setStatus(
+    generatedListId: string,
+    status: WritableGeneratedListStatus
+  ): Promise<void> {
+    await firstValueFrom(
+      this._http.patch<unknown>(
+        `${this._lists()}/${generatedListId}`,
+        { status },
+        { context: operation('generatedList.setStatus') }
+      )
+    );
   }
 
   private _lists(): string {

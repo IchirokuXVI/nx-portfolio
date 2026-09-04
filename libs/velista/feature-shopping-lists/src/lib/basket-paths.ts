@@ -1,4 +1,8 @@
-import { appPath, sheetSegments } from '@portfolio/velista/platform';
+import {
+  shareUrl as absoluteShareUrl,
+  appPath,
+  sheetSegments,
+} from '@portfolio/velista/platform';
 
 /**
  * Where a basket and its join screen live in the route table, in one place.
@@ -77,22 +81,19 @@ export function joinPath(
 /**
  * The URL an owner copies out of the share sheet: absolute, and **locale free**.
  *
- * No locale segment on purpose. The link goes to somebody whose language this app
- * has no way to know, and `localeGuard` inserts the *recipient's* locale when a
- * URL arrives without one (plan 0005, its "insert a missing one" case). Baking
- * the sender's in would open the app in the wrong language for exactly the person
- * it was sent to, which is the one reader whose experience this screen exists to
- * protect.
+ * The locale free part is the whole of `shareUrl` in `platform`, which every shared
+ * link in this app now goes through; this only names the segments. It stays a
+ * function of its own so the join screen's address is written down once, beside the
+ * route that serves it.
  *
  * @param origin where velista is served from: its own domain in the standalone
  *   build, the portfolio's under the shell.
  * @param basePath the mount, `''` standalone and `/velista` under the shell.
  */
-export function shareUrl(
+export function basketShareUrl(
   origin: string,
   basePath: string,
   secret: string
 ): string {
-  const base = `${origin.replace(/\/$/, '')}${basePath}`;
-  return `${base}/s/${encodeURIComponent(secret)}`;
+  return absoluteShareUrl(origin, basePath, 's', secret);
 }

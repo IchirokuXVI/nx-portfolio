@@ -112,7 +112,9 @@ function makeService(opts: {
   } as unknown as EntityManager;
 
   const dataSource = {
-    transaction: async <T>(cb: (m: EntityManager) => Promise<T>): Promise<T> => {
+    transaction: async <T>(
+      cb: (m: EntityManager) => Promise<T>
+    ): Promise<T> => {
       const result = await cb(manager);
       if (opts.commits === false) {
         throw new Error('rolled back');
@@ -146,23 +148,29 @@ function emitted(events: EventsSpy): [RealtimeEvent, unknown][] {
 }
 
 describe('ZoneService.transferOwnership', () => {
-  const outgoing = makeMembership({
-    id: 'm-owner',
-    userId: 'u-owner',
-    username: 'Vela',
-    role: ZoneRole.OWNER,
-  });
-  const incoming = makeMembership({
-    id: 'm-admin',
-    userId: 'u-admin',
-    username: 'Marta',
-    role: ZoneRole.ADMIN,
-  });
+  // Built per test rather than shared. A transfer **mutates** the memberships it
+  // is handed, so a shared fixture arrives at the second test already carrying
+  // the first test's outcome: the incoming admin is the owner before the second
+  // transfer starts, which is a state the service now refuses outright.
+  const makeOutgoing = () =>
+    makeMembership({
+      id: 'm-owner',
+      userId: 'u-owner',
+      username: 'Vela',
+      role: ZoneRole.OWNER,
+    });
+  const makeIncoming = () =>
+    makeMembership({
+      id: 'm-admin',
+      userId: 'u-admin',
+      username: 'Marta',
+      role: ZoneRole.ADMIN,
+    });
 
   it('announces both role changes before the ownership change', async () => {
     const { svc, events } = makeService({
-      caller: outgoing,
-      target: incoming,
+      caller: makeOutgoing(),
+      target: makeIncoming(),
       zone: makeZone(),
     });
 
@@ -182,8 +190,8 @@ describe('ZoneService.transferOwnership', () => {
 
   it('carries the outgoing owner as an admin and the target as the owner', async () => {
     const { svc, events } = makeService({
-      caller: outgoing,
-      target: incoming,
+      caller: makeOutgoing(),
+      target: makeIncoming(),
       zone: makeZone(),
     });
 
@@ -217,7 +225,7 @@ describe('ZoneService.transferOwnership', () => {
       status: MembershipStatus.PENDING,
     });
     const { svc, events } = makeService({
-      caller: outgoing,
+      caller: makeOutgoing(),
       target: pending,
       zone: makeZone(),
     });
@@ -236,8 +244,8 @@ describe('ZoneService.transferOwnership', () => {
 
   it('announces nothing when the transaction rolls back', async () => {
     const { svc, events } = makeService({
-      caller: outgoing,
-      target: incoming,
+      caller: makeOutgoing(),
+      target: makeIncoming(),
       zone: makeZone(),
       commits: false,
     });

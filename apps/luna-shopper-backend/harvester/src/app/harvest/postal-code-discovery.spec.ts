@@ -30,7 +30,7 @@ function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
     natsUrl: 'nats://localhost:4222',
     dbUrl: 'postgres://localhost/harvester',
     authJwtPublicKey: 'key',
-    platformAdminUserIds: [ADMIN],
+    adminJwtPublicKey: 'key',
     logLevel: 'silent',
     actorId: 'ac700000-0000-4000-a000-000000000001',
     harvestEnabled: true,

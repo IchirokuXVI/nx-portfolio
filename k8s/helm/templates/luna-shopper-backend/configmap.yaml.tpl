@@ -59,9 +59,16 @@ part of the render and would trip that very check.
   MAIL_FROM: {{ $cfg.mailFrom | quote }}
   MAIL_VERIFY_BASE_URL: {{ $cfg.mailVerifyBaseUrl | quote }}
   MAIL_RESET_BASE_URL: {{ $cfg.mailResetBaseUrl | quote }}
-  # Comma-separated platform-admin (app owner) user ids allowed to write the
-  # catalog (plan 0012). Empty by default so no one can write until it is set.
-  PLATFORM_ADMIN_USER_IDS: {{ $cfg.platformAdminUserIds | default "" | quote }}
+  # Comma-separated uuids of SERVICES allowed to write the catalog with no token
+  # (plan 0072, section 4). The harvester's actor id is the only member, and it is
+  # rendered from that one value below rather than restated, so the two cannot
+  # disagree. Empty when the harvester is switched off, which is both clusters.
+  #
+  # This replaced `PLATFORM_ADMIN_USER_IDS`, and it is not the same list under a
+  # new name: an admin is now proved by a signature and cannot be granted from a
+  # ConfigMap at all. What is left here names machines, which is why a plain uuid
+  # is still enough.
+  SERVICE_ACTOR_IDS: {{ $harvest.actorId | default "" | quote }}
   # The oldest velista build the gateway serves (velista plan 0034). Empty is the
   # resting value and switches it off entirely: no floor advertised, nobody refused.
   MIN_CLIENT_VERSION: {{ $cfg.minClientVersion | default "" | quote }}

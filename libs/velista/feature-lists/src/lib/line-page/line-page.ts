@@ -12,6 +12,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
+  RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_SERVICE,
@@ -114,6 +115,7 @@ export class LinePage {
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _localeStore = inject(RokuLocaleStore);
+  private readonly _translator = inject(RokuTranslatorService);
   private readonly _basePath = inject(APP_BASE_PATH);
 
   readonly zoneId = zoneIdOf(this._route);
@@ -242,6 +244,19 @@ export class LinePage {
       // that failed. The heading is the same in all three cases, and the selector is
       // where that is decided (section 2.1).
       groupNameOf: (groupId) => this._groupNames.nameOf(groupId),
+      // The two words the "added by" caption falls back on, translated here because a
+      // selector holds no translator, and read inside this computed so a locale change
+      // redraws the caption along with everything else (section 4).
+      youLabel: this._translator.t(
+        'list.page.you',
+        undefined,
+        this._localeStore.locale()
+      ),
+      someoneLabel: this._translator.t(
+        'list.page.someone',
+        undefined,
+        this._localeStore.locale()
+      ),
     });
   });
 

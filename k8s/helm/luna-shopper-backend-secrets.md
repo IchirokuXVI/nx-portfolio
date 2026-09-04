@@ -46,7 +46,7 @@ about correctness rather than convenience:
   repository, and refuses to write it inside the working tree.
 
 Prose and executable steps in the same document always drift, and the prose always
-loses. So the how lives in the script; what each Secret is *for* lives here.
+loses. So the how lives in the script; what each Secret is _for_ lives here.
 
 ## Secrets the chart references
 
@@ -55,17 +55,17 @@ cluster and the names carry no `-production` / `-staging` suffix.
 
 The application secret — `luna-shopper-backend-secrets`:
 
-| Key                    | What it is                                             |
-| ---------------------- | ------------------------------------------------------ |
-| `AUTH_DB_URL`          | `postgres://<user>:<pw>@luna-shopper-backend-auth-db:5432/<db>`|
-| `CORE_DB_URL`          | `postgres://<user>:<pw>@luna-shopper-backend-core-db:5432/<db>`|
-| `CATALOG_DB_URL`       | `postgres://<user>:<pw>@luna-shopper-backend-catalog-db:5432/<db>`|
-| `AUTH_JWT_PRIVATE_KEY` | PEM private key — **only** the auth pod receives it    |
-| `AUTH_JWT_PUBLIC_KEY`  | PEM public key — every service verifies tokens with it |
-| `ADMIN_JWT_PRIVATE_KEY` | PEM private key for operator tokens — **only** the auth pod receives it (plan 0071) |
-| `ADMIN_JWT_PUBLIC_KEY` | PEM public key for operator tokens — the gateway today, catalog and harvester after plan 0072 |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret. May be empty (plan 0026)   |
-| `SMTP_PASS`            | SMTP submission password. May be empty (plan 0026)     |
+| Key                     | What it is                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `AUTH_DB_URL`           | `postgres://<user>:<pw>@luna-shopper-backend-auth-db:5432/<db>`                                               |
+| `CORE_DB_URL`           | `postgres://<user>:<pw>@luna-shopper-backend-core-db:5432/<db>`                                               |
+| `CATALOG_DB_URL`        | `postgres://<user>:<pw>@luna-shopper-backend-catalog-db:5432/<db>`                                            |
+| `AUTH_JWT_PRIVATE_KEY`  | PEM private key — **only** the auth pod receives it                                                           |
+| `AUTH_JWT_PUBLIC_KEY`   | PEM public key — every service verifies tokens with it                                                        |
+| `ADMIN_JWT_PRIVATE_KEY` | PEM private key for operator tokens — **only** the auth pod receives it (plan 0071)                           |
+| `ADMIN_JWT_PUBLIC_KEY`  | PEM public key for operator tokens — the gateway, catalog and harvester (plan 0072), and core since plan 0074 |
+| `GOOGLE_CLIENT_SECRET`  | Google OAuth client secret. May be empty (plan 0026)                                                          |
+| `SMTP_PASS`             | SMTP submission password. May be empty (plan 0026)                                                            |
 
 The split is the point of `_env.tpl`: `role` decides which of these a pod
 receives, so only the auth pod ever sees the private half of the keypair, and a
@@ -74,24 +74,24 @@ service only holds the URL of the database it owns.
 Per Postgres instance — `luna-shopper-backend-auth-db-secret`,
 `luna-shopper-backend-core-db-secret`, `luna-shopper-backend-catalog-db-secret`:
 
-| Key                 | What it is                                    |
-| ------------------- | --------------------------------------------- |
-| `POSTGRES_PASSWORD` | Password for that instance's `POSTGRES_USER`  |
+| Key                 | What it is                                   |
+| ------------------- | -------------------------------------------- |
+| `POSTGRES_PASSWORD` | Password for that instance's `POSTGRES_USER` |
 
 Backups, production only — `luna-shopper-backend-backup-secret` (plan 0005):
 
-| Key                     | What it is                                     |
-| ----------------------- | ---------------------------------------------- |
-| `S3_ENDPOINT`           | S3 compatible endpoint URL                     |
-| `S3_BUCKET`             | Destination bucket                             |
-| `AWS_ACCESS_KEY_ID`     | Bucket scoped key, ideally write only          |
-| `AWS_SECRET_ACCESS_KEY` | Its secret                                     |
+| Key                     | What it is                            |
+| ----------------------- | ------------------------------------- |
+| `S3_ENDPOINT`           | S3 compatible endpoint URL            |
+| `S3_BUCKET`             | Destination bucket                    |
+| `AWS_ACCESS_KEY_ID`     | Bucket scoped key, ideally write only |
+| `AWS_SECRET_ACCESS_KEY` | Its secret                            |
 
 Write only matters: a backup credential that can delete its own bucket turns a
 compromised cluster into a compromised backup.
 
 This table is what `--check` is checking against, so keeping it accurate is worth
-the effort — but note that the check reads the *chart*, not this file, so the
+the effort — but note that the check reads the _chart_, not this file, so the
 table being stale cannot make the check wrong, only make this document wrong.
 
 ## Rotation

@@ -284,6 +284,18 @@ export function isLiveGeneratedList(status: string): boolean {
 }
 
 /**
+ * The statuses this app ever asks the server to write (velista `0057`).
+ *
+ * Two of the five, because there are two gestures: Finish ends the trip and Reopen
+ * takes it back, and nothing in velista archives a basket or puts one back into
+ * `DRAFT`. Narrower than {@link GeneratedListStatus} on purpose, and `UNKNOWN` is
+ * why: it is this build's fallback for a status it does not recognise, not a value
+ * the server has ever heard of, so a write signature that accepted it would let a
+ * round trip turn "I could not read this" into a request the gateway refuses.
+ */
+export type WritableGeneratedListStatus = 'ACTIVE' | 'COMPLETED';
+
+/**
  * Where a basket line came from (backend `0055`, section 3; velista `0056`).
  *
  * `DERIVED` is a line the run composed out of the zone lists it drew from, and

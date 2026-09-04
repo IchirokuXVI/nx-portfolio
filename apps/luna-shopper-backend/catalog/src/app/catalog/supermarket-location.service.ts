@@ -27,6 +27,7 @@ import { randomUUID } from 'node:crypto';
 import { Repository } from 'typeorm';
 import type { CatalogConfig } from '../config/app-config';
 import { Supermarket, SupermarketLocation } from '../entities';
+import { CatalogAuditService } from './catalog-audit.service';
 import {
   toSupermarketLocationView,
   toSupermarketView,
@@ -60,6 +61,7 @@ export class SupermarketLocationService {
     private readonly supermarkets: Repository<Supermarket>,
     private readonly scopes: PriceScopeService,
     private readonly admin: PlatformAdminService,
+    private readonly audit: CatalogAuditService,
     private readonly postalCodes: PostalCodeService,
     config: ConfigService
   ) {
@@ -83,7 +85,7 @@ export class SupermarketLocationService {
   async create(
     req: CreateSupermarketLocationRequest
   ): Promise<SupermarketLocationView> {
-    this.admin.requireAdmin(req.userId);
+    const actor = await this.admin.requireAdmin(req);
     const parent = await this.supermarkets.findOne({
       where: { id: req.supermarketId },
     });
@@ -92,21 +94,19 @@ export class SupermarketLocationService {
     }
 
     const id = randomUUID();
-    const priceScopeId = req.priceScopeId
+    // The named scope is only checked, so it is resolved before the transaction.
+    // The store scope is created, so it is not: it belongs inside, with the
+    // location that is the reason it exists (plan 0075).
+    const namedScopeId = req.priceScopeId
       ? (await this.scopes.requireScopeOf(req.priceScopeId, req.supermarketId))
           .id
-      : (
-          await this.scopes.ensureStoreScope(
-            req.supermarketId,
-            id,
-            req.label ?? null
-          )
-        ).id;
+      : null;
 
     const draft = this.locations.create({
       id,
       supermarketId: req.supermarketId,
-      priceScopeId,
+      // Filled inside the transaction below when no scope was named.
+      priceScopeId: namedScopeId as string,
       label: req.label ?? null,
       address: req.address ?? null,
       city: req.city ?? null,
@@ -122,14 +122,28 @@ export class SupermarketLocationService {
     });
     await this.fillPostalCodeFromCentroid(draft);
 
-    return toSupermarketLocationView(await this.locations.save(draft));
+    const saved = await this.audit.write(actor, async (tx) => {
+      if (!namedScopeId) {
+        draft.priceScopeId = (
+          await this.scopes.ensureStoreScope(
+            tx,
+            req.supermarketId,
+            id,
+            req.label ?? null
+          )
+        ).id;
+      }
+      return tx.create(SupermarketLocation, draft);
+    });
+    return toSupermarketLocationView(saved);
   }
 
   async update(
     req: UpdateSupermarketLocationRequest
   ): Promise<SupermarketLocationView> {
-    this.admin.requireAdmin(req.userId);
+    const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.supermarketLocationId);
+    const before = { ...row };
     if (req.priceScopeId !== undefined) {
       row.priceScopeId = (
         await this.scopes.requireScopeOf(req.priceScopeId, row.supermarketId)
@@ -170,17 +184,17 @@ export class SupermarketLocationService {
     }
     await this.fillPostalCodeFromCentroid(row);
 
-    return toSupermarketLocationView(await this.locations.save(row));
+    return toSupermarketLocationView(
+      await this.audit.write(actor, (tx) =>
+        tx.update(SupermarketLocation, before, row)
+      )
+    );
   }
 
   async delete(req: SupermarketLocationIdRequest): Promise<{ id: string }> {
-    this.admin.requireAdmin(req.userId);
-    const result = await this.locations.delete({
-      id: req.supermarketLocationId,
-    });
-    if (!result.affected) {
-      throw new NotFoundException('Supermarket location not found');
-    }
+    const actor = await this.admin.requireAdmin(req);
+    const row = await this.load(req.supermarketLocationId);
+    await this.audit.write(actor, (tx) => tx.delete(SupermarketLocation, row));
     return { id: req.supermarketLocationId };
   }
 
@@ -217,6 +231,14 @@ export class SupermarketLocationService {
       // Plan 0066, section 4: the shops that sell at one scope, which is how a
       // price keyed by scope becomes somewhere a person can go.
       qb.andWhere('l."priceScopeId" = :scope', { scope: req.priceScopeId });
+    }
+    if (req.postalCodeSource) {
+      // Plan 0073, section 4: the shops whose postal code was guessed, which is
+      // the operator's review list. A shop with no postal code has no source
+      // either, so it is excluded by the comparison rather than by a clause.
+      qb.andWhere('l."postalCodeSource" = :pcs', {
+        pcs: req.postalCodeSource,
+      });
     }
     if (cursor) {
       qb.andWhere('(l."createdAt", l.id) < (:cv, :cid)', {

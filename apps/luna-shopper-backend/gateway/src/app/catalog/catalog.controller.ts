@@ -1,13 +1,10 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   HttpStatus,
   Param,
-  Patch,
   Post,
-  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -28,7 +25,6 @@ import {
   type ItemPage,
   type ItemView,
   type PriceScopePage,
-  type PriceScopeView,
   type ProductGroupOfferPage,
   type ProductGroupPage,
   type ProductGroupView,
@@ -55,11 +51,7 @@ import {
 import { NatsClient } from '../messaging/nats-client';
 import {
   CatalogListQueryDto,
-  CreateItemDto,
-  CreatePriceScopeDto,
-  CreateProductGroupDto,
-  CreateSupermarketDto,
-  CreateSupermarketLocationDto,
+  ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
   LookupItemsDto,
   PriceScopedQueryDto,
@@ -68,13 +60,6 @@ import {
   SearchShopsQueryDto,
   ShopQueryDto,
   SuggestQueryDto,
-  UpdateItemDto,
-  UpdatePriceScopeDto,
-  UpdateProductGroupDto,
-  UpdateSupermarketDto,
-  UpdateSupermarketLocationDto,
-  UpsertSupermarketItemDto,
-  UpsertSupermarketLocationItemDto,
 } from './catalog.dto';
 import {
   ScopeResolutionService,
@@ -127,9 +112,18 @@ function toScopeQuery(query: PriceScopedQueryDto): ScopeQuery {
 
 /**
  * The catalog REST surface (plan 0012), proxying to the catalog service over
- * NATS. Every route requires a valid token; write routes are additionally gated
- * to the platform-admin allowlist inside the catalog service (the app owner
- * alone), while read routes are open to any authenticated user.
+ * NATS. Every route requires a valid velista access token.
+ *
+ * **Reads only, since plan 0073.** The writes that used to sit beside them moved
+ * to `/v1/admin/catalog/**` and `AdminJwtGuard`, because an operator and a user
+ * are different principals verified against different keys and a URL is the unit
+ * that carries a guard. What stayed is what velista calls, and the split was by
+ * **who may call it** rather than by HTTP verb: `POST items/lookup` is here, and
+ * belongs here, because it is a read that takes a body of ids.
+ *
+ * Adding a write to this file is the mistake the split exists to prevent. It
+ * would be reachable with any user's token, and catalog would refuse it with a
+ * 403 that looks like a bug rather than like a boundary.
  */
 @ApiTags('catalog')
 @ApiBearerAuth('access-token')
@@ -141,21 +135,6 @@ export class CatalogSupermarketsController {
     private readonly nats: NatsClient,
     private readonly scopes: ScopeResolutionService
   ) {}
-
-  @Post()
-  @ApiContractResponse(SUPERMARKET_PATTERNS.create, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({ body: true, conflict: true })
-  create(
-    @AuthUser() user: CurrentUser,
-    @Body() dto: CreateSupermarketDto
-  ): Promise<SupermarketView> {
-    return this.nats.send<SupermarketView>(SUPERMARKET_PATTERNS.create, {
-      userId: user.userId,
-      ...dto,
-    });
-  }
 
   @Get()
   @ApiContractResponse(SUPERMARKET_PATTERNS.list)
@@ -183,57 +162,17 @@ export class CatalogSupermarketsController {
     });
   }
 
-  @Patch(':id')
-  @ApiContractResponse(SUPERMARKET_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
-  update(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: UpdateSupermarketDto
-  ): Promise<SupermarketView> {
-    return this.nats.send<SupermarketView>(SUPERMARKET_PATTERNS.update, {
-      userId: user.userId,
-      supermarketId: id,
-      ...dto,
-    });
-  }
-
-  @Delete(':id')
-  @ApiContractResponse(SUPERMARKET_PATTERNS.delete)
-  remove(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string
-  ): Promise<{ id: string }> {
-    return this.nats.send(SUPERMARKET_PATTERNS.delete, {
-      userId: user.userId,
-      supermarketId: id,
-    });
-  }
-
-  @Post(':id/locations')
-  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.create, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({ body: true, conflict: true })
-  createLocation(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: CreateSupermarketLocationDto
-  ): Promise<SupermarketLocationView> {
-    return this.nats.send<SupermarketLocationView>(
-      SUPERMARKET_LOCATION_PATTERNS.create,
-      { userId: user.userId, supermarketId: id, ...dto }
-    );
-  }
-
   /**
    * Every shop of one chain, nationwide, newest first.
    *
-   * **The owner's read, and it applies nobody's refusals.** The shopper's read
-   * of the same table is `GET /v1/catalog/shops` (plan 0068), which is narrowed
-   * to the caller's postal codes and knows what they have switched off; this one
-   * is how the chain itself is administered, and filtering it by whoever happens
-   * to be looking would hide rows from the person maintaining them.
+   * **It applies nobody's refusals.** The shopper's read of the same table is
+   * `GET /v1/catalog/shops` (plan 0068), which is narrowed to the caller's
+   * postal codes and knows what they have switched off; this one answers "where
+   * does this chain have shops", which is the same answer for everybody.
+   *
+   * The operator's version of it is `GET /v1/admin/catalog/supermarkets/:id/locations`,
+   * which is this read plus the `postalCodeSource` filter. Both exist because the
+   * question is legitimate for a shopper and the review filter is not.
    */
   @Get(':id/locations')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.list)
@@ -272,32 +211,6 @@ export class CatalogLocationsController {
       SUPERMARKET_LOCATION_PATTERNS.get,
       { userId: user.userId, supermarketLocationId: id }
     );
-  }
-
-  @Patch(':id')
-  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
-  update(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: UpdateSupermarketLocationDto
-  ): Promise<SupermarketLocationView> {
-    return this.nats.send<SupermarketLocationView>(
-      SUPERMARKET_LOCATION_PATTERNS.update,
-      { userId: user.userId, supermarketLocationId: id, ...dto }
-    );
-  }
-
-  @Delete(':id')
-  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.delete)
-  remove(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string
-  ): Promise<{ id: string }> {
-    return this.nats.send(SUPERMARKET_LOCATION_PATTERNS.delete, {
-      userId: user.userId,
-      supermarketLocationId: id,
-    });
   }
 
   @Get(':id/offers')
@@ -433,19 +346,6 @@ export class CatalogItemsController {
     private readonly scopes: ScopeResolutionService
   ) {}
 
-  @Post()
-  @ApiContractResponse(ITEM_PATTERNS.create, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, conflict: true })
-  create(
-    @AuthUser() user: CurrentUser,
-    @Body() dto: CreateItemDto
-  ): Promise<ItemView> {
-    return this.nats.send<ItemView>(ITEM_PATTERNS.create, {
-      userId: user.userId,
-      ...dto,
-    });
-  }
-
   /**
    * Ranked products (plan 0048, section 3), scoped to where the caller shops
    * (plan 0049, section 3).
@@ -566,33 +466,6 @@ export class CatalogItemsController {
     });
   }
 
-  @Patch(':id')
-  @ApiContractResponse(ITEM_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
-  update(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: UpdateItemDto
-  ): Promise<ItemView> {
-    return this.nats.send<ItemView>(ITEM_PATTERNS.update, {
-      userId: user.userId,
-      itemId: id,
-      ...dto,
-    });
-  }
-
-  @Delete(':id')
-  @ApiContractResponse(ITEM_PATTERNS.delete)
-  remove(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string
-  ): Promise<{ id: string }> {
-    return this.nats.send(ITEM_PATTERNS.delete, {
-      userId: user.userId,
-      itemId: id,
-    });
-  }
-
   /**
    * Every price one known product has, across scopes.
    *
@@ -639,21 +512,6 @@ export class CatalogProductGroupsController {
     private readonly scopes: ScopeResolutionService
   ) {}
 
-  @Post()
-  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.create, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({ body: true, conflict: true })
-  create(
-    @AuthUser() user: CurrentUser,
-    @Body() dto: CreateProductGroupDto
-  ): Promise<ProductGroupView> {
-    return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.create, {
-      userId: user.userId,
-      ...dto,
-    });
-  }
-
   @Get()
   @ApiContractResponse(PRODUCT_GROUP_PATTERNS.list)
   list(
@@ -676,38 +534,6 @@ export class CatalogProductGroupsController {
     @Param('id') id: string
   ): Promise<ProductGroupView> {
     return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.get, {
-      userId: user.userId,
-      productGroupId: id,
-    });
-  }
-
-  @Patch(':id')
-  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.update)
-  @ApiProblemResponses({ body: true, conflict: true })
-  update(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: UpdateProductGroupDto
-  ): Promise<ProductGroupView> {
-    return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.update, {
-      userId: user.userId,
-      productGroupId: id,
-      ...dto,
-    });
-  }
-
-  /**
-   * Delete a group. Its members are kept and simply lose their group, which is
-   * the catalog service's rule and the database's: undoing a curation decision
-   * must not be blocked by the products it was about.
-   */
-  @Delete(':id')
-  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.delete)
-  remove(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string
-  ): Promise<{ id: string }> {
-    return this.nats.send(PRODUCT_GROUP_PATTERNS.delete, {
       userId: user.userId,
       productGroupId: id,
     });
@@ -882,19 +708,6 @@ export class CatalogScopeController {
 export class CatalogSupermarketItemsController {
   constructor(private readonly nats: NatsClient) {}
 
-  @Put()
-  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.upsert)
-  @ApiProblemResponses({ body: true, conflict: true })
-  upsert(
-    @AuthUser() user: CurrentUser,
-    @Body() dto: UpsertSupermarketItemDto
-  ): Promise<SupermarketItemView> {
-    return this.nats.send<SupermarketItemView>(
-      SUPERMARKET_ITEM_PATTERNS.upsert,
-      { userId: user.userId, ...dto }
-    );
-  }
-
   @Get()
   @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.get)
   get(
@@ -906,18 +719,6 @@ export class CatalogSupermarketItemsController {
       userId: user.userId,
       itemId,
       priceScopeId,
-    });
-  }
-
-  @Delete(':id')
-  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.delete)
-  remove(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string
-  ): Promise<{ id: string }> {
-    return this.nats.send(SUPERMARKET_ITEM_PATTERNS.delete, {
-      userId: user.userId,
-      supermarketItemId: id,
     });
   }
 }
@@ -934,61 +735,17 @@ export class CatalogSupermarketItemsController {
 export class CatalogPriceScopesController {
   constructor(private readonly nats: NatsClient) {}
 
-  @Post()
-  @ApiContractResponse(PRICE_SCOPE_PATTERNS.create, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({ body: true, conflict: true })
-  create(
-    @AuthUser() user: CurrentUser,
-    @Body() dto: CreatePriceScopeDto
-  ): Promise<PriceScopeView> {
-    return this.nats.send<PriceScopeView>(PRICE_SCOPE_PATTERNS.create, {
-      userId: user.userId,
-      ...dto,
-    });
-  }
-
   @Get()
   @ApiContractResponse(PRICE_SCOPE_PATTERNS.list)
   list(
     @AuthUser() user: CurrentUser,
-    @Query() query: CatalogListQueryDto,
-    @Query('supermarketId') supermarketId?: string
+    @Query() query: ListPriceScopesQueryDto
   ): Promise<PriceScopePage> {
     return this.nats.send<PriceScopePage>(PRICE_SCOPE_PATTERNS.list, {
       userId: user.userId,
-      supermarketId,
+      supermarketId: query.supermarketId,
       cursor: query.cursor,
       limit: query.limit,
-    });
-  }
-
-  @Patch(':id')
-  @ApiContractResponse(PRICE_SCOPE_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
-  update(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: UpdatePriceScopeDto
-  ): Promise<PriceScopeView> {
-    return this.nats.send<PriceScopeView>(PRICE_SCOPE_PATTERNS.update, {
-      userId: user.userId,
-      priceScopeId: id,
-      ...dto,
-    });
-  }
-
-  @Delete(':id')
-  @ApiContractResponse(PRICE_SCOPE_PATTERNS.delete)
-  @ApiProblemResponses({ conflict: true })
-  remove(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string
-  ): Promise<{ id: string }> {
-    return this.nats.send(PRICE_SCOPE_PATTERNS.delete, {
-      userId: user.userId,
-      priceScopeId: id,
     });
   }
 
@@ -1026,19 +783,6 @@ export class CatalogPriceScopesController {
 @Controller({ path: 'catalog/location-items', version: '1' })
 export class CatalogLocationItemsController {
   constructor(private readonly nats: NatsClient) {}
-
-  @Put()
-  @ApiContractResponse(SUPERMARKET_LOCATION_ITEM_PATTERNS.upsert)
-  @ApiProblemResponses({ body: true })
-  upsert(
-    @AuthUser() user: CurrentUser,
-    @Body() dto: UpsertSupermarketLocationItemDto
-  ): Promise<SupermarketLocationItemView> {
-    return this.nats.send<SupermarketLocationItemView>(
-      SUPERMARKET_LOCATION_ITEM_PATTERNS.upsert,
-      { userId: user.userId, ...dto }
-    );
-  }
 
   @Get()
   @ApiContractResponse(SUPERMARKET_LOCATION_ITEM_PATTERNS.get)

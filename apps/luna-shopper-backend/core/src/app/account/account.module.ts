@@ -34,5 +34,9 @@ import { ZoneReaperService } from './zone-reaper.service';
     UsernamePropagationService,
     ZoneReaperService,
   ],
+  // The reaper is exported for the back office (plan 0074, section 1): an
+  // operator deleting a zone runs `deleteZone`, the same write the reaper runs
+  // on an abandoned one, so the two cannot come to mean different things.
+  exports: [ZoneReaperService],
 })
 export class AccountModule {}

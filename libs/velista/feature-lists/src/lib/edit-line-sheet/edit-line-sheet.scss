@@ -17,9 +17,9 @@
   }
 }
 
-// The content in `quantity` mode: present, readable, and plainly not a field. It sits
-// where the input would, at the input's size, so the sheet does not jump between the two
-// modes for anybody who sees both.
+// The quantity in `content` mode: present, readable, and plainly not a control. It sits
+// where the stepper would, at the stepper's text size, so the sheet does not jump
+// between the two modes for anybody who sees both.
 .shown {
   margin: 0;
   padding-block: var(--app-space-2);
@@ -30,7 +30,7 @@
 
 // What the save is about to do, drawn in the sheet's caution colour rather than its
 // error colour: nothing has gone wrong, and the person is about to do this on purpose.
-.remainder {
+.notice {
   margin: var(--app-space-4) 0 0;
   padding: var(--app-space-3);
   border-radius: var(--app-radius-md);

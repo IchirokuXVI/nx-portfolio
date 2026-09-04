@@ -1,5 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import type { Deployment } from '@portfolio/luna-shopper-admin/models';
+import {
+  UNKNOWN_ENVIRONMENT,
+  type AdminEnvironment,
+} from '@portfolio/luna-shopper-admin/models';
 import {
   DEPLOYMENT_SERVICE,
   type DeploymentServiceI,
@@ -8,13 +11,13 @@ import { DeploymentStore } from './deployment-store';
 
 /** A service whose one read resolves when the test says so, and counts its calls. */
 function deferredService() {
-  let settle: (value: Deployment | null) => void = () => undefined;
+  let settle: (value: AdminEnvironment) => void = () => undefined;
   let calls = 0;
 
   const service: DeploymentServiceI = {
     read: () => {
       calls += 1;
-      return new Promise<Deployment | null>((resolve) => {
+      return new Promise<AdminEnvironment>((resolve) => {
         settle = resolve;
       });
     },
@@ -23,7 +26,7 @@ function deferredService() {
   return {
     service,
     calls: () => calls,
-    settle: (value: Deployment | null) => settle(value),
+    settle: (value: AdminEnvironment) => settle(value),
   };
 }
 
@@ -45,23 +48,25 @@ describe('DeploymentStore', () => {
     const deferred = deferredService();
     const store = setup(deferred.service);
 
-    store.load();
+    void store.load();
 
     // Not `development`, and not `null` either: the app has not failed to find out,
     // it has not finished asking. The page renders through this without claiming
     // anything.
     expect(store.deployment()).toBeUndefined();
+    expect(store.settled()).toBe(false);
   });
 
   it('holds what the gateway said', async () => {
     const deferred = deferredService();
     const store = setup(deferred.service);
 
-    store.load();
-    deferred.settle('production');
+    void store.load();
+    deferred.settle({ deployment: 'production', devAutologin: false });
     await drain();
 
     expect(store.deployment()).toBe('production');
+    expect(store.settled()).toBe(true);
   });
 
   /**
@@ -73,8 +78,8 @@ describe('DeploymentStore', () => {
     const deferred = deferredService();
     const store = setup(deferred.service);
 
-    store.load();
-    deferred.settle(null);
+    void store.load();
+    deferred.settle(UNKNOWN_ENVIRONMENT);
     await drain();
 
     expect(store.deployment()).toBeNull();
@@ -84,10 +89,68 @@ describe('DeploymentStore', () => {
     const deferred = deferredService();
     const store = setup(deferred.service);
 
-    store.load();
-    store.load();
-    store.load();
+    void store.load();
+    void store.load();
+    void store.load();
 
     expect(deferred.calls()).toBe(1);
+  });
+
+  /**
+   * `SessionBootstrap` awaits this to decide whether to attempt an autologin, and
+   * a second caller must get the same in flight read rather than start another
+   * one. Asserted through the promise rather than the call count, because that is
+   * the property the bootstrap actually depends on.
+   */
+  it('answers every caller with the one read', async () => {
+    const deferred = deferredService();
+    const store = setup(deferred.service);
+
+    const first = store.load();
+    const second = store.load();
+    deferred.settle({ deployment: 'staging', devAutologin: false });
+    await Promise.all([first, second]);
+
+    expect(deferred.calls()).toBe(1);
+    expect(store.deployment()).toBe('staging');
+  });
+
+  describe('devAutologin', () => {
+    /**
+     * The safe direction, and the reason this is a separate signal rather than a
+     * read of the environment object: the app shows its login screen while it does
+     * not know, and skips it only once a server has said in as many words that it
+     * may.
+     */
+    it('is false before the read settles', () => {
+      const deferred = deferredService();
+      const store = setup(deferred.service);
+
+      void store.load();
+
+      expect(store.devAutologin()).toBe(false);
+    });
+
+    it('is false when the gateway could not be reached', async () => {
+      const deferred = deferredService();
+      const store = setup(deferred.service);
+
+      void store.load();
+      deferred.settle(UNKNOWN_ENVIRONMENT);
+      await drain();
+
+      expect(store.devAutologin()).toBe(false);
+    });
+
+    it('is true only because the gateway said so', async () => {
+      const deferred = deferredService();
+      const store = setup(deferred.service);
+
+      void store.load();
+      deferred.settle({ deployment: 'development', devAutologin: true });
+      await drain();
+
+      expect(store.devAutologin()).toBe(true);
+    });
   });
 });

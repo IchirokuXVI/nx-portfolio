@@ -1,6 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  ADMIN_POSTAL_CODE_PATTERNS,
   ITEM_PATTERNS,
   POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
@@ -9,6 +10,8 @@ import {
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type AdminListSupermarketItemsRequest,
+  type AdminPostalCodePage,
   type CountLocationsByPostalCodeRequest,
   type CreateItemRequest,
   type CreatePriceScopeRequest,
@@ -24,6 +27,7 @@ import {
   type ItemIdRequest,
   type ItemPage,
   type ItemView,
+  type ListAdminPostalCodesRequest,
   type ListNearbyPostalCodesRequest,
   type ListPriceScopesRequest,
   type ListProductGroupsRequest,
@@ -370,6 +374,20 @@ export class CatalogController {
     return this.postalCodes.nearby(req);
   }
 
+  /**
+   * The centroid table, for the back office (plan 0074, section 2).
+   *
+   * The one subject on this controller that is gated rather than open, and the
+   * gate is inside `PostalCodeService` rather than here, so it holds however the
+   * call arrived.
+   */
+  @MessagePattern(ADMIN_POSTAL_CODE_PATTERNS.list)
+  listPostalCodesForAdmin(
+    @Payload() req: ListAdminPostalCodesRequest
+  ): Promise<AdminPostalCodePage> {
+    return this.postalCodes.listForAdmin(req);
+  }
+
   // --- Per store rows (plan 0038, section 5.2) -----------------------------
 
   @MessagePattern(SUPERMARKET_LOCATION_ITEM_PATTERNS.upsert)
@@ -442,5 +460,12 @@ export class CatalogController {
     @Payload() req: ListSupermarketItemsByScopeRequest
   ): Promise<SupermarketItemPage> {
     return this.supermarketItems.listByScope(req);
+  }
+
+  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.adminList)
+  adminListSupermarketItems(
+    @Payload() req: AdminListSupermarketItemsRequest
+  ): Promise<SupermarketItemPage> {
+    return this.supermarketItems.adminList(req);
   }
 }

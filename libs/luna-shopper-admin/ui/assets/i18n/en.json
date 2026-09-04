@@ -12,8 +12,742 @@
     "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does.",
     "sourcedFromApi": "Reported by the gateway this app is talking to, not by the build."
   },
-  "placeholder": {
-    "heading": "The app exists",
-    "body": "Signing in arrives next. Until then this page reports which deployment answered, and nothing else."
+  "signIn": {
+    "heading": "Sign in",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "error": {
+      "invalidCredentials": "That username and password did not match. Check both and try again.",
+      "throttled": "Too many attempts from here. Wait a moment and try again.",
+      "throttledFor": "Too many attempts from here. Try again in {{seconds}} seconds.",
+      "lockedOut": "This account is locked after too many failed attempts. It unlocks once the window passes, or sooner if somebody with the server clears it.",
+      "lockedOutFor": "This account is locked after too many failed attempts. It unlocks in {{seconds}} seconds, or sooner if somebody with the server clears it.",
+      "notAvailable": "This deployment cannot sign you in. Trying again will not help; the server needs configuring.",
+      "unknown": "Signing in failed, and the server did not say why. Check that the backend is reachable and try again."
+    }
+  },
+  "session": {
+    "warning": {
+      "body": "Nothing has been touched for a while, so this session is about to end. Anything you do keeps it.",
+      "keep": "Keep me signed in"
+    },
+    "reauth": {
+      "heading": "Session ended",
+      "body": "Signed in as {{name}}. Enter the password to carry on. Nothing behind this has been lost, including anything half typed.",
+      "password": "Password",
+      "submit": "Carry on",
+      "submitting": "Checking…",
+      "signOut": "Sign out and lose unsaved work"
+    }
+  },
+  "shell": {
+    "menu": "Menu",
+    "navigation": "Sections",
+    "signOut": "Sign out"
+  },
+  "notFound": {
+    "heading": "There is no such screen",
+    "body": "The address you asked for does not belong to anything in this back office. It may have been a link from an older version.",
+    "home": "Go to the first screen"
+  },
+  "resource": {
+    "value": {
+      "none": "None",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "list": {
+      "loading": "Loading…",
+      "loadingMore": "Loading more…",
+      "empty": "There is nothing here yet.",
+      "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
+      "actions": "Actions",
+      "blocked": "Choose {{filters}} first. There is nothing to read until you do."
+    },
+    "filter": {
+      "any": "Any"
+    },
+    "sort": {
+      "label": "Order",
+      "default": "Default order"
+    },
+    "field": {
+      "choose": "Choose…",
+      "unset": "Not set"
+    },
+    "reference": {
+      "search": "Search",
+      "searching": "Searching…",
+      "noResults": "Nothing matched.",
+      "resolving": "Looking it up…",
+      "missing": "This points at {{id}}, which no longer exists.",
+      "change": "Change",
+      "clear": "Clear"
+    },
+    "form": {
+      "create": "New {{name}}",
+      "edit": "Edit {{name}}",
+      "loading": "Loading…"
+    },
+    "action": {
+      "create": "Create",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "retry": "Try again",
+      "more": "Load more",
+      "clearFilters": "Clear the filter",
+      "confirm": "Yes, do it",
+      "working": "Working…"
+    },
+    "confirm": {
+      "delete": {
+        "heading": "Delete this row?",
+        "body": "{{name}} will be deleted. There is no undo, and anything pointing at it may stop working.",
+        "confirm": "Delete it"
+      },
+      "discard": {
+        "heading": "Leave without saving?",
+        "body": "This form has changes that have not been saved. Leaving now loses them.",
+        "confirm": "Leave and lose them"
+      }
+    },
+    "error": {
+      "required": "This is needed.",
+      "missingLocale": "The {{locale}} text is needed.",
+      "tooLong": "Use at most {{max}} characters.",
+      "localeTooLong": "The {{locale}} text must be at most {{max}} characters.",
+      "notAUrl": "Write a full web address, starting with http:// or https://.",
+      "notANumber": "Write a number.",
+      "notAnInteger": "Write a whole number.",
+      "tooSmall": "Use {{min}} or more.",
+      "tooLarge": "Use {{max}} or less.",
+      "tooPrecise": "This column keeps {{decimals}} decimals. Values are not rounded for you, because a rounded price is a different price.",
+      "notADate": "Write a date.",
+      "notAnOption": "Choose one of the offered values.",
+      "notFound": "That row is not there. Somebody may have deleted it.",
+      "forbidden": "This account is not allowed to do that.",
+      "conflict": "That change conflicts with the current state. Read the row again and try once more.",
+      "validation": "Some of the values were refused. The details are beside the fields.",
+      "unreachable": "The gateway did not answer. Check that the backend is running.",
+      "unknown": "That did not work, and the server did not say why."
+    }
+  },
+  "catalog": {
+    "supermarkets": {
+      "one": "supermarket",
+      "many": "Supermarkets",
+      "id": "Identifier",
+      "name": "Name",
+      "logoUrl": "Logo address",
+      "websiteUrl": "Website",
+      "externalBrandKey": "Wikidata identifier",
+      "externalBrandKeyHelp": "The chain's stable identity across discovery runs. It is what splits Carrefour from Carrefour Express, so change it only when that is what you mean.",
+      "defaultPriceScopeId": "Default price scope",
+      "defaultPriceScopeIdHelp": "Set by the catalog service, not from here.",
+      "search": "Name contains",
+      "sort": {
+        "name": "By name",
+        "created": "Newest first",
+        "updated": "Recently changed"
+      }
+    },
+    "locations": {
+      "one": "shop",
+      "many": "Shops",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "priceScopeId": "Price scope",
+      "priceScopeIdHelp": "Which prices this shop uses. Leave it empty when you create the shop, and catalog gives the shop a scope of its own.",
+      "label": "Name",
+      "address": "Address",
+      "city": "Town",
+      "postalCode": "Postal code",
+      "postalCodeHelp": "Changing this does not move the shop to another price scope. The two are separate, and the pricing stays where it is.",
+      "postalCodeSource": "Postal code source",
+      "postalCodeSourceHelp": "Where the code came from. Guessed means it was taken from the nearest centroid and nobody has checked it. Empty means the shop has no code at all, which is deliberate: a wrong code is worse than none.",
+      "country": "Country",
+      "latitude": "Latitude",
+      "longitude": "Longitude",
+      "externalRef": "Source reference",
+      "externalRefHelp": "The discovery provider’s own reference, such as node/1156230891. It changes when a shop is remapped, so it is not a reliable identity.",
+      "externalProvider": "Source",
+      "note": "Shops are read one chain at a time, because the gateway has no route that lists them all. Choose a chain to begin.",
+      "filter": {
+        "supermarketId": "Chain",
+        "postalCodeSource": "Postal code source",
+        "priceScopeId": "Price scope"
+      }
+    },
+    "priceScopes": {
+      "one": "price scope",
+      "many": "Price scopes",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "supermarketIdHelp": "The chain this scope prices for. It is fixed once the scope exists.",
+      "kind": "Kind",
+      "kindHelp": "How wide the scope is. A warehouse scope is one price shared by every shop that warehouse serves. A single shop scope covers one shop.",
+      "externalKey": "Source key",
+      "externalKeyHelp": "The source’s own key for the scope, such as a warehouse number. Text and not a number: it arrives as 4661 and as mad3.",
+      "label": "Label",
+      "labelHelp": "A name for people to read. Harvested scopes have none, and are shown by their kind and source key instead.",
+      "filter": {
+        "supermarketId": "Chain"
+      }
+    },
+    "items": {
+      "one": "product",
+      "many": "Products",
+      "id": "Identifier",
+      "name": "Name",
+      "brand": "Brand",
+      "ean": "Barcode",
+      "eanHelp": "The only identifier that joins a product across chains. Unique across the catalog.",
+      "sku": "Source code",
+      "category": "Category",
+      "defaultUnit": "Unit",
+      "unitSize": "Size",
+      "unitSizeHelp": "Without it the unit says nothing: a liter is not a size.",
+      "productGroupId": "Product group",
+      "productGroupIdHelp": "What makes this product comparable with another. Empty is the ordinary state of a newly harvested product, and nothing is wrong with it.",
+      "imageUrl": "Image address",
+      "sort": {
+        "relevance": "Best match",
+        "name": "By name",
+        "created": "Newest first",
+        "updated": "Recently changed"
+      },
+      "filter": {
+        "query": "Name or barcode contains",
+        "category": "Category",
+        "productGroupId": "Product group",
+        "withoutProductGroup": "Belongs to no group"
+      }
+    },
+    "productGroups": {
+      "one": "product group",
+      "many": "Product groups",
+      "id": "Identifier",
+      "name": "Name",
+      "slug": "Handle",
+      "slugHelp": "A stable handle for tooling and tests: lower case words separated by single dashes.",
+      "referenceUnit": "Reference unit",
+      "referenceUnitHelp": "The unit this group’s members are compared in.",
+      "synonyms": "Synonyms",
+      "synonymsHelp": "Other words a shopper may use for this group. One per line.",
+      "sort": {
+        "name": "By name",
+        "created": "Newest first",
+        "updated": "Recently changed"
+      },
+      "filter": {
+        "query": "Name contains"
+      }
+    },
+    "prices": {
+      "one": "price",
+      "many": "Prices",
+      "id": "Identifier",
+      "itemId": "Product",
+      "priceScopeId": "Price scope",
+      "priceScopeIdHelp": "A price belongs to a scope and not to a shop. Every shop that prices against this scope shows this price.",
+      "price": "Price",
+      "priceHelp": "Clearing it lets the next automated run write this row again.",
+      "currency": "Currency",
+      "unitPrice": "Unit price",
+      "unitPriceHelp": "The source’s own price per reference unit. Type it in. It is never worked out from the price and the size, because the two disagree on about one product in forty.",
+      "unitPriceLabel": "Unit price label",
+      "unitPriceLabelHelp": "The source’s own words for the unit price, such as 100 ml, or lv for washing machine loads. Free text and not a unit.",
+      "available": "Sold at this scope",
+      "availableHelp": "Scope wide. Whether one particular shop has it is a separate answer, on that shop’s own row.",
+      "priceSourceKind": "Source",
+      "priceSourceKindHelp": "Set by the server. A price you type in is recorded as typed in, and no automated run will overwrite it while it is there.",
+      "priceObservedAt": "Seen at",
+      "priceObservedAtHelp": "When the price was last observed. The server sets it on every write.",
+      "note": "A price belongs to a price scope, not to a shop. Changing one here changes it for every shop that scope covers.",
+      "filter": {
+        "itemId": "Product",
+        "priceScopeId": "Price scope",
+        "priceSourceKind": "Source",
+        "available": "Sold at this scope"
+      },
+      "action": {
+        "revert": "Revert to harvested"
+      },
+      "confirm": {
+        "revert": {
+          "heading": "Remove this typed price?",
+          "body": "The price typed in for {{name}} is removed, and the next automated run may write this row again. The row itself stays, and it is still listed as typed in until a run replaces it.",
+          "confirm": "Remove it"
+        }
+      },
+      "scope": {
+        "heading": "This price applies to {{scope}}.",
+        "kind": "Scope kind: {{kind}}.",
+        "locations": "Shops covered: {{count}}.",
+        "atLeastLocations": "Shops covered: at least {{count}}.",
+        "noLocations": "No shop prices against it yet.",
+        "counting": "Counting the shops it covers…",
+        "none": "Choose a price scope. A price belongs to a scope, not to a shop."
+      }
+    },
+    "locationItems": {
+      "one": "shop row",
+      "many": "Products in a shop",
+      "id": "Identifier",
+      "itemId": "Product",
+      "supermarketLocationId": "Shop",
+      "positionInStore": "Position in the shop",
+      "positionInStoreHelp": "Where the product sits, such as an aisle. Per shop, because a warehouse cannot answer it.",
+      "available": "Available in this shop",
+      "availableHelp": "An override for this shop alone. Leave it unset and the scope’s own answer stands, which is not the same as saying no.",
+      "note": "These rows are read one shop at a time, because an aisle is a fact about one shop. Choose a shop to begin.",
+      "filter": {
+        "supermarketLocationId": "Shop"
+      }
+    },
+    "itemCategory": {
+      "PRODUCE": "Fresh produce",
+      "DAIRY": "Dairy",
+      "BAKERY": "Bakery",
+      "MEAT": "Meat",
+      "SEAFOOD": "Seafood",
+      "FROZEN": "Frozen",
+      "BEVERAGES": "Drinks",
+      "SNACKS": "Snacks",
+      "PANTRY": "Pantry",
+      "HOUSEHOLD": "Household",
+      "PERSONAL_CARE": "Personal care",
+      "OTHER": "Other"
+    },
+    "unit": {
+      "UNIT": "Unit",
+      "GRAM": "Gram",
+      "KILOGRAM": "Kilogram",
+      "MILLILITER": "Milliliter",
+      "LITER": "Liter",
+      "PACK": "Pack"
+    },
+    "priceScopeKind": {
+      "NATIONAL": "Nationwide",
+      "WAREHOUSE": "Warehouse",
+      "POSTAL_CODE": "Postal code area",
+      "STORE": "Single shop"
+    },
+    "priceSourceKind": {
+      "OFFICIAL_API": "Official API",
+      "OFFICIAL_WEB": "Official website",
+      "OFFICIAL_LEAFLET": "Official leaflet",
+      "ADMIN": "Typed in here",
+      "USER_RECEIPT": "User receipt",
+      "USER_REPORTED": "Reported by a user"
+    },
+    "postalCodeSource": {
+      "SOURCE": "Known",
+      "DERIVED": "Guessed",
+      "MANUAL": "Typed in"
+    }
+  },
+  "harvest": {
+    "nav": {
+      "runs": "Harvest runs",
+      "places": "Discovered places",
+      "entries": "Source entries",
+      "itemRefs": "Item links",
+      "sources": "Chain sources"
+    },
+    "mode": {
+      "STORE_DISCOVERY": "Store discovery",
+      "CATALOG_DISCOVERY": "Catalog discovery",
+      "REFRESH": "Price refresh"
+    },
+    "status": {
+      "PENDING": "Pending",
+      "RUNNING": "Running",
+      "COMPLETED": "Completed",
+      "FAILED": "Failed",
+      "ABORTED": "Aborted",
+      "STALE": "Stale"
+    },
+    "category": {
+      "PRODUCE": "Produce",
+      "DAIRY": "Dairy",
+      "BAKERY": "Bakery",
+      "MEAT": "Meat",
+      "SEAFOOD": "Seafood",
+      "FROZEN": "Frozen",
+      "BEVERAGES": "Beverages",
+      "SNACKS": "Snacks",
+      "PANTRY": "Pantry",
+      "HOUSEHOLD": "Household",
+      "PERSONAL_CARE": "Personal care",
+      "OTHER": "Other"
+    },
+    "absent": {
+      "heading": "The harvester does not run here",
+      "body": "It is switched off in production and in staging on purpose, so nothing is deployed to answer this. Runs happen on a development machine against the compose stack. Nothing is broken and there is nothing to retry."
+    },
+    "down": {
+      "heading": "The harvester did not answer",
+      "body": "Something should be listening in this environment and nothing replied. Check that the harvester service and its database are running."
+    },
+    "blocked": {
+      "service-off": "Harvesting is switched off on this deployment. HARVEST_ENABLED is false, so no run can start. It is server configuration and cannot be changed from here.",
+      "storefront-off": "That storefront is switched off on this deployment. MERCADONA_ENABLED is false, so the run started and stopped before fetching anything. It is server configuration and cannot be changed from here.",
+      "chain-disabled": "That chain is switched off. Turn it on under chain sources, which is application state rather than server configuration.",
+      "unknown": "The run could not start, and the server did not say which switch stopped it."
+    },
+    "switch": {
+      "heading": "What is allowed to happen",
+      "lead": "Three separate decisions, none of them changed from here. They are shown because otherwise there is no way to tell a run that did nothing from a run that was never allowed to.",
+      "state": {
+        "on": "On",
+        "off": "Off",
+        "unknown": "Not known"
+      },
+      "name": {
+        "deployed": "Harvester deployed",
+        "harvestEnabled": "HARVEST_ENABLED",
+        "mercadonaEnabled": "MERCADONA_ENABLED"
+      },
+      "what": {
+        "deployed": "Whether the service exists in this environment at all. Set in the Helm chart.",
+        "harvestEnabled": "Whether a running service may start any run. Set in the service configuration.",
+        "mercadonaEnabled": "Whether that one storefront may be fetched. Set in the service configuration."
+      },
+      "from": {
+        "chart": "From the chart, which switches the harvester off in production and in staging.",
+        "reply": "Something answered a request on this screen.",
+        "silence": "Nothing answered a request on this screen.",
+        "refusal": "The server refused to start a run and named this switch.",
+        "run": "A run got far enough that this switch must have been on.",
+        "failure": "A run failed and named this switch.",
+        "nothing": "No route reports this, and nothing has been attempted that would reveal it."
+      }
+    },
+    "queue": {
+      "tally": "{{remaining}} left, {{decided}} decided",
+      "skip": "Skip for now"
+    },
+    "runs": {
+      "heading": "Harvest runs",
+      "empty": "No runs have been recorded.",
+      "row": {
+        "counts": "{{processed}} processed, {{failed}} failed"
+      },
+      "start": {
+        "heading": "Start a run",
+        "mode": "What to run",
+        "supermarketId": "Chain identifier",
+        "postalCode": "Postal code",
+        "country": "Country",
+        "submit": "Start the run",
+        "starting": "Starting…",
+        "attribution": "A run's writes are recorded against the harvester service, not against you. Starting one is what is being recorded here.",
+        "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
+        "failed": "The run did not start, and the server did not say why."
+      }
+    },
+    "run": {
+      "back": "Back to runs",
+      "abort": "Stop this run",
+      "aborting": "Stopping. The run is flushing what it has already fetched, which is kept, and will finish shortly.",
+      "paused": "This tab is in the background, so the screen has stopped asking. These numbers are from the last read, not from now. Bring the tab forward to carry on.",
+      "pollFailed": "The last read failed. What is shown is from before that.",
+      "progress": {
+        "label": "Run progress",
+        "of": "{{processed}} of {{total}}",
+        "processed": "{{processed}} processed",
+        "unsized": "The run does not know yet how much work it has."
+      },
+      "counter": {
+        "created": "Created",
+        "updated": "Updated",
+        "unchanged": "Unchanged",
+        "notFound": "Not stocked",
+        "failed": "Failed"
+      },
+      "fact": {
+        "requested": "Requested",
+        "started": "Started",
+        "finished": "Finished",
+        "heartbeat": "Last heartbeat",
+        "correlationId": "Correlation identifier"
+      }
+    },
+    "places": {
+      "heading": "Discovered places",
+      "empty": "Every discovered place has been decided.",
+      "import": "Add to the catalog",
+      "reject": "Not a shop we want",
+      "why": "Nothing in the catalog matched this: neither its OpenStreetMap reference nor the same brand nearby. It is being offered rather than created.",
+      "supermarketId": "Chain identifier to file it under (optional)",
+      "near": {
+        "heading": "Others of the same brand nearby",
+        "none": "Nothing else of this brand is near it in the queue."
+      },
+      "field": {
+        "brand": "Brand",
+        "brandKey": "Wikidata identifier",
+        "street": "Street",
+        "city": "City",
+        "postalCode": "Postal code",
+        "country": "Country",
+        "openingHours": "Opening hours",
+        "website": "Website",
+        "provider": "Provider",
+        "externalRef": "Provider reference",
+        "coordinates": "Coordinates"
+      }
+    },
+    "entries": {
+      "heading": "Source entries",
+      "empty": "Every entry for this chain has a catalog item.",
+      "import": "Create a catalog item",
+      "category": "Category",
+      "categoryHelp": "The one thing the source does not tell us. Everything else on the item comes from the entry.",
+      "choose": {
+        "body": "Entries belong to one chain, so choose which chain to work through. The queue reads that chain's entries that have no catalog item yet.",
+        "supermarketId": "Chain identifier",
+        "submit": "Open the queue"
+      },
+      "field": {
+        "brand": "Brand",
+        "externalId": "Source identifier",
+        "ean": "EAN",
+        "sizeFormat": "Size",
+        "price": "Price",
+        "unitPrice": "Unit price",
+        "categoryPath": "Source category",
+        "url": "Product page"
+      }
+    },
+    "refs": {
+      "heading": "Item links",
+      "empty": "Every link has been resolved.",
+      "confirm": "Yes, this is the product",
+      "reject": "No, unlink it",
+      "confidence": "{{percent}}% confident",
+      "problem": {
+        "unmatched": "Never resolved",
+        "stale": "Stopped appearing at the source"
+      },
+      "correct": {
+        "heading": "Point it somewhere else",
+        "help": "If the match is wrong, give the source's own identifier for the right product. That replaces the link rather than removing it, so the item keeps a price.",
+        "externalId": "Source identifier",
+        "submit": "Use this one instead"
+      },
+      "field": {
+        "itemId": "Catalog item",
+        "supermarketId": "Chain",
+        "externalId": "Source identifier",
+        "matchedBy": "Matched by",
+        "status": "Status",
+        "externalUrl": "Product page",
+        "lastSeenAt": "Last seen"
+      }
+    },
+    "sources": {
+      "heading": "Chain sources",
+      "lead": "How each chain is fetched, and whether it is fetched at all. This switch is per chain and is the one on this screen that can be changed from here.",
+      "empty": "No chain has a source configured.",
+      "enabled": "Fetching",
+      "disabled": "Not fetching",
+      "edit": "Change how it is fetched",
+      "field": {
+        "adapter": "Adapter",
+        "workers": "Workers",
+        "rate": "Requests per second",
+        "lastRunAt": "Last run",
+        "lastSuccessAt": "Last success",
+        "failures": "Failures in a row"
+      }
+    }
+  },
+  "people": {
+    "detail": {
+      "back": "Back to the list",
+      "loading": "Loading…",
+      "actions": "Actions"
+    },
+    "users": {
+      "one": "person",
+      "many": "People",
+      "userId": "Identifier",
+      "username": "Username",
+      "displayName": "Display name",
+      "email": "Email address",
+      "emailVerifiedAt": "Address confirmed",
+      "hasPassword": "Has a password",
+      "providers": "Sign in methods",
+      "createdAt": "Signed up",
+      "updatedAt": "Last changed",
+      "zones": "Zones",
+      "noZones": "This person is not in any zone.",
+      "zonesUnavailable": "The zones could not be read. The account above is still what the server sent.",
+      "kind": {
+        "label": "Kind",
+        "REGISTERED": "Registered",
+        "TEMPORARY": "Temporary"
+      },
+      "filter": {
+        "username": "Username contains",
+        "email": "Email contains",
+        "verified": "Address confirmed",
+        "createdAfter": "Signed up on or after",
+        "createdBefore": "Signed up on or before"
+      },
+      "action": {
+        "resendVerification": "Resend confirmation",
+        "deleteAccount": "Delete account"
+      },
+      "confirm": {
+        "resendVerification": {
+          "heading": "Send the confirmation email again?",
+          "body": "A new confirmation email goes to {{email}}, the address on {{name}}'s account. This skips the wait an ordinary resend has to sit through.",
+          "confirm": "Send it"
+        },
+        "deleteAccount": {
+          "heading": "Delete this account?",
+          "body": "{{name}}'s identity is removed and their shopping lists are deleted. Any zone they own is marked for deletion, and their memberships are retired with the name they used in each zone scrubbed. What they wrote on other people's lists stays. There is no undo.",
+          "confirm": "Delete the account"
+        }
+      }
+    },
+    "zones": {
+      "one": "zone",
+      "many": "Zones",
+      "id": "Identifier",
+      "name": "Name",
+      "owner": "Owner",
+      "joinCode": "Join code",
+      "memberCount": "Members",
+      "listCount": "Lists",
+      "markedForDeletionAt": "Marked for deletion",
+      "createdAt": "Created",
+      "updatedAt": "Last changed",
+      "members": "Members",
+      "noMembers": "This zone has no members.",
+      "lists": "Lists",
+      "noLists": "This zone has no lists.",
+      "lineCount": "{{count}} lines",
+      "status": {
+        "label": "State",
+        "ACTIVE": "Active",
+        "MARKED_FOR_DELETION": "Marked for deletion"
+      },
+      "role": {
+        "OWNER": "Owner",
+        "ADMIN": "Admin",
+        "MEMBER": "Member"
+      },
+      "membership": {
+        "PENDING": "Waiting to be let in",
+        "APPROVED": "In the zone",
+        "KICKED": "Removed",
+        "BANNED": "Banned"
+      },
+      "filter": {
+        "userId": "Zones this person is in",
+        "createdAfter": "Created on or after",
+        "createdBefore": "Created on or before"
+      },
+      "action": {
+        "regenerateJoinCode": "New join code",
+        "deleteZone": "Delete zone",
+        "transferOwnership": "Make owner",
+        "kickMember": "Remove",
+        "banMember": "Ban"
+      },
+      "confirm": {
+        "regenerateJoinCode": {
+          "heading": "Replace the join code?",
+          "body": "{{name}} gets a new join code. Anybody holding the old one can no longer use it, including a link somebody was sent an hour ago.",
+          "confirm": "Replace it"
+        },
+        "deleteZone": {
+          "heading": "Delete this zone?",
+          "body": "{{name}} is deleted, with its lists, its lines and everything settled inside it. Every member loses it from their app. There is no undo.",
+          "confirm": "Delete the zone"
+        },
+        "transferOwnership": {
+          "heading": "Hand the zone over?",
+          "body": "{{member}} becomes the owner of {{name}}. Whoever owns it now becomes an admin instead.",
+          "confirm": "Make them the owner"
+        },
+        "kickMember": {
+          "heading": "Remove this member?",
+          "body": "{{member}} loses {{name}} from their app. They can join again with the code, so ban them instead if that is not what you want.",
+          "confirm": "Remove them"
+        },
+        "banMember": {
+          "heading": "Ban this member?",
+          "body": "{{member}} loses {{name}} and cannot rejoin with the code. What they already wrote on the zone's lists stays.",
+          "confirm": "Ban them"
+        }
+      }
+    },
+    "lists": {
+      "one": "list",
+      "many": "Lists",
+      "id": "Identifier",
+      "name": "Name",
+      "zone": "Zone",
+      "zoneId": "Zone identifier",
+      "createdByUserId": "Created by",
+      "lineCount": "Lines",
+      "sharedWithZone": "Shared with the zone",
+      "autoApproveLines": "Lines approved automatically",
+      "createdAt": "Created",
+      "updatedAt": "Last changed",
+      "lines": "Lines",
+      "noLines": "This list has no lines.",
+      "approval": {
+        "PENDING": "Waiting for approval",
+        "APPROVED": "Approved",
+        "REJECTED": "Rejected"
+      },
+      "filter": {
+        "zoneId": "In this zone",
+        "createdByUserId": "Created by this person"
+      }
+    },
+    "baskets": {
+      "one": "shopping list",
+      "many": "Shopping lists",
+      "id": "Identifier",
+      "name": "Name",
+      "ownerUserId": "Owner",
+      "zoneIds": "Zones the lines came from",
+      "lineCount": "Lines",
+      "generatedAt": "Generated",
+      "updatedAt": "Last changed",
+      "lines": "Lines",
+      "noLines": "This shopping list has no lines.",
+      "status": {
+        "label": "State",
+        "DRAFT": "Being shopped",
+        "ACTIVE": "Active",
+        "COMPLETED": "Finished",
+        "ARCHIVED": "Archived"
+      },
+      "filter": {
+        "ownerUserId": "Belonging to this person",
+        "zoneId": "With lines from this zone"
+      }
+    },
+    "admins": {
+      "one": "admin",
+      "many": "Admins",
+      "username": "Username",
+      "displayName": "Display name",
+      "disabledAt": "Disabled",
+      "lastLoginAt": "Last signed in",
+      "note": "Admins are read only here, on purpose. There is no route that creates, changes or removes one, so adding an admin means running \"npx nx run luna-shopper-backend-auth:admin:create\" on the server, or \"node admin-cli.js create <username>\" inside the auth pod."
+    }
   }
 }
