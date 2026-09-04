@@ -15,8 +15,66 @@
       No manifest and no apple touch icon, unlike velista's document. This app is
       not installable and has no service worker (plan 0001, section 4).
     -->
+    <!--
+      The spinner below, styled here rather than in a stylesheet, because it has
+      to be painted before any of this app's CSS or JavaScript has loaded (plan
+      0008, section 3). The colours are the resting values of `--admin-surface`
+      and `--admin-ink-muted`, written out because the token stylesheet lands on
+      the app root and does not exist yet.
+    -->
+    <style>
+      .boot {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        min-block-size: 100dvh;
+        background: #f7f7f8;
+        font:
+          600 0.875rem/1.4 system-ui,
+          sans-serif;
+        color: #5c5f6b;
+      }
+
+      .boot-spinner {
+        display: block;
+        inline-size: 1.75rem;
+        block-size: 1.75rem;
+        border: 2px solid #d8d9de;
+        border-block-start-color: #6b7280;
+        border-radius: 50%;
+        animation: boot-spin 0.8s linear infinite;
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(1turn);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-spinner {
+          animation-duration: 3s;
+        }
+      }
+    </style>
   </head>
   <body>
-    <app-luna-shopper-admin-root></app-luna-shopper-admin-root>
+    <!--
+      What the operator looks at while the app asks the gateway which deployment
+      it is (plan 0008, section 3). Angular replaces the contents of this element
+      when the root component renders, which is after the app initializer holding
+      that read has settled, so no component can draw this and none needs to.
+
+      The label is in English and not translated. The translator is part of the
+      bundle that is still loading, and this app ships one locale.
+    -->
+    <app-luna-shopper-admin-root>
+      <div aria-live="polite" class="boot" role="status">
+        <span class="boot-spinner"></span>
+        <span>Starting…</span>
+      </div>
+    </app-luna-shopper-admin-root>
   </body>
 </html>

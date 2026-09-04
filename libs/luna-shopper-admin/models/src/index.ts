@@ -6,6 +6,7 @@ export * from './lib/app-key';
 export * from './lib/deployment';
 export * from './lib/harvest/harvest-run';
 export * from './lib/harvest/harvest-switches';
+export * from './lib/reachability-policy';
 export * from './lib/resource/composite-id';
 export * from './lib/resource/localized-text';
 export * from './lib/resource/money';

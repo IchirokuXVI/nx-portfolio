@@ -7,6 +7,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
+import { toGatewayError } from '../gateway-error';
 import type { DeploymentServiceI } from './deployment-service';
 
 /**
@@ -22,13 +23,19 @@ import type { DeploymentServiceI } from './deployment-service';
  * (rule D4). A gateway that grows a fourth environment name must reach the
  * screen as "unknown", not as a value the colour lookup silently misses.
  *
- * A failed request answers {@link UNKNOWN_ENVIRONMENT} rather than throwing.
- * Nothing else in the app is waiting on this call, and an unreachable gateway is
- * a thing the page has to be able to draw: the alternative is an unhandled
- * rejection during bootstrap and a blank screen, which tells an operator less
- * than "the environment is unknown" does. It also means an unreachable gateway
- * shows the login screen rather than skipping it, which is the safe way to be
- * wrong about that question.
+ * A gateway that **answered** something this app cannot read produces
+ * {@link UNKNOWN_ENVIRONMENT} rather than a rejection. Not knowing which
+ * deployment this is has a safe value, the page has to draw either way, and an
+ * unhandled rejection during bootstrap is a blank screen that tells an operator
+ * less than "the environment is unknown" does. It also means the login screen is
+ * shown rather than skipped, which is the safe way to be wrong about the
+ * autologin.
+ *
+ * A request that produced **no response at all** is the one case that throws
+ * (plan 0008, section 3). It is a different fact about a different thing: not
+ * "the environment is unknown" but "there is nothing there to ask", and the app
+ * draws a cover for it instead of a login form that cannot work. Status 0 is how
+ * Angular reports it, and how the interceptor reports a timeout.
  */
 @Injectable()
 export class DeploymentApi implements DeploymentServiceI {
@@ -42,7 +49,10 @@ export class DeploymentApi implements DeploymentServiceI {
       );
 
       return toAdminEnvironment(body);
-    } catch {
+    } catch (error) {
+      if (toGatewayError(error).status === 0) {
+        throw error;
+      }
       return UNKNOWN_ENVIRONMENT;
     }
   }

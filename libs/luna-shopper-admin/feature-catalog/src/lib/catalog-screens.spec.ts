@@ -6,6 +6,7 @@ import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   DeploymentStore,
+  ServerReachability,
   SessionStorage,
   SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -59,6 +60,7 @@ async function boot(url: string) {
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter(adminRoutes(ALL)),
       provideLocationMocks(),
       provideResources(...ALL),

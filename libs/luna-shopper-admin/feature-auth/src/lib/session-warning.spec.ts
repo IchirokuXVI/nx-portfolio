@@ -1,11 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ServerReachability,
   SESSION_SERVICE,
   SessionLifecycle,
+  type SessionServiceI,
   SessionStorage,
   SessionStore,
-  type SessionServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type {
   AdminMe,
@@ -53,6 +54,7 @@ async function render() {
   await TestBed.configureTestingModule({
     imports: [SessionWarning, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       { provide: SESSION_SERVICE, useValue: service },
       SessionStorage,
       SessionStore,

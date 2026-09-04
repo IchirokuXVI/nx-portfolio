@@ -20,9 +20,13 @@ export interface DeploymentServiceI {
   /**
    * What the gateway says about itself.
    *
-   * Total: a gateway that did not answer produces `UNKNOWN_ENVIRONMENT` rather
-   * than a rejection, because both halves of the answer have a safe value for
-   * "was not told" and the page has to be able to draw either way.
+   * A gateway that answered something unreadable produces `UNKNOWN_ENVIRONMENT`
+   * rather than a rejection, because both halves of the answer have a safe value
+   * for "was not told" and the page has to be able to draw either way.
+   *
+   * It rejects for one case only: a request that produced no response at all
+   * (plan 0008, section 3). That is not an unknown environment, it is an absent
+   * server, and the app answers the two differently.
    */
   read(): Promise<AdminEnvironment>;
 }

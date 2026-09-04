@@ -5,6 +5,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
+  ServerReachability,
   SessionStorage,
   SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -38,6 +39,7 @@ async function render(extra: Parameters<typeof provideShellLinks>) {
   await TestBed.configureTestingModule({
     imports: [AdminShellPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter([]),
       provideLocationMocks(),
       provideResources(shops),

@@ -18,9 +18,12 @@ import {
   DirectoryApi,
   HARVEST_SERVICE,
   HarvestApi,
+  HEALTH_SERVICE,
+  HealthApi,
   LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS,
   RESOURCE_GATEWAYS,
   ResourceApiGateways,
+  ServerReachability,
   SESSION_SERVICE,
   SessionApi,
   SessionBootstrap,
@@ -82,6 +85,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // stack: the service is switched off in both clusters on purpose.
   provideService(HARVEST_SERVICE, HarvestApi),
 
+  // The liveness probe (plan 0008). Bound here for the same reason the others
+  // are: it needs the `HttpClient` configured above. `HealthMemory` stays the
+  // token's default and answers that the server is there, so no spec and no run
+  // without a backend is covered by an outage nobody asked for.
+  provideService(HEALTH_SERVICE, HealthApi),
+
   // Which resources this app has (plan 0004). The route table is built from the
   // same list, so a resource cannot be reachable without a link or linked
   // without a route, and a reference field pointing at one of them resolves
@@ -102,6 +111,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // This is also what starts the environment read that decides the accent colour,
   // so `0001`'s `DeploymentStore.load()` is no longer called separately.
   provideAppInitializer(() => inject(SessionBootstrap).run()),
+
+  // Notice a tab that comes back to the foreground during an outage (plan 0008,
+  // section 6). An **environment** initializer, and started explicitly, for the
+  // reason below: nothing injects this service until a request fails, and by
+  // then the listener it needed has missed everything.
+  provideEnvironmentInitializer(() => inject(ServerReachability).start()),
 
   // Start counting interaction before anything can happen (plan 0003, section 2).
   //

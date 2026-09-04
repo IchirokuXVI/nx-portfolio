@@ -12,6 +12,7 @@ import {
   decideKeepalive,
   type SignInFailure,
 } from '@portfolio/luna-shopper-admin/models';
+import { ServerReachability } from '../health/server-reachability';
 import { SessionStore } from './session-store';
 
 /**
@@ -63,6 +64,7 @@ export class SessionLifecycle {
   private readonly _sessions = inject(SessionStore);
   private readonly _policy = inject(ADMIN_SESSION_POLICY);
   private readonly _document = inject(DOCUMENT);
+  private readonly _reachability = inject(ServerReachability);
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
   private _started = false;
@@ -123,6 +125,19 @@ export class SessionLifecycle {
     effect(() => {
       const session = this._sessions.session();
       untracked(() => (session === null ? this.idle() : this.evaluate()));
+    });
+
+    // A server that came back (plan 0008, section 5). A renewal refused during
+    // the outage is sitting on a retry wait of up to `renewRetryMs`, and the
+    // token can die inside it. Re-deciding the moment the gateway answers spends
+    // that wait on the outage rather than on the recovery.
+    effect(() => {
+      const reachable = !this._reachability.down();
+      untracked(() => {
+        if (reachable) {
+          this.evaluate();
+        }
+      });
     });
 
     inject(DestroyRef).onDestroy(() => this.stop());

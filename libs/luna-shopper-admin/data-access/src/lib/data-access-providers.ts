@@ -5,6 +5,7 @@ import { SessionLifecycle } from './auth/session-lifecycle';
 import { SessionStorage } from './auth/session-storage';
 import { SessionStore } from './auth/session-store';
 import { DeploymentStore } from './deployment/deployment-store';
+import { ServerReachability } from './health/server-reachability';
 
 /**
  * Everything this library provides, in one list the app spreads into its
@@ -14,14 +15,16 @@ import { DeploymentStore } from './deployment/deployment-store';
  * moves or arrives is added in one place and both the app and every spec pick it
  * up from there.
  *
- * **Real transports are deliberately absent.** `DeploymentApi` and `SessionApi`
- * are not here: talking to a live gateway is the app's decision, made in
- * `app-providers.ts` beside the `HttpClient` they depend on. `DeploymentMemory`
- * and `SessionMemory` stay their tokens' defaults, so a spec and a run with no
- * backend keep working with no change at all.
+ * **Real transports are deliberately absent.** `DeploymentApi`, `SessionApi` and
+ * `HealthApi` are not here: talking to a live gateway is the app's decision,
+ * made in `app-providers.ts` beside the `HttpClient` they depend on.
+ * `DeploymentMemory`, `SessionMemory` and `HealthMemory` stay their tokens'
+ * defaults, so a spec and a run with no backend keep working with no change at
+ * all.
  */
 export const LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
+  ServerReachability,
   DeploymentStore,
   SessionStorage,
   SessionStore,

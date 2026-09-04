@@ -5,6 +5,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
+  ServerReachability,
   SESSION_SERVICE,
   SessionStorage,
   SessionStore,
@@ -65,6 +66,7 @@ async function boot(signedIn: boolean) {
   await TestBed.configureTestingModule({
     imports: [RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter(appRoutes),
       provideLocationMocks(),
       { provide: SESSION_SERVICE, useValue: service },

@@ -6,6 +6,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   DeploymentStore,
   DIRECTORY_SERVICE,
+  ServerReachability,
   SessionStorage,
   SessionStore,
   type DirectoryServiceI,
@@ -70,6 +71,7 @@ async function boot(url: string, directory?: DirectoryServiceI) {
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ServerReachability,
       provideRouter(adminRoutes(ALL)),
       provideLocationMocks(),
       provideResources(...ALL),
