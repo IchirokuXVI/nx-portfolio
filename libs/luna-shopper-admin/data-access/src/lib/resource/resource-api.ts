@@ -72,12 +72,21 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
     });
 
     const read = this._source.page;
-    return read === undefined ? toPage<T>(body) : read(body);
+    const page = read === undefined ? toPage<T>(body) : read(body);
+
+    // The rows come back without the values that addressed them, so they go
+    // back on. Otherwise a membership has no address and cannot be opened.
+    const stamped = this._stampValues(query.filters ?? {});
+    return {
+      items: page.items.map((row) => stampRow(row, stamped)),
+      nextCursor: page.nextCursor,
+    };
   }
 
   async read(id: string): Promise<T> {
     if (this._source.readVia !== 'collection') {
-      return this._send<T>('get', this._member(id));
+      const row = await this._send<T>('get', this._member(id));
+      return stampRow(row, this._stampValues(this._keyOf(id)));
     }
 
     const found = await this._find(id);
@@ -102,11 +111,12 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
     );
   }
 
-  update(id: string, input: ResourceInput): Promise<T> {
+  async update(id: string, input: ResourceInput): Promise<T> {
     if (this._source.upsert !== true) {
-      return this._send<T>('patch', this._member(id), {
+      const row = await this._send<T>('patch', this._member(id), {
         body: this._body(input),
       });
+      return stampRow(row, this._stampValues(this._keyOf(id)));
     }
 
     // An upsert is addressed by the key in its body rather than by a path, so
@@ -132,8 +142,12 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
    * is read first and deleted by what came back.
    */
   async remove(id: string): Promise<void> {
+    // A source with its own member path is the exception: there the composite
+    // *is* the address, because the parent is half of the URL. Reading the row
+    // first to find its bare uuid would produce `/lines/{lineId}`, which is not
+    // a route.
     const target =
-      this._source.key === undefined
+      this._source.key === undefined || this._source.memberPath !== undefined
         ? id
         : ownIdOf(await this.read(id), this._source);
 
@@ -163,8 +177,53 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
     return path === null ? null : this._urls.gateway(path);
   }
 
+  /**
+   * One row's URL.
+   *
+   * {@link ResourceSource.memberPath} first, for the reason `_collection`
+   * consults `collectionPath` first: a resource that declares one has no flat
+   * member route, and falling through to `path/{id}` would answer 404 rather
+   * than say so.
+   */
   private _member(id: string): string {
-    return this._urls.gateway(`${this._source.path}/${encodeURIComponent(id)}`);
+    const declared = this._source.memberPath;
+    if (declared === undefined) {
+      return this._urls.gateway(
+        `${this._source.path}/${encodeURIComponent(id)}`
+      );
+    }
+
+    const path = declared(id);
+    if (path === null) {
+      throw notFoundError();
+    }
+    return this._urls.gateway(path);
+  }
+
+  /**
+   * The values a row has to carry to stay addressable, out of whatever names
+   * the collection.
+   *
+   * Only {@link ResourceSource.pathParams}, because only those are in the URL
+   * rather than on the row. A filter that is an ordinary query parameter is
+   * already answered by the server on every row it returns.
+   */
+  private _stampValues(
+    values: Readonly<Record<string, unknown>>
+  ): Readonly<Record<string, unknown>> {
+    const consumed = this._source.pathParams;
+    if (consumed === undefined || consumed.length === 0) {
+      return {};
+    }
+
+    const stamped: Record<string, unknown> = {};
+    for (const name of consumed) {
+      const value = values[name];
+      if (value !== undefined && value !== '') {
+        stamped[name] = value;
+      }
+    }
+    return stamped;
   }
 
   /** A body with the values the path already carries taken out of it. */
@@ -319,6 +378,32 @@ function addressOf(
   return source.key === undefined
     ? ownIdOf(row, source)
     : compositeIdOf(row, source.key);
+}
+
+/**
+ * A row, carrying the values that addressed the collection it came from.
+ *
+ * A nested collection does not repeat its parent: `GET
+ * /v1/admin/zones/{zoneId}/members` answers memberships with no `zoneId` on
+ * them, because the URL already said it. The row still has to be addressable
+ * afterwards, and the only address a nested member has is the pair
+ * `(zoneId, membershipId)`, so the value the URL carried goes back on.
+ *
+ * A value the row already carries wins. A shop really does carry its
+ * `supermarketId`, and what the server sent is the answer to believe.
+ */
+function stampRow<T extends ResourceRow>(
+  row: T,
+  values: Readonly<Record<string, unknown>>
+): T {
+  const missing = Object.entries(values).filter(
+    ([name]) => row[name] === undefined || row[name] === null
+  );
+  if (missing.length === 0) {
+    return row;
+  }
+
+  return { ...row, ...Object.fromEntries(missing) };
 }
 
 /** The row's own id, which is what a member URL quotes. */

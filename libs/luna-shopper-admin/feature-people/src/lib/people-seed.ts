@@ -45,6 +45,23 @@ export type BasketRow = Wire.AdminCoreAdminBasketDetailView;
 
 export type AdminRow = Wire.AdminAuthAdminIdentityView;
 
+/**
+ * One membership, carrying the zone that addressed it.
+ *
+ * `AdminZoneMemberView` does not, because the URL that answered it already
+ * named one, and a row that came out of `/zones/{id}/members` has no other way
+ * back to itself: it is addressed by the pair. The gateway puts the value back
+ * on (see `ResourceSource.pathParams`) and this type says so.
+ */
+export type MembershipRow = Wire.AdminCoreAdminZoneMemberView & {
+  readonly zoneId: string;
+};
+
+/** One list line, carrying the list that addressed it, for the same reason. */
+export type ListLineRow = Wire.AdminCoreAdminListLineView & {
+  readonly listId: string;
+};
+
 export const USER_SEED: readonly UserRow[] = [
   {
     userId: ROSA,
@@ -285,6 +302,22 @@ export const BASKET_SEED: readonly BasketRow[] = [
     ],
   },
 ];
+
+/**
+ * The same memberships as the zones above, as the collection serves them.
+ *
+ * Derived rather than typed out again, so the two cannot drift: a zone's detail
+ * screen and the membership screen would otherwise disagree about who is in a
+ * household, in a fixture whose whole job is to be believable.
+ */
+export const MEMBERSHIP_SEED: readonly MembershipRow[] = ZONE_SEED.flatMap(
+  (zone) => zone.members.map((member) => ({ ...member, zoneId: zone.id }))
+);
+
+/** The same lines as the lists above, as the collection serves them. */
+export const LIST_LINE_SEED: readonly ListLineRow[] = LIST_SEED.flatMap(
+  (list) => list.lines.map((line) => ({ ...line, listId: list.id }))
+);
 
 export const ADMIN_SEED: readonly AdminRow[] = [
   {

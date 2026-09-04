@@ -33,6 +33,9 @@ describe('ADMIN_RESOURCES', () => {
    * belong to one, then the products and the groups that make two products
    * comparable, then the prices, which need a product and a scope to exist at
    * all. The per shop rows are last, being the narrowest question here.
+   *
+   * Among the people, each nested collection follows the resource it hangs off:
+   * a membership after zones, a line after lists.
    */
   it('lists the screens in the order the navigation shows them', () => {
     expect(ADMIN_RESOURCES.map((resource) => resource.name)).toEqual([
@@ -45,7 +48,9 @@ describe('ADMIN_RESOURCES', () => {
       'location-items',
       'users',
       'zones',
+      'memberships',
       'lists',
+      'list-lines',
       'baskets',
       'admins',
     ]);

@@ -141,3 +141,43 @@ describe('ResourceMemoryGateways', () => {
     expect(other.items).toEqual([]);
   });
 });
+
+/**
+ * One table, two callers, one fixture (plan 0009, section 3.2).
+ *
+ * A membership is served out of the same table by the descriptor, which names
+ * the seed, and by `DirectoryMemory`, which keeps a status change in step with
+ * the zone's own membership array and has no seed because the fixture lives a
+ * library above it. Whichever asked first used to decide.
+ */
+describe('ResourceMemoryGateways, when one table has two callers', () => {
+  const PATH = '/v1/admin/zones/{zoneId}/members';
+  const SEED = [{ id: 'm1', username: 'rosa' }];
+
+  it('seeds the table the first time a seed is offered, not only on creation', async () => {
+    const gateways = new ResourceMemoryGateways();
+
+    // The caller with no fixture goes first, which is what happens when
+    // somebody kicks a member from the zone screen before ever opening the
+    // membership list.
+    gateways.for({ path: PATH });
+    const seeded = gateways.for({ path: PATH, seed: SEED });
+
+    expect((await seeded.list({})).items).toHaveLength(1);
+  });
+
+  /**
+   * Once, and tracked apart from the rows: a table an operator emptied by
+   * deleting every row must not be quietly refilled the next time a screen asks
+   * for it.
+   */
+  it('does not refill a table that was emptied on purpose', async () => {
+    const gateways = new ResourceMemoryGateways();
+    const first = gateways.for({ path: PATH, seed: SEED });
+    await first.remove('m1');
+
+    const second = gateways.for({ path: PATH, seed: SEED });
+
+    expect((await second.list({})).items).toEqual([]);
+  });
+});

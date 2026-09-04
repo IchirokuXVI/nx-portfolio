@@ -26,21 +26,38 @@ import type { ResourceGatewaysI, ResourceSource } from './resource-gateways';
 @Injectable({ providedIn: 'root' })
 export class ResourceMemoryGateways implements ResourceGatewaysI {
   private readonly _tables = new Map<string, ResourceRow[]>();
+  private readonly _seeded = new Set<string>();
 
   for<T extends ResourceRow>(source: ResourceSource<T>): ResourceGateway<T> {
     return new ResourceMemory<T>(this._table(source), source);
   }
 
-  /** The table for a path, seeded the first time it is asked for. */
+  /**
+   * The table for a path, seeded once.
+   *
+   * One table can be asked for by two callers, and only one of them knows the
+   * fixture. A membership is the case: the descriptor names `MEMBERSHIP_SEED`,
+   * and `DirectoryMemory` asks for the same table to keep a status change in
+   * step with the zone's own membership array, with no seed at all because the
+   * fixture lives a library above it. Whichever asks first used to decide, so
+   * kicking somebody from the zone screen before ever opening the membership
+   * list left that list permanently empty.
+   *
+   * So the seed is applied the first time one is offered, rather than only when
+   * the table is created. It is applied **once**, tracked separately from the
+   * rows, so a table an operator emptied by deleting every row is not quietly
+   * refilled the next time a screen asks for it.
+   */
   private _table<T extends ResourceRow>(source: ResourceSource<T>): T[] {
-    const existing = this._tables.get(source.path);
-    if (existing !== undefined) {
-      return existing as T[];
+    const existing = this._tables.get(source.path) ?? [];
+    this._tables.set(source.path, existing);
+
+    if (source.seed !== undefined && !this._seeded.has(source.path)) {
+      this._seeded.add(source.path);
+      existing.push(...(source.seed as readonly ResourceRow[]));
     }
 
-    const rows = [...(source.seed ?? [])] as ResourceRow[];
-    this._tables.set(source.path, rows);
-    return rows as T[];
+    return existing as T[];
   }
 }
 

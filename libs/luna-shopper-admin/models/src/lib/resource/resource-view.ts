@@ -116,6 +116,14 @@ export function toCell<T extends ResourceRow>(
     // where a reference is shown by name (plan 0004, section 6).
     case 'reference':
       return { text: String(value) };
+
+    // Printed rather than described. There is nothing this app knows about the
+    // shape, so the only honest cell is the value itself, on one line: a cell
+    // is a table cell, and the form is where it is read across several.
+    case 'json': {
+      const text = JSON.stringify(value);
+      return text === undefined || text === '{}' ? EMPTY : { text };
+    }
   }
 }
 

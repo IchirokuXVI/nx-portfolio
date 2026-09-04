@@ -111,7 +111,8 @@
       "more": "Load more",
       "clearFilters": "Clear the filter",
       "confirm": "Yes, do it",
-      "working": "Working…"
+      "working": "Working…",
+      "edit": "Edit"
     },
     "confirm": {
       "delete": {
@@ -143,7 +144,8 @@
       "conflict": "That change conflicts with the current state. Read the row again and try once more.",
       "validation": "Some of the values were refused. The details are beside the fields.",
       "unreachable": "The gateway did not answer. Check that the backend is running.",
-      "unknown": "That did not work, and the server did not say why."
+      "unknown": "That did not work, and the server did not say why.",
+      "notAnObject": "Write a JSON object, in braces. A list or a bare value is not what this column holds."
     }
   },
   "catalog": {
@@ -628,7 +630,12 @@
           "body": "{{name}}'s identity is removed and their shopping lists are deleted. Any zone they own is marked for deletion, and their memberships are retired with the name they used in each zone scrubbed. What they wrote on other people's lists stays. There is no undo.",
           "confirm": "Delete the account"
         }
-      }
+      },
+      "usernameHelp": "The handle this person is known by. Changing it reaches every zone they are in: the name on each of their memberships is rewritten to match, so this is not a private label.",
+      "displayNameHelp": "Whatever the sign in provider supplied, which for a Google account is somebody’s real full name. It is kept off every listing for that reason, and clearing it is allowed.",
+      "emailHelp": "Fixed here. Nothing in velista changes a registered address, so there is no service to call: the four paths that write it each establish an identity, and writing the column alone would leave the credential, any linked provider and every outstanding confirmation pointing at an address the account no longer claims. Use “Resend confirmation” for an unconfirmed one.",
+      "emailVerifiedAtHelp": "Fixed here. Setting it by hand asserts that somebody proved control of an address, which is the one thing this column exists to record and the one thing an operator cannot observe.",
+      "kindHelp": "Fixed here. A temporary account becomes registered by upgrading, which needs a password or a linked provider and writes a credential in the same transaction; flipping the value alone would leave an account nobody can sign in to. Nothing goes the other way at all."
     },
     "zones": {
       "one": "zone",
@@ -673,7 +680,10 @@
         "deleteZone": "Delete zone",
         "transferOwnership": "Make owner",
         "kickMember": "Remove",
-        "banMember": "Ban"
+        "banMember": "Ban",
+        "markForDeletion": "Mark for deletion",
+        "restore": "Restore",
+        "openMembership": "Open"
       },
       "confirm": {
         "regenerateJoinCode": {
@@ -700,8 +710,21 @@
           "heading": "Ban this member?",
           "body": "{{member}} loses {{name}} and cannot rejoin with the code. What they already wrote on the zone's lists stays.",
           "confirm": "Ban them"
+        },
+        "markForDeletion": {
+          "heading": "Mark this zone for deletion?",
+          "body": "{{name}} is put in the queue the reaper works through, and is removed for good once the grace period is up. Restoring it before then undoes this.",
+          "confirm": "Mark it"
         }
-      }
+      },
+      "config": "Settings",
+      "configHelp": "The zone’s own settings, as a JSON object. It is replaced whole rather than merged, which is what saving does for the zone’s owner too.",
+      "ownerHelp": "Fixed here. Handing the zone to somebody is “Make owner” on one of the member rows, because it is two role changes and this column in one transaction. A zone with no owner is an ordinary state, and that action is what rescues it.",
+      "joinCodeHelp": "Fixed here. It is unique and random on purpose, so it is minted rather than typed: “New join code” replaces it and invalidates every invitation already handed out.",
+      "statusHelp": "Fixed here. It is written together with “Marked for deletion” in one transaction, and the two actions below are how it moves. Writing one of the pair alone leaves a zone the reaper either never removes or removes anyway.",
+      "markedForDeletionAtHelp": "Fixed here, and the other half of the pair above. “Mark for deletion” sets both and “Restore” clears both.",
+      "memberCountHelp": "Counted from the membership below. Add or remove a member to change it.",
+      "listCountHelp": "Counted from the lists below. Add or remove a list to change it."
     },
     "lists": {
       "one": "list",
@@ -726,6 +749,14 @@
       "filter": {
         "zoneId": "In this zone",
         "createdByUserId": "Created by this person"
+      },
+      "zoneHelp": "Fixed here. A list belongs to the zone it was made in, and nothing moves one between zones.",
+      "createdByUserIdHelp": "Fixed here. It records who made the list, which is a fact about what happened rather than a setting.",
+      "lineCountHelp": "Counted from the lines below. Add or delete a line to change it.",
+      "autoApproveLinesHelp": "Whether a line added from now on counts straight away. It governs new lines only, so turning it on approves nothing that is already waiting.",
+      "sharedWithZoneHelp": "Turning this on gives every approved member of the zone the right to read this list, write on it and decide its lines. Turning it off takes that right from nobody. It governs who arrives next, so switching it off does not close the list: to shut somebody out, remove them from the zone.",
+      "action": {
+        "openLine": "Open"
       }
     },
     "baskets": {
@@ -750,7 +781,8 @@
       "filter": {
         "ownerUserId": "Belonging to this person",
         "zoneId": "With lines from this zone"
-      }
+      },
+      "note": "A shopping list is a record of what somebody took to the shop, so nothing here can be changed. It was put together from the household’s lists at a moment it remembers, and its lines carry what was claimed and settled while that person walked round. What an operator can correct is the list it came from."
     },
     "admins": {
       "one": "admin",
@@ -760,6 +792,90 @@
       "disabledAt": "Disabled",
       "lastLoginAt": "Last signed in",
       "note": "Admins are read only here, on purpose. There is no route that creates, changes or removes one, so adding an admin means running \"npx nx run luna-shopper-backend-auth:admin:create\" on the server, or \"node admin-cli.js create <username>\" inside the auth pod."
+    },
+    "broadcast": "Saving this is seen straight away by everybody in the zone. Somebody with the app open watches it change under their thumb, with nothing on their screen to say an operator did it.",
+    "field": {
+      "idHelp": "The identifier this row is addressed by. It is generated when the row is created and nothing changes it.",
+      "createdAtHelp": "When the row was created. It records what happened and is never rewritten."
+    },
+    "memberships": {
+      "one": "membership",
+      "many": "Memberships",
+      "membershipId": "Identifier",
+      "zoneId": "Zone",
+      "zoneIdHelp": "Fixed here. A membership is one person in one zone; somebody joining a second zone gets a second membership.",
+      "userId": "Person",
+      "userIdHelp": "Fixed here. It says whose membership this is, and nothing transfers one between accounts.",
+      "username": "Name in this zone",
+      "usernameHelp": "What this person is called inside this zone alone. Their global handle is on their account and is not touched by this.",
+      "role": "Role",
+      "roleHelp": "Owner is deliberately not offered. Handing the zone over is “Make owner” on the zone screen, because it is two role changes and a column in one transaction.",
+      "status": "State",
+      "statusHelp": "Fixed here. The four actions beside this row are how it moves, because each of them does more than write this value: letting somebody in announces it to the zone, banning keeps the row so the ban survives, and refusing removes it.",
+      "createdAt": "Joined",
+      "filter": {
+        "zoneId": "In this zone"
+      },
+      "action": {
+        "approve": "Let them in",
+        "reject": "Refuse"
+      },
+      "confirm": {
+        "approve": {
+          "heading": "Let this person in?",
+          "body": "{{name}} becomes a member of the zone and can read and write its lists straight away. The zone is told, so everybody with the app open sees them arrive.",
+          "confirm": "Let them in"
+        },
+        "reject": {
+          "heading": "Refuse this request?",
+          "body": "{{name}} stops waiting and the request is removed. They can ask again with the join code, so ban them instead if that is not what you want.",
+          "confirm": "Refuse it"
+        },
+        "kick": {
+          "heading": "Remove this member?",
+          "body": "{{name}} loses the zone from their app. They can join again with the code, so ban them instead if that is not what you want.",
+          "confirm": "Remove them"
+        },
+        "ban": {
+          "heading": "Ban this member?",
+          "body": "{{name}} loses the zone and cannot rejoin with the code. What they already wrote on its lists stays.",
+          "confirm": "Ban them"
+        }
+      }
+    },
+    "lines": {
+      "one": "line",
+      "many": "List lines",
+      "id": "Identifier",
+      "listId": "List",
+      "listIdHelp": "Fixed here. A line belongs to the list it was written on, and nothing moves one between lists.",
+      "content": "What it says",
+      "quantity": "How many",
+      "approvalStatus": "Approval",
+      "approvalStatusHelp": "Fixed here. The two actions beside this row are how it moves, because each is a service call that tells the zone. Correcting the wording above leaves an approved line approved.",
+      "createdByUserId": "Written by",
+      "createdByUserIdHelp": "Fixed here. It records who wrote the line, and an operator did not.",
+      "createdAt": "Written",
+      "note": "There is no way to add a line here, on purpose. Every line records who wrote it, that column cannot be empty, and an operator is not a member of the household. Somebody in the zone adds a line; an operator corrects one.",
+      "filter": {
+        "listId": "On this list"
+      },
+      "action": {
+        "approve": "Approve",
+        "reject": "Reject"
+      },
+      "confirm": {
+        "approve": {
+          "heading": "Approve this line?",
+          "body": "“{{name}}” starts counting towards the shopping. Everybody in the zone sees it change.",
+          "confirm": "Approve it"
+        },
+        "reject": {
+          "heading": "Reject this line?",
+          "body": "“{{name}}” stops counting towards the shopping. It stays on the list, and somebody in the zone can approve it again.",
+          "confirm": "Reject it"
+        }
+      }
     }
   }
 }

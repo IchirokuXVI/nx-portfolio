@@ -4,8 +4,12 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { toGatewayError } from '../gateway-error';
-import { ADMIN_USERS_PATH, ADMIN_ZONES_PATH } from './directory-paths';
-import type { DirectoryServiceI } from './directory-service';
+import {
+  ADMIN_LISTS_PATH,
+  ADMIN_USERS_PATH,
+  ADMIN_ZONES_PATH,
+} from './directory-paths';
+import type { DirectoryServiceI, LineApproval } from './directory-service';
 
 /**
  * The seven named actions, over HTTP (plan 0007, section 1).
@@ -68,6 +72,37 @@ export class DirectoryApi implements DirectoryServiceI {
     await this._send('post', this._member(zoneId, membershipId, 'ban'), {});
   }
 
+  /**
+   * The two directions of the mark, as the two routes the gateway has for it.
+   *
+   * `POST` sets it and `DELETE` clears it, and both reach the one service method
+   * that writes `status` and `markedForDeletionAt` in a single transaction.
+   */
+  async setZoneDeletionMark(zoneId: string, marked: boolean): Promise<void> {
+    const path = `${ADMIN_ZONES_PATH}/${part(zoneId)}/deletion-mark`;
+    await (marked ? this._send('post', path, {}) : this._send('delete', path));
+  }
+
+  async approveMember(zoneId: string, membershipId: string): Promise<void> {
+    await this._send('post', this._member(zoneId, membershipId, 'approve'), {});
+  }
+
+  async rejectMember(zoneId: string, membershipId: string): Promise<void> {
+    await this._send('post', this._member(zoneId, membershipId, 'reject'), {});
+  }
+
+  async setLineApproval(
+    listId: string,
+    lineId: string,
+    status: LineApproval
+  ): Promise<void> {
+    await this._send(
+      'post',
+      `${ADMIN_LISTS_PATH}/${part(listId)}/lines/${part(lineId)}/approval`,
+      { status }
+    );
+  }
+
   private _member(
     zoneId: string,
     membershipId: string,
@@ -84,7 +119,7 @@ export class DirectoryApi implements DirectoryServiceI {
    * refusal of any of the seven.
    */
   private async _send<R>(
-    method: 'post' | 'delete',
+    method: 'post' | 'delete' | 'patch',
     path: string,
     body?: unknown
   ): Promise<R> {
