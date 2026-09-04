@@ -1131,6 +1131,34 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
+    describe('a name in one language (plan 0079)', () => {
+      const create = (name: unknown) =>
+        validateMessageRequest('supermarket.create', { userId: 'owner', name })
+          .valid;
+
+      it('accepts a name in either language alone, or both', () => {
+        expect(create({ es: 'Leche' })).toBe(true);
+        expect(create({ en: 'Milk' })).toBe(true);
+        expect(create({ en: 'Milk', es: 'Leche' })).toBe(true);
+      });
+
+      it('refuses a name in no language', () => {
+        expect(create({})).toBe(false);
+      });
+
+      it('refuses null: a missing language is an absent key, not a null one', () => {
+        expect(create({ en: null, es: 'Leche' })).toBe(false);
+      });
+
+      it('refuses a blank string in any language', () => {
+        expect(create({ en: '', es: 'Leche' })).toBe(false);
+      });
+
+      it('refuses a language the catalog does not serve', () => {
+        expect(create({ fr: 'Lait' })).toBe(false);
+      });
+    });
+
     it('catalog item.create rejects a missing required enum (plan 0012)', () => {
       expect(
         validateMessageRequest('item.create', {

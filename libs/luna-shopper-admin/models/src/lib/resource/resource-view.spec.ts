@@ -88,6 +88,17 @@ describe('toCell', () => {
     expect(cellFor('name')).toEqual({ text: 'Bonpreu' });
   });
 
+  /**
+   * A Spanish only name reads as its Spanish name in an English table, and the
+   * cell says which language it is still waiting for (plan 0079).
+   */
+  it('shows the fallback of a name in one language and names the gap', () => {
+    expect(cellFor('name', { name: { es: 'Bonpreu' } })).toEqual({
+      text: 'Bonpreu',
+      missing: ['en'],
+    });
+  });
+
   it('formats money to the column scale', () => {
     expect(cellFor('price')).toEqual({ text: '3.50' });
   });

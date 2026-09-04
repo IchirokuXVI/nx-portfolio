@@ -3,6 +3,7 @@ import {
   emptyLocalizedText,
   localizedTextValue,
   missingLocales,
+  presentLocalizedText,
   toLocalizedText,
 } from './localized-text';
 
@@ -45,6 +46,18 @@ describe('localizedTextValue', () => {
   it('answers the empty string when there is no string at all', () => {
     expect(localizedTextValue({ en: '' }, ['en'])).toBe('');
     expect(localizedTextValue(null, ['en'])).toBe('');
+  });
+});
+
+describe('presentLocalizedText', () => {
+  it('keeps the languages with text and leaves the blank ones out (plan 0079)', () => {
+    expect(presentLocalizedText({ en: '', es: 'Leche' })).toEqual({
+      es: 'Leche',
+    });
+    expect(presentLocalizedText({ en: '  ', es: 'Leche', count: 3 })).toEqual({
+      es: 'Leche',
+    });
+    expect(presentLocalizedText({ en: '', es: '' })).toEqual({});
   });
 });
 

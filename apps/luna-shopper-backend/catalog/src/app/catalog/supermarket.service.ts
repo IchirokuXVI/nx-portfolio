@@ -18,7 +18,11 @@ import {
 import { Repository, type SelectQueryBuilder } from 'typeorm';
 import { Supermarket } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
-import { toSupermarketView } from './catalog.mappers';
+import {
+  displayName,
+  displayNameSql,
+  toSupermarketView,
+} from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import { PriceScopeService } from './price-scope.service';
 
@@ -92,9 +96,7 @@ export class SupermarketService {
             ).id;
     }
     return toSupermarketView(
-      await this.audit.write(actor, (tx) =>
-        tx.update(Supermarket, before, row)
-      )
+      await this.audit.write(actor, (tx) => tx.update(Supermarket, before, row))
     );
   }
 
@@ -208,10 +210,10 @@ export class SupermarketService {
         });
       }
     } else {
-      // Order by the English label of the localized name; id breaks ties.
-      qb.orderBy(`s.name ->> 'en'`, 'ASC').addOrderBy('s.id', 'ASC');
+      // Order by the shown name (English, else Spanish); id breaks ties.
+      qb.orderBy(displayNameSql('s'), 'ASC').addOrderBy('s.id', 'ASC');
       if (cursor) {
-        qb.andWhere(`(s.name ->> 'en', s.id) > (:cv, :cid)`, {
+        qb.andWhere(`(${displayNameSql('s')}, s.id) > (:cv, :cid)`, {
           cv: cursor.value,
           cid: cursor.id,
         });
@@ -226,6 +228,6 @@ export class SupermarketService {
     if (order === 'updated') {
       return row.updatedAt.toISOString();
     }
-    return row.name.en;
+    return displayName(row.name);
   }
 }

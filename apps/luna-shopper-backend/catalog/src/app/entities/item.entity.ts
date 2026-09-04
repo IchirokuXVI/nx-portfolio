@@ -9,7 +9,7 @@ import { BaseEntity } from './base.entity';
 /**
  * The actual product (plan 0012, section 2): one global row per product, owner
  * managed and never created by users. Its per store price and in store position
- * live on {@link SupermarketItem} rows. The name is localized (EN + ES minimum).
+ * live on {@link SupermarketItem} rows. The name is localized, in at least one of EN and ES (plan 0079).
  */
 @Entity({ name: 'items' })
 export class Item extends BaseEntity {

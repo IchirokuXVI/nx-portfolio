@@ -20346,17 +20346,16 @@
         "properties": {
           "en": {
             "type": "string",
-            "maxLength": 200
+            "maxLength": 200,
+            "minLength": 1
           },
           "es": {
             "type": "string",
-            "maxLength": 200
+            "maxLength": 200,
+            "minLength": 1
           }
         },
-        "required": [
-          "en",
-          "es"
-        ]
+        "description": "A name in at least one of the languages the catalog serves. A language the name does not have is left out, never null."
       },
       "CreateSupermarketDto": {
         "type": "object",
@@ -22486,11 +22485,9 @@
             "minLength": 1
           }
         },
-        "required": [
-          "en",
-          "es"
-        ],
-        "additionalProperties": false
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
       },
       "catalog.PostalCodeCoverageView": {
         "type": "object",

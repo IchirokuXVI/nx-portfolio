@@ -316,10 +316,12 @@ export type LocalizedSynonymsDto = {
 
 /**
  * `LocalizedTextDto` in the gateway's OpenAPI document.
+ *
+ * A name in at least one of the languages the catalog serves. A language the name does not have is left out, never null.
  */
 export type LocalizedTextDto = {
-  en: string;
-  es: string;
+  en?: string;
+  es?: string;
 };
 
 /**
@@ -1286,8 +1288,8 @@ export type CatalogLocalizedSynonyms = {
  * `catalog.LocalizedText` in the gateway's OpenAPI document.
  */
 export type CatalogLocalizedText = {
-  en: string;
-  es: string;
+  en?: string;
+  es?: string;
 };
 
 /**

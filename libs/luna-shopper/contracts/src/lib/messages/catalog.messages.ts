@@ -12,16 +12,28 @@ import type { AdminCredential } from './admin-auth.messages';
  * Catalog message contracts (plan 0012). The gateway calls these on the catalog
  * service over NATS. Writes are gated behind a platform-admin role (the app owner
  * alone); reads are open to any authenticated user. Every localized text field
- * carries at least English and Spanish (plan 0004, section 12). The catalog owns
+ * carries at least one of English and Spanish (plan 0004, section 12; widened
+ * from both by plan 0079). The catalog owns
  * its own database and is referenced from core only by an opaque `itemId`; it is
  * deliberately NOT part of the realtime fan-out, so it defines no events.
  */
 
-/** A reference/catalog text stored multilingual (English + Spanish minimum). */
-export interface LocalizedText {
-  en: string;
-  es: string;
-}
+/**
+ * The languages the catalog writes its names in, in the order a reader falls
+ * through them (plan 0079).
+ */
+export const CONTENT_LOCALES = ['en', 'es'] as const;
+export type ContentLocale = (typeof CONTENT_LOCALES)[number];
+
+/**
+ * A name in at least one of the languages the catalog serves (plan 0079).
+ *
+ * A language the name does not have is **absent, never null**, so a third
+ * language is a new key and not a migration over every row. At least one key is
+ * present, and every present value is a non blank string. `{}` is not a name,
+ * and neither is `{ en: null }`: the gateway refuses both.
+ */
+export type LocalizedText = Partial<Record<ContentLocale, string>>;
 
 /**
  * Alternative words for one thing, per locale (plan 0048, section 1).

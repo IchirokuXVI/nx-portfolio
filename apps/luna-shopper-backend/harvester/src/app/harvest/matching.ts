@@ -61,7 +61,15 @@ export class ItemMatchIndex {
       if (item.ean) {
         this.byEan.set(item.ean, item);
       }
-      const key = nameKey(item.name.es, item.brand, item.unitSize);
+      // The Spanish name, because the discovery snapshot is Spanish (plan 0038,
+      // section 6.2). An English only item (plan 0079) lands in a bucket a
+      // Spanish snapshot rarely hits, which is right: a name match is a
+      // candidate at best, and this one is a weaker candidate than most.
+      const key = nameKey(
+        item.name.es ?? item.name.en ?? '',
+        item.brand,
+        item.unitSize
+      );
       const bucket = this.byNameKey.get(key);
       if (bucket) {
         bucket.push(item);
