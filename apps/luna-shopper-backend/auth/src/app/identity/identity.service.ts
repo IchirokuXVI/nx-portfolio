@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AuthProvider,
@@ -112,6 +112,10 @@ const INVALID_OAUTH_STATE = 'Invalid or expired sign in request';
 @Injectable()
 export class IdentityService {
   private readonly config: AuthConfig;
+
+  // A field rather than a constructor dependency, so that a mail failure becomes
+  // visible without every spec in this folder having to build one.
+  private readonly logger = new Logger(IdentityService.name);
 
   constructor(
     private readonly dataSource: DataSource,
@@ -229,7 +233,7 @@ export class IdentityService {
 
     // Send the confirmation email outside the transaction; delivery failure must
     // not roll back a successful registration (verification is optional).
-    await this.sendVerification(email, rawVerificationToken, req.locale);
+    this.sendVerification(email, rawVerificationToken, req.locale);
     this.events.userRegistered({ userId: user.id });
     return this.tokens.issueTokens(user);
   }
@@ -254,22 +258,61 @@ export class IdentityService {
     );
   }
 
-  private async sendVerification(
+  /**
+   * Hand a message to the mailer without holding the request open for it.
+   *
+   * **Catching was never enough, and that is the defect this exists for.** Every
+   * send site already swallowed a rejection so that a dead mail server could not
+   * fail a registration that had succeeded. A blocked port does not reject: it
+   * hangs, and an awaited hang is indistinguishable from a slow request. Both
+   * clusters ran for months with the SMTP port blocked outbound, so every send
+   * sat on a connection that never opened until the ingress gave up at fifteen
+   * seconds, and `POST /v1/auth/register` answered 504 for an account it had
+   * already written. The person saw a failure, their account existed, and
+   * retrying told them the address was taken.
+   *
+   * So the send is dispatched rather than awaited. The response no longer
+   * depends on the mail server being reachable, which is the property the
+   * swallow was reaching for and could not have on its own.
+   *
+   * **It also removes a timing signal.** `requestPasswordReset` answers the same
+   * thing for an address with an account and one without, deliberately, so that
+   * the response cannot be used to test whether somebody is registered. It could
+   * still be timed: the branch that sent a mail waited for the SMTP round trip
+   * and the branch that sent nothing did not. Neither waits now.
+   *
+   * A failure is logged rather than swallowed silently. The old comments claimed
+   * the global logger recorded it, and nothing did: the catch blocks were empty,
+   * which is part of why a total mail outage went unnoticed.
+   */
+  private dispatchMail(what: string, send: () => Promise<void>): void {
+    // `Promise.resolve().then(send)` rather than `send().catch(...)`, so that a
+    // sender which throws synchronously is caught by the same handler as one
+    // that rejects, and so that a stand in returning nothing is not a crash.
+    void Promise.resolve()
+      .then(send)
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `${what} could not be sent: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      });
+  }
+
+  private sendVerification(
     email: string,
     rawToken: string,
     locale?: string
-  ): Promise<void> {
-    try {
-      await this.mail.sendVerificationEmail(
+  ): void {
+    this.dispatchMail('the confirmation email', () =>
+      this.mail.sendVerificationEmail(
         email,
         rawToken,
         this.config.smtp.verifyBaseUrl,
         locale
-      );
-    } catch {
-      // Deliverability is a known risk (plan 0005, section 4.2); a send failure
-      // is swallowed so registration still succeeds. The global logger records it.
-    }
+      )
+    );
   }
 
   /** Email + password login (plan 0005, section 4.3). */
@@ -355,7 +398,7 @@ export class IdentityService {
       (manager) => this.issueResend(manager, req.userId)
     );
 
-    await this.sendVerification(email, rawVerificationToken, req.locale);
+    this.sendVerification(email, rawVerificationToken, req.locale);
     return {
       retryAfterSeconds: throttleWaitSeconds(THROTTLE_LIMITS.verifyResend),
     };
@@ -393,7 +436,7 @@ export class IdentityService {
       }
     );
 
-    await this.sendVerification(email, rawVerificationToken, locale);
+    this.sendVerification(email, rawVerificationToken, locale);
     return {
       retryAfterSeconds: throttleWaitSeconds(THROTTLE_LIMITS.verifyResend),
     };
@@ -481,21 +524,26 @@ export class IdentityService {
 
     // Outside the transaction, as registration sends its confirmation: a send
     // failure must not roll back a grant the user may still receive by another
-    // route, and the global logger records it.
-    try {
-      if (outcome?.google) {
-        await this.mail.sendGoogleAccountEmail(email, req.locale);
-      } else if (outcome?.rawToken) {
-        await this.mail.sendPasswordResetEmail(
+    // route.
+    //
+    // Dispatched rather than awaited, which matters more here than anywhere
+    // else. This method answers identically whether or not the address has an
+    // account, so that the answer cannot be used to test who is registered. An
+    // awaited send made the two branches take measurably different times, so the
+    // secret the body withholds was readable off the clock instead.
+    if (outcome?.google) {
+      this.dispatchMail('the Google sign in email', () =>
+        this.mail.sendGoogleAccountEmail(email, req.locale)
+      );
+    } else if (outcome?.rawToken) {
+      this.dispatchMail('the password reset email', () =>
+        this.mail.sendPasswordResetEmail(
           email,
           outcome.rawToken,
           this.config.smtp.resetBaseUrl,
           req.locale
-        );
-      }
-    } catch {
-      // Swallowed for the reason the confirmation send is: the response is the
-      // same either way, and it has to be.
+        )
+      );
     }
 
     // The same number for everyone, including the address with no account. A
@@ -673,7 +721,7 @@ export class IdentityService {
     // must not roll back an upgrade that succeeded, verification is optional, and
     // the global logger records a failed send.
     if (email && rawVerificationToken) {
-      await this.sendVerification(email, rawVerificationToken, req.locale);
+      this.sendVerification(email, rawVerificationToken, req.locale);
     }
 
     this.events.userUpgraded({ userId: user.id });

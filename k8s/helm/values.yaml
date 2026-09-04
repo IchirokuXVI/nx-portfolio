@@ -311,7 +311,11 @@ lunaShopperBackend:
     # registration answers 501 rather than accepting a signup whose confirmation
     # link is never sent. A cluster that exercises the signup flow sets it.
     smtpHost: ''
-    smtpPort: '587'
+    # 2525 rather than the conventional 587. Both environment files override it
+    # with the same number, and the default matches them so a new cluster
+    # inherits the port that works: hosting providers block 25, 465 and 587
+    # outbound by default, and a blocked port does not fail, it hangs.
+    smtpPort: '2525'
     smtpUser: ''
     # There is deliberately no admin list here any more (plan 0072). Writing the
     # catalog is proved by a signature the service verifies for itself, so an
