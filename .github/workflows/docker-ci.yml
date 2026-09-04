@@ -342,6 +342,27 @@ jobs:
             npx nx run-many -t build prune --configuration production \
               --projects "${{ needs.setup.outputs.apps_tobuild }}"
 
+      # Between building the bundles and turning them into images, which is the
+      # last moment a missing runtime dependency costs nothing (k8s plan 0009).
+      #
+      # pr.yml runs the same check on every pull request, so in the ordinary case
+      # this one has nothing left to find. It is here for the cases that route
+      # around that: a direct push to main, a merge whose two sides were each
+      # green alone, or a manual re-run. Everything after this step is expensive
+      # or public. The images are built and pushed to a registry under a mutable
+      # tag, two e2e gates run against them, and then staging is upgraded with
+      # --atomic, where a bundle that cannot resolve an import does not kill one
+      # pod but fails a Helm hook and rolls the whole release back.
+      #
+      # It reads the dist directories the step above just wrote, so it needs no
+      # image, no registry and no cluster, and it costs about a second.
+      - name: Every bundle can resolve what it requires
+        if: needs.setup.outputs.luna != ''
+        run: |
+          dirs=$(echo "${{ needs.setup.outputs.luna }}" \
+            | tr ',' '\n' | sed '/^$/d; s|^|dist/apps/|' | paste -sd' ' -)
+          node apps/luna-shopper-backend/tools/ci/assert-runtime-manifest.mjs $dirs
+
       # --exclude-task-dependencies is load bearing: without it a cold Nx cache would
       # let this step recompile a bundle here, on the runner, outside the pinned
       # image, and nothing would say so.

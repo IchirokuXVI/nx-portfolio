@@ -67,6 +67,16 @@
         "buildTarget": "build"
       }
     },
+    "manifest-check": {
+      "// ": "Every bundle in the image can resolve every package it requires (k8s plan 0009). This package.json is hand written and `generatePackageJson` covers the main entry alone, so a package reachable only from migrate.ts, seed-reference.ts or admin-cli.ts reaches the image only if somebody typed it here. Three staging releases have died on a miss, the last one through a pre-upgrade hook that rolled the whole release back. Depends on prune, because the pruned lockfile is what the image installs from.",
+      "dependsOn": ["prune"],
+      "//cache": "Uncached on purpose. The thing this reads is the dist output of `prune` and the checker script itself, and neither is an input Nx hashes for this project: the script lives outside every project directory, so editing it would replay a cached pass from before the edit. The check itself takes about a second, so there is nothing to save and a stale green to lose.",
+      "cache": false,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper-backend/tools/ci/assert-runtime-manifest.mjs dist/apps/luna-shopper-backend-realtime"
+      }
+    },
     "prune": {
       "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
       "executor": "nx:noop"

@@ -248,6 +248,28 @@ jobs:
             npx nx run-many -t build prune --configuration production \
               --projects "${{ needs.setup.outputs.apps_tobuild }}"
 
+      # The same gate staging runs, on the same side of the same line: after the
+      # bundles exist and before anything turns them into a published image
+      # (k8s plan 0009).
+      #
+      # A release builds every app rather than the affected ones, so the list is
+      # filtered here instead of being carried as an output. Production has never
+      # been hit by this class, and only by luck: it deploys immutable version
+      # tags, so it would fail on a fresh image nobody could have smoke tested
+      # rather than on a stale one. `deploy-release.sh` runs without --atomic, so
+      # the failure would leave a half upgraded release rather than a rolled back
+      # one, which is worse than what staging suffers, not better.
+      - name: Every bundle can resolve what it requires
+        run: |
+          dirs=$(echo "${{ needs.setup.outputs.apps_tobuild }}" \
+            | tr ',' '\n' | grep -E '^luna-shopper-backend-' \
+            | sed 's|^|dist/apps/|' | paste -sd' ' - || true)
+          if [ -z "$dirs" ]; then
+            echo "No Luna Shopper service in this release; nothing to check."
+            exit 0
+          fi
+          node apps/luna-shopper-backend/tools/ci/assert-runtime-manifest.mjs $dirs
+
       # --exclude-task-dependencies is load bearing: without it a cold Nx cache would
       # let this step recompile a bundle here, on the runner, outside the pinned
       # image, and nothing would say so.

@@ -8,7 +8,10 @@ name: PR checks
 #
 # There are two jobs, and BOTH must be required checks:
 #
-#   verify        lint + unit/schema tests. Fast, needs no infrastructure.
+#   verify        lint + unit/schema tests + the runtime manifest check. Needs no
+#                 infrastructure, but it is no longer free: manifest-check builds
+#                 the affected Luna Shopper services, because the thing it reads
+#                 is the built bundle (k8s plan 0009).
 #   verify-infra  the Luna Shopper integration and e2e layers, against a stack the
 #                 job brings up itself (plan 0015). Skips itself entirely when no
 #                 Luna Shopper project is affected, so a pull request touching only
@@ -45,9 +48,26 @@ jobs:
 
       # The base is the branch receiving the PR (main or dev), not a fixed branch,
       # so a PR into dev is diffed against dev and a PR into main against main.
+      # The gate itself, before the gate runs. `manifest-check` is a script rather
+      # than a spec, so nothing else would notice it turning into a permanent
+      # pass; these tests are what keep it able to fail. Under a second, and
+      # unconditional, because a check nobody proves can fail is not a check.
+      - name: The runtime manifest check's own tests
+        run: node --test apps/luna-shopper-backend/tools/ci/assert-runtime-manifest.test.mjs
+
+      # `manifest-check` joins lint and test here (k8s plan 0009). It is the one
+      # target in this job that is not free: it depends on `prune`, so an affected
+      # Luna Shopper service is built and its lockfile pruned before the check
+      # reads them. That is the point. The failure it catches lives in the built
+      # bundle and in nothing else, so lint, the type checker and 123 unit tests
+      # all pass while the image is dead at boot.
+      #
+      # Only the seven Luna Shopper services declare the target, so a pull request
+      # touching only the Angular micro frontends pays nothing for it: Nx skips a
+      # target a project does not have.
       - name: Lint & test affected
         run: |
-          npx nx affected -t lint test \
+          npx nx affected -t lint test manifest-check \
             --base=origin/${{ github.base_ref }} --head=HEAD
 
   # ---------------------------------------------------------------------------
