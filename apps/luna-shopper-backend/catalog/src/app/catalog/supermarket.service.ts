@@ -118,6 +118,7 @@ export class SupermarketService {
     const cursor = decodeCursor(req.cursor) as SupermarketCursor | undefined;
 
     const qb = this.supermarkets.createQueryBuilder('s').take(limit + 1);
+    this.applySearch(qb, req.query);
     this.applyOrder(qb, order, cursor);
 
     const rows = await qb.getMany();
@@ -142,6 +143,43 @@ export class SupermarketService {
       throw new NotFoundException('Supermarket not found');
     }
     return row;
+  }
+
+  /**
+   * Narrow the page to the chains whose name or brand key contains the term.
+   *
+   * A substring match, not the ranked read a product group gets: a chain has no
+   * search document and no synonyms, and its name is one or two words. Ranking
+   * would also cost the keyset cursor, because a relevance score is computed per
+   * query rather than stored and there is no column to seek into.
+   *
+   * The brand key is in because it is what tells two chains apart when their
+   * names read alike, which is the case the operator is squinting at.
+   */
+  private applySearch(
+    qb: SelectQueryBuilder<Supermarket>,
+    query?: string
+  ): void {
+    const term = query?.trim() ?? '';
+    if (term === '') {
+      return;
+    }
+
+    // `strpos` rather than `ILIKE`, because `%` and `_` are wildcards to LIKE
+    // and the operator typing them means those two characters. Nothing has to be
+    // escaped this way, and an escape that is forgotten reads as a working
+    // search that quietly matches too much.
+    //
+    // A null brand key makes `strpos` null, which is not true, so a chain
+    // without one is simply not matched by that arm.
+    qb.andWhere(
+      `(
+        strpos(lower(s.name ->> 'en'), lower(:term)) > 0
+        OR strpos(lower(s.name ->> 'es'), lower(:term)) > 0
+        OR strpos(lower(s."externalBrandKey"), lower(:term)) > 0
+      )`,
+      { term }
+    );
   }
 
   private resolveOrder(order?: string): SupermarketOrder {

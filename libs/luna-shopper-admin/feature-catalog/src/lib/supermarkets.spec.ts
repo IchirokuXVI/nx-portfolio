@@ -104,6 +104,20 @@ describe('the supermarkets descriptor', () => {
   });
 
   /**
+   * The filter is what makes a reference picker over chains work. Without one,
+   * `ResourceReferences.search` has no parameter to put the operator's term in,
+   * so it drops the term and asks for the first page: the picker then answers
+   * every search with the same twenty chains.
+   */
+  it('offers the search its reference picker needs', () => {
+    const search = (SUPERMARKETS.filters ?? []).find(
+      (filter) => filter.kind === 'search'
+    );
+
+    expect(search?.param).toBe('query');
+  });
+
+  /**
    * `UpdateSupermarketDto` has no such property, so the gateway would drop it.
    * A field the form offered and the server ignored is worse than one it does
    * not offer: the operator would type a value, see the form succeed, and find
