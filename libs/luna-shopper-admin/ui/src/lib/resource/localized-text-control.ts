@@ -23,17 +23,34 @@ import {
   selector: 'lib-localized-text-control',
   template: `
     @for (locale of locales(); track locale) {
-      <label>
-        <span class="locale">{{ locale }}</span>
-        <input
-          (input)="onInput(locale, $event)"
-          [attr.maxlength]="maxLength() ?? null"
-          [disabled]="disabled()"
-          [id]="controlId() + '-' + locale"
-          [value]="valueFor(locale)"
-          type="text"
-        />
-      </label>
+      <!-- The label points at its control by id rather than wrapping it. A
+           wrapping label whose control is inside an @if is associated with
+           nothing a linter, or a screen reader, can see. -->
+      <div class="row">
+        <label [for]="controlId() + '-' + locale" class="locale">{{
+          locale
+        }}</label>
+        @if (list()) {
+          <!-- One entry per line. A line break is the one separator a synonym
+               cannot contain, so nothing has to guess where an entry ends. -->
+          <textarea
+            (input)="onInput(locale, $event)"
+            [disabled]="disabled()"
+            [id]="controlId() + '-' + locale"
+            [value]="valueFor(locale)"
+            rows="4"
+          ></textarea>
+        } @else {
+          <input
+            (input)="onInput(locale, $event)"
+            [attr.maxlength]="maxLength() ?? null"
+            [disabled]="disabled()"
+            [id]="controlId() + '-' + locale"
+            [value]="valueFor(locale)"
+            type="text"
+          />
+        }
+      </div>
     }
   `,
   styles: `
@@ -43,7 +60,7 @@ import {
       gap: var(--admin-space-2);
     }
 
-    label {
+    .row {
       display: flex;
       gap: var(--admin-space-2);
       align-items: center;
@@ -58,7 +75,8 @@ import {
       color: var(--admin-ink-muted);
     }
 
-    input {
+    input,
+    textarea {
       /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
          smaller, which on a phone leaves the operator scrolled sideways. */
       flex: 1;
@@ -72,7 +90,12 @@ import {
       color: var(--admin-ink);
     }
 
-    input:focus-visible {
+    textarea {
+      resize: vertical;
+    }
+
+    input:focus-visible,
+    textarea:focus-visible {
       outline: 2px solid var(--admin-accent);
       outline-offset: 2px;
     }
@@ -85,6 +108,8 @@ export class LocalizedTextControl {
   readonly value = input.required<Readonly<Record<string, string>>>();
   readonly disabled = input(false);
   readonly maxLength = input<number | undefined>(undefined);
+  /** Whether each locale holds a list of entries, one per line. */
+  readonly list = input(false);
 
   readonly valueChange = output<Readonly<Record<string, string>>>();
 
@@ -93,7 +118,7 @@ export class LocalizedTextControl {
   }
 
   onInput(locale: string, event: Event): void {
-    const text = (event.target as HTMLInputElement).value;
+    const text = (event.target as HTMLInputElement | HTMLTextAreaElement).value;
     // Every locale is emitted, not only the one that changed. The value is one
     // column, and a partial object would erase the other language on submit.
     this.valueChange.emit({ ...this.value(), [locale]: text });

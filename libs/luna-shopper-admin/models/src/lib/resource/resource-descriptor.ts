@@ -195,6 +195,21 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
   /** The property holding the row's id. `id` unless stated. */
   readonly idField?: FieldName<T>;
   /**
+   * The address one row has, when no single property is one.
+   *
+   * A price is keyed on `(itemId, priceScopeId)` and a location item on
+   * `(itemId, supermarketLocationId)`, and the gateway has no route that reads
+   * either by its own uuid: the only way back to one row is to name the pair it
+   * is keyed on. So the pair is what the URL carries and what the gateway is
+   * asked for, and the row's own `id` stays what a delete quotes.
+   *
+   * A method rather than a property holding a function, for the reason
+   * {@link NamedAction.available} is one: `keyof T` makes `T` contravariant, and
+   * a descriptor for a concrete row has to stay assignable to a descriptor for
+   * any row.
+   */
+  rowId?(row: T): string;
+  /**
    * What to call one row, in a heading, a picker and a confirmation.
    *
    * A function rather than a field name, because a name is usually localized
@@ -214,6 +229,19 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    */
   readonly note?: string;
   readonly filters?: readonly FilterDescriptor[];
+  /**
+   * Filter parameters this list cannot be read without.
+   *
+   * Not every collection can be listed from nothing. A chain's shops are read
+   * at `/supermarkets/{id}/locations`, and what is in one shop is read with a
+   * shop named, because aisle positions across every shop at once would be rows
+   * nothing could make sense of.
+   *
+   * A list missing one of these is a **third** state, and stating it here is
+   * what lets the screen say so. Asking the gateway anyway would answer 400,
+   * and drawing "there is nothing here" would be a claim nobody checked.
+   */
+  readonly requires?: readonly string[];
   /** The orders the backend accepts, sent as `order`. Absent means none. */
   readonly sorts?: readonly EnumOption[];
   readonly actions?: ResourceActions<T>;
@@ -231,6 +259,22 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * and its rows do not open. That is the admin table (plan 0007, section 2).
    */
   readonly detail?: Type<unknown>;
+  /**
+   * The component that creates and changes one row, when the generic form
+   * cannot.
+   *
+   * There is one of these, and the plan that asks for it says why: a price is
+   * the screen where a well meaning generic form creates wrong data. A price
+   * belongs to a **scope** and not to a shop, so the form has to name the scope,
+   * state its kind and say how many shops share it, and none of that is a field
+   * of the row being edited (plan 0005, section 2).
+   *
+   * It replaces the generic form at `new` and at `:id`, so create and edit stay
+   * one act with one component. {@link detail} still wins at `:id` where a
+   * resource named both, since a row that is read rather than changed is a
+   * different screen from the one that changes it.
+   */
+  readonly editor?: Type<unknown>;
   /** Called in an injection context, so the gateway can inject what it needs. */
   gateway(): ResourceGateway<T>;
 }
@@ -244,7 +288,11 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
 export function hasDetailScreen<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>
 ): boolean {
-  return descriptor.detail !== undefined || descriptor.actions?.edit === true;
+  return (
+    descriptor.detail !== undefined ||
+    descriptor.editor !== undefined ||
+    descriptor.actions?.edit === true
+  );
 }
 
 /**
@@ -283,11 +331,20 @@ export function idFieldOf<T extends ResourceRow>(
   return descriptor.idField ?? 'id';
 }
 
-/** One row's id, as a string. Empty when the row carries none. */
+/**
+ * One row's address, as a string. Empty when the row carries none.
+ *
+ * {@link ResourceDescriptor.rowId} first, because a resource that states one has
+ * no single property holding its identity, and reading `id` there would give the
+ * URL a value no route can look up again.
+ */
 export function idOf<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>,
   row: T
 ): string {
+  if (descriptor.rowId !== undefined) {
+    return descriptor.rowId(row);
+  }
   const value = row[idFieldOf(descriptor)];
   return typeof value === 'string' ? value : '';
 }

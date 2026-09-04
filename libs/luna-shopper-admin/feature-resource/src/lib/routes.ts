@@ -44,8 +44,11 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
         ...(descriptor.actions?.create === true
           ? [
               {
+                // The resource's own editor where it named one, and the generic
+                // form otherwise. Create and edit stay one component either
+                // way, which is what keeps them one act.
                 path: 'new',
-                component: ResourceFormPage,
+                component: descriptor.editor ?? ResourceFormPage,
                 data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
               },
             ]
@@ -56,11 +59,16 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
         // change beside the ones it can. A resource with neither has no such
         // route, and `resource-list` draws its rows as text rather than as
         // controls that lead nowhere.
+        //
+        // `detail` before `editor`, because a resource naming both means the two
+        // screens are genuinely different: one reads a row and one changes it.
+        // Nothing names both today, and the order says which would win.
         ...(hasDetailScreen(descriptor)
           ? [
               {
                 path: ':id',
-                component: descriptor.detail ?? ResourceFormPage,
+                component:
+                  descriptor.detail ?? descriptor.editor ?? ResourceFormPage,
                 data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
               },
             ]

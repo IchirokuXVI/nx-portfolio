@@ -76,8 +76,18 @@ interface FieldBase<T extends ResourceRow> {
    * date are the two things an operator most often needs to copy, and a form
    * that hides everything it cannot change is a worse detail view than a table
    * row.
+   *
+   * **`'create'` means settable once and fixed afterwards**, which is a real
+   * shape rather than a convenience. Three catalog resources have it, and in
+   * each the gateway says so itself: `CreateSupermarketLocationDto` takes the
+   * chain and `UpdateSupermarketLocationDto` does not, `CreatePriceScopeDto`
+   * takes it and `UpdatePriceScopeDto` does not, and a price is **keyed** on
+   * `(itemId, priceScopeId)` so changing either would write a second row rather
+   * than move this one. A form offering a control the server ignores is worse
+   * than one that does not: the operator types a value, sees the form succeed,
+   * and finds nothing changed.
    */
-  readonly editable?: boolean;
+  readonly editable?: boolean | 'create';
   /**
    * Where this field's displayed value comes from, when it is not the property.
    *
@@ -116,15 +126,40 @@ export interface NumberField<T extends ResourceRow> extends FieldBase<T> {
   readonly integer?: boolean;
 }
 
-/** A `numeric` column, carried as a string end to end. */
+/** A `numeric` column, carried as a string for as long as this app can manage. */
 export interface MoneyField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'money';
   /** The column's scale: 2 for `price`, 4 for `unitPrice`. */
   readonly decimals: number;
+  /**
+   * What the wire carries, which is not always what the column holds.
+   *
+   * `numeric` arrives as a string and should leave as one, and that is the
+   * default. But `UpsertSupermarketItemDto` validates `price` and `unitPrice`
+   * with `@IsNumber()`, so the one route that writes a price refuses the string
+   * the column stores. Stating it here keeps the digits as text through the
+   * control, the validation and the rounding rules, and converts once at the
+   * last moment rather than making the whole app carry floats for one DTO.
+   */
+  readonly wire?: 'string' | 'number';
 }
 
 export interface BooleanField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'boolean';
+  /**
+   * What a create starts from, when the column's own default is not `false`.
+   *
+   * Only a boolean needs this, and the reason is that only a boolean has no
+   * empty. A text field left alone is left out of the request and the column
+   * keeps its default; a checkbox left alone submits `false`, which is a real
+   * value and overrides it. `SupermarketItem.available` defaults to true, so a
+   * price created through an unticked box would be a price on a product the
+   * screen had just declared unsold.
+   *
+   * Ignored for a nullable boolean, which starts at null because null is what
+   * its three answers call "not decided".
+   */
+  readonly initial?: boolean;
 }
 
 export interface EnumField<T extends ResourceRow> extends FieldBase<T> {
@@ -153,6 +188,19 @@ export interface LocalizedTextField<
   /** The locales the form renders an input for. */
   readonly locales: readonly string[];
   readonly maxLength?: number;
+  /**
+   * Whether the column holds a **list** of strings per locale rather than one.
+   *
+   * `ProductGroup.synonyms` is the one, and it is worth having rather than
+   * leaving uneditable: a group's synonyms are what let a shopper's word reach
+   * its members, so a screen that could create a group but not say what it is
+   * called would leave the interesting half of the resource unreachable.
+   *
+   * One entry per line, because a line break is the one separator a synonym
+   * cannot contain. A comma can, and guessing which commas separate and which
+   * belong is how a list quietly loses an entry.
+   */
+  readonly list?: boolean;
 }
 
 /** A timestamp, formatted with `Intl` and never with `DatePipe`. */
@@ -172,9 +220,28 @@ export type FieldDescriptor<T extends ResourceRow = ResourceRow> =
   | LocalizedTextField<T>
   | DateField<T>;
 
-/** Whether the form may change this field. Absent means yes. */
+/**
+ * Whether the form is creating a row or changing one.
+ *
+ * Here rather than beside the draft, because {@link isEditable} needs it and a
+ * field's own rules are the deeper of the two.
+ */
+export type FormMode = 'create' | 'edit';
+
+/**
+ * Whether the form may change this field, in this mode. Absent means yes.
+ *
+ * The mode is not optional, and that is deliberate. A field that is settable
+ * only at creation is invisible to a caller that forgets to say which screen it
+ * is asking about, and the failure would be an ignored control rather than an
+ * error.
+ */
 export function isEditable<T extends ResourceRow>(
-  field: FieldDescriptor<T>
+  field: FieldDescriptor<T>,
+  mode: FormMode
 ): boolean {
+  if (field.editable === 'create') {
+    return mode === 'create';
+  }
   return field.editable !== false;
 }

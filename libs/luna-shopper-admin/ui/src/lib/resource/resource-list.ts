@@ -75,7 +75,11 @@ export interface RowAction {
       />
     }
 
-    @if (loading()) {
+    @if (blockedBy(); as needed) {
+      <p class="state" role="status">
+        {{ 'resource.list.blocked' | rokuT: { filters: needed } }}
+      </p>
+    } @else if (loading()) {
       <p class="state" role="status">{{ 'resource.list.loading' | rokuT }}</p>
     } @else if (failed()) {
       <div class="state error" role="alert">
@@ -441,6 +445,17 @@ export class ResourceList {
   readonly errorKey = input('resource.error.unknown');
   readonly empty = input(false);
   readonly noMatch = input(false);
+  /**
+   * The filters this list is waiting for, already translated and joined, or
+   * `null` when it is waiting for none.
+   *
+   * A third state beside empty and no match. "There are no shops here" and "you
+   * have not said whose shops" are different sentences and only one of them is
+   * true, so a list that cannot be read yet says which filter would let it be.
+   * Translated by the page, because a pipe cannot resolve keys that are
+   * themselves the argument of another key.
+   */
+  readonly blockedBy = input<string | null>(null);
   readonly hasMore = input(false);
   readonly loadingMore = input(false);
 

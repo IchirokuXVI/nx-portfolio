@@ -27,10 +27,22 @@ describe('ADMIN_RESOURCES', () => {
    * Grouped by what an operator came here to do: the catalog, which is the half
    * that gets edited; then the people and what they share; then the admin table,
    * which is opened to answer one question and never to change anything.
+   *
+   * Inside the catalog the order follows what an operator is holding in their
+   * head rather than the alphabet. A chain, then the shops and scopes that
+   * belong to one, then the products and the groups that make two products
+   * comparable, then the prices, which need a product and a scope to exist at
+   * all. The per shop rows are last, being the narrowest question here.
    */
   it('lists the screens in the order the navigation shows them', () => {
     expect(ADMIN_RESOURCES.map((resource) => resource.name)).toEqual([
       'supermarkets',
+      'locations',
+      'price-scopes',
+      'items',
+      'product-groups',
+      'prices',
+      'location-items',
       'users',
       'zones',
       'lists',
@@ -46,8 +58,8 @@ describe('ADMIN_RESOURCES', () => {
    *
    * A reference the form cannot change is deliberately not in this check. It is
    * drawn as the uuid it is and never opens a picker, which is why
-   * `defaultPriceScopeId` may point at `price-scopes` before `0005` adds that
-   * screen.
+   * `defaultPriceScopeId` could point at `price-scopes` before `0005` added
+   * that screen.
    */
   it('points every reference picker at a resource that exists', () => {
     const names = new Set(ADMIN_RESOURCES.map((resource) => resource.name));

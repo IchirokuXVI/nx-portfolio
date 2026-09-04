@@ -15,6 +15,7 @@ import {
   toRowView,
   type ActionConfirmation,
   type FieldDescriptor,
+  type FilterDescriptor,
   type NamedAction,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
@@ -60,6 +61,7 @@ interface PendingAction extends RowAction {
       (orderChange)="store.setOrder($event)"
       (remove)="askToDelete($event)"
       (retry)="store.load()"
+      [blockedBy]="blockedBy()"
       [busyRowId]="busyRowId()"
       [canCreate]="canCreate()"
       [canDelete]="canDelete()"
@@ -185,6 +187,28 @@ export class ResourceListPage {
   );
 
   readonly errorKey = computed(() => gatewayErrorKey(this.store.error()));
+
+  /**
+   * The filters this list is waiting for, named in words, or `null`.
+   *
+   * Translated here rather than in the template. The sentence is one key for
+   * every resource, so the filters' own labels have to arrive as a string: a
+   * pipe cannot resolve a key that is itself the argument of another key.
+   */
+  readonly blockedBy = computed(() => {
+    const missing = this.store.missingFilters();
+    if (missing.length === 0) {
+      return null;
+    }
+
+    const filters: readonly FilterDescriptor[] = this.descriptor.filters ?? [];
+    return missing
+      .map((param) => {
+        const filter = filters.find((entry) => entry.param === param);
+        return this._translator.t(filter?.label ?? param);
+      })
+      .join(', ');
+  });
 
   readonly canCreate = computed(() => this.descriptor.actions?.create === true);
 

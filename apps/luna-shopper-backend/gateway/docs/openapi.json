@@ -10703,23 +10703,12 @@
         "operationId": "CatalogPriceScopesController_list_v1",
         "parameters": [
           {
-            "name": "order",
+            "name": "supermarketId",
             "required": false,
             "in": "query",
+            "description": "Only this chain’s scopes.",
             "schema": {
-              "type": "string",
-              "enum": [
-                "name",
-                "created",
-                "updated"
-              ]
-            }
-          },
-          {
-            "name": "supermarketId",
-            "required": true,
-            "in": "query",
-            "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
@@ -14945,23 +14934,12 @@
         "operationId": "AdminCatalogPriceScopesController_list_v1",
         "parameters": [
           {
-            "name": "order",
+            "name": "supermarketId",
             "required": false,
             "in": "query",
+            "description": "Only this chain’s scopes.",
             "schema": {
-              "type": "string",
-              "enum": [
-                "name",
-                "created",
-                "updated"
-              ]
-            }
-          },
-          {
-            "name": "supermarketId",
-            "required": true,
-            "in": "query",
-            "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }

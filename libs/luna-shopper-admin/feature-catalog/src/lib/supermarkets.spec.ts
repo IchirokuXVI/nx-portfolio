@@ -107,11 +107,14 @@ describe('the supermarkets descriptor', () => {
    * not offer: the operator would type a value, see the form succeed, and find
    * it unchanged.
    */
-  it('does not offer to edit the default price scope', () => {
+  it('does not offer to edit the default price scope, in either mode', () => {
     const field = fieldOf(SUPERMARKETS, 'defaultPriceScopeId');
 
     expect(field).toBeDefined();
-    expect(field === undefined ? null : isEditable(field)).toBe(false);
+    expect(field === undefined ? null : isEditable(field, 'create')).toBe(
+      false
+    );
+    expect(field === undefined ? null : isEditable(field, 'edit')).toBe(false);
   });
 
   it('calls a chain by its localized name', () => {

@@ -63,7 +63,8 @@
       "loadingMore": "Loading more…",
       "empty": "There is nothing here yet.",
       "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
-      "actions": "Actions"
+      "actions": "Actions",
+      "blocked": "Choose {{filters}} first. There is nothing to read until you do."
     },
     "filter": {
       "any": "Any"
@@ -73,7 +74,8 @@
       "default": "Default order"
     },
     "field": {
-      "choose": "Choose…"
+      "choose": "Choose…",
+      "unset": "Not set"
     },
     "reference": {
       "search": "Search",
@@ -152,6 +154,201 @@
         "created": "Newest first",
         "updated": "Recently changed"
       }
+    },
+    "locations": {
+      "one": "shop",
+      "many": "Shops",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "priceScopeId": "Price scope",
+      "priceScopeIdHelp": "Which prices this shop uses. Leave it empty when you create the shop, and catalog gives the shop a scope of its own.",
+      "label": "Name",
+      "address": "Address",
+      "city": "Town",
+      "postalCode": "Postal code",
+      "postalCodeHelp": "Changing this does not move the shop to another price scope. The two are separate, and the pricing stays where it is.",
+      "postalCodeSource": "Postal code source",
+      "postalCodeSourceHelp": "Where the code came from. Guessed means it was taken from the nearest centroid and nobody has checked it. Empty means the shop has no code at all, which is deliberate: a wrong code is worse than none.",
+      "country": "Country",
+      "latitude": "Latitude",
+      "longitude": "Longitude",
+      "externalRef": "Source reference",
+      "externalRefHelp": "The discovery provider’s own reference, such as node/1156230891. It changes when a shop is remapped, so it is not a reliable identity.",
+      "externalProvider": "Source",
+      "note": "Shops are read one chain at a time, because the gateway has no route that lists them all. Choose a chain to begin.",
+      "filter": {
+        "supermarketId": "Chain",
+        "postalCodeSource": "Postal code source",
+        "priceScopeId": "Price scope"
+      }
+    },
+    "priceScopes": {
+      "one": "price scope",
+      "many": "Price scopes",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "supermarketIdHelp": "The chain this scope prices for. It is fixed once the scope exists.",
+      "kind": "Kind",
+      "kindHelp": "How wide the scope is. A warehouse scope is one price shared by every shop that warehouse serves. A single shop scope covers one shop.",
+      "externalKey": "Source key",
+      "externalKeyHelp": "The source’s own key for the scope, such as a warehouse number. Text and not a number: it arrives as 4661 and as mad3.",
+      "label": "Label",
+      "labelHelp": "A name for people to read. Harvested scopes have none, and are shown by their kind and source key instead.",
+      "filter": {
+        "supermarketId": "Chain"
+      }
+    },
+    "items": {
+      "one": "product",
+      "many": "Products",
+      "id": "Identifier",
+      "name": "Name",
+      "brand": "Brand",
+      "ean": "Barcode",
+      "eanHelp": "The only identifier that joins a product across chains. Unique across the catalog.",
+      "sku": "Source code",
+      "category": "Category",
+      "defaultUnit": "Unit",
+      "unitSize": "Size",
+      "unitSizeHelp": "Without it the unit says nothing: a liter is not a size.",
+      "productGroupId": "Product group",
+      "productGroupIdHelp": "What makes this product comparable with another. Empty is the ordinary state of a newly harvested product, and nothing is wrong with it.",
+      "imageUrl": "Image address",
+      "sort": {
+        "relevance": "Best match",
+        "name": "By name",
+        "created": "Newest first",
+        "updated": "Recently changed"
+      },
+      "filter": {
+        "query": "Name or barcode contains",
+        "category": "Category",
+        "productGroupId": "Product group",
+        "withoutProductGroup": "Belongs to no group"
+      }
+    },
+    "productGroups": {
+      "one": "product group",
+      "many": "Product groups",
+      "id": "Identifier",
+      "name": "Name",
+      "slug": "Handle",
+      "slugHelp": "A stable handle for tooling and tests: lower case words separated by single dashes.",
+      "referenceUnit": "Reference unit",
+      "referenceUnitHelp": "The unit this group’s members are compared in.",
+      "synonyms": "Synonyms",
+      "synonymsHelp": "Other words a shopper may use for this group. One per line.",
+      "sort": {
+        "name": "By name",
+        "created": "Newest first",
+        "updated": "Recently changed"
+      },
+      "filter": {
+        "query": "Name contains"
+      }
+    },
+    "prices": {
+      "one": "price",
+      "many": "Prices",
+      "id": "Identifier",
+      "itemId": "Product",
+      "priceScopeId": "Price scope",
+      "priceScopeIdHelp": "A price belongs to a scope and not to a shop. Every shop that prices against this scope shows this price.",
+      "price": "Price",
+      "priceHelp": "Clearing it lets the next automated run write this row again.",
+      "currency": "Currency",
+      "unitPrice": "Unit price",
+      "unitPriceHelp": "The source’s own price per reference unit. Type it in. It is never worked out from the price and the size, because the two disagree on about one product in forty.",
+      "unitPriceLabel": "Unit price label",
+      "unitPriceLabelHelp": "The source’s own words for the unit price, such as 100 ml, or lv for washing machine loads. Free text and not a unit.",
+      "available": "Sold at this scope",
+      "availableHelp": "Scope wide. Whether one particular shop has it is a separate answer, on that shop’s own row.",
+      "priceSourceKind": "Source",
+      "priceSourceKindHelp": "Set by the server. A price you type in is recorded as typed in, and no automated run will overwrite it while it is there.",
+      "priceObservedAt": "Seen at",
+      "priceObservedAtHelp": "When the price was last observed. The server sets it on every write.",
+      "note": "A price belongs to a price scope, not to a shop. Changing one here changes it for every shop that scope covers.",
+      "filter": {
+        "itemId": "Product",
+        "priceScopeId": "Price scope",
+        "priceSourceKind": "Source",
+        "available": "Sold at this scope"
+      },
+      "action": {
+        "revert": "Revert to harvested"
+      },
+      "confirm": {
+        "revert": {
+          "heading": "Remove this typed price?",
+          "body": "The price typed in for {{name}} is removed, and the next automated run may write this row again. The row itself stays, and it is still listed as typed in until a run replaces it.",
+          "confirm": "Remove it"
+        }
+      },
+      "scope": {
+        "heading": "This price applies to {{scope}}.",
+        "kind": "Scope kind: {{kind}}.",
+        "locations": "Shops covered: {{count}}.",
+        "atLeastLocations": "Shops covered: at least {{count}}.",
+        "noLocations": "No shop prices against it yet.",
+        "counting": "Counting the shops it covers…",
+        "none": "Choose a price scope. A price belongs to a scope, not to a shop."
+      }
+    },
+    "locationItems": {
+      "one": "shop row",
+      "many": "Products in a shop",
+      "id": "Identifier",
+      "itemId": "Product",
+      "supermarketLocationId": "Shop",
+      "positionInStore": "Position in the shop",
+      "positionInStoreHelp": "Where the product sits, such as an aisle. Per shop, because a warehouse cannot answer it.",
+      "available": "Available in this shop",
+      "availableHelp": "An override for this shop alone. Leave it unset and the scope’s own answer stands, which is not the same as saying no.",
+      "note": "These rows are read one shop at a time, because an aisle is a fact about one shop. Choose a shop to begin.",
+      "filter": {
+        "supermarketLocationId": "Shop"
+      }
+    },
+    "itemCategory": {
+      "PRODUCE": "Fresh produce",
+      "DAIRY": "Dairy",
+      "BAKERY": "Bakery",
+      "MEAT": "Meat",
+      "SEAFOOD": "Seafood",
+      "FROZEN": "Frozen",
+      "BEVERAGES": "Drinks",
+      "SNACKS": "Snacks",
+      "PANTRY": "Pantry",
+      "HOUSEHOLD": "Household",
+      "PERSONAL_CARE": "Personal care",
+      "OTHER": "Other"
+    },
+    "unit": {
+      "UNIT": "Unit",
+      "GRAM": "Gram",
+      "KILOGRAM": "Kilogram",
+      "MILLILITER": "Milliliter",
+      "LITER": "Liter",
+      "PACK": "Pack"
+    },
+    "priceScopeKind": {
+      "NATIONAL": "Nationwide",
+      "WAREHOUSE": "Warehouse",
+      "POSTAL_CODE": "Postal code area",
+      "STORE": "Single shop"
+    },
+    "priceSourceKind": {
+      "OFFICIAL_API": "Official API",
+      "OFFICIAL_WEB": "Official website",
+      "OFFICIAL_LEAFLET": "Official leaflet",
+      "ADMIN": "Typed in here",
+      "USER_RECEIPT": "User receipt",
+      "USER_REPORTED": "Reported by a user"
+    },
+    "postalCodeSource": {
+      "SOURCE": "Known",
+      "DERIVED": "Guessed",
+      "MANUAL": "Typed in"
     }
   },
   "harvest": {
