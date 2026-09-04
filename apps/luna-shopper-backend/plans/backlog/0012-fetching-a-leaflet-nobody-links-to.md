@@ -1,6 +1,6 @@
-> **Status: backlog. Not scheduled for development.**
+# 0012 (backlog) Fetching a leaflet nobody links to
 
-# 0012 Fetching a leaflet nobody links to
+> **Status: backlog. Not scheduled for development.**
 
 Plan `0083` reads a leaflet PDF and turns it into an import document. It does not obtain the PDF.
 An admin downloads the file and uploads it, once a month per chain.
