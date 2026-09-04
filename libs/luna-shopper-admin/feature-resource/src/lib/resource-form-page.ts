@@ -66,6 +66,7 @@ import {
         [lookup]="references"
         [messages]="messages()"
         [mode]="mode"
+        [noteKey]="descriptor.formNote ?? null"
         [readonlyCells]="readonlyCells()"
         [strayErrors]="store.strayErrors()"
         [subtitle]="subtitle()"

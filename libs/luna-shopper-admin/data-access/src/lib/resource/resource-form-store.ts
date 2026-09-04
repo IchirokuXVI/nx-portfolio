@@ -67,7 +67,7 @@ export class ResourceFormStore<T extends ResourceRow> {
 
   /** Everything this app's own rules object to, by field. */
   private readonly _problems = computed(() =>
-    validateDraft(this._descriptor, this._draft(), this.mode)
+    validateDraft(this._descriptor, this._draft(), this.mode, this._original())
   );
 
   /** Whether the draft satisfies this app's rules. */

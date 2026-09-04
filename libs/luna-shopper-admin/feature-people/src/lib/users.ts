@@ -18,27 +18,35 @@ export const USER_KIND_OPTIONS = [
 ] as const;
 
 /**
- * The people (plan 0007, section 2).
+ * The people (plan 0007, section 2, widened by plan 0009, section 2).
  *
- * **Read, and two named actions.** There is no edit and there never will be:
- * deleting an account runs `account-deletion.service` across three databases,
- * and the invariants around a user live in services rather than in constraints,
- * so a generic row editor over `users` offers a way to corrupt state that no
- * code path can repair. Both actions call the service the user's own routes
- * call.
+ * **Two editable fields and two named actions.** `0007` made this screen read
+ * only, on the grounds that the invariants around a user live in services
+ * rather than in constraints. That is still true, and it is why exactly two of
+ * the six fields can be changed: backend plan 0077 put a service behind each of
+ * them and refused every other column outright.
  *
- * Two things about this screen are decisions rather than details.
+ * There is still **no create**, because an operator does not make accounts, and
+ * **no delete**, because deleting one runs `account-deletion.service` across
+ * three databases and stays the named action whose confirmation says whose
+ * account it is and what goes with it.
+ *
+ * Three things about this screen are decisions rather than details.
  *
  * **`username` is not an identifier.** It is the global handle and it is not
  * unique, so rows are keyed and linked by `userId` and two identical usernames
  * are an ordinary result. A screen that treated the handle as the key would
  * merge two people.
  *
- * **`displayName` is not a column.** It is whatever an identity provider
- * supplied, which for a Google sign in is somebody's real full name, so it is
- * in the detail view where an operator has a reason to look and not in a list
- * anybody might screenshot. It is deliberately not among the fields below, so
- * it cannot be added to `columns` by accident.
+ * **Renaming somebody reaches every zone they are in.** `IdentityService`
+ * publishes `user.usernameChanged` and core rewrites the per zone name of every
+ * membership the person holds. The field says so, because an operator changing
+ * a handle should know it is not a private label.
+ *
+ * **`displayName` stays off the listing.** It is whatever an identity provider
+ * supplied, which for a Google sign in is somebody's real full name, so it is a
+ * field on the form, which is the detail screen, and not a column in a table
+ * anybody might screenshot.
  */
 export const USERS = defineResource<User>({
   name: 'users',
@@ -55,18 +63,30 @@ export const USERS = defineResource<User>({
       kind: 'text',
       name: 'userId',
       label: 'people.users.userId',
+      help: 'people.field.idHelp',
       editable: false,
     },
     {
       kind: 'text',
       name: 'username',
       label: 'people.users.username',
-      editable: false,
+      help: 'people.users.usernameHelp',
+      required: true,
+      maxLength: 40,
+    },
+    {
+      kind: 'text',
+      name: 'displayName',
+      label: 'people.users.displayName',
+      help: 'people.users.displayNameHelp',
+      nullable: true,
+      maxLength: 200,
     },
     {
       kind: 'text',
       name: 'email',
       label: 'people.users.email',
+      help: 'people.users.emailHelp',
       editable: false,
     },
     {
@@ -74,6 +94,7 @@ export const USERS = defineResource<User>({
       name: 'kind',
       label: 'people.users.kind.label',
       options: USER_KIND_OPTIONS,
+      help: 'people.users.kindHelp',
       editable: false,
     },
     {
@@ -81,12 +102,14 @@ export const USERS = defineResource<User>({
       name: 'emailVerifiedAt',
       label: 'people.users.emailVerifiedAt',
       time: true,
+      help: 'people.users.emailVerifiedAtHelp',
       editable: false,
     },
     {
       kind: 'date',
       name: 'createdAt',
       label: 'people.users.createdAt',
+      help: 'people.field.createdAtHelp',
       editable: false,
     },
   ],
@@ -134,8 +157,9 @@ export const USERS = defineResource<User>({
   // No `delete: true`. Deleting an account is a named action instead, so the
   // confirmation can say whose account it is and what goes with it rather than
   // asking the generic question every row in the app would ask (plan 0007,
-  // section 5).
+  // section 5). No `create: true` either: an operator does not make accounts.
   actions: {
+    edit: true,
     named: () => {
       const directory = inject(DIRECTORY_SERVICE);
 

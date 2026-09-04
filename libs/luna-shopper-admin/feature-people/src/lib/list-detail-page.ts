@@ -1,17 +1,22 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { compositeId } from '@portfolio/luna-shopper-admin/models';
 import { DetailFacts, DetailFrame, type DetailFact } from './detail-frame';
 import { DetailPage } from './detail-page';
+import { LIST_LINES } from './list-lines';
 import { instant } from './people-format';
 import type { ListRow } from './people-seed';
 
 /**
- * One standing list, and its lines (plan 0007, section 2).
+ * One standing list, and its lines (plan 0007, section 2, widened by plan 0009,
+ * section 4).
  *
- * **Read only, with no actions at all.** There is no service behind a change to
- * a line from here: a line participates in settlements, generated list bindings,
- * permission sets and realtime broadcasts other clients have already applied, so
- * a row editor over it is ruled out now and permanently.
+ * **It reads, and it links to the two forms that write.** `0007` made it read
+ * only on the grounds that a line participates in settlements, generated list
+ * bindings, permission sets and realtime broadcasts other clients have already
+ * applied. That is still true, which is why nothing is typed here: backend plan
+ * 0077 put `ListService` and `LineService` behind the writes, and the forms are
+ * where they happen.
  *
  * This is the screen the lines live on, and it is reached by a deliberate click.
  * The zone screen shows a list's name and its line count and stops there, so
@@ -49,11 +54,31 @@ import type { ListRow } from './people-seed';
                       · {{ createdAt(line.createdAt) }}
                     </span>
                   </div>
-                  <span class="quantity">{{ line.quantity }}</span>
+                  <div class="actions">
+                    <span class="quantity">{{ line.quantity }}</span>
+                    <!-- Through to the one line, which is where its wording and
+                         its quantity are changed. This screen keeps every line,
+                         because reading what a household wrote down is what it
+                         is for (plan 0009, section 4.2). -->
+                    <button (click)="openLine(list, line)" type="button">
+                      {{ 'people.lists.action.openLine' | rokuT }}
+                    </button>
+                  </div>
                 </li>
               }
             </ul>
           }
+        </section>
+
+        <section>
+          <h2>{{ 'people.detail.actions' | rokuT }}</h2>
+          <div class="actions">
+            @if (canEdit) {
+              <button (click)="edit()" type="button">
+                {{ 'resource.action.edit' | rokuT }}
+              </button>
+            }
+          </div>
         </section>
       }
     </lib-detail-frame>
@@ -113,6 +138,29 @@ import type { ListRow } from './people-seed';
     .muted {
       color: var(--admin-ink-muted);
     }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+      align-items: center;
+    }
+
+    button {
+      min-block-size: 2.75rem;
+      padding: var(--admin-space-2) var(--admin-space-4);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      font: inherit;
+      color: var(--admin-ink);
+      cursor: pointer;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -161,6 +209,16 @@ export class ListDetailPage extends DetailPage<ListRow> {
 
   createdAt(value: string): string {
     return instant(value, this.locale);
+  }
+
+  /**
+   * Through to one line's own screen.
+   *
+   * The pair, because that is a line's address: there is no flat route for one,
+   * so both halves are in every URL that reaches it.
+   */
+  openLine(list: ListRow, line: { readonly id: string }): void {
+    this.go([`/${LIST_LINES.segment}`, compositeId([list.id, line.id])]);
   }
 
   yesNo(value: boolean): string {

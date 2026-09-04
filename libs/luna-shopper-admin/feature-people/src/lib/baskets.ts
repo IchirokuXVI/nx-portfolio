@@ -27,6 +27,18 @@ export const BASKET_STATUS_OPTIONS = [
  * matches through the line origins: the zones a basket's lines were drawn from.
  * That is why a basket carries several `zoneIds` and why filtering by one of
  * them is not the same question as filtering a list by its zone.
+ *
+ * **It stayed read only when plan 0009 made the rest of the app editable**, and
+ * the screen says so rather than looking unfinished. A basket is output: it is
+ * composed from the wanted, approved lines of the zones somebody chose, at a
+ * moment recorded in `sourceSnapshot`, and its lines accumulate claims and
+ * settlements while that person walks around the shop. A changed `content`
+ * contradicts the origin that says where it came from, and a changed `quantity`
+ * contradicts settlement rows already written against it. None of that is
+ * repairable, and a basket is readable only by its owner, so the change would
+ * land silently inside one person's private working document. What an operator
+ * can do instead is correct the list it came from (backend plan 0077, section
+ * 6.4).
  */
 export const BASKETS = defineResource<Basket>({
   name: 'baskets',
@@ -74,6 +86,9 @@ export const BASKETS = defineResource<Basket>({
     columns: ['name', 'status', 'lineCount', 'generatedAt'],
     compact: ['status', 'lineCount'],
   },
+
+  // Why there is nothing to press here, where an operator would look for it.
+  note: 'people.baskets.note',
 
   filters: [
     {

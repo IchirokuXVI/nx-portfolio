@@ -1,15 +1,26 @@
 import { inject, Injectable } from '@angular/core';
-import type { ResourceRow } from '@portfolio/luna-shopper-admin/models';
+import {
+  compositeId,
+  type ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
 import { ResourceMemoryGateways } from '../resource/resource-memory';
-import { ADMIN_USERS_PATH, ADMIN_ZONES_PATH } from './directory-paths';
-import type { DirectoryServiceI } from './directory-service';
+import {
+  ADMIN_LIST_LINES_PATH,
+  ADMIN_LISTS_PATH,
+  ADMIN_USERS_PATH,
+  ADMIN_ZONE_MEMBERS_PATH,
+  ADMIN_ZONES_PATH,
+  LIST_LINE_KEY,
+  MEMBERSHIP_KEY,
+} from './directory-paths';
+import type { DirectoryServiceI, LineApproval } from './directory-service';
 
 /** A join code, in the shape the real one has. */
 const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const JOIN_CODE_LENGTH = 8;
 
 /**
- * The seven named actions, with nothing listening (plan 0007, section 1).
+ * The named actions, with nothing listening (plan 0007, section 1).
  *
  * Every data domain in this workspace ships an in-memory implementation so the
  * app runs and every spec passes with no backend, and this is that one. It acts
@@ -22,6 +33,13 @@ const JOIN_CODE_LENGTH = 8;
  * really runs `account-deletion.service` across three databases, and a memory
  * copy of that would be a second implementation of the rule, with its own bugs,
  * asserted by nothing.
+ *
+ * **A membership lives in two tables here and one row on the server.** The
+ * gateway answers a zone's whole membership inside the zone's detail read *and*
+ * serves `/zones/{id}/members` as a collection, and in this mode those are two
+ * tables. So a status change writes both, and the mirror is written with
+ * {@link _mirror}, which lets a missing row pass: the zone's own array is the
+ * authoritative one, and an action must not fail because a spec seeded only it.
  */
 @Injectable({ providedIn: 'root' })
 export class DirectoryMemory implements DirectoryServiceI {
@@ -45,8 +63,8 @@ export class DirectoryMemory implements DirectoryServiceI {
     return joinCode;
   }
 
-  transferOwnership(zoneId: string, membershipId: string): Promise<void> {
-    return this._eachMember(zoneId, (member) => ({
+  async transferOwnership(zoneId: string, membershipId: string): Promise<void> {
+    await this._eachMember(zoneId, (member) => ({
       ...member,
       role:
         member['membershipId'] === membershipId
@@ -65,12 +83,84 @@ export class DirectoryMemory implements DirectoryServiceI {
     return this._setStatus(zoneId, membershipId, 'BANNED');
   }
 
+  approveMember(zoneId: string, membershipId: string): Promise<void> {
+    return this._setStatus(zoneId, membershipId, 'APPROVED');
+  }
+
+  /** Rejecting removes the pending row, which is what the service does. */
+  async rejectMember(zoneId: string, membershipId: string): Promise<void> {
+    const gateway = this._zones();
+    const zone = await gateway.read(zoneId);
+    await gateway.update(zoneId, {
+      members: membersOf(zone).filter(
+        (member) => member['membershipId'] !== membershipId
+      ),
+    });
+
+    await this._mirror(() =>
+      this._memberships().remove(compositeId([zoneId, membershipId]))
+    );
+  }
+
+  /**
+   * Both columns together, because that is the whole point of the act.
+   *
+   * A memory copy that wrote one of them would demonstrate exactly the broken
+   * state the backend added a service method to make unreachable (backend plan
+   * 0077, section 4.2).
+   */
+  async setZoneDeletionMark(zoneId: string, marked: boolean): Promise<void> {
+    await this._zones().update(zoneId, {
+      status: marked ? 'MARKED_FOR_DELETION' : 'ACTIVE',
+      markedForDeletionAt: marked ? new Date().toISOString() : null,
+    });
+  }
+
+  async setLineApproval(
+    listId: string,
+    lineId: string,
+    status: LineApproval
+  ): Promise<void> {
+    const gateway = this._lists();
+    const list = await gateway.read(listId);
+    await gateway.update(listId, {
+      lines: linesOf(list).map((line) =>
+        line['id'] === lineId ? { ...line, approvalStatus: status } : line
+      ),
+    });
+
+    await this._mirror(() =>
+      this._lines().update(compositeId([listId, lineId]), {
+        approvalStatus: status,
+      })
+    );
+  }
+
   private _users() {
     return this._gateways.for({ path: ADMIN_USERS_PATH, idField: 'userId' });
   }
 
   private _zones() {
     return this._gateways.for({ path: ADMIN_ZONES_PATH });
+  }
+
+  private _lists() {
+    return this._gateways.for({ path: ADMIN_LISTS_PATH });
+  }
+
+  private _memberships() {
+    return this._gateways.for({
+      path: ADMIN_ZONE_MEMBERS_PATH,
+      key: [...MEMBERSHIP_KEY],
+      idField: 'membershipId',
+    });
+  }
+
+  private _lines() {
+    return this._gateways.for({
+      path: ADMIN_LIST_LINES_PATH,
+      key: [...LIST_LINE_KEY],
+    });
   }
 
   private _setStatus(
@@ -84,7 +174,7 @@ export class DirectoryMemory implements DirectoryServiceI {
   }
 
   /**
-   * Rewrite a zone's membership, one member at a time.
+   * Rewrite a zone's membership, one member at a time, in both tables.
    *
    * The zone row is read back before it is written, rather than patched
    * blindly, so an action against a zone this table does not hold fails the way
@@ -96,11 +186,47 @@ export class DirectoryMemory implements DirectoryServiceI {
   ): Promise<void> {
     const gateway = this._zones();
     const zone = await gateway.read(zoneId);
-    const members = Array.isArray(zone['members']) ? zone['members'] : [];
-    await gateway.update(zoneId, {
-      members: members.map((member) => change(member as ResourceRow)),
-    });
+    const members = membersOf(zone).map(change);
+    await gateway.update(zoneId, { members });
+
+    for (const member of members) {
+      const membershipId = member['membershipId'];
+      if (typeof membershipId !== 'string') {
+        continue;
+      }
+      await this._mirror(() =>
+        this._memberships().update(compositeId([zoneId, membershipId]), member)
+      );
+    }
   }
+
+  /**
+   * A write to the mirror table, which a spec is allowed not to have seeded.
+   *
+   * The zone's own array is the authoritative copy in this mode, and the
+   * membership collection exists beside it so the standalone screen has
+   * something to list. An action must not fail because only one of the two was
+   * seeded, so a missing row here is nothing rather than an error.
+   */
+  private async _mirror(work: () => Promise<unknown>): Promise<void> {
+    try {
+      await work();
+    } catch {
+      // The mirror does not hold this row. Nothing to keep in step.
+    }
+  }
+}
+
+/** A zone's membership array, as rows. */
+function membersOf(zone: ResourceRow): ResourceRow[] {
+  const members = zone['members'];
+  return Array.isArray(members) ? (members as ResourceRow[]) : [];
+}
+
+/** A list's lines, as rows. */
+function linesOf(list: ResourceRow): ResourceRow[] {
+  const lines = list['lines'];
+  return Array.isArray(lines) ? (lines as ResourceRow[]) : [];
 }
 
 /** A code in the shipped alphabet, which excludes the letters that read as digits. */

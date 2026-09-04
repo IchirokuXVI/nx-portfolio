@@ -186,3 +186,107 @@ describe('ResourceForm', () => {
     expect(saved).toBe(1);
   });
 });
+
+/**
+ * What plan 0009 asks the form to say, and to draw.
+ *
+ * A sentence above the fields for a write the whole zone sees, help under a
+ * field an operator cannot change, and a textarea for a settings blob. All three
+ * are assertions about elements rather than about sentences, because the testing
+ * translator returns keys and does not interpolate.
+ */
+describe('ResourceForm, on a resource plan 0009 made editable', () => {
+  const zoneFields: FieldDescriptor[] = [
+    {
+      kind: 'text',
+      name: 'name',
+      label: 'people.zones.name',
+      required: true,
+    },
+    {
+      kind: 'json',
+      name: 'config',
+      label: 'people.zones.config',
+      help: 'people.zones.configHelp',
+    },
+    {
+      kind: 'text',
+      name: 'joinCode',
+      label: 'people.zones.joinCode',
+      help: 'people.zones.joinCodeHelp',
+      editable: false,
+    },
+  ];
+
+  async function renderZone(
+    noteKey: string | null
+  ): Promise<ComponentFixture<ResourceForm>> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ResourceForm, RokuTranslatorTestingModule.forTesting()],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ResourceForm);
+    fixture.componentRef.setInput('titleKey', 'resource.form.edit');
+    fixture.componentRef.setInput('mode', 'edit');
+    fixture.componentRef.setInput('fields', zoneFields);
+    fixture.componentRef.setInput('draft', {
+      name: 'Kitchen',
+      config: '{}',
+    });
+    fixture.componentRef.setInput('readonlyCells', {
+      joinCode: { text: 'K4TCH2N9' },
+    });
+    fixture.componentRef.setInput('noteKey', noteKey);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  /**
+   * Plan 0009, section 7: the write broadcasts, so somebody with velista open
+   * sees it arrive. Said once above the fields rather than as a confirmation on
+   * every edit, which becomes a click people stop reading.
+   */
+  it('says above the fields what saving does beyond writing the row', async () => {
+    const fixture = await renderZone('people.broadcast');
+    const note = query(fixture, '.note');
+
+    expect(note).toHaveLength(1);
+    expect(note[0].textContent).toContain('people.broadcast');
+  });
+
+  it('says nothing where the resource named no note', async () => {
+    const fixture = await renderZone(null);
+
+    expect(query(fixture, '.note')).toHaveLength(0);
+  });
+
+  /**
+   * Plan 0009, section 5. The form draws `help` outside the editable branch, so
+   * a field an operator cannot change can still say what does change it. That is
+   * what makes a missing control an answer rather than a gap.
+   */
+  it('draws the reason under a field it will not let an operator change', async () => {
+    const fixture = await renderZone(null);
+    const help = [...query(fixture, '.help')].map((node) => node.textContent);
+
+    expect(help).toEqual([
+      expect.stringContaining('people.zones.configHelp'),
+      expect.stringContaining('people.zones.joinCodeHelp'),
+    ]);
+    // And the locked one really is locked: one control, for the name.
+    expect(query(fixture, 'input[type="text"]')).toHaveLength(1);
+  });
+
+  /**
+   * A settings blob is several lines before it is anything worth reading, so it
+   * gets a textarea. The control holds text; the parse happens on the way out.
+   */
+  it('gives a json field a textarea', async () => {
+    const fixture = await renderZone(null);
+    const areas = query(fixture, 'textarea');
+
+    expect(areas).toHaveLength(1);
+    expect((areas[0] as HTMLTextAreaElement).value).toBe('{}');
+  });
+});

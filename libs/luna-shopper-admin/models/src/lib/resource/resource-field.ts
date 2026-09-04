@@ -210,6 +210,25 @@ export interface DateField<T extends ResourceRow> extends FieldBase<T> {
   readonly time?: boolean;
 }
 
+/**
+ * A `jsonb` column this app knows nothing about the shape of (plan 0009,
+ * section 3.1).
+ *
+ * A zone's `config` is the one, and it is the reason this kind exists rather
+ * than a `text` field holding JSON. `UpdateAdminZoneDto.config` is validated
+ * with `@IsObject()`, so the column takes an object and a string is refused.
+ * The control still holds text, because that is what a textarea holds and
+ * because half typed JSON has to survive under the operator's cursor; the parse
+ * happens once, on the way out, after validation has agreed it reads.
+ *
+ * **It is replaced whole rather than merged**, which is what `zone.update` does
+ * for a zone's own owner. So the form opens with the whole object printed out,
+ * and what is submitted is the whole object as edited.
+ */
+export interface JsonField<T extends ResourceRow> extends FieldBase<T> {
+  readonly kind: 'json';
+}
+
 export type FieldDescriptor<T extends ResourceRow = ResourceRow> =
   | TextField<T>
   | NumberField<T>
@@ -218,7 +237,8 @@ export type FieldDescriptor<T extends ResourceRow = ResourceRow> =
   | EnumField<T>
   | ReferenceField<T>
   | LocalizedTextField<T>
-  | DateField<T>;
+  | DateField<T>
+  | JsonField<T>;
 
 /**
  * Whether the form is creating a row or changing one.

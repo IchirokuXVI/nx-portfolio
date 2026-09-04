@@ -69,6 +69,13 @@ export interface FieldChange {
         <p class="subtitle">{{ text }}</p>
       }
 
+      <!-- What saving this does beyond writing the row. Above the fields
+           rather than beside the submit button, so it is read before anything
+           is typed instead of after (plan 0009, section 7). -->
+      @if (noteKey(); as key) {
+        <p class="note">{{ key | rokuT }}</p>
+      }
+
       @for (field of fields(); track field.name) {
         <div class="field">
           <label [for]="controlId(field)">
@@ -185,6 +192,15 @@ export interface FieldChange {
       color: var(--admin-ink-muted);
     }
 
+    .note {
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface);
+      font-size: 0.875rem;
+      color: var(--admin-ink-muted);
+    }
+
     .error {
       font-size: 0.875rem;
       color: var(--admin-danger);
@@ -247,6 +263,14 @@ export class ResourceForm {
   readonly titleArgs = input<Record<string, string | number>>({});
   /** What the row is called, when there is one. Shown under the heading. */
   readonly subtitle = input<string | null>(null);
+  /**
+   * A key for a sentence about what saving does, above the fields.
+   *
+   * `ResourceDescriptor.formNote`, and the four resources that carry one all
+   * carry the same warning: the write broadcasts, so somebody with velista open
+   * sees it arrive (plan 0009, section 7).
+   */
+  readonly noteKey = input<string | null>(null);
   readonly mode = input.required<FormMode>();
   readonly fields = input.required<readonly FieldDescriptor<ResourceRow>[]>();
   readonly draft = input.required<ResourceDraft>();
