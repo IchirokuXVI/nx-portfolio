@@ -7,12 +7,15 @@ import {
   fakeGeneratedListStore,
   fakeMemberNames,
   fakePresenceStore,
+  fakeProfileStore,
   fakeZoneStore,
+  profileFor,
   provideAccountNotice,
   provideFakeAuthService,
   provideFakeGeneratedListStore,
   provideFakeMemberNames,
   provideFakePresenceStore,
+  provideFakeProfileStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
   VERIFY_RESEND_AVAILABLE,
@@ -20,6 +23,7 @@ import {
   type FakeGeneratedListStore,
   type FakeIdentity,
   type FakePresenceOptions,
+  type FakeProfileStore,
   type FakeZoneStore,
   type ZoneEntry,
 } from '@portfolio/velista/data-access';
@@ -61,6 +65,11 @@ interface Options {
   lastEntry?: ZoneEntry | null;
   /** What just happened to the account, which this page reports once (plan 0009). */
   accountNotice?: { kind: 'registered' | 'upgraded'; email: string };
+  /**
+   * The caller's profile, which is where the standing confirm-your-email card comes
+   * from. Confirmed by default, so no card is drawn unless a test asks for one.
+   */
+  profile?: FakeProfileStore;
   /** Who the server says is present, which the zone cards render (plan 0017). */
   presence?: FakePresenceOptions;
   /** The caller's generated shopping lists, for the dashboard card (plan 0045). */
@@ -129,6 +138,12 @@ async function render(
       // account, and offers another confirmation email once there is an endpoint.
       provideAccountNotice(),
       provideFakeAuthService(),
+      // The one field the confirm-your-email card stands on. Confirmed by default:
+      // the card is drawn for an unconfirmed address, and most specs here are not
+      // about one.
+      provideFakeProfileStore(
+        options.profile ?? fakeProfileStore({ profile: profileFor() })
+      ),
       // Plan 0017: the resume card's presence row. Both are doubles for the same
       // reason the store is, so a presence test changes one fact about the world.
       provideFakePresenceStore(fakePresenceStore(options.presence)),
@@ -374,16 +389,17 @@ describe('HomePage', () => {
       });
 
       (
-        query(fixture, 'lib-confirm-email-nudge button') as HTMLButtonElement
+        query(
+          fixture,
+          'lib-confirm-email-nudge button.dismiss'
+        ) as HTMLButtonElement
       ).click();
       fixture.detectChanges();
 
       expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
     });
 
-    it('does not offer another send until there is an endpoint behind it', async () => {
-      // Section 5.8: the nudge without its last sentence is the screen plan 0009
-      // would have shipped anyway.
+    it('offers another send, because the endpoint is behind it', async () => {
       const fixture = await render({
         accountNotice: { kind: 'registered', email: 'marta@example.com' },
       });
@@ -391,9 +407,7 @@ describe('HomePage', () => {
       expect(fixture.componentInstance.resendOffered).toBe(
         VERIFY_RESEND_AVAILABLE
       );
-      if (!VERIFY_RESEND_AVAILABLE) {
-        expect(query(fixture, 'lib-resend-sentence')).toBeNull();
-      }
+      expect(query(fixture, 'lib-resend-sentence')).not.toBeNull();
     });
 
     it('confirms an upgrade with one line, and no nudge', async () => {
@@ -411,6 +425,124 @@ describe('HomePage', () => {
 
       expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
       expect(query(fixture, 'lib-success-note')).toBeNull();
+    });
+  });
+
+  /**
+   * The card that used to exist for one frame.
+   *
+   * Fed by `AccountNotice` alone it appeared on the navigation after the register form
+   * and never again, because that notice survives exactly one navigation and this page
+   * clears it on destroy. So signing in the next day, reloading, or opening a group and
+   * coming back all lost it while the address stayed unconfirmed, and nothing anywhere
+   * in the app mentioned it. The profile is the standing source that fixes that.
+   */
+  describe('an unconfirmed address, with no notice at all', () => {
+    const unconfirmed = () =>
+      fakeProfileStore({
+        profile: profileFor({
+          email: 'marta@example.com',
+          emailVerified: false,
+        }),
+      });
+
+    it('draws the card on an ordinary visit', async () => {
+      const fixture = await render({ profile: unconfirmed() });
+
+      expect(query(fixture, 'lib-confirm-email-nudge')).not.toBeNull();
+      expect(fixture.componentInstance.confirmEmail()).toBe(
+        'marta@example.com'
+      );
+    });
+
+    it('does not claim an email was just sent', async () => {
+      // The last send could have been days ago or could have failed. Only the notice
+      // licenses "we sent a link", because only it means a registration returned a
+      // moment ago.
+      const fixture = await render({ profile: unconfirmed() });
+
+      expect(fixture.componentInstance.confirmOccasion()).toBe('unconfirmed');
+      expect(text(fixture)).toContain('auth.nudge.bodyStanding');
+      expect(text(fixture)).not.toContain('auth.nudge.body ');
+    });
+
+    it('prefers the notice while both are true, so the card is there on the first frame', async () => {
+      // `GET /v1/account/me` has not answered yet on the navigation after the form.
+      // The notice carries the typed address, which is the difference between a card
+      // that is already there and one that appears under somebody's thumb.
+      const fixture = await render({
+        accountNotice: { kind: 'registered', email: 'typed@example.com' },
+        profile: unconfirmed(),
+      });
+
+      expect(fixture.componentInstance.confirmEmail()).toBe(
+        'typed@example.com'
+      );
+      expect(fixture.componentInstance.confirmOccasion()).toBe(
+        'justRegistered'
+      );
+    });
+
+    it('reads the profile, which no other dashboard concern needs', async () => {
+      const profile = fakeProfileStore({ profile: null, state: 'loading' });
+      await render({ profile });
+
+      expect(profile.calls).toContainEqual({ method: 'load' });
+    });
+
+    it('re-reads nothing when one is already held', async () => {
+      // `ProfileStore` is app scoped, so a profile the account screen fetched is the
+      // one this page sees. Moving between the two must not spend a request each way.
+      const profile = unconfirmed();
+      await render({ profile });
+
+      expect(profile.calls).not.toContainEqual({ method: 'load' });
+    });
+
+    it('draws nothing for a confirmed address', async () => {
+      const fixture = await render({
+        profile: fakeProfileStore({ profile: profileFor() }),
+      });
+
+      expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
+    });
+
+    it('draws nothing while the profile has not been read', async () => {
+      // A blank where the address should be is worse than a card a moment later.
+      const fixture = await render({
+        profile: fakeProfileStore({ profile: null, state: 'loading' }),
+      });
+
+      expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
+    });
+
+    it('draws nothing for a guest, who has no address to confirm', async () => {
+      const profile = fakeProfileStore({
+        profile: profileFor({ kind: 'GUEST', email: null }),
+      });
+      const fixture = await render({ identity: 'GUEST', profile });
+
+      expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
+      // And spends no request learning what it already knows about a guest.
+      expect(profile.calls).not.toContainEqual({ method: 'load' });
+    });
+
+    it('can be dismissed for the session, and asks again on the next one', async () => {
+      const fixture = await render({ profile: unconfirmed() });
+
+      (
+        query(
+          fixture,
+          'lib-confirm-email-nudge button.dismiss'
+        ) as HTMLButtonElement
+      ).click();
+      fixture.detectChanges();
+      expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
+
+      // A second render is the next visit. The address is still unconfirmed, so the
+      // card is still the only place in the product that says so.
+      const next = await render({ profile: unconfirmed() });
+      expect(query(next, 'lib-confirm-email-nudge')).not.toBeNull();
     });
 
     it('clears the notice when the page goes, so it is not said twice', async () => {

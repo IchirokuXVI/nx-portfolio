@@ -17,7 +17,6 @@ import {
   REALTIME_CLIENT,
   SessionStore,
   TokenStore,
-  VERIFY_RESEND_AVAILABLE,
   ZoneStore,
   type AuthServiceI,
   type RealtimeClientI,
@@ -42,9 +41,7 @@ import {
   AppBar,
   AppVersion,
   ChevronLeftIcon,
-  ResendSentence,
   SectionHeading,
-  type ResendState,
 } from '@portfolio/velista/ui';
 import {
   accountCorrelationId,
@@ -102,7 +99,6 @@ import { RenameAnnouncement } from '../rename-announcement';
     AppBar,
     AppVersion,
     ChevronLeftIcon,
-    ResendSentence,
     SectionHeading,
   ],
   templateUrl: './account-page.html',
@@ -147,13 +143,6 @@ export class AccountPage {
   private readonly _browser = inject(BrowserFacade);
   private readonly _brand = inject(APP_BRAND);
   private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
-
-  /** Whether the resend sentence may be drawn at all. See `VERIFY_RESEND_AVAILABLE`. */
-  readonly resendAvailable = VERIFY_RESEND_AVAILABLE;
-
-  /** How the last ask for another confirmation went, for the resend sentence. */
-  readonly resendState = signal<ResendState>('ready');
-  readonly resendWait = signal<number | null>(null);
 
   /**
    * How asking for a password reset link went, or null before anything was asked.
@@ -338,7 +327,20 @@ export class AccountPage {
     );
   }
 
-  /** The two sheets, as children of this route (rule E1). */
+  /**
+   * What an unconfirmed address opens (`ConfirmEmailSheet`).
+   *
+   * Bound unconditionally while the row that calls it is only a button when the
+   * address is unconfirmed, so a confirmed address cannot reach this. The alternative,
+   * a guard in here, would put the same condition in two places and let them disagree.
+   */
+  openConfirmEmail(): void {
+    void this._router.navigate(sheetSegments('email'), {
+      relativeTo: this._route,
+    });
+  }
+
+  /** The other sheets, as children of this route (rule E1). */
   openRename(): void {
     void this._router.navigate(sheetSegments('name'), {
       relativeTo: this._route,
@@ -401,18 +403,6 @@ export class AccountPage {
     }
 
     this.resetOutcome.set(outcome);
-  }
-
-  /** Another confirmation email. Only reachable while `resendAvailable` is true. */
-  async resend(): Promise<void> {
-    const outcome = await this._auth.resendVerification();
-    if (outcome.state === 'failed') {
-      this.resendState.set('ready');
-      return;
-    }
-
-    this.resendState.set(outcome.state);
-    this.resendWait.set(outcome.waitSeconds);
   }
 
   /** The retry on a failed profile read. The screen stays up either way. */

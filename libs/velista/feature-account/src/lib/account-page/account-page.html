@@ -288,11 +288,24 @@
           @if (current.email; as email) {
             <!--
               Words and not a colour: "Confirmed" and "Not confirmed" both survive a
-              colourblind reader and a screen reader alike (section 7). Not tappable,
-              because there is no screen behind an email address: it cannot be changed
-              anywhere in this product (section 9).
+              colourblind reader and a screen reader alike (section 7).
+
+              **A confirmed address is a statement and an unconfirmed one is a
+              control**, which is the one place this screen renders the same fact two
+              ways. `0015` drew both as statements and said why: there is no screen
+              behind an email address, because it cannot be changed anywhere in this
+              product. That still holds for a confirmed address. It never held for the
+              other one, which is the only actionable state on this screen and had no
+              action, so somebody whose confirmation email never arrived read "Not
+              confirmed" on their own account page with nothing to press. Tapping it
+              opens the sheet that can send another (rule E1).
+
+              `hasAction` and `activate` are bound together, so the row is a button
+              exactly when there is somewhere for it to go.
             -->
             <lib-account-row
+              (activate)="openConfirmEmail()"
+              [chevron]="!current.emailVerified"
               [chip]="
                 (current.emailVerified
                   ? 'account.email.confirmed'
@@ -300,20 +313,10 @@
                 ) | rokuT
               "
               [chipTone]="current.emailVerified ? 'ok' : 'pending'"
-              [divided]="!(!current.emailVerified && resendAvailable)"
+              [hasAction]="!current.emailVerified"
               [label]="'account.email.label' | rokuT"
               [value]="email"
             />
-
-            @if (!current.emailVerified && resendAvailable) {
-              <p class="nudge">
-                <lib-resend-sentence
-                  (resend)="resend()"
-                  [state]="resendState()"
-                  [waitSeconds]="resendWait()"
-                />
-              </p>
-            }
 
             <!--
               The password row is rendered whenever there is an address, including for

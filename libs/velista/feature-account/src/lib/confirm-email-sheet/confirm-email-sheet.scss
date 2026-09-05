@@ -1,0 +1,23 @@
+@use '../account-sheet';
+
+@include account-sheet.sheet-form;
+
+// The same envelope the dashboard's nudge is marked with, so the two screens that talk
+// about confirming an address are recognisably about one thing.
+.mark {
+  display: block;
+  margin-block-end: var(--app-space-4);
+  font-size: var(--app-icon-lg);
+  color: var(--app-text-secondary);
+}
+
+// The body's own bottom margin is sized for a form under it. There is none here, so
+// the sentence sits closer to the offer it introduces.
+.body {
+  margin-block-end: var(--app-space-4);
+}
+
+.resend {
+  display: block;
+  margin-block-end: var(--app-space-2);
+}

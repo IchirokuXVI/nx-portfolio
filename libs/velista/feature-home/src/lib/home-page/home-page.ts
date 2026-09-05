@@ -23,6 +23,7 @@ import {
   NetworkError,
   presenceNames,
   PresenceStore,
+  ProfileStore,
   REALTIME_CLIENT,
   SessionStore,
   VERIFY_RESEND_AVAILABLE,
@@ -110,6 +111,16 @@ export class HomePage {
   private readonly _names = inject(MemberNames);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _session = inject(SessionStore);
+  /**
+   * Read for one field: whether the account's address is confirmed.
+   *
+   * The dashboard has never needed a profile before, because the name rides on the
+   * token pair (rule A2) and nothing else here is about the person. Confirmation state
+   * is the exception: it is not on the pair, it changes without this app doing
+   * anything (somebody opens the link on a laptop), and the card that asks about it is
+   * drawn here. See `confirmEmail` for why the notice alone was not enough.
+   */
+  private readonly _profile = inject(ProfileStore);
   private readonly _accountNotice = inject(AccountNotice);
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _browser = inject(BrowserFacade);
@@ -289,27 +300,74 @@ export class HomePage {
    */
   readonly accountNotice = this._accountNotice.notice;
 
-  /** Dismissing the nudge. Only the nudge has a dismiss; the secured line is a line. */
+  /**
+   * Dismissing the nudge, for this session only and not persisted.
+   *
+   * The same weaker-than-never rule the guest banner has: somebody who taps the close
+   * today is asked again tomorrow, because the address is still unconfirmed and the
+   * card is the only place in the product that says so.
+   */
   private readonly _nudgeDismissed = signal(false);
 
-  readonly confirmEmail = computed(() => {
+  /**
+   * The address the confirm-your-email card names, or null when there is no card.
+   *
+   * **Two sources, and the second is why this exists.** `AccountNotice` is a one-shot
+   * the register screen sets for exactly one navigation and this page clears on
+   * destroy, so a card fed by it alone appeared in the single frame after registration
+   * and never again: signing in the next day, reloading, or opening a group and coming
+   * back all lost it, while the address stayed unconfirmed and nothing in the app
+   * mentioned it. Registering through a failed mail send lost it before it was ever
+   * drawn, since the notice is set after the call returns.
+   *
+   * So the profile is the standing source and the notice is the fast one. The notice
+   * wins while both are true because it carries the address a beat before
+   * `GET /v1/account/me` answers, which is the difference between a card that is there
+   * on the frame after the form and one that appears under somebody's thumb.
+   *
+   * A guest has no address and gets no card. A failed or unread profile produces
+   * nothing rather than a card with a blank address in it.
+   */
+  readonly confirmEmail = computed<string | null>(() => {
+    if (this._nudgeDismissed()) {
+      return null;
+    }
+
     const notice = this.accountNotice();
-    return notice?.kind === 'registered' && !this._nudgeDismissed()
-      ? notice.email
+    if (notice?.kind === 'registered') {
+      return notice.email;
+    }
+
+    const profile = this._profile.profile();
+    return this._profile.state() === 'loaded' &&
+      profile !== null &&
+      profile.email !== null &&
+      profile.email !== '' &&
+      !profile.emailVerified
+      ? profile.email
       : null;
   });
+
+  /**
+   * Which of the two moments the card is drawn for, which decides what its body claims.
+   *
+   * Only the notice licenses "we sent a link": it means the registration this app made
+   * returned a moment ago. Everything else is the standing case, where the last send
+   * could have been days back or could have failed, and the card says the address is
+   * unconfirmed without claiming anything about an email.
+   */
+  readonly confirmOccasion = computed<'justRegistered' | 'unconfirmed'>(() =>
+    this.accountNotice()?.kind === 'registered'
+      ? 'justRegistered'
+      : 'unconfirmed'
+  );
 
   readonly securedEmail = computed(() => {
     const notice = this.accountNotice();
     return notice?.kind === 'upgraded' ? notice.email : null;
   });
 
-  /**
-   * Whether the nudge offers another send.
-   *
-   * False until the section 5.8 endpoint lands, and the card is exactly the screen
-   * plan 0009 would have shipped anyway without its last sentence.
-   */
+  /** Whether the nudge offers another send. See `VERIFY_RESEND_AVAILABLE`. */
   readonly resendOffered = VERIFY_RESEND_AVAILABLE;
 
   readonly resendState = signal<ResendState>('ready');
@@ -339,6 +397,20 @@ export class HomePage {
     // arrive is a settle, which core publishes to the basket's room; `GeneratedListStore`
     // documents that gap where it applies the events.
     void this._generated.load();
+
+    // The one field the confirm-your-email card stands on, and the only reason this
+    // page reads a profile at all.
+    //
+    // Guests are skipped, exactly as the account screen skips them: a guest's profile
+    // carries a null email, so the request would buy an answer that draws nothing.
+    //
+    // Only when nothing has been read yet, so moving between the dashboard and the
+    // account screen does not re-read it. `ProfileStore` is app scoped, so a profile
+    // fetched by either is the one both see, and a null here also covers a previous
+    // failure, which is the case worth retrying on the next visit.
+    if (!this._session.isGuest() && this._profile.profile() === null) {
+      void this._profile.load();
+    }
 
     // The names behind the presence rows, asked for only when there is somebody to
     // name (plan 0022, section 3.1).

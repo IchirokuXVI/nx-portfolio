@@ -24,9 +24,11 @@ export type ResendState = 'ready' | 'sent' | 'refused';
  *
  * ## Rule C3: the countdown is the server's number
  *
- * The `verifyResend` bucket is **three per ten minutes**, so the fourth ask in a window
- * waits far longer than a minute. A hardcoded sixty would count down to zero, invite
- * the tap, and fail again, which is worse than not offering it at all. So this renders
+ * The `verifyResend` bucket is **one per minute**, and how much of that minute is left
+ * is the server's to say rather than a screen's to assume: this sentence is drawn on
+ * three screens, and only the response knows whether an earlier ask on another one
+ * already spent the window. A hardcoded sixty would count down to zero, invite the
+ * tap, and fail again, which is worse than not offering it at all. So this renders
  * whatever wait it was told about and nothing else, and when it was told none it says
  * so without a clock rather than inventing one.
  *

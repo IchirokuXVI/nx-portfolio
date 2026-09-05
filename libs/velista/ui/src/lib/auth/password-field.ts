@@ -29,9 +29,13 @@ export const PASSWORD_MAX_LENGTH = 200;
  *
  * At least 8 characters is the DTO's rule, and section 5.1 asks that the form say so
  * up front. A person choosing a password they are about to be told is too short has
- * been made to do the work twice. There is deliberately **no** confirm field and no
- * strength meter: neither is backed by anything the server checks, so both would be
- * theatre that costs a phone keyboard's worth of typing.
+ * been made to do the work twice.
+ *
+ * There is deliberately no strength meter, because nothing the server checks is behind
+ * one. A **confirm** field is a different case and the register screen has one: the
+ * server sees one string and cannot know it was mistyped, so typing it twice is the
+ * only check that exists anywhere. This component is rendered twice there rather than
+ * growing a mode, and the rule sentence is passed to the first of the two only.
  */
 @Component({
   selector: 'lib-password-field',
