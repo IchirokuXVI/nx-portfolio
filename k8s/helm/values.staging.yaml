@@ -123,15 +123,15 @@ lunaShopperBackend:
   # with production ever stops being comfortable the answer is a shared cache, not
   # switching a cluster off.
   #
-  # `actorId` is deliberately left empty, which is the base file's value and not
-  # an omission here. Store discovery writes `DiscoveredPlace` rows into the
-  # harvester's own database and never calls catalog, so it needs no identity;
-  # `CatalogClient` is the only thing that reads the uuid and it throws a named
-  # error rather than writing anonymously. So a run works and an ADMIN IMPORT of a
-  # discovered place into catalog does not, until somebody sets this and adds the
-  # same uuid to `config.platformAdminUserIds`. That is the correct order: the
-  # exit criteria for this plan want discovery observed and no catalog location
-  # created.
+  # The actor id is no longer a values field at all (plan 0081, section 11).
+  # `provision-release.sh` generates it into the per environment Secret, and both
+  # `HARVESTER_ACTOR_ID` and catalog's `SERVICE_ACTOR_IDS` read that one key.
+  #
+  # It used to be left empty here on purpose, because store discovery writes into
+  # the harvester's own database and never calls catalog. A leaflet import does
+  # call catalog, so an empty id is no longer a harmless default: it is an import
+  # that runs and writes nothing, with `CatalogClient.actor()` throwing a named
+  # error. Provisioning it is what `--check` now asserts before a deploy.
   harvester:
     enabled: true
     harvestEnabled: true

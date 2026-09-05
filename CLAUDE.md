@@ -230,23 +230,31 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
 
 ## Luna Shopper backend
 
-### The harvester runs locally and nowhere else
+### The harvester is deployed, and what it may do is three switches
 
 `luna-shopper-backend-harvester` (plan 0038) fetches prices from supermarket
 storefronts and store locations from OpenStreetMap, and writes what it finds into
 catalog over NATS. It was the sixth backend service to land (`assistant`, plan
 0039, is the seventh) and it owns the fourth Postgres, after auth, core and
-catalog.
+catalog. **Its fourth run mode fetches nothing at all**: `LEAFLET_IMPORT` (plan 0081) reads a JSON document an admin uploads. The output is identical to the
+output of a crawl and only the fetching differs, which is why it is a run here
+rather than a write in catalog.
 
-**It is deployed in both clusters, and no run can write to catalog in either.**
-`values.staging.yaml` sets `enabled: true` and `harvestEnabled: true` (k8s plan
-0008): the pod runs store discovery only, and never fetches a storefront, because
-every chain's source row is off. `values.production.yaml` sets `enabled: true`
-with no `harvestEnabled`, so the pod runs and refuses every spawn. Both clusters
-leave `actorId` empty, so even a run that started could not write a price:
-catalog rejects a service actor it does not know. A catalog discovery run is
-4,383 HTTP requests over about eighteen minutes, and price runs happen here
-against the compose stack, where the development machine has room for them.
+**It is deployed in both clusters, and both may now start a run.**
+`values.staging.yaml` and `values.production.yaml` both set `enabled: true` and
+`harvestEnabled: true`. No storefront is fetched from either, because that is a
+row per chain in the harvester's own database and every one of them is off
+(plan 0083). A catalog discovery run is 4,383 HTTP requests over about eighteen
+minutes, and price crawls still happen here against the compose stack, where the
+development machine has room for them. What a cluster runs is store discovery,
+which is two requests, and leaflet imports, which are none.
+
+**The actor id is provisioned, not configured.** `provision-release.sh`
+generates the uuid catalog knows the harvester by once per cluster and keeps it
+in the per environment Secret; both `HARVESTER_ACTOR_ID` and catalog's
+`SERVICE_ACTOR_IDS` read that one key. It is not a values field any more, and
+`--check` fails when it is missing, which is the point: without it
+`CatalogClient.actor()` throws and an import writes nothing.
 
 There are **two** switches in configuration, and they are two because they are two
 different decisions:
@@ -282,6 +290,14 @@ Two rules that are easy to break by accident:
   that changed it and by a sixty second sweep when only the clock moved. Never
   write a price to `supermarket_items` directly, and never decide at write time
   which source wins.
+- **No automated match ever binds a printed name to a product** (plan 0081). A
+  leaflet import resolves an offer through `source_aliases`, chain scoped and
+  keyed on the normalized printed name plus the printed format and never the
+  brand. A fuzzy hit inserts a `CANDIDATE` and writes **no price**; only an
+  admin accepting one in the queue creates an `ACTIVE` alias, and accepting is
+  what then writes the price the row was queued for. Accepting sets `itemId`
+  and never touches `printedName`, so renaming the product does not stop the
+  next leaflet resolving.
 
 **One mode, two adapters** (plan 0085). `CATALOG_DISCOVERY` now runs against
 either `mercadona-api` or `deza-web`, and the run picks between them on

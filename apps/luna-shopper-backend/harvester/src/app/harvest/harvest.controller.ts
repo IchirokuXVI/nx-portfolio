@@ -6,9 +6,12 @@ import {
   ITEM_SOURCE_REF_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   POSTAL_CODE_EVENTS,
+  SOURCE_ALIAS_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
+  type AcceptSourceAliasRequest,
+  type CreateItemFromSourceAliasRequest,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
@@ -27,6 +30,7 @@ import {
   type ListHarvestRunsRequest,
   type ListItemSourceRefsRequest,
   type ListPostalCodeDiscoveryRequestsRequest,
+  type ListSourceAliasesRequest,
   type ListSourceEntriesRequest,
   type ListSourceLocationsRequest,
   type ListSupermarketSourcesRequest,
@@ -35,6 +39,10 @@ import {
   type PostalCodesAddedEvent,
   type SetManualItemSourceRefRequest,
   type SetSupermarketSourceEnabledRequest,
+  type SourceAliasAcceptResult,
+  type SourceAliasIdRequest,
+  type SourceAliasPage,
+  type SourceAliasView,
   type SourceCatalogEntryPage,
   type SourceLocationIdRequest,
   type SourceLocationPage,
@@ -49,6 +57,7 @@ import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { ItemSourceRefService } from './item-source-ref.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
+import { SourceAliasService } from './source-alias.service';
 import { SourceEntryService } from './source-entry.service';
 import { SourceLocationService } from './source-location.service';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -74,6 +83,7 @@ export class HarvestController {
     private readonly entries: SourceEntryService,
     private readonly refs: ItemSourceRefService,
     private readonly shops: SourceLocationService,
+    private readonly aliases: SourceAliasService,
     private readonly sources: SupermarketSourceService,
     private readonly discovery: PostalCodeDiscoveryService
   ) {}
@@ -210,6 +220,45 @@ export class HarvestController {
     @Payload() req: SourceLocationIdRequest
   ): Promise<SourceLocationView> {
     return this.shops.unignore(req);
+  }
+
+  // --- Source aliases (plan 0081) ------------------------------------------
+
+  /**
+   * The queue of printed names waiting for a person. Absent `status` lists the
+   * two that are waiting, which is what the back office asks for.
+   */
+  @MessagePattern(SOURCE_ALIAS_PATTERNS.list)
+  listAliases(
+    @Payload() req: ListSourceAliasesRequest
+  ): Promise<SourceAliasPage> {
+    return this.aliases.list(req);
+  }
+
+  /**
+   * Bind a printed name to a product, and write the price it was queued for.
+   * The only thing besides {@link createItemFromAlias} that ever produces an
+   * ACTIVE alias: a run proposes and never binds.
+   */
+  @MessagePattern(SOURCE_ALIAS_PATTERNS.accept)
+  acceptAlias(
+    @Payload() req: AcceptSourceAliasRequest
+  ): Promise<SourceAliasAcceptResult> {
+    return this.aliases.accept(req);
+  }
+
+  /** The same, for a product the catalog does not hold yet. */
+  @MessagePattern(SOURCE_ALIAS_PATTERNS.createItem)
+  createItemFromAlias(
+    @Payload() req: CreateItemFromSourceAliasRequest
+  ): Promise<SourceAliasAcceptResult> {
+    return this.aliases.createItem(req);
+  }
+
+  /** Not a product he tracks. The next leaflet printing it does not ask again. */
+  @MessagePattern(SOURCE_ALIAS_PATTERNS.reject)
+  rejectAlias(@Payload() req: SourceAliasIdRequest): Promise<SourceAliasView> {
+    return this.aliases.reject(req);
   }
 
   // --- Item source refs ----------------------------------------------------

@@ -1,3 +1,4 @@
+import type { HarvestRunWarning } from '@portfolio/luna-shopper/contracts';
 import type { HarvestRun } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import type { HarvestRunStore, RunCounters } from './harvest-run.store';
@@ -16,6 +17,7 @@ const HEARTBEAT_INTERVAL_MS = 10_000;
 
 export class RunContext {
   private pending: Required<RunCounters> = emptyCounters();
+  private pendingWarnings: HarvestRunWarning[] = [];
   private lastFlushAt = 0;
 
   constructor(
@@ -69,13 +71,32 @@ export class RunContext {
     }
   }
 
+  /**
+   * Record a decision that was not a write (plan 0081, section 7).
+   *
+   * Accumulated beside the counters and written by the same flush, so a run that
+   * skipped 40 offers does one append rather than 40. A warning does **not**
+   * count as skipped by itself: a queued offer and a dropped one are both
+   * warnings, and only the runner knows which counter each belongs to.
+   */
+  warn(warning: HarvestRunWarning): void {
+    this.pendingWarnings.push(warning);
+  }
+
   /** Write whatever has accumulated. Always called before a run finalizes. */
   async flush(): Promise<void> {
     this.lastFlushAt = this.now();
     const counters = this.pending;
+    const warnings = this.pendingWarnings;
     this.pending = emptyCounters();
+    this.pendingWarnings = [];
+    if (warnings.length > 0) {
+      await this.store.addWarnings(this.runId, warnings);
+    }
     if (Object.values(counters).every((value) => value === 0)) {
-      await this.store.touchHeartbeat(this.runId);
+      if (warnings.length === 0) {
+        await this.store.touchHeartbeat(this.runId);
+      }
       return;
     }
     await this.store.addCounters(this.runId, counters);
@@ -89,6 +110,7 @@ function emptyCounters(): Required<RunCounters> {
     updated: 0,
     unchanged: 0,
     notFound: 0,
+    skipped: 0,
     failed: 0,
   };
 }

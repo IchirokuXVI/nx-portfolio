@@ -193,6 +193,18 @@ export function toItemPriceView(row: ItemPrice): ItemPriceView {
     lastObservedRunId: row.lastObservedRunId ?? null,
     overrides: row.overrides ?? null,
     protectedUntil: toInstant(row.protectedUntil),
+    // Loaded only by the history read (plan 0081, section 6.4). An unloaded
+    // relation and a row no leaflet wrote are both null, and the difference
+    // does not matter to any caller: nothing branches on it.
+    details: row.details
+      ? {
+          offerId: row.details.offerId ?? null,
+          page: row.details.page ?? null,
+          rawText: row.details.rawText ?? [],
+          promotion: row.details.promotion ?? null,
+          loyalty: row.details.loyalty ?? null,
+        }
+      : null,
   };
 }
 

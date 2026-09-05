@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -14,10 +15,13 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
+  HarvestRunMode,
   ITEM_SOURCE_REF_PATTERNS,
+  SOURCE_ALIAS_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
+  validateLeafletDocument,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlacePage,
   type DiscoveredPlaceView,
@@ -26,6 +30,9 @@ import {
   type ItemSourceRefPage,
   type ItemSourceRefView,
   type ItemView,
+  type SourceAliasAcceptResult,
+  type SourceAliasPage,
+  type SourceAliasView,
   type SourceCatalogEntryPage,
   type SourceLocationPage,
   type SourceLocationView,
@@ -39,15 +46,19 @@ import { ActingAdmin } from '../admin/current-admin.decorator';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  AcceptSourceAliasDto,
+  CreateItemFromAliasDto,
   CreateItemFromEntryDto,
   DiscoveredPlaceGroupQueryDto,
   DiscoveredPlaceListQueryDto,
   HarvestRunListQueryDto,
   ImportDiscoveredPlaceDto,
+  ImportLeafletDto,
   ItemSourceRefListQueryDto,
   MapSourceLocationDto,
   SetManualItemSourceRefDto,
   SetSourceEnabledDto,
+  SourceAliasListQueryDto,
   SourceEntryListQueryDto,
   SourceLocationListQueryDto,
   SpawnHarvestRunDto,
@@ -147,6 +158,190 @@ export class AdminHarvestRunsController {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.abort, {
       ...adminCredential(admin),
       runId: id,
+    });
+  }
+}
+
+/**
+ * The leaflet upload (plan 0081, section 7).
+ *
+ * **This is the only route in the gateway with its own body limit.** Nest's JSON
+ * parser defaults to 100 KB and this gateway configured none, so every real
+ * leaflet (337 KB and 349 KB for the two committed extractions) was refused with
+ * a bare 413 before the route existed. `main.ts` creates the app with
+ * `bodyParser: false` and mounts this path's parser at `LEAFLET_MAX_BYTES`
+ * ahead of the default one.
+ *
+ * Multipart is deliberately not used: the admin produces JSON, the schema
+ * validates JSON, and a form part around it adds a parse step for nothing.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/leaflets', version: '1' })
+export class AdminHarvestLeafletsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Validate the document, then start a `LEAFLET_IMPORT` run for it.
+   *
+   * The validation here is the first of two (section 4). It happens **before**
+   * the document crosses the broker, so a malformed file is answered in
+   * milliseconds with every failure named by its JSON path and its offer id
+   * rather than after a run has been inserted. The harvester validates again at
+   * spawn, because it owns the schema version and a broker message is not a
+   * trusted input.
+   *
+   * Answers the PENDING run, like the spawn route beside it, and 409 with the
+   * earlier run's id when this chain has already imported this exact file.
+   */
+  @Post()
+  @ApiContractResponse(HARVEST_PATTERNS.spawn, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, conflict: true })
+  importLeaflet(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: ImportLeafletDto
+  ): Promise<HarvestRunView> {
+    const { valid, failures } = validateLeafletDocument(dto.document);
+    if (!valid) {
+      // One line per failure, each starting with the JSON path, because the
+      // house filter keys the envelope's `errors` map on the first word. The
+      // offer id rides in the text so the upload screen can highlight the tile
+      // rather than an array index nobody can find in the file.
+      throw new BadRequestException({
+        error: 'The leaflet document does not match the import schema',
+        message: failures.map(
+          (failure) =>
+            `${failure.path || '/'} ${failure.message}` +
+            (failure.offerId ? ` (offer ${failure.offerId})` : '')
+        ),
+      });
+    }
+
+    return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.spawn, {
+      ...adminCredential(admin),
+      mode: HarvestRunMode.LEAFLET_IMPORT,
+      supermarketId: dto.supermarketId,
+      priceScopeId: dto.priceScopeId,
+      validFrom: dto.validFrom ?? null,
+      validUntil: dto.validUntil ?? null,
+      document: dto.document,
+    });
+  }
+}
+
+/**
+ * The queue of printed names a leaflet import could not resolve (plan 0081,
+ * sections 2 and 3).
+ *
+ * Three decisions per row, and **all three are a person's**: accept to a product
+ * the catalog holds, accept as a new product, or reject. A run proposes and
+ * never binds, because a bad fuzzy match writes a wrong price onto a real
+ * product that people then shop on.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({
+  path: 'admin/harvest/supermarkets/:supermarketId/aliases',
+  version: '1',
+})
+export class AdminHarvestAliasesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('supermarketId') supermarketId: string,
+    @Query() query: SourceAliasListQueryDto
+  ): Promise<SourceAliasPage> {
+    return this.nats.send<SourceAliasPage>(SOURCE_ALIAS_PATTERNS.list, {
+      ...adminCredential(admin),
+      supermarketId,
+      status: query.status,
+      query: query.query,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+}
+
+/**
+ * The three decisions themselves, addressed by the alias rather than by the
+ * chain: an alias id is unique, and an operator acting on a row has it.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/aliases', version: '1' })
+export class AdminHarvestAliasDecisionsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Bind a printed name to a product, and write the price it was queued for.
+   *
+   * The write is the half that is easy to miss: the run that queued this row is
+   * over, the offer sits in its stored document, and without writing here an
+   * admin who works the queue would have to upload the same file again to get
+   * the prices he just resolved.
+   */
+  @Post(':id/accept')
+  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.accept, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  accept(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: AcceptSourceAliasDto
+  ): Promise<SourceAliasAcceptResult> {
+    return this.nats.send<SourceAliasAcceptResult>(
+      SOURCE_ALIAS_PATTERNS.accept,
+      { ...adminCredential(admin), aliasId: id, itemId: dto.itemId }
+    );
+  }
+
+  /**
+   * The same, for a product the catalog does not hold yet: one call that
+   * creates the item and binds the alias, the way `entries/:entryId/item` does
+   * for a discovery entry. `name.en` may be left out (plan 0079).
+   */
+  @Post(':id/item')
+  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.createItem, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  createItem(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: CreateItemFromAliasDto
+  ): Promise<SourceAliasAcceptResult> {
+    return this.nats.send<SourceAliasAcceptResult>(
+      SOURCE_ALIAS_PATTERNS.createItem,
+      { ...adminCredential(admin), aliasId: id, ...dto }
+    );
+  }
+
+  /**
+   * Not a product he tracks. The row stays as REJECTED rather than being
+   * deleted, so the next leaflet that prints the string skips it with a warning
+   * instead of asking again.
+   */
+  @Post(':id/reject')
+  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.reject, {
+    status: HttpStatus.CREATED,
+  })
+  reject(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<SourceAliasView> {
+    return this.nats.send<SourceAliasView>(SOURCE_ALIAS_PATTERNS.reject, {
+      ...adminCredential(admin),
+      aliasId: id,
     });
   }
 }

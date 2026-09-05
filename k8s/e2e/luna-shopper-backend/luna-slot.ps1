@@ -487,6 +487,11 @@ VOICE_COMMENT_MAX_BYTES=2097152
 # WebM/Opus in Chrome, Ogg/Opus in Firefox, MP4/AAC in Safari.
 VOICE_COMMENT_CONTENT_TYPES=
 VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS=45000
+# The byte cap on an uploaded leaflet (plan 0081, section 7). The gateway is
+# created with no built in body parser so this one route can have a limit of its
+# own; every other JSON body stays at Express's 100 KB. Two megabytes is
+# comfortable: the two committed El Jamon extractions are 337 KB and 349 KB.
+LEAFLET_MAX_BYTES=2097152
 # The oldest client build this deployment serves (velista plan 0034, D5). Empty
 # switches the whole mechanism off, which is how both clusters run and what a
 # local stack wants: no header advertised and no request refused. Set it to a

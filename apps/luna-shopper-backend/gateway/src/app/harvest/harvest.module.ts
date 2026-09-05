@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
 import { MessagingModule } from '../messaging/messaging.module';
 import {
+  AdminHarvestAliasDecisionsController,
+  AdminHarvestAliasesController,
   AdminHarvestEntriesController,
   AdminHarvestItemRefsController,
+  AdminHarvestLeafletsController,
   AdminHarvestPlacesController,
   AdminHarvestRunsController,
   AdminHarvestShopsController,
@@ -20,6 +23,10 @@ import {
   imports: [MessagingModule],
   controllers: [
     AdminHarvestRunsController,
+    // The leaflet upload and the queue it fills (plan 0081).
+    AdminHarvestLeafletsController,
+    AdminHarvestAliasesController,
+    AdminHarvestAliasDecisionsController,
     AdminHarvestPlacesController,
     AdminHarvestEntriesController,
     AdminHarvestItemRefsController,

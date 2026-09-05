@@ -13,6 +13,7 @@ import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
 import { HarvestController } from './harvest.controller';
 import { ItemSourceRefService } from './item-source-ref.service';
+import { LeafletImportRunner } from './leaflet-import.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
@@ -20,6 +21,7 @@ import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { RefreshRunner } from './refresh.runner';
 import { RunExecutor } from './run-executor.service';
+import { SourceAliasService } from './source-alias.service';
 import { SourceEntryService } from './source-entry.service';
 import { SourceLocationService } from './source-location.service';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
@@ -65,10 +67,14 @@ import { SupermarketSourceService } from './supermarket-source.service';
     DezaCatalogRunner,
     CatalogDiscoveryRunner,
     RefreshRunner,
+    // The one runner that fetches nothing at all (plan 0081): its input is an
+    // uploaded document rather than a storefront.
+    LeafletImportRunner,
     RunExecutor,
     HarvestRunService,
     DiscoveredPlaceService,
     SourceEntryService,
+    SourceAliasService,
     ItemSourceRefService,
     SourceLocationService,
     PostalCodeDiscoveryStore,

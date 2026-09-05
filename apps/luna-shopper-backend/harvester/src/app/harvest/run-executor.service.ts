@@ -8,6 +8,7 @@ import type { HarvesterConfig } from '../config/app-config';
 import { TokenBucket } from '../runner/token-bucket';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestRunStore } from './harvest-run.store';
+import { LeafletImportRunner } from './leaflet-import.runner';
 import { RefreshRunner } from './refresh.runner';
 import { RunContext } from './run-context';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
@@ -37,6 +38,7 @@ export class RunExecutor implements OnApplicationShutdown {
     private readonly storeDiscovery: StoreDiscoveryRunner,
     private readonly catalogDiscovery: CatalogDiscoveryRunner,
     private readonly refresh: RefreshRunner,
+    private readonly leafletImport: LeafletImportRunner,
     private readonly config: ConfigService
   ) {}
 
@@ -137,6 +139,16 @@ export class RunExecutor implements OnApplicationShutdown {
             },
             requireSource(source)
           );
+          break;
+        // `requireSource` is deliberately not called (plan 0081, section 1).
+        // A `SupermarketSource` is fetching configuration and an upload fetches
+        // nothing, so a chain that publishes only leaflets runs with no source
+        // row at all.
+        case HarvestRunMode.LEAFLET_IMPORT:
+          await this.leafletImport.run(context, {
+            supermarketId: run.supermarketId as string,
+            priceScopeId: run.priceScopeId as string,
+          });
           break;
       }
 

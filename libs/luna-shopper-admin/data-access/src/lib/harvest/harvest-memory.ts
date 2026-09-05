@@ -93,9 +93,14 @@ export class HarvestMemory implements HarvestServiceI {
       updated: 0,
       unchanged: 0,
       notFound: 0,
+      // Nothing has run yet, so nothing has been dropped by a rule and no
+      // document has been read (backend plan 0081, section 7).
+      skipped: 0,
       failed: 0,
       stage: null,
       stageLabel: null,
+      warnings: [],
+      documentSha256: null,
       abortRequestedAt: null,
       error: null,
       // A run says nothing beyond its counters until it has finished and has
