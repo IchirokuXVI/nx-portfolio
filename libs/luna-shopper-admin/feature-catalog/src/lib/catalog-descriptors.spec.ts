@@ -180,6 +180,21 @@ describe('the shops', () => {
   it('cannot be read until a chain is named', () => {
     expect(LOCATIONS.requires).toEqual(['supermarketId']);
   });
+
+  /**
+   * The filter a reference picker over shops needs (admin plan 0011, section
+   * 4). Without one `ResourceReferences.search` has nowhere to put the term, so
+   * it drops it and asks for the first page: the picker then answers every
+   * search with the same twenty shops, and a chain with three hundred cannot be
+   * used at all.
+   */
+  it('offers the search its reference picker needs', () => {
+    const search = (LOCATIONS.filters ?? []).find(
+      (filter) => filter.kind === 'search'
+    );
+
+    expect(search?.param).toBe('query');
+  });
 });
 
 describe('the price form', () => {

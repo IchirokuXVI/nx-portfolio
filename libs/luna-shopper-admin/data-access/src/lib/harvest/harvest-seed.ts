@@ -257,6 +257,112 @@ export const ITEM_SOURCE_REF_SEED: readonly Wire.HarvestItemSourceRefView[] = [
   },
 ];
 
+/**
+ * The shops one source names, in every state the queue draws (backend plan
+ * 0084, section 6; admin plan 0011).
+ *
+ * Shaped after DEZA, which is the chain the table was built for: it labels each
+ * shop `T1` to `T7`, `C1`, `C2` and `Z1` in its markup and prints a street name
+ * beside it, and it publishes eighteen centres of which only ten sell anything.
+ * So the fixture carries a shop the automatic name match bound, one a person
+ * bound, two nobody has decided yet, and one that is a bakery.
+ *
+ * The addresses of the two mapped rows are the addresses in `LOCATION_SEED`, so
+ * an operator clicking through the mapping picker with nothing listening finds
+ * a shop whose printed name really does look like one of ours.
+ */
+export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
+  {
+    id: 'shop-t1',
+    supermarketId: MERCADONA,
+    externalId: 'T1',
+    printedName: 'Ronda del Marrubial',
+    supermarketLocationId: null,
+    status: 'UNMAPPED',
+    // Nothing bound it, and `NAME_SIZE` is what the automatic attempt is called
+    // whether or not it hit. An `UNMAPPED` row's `matchedBy` says which rule was
+    // tried, not which one succeeded.
+    matchedBy: 'NAME_SIZE',
+    firstSeenAt: '2026-08-28T08:00:00.000Z',
+    lastSeenAt: NOW,
+    firstRunId: 'run-store-aborted',
+    lastRunId: 'run-catalog-running',
+  },
+  {
+    id: 'shop-t2',
+    supermarketId: MERCADONA,
+    externalId: 'T2',
+    printedName: 'Polígono de las Quemadas',
+    supermarketLocationId: null,
+    status: 'UNMAPPED',
+    matchedBy: 'NAME_SIZE',
+    firstSeenAt: '2026-08-28T08:00:00.000Z',
+    lastSeenAt: NOW,
+    firstRunId: 'run-store-aborted',
+    lastRunId: 'run-catalog-running',
+  },
+  {
+    // The exact name match, which is the only automatic one there is. It bound
+    // itself and nobody has checked it, which is what the column exists to say.
+    id: 'shop-c1',
+    supermarketId: MERCADONA,
+    externalId: 'C1',
+    printedName: 'Avenida del Gran Capitán 12',
+    supermarketLocationId: 'loc_cordoba_centro',
+    status: 'ACTIVE',
+    matchedBy: 'NAME_SIZE',
+    firstSeenAt: '2026-08-28T08:00:00.000Z',
+    lastSeenAt: NOW,
+    firstRunId: 'run-store-aborted',
+    lastRunId: 'run-catalog-running',
+  },
+  {
+    // Bound by a person, which is the same green badge and a different
+    // confidence. A queue that showed only the badge would hide the difference.
+    id: 'shop-c2',
+    supermarketId: MERCADONA,
+    externalId: 'C2',
+    printedName: 'Centro Comercial Zahira',
+    supermarketLocationId: 'loc_cordoba_oeste',
+    status: 'ACTIVE',
+    matchedBy: 'MANUAL',
+    firstSeenAt: '2026-08-28T08:00:00.000Z',
+    lastSeenAt: NOW,
+    firstRunId: 'run-store-aborted',
+    lastRunId: 'run-catalog-running',
+  },
+  {
+    // A place the source lists that we do not sell from. Marking it is a
+    // person's act and a run never does it.
+    id: 'shop-z1',
+    supermarketId: MERCADONA,
+    externalId: 'Z1',
+    printedName: 'Obrador de panadería',
+    supermarketLocationId: null,
+    status: 'IGNORED',
+    matchedBy: 'NAME_SIZE',
+    firstSeenAt: '2026-08-28T08:00:00.000Z',
+    lastSeenAt: '2026-08-30T08:00:00.000Z',
+    firstRunId: 'run-store-aborted',
+    lastRunId: 'run-store-aborted',
+  },
+  {
+    // Another chain entirely, so a spec asserting the queue is chain scoped has
+    // a row it must not see.
+    id: 'shop-carrefour-1',
+    supermarketId: CARREFOUR,
+    externalId: '0421',
+    printedName: 'Carrefour Sierra',
+    supermarketLocationId: null,
+    status: 'UNMAPPED',
+    matchedBy: 'NAME_SIZE',
+    firstSeenAt: '2026-08-28T08:00:00.000Z',
+    lastSeenAt: NOW,
+    firstRunId: null,
+    lastRunId: null,
+  },
+];
+
 export const SUPERMARKET_SOURCE_SEED: readonly Wire.HarvestSupermarketSourceView[] =
   [
     {

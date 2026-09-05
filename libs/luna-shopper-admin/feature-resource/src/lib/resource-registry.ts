@@ -15,6 +15,7 @@ import {
 import type {
   ReferenceLookup,
   ReferenceOption,
+  ReferenceScope,
 } from '@portfolio/luna-shopper-admin/ui';
 
 /**
@@ -82,9 +83,24 @@ const PICKER_PAGE_SIZE = 20;
 export class ResourceReferences implements ReferenceLookup {
   private readonly _registry = inject(ResourceRegistry);
 
+  /**
+   * The rows of `resource` a picker offers, narrowed by what was typed and by
+   * what the screen already decided.
+   *
+   * **A target that declares no `search` filter silently ignores the term.**
+   * There is nowhere to put it, so the first page comes back for every search
+   * and a row past the page size cannot be reached by typing its name at all.
+   * That is a gap in the descriptor rather than in the picker, and it is why
+   * admin plan 0011 gives `LOCATIONS` one.
+   *
+   * The scope goes in whatever the term does, because it is what addresses the
+   * collection rather than what narrows it: a picker over one chain's shops
+   * reads nothing at all without its chain, typed term or not.
+   */
   async search(
     resource: string,
-    term: string
+    term: string,
+    scope: ReferenceScope = {}
   ): Promise<readonly ReferenceOption[]> {
     const descriptor = this._registry.byName(resource);
     if (descriptor === undefined) {
@@ -96,8 +112,8 @@ export class ResourceReferences implements ReferenceLookup {
     );
     const filters =
       search === undefined || term.trim() === ''
-        ? {}
-        : { [search.param]: term.trim() };
+        ? { ...scope }
+        : { ...scope, [search.param]: term.trim() };
 
     const page = await this._registry
       .gatewayFor(descriptor)

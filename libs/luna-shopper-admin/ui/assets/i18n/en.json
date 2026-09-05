@@ -192,6 +192,7 @@
       "externalProvider": "Source",
       "note": "Shops are read one chain at a time, because the gateway has no route that lists them all. Choose a chain to begin.",
       "filter": {
+        "query": "Label, address or town contains",
         "supermarketId": "Chain",
         "postalCodeSource": "Postal code source",
         "priceScopeId": "Price scope"
@@ -407,7 +408,15 @@
       "places": "Discovered places",
       "entries": "Source entries",
       "itemRefs": "Item links",
+      "shops": "Source shops",
       "sources": "Chain sources"
+    },
+    "match": {
+      "EXTERNAL_ID": "The source's own identifier",
+      "EAN": "Barcode",
+      "NAME_BRAND_SIZE": "Name, brand and size",
+      "NAME_SIZE": "Name match",
+      "MANUAL": "Set by a person"
     },
     "mode": {
       "STORE_DISCOVERY": "Store discovery",
@@ -612,6 +621,42 @@
         "lastRunAt": "Last run",
         "lastSuccessAt": "Last success",
         "failures": "Failures in a row"
+      }
+    },
+    "shops": {
+      "heading": "Source shops",
+      "lead": "Every shop a source names, and the shop of ours it points at. A run writes no availability for a shop nobody has mapped: it counts it and finishes.",
+      "chain": "Chain",
+      "chooseChain": "Choose a chain. A source's shops are only ever read one chain at a time, so there is nothing to show until you do.",
+      "empty": "No shop of this chain is in this state.",
+      "filter": {
+        "status": "State",
+        "any": "Any state"
+      },
+      "status": {
+        "UNMAPPED": "Waiting to be mapped",
+        "ACTIVE": "Mapped",
+        "IGNORED": "Ignored"
+      },
+      "field": {
+        "mappedTo": "Mapped to",
+        "unmapped": "Nothing yet",
+        "matchedBy": "Matched by",
+        "lastSeen": "Last seen",
+        "run": "the run"
+      },
+      "action": {
+        "map": "Map it to one of ours",
+        "unmap": "Unmap it",
+        "ignore": "We do not sell from here",
+        "unignore": "Put it back in the queue"
+      },
+      "map": {
+        "heading": "Map this shop",
+        "pick": "Which shop of ours is it?",
+        "notBackfilled": "{{shop}} will point at {{location}}. This does not fill in what the last run skipped: the next run writes it.",
+        "startRun": "Start a run",
+        "submit": "Map it"
       }
     }
   },

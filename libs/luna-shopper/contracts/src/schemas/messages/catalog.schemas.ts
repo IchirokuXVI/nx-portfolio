@@ -638,6 +638,9 @@ const listLocationsRequest = object(
   {
     userId: nonEmptyString(),
     supermarketId: nonEmptyString(),
+    // Admin plan 0011, section 4: free text over the label, the address and the
+    // town, for the reference picker that binds a source's shop to one of ours.
+    query: string(),
     // Plan 0066, section 4: only the shops that sell at this scope.
     priceScopeId: nonEmptyString(),
     // Plan 0073, section 4: the guessed postal codes, for the operator's review.

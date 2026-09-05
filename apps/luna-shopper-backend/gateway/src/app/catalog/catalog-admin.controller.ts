@@ -232,6 +232,7 @@ export class AdminCatalogSupermarketsController {
       {
         userId: admin.adminId,
         supermarketId: id,
+        query: query.query,
         priceScopeId: query.priceScopeId,
         postalCodeSource: query.postalCodeSource,
         cursor: query.cursor,

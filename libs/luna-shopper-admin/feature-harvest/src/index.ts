@@ -8,4 +8,6 @@ export * from './lib/ref-view';
 export * from './lib/routes';
 export * from './lib/run-page';
 export * from './lib/runs-page';
+export * from './lib/shop-view';
+export * from './lib/shops-queue-page';
 export * from './lib/sources-page';
