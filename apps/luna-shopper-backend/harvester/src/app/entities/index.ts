@@ -1,19 +1,17 @@
 import { DiscoveredPlace } from './discovered-place.entity';
 import { HarvestRun } from './harvest-run.entity';
-import { ItemSourceRef } from './item-source-ref.entity';
 import { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.entity';
-import { SourceAlias } from './source-alias.entity';
 import { SourceCatalogEntry } from './source-catalog-entry.entity';
+import { SourceEntryPrice } from './source-entry-price.entity';
 import { SourceLocation } from './source-location.entity';
 import { SupermarketSource } from './supermarket-source.entity';
 
 export { BaseEntity } from './base.entity';
 export { DiscoveredPlace } from './discovered-place.entity';
 export { HarvestRun } from './harvest-run.entity';
-export { ItemSourceRef } from './item-source-ref.entity';
 export { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.entity';
-export { SourceAlias } from './source-alias.entity';
 export { SourceCatalogEntry } from './source-catalog-entry.entity';
+export { SourceEntryPrice } from './source-entry-price.entity';
 export { SourceLocation } from './source-location.entity';
 export { SupermarketSource } from './supermarket-source.entity';
 
@@ -21,12 +19,12 @@ export { SupermarketSource } from './supermarket-source.entity';
 export const HARVESTER_ENTITIES = [
   SupermarketSource,
   HarvestRun,
+  // One product a source described, however the source said it, and what became
+  // of it (plan 0086, D1). `ItemSourceRef` and `SourceAlias` folded into this.
   SourceCatalogEntry,
+  // The latest price each scope stated for one of those rows (plan 0086, D3).
+  SourceEntryPrice,
   SourceLocation,
-  ItemSourceRef,
-  // The names a chain printed, and the queue an admin works through
-  // (plan 0081, section 2).
-  SourceAlias,
   DiscoveredPlace,
   PostalCodeDiscoveryRequest,
 ];
