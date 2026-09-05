@@ -313,6 +313,20 @@ function scopedRequest(
 }
 
 /**
+ * A recording narrowed to one list, which is the request the list page's
+ * microphone actually sends (plan 0044). The typed `scopedRequest` above is the
+ * shape the service is tested with; this is the shape it is used through.
+ */
+function scopedVoiceRequest(
+  scope: { zoneId: string; listId: string } = {
+    zoneId: 'zone-home',
+    listId: 'list-flat',
+  }
+): AssistantVoiceRequest {
+  return { ...voiceRequest(1024), scope };
+}
+
+/**
  * A spoken turn, with a recording that is bytes and nothing more (plan 0041).
  *
  * **There is no audio fixture in this repository and there does not need to be
@@ -1882,6 +1896,51 @@ describe('a turn that may only touch one list (plan 0044)', () => {
     expect(
       api.calls.filter((call) => call.method === 'listLists')
     ).toHaveLength(1);
+  });
+
+  it('keeps the scope on a spoken turn', async () => {
+    // The list page's microphone is the only caller that sends a scope, and it
+    // sends it on the voice route. The service builds the turn request for the
+    // shared half by hand there, and a version that left the scope out passed
+    // every spec in this block, because every one of them spoke through `turn`.
+    // The symptom was the plan's own headline defect: a recording on a list was
+    // answered with "which list?" by an assistant that could see all of them.
+    const api = twoLists();
+    const provider = new FakeModelProvider(
+      [FakeModelProvider.says('Vale.')],
+      ['añade leche']
+    );
+    const service = build(provider, api);
+
+    await service.voice(scopedVoiceRequest());
+
+    // Read as a scoped turn: the one list, never the zone index.
+    expect(api.calls.map((call) => call.method)).not.toContain('listZones');
+    expect(
+      api.calls.filter((call) => call.method === 'listLists')
+    ).toHaveLength(1);
+    // Handed the scoped catalog and the scoped prompt, which is what stops the
+    // question before the model can ask it.
+    const offered = provider.requests[0].tools.map((tool) => tool.name);
+    expect(offered).not.toContain('rename_me');
+    expect(provider.requests[0].system).toContain('Never ask which list');
+  });
+
+  it('sends the provider on a scoped spoken turn what a scoped typed turn sends', async () => {
+    // The voice spec's central claim, byte for byte, restated for the scoped
+    // half: any field the spoken route drops on the way to `answer` fails here.
+    const spokenProvider = new FakeModelProvider(
+      [FakeModelProvider.says('Vale.')],
+      ['añade leche']
+    );
+    await build(spokenProvider, twoLists()).voice(scopedVoiceRequest());
+
+    const typedProvider = new FakeModelProvider([
+      FakeModelProvider.says('Vale.'),
+    ]);
+    await build(typedProvider, twoLists()).turn(scopedRequest('añade leche'));
+
+    expect(spokenProvider.requests[0]).toEqual(typedProvider.requests[0]);
   });
 
   it('offers four fewer tools, and never rename_me', async () => {

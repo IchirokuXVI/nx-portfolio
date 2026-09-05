@@ -226,6 +226,15 @@ export class AssistantService {
         authorization: request.authorization,
         transcript: request.transcript,
         message: heard,
+        // The scope rides along (plan 0044). The list page's microphone is the
+        // one caller that sends a scope at all, and it sends it here, on the
+        // spoken route, never on the typed one. Building this request by hand
+        // and leaving the field out turned every recording on a list into an
+        // open turn: the model was handed the whole index and asked which list,
+        // on a screen that shows exactly one. It went unnoticed while every
+        // tester had one list, because the resolver's third branch then picks
+        // the only list there is and the answer looks scoped.
+        scope: request.scope,
       },
       locale,
       startedAtMs,
