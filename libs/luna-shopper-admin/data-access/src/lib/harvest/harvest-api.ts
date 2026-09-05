@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { toGatewayError } from '../gateway-error';
 import type {
+  AliasQuery,
   EntryQuery,
   HarvestServiceI,
   ItemRefQuery,
@@ -160,6 +161,87 @@ export class HarvestApi implements HarvestServiceI {
 
   rejectItemRef(id: string): Promise<Wire.HarvestItemSourceRefView> {
     return this._send('post', `${ROOT}/item-refs/${segment(id)}/reject`, {
+      body: {},
+    });
+  }
+
+  /**
+   * A leaflet, uploaded (backend plan 0081, section 7).
+   *
+   * A plain JSON body, and deliberately not multipart: the extractor produces
+   * JSON, the schema validates JSON, and a form part around it would add a
+   * parse step for nothing. This is the one route in the gateway with a body
+   * limit of its own, because the default parser refuses 100 KB and a real
+   * leaflet is three times that.
+   */
+  importLeaflet(
+    input: Wire.ImportLeafletDto
+  ): Promise<Wire.HarvestHarvestRunView> {
+    return this._send('post', `${ROOT}/leaflets`, { body: input });
+  }
+
+  /**
+   * One chain's queued printed names (backend plan 0081, section 2).
+   *
+   * Under the chain in the path, like the entries queue and unlike the shops
+   * one, because that is where the gateway declares it. So `supermarketId` is
+   * pulled out of the query rather than sent as a filter: sending it as well
+   * would be a property the DTO does not declare, and the validation pipe
+   * refuses the whole request over one.
+   */
+  listAliases(query: AliasQuery): Promise<Wire.HarvestSourceAliasPage> {
+    const { supermarketId, ...rest } = query;
+    return this._send(
+      'get',
+      `${ROOT}/supermarkets/${segment(supermarketId)}/aliases`,
+      { params: toParams(rest) }
+    );
+  }
+
+  /**
+   * Bind a printed name to a product, which is what writes the price.
+   *
+   * The three decisions are addressed by the alias rather than by the chain: an
+   * alias id is unique and an operator acting on a row has it. Accepting is not
+   * only a binding: the run that queued this row is over and its offer sits in
+   * the run's stored document, so the harvester writes the price it was queued
+   * for and answers how many rows it wrote.
+   */
+  acceptAlias(
+    id: string,
+    input: Wire.AcceptSourceAliasDto
+  ): Promise<Wire.HarvestSourceAliasAcceptResult> {
+    return this._send('post', `${ROOT}/aliases/${segment(id)}/accept`, {
+      body: input,
+    });
+  }
+
+  /**
+   * The same, for a product the catalog does not hold yet.
+   *
+   * **One call**, the way `entries/:entryId/item` is one call: it creates the
+   * item and binds the alias in the harvester. Two calls would leave a window
+   * where an item exists that nothing points at, and the operator would have no
+   * way to tell that from a queue row they had not decided.
+   */
+  createItemFromAlias(
+    id: string,
+    input: Wire.CreateItemFromAliasDto
+  ): Promise<Wire.HarvestSourceAliasAcceptResult> {
+    return this._send('post', `${ROOT}/aliases/${segment(id)}/item`, {
+      body: input,
+    });
+  }
+
+  /**
+   * Not a product he tracks.
+   *
+   * The row stays as `REJECTED` rather than being deleted, so the next leaflet
+   * that prints the string skips it with a warning instead of asking again. The
+   * status is the owner's, and a run does not get to overwrite a decision.
+   */
+  rejectAlias(id: string): Promise<Wire.HarvestSourceAliasView> {
+    return this._send('post', `${ROOT}/aliases/${segment(id)}/reject`, {
       body: {},
     });
   }

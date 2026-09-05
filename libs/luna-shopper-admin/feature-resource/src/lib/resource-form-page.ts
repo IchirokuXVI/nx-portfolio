@@ -18,6 +18,7 @@ import {
   type FieldMessage,
   type FormMode,
   type ResourceCell,
+  type ResourceDraft,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import {
@@ -32,6 +33,23 @@ import {
   RESOURCE_FORM_MODE,
   RESOURCE_ID_PARAM,
 } from './resource-route-data';
+
+/**
+ * The field kinds a query parameter can seed.
+ *
+ * Every one of them holds a plain string in the draft. A boolean is three
+ * valued, a localized text is one string per locale and a json field is a
+ * printed object, and none of the three can be spelled in a query parameter
+ * without inventing an encoding for it.
+ */
+const STRING_FIELD_KINDS: readonly string[] = [
+  'text',
+  'number',
+  'money',
+  'enum',
+  'reference',
+  'date',
+];
 
 /**
  * The create and edit screen, for every resource (plan 0004, section 5).
@@ -129,7 +147,8 @@ export class ResourceFormPage {
     this.descriptor,
     this.descriptor.gateway(),
     this.mode,
-    this._id
+    this._id,
+    this._prefill()
   );
 
   /** Whether the operator has been asked about losing what they typed. */
@@ -212,6 +231,41 @@ export class ResourceFormPage {
 
   constructor() {
     void this.store.load();
+  }
+
+  /**
+   * Fields a caller filled in through the query string.
+   *
+   * A create form reached from another screen that already knows one of its
+   * answers opens with it in place: `price-scopes/new?supermarketId=<id>` from
+   * the leaflet upload of admin plan 0010, whose whole reason for sending the
+   * operator here is that this chain has no `NATIONAL` scope.
+   *
+   * **A create only, and only over fields the descriptor names**, both of which
+   * the store enforces again. Narrowed here as well to the kinds whose control
+   * takes a plain string: a boolean, a localized text and a json field each
+   * hold a shape a query parameter cannot spell, and seeding one with a string
+   * would put a value in a control that cannot draw it.
+   */
+  private _prefill(): ResourceDraft {
+    if (this.mode !== 'create') {
+      return {};
+    }
+
+    const params = this._route.snapshot.queryParamMap;
+    const draft: Record<string, string> = {};
+
+    for (const field of this.descriptor.fields) {
+      if (!STRING_FIELD_KINDS.includes(field.kind)) {
+        continue;
+      }
+      const value = params.get(field.name);
+      if (value !== null && value !== '') {
+        draft[field.name] = value;
+      }
+    }
+
+    return draft;
   }
 
   change(event: FieldChange): void {

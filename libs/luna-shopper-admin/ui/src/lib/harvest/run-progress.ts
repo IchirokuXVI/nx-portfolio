@@ -154,6 +154,11 @@ export class RunProgressView {
       { key: 'updated', value: run.updated },
       { key: 'unchanged', value: run.unchanged },
       { key: 'notFound', value: run.notFound },
+      // What a rule dropped, which is not the same as what failed (backend plan
+      // 0081, section 7). A loyalty gated leaflet offer is skipped on purpose
+      // and a crawl skips nothing at all, so folding it into `failed` would
+      // report a working import as broken six times over.
+      { key: 'skipped', value: run.skipped },
       { key: 'failed', value: run.failed },
     ];
   });

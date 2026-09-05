@@ -1,5 +1,7 @@
+import { AliasesQueuePage } from './aliases-queue-page';
 import { EntriesQueuePage } from './entries-queue-page';
 import { ItemRefsQueuePage } from './item-refs-queue-page';
+import { LeafletUploadPage } from './leaflet-upload-page';
 import { PlacesQueuePage } from './places-queue-page';
 import { HARVEST_LINKS, HARVEST_SEGMENT, harvestRoutes } from './routes';
 import { RunPage } from './run-page';
@@ -24,9 +26,25 @@ describe('harvestRoutes', () => {
       PlacesQueuePage,
       EntriesQueuePage,
       ItemRefsQueuePage,
+      LeafletUploadPage,
+      AliasesQueuePage,
       ShopsQueuePage,
       SourcesPage,
     ]);
+  });
+
+  /**
+   * The two halves of a leaflet, on two screens (admin plan 0010, section 7).
+   *
+   * A file drop and a decision queue are different acts with different rhythms,
+   * and the plan's section 4 is the argument for the second being its own page
+   * rather than a fourth shape on an existing queue.
+   */
+  it('gives a leaflet an upload and a queue', () => {
+    const paths = pathsOf();
+
+    expect(paths).toContain('leaflets/upload');
+    expect(paths).toContain('leaflets/queue');
   });
 
   /**

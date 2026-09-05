@@ -62,6 +62,31 @@ export interface HarvestServiceI {
   confirmItemRef(id: string): Promise<Wire.HarvestItemSourceRefView>;
   rejectItemRef(id: string): Promise<Wire.HarvestItemSourceRefView>;
 
+  /**
+   * Start a `LEAFLET_IMPORT` run for a document the operator dropped in.
+   *
+   * A spawn like any other, from this app's side: it answers the `PENDING` run
+   * and the run screen watches it to completion. What is different is the
+   * refusals, and both are ordinary states rather than surprises. A document
+   * the schema does not accept comes back 400 with one message per failure
+   * keyed on its JSON path, and a document this chain has already imported
+   * comes back 409 naming the earlier run.
+   */
+  importLeaflet(
+    input: Wire.ImportLeafletDto
+  ): Promise<Wire.HarvestHarvestRunView>;
+
+  listAliases(query: AliasQuery): Promise<Wire.HarvestSourceAliasPage>;
+  acceptAlias(
+    id: string,
+    input: Wire.AcceptSourceAliasDto
+  ): Promise<Wire.HarvestSourceAliasAcceptResult>;
+  createItemFromAlias(
+    id: string,
+    input: Wire.CreateItemFromAliasDto
+  ): Promise<Wire.HarvestSourceAliasAcceptResult>;
+  rejectAlias(id: string): Promise<Wire.HarvestSourceAliasView>;
+
   listShops(query: ShopQuery): Promise<Wire.HarvestSourceLocationPage>;
   mapShop(
     id: string,
@@ -136,6 +161,25 @@ export interface ItemRefQuery extends PageQuery {
 export interface ShopQuery extends PageQuery {
   readonly supermarketId: string;
   readonly status?: Wire.EnumsSourceLocationStatus;
+}
+
+/**
+ * The printed names one chain's leaflets could not resolve (backend plan 0081,
+ * section 2).
+ *
+ * `supermarketId` is **required**, like the shops query and for the same
+ * reason: an alias is keyed on (`supermarketId`, `aliasKey`) and a printed name
+ * only means anything inside the chain that printed it, so the route addresses
+ * the collection under the chain and there is no queue over every chain's.
+ *
+ * `status` absent lists `CANDIDATE` and `UNRESOLVED` together, which is the
+ * queue: the rows waiting for a person. The other two are asked for by name, to
+ * find a rejection somebody wants back or an alias somebody wants unbound.
+ */
+export interface AliasQuery extends PageQuery {
+  readonly supermarketId: string;
+  readonly status?: Wire.EnumsSourceAliasStatus;
+  readonly query?: string;
 }
 
 /**

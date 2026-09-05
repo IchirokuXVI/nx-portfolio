@@ -327,3 +327,75 @@ describe('ResourceFormStore submitting', () => {
     });
   });
 });
+
+/**
+ * A create form opened with an answer already in it (admin plan 0010).
+ *
+ * The leaflet upload sends an operator to the price scopes create form when
+ * their chain has no national scope, and the chain is the one thing that screen
+ * already knows. Making them pick it again is asking them to repeat a choice
+ * made two controls ago, and getting it wrong files the scope under the wrong
+ * chain.
+ */
+describe('ResourceFormStore with a prefill', () => {
+  const prefilled = (values: Record<string, string>, mode: 'create' | 'edit') =>
+    new ResourceFormStore<ResourceRow>(
+      descriptor,
+      new FakeGateway(),
+      mode,
+      mode === 'edit' ? 's1' : null,
+      values
+    );
+
+  it('opens a create with the value already in it', async () => {
+    const store = prefilled(
+      { websiteUrl: 'https://prefilled.example' },
+      'create'
+    );
+
+    await store.load();
+
+    expect(store.draft()['websiteUrl']).toBe('https://prefilled.example');
+  });
+
+  /**
+   * The operator typed nothing, so leaving asks nothing. A form that claimed
+   * unsaved work over a value it filled in itself would teach them to click
+   * through that question.
+   */
+  it('leaves the form clean', async () => {
+    const store = prefilled(
+      { websiteUrl: 'https://prefilled.example' },
+      'create'
+    );
+
+    await store.load();
+
+    expect(store.dirty()).toBe(false);
+  });
+
+  /** A caller cannot widen what the form submits. */
+  it('ignores a name the descriptor does not declare editable', async () => {
+    const store = prefilled({ id: 'forged', nonsense: 'x' }, 'create');
+
+    await store.load();
+
+    expect(store.draft()['id']).toBeUndefined();
+    expect(store.draft()['nonsense']).toBeUndefined();
+  });
+
+  /**
+   * An edit starts from the row. A caller's opinion about a field there would
+   * be an unexplained change to a value somebody saved.
+   */
+  it('is ignored on an edit', async () => {
+    const store = prefilled(
+      { websiteUrl: 'https://prefilled.example' },
+      'edit'
+    );
+
+    await store.load();
+
+    expect(store.draft()['websiteUrl']).toBe('https://bonpreu.example');
+  });
+});

@@ -73,6 +73,47 @@ export function formatMoney(
     : `${parts.sign}${grouped}${decimalSeparator(locale)}${fraction}`;
 }
 
+/**
+ * An amount with the currency it is in.
+ *
+ * The two leaflet screens are what this is for, and they are the only place in
+ * this app that knows a currency at all. A price on a `SupermarketItem` is a
+ * bare `numeric` and the column says nothing about which money it is, so
+ * {@link formatMoney} draws digits and no symbol. A leaflet states its currency
+ * on every offer, and a queued alias carries the one the offer was priced in,
+ * so here the symbol is a fact rather than a guess.
+ *
+ * A number rather than a decimal string, because that is what the wire carries
+ * on these two shapes: `offerPrice` is a JSON number and the document's amounts
+ * are too. Nothing is recomputed from it, so the float is displayed and never
+ * arithmetic.
+ *
+ * `''` for an absent amount, so a row with no price renders as nothing. An
+ * unknown currency code falls back to the number and the code, because a
+ * refusal from `Intl` must not cost the operator the number as well.
+ */
+export function formatCurrencyAmount(
+  amount: number | null,
+  currency: string | null,
+  locale?: string
+): string {
+  if (amount === null || !Number.isFinite(amount)) {
+    return '';
+  }
+  if (currency === null || currency === '') {
+    return amount.toFixed(2);
+  }
+
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+}
+
 /** What this locale puts between the units and the fraction. */
 function decimalSeparator(locale: string): string {
   const part = new Intl.NumberFormat(locale)

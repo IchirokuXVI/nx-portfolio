@@ -33,6 +33,22 @@ const CONSUM = 'sm_consum';
  */
 export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
   {
+    /**
+     * The nationwide scope, which is what a leaflet price belongs to (backend
+     * plan 0080, section 6; admin plan 0010, section 2).
+     *
+     * One row per chain at most, and the seed carries it for Mercadona and not
+     * for Consum on purpose: the upload screen preselects a chain's `NATIONAL`
+     * scope where there is one and offers to create one where there is not, and
+     * both states have to be reachable with nothing listening.
+     */
+    id: 'ps_mercadona_national',
+    supermarketId: MERCADONA,
+    kind: 'NATIONAL',
+    externalKey: null,
+    label: { en: 'Nationwide', es: 'Nacional' },
+  },
+  {
     id: 'ps_mercadona_4661',
     supermarketId: MERCADONA,
     kind: 'WAREHOUSE',
@@ -368,12 +384,22 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
 
 /** The six policy rows, as the migration seeds them (backend plan 0080, section 3). */
 export const PRICE_POLICY_SEED: readonly Wire.CatalogPricePolicyView[] = [
-  { sourceKind: 'OFFICIAL_LEAFLET', priority: 10, maxAgeDays: null, enabled: true },
+  {
+    sourceKind: 'OFFICIAL_LEAFLET',
+    priority: 10,
+    maxAgeDays: null,
+    enabled: true,
+  },
   { sourceKind: 'OFFICIAL_API', priority: 20, maxAgeDays: 7, enabled: true },
   { sourceKind: 'OFFICIAL_WEB', priority: 30, maxAgeDays: 7, enabled: true },
   { sourceKind: 'ADMIN', priority: 40, maxAgeDays: null, enabled: true },
   { sourceKind: 'USER_RECEIPT', priority: 50, maxAgeDays: null, enabled: true },
-  { sourceKind: 'USER_REPORTED', priority: 60, maxAgeDays: null, enabled: false },
+  {
+    sourceKind: 'USER_REPORTED',
+    priority: 60,
+    maxAgeDays: null,
+    enabled: false,
+  },
 ];
 
 /**

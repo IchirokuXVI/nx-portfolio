@@ -55,6 +55,7 @@
   "shell": {
     "menu": "Menu",
     "navigation": "Sections",
+    "waiting": "{{count}} waiting for a decision",
     "signOut": "Sign out"
   },
   "notFound": {
@@ -408,6 +409,8 @@
       "places": "Discovered places",
       "entries": "Source entries",
       "itemRefs": "Item links",
+      "leafletUpload": "Import a leaflet",
+      "leafletQueue": "Leaflet names",
       "shops": "Source shops",
       "sources": "Chain sources"
     },
@@ -421,7 +424,26 @@
     "mode": {
       "STORE_DISCOVERY": "Store discovery",
       "CATALOG_DISCOVERY": "Catalog discovery",
-      "REFRESH": "Price refresh"
+      "REFRESH": "Price refresh",
+      "LEAFLET_IMPORT": "Leaflet import"
+    },
+    "unit": {
+      "UNIT": "Unit",
+      "GRAM": "Gram",
+      "KILOGRAM": "Kilogram",
+      "MILLILITER": "Millilitre",
+      "LITER": "Litre",
+      "PACK": "Pack"
+    },
+    "warning": {
+      "LOYALTY_REQUIRED": "Loyalty card only",
+      "CONDITIONAL_PRICE": "Price needs a quantity",
+      "DUPLICATE_KEY": "Two offers, one name",
+      "REJECTED_ALIAS": "Rejected earlier",
+      "CANDIDATE_MATCH": "A product was proposed",
+      "NO_MATCH": "Nothing matched",
+      "ALREADY_QUEUED": "Already waiting",
+      "EXTRACTOR": "From the extractor"
     },
     "status": {
       "PENDING": "Pending",
@@ -513,7 +535,9 @@
         "starting": "Starting…",
         "attribution": "A run's writes are recorded against the harvester service, not against you. Starting one is what is being recorded here.",
         "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
-        "failed": "The run did not start, and the server did not say why."
+        "failed": "The run did not start, and the server did not say why.",
+        "leaflet": "A leaflet import starts from the document itself: the file says which chain printed it, what is on offer and when the prices apply. Drop it on the import screen.",
+        "openUpload": "Go to the leaflet import"
       }
     },
     "run": {
@@ -533,7 +557,16 @@
         "updated": "Updated",
         "unchanged": "Unchanged",
         "notFound": "Not stocked",
+        "skipped": "Skipped by a rule",
         "failed": "Failed"
+      },
+      "warnings": {
+        "heading": "What was dropped, and why",
+        "lead": "One line per decision this run made without asking. The extractor's own lost tiles are here too, so what it lost and what the import dropped read in one place."
+      },
+      "queue": {
+        "open": "Work through the names this chain has queued",
+        "count": "{{count}} offers went to the queue"
       },
       "revert": {
         "action": "Revert this run",
@@ -643,6 +676,90 @@
         "lastRunAt": "Last run",
         "lastSuccessAt": "Last success",
         "failures": "Failures in a row"
+      }
+    },
+    "leaflets": {
+      "heading": "Import a leaflet",
+      "lead": "Drop the JSON the extractor produced. Nothing here changes the document: an edited file has a different digest, and the digest is what stops the same leaflet being imported twice.",
+      "file": "The leaflet document",
+      "rejected": {
+        "not-json": "That file is not JSON. Check that it is the extractor's output and not the PDF.",
+        "not-a-document": "That file reads as JSON but has no offers in it, so it did not come from the leaflet extractor."
+      },
+      "read": {
+        "heading": "What the file says",
+        "retailer": "Retailer",
+        "chainId": "Chain identifier in the file",
+        "file": "Source file",
+        "sha256": "Digest",
+        "pages": "Pages",
+        "offers": "Offers",
+        "warnings": "Extractor warnings",
+        "chainIdHint": "The chain identifier is shown and never used to look anything up. Two extractors spell one chain two ways, so pick the chain yourself below."
+      },
+      "chain": "Chain",
+      "scope": "Price scope",
+      "scopeNeedsChain": "Choose the chain first. Scopes belong to a chain, so there is nothing to choose between until there is one.",
+      "noNational": "This chain has no national scope. Most leaflets are nationwide, so create one and come back.",
+      "createScope": "Create a price scope in a new tab",
+      "refreshScopes": "Look again",
+      "validFrom": "Valid from",
+      "validUntil": "Valid until",
+      "datesRequired": "Both dates are needed. The file states none, or states only one, and the import is refused without both.",
+      "import": "Start the import",
+      "importing": "Importing…",
+      "conflict": {
+        "already-imported": "This chain has already imported this exact document. Revert that run first, then import the corrected file.",
+        "run-in-progress": "A run for this chain is already in progress. Only one runs at a time, so wait for it or abort it first.",
+        "open": "Open that run"
+      },
+      "failures": {
+        "heading": "The document was refused",
+        "lead": "One entry per offer, with every complaint about it. Fix the file in the extractor and drop it again: nothing on this screen edits the document."
+      },
+      "preview": {
+        "heading": "What would be imported",
+        "byPageAsc": "Sort by page, first to last",
+        "byPageDesc": "Sort by page, last to first",
+        "loyalty": "Card price"
+      },
+      "note": {
+        "loyalty": "Skipped: the price on this tile is for loyalty card holders, and that is not what a shopper without the card pays.",
+        "conditional": "Queued, not written: the printed price is the second unit's or the price at a quantity, and this tile states no single unit price."
+      }
+    },
+    "aliases": {
+      "heading": "Leaflet names",
+      "empty": "Every printed name for this chain has been decided.",
+      "accept": "Yes, it is this product",
+      "reject": "Not a product we track",
+      "timesSeen": "Printed {{count}} times",
+      "written": "{{count}} price rows written for {{name}} at {{price}}.",
+      "rawText": "What the extractor read on the tile",
+      "choose": {
+        "body": "A printed name belongs to the chain that printed it, so choose which chain to work through. The queue reads that chain's names that no leaflet could resolve.",
+        "chain": "Chain"
+      },
+      "field": {
+        "price": "Leaflet price",
+        "unitPrice": "Comparison price",
+        "page": "Page",
+        "confidence": "Extractor confidence",
+        "lastSeen": "Last printed"
+      },
+      "bind": {
+        "heading": "Point it at a product we have",
+        "candidate": "A product was proposed by name. Nothing was written: agreeing here is what binds the name and writes the leaflet's price."
+      },
+      "create": {
+        "heading": "Or create the product",
+        "help": "The Spanish name starts as the leaflet printed it and can be changed freely. The English name may be left empty: the product lists with a missing translation tag and a shopper reading English sees the Spanish name. Whatever the product ends up called, the name the leaflet printed is what the next leaflet resolves against.",
+        "nameEs": "Name in Spanish",
+        "nameEn": "Name in English (optional)",
+        "brand": "Brand",
+        "category": "Category",
+        "defaultUnit": "Sold by",
+        "submit": "Create it and bind the name"
       }
     },
     "shops": {

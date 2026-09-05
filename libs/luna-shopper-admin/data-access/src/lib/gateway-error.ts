@@ -28,6 +28,20 @@ export class GatewayError extends Error {
   readonly status: number;
   /** For matching this to a server log. `''` when the body carried none. */
   readonly correlationId: string;
+  /**
+   * The server's own untranslated sentence about this one failure.
+   *
+   * `''` when the body carried none, which is most of the time. Almost nothing
+   * reads it, and nothing should read it to decide what to *say*: `message` is
+   * the translated half of the envelope and this is the developer facing half.
+   *
+   * It is here because one refusal carries a fact that exists nowhere else in
+   * the envelope. A leaflet upload refused with a 409 names the run that
+   * already took that document, or the run already in progress, and the id is
+   * in this sentence and in no field (backend plan 0081, section 7). Reading a
+   * uuid out of prose is a weak contract, and it is the contract on offer.
+   */
+  readonly detail: string;
   /** The server's own wait, in whole seconds, only when it named one. */
   readonly retryAfterSeconds?: number;
   /** Per field messages, by field name. Empty unless the server sent any. */
@@ -37,6 +51,7 @@ export class GatewayError extends Error {
     code: string;
     status: number;
     correlationId: string;
+    detail?: string;
     retryAfterSeconds?: number;
     fieldErrors?: Readonly<Record<string, readonly string[]>>;
   }) {
@@ -49,6 +64,7 @@ export class GatewayError extends Error {
     this.code = init.code;
     this.status = init.status;
     this.correlationId = init.correlationId;
+    this.detail = init.detail ?? '';
     this.retryAfterSeconds = init.retryAfterSeconds;
     this.fieldErrors = init.fieldErrors ?? {};
   }
@@ -81,6 +97,7 @@ export function toGatewayError(error: unknown): GatewayError {
     status,
     correlationId:
       typeof body?.['correlationId'] === 'string' ? body['correlationId'] : '',
+    detail: typeof body?.['detail'] === 'string' ? body['detail'] : '',
     retryAfterSeconds: asWaitSeconds(body?.['retryAfterSeconds']),
     fieldErrors: asFieldErrors(body?.['errors']),
   });

@@ -198,6 +198,231 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     revertedByUserId: null,
     revertedPriceCount: null,
   },
+  {
+    /**
+     * A leaflet import that finished (backend plan 0081; admin plan 0010,
+     * section 5).
+     *
+     * The run whose warnings the run screen exists to draw, and the one no
+     * crawl can stand in for: it has a `documentSha256`, a `skipped` count, and
+     * one warning per decision it made without asking. `sourceId` is null and
+     * always is, because an upload fetches nothing and a chain that publishes
+     * only leaflets has no source row at all.
+     *
+     * The four codes here are the four an operator has to be able to tell
+     * apart. A loyalty gated tile was dropped, a second unit tile with no
+     * single unit price was queued rather than written at a price nobody can
+     * pay for one, a string the owner already rejected was skipped without
+     * being asked again, and the extractor's own lost tile is carried through
+     * so that what the extractor lost and what the import dropped are read in
+     * one table.
+     */
+    id: 'run-leaflet-completed',
+    supermarketId: DEZA,
+    sourceId: null,
+    mode: 'LEAFLET_IMPORT',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-09-03T07:20:00.000Z',
+    startedAt: '2026-09-03T07:20:01.000Z',
+    finishedAt: '2026-09-03T07:20:09.000Z',
+    heartbeatAt: '2026-09-03T07:20:09.000Z',
+    totalPlanned: 48,
+    processed: 48,
+    created: 31,
+    updated: 0,
+    unchanged: 6,
+    // Offers put in front of a person, which is what the queue link counts.
+    notFound: 5,
+    // Offers a rule dropped, which is what the fourth counter is for.
+    skipped: 6,
+    failed: 0,
+    stage: null,
+    stageLabel: null,
+    warnings: [
+      {
+        code: 'LOYALTY_REQUIRED',
+        offerId: 'p36-o01',
+        page: 36,
+        name: 'Champu Elvive 380 ml.',
+        message:
+          'Skipped: the price is for loyalty card holders (descuentos ifamilia).',
+      },
+      {
+        code: 'CONDITIONAL_PRICE',
+        offerId: 'p05-o07',
+        page: 5,
+        name: 'Cerveza Radler Cruzcampo lata 33 cl.',
+        message:
+          'Queued: the headline price is the second unit and the tile states no single unit price.',
+      },
+      {
+        code: 'REJECTED_ALIAS',
+        offerId: 'p31-o04',
+        page: 31,
+        name: 'Lote degustacion 60 aniversario',
+        message:
+          'Skipped: this printed name was rejected on an earlier import.',
+      },
+      {
+        code: 'EXTRACTOR',
+        offerId: null,
+        page: 2,
+        name: null,
+        message: 'tile has no readable price',
+      },
+    ],
+    documentSha256:
+      'f62fa7ac367008e1dd00871292e9b6be1b5d1c8cca840c40a6541cec3a58f2ea',
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-4',
+    requestedByUserId: null,
+    // Standing, not reverted (backend plan 0082). It has to be: the dedupe
+    // index ignores a reverted run, so a reverted seed run would let the same
+    // document be imported again and the upload screen's 409 would be
+    // unreachable with nothing listening.
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+];
+
+/**
+ * The printed names one chain's leaflets could not resolve (backend plan 0081,
+ * sections 2 and 3; admin plan 0010, section 3).
+ *
+ * Every row here is a question only a person can answer, because **no automated
+ * path ever binds a printed name to a product**. A fuzzy hit inserts a
+ * `CANDIDATE` and writes no price; a miss inserts an `UNRESOLVED`. So the seed
+ * carries one of each, which are the two shapes of the queue: a row with a
+ * product to agree with, and a row with nothing to agree with at all.
+ *
+ * The third row is a rejection, which the queue does not show and which exists
+ * so that a spec asking for `REJECTED` by name finds one. The fourth is
+ * `ACTIVE`, an alias somebody has already accepted, which is what a resolved
+ * name looks like once it stops being a question.
+ *
+ * The offer columns are the leaflet's own numbers, carried on the alias from
+ * the run's stored document so the queue can show what the row was queued for
+ * without re-reading a 300 KB document per row.
+ */
+export const SOURCE_ALIAS_SEED: readonly Wire.HarvestSourceAliasView[] = [
+  {
+    id: 'alias-radler',
+    supermarketId: DEZA,
+    aliasKey: 'cerveza radler cruzcampo|lata 33 cl',
+    printedName: 'Cerveza Radler Cruzcampo',
+    printedFormat: 'lata 33 cl.',
+    printedBrand: 'Cruzcampo',
+    itemId: null,
+    // Nothing in the catalog looked like it, so there is nothing to agree with
+    // and the operator either finds the product or creates it.
+    candidateItemId: null,
+    candidateEntryId: null,
+    status: 'UNRESOLVED',
+    matchedBy: 'NAME_SIZE',
+    confidence: 0,
+    timesSeen: 1,
+    firstSeenAt: '2026-09-03T07:20:05.000Z',
+    lastSeenAt: '2026-09-03T07:20:05.000Z',
+    firstRunId: 'run-leaflet-completed',
+    lastRunId: 'run-leaflet-completed',
+    offerPrice: 0.79,
+    offerCurrency: 'EUR',
+    offerUnitPrice: 1.97,
+    offerUnitPriceLabel: 'l',
+    offerPage: 5,
+    offerRawText: ['-50% 2a Unidad', 'la segunda unidad le sale a: 0,39 EUR'],
+    offerConfidence: 0.97,
+  },
+  {
+    // The fuzzy rung proposed a product and stopped there, which is the rule
+    // and the reason: a bad match writes a wrong price onto a real product that
+    // people then shop on, which is worse than having no price.
+    id: 'alias-aceite',
+    supermarketId: DEZA,
+    aliasKey: 'aceite de oliva virgen serie oro coosur|garrafa 5 litros',
+    printedName: 'Aceite de Oliva Virgen Serie Oro Coosur',
+    printedFormat: 'Garrafa 5 litros',
+    printedBrand: 'Coosur',
+    itemId: null,
+    candidateItemId: 'item-milk',
+    candidateEntryId: null,
+    status: 'CANDIDATE',
+    matchedBy: 'NAME_SIZE',
+    confidence: 0.81,
+    timesSeen: 3,
+    firstSeenAt: '2026-08-14T07:00:00.000Z',
+    lastSeenAt: '2026-09-03T07:20:05.000Z',
+    firstRunId: 'run-leaflet-completed',
+    lastRunId: 'run-leaflet-completed',
+    offerPrice: 19.95,
+    offerCurrency: 'EUR',
+    offerUnitPrice: 3.99,
+    offerUnitPriceLabel: 'l',
+    offerPage: 1,
+    offerRawText: [],
+    offerConfidence: 0.97,
+  },
+  {
+    // Not a product he tracks. The row stays rather than being deleted, so the
+    // next leaflet that prints the string skips it with a warning.
+    id: 'alias-rejected',
+    supermarketId: DEZA,
+    aliasKey: 'lote degustacion 60 aniversario|',
+    printedName: 'Lote degustacion 60 aniversario',
+    printedFormat: null,
+    printedBrand: null,
+    itemId: null,
+    candidateItemId: null,
+    candidateEntryId: null,
+    status: 'REJECTED',
+    matchedBy: 'MANUAL',
+    confidence: 1,
+    timesSeen: 2,
+    firstSeenAt: '2026-08-14T07:00:00.000Z',
+    lastSeenAt: '2026-09-03T07:20:05.000Z',
+    firstRunId: 'run-leaflet-completed',
+    lastRunId: 'run-leaflet-completed',
+    offerPrice: null,
+    offerCurrency: null,
+    offerUnitPrice: null,
+    offerUnitPriceLabel: null,
+    offerPage: 31,
+    offerRawText: [],
+    offerConfidence: null,
+  },
+  {
+    // Accepted, and still carrying what the leaflet printed. Renaming the
+    // product does not stop the next leaflet resolving, which is the whole
+    // point of storing the printed name rather than the catalog's.
+    id: 'alias-leche',
+    supermarketId: DEZA,
+    aliasKey: 'leche entera hacendado|brik 1 l',
+    printedName: 'LECHE ENTERA HACENDADO',
+    printedFormat: 'brik 1 l.',
+    printedBrand: 'Hacendado',
+    itemId: 'item-milk',
+    candidateItemId: null,
+    candidateEntryId: null,
+    status: 'ACTIVE',
+    matchedBy: 'MANUAL',
+    confidence: 1,
+    timesSeen: 7,
+    firstSeenAt: '2026-06-02T07:00:00.000Z',
+    lastSeenAt: '2026-09-03T07:20:05.000Z',
+    firstRunId: 'run-leaflet-completed',
+    lastRunId: 'run-leaflet-completed',
+    offerPrice: 0.89,
+    offerCurrency: 'EUR',
+    offerUnitPrice: 0.89,
+    offerUnitPriceLabel: 'l',
+    offerPage: 31,
+    offerRawText: [],
+    offerConfidence: 0.99,
+  },
 ];
 
 /**
