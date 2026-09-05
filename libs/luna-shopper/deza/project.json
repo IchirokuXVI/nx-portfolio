@@ -1,0 +1,27 @@
+{
+  "name": "luna-shopper/deza",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/deza/src",
+  "prefix": "lib",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/luna-shopper/deza/jest.config.cts"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "capture-fixtures": {
+      "//": "Refreshes the checked in fixtures from the live site (plan 0085, section 11). Never run by CI: it makes real requests, and the fixtures are what keeps every other test off the network.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx tsx libs/luna-shopper/deza/tools/capture-fixtures.ts"
+      }
+    }
+  }
+}

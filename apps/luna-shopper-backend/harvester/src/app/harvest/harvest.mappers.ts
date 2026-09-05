@@ -71,6 +71,10 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     stageLabel: row.stageLabel,
     abortRequestedAt: iso(row.abortRequestedAt),
     error: row.error,
+    // A row inserted before the column existed reads null through TypeORM's
+    // hydration of an older snapshot, and an empty bag is what "nothing to say"
+    // means everywhere else in this view.
+    report: row.report ?? {},
     correlationId: row.correlationId,
     requestedByUserId: row.requestedByUserId,
   };

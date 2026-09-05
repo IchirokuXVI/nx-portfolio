@@ -43,6 +43,18 @@ export class RunContext {
   }
 
   /**
+   * What this run has to say about itself beyond its counters (plan 0085,
+   * section 3): sections a budget could not finish, availability a person had
+   * typed and the run declined to overwrite.
+   *
+   * Not an error and not a failure. It is written once, near the end, and read
+   * once, by a person looking at a finished run.
+   */
+  async setReport(report: Record<string, unknown>): Promise<void> {
+    await this.store.setReport(this.runId, report);
+  }
+
+  /**
    * Record work. Cheap: it accumulates and writes at most once per interval, so a
    * 4,232 item run does tens of updates rather than thousands.
    */

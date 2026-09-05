@@ -167,6 +167,9 @@ const harvestRunView = object(
     stageLabel: nullableString(),
     abortRequestedAt: nullableString(),
     error: nullableString(),
+    // Free form on purpose: a summary for a person reading a finished run, not a
+    // structure anything decides on (plan 0085, section 3).
+    report: freeObject(),
     correlationId: nullableString(),
     requestedByUserId: nullableString(),
   },
@@ -192,6 +195,7 @@ const harvestRunView = object(
     'stageLabel',
     'abortRequestedAt',
     'error',
+    'report',
     'correlationId',
     'requestedByUserId',
   ]

@@ -7,11 +7,13 @@ import type { HarvesterConfig } from '../config/app-config';
 import { HARVESTER_ENTITIES } from '../entities';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
+import { DezaCatalogRunner } from './deza-catalog.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
 import { HarvestController } from './harvest.controller';
 import { ItemSourceRefService } from './item-source-ref.service';
+import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
@@ -59,6 +61,8 @@ import { SupermarketSourceService } from './supermarket-source.service';
     HarvestRunStore,
     SupermarketSourceService,
     StoreDiscoveryRunner,
+    MercadonaCatalogRunner,
+    DezaCatalogRunner,
     CatalogDiscoveryRunner,
     RefreshRunner,
     RunExecutor,
