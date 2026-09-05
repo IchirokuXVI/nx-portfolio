@@ -12,30 +12,45 @@
  */
 
 /**
- * What a run is for (plan 0038, section 6; plan 0081, section 1). The modes have
+ * What a run is for (plan 0038, section 6; plan 0086, section 9). The modes have
  * very different costs: STORE_DISCOVERY is two requests, CATALOG_DISCOVERY is
- * 4,383, REFRESH is proportional to the items the owner actually tracks, and
- * LEAFLET_IMPORT makes none at all.
+ * 4,383, and FILE_IMPORT makes none at all.
+ *
+ * **There are three, and there used to be four.** `REFRESH` re-fetched the
+ * products already linked to a catalog item, purely because a catalog discovery
+ * threw away the price it had already fetched for all 4,232 of them. Plan 0086
+ * (D4) makes the walk write what it saw, which leaves the refresh with nothing
+ * to do that the walk did not already do. A per item refresh for a shopper is a
+ * different thing and stays in backlog 0006.
  */
 export enum HarvestRunMode {
   /** Geocode a postal code, then one Overpass query for the supermarkets near it. */
   STORE_DISCOVERY = 'STORE_DISCOVERY',
-  /** Walk a chain's whole assortment, capturing EAN and brand per product. */
-  CATALOG_DISCOVERY = 'CATALOG_DISCOVERY',
-  /** Re-fetch only the products already linked to a catalog item. */
-  REFRESH = 'REFRESH',
   /**
-   * Read an uploaded leaflet document and write the prices printed in it (plan
-   * 0081). **The output is identical to the output of a crawl; only the
+   * Walk a chain's whole assortment, capturing EAN, brand and, where the source
+   * states one, the price. Which storefront is walked is the source's
+   * `adapterKey` and not the mode (plan 0085): `mercadona-api` answers JSON and
+   * prices, `deza-web` renders a page and prints none.
+   */
+  CATALOG_DISCOVERY = 'CATALOG_DISCOVERY',
+  /**
+   * Read an uploaded {@link HarvestDocument} and write what it holds (plan
+   * 0086, D6). **The output is identical to the output of a crawl; only the
    * fetching differs**, which is why it is a run here rather than a write in
-   * catalog: the run machinery, the per chain lock and the review queues all
+   * catalog: the run machinery, the per chain lock and the review queue all
    * already exist.
+   *
+   * It is not a leaflet tool, which is what `LEAFLET_IMPORT` was called and the
+   * reason it was renamed. A file is a list of products as a source described
+   * them, whoever produced it: a leaflet extractor, a person typing a chain's
+   * prices, or the harvester's own export from a machine that is allowed to
+   * crawl.
    *
    * A run in this mode has a `supermarketId` and `sourceId: null`. A
    * `SupermarketSource` is fetching configuration, and an upload fetches
-   * nothing, so a chain that publishes only leaflets needs no source row at all.
+   * nothing, so a chain that publishes only files needs no source row at all.
    */
-  LEAFLET_IMPORT = 'LEAFLET_IMPORT',
+  FILE_IMPORT = 'FILE_IMPORT',
 }
 
 /**
@@ -66,24 +81,47 @@ export enum HarvestRunStatus {
 }
 
 /**
- * The state of the link between one catalog item and one source's product
- * (plan 0038, section 6.2). Only ACTIVE refs are refreshed and only ACTIVE refs
- * may write a price: a CANDIDATE came from a fuzzy name match and stays inert
- * until the owner confirms it, because a bad match writes a wrong price onto a
- * real product that users then shop on.
+ * What has become of one product a source described (plan 0086, D7).
+ *
+ * One status for every source kind. A Mercadona product a walk found, a DEZA
+ * listing and a printed leaflet name are three observations of the same kind of
+ * thing, so they are rows of one table with one status column, and the two
+ * queued values are the queue an admin works through.
+ *
+ * The rule the whole set exists for: **only an EAN or a person ever makes a row
+ * ACTIVE.** A fuzzy match proposes a CANDIDATE and writes no price, because a
+ * bad match writes a wrong price onto a real product that people then shop on.
+ *
+ * It replaces `ItemSourceRefStatus` and `SourceAliasStatus`, and it is the alias
+ * enum under a new name, because that one already had the shape a queue needs: a
+ * row that matched nothing is a status rather than an absence. `MANUAL` was
+ * never a status here, it said *how* a row became ACTIVE, which is
+ * {@link ItemSourceMatch}.
  */
-export enum ItemSourceRefStatus {
+export enum SourceEntryStatus {
+  /** Bound to a catalog item, by an EAN or by a person. The only status that writes a price. */
   ACTIVE = 'ACTIVE',
+  /** The fuzzy rung proposed something. Waiting for a person, writing nothing. */
   CANDIDATE = 'CANDIDATE',
+  /** Nothing was proposed. Waiting for a person, writing nothing. */
+  UNRESOLVED = 'UNRESOLVED',
+  /**
+   * The owner said this is not a product he tracks. A run does not get to
+   * reopen that: the next run that observes the key touches the row and asks
+   * nobody.
+   */
   REJECTED = 'REJECTED',
-  /** Linked by hand by the owner; never re-derived by a discovery run. */
-  MANUAL = 'MANUAL',
 }
 
-/** How a ref was established (plan 0038, section 6.2's matching ladder). */
+/**
+ * How a row was tied to a catalog item (plan 0038, section 6.2's ladder, as
+ * plan 0086 section 4 restated it).
+ *
+ * **There is no `EXTERNAL_ID`.** It meant "the row already existed and its id
+ * still resolves", and nothing ever wrote it: rung 1 touches a row it already
+ * holds, and touching is not a match. It left the enum with plan 0086.
+ */
 export enum ItemSourceMatch {
-  /** The ref already existed and the external id still resolves. */
-  EXTERNAL_ID = 'EXTERNAL_ID',
   /** The source's EAN equals a catalog item's. The only cross chain identifier. */
   EAN = 'EAN',
   /** Normalized name plus brand plus size. Produces a CANDIDATE, never an ACTIVE. */
@@ -129,55 +167,33 @@ export enum SourceLocationStatus {
 }
 
 /**
- * What has become of one printed name a chain used (plan 0081, section 2).
+ * Why a file import queued a product or wrote nothing for it (plan 0081,
+ * section 7; plan 0086, section 5).
  *
- * The rule the whole set exists for: **only an admin ever creates an ACTIVE
- * alias.** A fuzzy match proposes a CANDIDATE and writes no price, because a
- * bad match writes a wrong price onto a real product that people then shop on.
- */
-export enum SourceAliasStatus {
-  /** Bound to an item by a person. The only status that writes a price. */
-  ACTIVE = 'ACTIVE',
-  /** The fuzzy rung proposed something. Waiting for a person, writing nothing. */
-  CANDIDATE = 'CANDIDATE',
-  /** Nothing was proposed. Waiting for a person, writing nothing. */
-  UNRESOLVED = 'UNRESOLVED',
-  /**
-   * The owner said this string is not a product he tracks. A run does not get
-   * to reopen that: the next leaflet printing it skips the offer with a
-   * warning and does not ask again.
-   */
-  REJECTED = 'REJECTED',
-}
-
-/**
- * Why a leaflet import skipped an offer or sent it to the queue (plan 0081,
- * sections 6 and 7).
+ * Every decision a file import makes that was not a write becomes one of these,
+ * so a run page reads as a list of decisions rather than a set of counters that
+ * lost their reasons. **A walk records counters and no warnings**: a file has
+ * hundreds of rows and a person reads that list, a walk has 4,232 and nobody
+ * does.
  *
- * Every skip and every queue entry becomes a warning carrying the offer's id, so
- * a run page reads as a list of decisions rather than a set of counters that
- * lost their reasons.
+ * `LOYALTY_REQUIRED` and `CONDITIONAL_PRICE` are gone. They were the harvester
+ * deciding which of a leaflet tile's numbers a shopper pays, and plan 0086
+ * section 6.1 moves that to the producer: a `HarvestDocument` states a `price`
+ * only when a shopper pays it for one unit, and anything it wants to say about
+ * why it did not arrives as {@link EXTRACTOR} text.
  */
 export enum HarvestWarningCode {
-  /** Section 6.3: the price needs the chain's loyalty card, so nothing is written. */
-  LOYALTY_REQUIRED = 'LOYALTY_REQUIRED',
-  /**
-   * Section 6.2: the headline price is the price of a second unit or of a
-   * required quantity, and the tile carries no `single_unit_price`. The only
-   * number on it is one a shopper cannot pay for one unit.
-   */
-  CONDITIONAL_PRICE = 'CONDITIONAL_PRICE',
-  /** Section 2.1: two offers in one document share an alias key. Neither writes. */
+  /** Two products in one document share the key the import computes. Neither writes. */
   DUPLICATE_KEY = 'DUPLICATE_KEY',
-  /** Section 3, rung 2: the owner rejected this printed name. */
+  /** Rung 1 onto a REJECTED row: the owner said this is not a product he tracks. */
   REJECTED_ALIAS = 'REJECTED_ALIAS',
-  /** Section 3, rung 4: a fuzzy match proposed something, so a person decides. */
+  /** Rung 3 or 4: a fuzzy match proposed something, so a person decides. */
   CANDIDATE_MATCH = 'CANDIDATE_MATCH',
-  /** Section 3, rung 4: nothing matched, so the printed name waits in the queue. */
+  /** Rung 5: nothing matched, so the row waits in the queue. */
   NO_MATCH = 'NO_MATCH',
-  /** Section 3, rung 3: this printed name is already waiting for a person. */
+  /** Rung 1 onto a queued row: this one is already waiting for a person. */
   ALREADY_QUEUED = 'ALREADY_QUEUED',
-  /** A tile the extractor itself could not resolve, carried through verbatim. */
+  /** A warning the document itself carried, from whatever produced it, verbatim. */
   EXTRACTOR = 'EXTRACTOR',
 }
 

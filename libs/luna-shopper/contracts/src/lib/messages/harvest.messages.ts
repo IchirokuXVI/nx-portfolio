@@ -1,5 +1,8 @@
-import type { LeafletDocument } from '../../schemas/leaflet/leaflet-document';
-import type { ItemCategory, UnitOfMeasure } from '../enums/catalog.enums';
+import type {
+  ItemCategory,
+  PriceSourceKind,
+  UnitOfMeasure,
+} from '../enums/catalog.enums';
 import type {
   DiscoveredPlaceStatus,
   HarvestRunMode,
@@ -7,14 +10,14 @@ import type {
   HarvestRunTrigger,
   HarvestWarningCode,
   ItemSourceMatch,
-  ItemSourceRefStatus,
   PostalCodeDiscoveryStatus,
-  SourceAliasStatus,
+  SourceEntryStatus,
   SourceLocationStatus,
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
 import type { ItemView } from './catalog.messages';
+import type { HarvestDocument } from './harvest-document.placeholder';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
@@ -48,6 +51,20 @@ export const HARVEST_PATTERNS = {
   revert: 'harvest.revert',
   runGet: 'harvest.run.get',
   runList: 'harvest.run.list',
+  /**
+   * Everything one run observed, as a {@link HarvestDocument} (plan 0086,
+   * section 6.2).
+   *
+   * The other half of {@link HarvestRunMode.FILE_IMPORT}, and the reason the
+   * file schema is one schema: a walk runs on the compose stack where there is
+   * room for 4,383 requests, its export is uploaded to a cluster that is not
+   * allowed to crawl, and that cluster's rows, ladder, queue and prices are
+   * exactly what a walk there would have produced.
+   *
+   * A **read**, so it is not gated by `HARVEST_ENABLED`: exporting from a
+   * machine that crawled to one that cannot is the point of it.
+   */
+  export: 'harvest.export',
 } as const;
 
 export const DISCOVERED_PLACE_PATTERNS = {
@@ -62,17 +79,32 @@ export const DISCOVERED_PLACE_PATTERNS = {
   reject: 'place.reject',
 } as const;
 
-export const ITEM_SOURCE_REF_PATTERNS = {
-  list: 'itemSourceRef.list',
-  listUnresolved: 'itemSourceRef.listUnresolved',
-  confirm: 'itemSourceRef.confirm',
-  reject: 'itemSourceRef.reject',
-  setManual: 'itemSourceRef.setManual',
-} as const;
-
+/**
+ * The one queue, for every chain and every source kind (plan 0086, D7 and
+ * section 10).
+ *
+ * These four replace `sourceAlias.accept`, `sourceAlias.createItem`,
+ * `sourceAlias.reject`, `itemSourceRef.confirm`, `itemSourceRef.reject` and
+ * `itemSourceRef.setManual`, which were three queues over three tables saying
+ * the same three things. A Mercadona product a walk found, a DEZA listing and a
+ * printed leaflet name are three observations of the same kind of thing, so
+ * there is one table, one status column and one set of decisions about a row.
+ *
+ * **Accepting writes the prices the row holds**, one per scope, each stamped
+ * with the run that observed it. That is what lets an admin who works the queue
+ * after an eighteen minute walk get the prices that walk saw without running it
+ * again, and what lets two regional leaflets of one chain each put their price
+ * into their own scope from one decision.
+ *
+ * `itemSourceRef.setManual` has no replacement. It linked an item to an external
+ * id by hand so that a refresh fetched it; nothing fetches by id any more, and a
+ * product no run has observed has no row, no price and nothing to link.
+ */
 export const SOURCE_ENTRY_PATTERNS = {
   list: 'sourceEntry.list',
+  accept: 'sourceEntry.accept',
   createItem: 'sourceEntry.createItem',
+  reject: 'sourceEntry.reject',
 } as const;
 
 /**
@@ -84,9 +116,10 @@ export const SOURCE_ENTRY_PATTERNS = {
  * do not sell from out of the queue for good.
  *
  * **Mapping a shop does not backfill it.** The availability a run skipped stays
- * skipped until the next run, which is the opposite of `sourceAlias.accept`: a
- * leaflet offer sits in the run's stored document, and a shop's availability is
- * one boolean per product across a whole assortment that no run stored.
+ * skipped until the next run, which is the opposite of `sourceEntry.accept`: a
+ * price the run observed sits on the row it observed it for, and a shop's
+ * availability is one boolean per product across a whole assortment that no run
+ * stored.
  */
 export const SOURCE_LOCATION_PATTERNS = {
   list: 'sourceLocation.list',
@@ -94,20 +127,6 @@ export const SOURCE_LOCATION_PATTERNS = {
   unmap: 'sourceLocation.unmap',
   ignore: 'sourceLocation.ignore',
   unignore: 'sourceLocation.unignore',
-} as const;
-
-/**
- * The printed names a chain used, and the queue an admin works through (plan
- * 0081, sections 2 and 3).
- *
- * `accept` and `createItem` are the only two things that ever produce an ACTIVE
- * alias, and both are a person. A run proposes and never binds.
- */
-export const SOURCE_ALIAS_PATTERNS = {
-  list: 'sourceAlias.list',
-  accept: 'sourceAlias.accept',
-  createItem: 'sourceAlias.createItem',
-  reject: 'sourceAlias.reject',
 } as const;
 
 export const SUPERMARKET_SOURCE_PATTERNS = {
@@ -200,7 +219,7 @@ export interface HarvestRunView {
    */
   warnings: HarvestRunWarning[];
   /**
-   * The digest of the document a LEAFLET_IMPORT run read, null for every other
+   * The digest of the document a FILE_IMPORT run read, null for every other
    * mode. A second upload of the same file for the same chain is refused until
    * the first run is reverted.
    */
@@ -240,9 +259,9 @@ export interface HarvestRunView {
   /**
    * How many `item_prices` rows the revert deleted, null until one happens.
    *
-   * The rows the run inserted, including those an alias accept wrote on its
-   * behalf. Rows the run only confirmed were reset rather than deleted and are
-   * not counted here.
+   * The rows the run inserted, including those an accept in the queue wrote on
+   * its behalf. Rows the run only confirmed were reset rather than deleted and
+   * are not counted here.
    */
   revertedPriceCount: number | null;
 }
@@ -263,54 +282,6 @@ export interface HarvestRunWarning {
   /** The printed name, so a row reads without opening the document. */
   name: string | null;
   message: string;
-}
-
-/**
- * One printed name a chain used, and what became of it (plan 0081, section 2).
- *
- * **Accepting an alias sets `itemId` and never touches `printedName`.** One
- * product appears in many leaflets and each names it differently; renaming the
- * item must not change the string the chain printed, or the next leaflet that
- * prints it stops resolving.
- */
-export interface SourceAliasView {
-  id: string;
-  supermarketId: string;
-  /** normalizeName(name), a pipe, then normalizeName(format.raw). Section 2.1. */
-  aliasKey: string;
-  /** The printed product name, exactly. Never rewritten by an accept. */
-  printedName: string;
-  /** The printed format, exactly. It is in the key; the brand is not. */
-  printedFormat: string | null;
-  /** The printed brand, when the extractor read one. Shown, and in no key. */
-  printedBrand: string | null;
-  /** Set on ACTIVE only. Opaque here, as every catalog id is. */
-  itemId: string | null;
-  /** What the fuzzy rung proposed, for the queue to show. */
-  candidateItemId: string | null;
-  /** A discovery entry the fuzzy rung proposed, when no item exists yet. */
-  candidateEntryId: string | null;
-  status: SourceAliasStatus;
-  matchedBy: ItemSourceMatch;
-  /** 0..1. Below 1 only for a NAME_SIZE proposal. */
-  confidence: number;
-  timesSeen: number;
-  firstSeenAt: string;
-  lastSeenAt: string;
-  /** The run that created it. Plan 0082 deletes undecided rows by this. */
-  firstRunId: string | null;
-  lastRunId: string | null;
-  /** The leaflet price this row is waiting on, for the queue to show. */
-  offerPrice: number | null;
-  offerCurrency: string | null;
-  offerUnitPrice: number | null;
-  offerUnitPriceLabel: string | null;
-  /** The page the tile was printed on, in the run that queued it. */
-  offerPage: number | null;
-  /** Every fragment the extractor assigned to the tile, where it kept them. */
-  offerRawText: string[];
-  /** How sure the extractor was about the tile, where it said. */
-  offerConfidence: number | null;
 }
 
 /**
@@ -366,24 +337,121 @@ export interface DiscoveredPlaceGroup {
   sample: DiscoveredPlaceView[];
 }
 
-/** One product as the source last described it (plan 0038, section 4.2). */
+/**
+ * One product as a source described it, and what became of it (plan 0086,
+ * sections 3.1 and 10).
+ *
+ * **One row for every source kind.** A Mercadona product a walk found, a DEZA
+ * listing and a printed leaflet name are three observations of the same kind of
+ * thing, and `sourceKind` is the discriminator every code path reads. Nothing
+ * parses `externalId`: it is the chain's own product id where the source has
+ * one, and a hash of the normalized name and size where it does not.
+ *
+ * The fields fall into two groups, and the split is the contract. The first is
+ * the **source's**, and every run rewrites it verbatim: `name`, `brand`, `ean`,
+ * `unitSize`, `sizeFormat`, `categoryPath`, `url`, `extra`. The second is a
+ * **person's**, or the EAN rung's, and a run only reads it: `itemId`,
+ * `candidateEntryId`, `status`, `matchedBy`, `confidence`, `decidedAt`.
+ *
+ * **A decision never rewrites the name** (D8). Accepting sets `itemId` and
+ * touches none of the first group, so the item can be renamed to anything at all
+ * and the next walk or file that produces the same key hits this same row.
+ */
 export interface SourceCatalogEntryView {
   id: string;
   supermarketId: string;
+  /** The chain's id, or a hash of the normalized name and size for a source with none. */
   externalId: string;
+  /** What kind of observation made this row. Not derived from the key's shape. */
+  sourceKind: PriceSourceKind;
+  /** Verbatim, Spanish, never rewritten by a decision. */
   name: string;
   brand: string | null;
+  /** The one identifier that joins across chains. Leaflets and DEZA rarely fill it. */
   ean: string | null;
   unitSize: number | null;
+  /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
+  categoryPath: string[];
+  url: string | null;
+  /**
+   * The last observation's `extra` bag: a leaflet's page and raw text, a
+   * chain's loyalty block, whatever the producer knew and the import does not
+   * read (plan 0086, section 6.1).
+   *
+   * **Stored, shown, and never interpreted.** It is what lets a person decide a
+   * row the import could not. If a rule ever wants to read something out of it,
+   * that is the moment it becomes a field of the file schema, in a new version.
+   */
+  extra: Record<string, unknown> | null;
+  /** Every observation adds one. */
+  timesSeen: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  /** The run that created it. A revert deletes undecided rows by this and `lastRunId`. */
+  firstRunId: string | null;
+  /** The run that last observed it. An export is keyed on this. */
+  lastRunId: string | null;
+  /** Set on ACTIVE, and on CANDIDATE as the proposal. Opaque, as every catalog id is. */
+  itemId: string | null;
+  /**
+   * A sibling row of this chain the fuzzy rung proposed, when that sibling has
+   * no item yet (rung 4).
+   *
+   * It is how a leaflet name and a walk's product id meet: the admin creates the
+   * item from whichever row carries the EAN, and both resolve.
+   */
+  candidateEntryId: string | null;
+  status: SourceEntryStatus;
+  /** Null when nothing answered, i.e. on an UNRESOLVED row. */
+  matchedBy: ItemSourceMatch | null;
+  /** 0..1. 1 for EAN and MANUAL, 0.6 for a fuzzy proposal, 0 for UNRESOLVED. */
+  confidence: number;
+  /** When the status left the queue, by a person or by the EAN rung. */
+  decidedAt: string | null;
+  /**
+   * The latest price each scope stated for this row, one per scope (D3).
+   *
+   * Inline rather than a second call: there is one per scope and a chain has a
+   * handful of scopes, and the queue cannot decide a row without seeing what it
+   * is waiting on. An accept writes every one of these that is still valid.
+   */
+  prices: SourceEntryPriceView[];
+}
+
+/**
+ * The latest price one scope stated for one row (plan 0086, section 3.2).
+ *
+ * A chain has several leaflets at once because each is for a region, that is,
+ * for a price scope, and two of them print the same product. The **decision**
+ * about that product is one, for the chain; the **prices** are one per scope.
+ * So they are a row of their own, and accepting the entry writes every one of
+ * them that is still valid, each into its own scope and stamped with the run
+ * that observed it.
+ */
+export interface SourceEntryPriceView {
+  id: string;
+  /** Opaque here, as every catalog id is. */
+  priceScopeId: string;
+  /**
+   * The till price for one unit. Null when the source stated only a comparison
+   * figure, a per kilogram price with no pack price.
+   */
   price: number | null;
+  currency: string;
   /** The source's own normalized price, stored verbatim and never recomputed. */
   unitPrice: number | null;
   /** The source's own label for that number. Display text, never a unit. */
   unitPriceLabel: string | null;
-  categoryPath: string[];
-  url: string | null;
-  lastSeenAt: string;
+  /** A file's window. Null for a storefront price, which has none. */
+  validFrom: string | null;
+  validUntil: string | null;
+  /** The observation's `extra` bag at the time. Shown, never read by a rule. */
+  details: Record<string, unknown> | null;
+  /** When the source stated it. */
+  observedAt: string;
+  /** The run that observed it, and the run an accept stamps its price row with. */
+  runId: string | null;
 }
 
 /**
@@ -415,32 +483,27 @@ export interface SourceLocationView {
   lastRunId: string | null;
 }
 
-/** The link between one catalog item and one chain's product. */
-export interface ItemSourceRefView {
-  id: string;
-  itemId: string;
-  supermarketId: string;
-  externalId: string;
-  externalUrl: string | null;
-  matchedBy: ItemSourceMatch;
-  status: ItemSourceRefStatus;
-  /** 0..1. Only a NAME_BRAND_SIZE match carries anything below 1. */
-  confidence: number;
-  lastResolvedAt: string | null;
-  lastSeenAt: string | null;
-}
-
 // --- Run requests ----------------------------------------------------------
 
 /**
- * Start a run. Which fields matter depends on `mode`: STORE_DISCOVERY takes a
- * postal code and a radius, CATALOG_DISCOVERY and REFRESH take a supermarket and
- * the scope to write prices for. Answers a conflict carrying the active run's id
- * when one is already in progress for that supermarket.
+ * Start a run. Which fields matter depends on `mode` (plan 0086, section 9):
+ * STORE_DISCOVERY takes a postal code and a radius; CATALOG_DISCOVERY takes a
+ * supermarket, and a `priceScopeId` when the chain's adapter yields prices;
+ * FILE_IMPORT takes a supermarket, a scope, a source kind and a document.
+ * Answers a conflict carrying the active run's id when one is already in
+ * progress for that supermarket.
  */
 export interface SpawnHarvestRunRequest extends AdminCredential {
   mode: HarvestRunMode;
   supermarketId?: string;
+  /**
+   * The scope the prices are written for.
+   *
+   * Required for a FILE_IMPORT, and for a CATALOG_DISCOVERY of a chain whose
+   * adapter yields prices (`mercadona-api`). A `deza-web` discovery accepts one
+   * and ignores it, because the site prints no price and a required field that
+   * does nothing is a lie in a form.
+   */
   priceScopeId?: string;
   postalCode?: string;
   country?: string;
@@ -448,19 +511,56 @@ export interface SpawnHarvestRunRequest extends AdminCredential {
   /** Restrict a store discovery run's report to these `brand:wikidata` keys. */
   brandKeys?: string[];
   /**
-   * The leaflet, for a LEAFLET_IMPORT run (plan 0081, section 7). Validated
-   * against its own versioned schema by the gateway before it crosses the
-   * broker, and by the harvester again at run start: the harvester owns the
-   * schema version, and a broker message is not a trusted input.
+   * What observed the products in a FILE_IMPORT's document, which is what its
+   * rows and its prices are stamped with (plan 0086, section 6.2).
+   *
+   * **Not what the upload is.** A re-imported Mercadona walk stamps
+   * `OFFICIAL_API`, because that is what saw the price; the upload only carried
+   * it. It must be one of the three official kinds: no upload may write a user
+   * kind, which is the rule `catalog.addPrices` already enforces.
    */
-  document?: LeafletDocument;
+  sourceKind?: PriceSourceKind;
   /**
-   * The admin validity override, as YYYY-MM-DD local days in Spain (section 5).
-   * Required when the document own bound is null, and offered always; the
-   * backend turns both into Europe/Madrid instants.
+   * The file, for a FILE_IMPORT run (plan 0086, section 6). Validated against
+   * its own versioned schema by the gateway before it crosses the broker, and
+   * by the harvester again at run start: the harvester owns the schema version,
+   * and a broker message is not a trusted input.
+   */
+  document?: HarvestDocument;
+  /**
+   * The admin validity override, as YYYY-MM-DD local days in Spain. Required
+   * when the document's own bound is null, and offered always; the backend
+   * turns both into Europe/Madrid instants.
    */
   validFrom?: string | null;
   validUntil?: string | null;
+}
+
+/**
+ * Everything one run observed, as a file (plan 0086, section 6.2).
+ *
+ * Offered on a finished `CATALOG_DISCOVERY` or `FILE_IMPORT`. **A later run of
+ * the same chain moves rows out of the answer as it observes them again**, since
+ * the set is every row whose `lastRunId` is this run, so the newest run of a
+ * chain is the one to export.
+ */
+export interface ExportHarvestRunRequest extends AdminCredential {
+  runId: string;
+}
+
+/**
+ * The document a run exported, with what a caller needs to name the file.
+ *
+ * The ids ride beside the document rather than being read out of its `hints`,
+ * because the hints are for the upload screen and nothing may depend on them
+ * being there.
+ */
+export interface HarvestRunExportResult {
+  /** The chain the run was for. */
+  supermarketId: string;
+  /** The scope the run's prices were observed for, null when it had none. */
+  priceScopeId: string | null;
+  document: HarvestDocument;
 }
 
 export interface HarvestRunIdRequest extends AdminCredential {
@@ -519,25 +619,83 @@ export interface DiscoveredPlaceGroupsResult {
   groups: DiscoveredPlaceGroup[];
 }
 
-// --- Source entry requests -------------------------------------------------
+// --- Source entry requests (plan 0086, sections 7 and 10) -------------------
 
+/**
+ * The queue, one chain at a time.
+ *
+ * The chain is required because the table is unique on (`supermarketId`,
+ * `externalId`) and a row only means anything within one chain. Absent `status`
+ * lists the two that are waiting for a person, which is what the back office
+ * asks for; the other two are reachable so a decision can be looked up and
+ * undone.
+ *
+ * Pages on (`lastSeenAt`, `id`) descending, which is the order a queue reads in.
+ * `unmatchedOnly` is gone: it was the `NOT EXISTS` over `item_source_refs`, and
+ * `status` says it now.
+ */
 export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
   supermarketId: string;
-  /** Only entries with no `item_source_refs` row, i.e. candidate new items. */
-  unmatchedOnly?: boolean;
+  status?: SourceEntryStatus;
+  /**
+   * Which kind of observation to show, so an operator working through a
+   * leaflet's rows is not interleaved with a walk's 4,000.
+   */
+  sourceKind?: PriceSourceKind;
+  /** Free text over the name, the brand and the EAN. */
   query?: string;
 }
 
+export interface SourceEntryIdRequest extends AdminCredential {
+  entryId: string;
+}
+
+/** Bind a queued row to a product the catalog already holds. */
+export interface AcceptSourceEntryRequest extends AdminCredential {
+  entryId: string;
+  itemId: string;
+}
+
 /**
- * Promote a discovery entry to a catalog `Item`. This is the path that populates
- * the catalog, and it is deliberately a review queue rather than a bulk insert of
- * 4,232 products nobody chose. The English name costs one extra request, made
- * here rather than during discovery (plan 0038, section 6.2).
+ * Create the product a queued row is for, and bind it, in one call.
+ *
+ * **Every field is optional**, because the row already holds a default for each:
+ * `name.es` from `name`, the brand, the EAN, the size, the category the source's
+ * own tree mapped to, and the default unit its size text mapped to. An operator
+ * changes what he wants to change and sends only that.
+ *
+ * The row keeps what the source printed whatever the item ends up called (D8),
+ * and `name.en` may be absent, which plan 0079 made legal: a shopper in English
+ * sees the Spanish name through the fallback.
  */
 export interface CreateItemFromSourceEntryRequest extends AdminCredential {
   entryId: string;
+  name?: { es?: string; en?: string };
+  brand?: string | null;
+  ean?: string | null;
+  unitSize?: number | null;
   /** Override the category the source's own tree mapped to. */
-  category?: string;
+  category?: ItemCategory;
+  /** Override the unit the source's own size text mapped to. */
+  defaultUnit?: UnitOfMeasure;
+}
+
+/**
+ * What deciding a queued row did (plan 0086, section 7).
+ *
+ * `pricesWritten` is the point of answering anything beyond the row. The run
+ * that observed the price is over by then, and without writing here an admin who
+ * works the queue after an eighteen minute walk would have to run it again to
+ * get the prices he just resolved. **Zero is a normal answer**: a DEZA row holds
+ * no price because the site prints none, and the back office says so rather than
+ * reading it as a failure.
+ */
+export interface SourceEntryAcceptResult {
+  entry: SourceCatalogEntryView;
+  /** How many `item_prices` rows the accept wrote, across every scope on the row. */
+  pricesWritten: number;
+  /** The product this call created, or null when it bound an existing one. */
+  createdItem: ItemView | null;
 }
 
 // --- Source location requests (plan 0084, section 7) ------------------------
@@ -560,80 +718,6 @@ export interface MapSourceLocationRequest extends AdminCredential {
 
 export interface SourceLocationIdRequest extends AdminCredential {
   sourceLocationId: string;
-}
-
-// --- Item source ref requests ----------------------------------------------
-
-export interface ListItemSourceRefsRequest extends PageQuery, AdminCredential {
-  supermarketId?: string;
-  itemId?: string;
-  status?: ItemSourceRefStatus;
-}
-
-export interface ItemSourceRefIdRequest extends AdminCredential {
-  refId: string;
-}
-
-/** Link an item to an external id by hand, bypassing the matching ladder. */
-export interface SetManualItemSourceRefRequest extends AdminCredential {
-  itemId: string;
-  supermarketId: string;
-  externalId: string;
-}
-
-// --- Source alias requests (plan 0081, sections 2 and 3) -------------------
-
-export interface ListSourceAliasesRequest extends PageQuery, AdminCredential {
-  supermarketId: string;
-  /** Absent lists CANDIDATE and UNRESOLVED, which is the queue. */
-  status?: SourceAliasStatus;
-  /** Free text over the printed name, format and brand. */
-  query?: string;
-}
-
-export interface SourceAliasIdRequest extends AdminCredential {
-  aliasId: string;
-}
-
-/** Bind a queued printed name to a product the catalog already holds. */
-export interface AcceptSourceAliasRequest extends AdminCredential {
-  aliasId: string;
-  itemId: string;
-}
-
-/**
- * Bind a queued printed name to a product created for it, in one call.
- *
- * The operator changes the name and the brand freely; the alias keeps what the
- * leaflet printed whatever the item ends up called (section 2). `name.en` may
- * be absent, which plan 0079 made legal: a shopper in English sees the Spanish
- * name through the fallback.
- */
-export interface CreateItemFromSourceAliasRequest extends AdminCredential {
-  aliasId: string;
-  name: { es?: string; en?: string };
-  brand?: string | null;
-  ean?: string | null;
-  unitSize?: number | null;
-  category: ItemCategory;
-  defaultUnit: UnitOfMeasure;
-}
-
-/**
- * What accepting a queued name did (plan 0081, section 3).
- *
- * **Accepting writes the price it was queued for.** The run is over by then and
- * the offer sits in the run stored document, so the accept reads every non
- * reverted import for that chain whose validity is still open and writes the
- * prices with each run own id. Without it an admin who works the queue would
- * have to upload the document a second time.
- */
-export interface SourceAliasAcceptResult {
-  alias: SourceAliasView;
-  /** How many `item_prices` rows the accept wrote from stored documents. */
-  pricesWritten: number;
-  /** The product this call created, or null when it bound an existing one. */
-  item: ItemView | null;
 }
 
 // --- Supermarket source requests -------------------------------------------
@@ -664,10 +748,8 @@ export interface ListSupermarketSourcesRequest
 export type HarvestRunPage = Paginated<HarvestRunView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
-export type ItemSourceRefPage = Paginated<ItemSourceRefView>;
 export type SourceLocationPage = Paginated<SourceLocationView>;
 export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
-export type SourceAliasPage = Paginated<SourceAliasView>;
 
 // --- The postal code discovery queue (plan 0063) ---------------------------
 
