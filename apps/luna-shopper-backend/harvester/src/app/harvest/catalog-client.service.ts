@@ -239,7 +239,10 @@ export class CatalogClient {
   addPrices(
     priceScopeId: string,
     entries: ItemPriceBatchEntry[],
-    sourceRunId: string,
+    // Nullable since plan 0086: a `source_entry_prices` row folded in by that
+    // migration has no run to name, because the column it came from never
+    // recorded which walk had written the number.
+    sourceRunId: string | null,
     sourceKind: PriceSourceKind = PriceSourceKind.OFFICIAL_API
   ): Promise<AddItemPriceBatchResult> {
     return this.send(ITEM_PRICE_PATTERNS.addBatch, {

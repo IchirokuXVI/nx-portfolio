@@ -1,11 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MessagingModule } from '../messaging/messaging.module';
 import {
-  AdminHarvestAliasDecisionsController,
-  AdminHarvestAliasesController,
   AdminHarvestEntriesController,
-  AdminHarvestItemRefsController,
-  AdminHarvestLeafletsController,
+  AdminHarvestImportsController,
   AdminHarvestPlacesController,
   AdminHarvestRunsController,
   AdminHarvestShopsController,
@@ -23,13 +20,12 @@ import {
   imports: [MessagingModule],
   controllers: [
     AdminHarvestRunsController,
-    // The leaflet upload and the queue it fills (plan 0081).
-    AdminHarvestLeafletsController,
-    AdminHarvestAliasesController,
-    AdminHarvestAliasDecisionsController,
+    // The file import, and the one queue it fills along with every walk and
+    // crawl (plan 0086). The alias and item ref controllers were the same queue
+    // over two other tables and are gone.
+    AdminHarvestImportsController,
     AdminHarvestPlacesController,
     AdminHarvestEntriesController,
-    AdminHarvestItemRefsController,
     AdminHarvestShopsController,
     AdminHarvestSourcesController,
   ],

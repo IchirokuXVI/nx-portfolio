@@ -19,6 +19,19 @@ import type { AdminCredential } from './admin-auth.messages';
 import type { ItemView } from './catalog.messages';
 import type { HarvestDocument } from './harvest-document.placeholder';
 
+// Re-exported so the file schema reaches the package's public surface from the
+// one place that consumes it today. It moves to `schemas/harvest-document` with
+// its JSON schema and its validator.
+export {
+  HARVEST_DOCUMENT_VERSIONS,
+  validateHarvestDocument,
+} from './harvest-document.placeholder';
+export type {
+  HarvestDocument,
+  HarvestDocumentValidationFailure,
+  HarvestDocumentValidationResult,
+} from './harvest-document.placeholder';
+
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
  * harvester over NATS, under `/v1/admin/harvest/`. **Every subject here is

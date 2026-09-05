@@ -73,7 +73,11 @@ import { SupermarketSourceService } from './supermarket-source.service';
     RunExecutor,
     HarvestRunService,
     DiscoveredPlaceService,
+    // The one queue over the one table, and the three decisions about a row
+    // (plan 0086, section 7). `SourceAliasService` and `ItemSourceRefService`
+    // were the same three decisions over two other tables and are gone.
     SourceEntryService,
+    // Section 8's two deletes, which are the harvester's half of a revert.
     SourceEntryRevert,
     SourceLocationService,
     PostalCodeDiscoveryStore,
