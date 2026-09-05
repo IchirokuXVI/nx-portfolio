@@ -24,6 +24,10 @@ import { HarvestNotice, SwitchPanel } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
 import { HarvestShell } from './harvest-shell';
 
+/** What the reverted filter can be asked for. `any` sends no filter at all. */
+const REVERTED_OPTIONS = ['any', 'reverted', 'standing'] as const;
+type RevertedFilter = (typeof REVERTED_OPTIONS)[number];
+
 /** The three run modes, in the order the picker offers them. */
 const MODES: readonly HarvestRunMode[] = [
   'STORE_DISCOVERY',
@@ -118,6 +122,23 @@ const MODES: readonly HarvestRunMode[] = [
       }
     </section>
 
+    <section class="filters">
+      <label>
+        <span>{{ 'harvest.runs.filter.reverted' | rokuT }}</span>
+        <select
+          (ngModelChange)="onRevertedChange()"
+          [(ngModel)]="reverted"
+          name="reverted"
+        >
+          @for (option of revertedOptions; track option) {
+            <option [value]="option">
+              {{ 'harvest.runs.filter.revertedOption.' + option | rokuT }}
+            </option>
+          }
+        </select>
+      </label>
+    </section>
+
     @if (failed()) {
       <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
     } @else if (loading()) {
@@ -133,6 +154,15 @@ const MODES: readonly HarvestRunMode[] = [
               <span [class]="row.status" class="status">
                 {{ 'harvest.status.' + row.status | rokuT }}
               </span>
+              <!-- A second chip rather than a replacement: the status says how
+                   the run ended and a revert does not change that. -->
+              @if (row.reverted !== '') {
+                <span [title]="row.revertedBy" class="reverted">
+                  {{
+                    'harvest.runs.row.reverted' | rokuT: { when: row.reverted }
+                  }}
+                </span>
+              }
               <span class="when">{{ row.requested }}</span>
               <span class="counts">
                 {{
@@ -267,6 +297,20 @@ const MODES: readonly HarvestRunMode[] = [
       color: var(--admin-danger-ink);
     }
 
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+    }
+
+    .reverted {
+      padding: var(--admin-space-1) var(--admin-space-2);
+      border-radius: var(--admin-radius);
+      background: var(--admin-danger-wash);
+      font-size: 0.75rem;
+      color: var(--admin-danger-ink);
+    }
+
     .when,
     .counts,
     .reason {
@@ -291,6 +335,17 @@ export class RunsPage {
   readonly postalCode = signal('');
   readonly country = signal('');
 
+  /**
+   * The reverted filter (backend plan 0082, section 6), as three choices rather
+   * than a checkbox.
+   *
+   * A checkbox has two states and the filter has three: reverted only,
+   * unreverted only, and both, which is what the screen opens on. A tri state
+   * checkbox would encode the same thing less legibly.
+   */
+  readonly revertedOptions = REVERTED_OPTIONS;
+  readonly reverted = signal<RevertedFilter>('any');
+
   readonly starting = signal(false);
   readonly loading = signal(true);
   readonly runs = signal<readonly HarvestRun[]>([]);
@@ -309,6 +364,11 @@ export class RunsPage {
       requested: formatInstant(run.requestedAt),
       processed: run.processed,
       failed: run.failed,
+      // Empty when the run still stands, which is what the row branches on.
+      reverted: formatInstant(run.revertedAt),
+      // On hover rather than in the row: the operator id is a uuid, and a row
+      // that spelled one out would be mostly uuid.
+      revertedBy: run.revertedByUserId ?? '',
       // A finished run that failed because of a switch says which one, on the
       // row, because that is where somebody is looking when they wonder.
       reasonKey: reasonKey(failureBlockReason(run)),
@@ -341,12 +401,21 @@ export class RunsPage {
     void this.load();
   }
 
+  /** The filter is a server side one, so changing it is a fresh read. */
+  onRevertedChange(): void {
+    void this.load();
+  }
+
   async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
 
     try {
-      const page = await this._service.listRuns({ limit: 20 });
+      const filter = this.reverted();
+      const page = await this._service.listRuns({
+        limit: 20,
+        ...(filter === 'any' ? {} : { reverted: filter === 'reverted' }),
+      });
       this.runs.set(page.items);
       this.shell.observeReachable();
       // The runs are where a storefront refusal is legible, so the switch panel

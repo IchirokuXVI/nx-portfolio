@@ -194,6 +194,41 @@ export class SourceAliasService {
     return toSourceAliasView(await this.aliases.save(alias));
   }
 
+  /**
+   * Drop the rows one run queued that nobody has decided on (plan 0082,
+   * section 3), and answer how many went.
+   *
+   * **An alias a person decided on survives the run that created it.** An
+   * `ACTIVE` one is a mapping other leaflets already resolve through, and
+   * deleting it would make the next leaflet ask again for a product the owner
+   * already named. A `REJECTED` one is the owner saying this is not a product
+   * he tracks, and a run does not get to reopen that. The run's mistake was in
+   * its prices, not in the strings it read, and the string the chain printed is
+   * still the string the chain printed. What goes with the prices is the price
+   * an accept wrote, so an accepted alias survives with nothing behind it until
+   * the next import.
+   *
+   * A `CANDIDATE` or `UNRESOLVED` row is different: nobody decided on it, and
+   * it sits in the queue only because this run put it there. A run that must
+   * not introduce anything must not introduce work for a person either. The
+   * next import of a corrected document recreates it if the strings are still
+   * printed.
+   *
+   * Keyed on `firstRunId`, so an older alias this run merely saw again keeps
+   * its `timesSeen` and `lastSeenAt`: those are observations of a string on a
+   * page, and the string was on the page.
+   *
+   * Not admin gated here. It is one step of `harvest.revert`, which is gated
+   * once, at its own door.
+   */
+  async deleteUndecidedFrom(runId: string): Promise<number> {
+    const result = await this.aliases.delete({
+      firstRunId: runId,
+      status: In(QUEUED),
+    });
+    return result.affected ?? 0;
+  }
+
   /** ACTIVE, bound, and MANUAL: a person decided, so the confidence is 1. */
   private async bind(alias: SourceAlias, itemId: string): Promise<SourceAlias> {
     alias.itemId = itemId;

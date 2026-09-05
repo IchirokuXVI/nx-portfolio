@@ -25,6 +25,7 @@ import {
   getRequestContext,
 } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
+import { CatalogClient } from './catalog-client.service';
 import {
   ActiveRunExistsError,
   DocumentAlreadyImportedError,
@@ -35,12 +36,35 @@ import { readLeafletDocument } from './leaflet-document.reader';
 import { resolveLeafletWindow } from './leaflet-validity';
 import { PlatformAdminService } from './platform-admin.service';
 import { RunExecutor } from './run-executor.service';
+import { SourceAliasService } from './source-alias.service';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface RunCursor {
   value: string;
   id: string;
 }
+
+/**
+ * The modes that write prices, and therefore the modes a revert means anything
+ * for (plan 0082, section 5).
+ *
+ * A `STORE_DISCOVERY` run writes no price at all: it finds shops. Reverting one
+ * would delete nothing and mark it anyway, which reads as an act that happened
+ * when none did.
+ */
+const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
+  HarvestRunMode.LEAFLET_IMPORT,
+  HarvestRunMode.REFRESH,
+  HarvestRunMode.CATALOG_DISCOVERY,
+];
+
+/** The statuses a run never leaves, and the only ones a revert is offered on. */
+const FINISHED_STATUSES: readonly HarvestRunStatus[] = [
+  HarvestRunStatus.COMPLETED,
+  HarvestRunStatus.FAILED,
+  HarvestRunStatus.ABORTED,
+  HarvestRunStatus.STALE,
+];
 
 /**
  * The run surface (plan 0038, section 7), platform admin gated like everything
@@ -61,6 +85,8 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     private readonly store: HarvestRunStore,
     private readonly executor: RunExecutor,
     private readonly sources: SupermarketSourceService,
+    private readonly aliases: SourceAliasService,
+    private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService
   ) {}
@@ -180,6 +206,73 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     return toHarvestRunView(run);
   }
 
+  /**
+   * Take back everything a run wrote (plan 0082).
+   *
+   * A revert is a **hard delete** of the rows the run wrote, followed by a
+   * recompute of every key it touched. It is not a retraction flag: the owner's
+   * decision is that a reverted run must not introduce anything, and a wrong
+   * price kept behind a flag is still a number somebody can draw a chart from.
+   * That does not contradict the rule that old prices are never lost. A
+   * superseded price is a true statement about a day and is never deleted by
+   * any path; a reverted run's rows are claims the owner says were wrong, and
+   * keeping those falsifies the record in the other direction.
+   *
+   * **Not the same act as an abort**, which is why a run has to be finished
+   * before this is offered. An abort stops a run and keeps what it already
+   * fetched, because prices already fetched are valid data. A `PENDING` or
+   * `RUNNING` run is refused here: abort it first, then revert what it flushed.
+   *
+   * **Two databases, and the order matters.** Catalog goes first. A failure
+   * after it leaves the prices gone and the run not yet marked, and a second
+   * call finds nothing left to delete, deletes the aliases and completes the
+   * mark: the operation is idempotent up to the mark, and a retry is always the
+   * right response to a failure. The other order would show a run as reverted
+   * whose prices still existed.
+   *
+   * Setting `revertedAt` is also what lets a corrected upload of the same
+   * document through plan 0081's per document dedupe index, which excludes
+   * reverted runs for exactly this reason.
+   */
+  async revert(req: HarvestRunIdRequest): Promise<HarvestRunView> {
+    const userId = await this.admin.requireAdmin(req);
+    const run = await this.store.load(req.runId);
+
+    if (run.revertedAt) {
+      // There is nothing left to revert, and the second request is a mistake
+      // worth telling the caller about rather than answering with a shrug.
+      throw new ConflictException(
+        `That run was already reverted at ${run.revertedAt.toISOString()}.`
+      );
+    }
+    if (!FINISHED_STATUSES.includes(run.status)) {
+      throw new ConflictException(
+        `A ${run.status} run cannot be reverted. Abort it first, then revert ` +
+          'what it flushed.'
+      );
+    }
+    if (!PRICE_WRITING_MODES.includes(run.mode)) {
+      throw new ValidationException(
+        `A ${run.mode} run writes no price, so there is nothing to revert.`
+      );
+    }
+
+    const prices = await this.catalog.deletePricesByRun(run.id);
+    const aliases = await this.aliases.deleteUndecidedFrom(run.id);
+    const reverted = await this.store.markReverted(
+      run.id,
+      userId,
+      prices.deleted
+    );
+
+    this.logger.log(
+      `Reverted run ${run.id}: ${prices.deleted} price row(s) deleted, ` +
+        `${prices.reset} confirmation(s) withdrawn, ${prices.recomputed} key(s) ` +
+        `recomputed, ${aliases} undecided alias(es) removed.`
+    );
+    return toHarvestRunView(reverted);
+  }
+
   async get(req: HarvestRunIdRequest): Promise<HarvestRunView> {
     await this.admin.requireAdmin(req);
     return toHarvestRunView(await this.store.load(req.runId));
@@ -204,6 +297,13 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     }
     if (req.status) {
       qb.andWhere('r.status = :status', { status: req.status });
+    }
+    if (req.reverted !== undefined) {
+      // A filter of its own rather than a status (plan 0082, section 6): a
+      // revert does not change how the run ended.
+      qb.andWhere(
+        req.reverted ? 'r."revertedAt" IS NOT NULL' : 'r."revertedAt" IS NULL'
+      );
     }
     if (cursor) {
       qb.andWhere('(r."requestedAt", r.id) < (:cv, :cid)', {
@@ -236,7 +336,9 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
    */
   async reapStale(): Promise<void> {
     try {
-      const reaped = await this.store.reapStale(this.settings().staleAfterSeconds);
+      const reaped = await this.store.reapStale(
+        this.settings().staleAfterSeconds
+      );
       if (reaped > 0) {
         this.logger.warn(`Reaped ${reaped} stale harvest run(s)`);
       }

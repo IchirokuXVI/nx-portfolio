@@ -62,6 +62,19 @@ export class HarvestApi implements HarvestServiceI {
     });
   }
 
+  /**
+   * Take back what the run wrote (backend plan 0082).
+   *
+   * A POST to a sub path, like the abort above it, because it is an act on the
+   * run rather than an edit of it. It is not a `DELETE` on the run: the run row
+   * survives and gains `revertedAt`, and it is the prices elsewhere that go.
+   */
+  revertRun(id: string): Promise<Wire.HarvestHarvestRunView> {
+    return this._send('post', `${ROOT}/runs/${segment(id)}/revert`, {
+      body: {},
+    });
+  }
+
   listPlaces(query: PlaceQuery): Promise<Wire.HarvestDiscoveredPlacePage> {
     return this._send('get', `${ROOT}/places`, { params: toParams(query) });
   }

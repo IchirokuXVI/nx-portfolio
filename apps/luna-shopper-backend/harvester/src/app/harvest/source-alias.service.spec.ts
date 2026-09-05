@@ -97,6 +97,7 @@ function build(options: { alias?: SourceAlias; runs?: HarvestRun[] } = {}) {
   const aliases = {
     findOne: jest.fn(async () => alias),
     save: jest.fn(async (row: SourceAlias) => row),
+    delete: jest.fn(async () => ({ affected: 2 })),
   };
   const openRuns = options.runs ?? [runOf()];
   const runs = {
@@ -125,6 +126,46 @@ function build(options: { alias?: SourceAlias; runs?: HarvestRun[] } = {}) {
   );
   return { service, alias, aliases, catalog, runs };
 }
+
+/**
+ * What a revert does to the queue (plan 0082, section 3).
+ *
+ * The decision the plan settles is that **an alias a person decided on survives
+ * the run that created it, and an alias nobody decided on goes with the run.**
+ * The run's mistake was in its prices, not in the strings it read.
+ */
+describe('SourceAliasService.deleteUndecidedFrom (plan 0082, section 3)', () => {
+  it('deletes only the rows this run queued that nobody has decided on', async () => {
+    const { service, aliases } = build();
+
+    const removed = await service.deleteUndecidedFrom(RUN);
+
+    expect(removed).toBe(2);
+    // Keyed on `firstRunId`, so an older alias this run merely saw again keeps
+    // its `timesSeen` and `lastSeenAt`: the string was on the page.
+    expect(aliases.delete).toHaveBeenCalledWith({
+      firstRunId: RUN,
+      status: expect.anything(),
+    });
+
+    const criteria = aliases.delete.mock.calls[0][0] as {
+      status: { _value: SourceAliasStatus[] };
+    };
+    // CANDIDATE and UNRESOLVED, and neither ACTIVE nor REJECTED: both of those
+    // are the owner's own decision, and a run does not get to reopen one.
+    expect(criteria.status._value).toEqual([
+      SourceAliasStatus.CANDIDATE,
+      SourceAliasStatus.UNRESOLVED,
+    ]);
+  });
+
+  it('answers zero when the run queued nothing, so a retry is harmless', async () => {
+    const { service, aliases } = build();
+    aliases.delete.mockResolvedValueOnce({ affected: 0 });
+
+    await expect(service.deleteUndecidedFrom(RUN)).resolves.toBe(0);
+  });
+});
 
 /**
  * The three decisions an admin makes about a queued printed name (plan 0081,

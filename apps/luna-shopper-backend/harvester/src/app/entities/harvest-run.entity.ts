@@ -179,14 +179,31 @@ export class HarvestRun extends BaseEntity {
   requestedByUserId!: string | null;
 
   /**
-   * When this run's writes were taken back. **Nullable and unwritten here**:
-   * plan 0082 owns the operation that fills it.
+   * When this run's writes were taken back (plan 0082).
    *
-   * It exists in this plan because the dedupe index has to name it (section 7):
-   * a reverted run must not block a corrected upload of the same document, and
-   * rebuilding a unique index on this table later is worse than one column the
-   * next plan fills.
+   * Plan 0081 added the column so its per document dedupe index could name it,
+   * and `harvest.revert` is what fills it. Setting it does two things at once:
+   * it says the run's claims were withdrawn, and it lets a corrected upload of
+   * the same document past that index.
+   *
+   * **The status is not touched.** It says how the run ended and that did not
+   * change, so a reverted run keeps its own status and carries this beside it.
    */
+  @Index('ix_harvest_runs_reverted', { where: '"revertedAt" IS NOT NULL' })
   @Column({ type: 'timestamptz', nullable: true })
   revertedAt!: Date | null;
+
+  /** The operator who reverted it. Null while the run still stands. */
+  @Column({ type: 'uuid', nullable: true })
+  revertedByUserId!: string | null;
+
+  /**
+   * How many `item_prices` rows the revert deleted, null until one happens.
+   *
+   * What catalog answered, not what the run's own counters predicted: an alias
+   * accepted after the run wrote more rows on the run's behalf, and a row the
+   * run only confirmed was reset rather than deleted and is not counted here.
+   */
+  @Column({ type: 'integer', nullable: true })
+  revertedPriceCount!: number | null;
 }

@@ -172,6 +172,25 @@ export class AuditedWrite {
     });
   }
 
+  /**
+   * Record a deletion another call performed.
+   *
+   * The counterpart of {@link recordCreate}, and it exists for the same reason:
+   * a revert removes every price one run wrote in a single statement (plan
+   * 0082, section 2), so the rows are read, deleted together, and recorded
+   * afterwards. The caller has to hold the rows it read, because a row deleted
+   * by criteria cannot be described after the fact.
+   */
+  async recordDelete<T extends ObjectLiteral>(
+    target: EntityTarget<T>,
+    row: T
+  ): Promise<void> {
+    await this.insert(target, row['id'] as string, AuditAction.DELETE, {
+      before: this.snapshot(target, row),
+      after: null,
+    });
+  }
+
   /** Record an edit another call persisted, or record nothing if none moved. */
   async recordUpdate<T extends ObjectLiteral>(
     target: EntityTarget<T>,

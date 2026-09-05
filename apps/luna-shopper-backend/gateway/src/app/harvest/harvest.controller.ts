@@ -126,6 +126,7 @@ export class AdminHarvestRunsController {
       supermarketId: query.supermarketId,
       mode: query.mode,
       status: query.status,
+      reverted: query.reverted,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -156,6 +157,31 @@ export class AdminHarvestRunsController {
     @Param('id') id: string
   ): Promise<HarvestRunView> {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.abort, {
+      ...adminCredential(admin),
+      runId: id,
+    });
+  }
+
+  /**
+   * Take back everything the run wrote (plan 0082).
+   *
+   * The opposite of the route above it, and the pairing is the point: an abort
+   * stops a run and **keeps** what it already fetched, this deletes what it
+   * wrote. So a run has to have finished before this is allowed: abort it
+   * first, then revert what it flushed.
+   *
+   * Answers the run with `revertedAt` and the counts the operation produced,
+   * 409 for a run that was already reverted or is still going, and 400 for a
+   * mode that writes no price.
+   */
+  @Post(':id/revert')
+  @ApiContractResponse(HARVEST_PATTERNS.revert, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, conflict: true })
+  revert(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<HarvestRunView> {
+    return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.revert, {
       ...adminCredential(admin),
       runId: id,
     });
@@ -436,7 +462,10 @@ export class AdminHarvestPlacesController {
 @ApiBearerAuth('access-token')
 @UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
-@Controller({ path: 'admin/harvest/supermarkets/:supermarketId/entries', version: '1' })
+@Controller({
+  path: 'admin/harvest/supermarkets/:supermarketId/entries',
+  version: '1',
+})
 export class AdminHarvestEntriesController {
   constructor(private readonly nats: NatsClient) {}
 

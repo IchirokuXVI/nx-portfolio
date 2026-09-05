@@ -48,6 +48,46 @@ export function canAbort(run: HarvestRun | null): boolean {
   return run !== null && !isTerminalRun(run) && run.abortRequestedAt === null;
 }
 
+/**
+ * The modes that write prices, and therefore the only ones a revert applies to
+ * (backend plan 0082, section 5).
+ *
+ * A `STORE_DISCOVERY` run finds shops and writes no price, so there is nothing
+ * for a revert to take back and the backend refuses one.
+ */
+export const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
+  'LEAFLET_IMPORT',
+  'REFRESH',
+  'CATALOG_DISCOVERY',
+];
+
+/** Whether this run's writes have already been taken back. */
+export function isReverted(run: HarvestRun | null): boolean {
+  return run !== null && run.revertedAt !== null;
+}
+
+/**
+ * Whether taking this run's writes back is a thing that can still happen.
+ *
+ * Three conditions, and each of them is a different refusal on the server. The
+ * run has finished, because a revert deletes what an abort keeps: a run still
+ * going is aborted first and reverted after. Its mode writes prices, because
+ * reverting a store discovery would mark an act that deleted nothing. And it
+ * has not been reverted already, because there would be nothing left to take.
+ *
+ * Asked here so the button is absent rather than present and answered with a
+ * 409. The server checks all three again: this is which control to draw, not a
+ * gate.
+ */
+export function canRevert(run: HarvestRun | null): boolean {
+  return (
+    run !== null &&
+    isTerminalRun(run) &&
+    !isReverted(run) &&
+    PRICE_WRITING_MODES.includes(run.mode)
+  );
+}
+
 /** How far along a run is, in the three numbers the screen draws. */
 export interface RunProgress {
   readonly processed: number;

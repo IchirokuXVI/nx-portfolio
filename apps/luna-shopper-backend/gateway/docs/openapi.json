@@ -17518,6 +17518,15 @@
                 "STALE"
               ]
             }
+          },
+          {
+            "name": "reverted",
+            "required": false,
+            "in": "query",
+            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -17723,6 +17732,111 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/runs/{id}/revert": {
+      "post": {
+        "operationId": "AdminHarvestRunsController_revert_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `harvest.revert` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestRunView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19886,6 +20000,15 @@
                 "ABORTED",
                 "STALE"
               ]
+            }
+          },
+          {
+            "name": "reverted",
+            "required": false,
+            "in": "query",
+            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -27023,6 +27146,24 @@
               "string",
               "null"
             ]
+          },
+          "revertedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revertedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revertedPriceCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
@@ -27052,7 +27193,10 @@
           "error",
           "report",
           "correlationId",
-          "requestedByUserId"
+          "requestedByUserId",
+          "revertedAt",
+          "revertedByUserId",
+          "revertedPriceCount"
         ],
         "additionalProperties": false
       },

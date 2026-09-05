@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import {
   canAbort,
+  canRevert,
   isTerminalRun,
   runProgress,
   type HarvestRun,
@@ -62,6 +63,7 @@ export class RunWatch {
   private readonly _error = signal<GatewayError | null>(null);
   private readonly _loading = signal(true);
   private readonly _aborting = signal(false);
+  private readonly _reverting = signal(false);
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
   private _started = false;
@@ -85,6 +87,8 @@ export class RunWatch {
 
   readonly aborting: Signal<boolean> = this._aborting.asReadonly();
 
+  readonly reverting: Signal<boolean> = this._reverting.asReadonly();
+
   /** Nothing was drawable: the first read failed and there is no run to show. */
   readonly failed = computed(
     () => this._error() !== null && this._run() === null
@@ -94,6 +98,17 @@ export class RunWatch {
 
   readonly canAbort = computed(
     () => canAbort(this._run()) && !this._aborting()
+  );
+
+  /**
+   * Whether the revert control belongs on the screen (backend plan 0082).
+   *
+   * A finished run of a price writing mode that has not been reverted already.
+   * The three conditions are the server's own refusals, asked here so the
+   * button is absent rather than present and answered with a 409.
+   */
+  readonly canRevert = computed(
+    () => canRevert(this._run()) && !this._reverting()
   );
 
   readonly progress = computed(() => {
@@ -157,6 +172,33 @@ export class RunWatch {
       this._error.set(toGatewayError(error));
     } finally {
       this._aborting.set(false);
+    }
+  }
+
+  /**
+   * Take back everything the run wrote.
+   *
+   * The answer is the run with `revertedAt` and the counts the operation
+   * produced, and it is applied straight away rather than waited for: the run
+   * is finished, so the poll has already stopped and there is no next read to
+   * notice. That is the difference from {@link abort}, where the poll carries
+   * on because the abort is graceful and the status is not yet final.
+   *
+   * A failure leaves the run exactly as it was on screen, with the error under
+   * it. Nothing here half applies a revert: the counts come from the reply.
+   */
+  async revert(): Promise<void> {
+    if (!this.canRevert()) {
+      return;
+    }
+
+    this._reverting.set(true);
+    try {
+      this._apply(await this._service.revertRun(this._id));
+    } catch (error) {
+      this._error.set(toGatewayError(error));
+    } finally {
+      this._reverting.set(false);
     }
   }
 
@@ -236,10 +278,11 @@ export class RunWatch {
   };
 }
 
-/** The two calls a watch makes, so a spec can supply them without the rest. */
+/** The three calls a watch makes, so a spec can supply them without the rest. */
 export interface RunReader {
   readRun(id: string): Promise<HarvestRun>;
   abortRun(id: string): Promise<HarvestRun>;
+  revertRun(id: string): Promise<HarvestRun>;
 }
 
 /**

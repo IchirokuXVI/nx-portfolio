@@ -492,7 +492,16 @@
       "heading": "Harvest runs",
       "empty": "No runs have been recorded.",
       "row": {
-        "counts": "{{processed}} processed, {{failed}} failed"
+        "counts": "{{processed}} processed, {{failed}} failed",
+        "reverted": "Reverted {{when}}"
+      },
+      "filter": {
+        "reverted": "Reverted runs",
+        "revertedOption": {
+          "any": "Show both",
+          "reverted": "Only reverted",
+          "standing": "Only runs that still stand"
+        }
       },
       "start": {
         "heading": "Start a run",
@@ -526,11 +535,24 @@
         "notFound": "Not stocked",
         "failed": "Failed"
       },
+      "revert": {
+        "action": "Revert this run",
+        "heading": "Delete what this run wrote?",
+        "confirm": "Delete the {{prices}} prices this run wrote. Prices another run wrote, and prices you typed in yourself, are kept. This cannot be undone.",
+        "confirmLeaflet": "Delete the {{prices}} prices this run wrote and {{queued}} rows waiting in the queue. Accepted and rejected names are kept. This cannot be undone."
+      },
+      "reverted": {
+        "chip": "Reverted",
+        "done": "This run's prices were deleted and every product they priced was worked out again from what is left. The run kept its status, because that is how the run ended and reverting it did not change that. The same document can be imported again."
+      },
       "fact": {
         "requested": "Requested",
         "started": "Started",
         "finished": "Finished",
         "heartbeat": "Last heartbeat",
+        "reverted": "Reverted",
+        "revertedPrices": "Prices deleted",
+        "revertedBy": "Reverted by",
         "correlationId": "Correlation identifier"
       }
     },
