@@ -63,7 +63,7 @@ const ERROR_ID = 'register-error';
  * grounds that the server does not check it. That is the wrong test: the server cannot
  * check it, because only this screen ever sees the password twice. A typo in the one
  * field nobody can read back produces an account whose password is not the one its
- * owner believes they chose, and the product has no way out of that worth having —
+ * owner believes they chose, and the product has no way out of that worth having:
  * signing in fails with the deliberately incurious "that email and password do not
  * match", and the reset flow this app cannot reach yet is what would be needed to
  * recover. Typing it twice is the only check available anywhere, which is why it
