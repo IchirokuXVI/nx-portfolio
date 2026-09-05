@@ -8,7 +8,11 @@ import {
   type OnDestroy,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { ReferenceLookup, ReferenceOption } from './reference-lookup';
+import type {
+  ReferenceLookup,
+  ReferenceOption,
+  ReferenceScope,
+} from './reference-lookup';
 
 /** How long typing settles before a search goes out. */
 const SEARCH_DELAY_MS = 250;
@@ -189,6 +193,14 @@ export class ReferencePicker implements OnDestroy {
   /** The id currently held, or `''`. */
   readonly value = input.required<string>();
   readonly lookup = input.required<ReferenceLookup>();
+  /**
+   * What the screen has already decided, sent with every search.
+   *
+   * The mapping screen of plan 0011 is what this exists for: its picker is over
+   * one chain's shops, and that collection cannot be read at all until the
+   * chain is named. Empty for every picker whose target lists from nothing.
+   */
+  readonly scope = input<ReferenceScope>({});
   readonly nullable = input(false);
   readonly disabled = input(false);
 
@@ -256,7 +268,11 @@ export class ReferencePicker implements OnDestroy {
     this.searching.set(true);
 
     try {
-      const options = await this.lookup().search(this.resource(), term);
+      const options = await this.lookup().search(
+        this.resource(),
+        term,
+        this.scope()
+      );
       // A search the operator has already typed past must not overwrite a later
       // one that came back first, which is the ordinary case when the second
       // term is more specific and therefore faster.

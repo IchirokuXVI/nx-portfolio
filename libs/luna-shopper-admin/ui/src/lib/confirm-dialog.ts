@@ -32,12 +32,19 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
       <h2 id="confirm-heading">{{ headingKey() | rokuT }}</h2>
       <p>{{ bodyKey() | rokuT: bodyArgs() }}</p>
 
+      <!-- Whatever the caller has to put beside the sentence. The shop mapping
+           of plan 0011 puts a link to the run screen here, because what it is
+           warning about is fixed by starting a run and a warning with no way to
+           act on it is an apology. -->
+      <ng-content />
+
       <div class="controls">
         <button
           (click)="confirm.emit()"
+          [class.danger]="tone() === 'danger'"
+          [class.primary]="tone() === 'primary'"
           [disabled]="busy()"
           #confirmButton
-          class="danger"
           type="button"
         >
           {{ (busy() ? busyKey() : confirmKey()) | rokuT }}
@@ -109,6 +116,13 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
       color: var(--admin-danger-ink);
     }
 
+    button.primary {
+      border-color: transparent;
+      background: var(--admin-accent);
+      font-weight: 600;
+      color: var(--admin-accent-ink);
+    }
+
     button:disabled {
       opacity: 0.55;
       cursor: default;
@@ -128,6 +142,15 @@ export class ConfirmDialog implements AfterViewInit {
   readonly confirmKey = input('resource.action.confirm');
   readonly busyKey = input('resource.action.working');
   readonly busy = input(false);
+  /**
+   * What the button that goes through with it looks like.
+   *
+   * `danger` by default, because for a long time every caller was deleting a
+   * row or discarding a form. Admin plan 0011 brought the first one that is
+   * neither: mapping a source's shop to one of ours is undone by unmapping it,
+   * and a red button on a reversible act teaches an operator to ignore red.
+   */
+  readonly tone = input<'danger' | 'primary'>('danger');
 
   readonly confirm = output<void>();
   readonly dismiss = output<void>();

@@ -81,8 +81,25 @@ export class AdminListSupermarketsQueryDto extends CatalogListQueryDto {
   query?: string;
 }
 
-/** One chain's shops, with the review filter of plan 0005, section 3. */
+/**
+ * One chain's shops, with the review filter of plan 0005, section 3 and the one
+ * parameter its picker needs (admin plan 0011, section 4).
+ *
+ * The picker binds a source's shop to one of ours and is scoped to a chain, so
+ * it types into this list rather than scrolling it. Without the parameter the
+ * descriptor has nowhere to put the term, drops it, and answers every search
+ * with the same first page.
+ */
 export class AdminListLocationsQueryDto extends CatalogListQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'Only the shops whose label, in either content language, or whose address or town contains this text.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
+
   @ApiPropertyOptional({
     format: 'uuid',
     description: 'Only the shops that sell at this scope.',

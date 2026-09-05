@@ -24,7 +24,7 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { randomUUID } from 'node:crypto';
-import { Repository } from 'typeorm';
+import { Repository, type SelectQueryBuilder } from 'typeorm';
 import type { CatalogConfig } from '../config/app-config';
 import { Supermarket, SupermarketLocation } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
@@ -227,6 +227,7 @@ export class SupermarketLocationService {
       .orderBy('l.createdAt', 'DESC')
       .addOrderBy('l.id', 'DESC')
       .take(limit + 1);
+    this.applySearch(qb, req.query);
     if (req.priceScopeId) {
       // Plan 0066, section 4: the shops that sell at one scope, which is how a
       // price keyed by scope becomes somewhere a person can go.
@@ -257,6 +258,45 @@ export class SupermarketLocationService {
         : null;
 
     return { items: page.map(toSupermarketLocationView), nextCursor };
+  }
+
+  /**
+   * Narrow the chain's shops to the ones whose label, address or town contains
+   * the term (`apps/luna-shopper-admin/plans/0011`, section 4).
+   *
+   * A substring match, the same one a chain gets, and not the ranked read a
+   * product gets. A shop has no search document, its address is one line, and
+   * ranking would cost the keyset cursor because a relevance score is computed
+   * per query rather than stored.
+   *
+   * The address and the town are in because most shops carry no label at all: a
+   * chain distinguishes two of its own shops by street, which is what an
+   * operator is reading off the source's own printed name when they type here.
+   *
+   * `strpos` rather than `ILIKE`, because `%` and `_` are wildcards to LIKE and
+   * an operator typing them means those two characters. Nothing has to be
+   * escaped this way, and a forgotten escape reads as a working search that
+   * quietly matches too much. A null column makes `strpos` null, which is not
+   * true, so a shop without one is simply not matched by that arm.
+   */
+  private applySearch(
+    qb: SelectQueryBuilder<SupermarketLocation>,
+    query?: string
+  ): void {
+    const term = query?.trim() ?? '';
+    if (term === '') {
+      return;
+    }
+
+    qb.andWhere(
+      `(
+        strpos(lower(l.label ->> 'en'), lower(:term)) > 0
+        OR strpos(lower(l.label ->> 'es'), lower(:term)) > 0
+        OR strpos(lower(l.address), lower(:term)) > 0
+        OR strpos(lower(l.city), lower(:term)) > 0
+      )`,
+      { term }
+    );
   }
 
   /**
