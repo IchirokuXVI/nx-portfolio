@@ -598,7 +598,7 @@ green. Build, not only test: the backend services type check in the build and no
 - A file import and a walk of the same chain produce rows of the same shape, resolved through the
   same ladder, in the same queue, and a leaflet name the owner accepted is proposed to the walk
   that later finds the product's id.
-- A finished walk exports a `harvest-export` document, and importing it into a chain with no rows
+- A finished walk exports a `HarvestDocument`, and importing it into a chain with no rows
   reproduces the walk's rows, prices and ladder outcomes, stamped `OFFICIAL_API`.
 - `HarvestRunMode.REFRESH` and `LEAFLET_IMPORT` do not exist anywhere in the workspace, including
   `openapi.json`. `FILE_IMPORT` accepts one schema, `HarvestDocument`, and the leaflet extractor's
