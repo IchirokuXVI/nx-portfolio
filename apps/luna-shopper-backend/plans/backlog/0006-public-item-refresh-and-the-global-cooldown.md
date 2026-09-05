@@ -18,12 +18,36 @@ build rather than a redesign.
 Plan 0038 built the owner facing refresh (`REFRESH` run mode, platform admin gated). What is
 deferred is only the **public, uncapped-audience, globally-capped** version.
 
-**Plan 0086 deleted the `REFRESH` run mode.** A catalog walk writes the prices it fetches, so a
-second fetch of the same products had nothing left to do. This plan was written as a caller and a
-gate in front of a run mode that already existed, and that is no longer true. When it is picked up,
-the per item fetch is a small runner of its own over `SourceIngest`: one observation for the one
-product asked about, through the same ladder and the same price write every other run uses.
-Nothing in plan 0086 stands in its way, and nothing in it is built there.
+**Plan 0086 deleted that owner facing `REFRESH`.** A catalog walk writes the prices it fetches, so
+a second fetch of the whole tracked set had nothing left to do. The run mode this plan needs is
+narrower and survives as this plan's own: **one item, one fetch, one price, and nothing else
+created.** Section 1.1 states it against plan 0086's shape.
+
+### 1.1 What the refresh run is after plan 0086
+
+`REFRESH` comes back as a run mode when this plan is built, with the meaning the owner gave it:
+a shopper's refresh **updates a price and never creates anything**. Its input is one
+(`itemId`, `priceScopeId`) pair. It is a runner over `SourceIngest` (plan 0086, section 5) that:
+
+1. Finds the item's `ACTIVE` row for the scope's chain whose `sourceKind` is `OFFICIAL_API`. No
+   such row means there is nothing to fetch, and the request is refused as not refreshable rather
+   than started.
+2. Fetches that one product by its `externalId` through the chain's adapter, under the budget of
+   section 3, and produces one observation.
+3. Hands it to the ingest, which lands on rung 1 of the ladder: the row exists and is `ACTIVE`, so
+   the price is written to the scope with this run's id and `OFFICIAL_API`, the scope's
+   `source_entry_prices` row is replaced, and no row, item, candidate or queue entry is created.
+   A 404 sets the scope's availability to false, as a walk's absence does.
+
+It is the only run mode a non admin may start, and the only one whose cost is one request.
+
+**The button is offered only when the current price came from an automatic source.** The price a
+shopper sees is the materialized one plan 0080 decides, and it carries a `priceSourceKind`. The
+refresh control is shown when that kind is `OFFICIAL_API` and the item has an `ACTIVE` row of that
+kind for the chain, which is the Mercadona case. It is not shown for a leaflet price, because a
+leaflet cannot be fetched again, nor for an `ADMIN` or `USER_REPORTED` price, because a fetch would
+not be what the shopper is looking at. The gateway asks the harvester the same question before
+starting a run, so a client that shows the button anyway is refused with the same sentence.
 
 ## 1. What the feature is
 
