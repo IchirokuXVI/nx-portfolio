@@ -22,13 +22,24 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { HarvestNotice, SwitchPanel } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
+import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
 
-/** The three run modes, in the order the picker offers them. */
+/**
+ * The four run modes, in the order the picker offers them.
+ *
+ * `LEAFLET_IMPORT` is one of them and is the only one this form does not start
+ * (admin plan 0010, section 2). An import needs a document, and a document is a
+ * file, a preview and a validation failure that names the offer it is about.
+ * None of that fits three text inputs, so choosing it here sends the operator
+ * to the screen that does rather than growing this one a fourth mode's worth of
+ * fields.
+ */
 const MODES: readonly HarvestRunMode[] = [
   'STORE_DISCOVERY',
   'CATALOG_DISCOVERY',
   'REFRESH',
+  'LEAFLET_IMPORT',
 ];
 
 /**
@@ -80,10 +91,18 @@ const MODES: readonly HarvestRunMode[] = [
           </select>
         </label>
 
-        <label>
-          <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
-          <input [(ngModel)]="supermarketId" name="supermarketId" type="text" />
-        </label>
+        <!-- An import states its chain on the upload screen, beside the
+             document that says which chain printed it (admin plan 0010). -->
+        @if (!uploading()) {
+          <label>
+            <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
+            <input
+              [(ngModel)]="supermarketId"
+              name="supermarketId"
+              type="text"
+            />
+          </label>
+        }
 
         @if (mode() === 'STORE_DISCOVERY') {
           <label>
@@ -99,19 +118,26 @@ const MODES: readonly HarvestRunMode[] = [
 
       <p class="attribution">{{ 'harvest.runs.start.attribution' | rokuT }}</p>
 
-      <button
-        (click)="start()"
-        [disabled]="starting()"
-        class="primary"
-        type="button"
-      >
-        {{
-          (starting()
-            ? 'harvest.runs.start.starting'
-            : 'harvest.runs.start.submit'
-          ) | rokuT
-        }}
-      </button>
+      @if (uploading()) {
+        <p class="attribution">{{ 'harvest.runs.start.leaflet' | rokuT }}</p>
+        <a [routerLink]="uploadLink()" class="primary">{{
+          'harvest.runs.start.openUpload' | rokuT
+        }}</a>
+      } @else {
+        <button
+          (click)="start()"
+          [disabled]="starting()"
+          class="primary"
+          type="button"
+        >
+          {{
+            (starting()
+              ? 'harvest.runs.start.starting'
+              : 'harvest.runs.start.submit'
+            ) | rokuT
+          }}
+        </button>
+      }
 
       @if (blockedKey(); as key) {
         <p class="failure" role="alert">{{ key | rokuT }}</p>
@@ -208,6 +234,18 @@ const MODES: readonly HarvestRunMode[] = [
       color: var(--admin-accent-ink);
     }
 
+    /* The way to the upload, which is a link and not a button because it goes
+       to a screen rather than doing something. It still looks like the primary
+       action, because on that mode it is the only one there is. */
+    a.primary {
+      display: inline-flex;
+      align-items: center;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border-radius: var(--admin-radius);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
     .failure {
       padding: var(--admin-space-3);
       border: 1px solid var(--admin-danger);
@@ -300,6 +338,26 @@ export class RunsPage {
   readonly failed = computed(
     () => this.error() !== null && this.runs().length === 0
   );
+
+  /**
+   * Whether the chosen mode is the one this form cannot start.
+   *
+   * A leaflet import needs a document, so this form offers the way to the
+   * screen that takes one rather than a start button that would be refused for
+   * a body it has no field for (admin plan 0010, section 2).
+   */
+  readonly uploading = computed(() => this.mode() === 'LEAFLET_IMPORT');
+
+  /**
+   * Where a leaflet is dropped.
+   *
+   * Absolute rather than relative, for the reason the queues give: `..` needs a
+   * route above it to pop and throws outright when there is none, and this
+   * component is rendered directly in its spec.
+   */
+  uploadLink(): readonly string[] {
+    return ['/', HARVEST_SEGMENT, 'leaflets', 'upload'];
+  }
 
   readonly rows = computed(() =>
     this.runs().map((run) => ({

@@ -51,7 +51,24 @@ export class ResourceFormStore<T extends ResourceRow> {
     private readonly _descriptor: ResourceDescriptor<T>,
     private readonly _gateway: ResourceGateway<T>,
     readonly mode: FormMode,
-    private readonly _id: string | null
+    private readonly _id: string | null,
+    /**
+     * Values a create form opens with already filled in.
+     *
+     * Ignored on an edit, where the row is the starting point and a caller's
+     * opinion about a field would be an unexplained change to a saved value.
+     *
+     * It exists for one caller and the reason is worth stating. Admin plan 0010
+     * sends an operator from the leaflet upload to the price scopes create form
+     * when their chain has no `NATIONAL` scope, and the chain is the one thing
+     * that screen already knows. Making the operator pick it again is asking
+     * them to repeat a choice they made two controls ago, and getting it wrong
+     * files the scope under the wrong chain.
+     *
+     * Only fields the descriptor declares editable on a create are taken, so a
+     * query string cannot seed a value the form would not otherwise send.
+     */
+    private readonly _prefill: ResourceDraft = {}
   ) {}
 
   readonly draft = this._draft.asReadonly();
@@ -194,8 +211,24 @@ export class ResourceFormStore<T extends ResourceRow> {
   }
 
   private _reset(row: T | null): void {
-    const draft = draftFor(this._descriptor, row, this.mode);
+    const draft = { ...draftFor(this._descriptor, row, this.mode) };
+
+    if (this.mode === 'create') {
+      for (const [name, value] of Object.entries(this._prefill)) {
+        // Only over a field this form would have drawn anyway. A name the
+        // descriptor does not declare editable on a create is left out rather
+        // than added, so the caller cannot widen what the form submits.
+        if (name in draft) {
+          draft[name] = value;
+        }
+      }
+    }
+
     this._draft.set(draft);
+    // The prefill is the baseline as well as the value, so a form opened with
+    // one and left alone is clean: the operator typed nothing, and being asked
+    // whether they want to discard a value they never entered would teach them
+    // to click through that question.
     this._original.set(draft);
     this._row.set(row);
     this._touched.set(new Set());

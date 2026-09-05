@@ -16,6 +16,23 @@ export interface ShellLink {
   readonly path: string;
   /** A translation key. */
   readonly label: string;
+  /**
+   * How much work is waiting behind this link, when it is the sort of screen
+   * that has an answer to that.
+   *
+   * A function rather than a number, so the badge follows the count instead of
+   * whatever it was when the link list was built. It is read inside the
+   * template, so a signal read here registers as a dependency and the badge
+   * updates with no further wiring.
+   *
+   * **`null` is not zero**, even though both draw nothing. A queue that has not
+   * been read yet, or that is per chain with no chain chosen, has no count at
+   * all, and something that read it and found nothing has a count of none; the
+   * badge is silent either way, because a drained queue does not need a `0`
+   * beside its name. The difference is on the row rather than in the chrome
+   * (admin plan 0010, section 4).
+   */
+  badge?(): number | null;
 }
 
 /**
@@ -79,6 +96,15 @@ export interface ShellLink {
                   routerLinkActive="current"
                 >
                   {{ link.label | rokuT }}
+                  @if (link.badge?.(); as waiting) {
+                    <span
+                      [attr.aria-label]="
+                        'shell.waiting' | rokuT: { count: waiting }
+                      "
+                      class="badge"
+                      >{{ waiting }}</span
+                    >
+                  }
                 </a>
               </li>
             }
@@ -136,13 +162,24 @@ export interface ShellLink {
     }
 
     nav a {
-      display: block;
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
       min-block-size: 2.75rem;
       padding: var(--admin-space-2) var(--admin-space-3);
       border-radius: var(--admin-radius);
       font-weight: 600;
       text-decoration: none;
       color: var(--admin-ink-muted);
+    }
+
+    nav .badge {
+      padding: 0 var(--admin-space-2);
+      border-radius: 999px;
+      background: var(--admin-accent);
+      font-size: 0.75rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--admin-accent-ink);
     }
 
     nav a.current {

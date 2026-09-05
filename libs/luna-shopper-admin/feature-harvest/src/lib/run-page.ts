@@ -8,12 +8,18 @@ import {
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { RunWatches } from '@portfolio/luna-shopper-admin/data-access';
-import { failureBlockReason } from '@portfolio/luna-shopper-admin/models';
+import {
+  failureBlockReason,
+  isLeafletRun,
+  queuedByRun,
+  runWarningRows,
+} from '@portfolio/luna-shopper-admin/models';
 import {
   HarvestNotice,
   RunProgressView,
 } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
+import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
 
 /**
@@ -85,6 +91,48 @@ import { HarvestShell } from './harvest-shell';
           }
         }
       </dl>
+
+      <!-- The leaflet half (admin plan 0010, section 5). Additive, and drawn
+           only for a leaflet import: a crawl's warnings list is empty, so
+           without the guard every catalog run would carry an empty table. -->
+      @if (leaflet()) {
+        @if (queueLink(); as link) {
+          <p class="queued">
+            <a [queryParams]="link.params" [routerLink]="link.path">{{
+              'harvest.run.queue.open' | rokuT
+            }}</a>
+            <span class="count">{{
+              'harvest.run.queue.count' | rokuT: { count: queued() }
+            }}</span>
+          </p>
+        }
+
+        @if (warnings().length > 0) {
+          <section class="warnings">
+            <h2>{{ 'harvest.run.warnings.heading' | rokuT }}</h2>
+            <p class="note">{{ 'harvest.run.warnings.lead' | rokuT }}</p>
+            <ul>
+              @for (warning of warnings(); track warning.key) {
+                <li>
+                  <span class="code">{{
+                    'harvest.warning.' + warning.code | rokuT
+                  }}</span>
+                  @if (warning.offerId !== '') {
+                    <span class="offer">{{ warning.offerId }}</span>
+                  }
+                  @if (warning.page !== '') {
+                    <span class="page">{{ warning.page }}</span>
+                  }
+                  @if (warning.name !== '') {
+                    <strong>{{ warning.name }}</strong>
+                  }
+                  <span class="message">{{ warning.message }}</span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+      }
 
       @if (watch.canAbort()) {
         <button (click)="watch.abort()" class="danger" type="button">
@@ -172,6 +220,72 @@ import { HarvestShell } from './harvest-shell';
       border-color: var(--admin-danger);
       color: var(--admin-danger-ink);
     }
+
+    /* The leaflet half (admin plan 0010, section 5). */
+    .queued {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      align-items: baseline;
+    }
+
+    .queued a {
+      color: var(--admin-accent);
+    }
+
+    .count {
+      font-variant-numeric: tabular-nums;
+      color: var(--admin-ink-muted);
+    }
+
+    .warnings {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      inline-size: 100%;
+    }
+
+    .warnings h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .warnings ul {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+      list-style: none;
+    }
+
+    .warnings li {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2) var(--admin-space-3);
+      align-items: baseline;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+    }
+
+    .code {
+      padding: 0 var(--admin-space-2);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface);
+      font-size: 0.75rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .offer,
+    .page,
+    .message {
+      color: var(--admin-ink-muted);
+    }
+
+    .offer {
+      font-family: ui-monospace, 'SFMono-Regular', 'Consolas', monospace;
+      font-size: 0.8125rem;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -193,6 +307,44 @@ export class RunPage {
 
     const reason = failureBlockReason(run);
     return reason === null ? null : `harvest.blocked.${reason}`;
+  });
+
+  /**
+   * Whether this run read a document (admin plan 0010, section 5).
+   *
+   * Everything below is drawn on that answer alone. The counters keep their own
+   * labels either way, with `skipped` now among them, because a counter that
+   * appeared and disappeared per mode would be worse than one that reads zero.
+   */
+  readonly leaflet = computed(() => isLeafletRun(this.watch.run()));
+
+  /** Offer id, code and message, for what the import dropped and why. */
+  readonly warnings = computed(() => runWarningRows(this.watch.run()));
+
+  /** How many offers this run put in front of a person. */
+  readonly queued = computed(() => queuedByRun(this.watch.run()));
+
+  /**
+   * The queue, opened on this run's chain.
+   *
+   * The chain rides in the query string, which is what the queue reads to open
+   * itself rather than asking again. An operator arriving from a run already
+   * chose that chain when they uploaded the leaflet, and making them pick it a
+   * second time between the run and its own queue is asking them to remember
+   * something the URL already knows.
+   *
+   * `null` for a run with no chain, which a leaflet import never is: the spawn
+   * refuses one without a `supermarketId`. The guard is here because a link
+   * with a hole in its query string is worse than no link.
+   */
+  readonly queueLink = computed(() => {
+    const run = this.watch.run();
+    return run === null || run.supermarketId === null
+      ? null
+      : {
+          path: ['/', HARVEST_SEGMENT, 'leaflets', 'queue'],
+          params: { supermarketId: run.supermarketId },
+        };
   });
 
   readonly facts = computed(() => {
