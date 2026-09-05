@@ -1,4 +1,4 @@
-import { asInstant, toAdminSession } from './admin-session';
+import { asInstant, supersedes, toAdminSession } from './admin-session';
 
 /**
  * The mapper standing between the gateway's login response and everything that
@@ -93,4 +93,72 @@ describe('asInstant', () => {
       expect(asInstant(value)).toBeNull();
     }
   );
+});
+
+/**
+ * Which session wins when two tabs hold one (plan 0013, section 3).
+ *
+ * The rule is asked on every `storage` event, so its commonest answer is `false`:
+ * a tab is offered the token it already holds every time it reads storage during
+ * its own renewal.
+ */
+describe('supersedes', () => {
+  const held = {
+    adminId: 'adm_1',
+    username: 'ops',
+    displayName: 'Operations',
+    accessToken: 'held',
+    expiresAt: new Date('2026-09-05T12:00:00.000Z'),
+    receivedAt: new Date('2026-09-05T11:45:00.000Z'),
+  };
+
+  it('takes anything when nothing is held', () => {
+    expect(supersedes(held, null)).toBe(true);
+  });
+
+  it('takes a token that lasts longer', () => {
+    const renewed = {
+      ...held,
+      accessToken: 'renewed',
+      expiresAt: new Date('2026-09-05T12:15:00.000Z'),
+    };
+
+    expect(supersedes(renewed, held)).toBe(true);
+  });
+
+  it('refuses the token it already holds', () => {
+    expect(supersedes({ ...held }, held)).toBe(false);
+  });
+
+  /**
+   * The case the rule exists for. The browser says nothing about the order two
+   * tabs' writes landed in, and taking the older token would replace a live
+   * session with one closer to expiry.
+   */
+  it('refuses a token that expires sooner', () => {
+    const older = {
+      ...held,
+      accessToken: 'older',
+      expiresAt: new Date('2026-09-05T11:59:00.000Z'),
+    };
+
+    expect(supersedes(older, held)).toBe(false);
+  });
+
+  /**
+   * Somebody signed out and signed in as somebody else. Every tab takes it,
+   * whatever the expiries say: the alternative is a tab going on making requests
+   * as the operator who left.
+   */
+  it('takes a different operator, even with less time left', () => {
+    const other = {
+      ...held,
+      adminId: 'adm_2',
+      username: 'other',
+      accessToken: 'other',
+      expiresAt: new Date('2026-09-05T11:59:00.000Z'),
+    };
+
+    expect(supersedes(other, held)).toBe(true);
+  });
 });

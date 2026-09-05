@@ -1,10 +1,12 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import type {
-  AdminIdentity,
-  AdminSession,
-  SignInFailure,
+import {
+  supersedes,
+  type AdminIdentity,
+  type AdminSession,
+  type SignInFailure,
 } from '@portfolio/luna-shopper-admin/models';
 import { toSignInFailure } from '../gateway-error';
+import { withRenewalLock } from './session-renewal-lock';
 import { SESSION_SERVICE } from './session-service';
 import { SessionStorage } from './session-storage';
 
@@ -16,10 +18,10 @@ import { SessionStorage } from './session-storage';
  * route guard for whether there is one at all, and from `0004` the chrome for
  * who is signed in. Nothing else holds a copy, so signing out is one write.
  *
- * The token is mirrored into `sessionStorage` by {@link SessionStorage} rather
- * than kept only in memory, which is a change from the plan as written: a
- * reload keeps the session, and closing the browser still ends it. See that
- * class for why, and for the tab scoped limit that comes with it.
+ * The token is mirrored into `localStorage` by {@link SessionStorage} rather
+ * than kept only in memory, which is a change from the plan as written: a reload
+ * keeps the session, and so does a new tab (plan 0013). See that class for why,
+ * and for what the second amendment cost.
  */
 @Injectable()
 export class SessionStore {
@@ -92,15 +94,16 @@ export class SessionStore {
   }
 
   /**
-   * Renew the held token, once, however many callers ask (plan 0003,
-   * section 4).
+   * Renew the held token, once, however many callers ask (plan 0003, section 4)
+   * and however many tabs are open (plan 0013, section 4).
    *
-   * **Single-flight.** The keepalive timer and a 401 retry will want to refresh
-   * at the same moment, and so will several 401s from requests that were in
-   * flight together. One call is made and everybody awaits the same promise.
-   * With no rotating refresh token the duplicate calls would not invalidate each
-   * other, but they would still be several requests and several interleaved
-   * writes of a token, and preventing that is three lines.
+   * **Single-flight, twice over.** Within a tab, the keepalive timer and a 401
+   * retry will want to refresh at the same moment, and so will several 401s from
+   * requests that were in flight together: one call is made and everybody awaits
+   * the same promise. Between tabs, every tab's timer names the same instant
+   * because every tab computed it from the same token, so they fire together by
+   * construction: {@link withRenewalLock} serializes them and the check inside it
+   * means the ones that lose the race make no request at all.
    *
    * Answers `true` when the session was renewed and `false` for every way of
    * not being, and it **never signs out on a failure**. A refusal is the caller's
@@ -115,6 +118,35 @@ export class SessionStore {
     return this._refreshing;
   }
 
+  /**
+   * Take a session another tab wrote (plan 0013, section 3).
+   *
+   * Storage is **not** written back. The tab that produced this session already
+   * wrote it, and writing the same value again would be a second `storage` event
+   * for every other tab to react to.
+   *
+   * Answers whether the session was taken, so the caller knows whether anything
+   * changed. {@link supersedes} is what decides, and its usual answer is `false`:
+   * a tab is offered the token it already holds every time it reads storage
+   * during its own renewal.
+   */
+  adopt(session: AdminSession): boolean {
+    if (!supersedes(session, this._session())) {
+      return false;
+    }
+
+    this._session.set(session);
+    // Somebody the chrome is not already naming, which is a different operator
+    // or an identity read that never answered. Either way the read is one
+    // request this tab has to make for itself, and the ordinary case, a renewal
+    // by another tab for the operator already shown, makes none.
+    if (session.adminId !== this._identity()?.adminId) {
+      this._identity.set(null);
+      void this.loadIdentity();
+    }
+    return true;
+  }
+
   private async renew(): Promise<boolean> {
     // Nothing to renew, and asking would send an unauthenticated request that
     // fails in a way nothing explains.
@@ -122,20 +154,31 @@ export class SessionStore {
       return false;
     }
 
-    try {
-      const session = await this._service.refresh();
-      // Checked again: a sign out, or an abandoned overlay, may have run while
-      // this was in flight, and writing a token onto a cleared session would
-      // sign an operator back in after they asked to leave.
-      if (!this.signedIn()) {
+    return withRenewalLock(async () => {
+      // The whole point of the lock. Another tab may have renewed while this one
+      // waited for it, in which case the work is done and the answer is sitting
+      // in storage: adopting it is a renewal that cost no request. Without this
+      // check the lock would only make the duplicate requests orderly.
+      const shared = this._storage.read();
+      if (shared !== null && this.adopt(shared)) {
+        return true;
+      }
+
+      try {
+        const session = await this._service.refresh();
+        // Checked again: a sign out, or an abandoned overlay, may have run while
+        // this was in flight, and writing a token onto a cleared session would
+        // sign an operator back in after they asked to leave.
+        if (!this.signedIn()) {
+          return false;
+        }
+        this._session.set(session);
+        this._storage.write(session);
+        return true;
+      } catch {
         return false;
       }
-      this._session.set(session);
-      this._storage.write(session);
-      return true;
-    } catch {
-      return false;
-    }
+    });
   }
 
   /**
@@ -144,6 +187,11 @@ export class SessionStore {
    * The only way out of a session in this plan, and it is a local act: nothing
    * on the server ends an admin session, so there is no request to make. It is
    * what a 401 does (section 4) and what `0004`'s sign out control will call.
+   *
+   * Clearing storage is what ends the session in **every** tab (plan 0013,
+   * section 5). One shared token means one sign out: a tab left open elsewhere
+   * that kept its own copy would go on making requests as an operator who
+   * believes they left.
    */
   signOut(): void {
     this._session.set(null);

@@ -30,8 +30,9 @@ import { signInMessage } from './sign-in-copy';
  *
  * **No "remember me" either.** The session is one short lived token with no
  * refresh token behind it, so a checkbox promising persistence would be lying.
- * What persistence there is, the token surviving a reload in `sessionStorage`,
- * is not the operator's choice to make and is not presented as one.
+ * What persistence there is, the token surviving a reload and reaching the other
+ * tabs through `localStorage` (plan 0013), is not the operator's choice to make
+ * and is not presented as one.
  *
  * The environment badge is on this screen and not only behind it, which is the
  * point of `0001`'s unauthenticated read: an operator should know which database

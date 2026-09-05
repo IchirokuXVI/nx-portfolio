@@ -95,6 +95,39 @@ export function toAdminSession(
   };
 }
 
+/**
+ * Whether a session that arrived from another tab replaces the one held here
+ * (plan 0013, section 3).
+ *
+ * Every tab of this app shares one token, so a tab is constantly offered a
+ * session it may already have, and occasionally offered one older than what it
+ * holds: the browser delivers a `storage` event per tab and says nothing about
+ * the order two writes landed in. Both cases answer `false`, and the second is
+ * the one that matters. Adopting an older token would replace a live session
+ * with one closer to expiry and start the whole app renewing against it.
+ *
+ * A different operator is the exception, and it is checked first. Signing out
+ * and signing in as somebody else produces a session that is a different admin's
+ * and every other tab must take it, whatever the two expiries say, because the
+ * alternative is a tab that keeps making requests as the operator who left.
+ */
+export function supersedes(
+  incoming: AdminSession,
+  held: AdminSession | null
+): boolean {
+  if (held === null || incoming.adminId !== held.adminId) {
+    return true;
+  }
+
+  // The same token, offered back. Not an error and not worth a signal write:
+  // this is what a tab sees when it reads storage during its own renewal.
+  if (incoming.accessToken === held.accessToken) {
+    return false;
+  }
+
+  return incoming.expiresAt.getTime() > held.expiresAt.getTime();
+}
+
 /** An ISO instant, or `null` for anything that is not one. */
 export function asInstant(value: unknown): Date | null {
   if (typeof value !== 'string') {

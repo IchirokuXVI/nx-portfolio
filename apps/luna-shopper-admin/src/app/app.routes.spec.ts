@@ -89,8 +89,8 @@ async function boot(signedIn: boolean) {
 }
 
 describe('appRoutes', () => {
-  beforeEach(() => sessionStorage.clear());
-  afterEach(() => sessionStorage.clear());
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
 
   it('sends an operator with no session to the login screen', async () => {
     const { router } = await boot(false);
