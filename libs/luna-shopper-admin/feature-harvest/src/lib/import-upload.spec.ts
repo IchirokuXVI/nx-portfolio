@@ -5,6 +5,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
+  GatewayError,
   HARVEST_SERVICE,
   RESOURCE_GATEWAYS,
   ServerReachability,
@@ -72,12 +73,18 @@ function dropped(doc: unknown): Event {
   } as unknown as Event;
 }
 
+/** What the next import is answered with, when it is not answered with a run. */
+let refusal: unknown = null;
+
 async function render() {
   const imported: unknown[] = [];
 
   const service = {
     importDocument: async (input: unknown) => {
       imported.push(input);
+      if (refusal !== null) {
+        throw refusal;
+      }
       return { id: 'run-9' };
     },
   } as unknown as HarvestServiceI;
@@ -138,6 +145,10 @@ async function render() {
 
 const text = (fixture: ComponentFixture<ImportUploadPage>): string =>
   fixture.nativeElement.textContent;
+
+beforeEach(() => {
+  refusal = null;
+});
 
 describe('the import, reading a file', () => {
   it('refuses a file that is not JSON, in the browser', async () => {
@@ -402,5 +413,55 @@ describe('the import, once it has started', () => {
     expect(page.queueLink()).toEqual(['/', 'harvest', 'entries']);
     expect(page.queueParams()).toEqual({ supermarketId: CHAIN });
     expect(text(fixture)).toContain('harvest.imports.openQueue');
+  });
+});
+
+/**
+ * The refusal an operator in a cluster actually meets (backend plan 0086,
+ * section 6.2).
+ *
+ * Both clusters run the harvester with `HARVEST_ENABLED` false, and an import is
+ * the one run an operator there has any reason to start. So the 501 that answers
+ * it is an ordinary state of this screen and gets the switch's own explanation,
+ * not the app's general "something went wrong".
+ */
+describe('the import, refused by the deployment', () => {
+  const ready = async () => {
+    const rendered = await render();
+    await rendered.page.chooseFile(dropped(document({ hints: undefined })));
+    rendered.page.supermarketId.set(CHAIN);
+    rendered.page.priceScopeId.set(SCOPE);
+    rendered.page.sourceKind.set('OFFICIAL_LEAFLET');
+    return rendered;
+  };
+
+  it('names the switch that stopped it', async () => {
+    refusal = new GatewayError({
+      code: 'not_configured',
+      status: 501,
+      correlationId: '',
+      detail: 'Harvesting is disabled on this deployment.',
+    });
+
+    const { fixture, page } = await ready();
+    await page.submit();
+    fixture.detectChanges();
+
+    expect(page.errorKey()).toBe('harvest.blocked.service-off');
+    expect(page.started()).toBe('');
+    expect(text(fixture)).toContain('harvest.blocked.service-off');
+  });
+
+  it('falls through to the general vocabulary for anything else', async () => {
+    refusal = new GatewayError({
+      code: 'internal',
+      status: 500,
+      correlationId: '',
+    });
+
+    const { page } = await ready();
+    await page.submit();
+
+    expect(page.errorKey()).toBe('resource.error.unknown');
   });
 });

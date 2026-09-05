@@ -27,6 +27,7 @@ import {
   importConflict,
   OFFICIAL_SOURCE_KINDS,
   parseHarvestDocument,
+  spawnBlockReason,
   type HarvestDocumentRead,
   type HarvestDocumentRejection,
   type HintResult,
@@ -646,14 +647,24 @@ export class ImportUploadPage {
    * A failure this screen has no better sentence for.
    *
    * Not a 400, which is drawn as rows, and not a 409, which is drawn with a
-   * link. Everything else falls through to the app's general vocabulary.
+   * link. A refusal that names a switch is drawn as that switch's own
+   * explanation, which the runs screen already does and this one has to: the
+   * arrangement backend plan 0086 exists for is a cluster with `HARVEST_ENABLED`
+   * false, where an import is the one thing an operator will try and where
+   * `not_configured` is the ordinary answer. Everything else falls through to
+   * the app's general vocabulary, which for a 501 would say only that something
+   * went wrong.
    */
   readonly errorKey = computed(() => {
     const error = this.error();
     if (error === null || error.status === 400 || error.status === 409) {
       return null;
     }
-    return gatewayErrorKey(error);
+
+    const reason = spawnBlockReason(error);
+    return reason === null
+      ? gatewayErrorKey(error)
+      : `harvest.blocked.${reason}`;
   });
 
   /**
@@ -871,7 +882,11 @@ export class ImportUploadPage {
       this.shell.observeReachable();
       this.started.set(run.id);
     } catch (error) {
-      this.error.set(toGatewayError(error));
+      const failure = toGatewayError(error);
+      this.error.set(failure);
+      // The switch panel on the runs screen reads this, so a refusal seen here
+      // explains the empty runs list over there rather than being learned twice.
+      this.shell.observeSpawnRefusal(spawnBlockReason(failure));
       this.shell.observeFailure();
     } finally {
       this.importing.set(false);
