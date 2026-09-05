@@ -22,7 +22,7 @@ machine that is allowed to crawl.
 Depends on `0080` for the price rows a run writes, `0082` for the revert it has to keep working,
 and `0085` for the key a nameless product already has. It replaces `0081`'s document and moves
 `0081`'s three import rules out of the harvester, stated in section 6.
-Admin plan `0012` draws the one queue and the import.
+Admin plan `0014` draws the one queue and the import.
 
 ## 1. What the two runs write today
 
@@ -635,7 +635,7 @@ green. Build, not only test: the backend services type check in the build and no
 - It does not decide which of a leaflet tile's numbers is the price. That was `0081` section 6,
   and it is the producer's now (6.1). The extractor's prompt change is part of this build; any
   rule about promotions a future chain prints is written there, never here.
-- It does not draw the queue, the import or the export button. Admin plan `0012`.
+- It does not draw the queue, the import or the export button. Admin plan `0014`.
 - It does not build the shopper's per item refresh. Backlog `0006` holds it, restated against
   this plan, and it stays parked until Redis.
 - It does not import till receipts. Backlog `0008` section 6 wanted a `kind` column on the alias
