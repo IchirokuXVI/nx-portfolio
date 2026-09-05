@@ -252,10 +252,16 @@ export class DezaCatalogRunner implements CatalogRunner {
       observations,
     });
 
+    // The row's own `itemId`, not the outcome's. The outcome answers an item
+    // only for an `ACTIVE` row, because that is the rule for writing a **price**;
+    // the site prints none, and availability is what this run has to say. A
+    // fuzzy proposal's item is what plan 0085 wrote here and plan 0086 leaves
+    // unchanged, and with no EAN on this source an `ACTIVE` row would only ever
+    // be one a person accepted, which would silence the crawl entirely.
     const itemIdByKey = new Map<string, string>();
     for (const outcome of outcomes) {
-      if (outcome.itemId) {
-        itemIdByKey.set(outcome.entry.externalId, outcome.itemId);
+      if (outcome.entry.itemId) {
+        itemIdByKey.set(outcome.entry.externalId, outcome.entry.itemId);
       }
     }
     return itemIdByKey;

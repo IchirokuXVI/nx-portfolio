@@ -1,12 +1,13 @@
 import type { ConfigService } from '@nestjs/config';
 import {
   ItemSourceMatch,
+  SourceEntryStatus,
   SourceLocationStatus,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
 import type {
-  ItemSourceRef,
   SourceCatalogEntry,
+  SourceEntryPrice,
   SourceLocation,
   SupermarketSource,
 } from '../entities';
@@ -14,6 +15,7 @@ import type { CatalogClient } from './catalog-client.service';
 import { DezaCatalogRunner, entryKey } from './deza-catalog.runner';
 import { startFakeListing, type FakeListing } from './deza-listing.fake';
 import type { RunContext } from './run-context';
+import { SourceIngest } from './source-ingest';
 import type { SourceLocationService } from './source-location.service';
 
 const CHAIN = '11111111-1111-4111-8111-111111111111';
@@ -48,7 +50,9 @@ interface Built {
   catalog: {
     searchItems: jest.Mock;
     setLocationAvailability: jest.Mock;
+    addPrices: jest.Mock;
   };
+  priceUpsert: jest.Mock;
   observed: jest.Mock;
   report: Record<string, unknown>;
 }
@@ -56,10 +60,11 @@ interface Built {
 function build(listing: FakeListing, shops: Partial<SourceLocation>[]): Built {
   const saved: SourceCatalogEntry[] = [];
   const entries = {
-    findOne: jest.fn(async ({ where }: { where: { externalId: string } }) =>
-      saved.find((row) => row.externalId === where.externalId)
-    ),
-    create: jest.fn((row: SourceCatalogEntry) => row),
+    find: jest.fn(async () => [...saved]),
+    create: jest.fn((row: SourceCatalogEntry) => ({
+      id: `entry-${saved.length + 1}`,
+      ...row,
+    })),
     save: jest.fn(async (row: SourceCatalogEntry) => {
       const held = saved.find((each) => each.externalId === row.externalId);
       if (held) {
@@ -71,11 +76,11 @@ function build(listing: FakeListing, shops: Partial<SourceLocation>[]): Built {
     }),
   } as unknown as Repository<SourceCatalogEntry>;
 
-  const refs = {
-    find: jest.fn(async () => []),
-    create: jest.fn((row: ItemSourceRef) => row),
-    save: jest.fn(async (row: ItemSourceRef) => row),
-  } as unknown as Repository<ItemSourceRef>;
+  // A crawl states no price, so nothing may reach this repository at all.
+  const priceUpsert = jest.fn(async () => undefined);
+  const prices = {
+    upsert: priceUpsert,
+  } as unknown as Repository<SourceEntryPrice>;
 
   const catalog = {
     // One catalog item whose Spanish name matches the first product exactly, so
@@ -97,6 +102,7 @@ function build(listing: FakeListing, shops: Partial<SourceLocation>[]): Built {
       skipped: 0,
       conflicts: [],
     })),
+    addPrices: jest.fn(async () => ({ inserted: 0, confirmed: 0 })),
   };
 
   const observed = jest.fn(async () => shops as SourceLocation[]);
@@ -114,9 +120,13 @@ function build(listing: FakeListing, shops: Partial<SourceLocation>[]): Built {
     }),
   } as unknown as RunContext;
 
-  const runner = new DezaCatalogRunner(
+  const ingest = new SourceIngest(
     entries,
-    refs,
+    prices,
+    catalog as unknown as CatalogClient
+  );
+  const runner = new DezaCatalogRunner(
+    ingest,
     catalog as unknown as CatalogClient,
     { observe: observed } as unknown as SourceLocationService,
     {
@@ -124,7 +134,7 @@ function build(listing: FakeListing, shops: Partial<SourceLocation>[]): Built {
     } as unknown as ConfigService
   );
 
-  return { runner, context, saved, catalog, observed, report };
+  return { runner, context, saved, catalog, observed, report, priceUpsert };
 }
 
 const source = (
@@ -253,7 +263,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         shops: ['T1'],
       },
     ]);
-    const { runner, context, saved } = build(listing, []);
+    const { runner, context, saved, catalog, priceUpsert } = build(listing, []);
 
     await runner.run(
       context,
@@ -261,13 +271,16 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       source({ baseUrl: listing.url })
     );
 
+    // The price columns left the row in plan 0086, so "no price" is now two
+    // absences: no `source_entry_prices` row for any scope, and nothing sent to
+    // catalog.
+    expect(priceUpsert).not.toHaveBeenCalled();
+    expect(catalog.addPrices).not.toHaveBeenCalled();
     expect(saved[0]).toMatchObject({
-      price: null,
-      unitPrice: null,
-      unitPriceLabel: null,
       // No EAN either, so the EAN rung of the ladder never fires and every
       // automatic match here is a candidate.
       ean: null,
+      status: SourceEntryStatus.UNRESOLVED,
     });
   });
 

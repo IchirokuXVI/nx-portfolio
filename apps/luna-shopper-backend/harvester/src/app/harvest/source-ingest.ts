@@ -7,6 +7,7 @@ import {
   type ItemPriceBatchEntry,
 } from '@portfolio/luna-shopper/contracts';
 import { Repository } from 'typeorm';
+import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import {
@@ -333,8 +334,11 @@ export class SourceIngest {
     if (!priceScopeId || observed.length === 0) {
       return;
     }
-    const rows = observed.map(({ price, observation, entry }) =>
-      this.prices.create({
+    // Plain values rather than entity instances: an upsert takes the columns
+    // it writes, and a created entity carries the `entry` relation too, which
+    // has no place in an `INSERT ... ON CONFLICT`.
+    const rows = observed.map(
+      ({ price, observation, entry }) => ({
         entryId: entry.id,
         priceScopeId,
         price: price.price,
@@ -349,9 +353,18 @@ export class SourceIngest {
       })
     );
     for (let i = 0; i < rows.length; i += PRICE_ROW_CHUNK) {
-      await this.prices.upsert(rows.slice(i, i + PRICE_ROW_CHUNK), {
-        conflictPaths: ['entryId', 'priceScopeId'],
-      });
+      // The cast is `details`, and only `details`. TypeORM maps a partial entity
+      // field by field into the shape its query builder accepts, and a free
+      // `jsonb` bag has no such shape: `Record<string, unknown>` comes out as a
+      // deep partial of itself, which nothing satisfies. Every other column here
+      // is checked.
+      await this.prices.upsert(
+        rows.slice(
+          i,
+          i + PRICE_ROW_CHUNK
+        ) as QueryDeepPartialEntity<SourceEntryPrice>[],
+        { conflictPaths: ['entryId', 'priceScopeId'] }
+      );
     }
   }
 
