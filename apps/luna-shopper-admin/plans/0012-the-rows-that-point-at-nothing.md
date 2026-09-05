@@ -1,3 +1,5 @@
+> **PR:** [#228](https://github.com/IchirokuXVI/nx-portfolio/pull/228)
+
 # 0012 The rows that point at nothing
 
 Every list in the back office narrows by a reference picker: products by their group, zones by a
