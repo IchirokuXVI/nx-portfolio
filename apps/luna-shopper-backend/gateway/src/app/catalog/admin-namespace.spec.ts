@@ -5,7 +5,7 @@ import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   AdminHarvestEntriesController,
-  AdminHarvestItemRefsController,
+  AdminHarvestImportsController,
   AdminHarvestPlacesController,
   AdminHarvestRunsController,
   AdminHarvestSourcesController,
@@ -168,7 +168,8 @@ const ADMIN_CONTROLLERS = [
   AdminHarvestRunsController,
   AdminHarvestPlacesController,
   AdminHarvestEntriesController,
-  AdminHarvestItemRefsController,
+  // The one upload route, which replaced the leaflet one (plan 0086, D6).
+  AdminHarvestImportsController,
   AdminHarvestSourcesController,
 ];
 

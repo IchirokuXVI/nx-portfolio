@@ -21,6 +21,7 @@ import {
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
+  harvestDocument1Schema,
   validateHarvestDocument,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlacePage,
@@ -41,7 +42,13 @@ import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
 import { ActingAdmin } from '../admin/current-admin.decorator';
-import { ApiContractResponse, ApiProblemResponses } from '../docs';
+import {
+  ApiContractResponse,
+  ApiProblemResponses,
+  componentRef,
+  registerComponent,
+  toOpenApiSchema,
+} from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
   AcceptSourceEntryDto,
@@ -58,6 +65,20 @@ import {
   SpawnHarvestRunDto,
   UpsertSupermarketSourceDto,
 } from './harvest.dto';
+
+/**
+ * The file schema, published as a component so the export route can point at it.
+ *
+ * It is registered rather than hoisted by id, because the id is a URL and the
+ * component name derived from one would be unreadable in the Swagger list and in
+ * the generated wire types. What is published is the schema itself, converted
+ * once: the documentation stays a projection of the contract rather than a copy
+ * of it, which is plan 0019 section 2's whole rule.
+ */
+const HARVEST_DOCUMENT_COMPONENT = registerComponent(
+  'harvest.HarvestDocument',
+  toOpenApiSchema(harvestDocument1Schema as unknown as Record<string, unknown>)
+);
 
 /**
  * The harvester's REST surface (plan 0038, section 7), under
@@ -202,7 +223,7 @@ export class AdminHarvestRunsController {
   @ApiOkResponse({
     description:
       'The run as a HarvestDocument, offered as a download. Every row the run was the last to observe, with that run’s price for that run’s scope and none of the decisions a person made, which mean nothing on another cluster.',
-    schema: { type: 'object', additionalProperties: true },
+    schema: componentRef(HARVEST_DOCUMENT_COMPONENT),
   })
   @ApiProblemResponses({ body: true })
   async exportRun(

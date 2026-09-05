@@ -25,5 +25,6 @@ export {
   hoistContractSchema,
   hoistPlatformStats,
   openApiComponents,
+  registerComponent,
   toOpenApiSchema,
 } from './openapi-schema';

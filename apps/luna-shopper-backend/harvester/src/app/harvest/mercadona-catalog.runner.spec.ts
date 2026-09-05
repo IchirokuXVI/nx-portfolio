@@ -3,9 +3,6 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
 } from '@portfolio/luna-shopper/contracts';
-import categoryExpanded from '../../../../../../libs/luna-shopper/mercadona/src/lib/__fixtures__/category-expanded.json';
-import categoriesTree from '../../../../../../libs/luna-shopper/mercadona/src/lib/__fixtures__/categories-tree.json';
-import productDetail from '../../../../../../libs/luna-shopper/mercadona/src/lib/__fixtures__/product-detail-es.json';
 import type { Repository } from 'typeorm';
 import type {
   SourceCatalogEntry,
@@ -18,13 +15,19 @@ import type { RunContext } from './run-context';
 import { SourceIngest } from './source-ingest';
 
 /**
- * The walk, end to end, against the recorded fixtures of
- * `@portfolio/luna-shopper/mercadona` and no network (plan 0086, section 5).
+ * The walk, end to end, over a stubbed `fetch` and no network (plan 0086,
+ * section 5).
  *
  * **No run here fetches anything.** A real catalog discovery is 4,383 requests
- * over eighteen minutes and is never started from a test; the client's own
- * `fetch` is stubbed with the fixtures the library records, so the tree is one
- * root of two categories and the assortment is two products.
+ * over eighteen minutes and is never started from a test; the payloads below
+ * are the shapes the source answers with, a tree of one category holding two
+ * products, so a whole walk is four requests.
+ *
+ * They are written here rather than imported from
+ * `@portfolio/luna-shopper/mercadona`'s recorded fixtures, which is what that
+ * library's own spec asserts its parsers against: a spec may not reach into
+ * another project's sources by path, and what this file is about is the
+ * runner's wiring rather than the parsing.
  *
  * What is pinned is what plan 0086 changed: the walk writes the price it
  * fetched, for the `ACTIVE` rows only, and it says what the warehouse carries.
@@ -36,23 +39,77 @@ const SCOPE = '22222222-2222-4222-8222-222222222222';
 const RUN = '33333333-3333-4333-8333-333333333333';
 const BASE = 'https://fixtures.test/api';
 
-/**
- * The products `category-expanded.json` lists, after its own repeat.
- *
- * Every category of the tree fixture answers with that one expansion, so the
- * assortment of this walk is those products and the client's own deduplication
- * is what keeps them from arriving twice. That is the point: a real walk is
- * 4,383 requests over eighteen minutes and is never started here.
- */
-const WALKED = [
-  ...new Set(
-    (
-      categoryExpanded as { categories: { products?: { id: string }[] }[] }
-    ).categories.flatMap((child) =>
-      (child.products ?? []).map((product) => product.id)
-    )
-  ),
-].sort();
+/** The assortment, which the one level 2 category below lists. */
+const WALKED = ['4241', '7012'];
+
+/** `/categories/`: one level 1 category holding one level 2 category. */
+const CATEGORY_TREE = {
+  next: null,
+  previous: null,
+  results: [
+    {
+      id: 12,
+      name: 'Aceite, especias y salsas',
+      order: 1,
+      published: true,
+      categories: [
+        { id: 112, name: 'Aceite, vinagre y sal', order: 1, published: true },
+      ],
+    },
+  ],
+};
+
+/** One product as a category listing states it: no `ean` and no `brand`. */
+function listed(id: string) {
+  return {
+    id,
+    slug: `producto-${id}`,
+    display_name: `Producto ${id}`,
+    published: true,
+    share_url: `https://fixtures.test/product/${id}`,
+    price_instructions: {
+      size_format: 'l',
+      unit_price: '8.75',
+      bulk_price: '8.75',
+      unit_size: 1,
+      reference_format: 'L',
+    },
+  };
+}
+
+/** `/categories/:id/`: the level 2 children with their products inline. */
+const CATEGORY_PRODUCTS = {
+  id: 112,
+  name: 'Aceite, vinagre y sal',
+  order: 1,
+  published: true,
+  categories: [
+    {
+      id: 113,
+      name: 'Aceite de oliva',
+      order: 1,
+      published: true,
+      products: WALKED.map(listed),
+    },
+  ],
+};
+
+/** `/products/:id/`: the detail call, the only place `ean` and `brand` exist. */
+function detailed(id: string, ean: string | null) {
+  return {
+    ...listed(id),
+    ean,
+    brand: 'Hacendado',
+    categories: [
+      {
+        id: 12,
+        name: 'Aceite, especias y salsas',
+        level: 0,
+        categories: [{ id: 112, name: 'Aceite, vinagre y sal', level: 1 }],
+      },
+    ],
+  };
+}
 
 interface Fetched {
   urls: string[];
@@ -84,17 +141,16 @@ function stubFetch(options: {
       }) as unknown as Response;
 
     if (url.startsWith(`${BASE}/categories/?`)) {
-      return answer(200, categoriesTree);
+      return answer(200, CATEGORY_TREE);
     }
     if (/\/categories\/\d+\//.test(url)) {
-      return answer(200, categoryExpanded);
+      return answer(200, CATEGORY_PRODUCTS);
     }
     const product = /\/products\/([^/]+)\//.exec(url);
     if (product) {
-      const detail = options.detailFor?.(product[1]) ?? {
-        ...productDetail,
-        id: product[1],
-      };
+      const detail =
+        options.detailFor?.(product[1]) ??
+        detailed(product[1], '8480000135636');
       return detail === null ? answer(404, null) : answer(200, detail);
     }
     throw new Error(`No fixture for ${url}`);
@@ -229,13 +285,10 @@ describe('MercadonaCatalogRunner (plan 0086)', () => {
 
   it('writes a price for the ACTIVE rows it saw and for nothing else', async () => {
     const { fetchImpl } = stubFetch({
-      detailFor: (id) => ({
-        ...productDetail,
-        id,
-        // Only the first product's EAN is one the catalog holds, so only it
-        // reaches ACTIVE through rung 2.
-        ean: id === WALKED[0] ? '8480000135636' : null,
-      }),
+      // Only the first product's EAN is one the catalog holds, so only it
+      // reaches ACTIVE through rung 2.
+      detailFor: (id) =>
+        detailed(id, id === WALKED[0] ? '8480000135636' : null),
     });
     restore = withFetch(fetchImpl);
     const { runner, context, catalog, saved } = build({

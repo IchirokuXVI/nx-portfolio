@@ -82,7 +82,10 @@ export function buildHarvestDocument(
   };
 
   document['sha256'] = digestOf(document);
-  return document as HarvestDocument;
+  // Through `unknown`, because the document is assembled as a bag so `digestOf`
+  // can read it back before the digest is part of it. The JSON schema is what
+  // actually checks the shape, on the way out of here and on the way back in.
+  return document as unknown as HarvestDocument;
 }
 
 /**

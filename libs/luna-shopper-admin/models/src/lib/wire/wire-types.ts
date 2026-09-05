@@ -9,9 +9,9 @@
 // does not contradict rule D4, is admin plan 0004, section 2.
 
 /**
- * `AcceptSourceAliasDto` in the gateway's OpenAPI document.
+ * `AcceptSourceEntryDto` in the gateway's OpenAPI document.
  */
-export type AcceptSourceAliasDto = {
+export type AcceptSourceEntryDto = {
   itemId: string;
 };
 
@@ -188,33 +188,13 @@ export type CreateItemDto = {
 };
 
 /**
- * `CreateItemFromAliasDto` in the gateway's OpenAPI document.
- */
-export type CreateItemFromAliasDto = {
-  name: LocalizedNameDto;
-  brand?: string | null;
-  ean?: string | null;
-  unitSize?: number | null;
-  category:
-    | 'PRODUCE'
-    | 'DAIRY'
-    | 'BAKERY'
-    | 'MEAT'
-    | 'SEAFOOD'
-    | 'FROZEN'
-    | 'BEVERAGES'
-    | 'SNACKS'
-    | 'PANTRY'
-    | 'HOUSEHOLD'
-    | 'PERSONAL_CARE'
-    | 'OTHER';
-  defaultUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
-};
-
-/**
  * `CreateItemFromEntryDto` in the gateway's OpenAPI document.
  */
 export type CreateItemFromEntryDto = {
+  name?: LocalizedNameDto;
+  brand?: string | null;
+  ean?: string | null;
+  unitSize?: number | null;
   category?:
     | 'PRODUCE'
     | 'DAIRY'
@@ -228,6 +208,7 @@ export type CreateItemFromEntryDto = {
     | 'HOUSEHOLD'
     | 'PERSONAL_CARE'
     | 'OTHER';
+  defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
 };
 
 /**
@@ -345,11 +326,12 @@ export type ImportDiscoveredPlaceDto = {
 };
 
 /**
- * `ImportLeafletDto` in the gateway's OpenAPI document.
+ * `ImportHarvestDocumentDto` in the gateway's OpenAPI document.
  */
-export type ImportLeafletDto = {
+export type ImportHarvestDocumentDto = {
   supermarketId: string;
   priceScopeId: string;
+  sourceKind: 'OFFICIAL_API' | 'OFFICIAL_WEB' | 'OFFICIAL_LEAFLET';
   validFrom?: string;
   validUntil?: string;
   document: {
@@ -604,15 +586,6 @@ export type SetListAccessDto = {
 };
 
 /**
- * `SetManualItemSourceRefDto` in the gateway's OpenAPI document.
- */
-export type SetManualItemSourceRefDto = {
-  itemId: string;
-  supermarketId: string;
-  externalId: string;
-};
-
-/**
  * `SetMembershipUsernameDto` in the gateway's OpenAPI document.
  */
 export type SetMembershipUsernameDto = {
@@ -693,7 +666,7 @@ export type SettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
  * `SpawnHarvestRunDto` in the gateway's OpenAPI document.
  */
 export type SpawnHarvestRunDto = {
-  mode: 'STORE_DISCOVERY' | 'CATALOG_DISCOVERY' | 'REFRESH' | 'LEAFLET_IMPORT';
+  mode: 'STORE_DISCOVERY' | 'CATALOG_DISCOVERY' | 'FILE_IMPORT';
   supermarketId?: string;
   priceScopeId?: string;
   postalCode?: string;
@@ -1810,8 +1783,7 @@ export type EnumsGenerationScope = 'ALL' | 'SELECTED';
 export type EnumsHarvestRunMode =
   | 'STORE_DISCOVERY'
   | 'CATALOG_DISCOVERY'
-  | 'REFRESH'
-  | 'LEAFLET_IMPORT';
+  | 'FILE_IMPORT';
 
 /**
  * `enums.HarvestRunStatus` in the gateway's OpenAPI document.
@@ -1833,8 +1805,6 @@ export type EnumsHarvestRunTrigger = 'MANUAL' | 'SCHEDULED' | 'SYSTEM';
  * `enums.HarvestWarningCode` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestWarningCode =
-  | 'LOYALTY_REQUIRED'
-  | 'CONDITIONAL_PRICE'
   | 'DUPLICATE_KEY'
   | 'REJECTED_ALIAS'
   | 'CANDIDATE_MATCH'
@@ -1863,19 +1833,9 @@ export type EnumsItemCategory =
  * `enums.ItemSourceMatch` in the gateway's OpenAPI document.
  */
 export type EnumsItemSourceMatch =
-  | 'EXTERNAL_ID'
   | 'EAN'
   | 'NAME_BRAND_SIZE'
   | 'NAME_SIZE'
-  | 'MANUAL';
-
-/**
- * `enums.ItemSourceRefStatus` in the gateway's OpenAPI document.
- */
-export type EnumsItemSourceRefStatus =
-  | 'ACTIVE'
-  | 'CANDIDATE'
-  | 'REJECTED'
   | 'MANUAL';
 
 /**
@@ -1964,9 +1924,9 @@ export type EnumsProfilePostalCodeSource = 'TYPED' | 'DEVICE' | 'NEARBY';
 export type EnumsSettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
 
 /**
- * `enums.SourceAliasStatus` in the gateway's OpenAPI document.
+ * `enums.SourceEntryStatus` in the gateway's OpenAPI document.
  */
-export type EnumsSourceAliasStatus =
+export type EnumsSourceEntryStatus =
   | 'ACTIVE'
   | 'CANDIDATE'
   | 'UNRESOLVED'
@@ -2383,6 +2343,71 @@ export type HarvestDiscoveredPlaceView = {
 };
 
 /**
+ * `harvest.HarvestDocument` in the gateway's OpenAPI document.
+ *
+ * A list of products as a source described them, whoever produced it (plan 0086, section 6.1).
+ */
+export type HarvestHarvestDocument = {
+  schema_version: unknown;
+  sha256: string;
+  producer?: {
+    name: string;
+    version?: string | null;
+    produced_at?: string | null;
+    run_id?: string | null;
+  } | null;
+  hints?: {
+    chain_id?: string | null;
+    price_scope_id?: string | null;
+    source_kind?: 'OFFICIAL_API' | 'OFFICIAL_WEB' | 'OFFICIAL_LEAFLET' | null;
+  } | null;
+  validity?: {
+    from: string;
+    until: string;
+  } | null;
+  products: {
+    id?: string | null;
+    external_id?: string | null;
+    name: string;
+    brand?: string | null;
+    ean?: string | null;
+    size?: {
+      label?: string | null;
+      quantity?: number | null;
+      unit?: string | null;
+    } | null;
+    price?: {
+      amount: number;
+      currency: string;
+    } | null;
+    unit_price?: {
+      amount: number;
+      label: string;
+      currency?: string | null;
+    } | null;
+    validity?: {
+      from: string;
+      until: string;
+    } | null;
+    observed_at?: string | null;
+    category_path?: string[] | null;
+    url?: string | null;
+    extra?: {
+      [key: string]: unknown;
+    } | null;
+  }[];
+  warnings?:
+    | {
+        message: string;
+        product_id?: string | null;
+        extra?: {
+          [key: string]: unknown;
+        } | null;
+      }[]
+    | null;
+};
+
+/**
  * `harvest.HarvestRunPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2442,81 +2467,6 @@ export type HarvestHarvestRunWarning = {
 };
 
 /**
- * `harvest.ItemSourceRefPage` in the gateway's OpenAPI document.
- *
- * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
- */
-export type HarvestItemSourceRefPage = {
-  items: HarvestItemSourceRefView[];
-  nextCursor: string | null;
-};
-
-/**
- * `harvest.ItemSourceRefView` in the gateway's OpenAPI document.
- */
-export type HarvestItemSourceRefView = {
-  id: string;
-  itemId: string;
-  supermarketId: string;
-  externalId: string;
-  externalUrl: string | null;
-  matchedBy: EnumsItemSourceMatch;
-  status: EnumsItemSourceRefStatus;
-  confidence: number;
-  lastResolvedAt: string | null;
-  lastSeenAt: string | null;
-};
-
-/**
- * `harvest.SourceAliasAcceptResult` in the gateway's OpenAPI document.
- */
-export type HarvestSourceAliasAcceptResult = {
-  alias: HarvestSourceAliasView;
-  pricesWritten: number;
-  item: CatalogItemView | unknown;
-};
-
-/**
- * `harvest.SourceAliasPage` in the gateway's OpenAPI document.
- *
- * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
- */
-export type HarvestSourceAliasPage = {
-  items: HarvestSourceAliasView[];
-  nextCursor: string | null;
-};
-
-/**
- * `harvest.SourceAliasView` in the gateway's OpenAPI document.
- */
-export type HarvestSourceAliasView = {
-  id: string;
-  supermarketId: string;
-  aliasKey: string;
-  printedName: string;
-  printedFormat: string | null;
-  printedBrand: string | null;
-  itemId: string | null;
-  candidateItemId: string | null;
-  candidateEntryId: string | null;
-  status: EnumsSourceAliasStatus;
-  matchedBy: EnumsItemSourceMatch;
-  confidence: number;
-  timesSeen: number;
-  firstSeenAt: string;
-  lastSeenAt: string;
-  firstRunId: string | null;
-  lastRunId: string | null;
-  offerPrice: number | null;
-  offerCurrency: string | null;
-  offerUnitPrice: number | null;
-  offerUnitPriceLabel: string | null;
-  offerPage: number | null;
-  offerRawText: string[];
-  offerConfidence: number | null;
-};
-
-/**
  * `harvest.SourceCatalogEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2533,17 +2483,57 @@ export type HarvestSourceCatalogEntryView = {
   id: string;
   supermarketId: string;
   externalId: string;
+  sourceKind: EnumsPriceSourceKind;
   name: string;
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
   sizeFormat: string | null;
-  price: number | null;
-  unitPrice: number | null;
-  unitPriceLabel: string | null;
   categoryPath: string[];
   url: string | null;
+  extra: {
+    [key: string]: unknown;
+  } | null;
+  timesSeen: number;
+  firstSeenAt: string;
   lastSeenAt: string;
+  firstRunId: string | null;
+  lastRunId: string | null;
+  itemId: string | null;
+  candidateEntryId: string | null;
+  status: EnumsSourceEntryStatus;
+  matchedBy: EnumsItemSourceMatch | unknown;
+  confidence: number;
+  decidedAt: string | null;
+  prices: HarvestSourceEntryPriceView[];
+};
+
+/**
+ * `harvest.SourceEntryAcceptResult` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceEntryAcceptResult = {
+  entry: HarvestSourceCatalogEntryView;
+  pricesWritten: number;
+  createdItem: CatalogItemView | unknown;
+};
+
+/**
+ * `harvest.SourceEntryPriceView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceEntryPriceView = {
+  id: string;
+  priceScopeId: string;
+  price: number | null;
+  currency: string;
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  details: {
+    [key: string]: unknown;
+  } | null;
+  observedAt: string;
+  runId: string | null;
 };
 
 /**

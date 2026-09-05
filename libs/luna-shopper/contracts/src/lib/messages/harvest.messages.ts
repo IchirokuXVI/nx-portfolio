@@ -17,20 +17,11 @@ import type {
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
 import type { ItemView } from './catalog.messages';
-import type { HarvestDocument } from './harvest-document.placeholder';
-
-// Re-exported so the file schema reaches the package's public surface from the
-// one place that consumes it today. It moves to `schemas/harvest-document` with
-// its JSON schema and its validator.
-export {
-  HARVEST_DOCUMENT_VERSIONS,
-  validateHarvestDocument,
-} from './harvest-document.placeholder';
-export type {
-  HarvestDocument,
-  HarvestDocumentValidationFailure,
-  HarvestDocumentValidationResult,
-} from './harvest-document.placeholder';
+// The file schema (plan 0086, section 6.1), which `schemas/index.ts` already
+// puts on the package's public surface beside its JSON schema and its
+// validator. It is imported here and not re-exported: two `export *` of one
+// name is an ambiguity TypeScript resolves by dropping the name.
+import type { HarvestDocument } from '../../schemas/harvest-document';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the

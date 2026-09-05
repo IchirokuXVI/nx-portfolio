@@ -3,7 +3,6 @@ import {
   HarvestWarningCode,
   PriceSourceKind,
   SourceEntryStatus,
-  type HarvestDocument,
   type HarvestDocumentProduct,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
