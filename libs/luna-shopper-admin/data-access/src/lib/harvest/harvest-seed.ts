@@ -21,6 +21,17 @@ const MERCADONA = '11111111-1111-4111-8111-111111111111';
 const CARREFOUR = '22222222-2222-4222-8222-222222222222';
 const DEZA = '33333333-3333-4333-8333-333333333333';
 
+/**
+ * The scopes a price belongs to, fixed so a spec can name one.
+ *
+ * A price row is keyed on (`entryId`, `priceScopeId`) since backend plan 0086
+ * section 3.2, so a seed that wanted to show two regional leaflets on one
+ * product needed two scopes to point at.
+ */
+const MERCADONA_NATIONAL = '55555555-5555-4555-8555-555555555551';
+const DEZA_NATIONAL = '55555555-5555-4555-8555-555555555552';
+const DEZA_CORDOBA = '55555555-5555-4555-8555-555555555553';
+
 const NOW = '2026-09-03T10:00:00.000Z';
 
 export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
@@ -133,12 +144,16 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     revertedPriceCount: 214,
   },
   {
-    // A finished run of a price writing mode that still stands, so the revert
-    // control on the run screen has something to appear on.
-    id: 'run-refresh-completed',
+    // A finished walk that still stands, so the revert control and the export
+    // action on the run screen both have something to appear on.
+    //
+    // It used to be a `REFRESH`, which was the mode that existed only because a
+    // walk threw its prices away. A walk writes them now (backend plan 0086), so
+    // the mode is gone and this is the walk itself.
+    id: 'run-catalog-completed',
     supermarketId: MERCADONA,
     sourceId: 'source-mercadona',
-    mode: 'REFRESH',
+    mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'COMPLETED',
     requestedAt: '2026-09-02T06:00:00.000Z',
@@ -200,8 +215,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
   },
   {
     /**
-     * A leaflet import that finished (backend plan 0081; admin plan 0010,
-     * section 5).
+     * A file import that finished (backend plan 0086, section 6; admin plan
+     * 0010, section 5).
      *
      * The run whose warnings the run screen exists to draw, and the one no
      * crawl can stand in for: it has a `documentSha256`, a `skipped` count, and
@@ -209,18 +224,17 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
      * always is, because an upload fetches nothing and a chain that publishes
      * only leaflets has no source row at all.
      *
-     * The four codes here are the four an operator has to be able to tell
-     * apart. A loyalty gated tile was dropped, a second unit tile with no
-     * single unit price was queued rather than written at a price nobody can
-     * pay for one, a string the owner already rejected was skipped without
-     * being asked again, and the extractor's own lost tile is carried through
-     * so that what the extractor lost and what the import dropped are read in
-     * one table.
+     * The loyalty and conditional price codes are gone with the rules that
+     * wrote them (backend plan 0086, section 6.1): those rules belong to the
+     * producer now, and a producer's warning arrives as text under `EXTRACTOR`.
+     * What is left is what the import itself decides, plus the producer's own
+     * lost tile, so that what the producer lost and what the import dropped are
+     * read in one table.
      */
-    id: 'run-leaflet-completed',
+    id: 'run-import-completed',
     supermarketId: DEZA,
     sourceId: null,
-    mode: 'LEAFLET_IMPORT',
+    mode: 'FILE_IMPORT',
     trigger: 'MANUAL',
     status: 'COMPLETED',
     requestedAt: '2026-09-03T07:20:00.000Z',
@@ -241,28 +255,18 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     stageLabel: null,
     warnings: [
       {
-        code: 'LOYALTY_REQUIRED',
-        offerId: 'p36-o01',
-        page: 36,
-        name: 'Champu Elvive 380 ml.',
-        message:
-          'Skipped: the price is for loyalty card holders (descuentos ifamilia).',
+        code: 'DUPLICATE_KEY',
+        offerId: 'p12-o03',
+        page: 12,
+        name: 'Leche entera Hacendado brik 1 l.',
+        message: 'Two products in this document share one key. The second won.',
       },
       {
-        code: 'CONDITIONAL_PRICE',
+        code: 'NO_MATCH',
         offerId: 'p05-o07',
         page: 5,
         name: 'Cerveza Radler Cruzcampo lata 33 cl.',
-        message:
-          'Queued: the headline price is the second unit and the tile states no single unit price.',
-      },
-      {
-        code: 'REJECTED_ALIAS',
-        offerId: 'p31-o04',
-        page: 31,
-        name: 'Lote degustacion 60 aniversario',
-        message:
-          'Skipped: this printed name was rejected on an earlier import.',
+        message: 'Queued: nothing in the catalog looked like this.',
       },
       {
         code: 'EXTRACTOR',
@@ -286,142 +290,6 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     revertedAt: null,
     revertedByUserId: null,
     revertedPriceCount: null,
-  },
-];
-
-/**
- * The printed names one chain's leaflets could not resolve (backend plan 0081,
- * sections 2 and 3; admin plan 0010, section 3).
- *
- * Every row here is a question only a person can answer, because **no automated
- * path ever binds a printed name to a product**. A fuzzy hit inserts a
- * `CANDIDATE` and writes no price; a miss inserts an `UNRESOLVED`. So the seed
- * carries one of each, which are the two shapes of the queue: a row with a
- * product to agree with, and a row with nothing to agree with at all.
- *
- * The third row is a rejection, which the queue does not show and which exists
- * so that a spec asking for `REJECTED` by name finds one. The fourth is
- * `ACTIVE`, an alias somebody has already accepted, which is what a resolved
- * name looks like once it stops being a question.
- *
- * The offer columns are the leaflet's own numbers, carried on the alias from
- * the run's stored document so the queue can show what the row was queued for
- * without re-reading a 300 KB document per row.
- */
-export const SOURCE_ALIAS_SEED: readonly Wire.HarvestSourceAliasView[] = [
-  {
-    id: 'alias-radler',
-    supermarketId: DEZA,
-    aliasKey: 'cerveza radler cruzcampo|lata 33 cl',
-    printedName: 'Cerveza Radler Cruzcampo',
-    printedFormat: 'lata 33 cl.',
-    printedBrand: 'Cruzcampo',
-    itemId: null,
-    // Nothing in the catalog looked like it, so there is nothing to agree with
-    // and the operator either finds the product or creates it.
-    candidateItemId: null,
-    candidateEntryId: null,
-    status: 'UNRESOLVED',
-    matchedBy: 'NAME_SIZE',
-    confidence: 0,
-    timesSeen: 1,
-    firstSeenAt: '2026-09-03T07:20:05.000Z',
-    lastSeenAt: '2026-09-03T07:20:05.000Z',
-    firstRunId: 'run-leaflet-completed',
-    lastRunId: 'run-leaflet-completed',
-    offerPrice: 0.79,
-    offerCurrency: 'EUR',
-    offerUnitPrice: 1.97,
-    offerUnitPriceLabel: 'l',
-    offerPage: 5,
-    offerRawText: ['-50% 2a Unidad', 'la segunda unidad le sale a: 0,39 EUR'],
-    offerConfidence: 0.97,
-  },
-  {
-    // The fuzzy rung proposed a product and stopped there, which is the rule
-    // and the reason: a bad match writes a wrong price onto a real product that
-    // people then shop on, which is worse than having no price.
-    id: 'alias-aceite',
-    supermarketId: DEZA,
-    aliasKey: 'aceite de oliva virgen serie oro coosur|garrafa 5 litros',
-    printedName: 'Aceite de Oliva Virgen Serie Oro Coosur',
-    printedFormat: 'Garrafa 5 litros',
-    printedBrand: 'Coosur',
-    itemId: null,
-    candidateItemId: 'item-milk',
-    candidateEntryId: null,
-    status: 'CANDIDATE',
-    matchedBy: 'NAME_SIZE',
-    confidence: 0.81,
-    timesSeen: 3,
-    firstSeenAt: '2026-08-14T07:00:00.000Z',
-    lastSeenAt: '2026-09-03T07:20:05.000Z',
-    firstRunId: 'run-leaflet-completed',
-    lastRunId: 'run-leaflet-completed',
-    offerPrice: 19.95,
-    offerCurrency: 'EUR',
-    offerUnitPrice: 3.99,
-    offerUnitPriceLabel: 'l',
-    offerPage: 1,
-    offerRawText: [],
-    offerConfidence: 0.97,
-  },
-  {
-    // Not a product he tracks. The row stays rather than being deleted, so the
-    // next leaflet that prints the string skips it with a warning.
-    id: 'alias-rejected',
-    supermarketId: DEZA,
-    aliasKey: 'lote degustacion 60 aniversario|',
-    printedName: 'Lote degustacion 60 aniversario',
-    printedFormat: null,
-    printedBrand: null,
-    itemId: null,
-    candidateItemId: null,
-    candidateEntryId: null,
-    status: 'REJECTED',
-    matchedBy: 'MANUAL',
-    confidence: 1,
-    timesSeen: 2,
-    firstSeenAt: '2026-08-14T07:00:00.000Z',
-    lastSeenAt: '2026-09-03T07:20:05.000Z',
-    firstRunId: 'run-leaflet-completed',
-    lastRunId: 'run-leaflet-completed',
-    offerPrice: null,
-    offerCurrency: null,
-    offerUnitPrice: null,
-    offerUnitPriceLabel: null,
-    offerPage: 31,
-    offerRawText: [],
-    offerConfidence: null,
-  },
-  {
-    // Accepted, and still carrying what the leaflet printed. Renaming the
-    // product does not stop the next leaflet resolving, which is the whole
-    // point of storing the printed name rather than the catalog's.
-    id: 'alias-leche',
-    supermarketId: DEZA,
-    aliasKey: 'leche entera hacendado|brik 1 l',
-    printedName: 'LECHE ENTERA HACENDADO',
-    printedFormat: 'brik 1 l.',
-    printedBrand: 'Hacendado',
-    itemId: 'item-milk',
-    candidateItemId: null,
-    candidateEntryId: null,
-    status: 'ACTIVE',
-    matchedBy: 'MANUAL',
-    confidence: 1,
-    timesSeen: 7,
-    firstSeenAt: '2026-06-02T07:00:00.000Z',
-    lastSeenAt: '2026-09-03T07:20:05.000Z',
-    firstRunId: 'run-leaflet-completed',
-    lastRunId: 'run-leaflet-completed',
-    offerPrice: 0.89,
-    offerCurrency: 'EUR',
-    offerUnitPrice: 0.89,
-    offerUnitPriceLabel: 'l',
-    offerPage: 31,
-    offerRawText: [],
-    offerConfidence: 0.99,
   },
 ];
 
@@ -501,81 +369,302 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
     },
   ];
 
+/**
+ * The one queue, in every shape it draws (backend plan 0086, section 3; admin
+ * plan 0014, section 1).
+ *
+ * Three seeds used to sit here: entries a walk found, refs it proposed, and
+ * aliases a leaflet queued. `0086` folded the three tables into one with a
+ * status column, so this is the only one left, and every shape those three used
+ * to carry has to be in it.
+ *
+ * What the rows are for, in order. A walk's product that nothing matched, with
+ * an API price, which is the plain `UNRESOLVED`. A walk's product the fuzzy rung
+ * proposed an item for, which is the row an operator confirms in one press. A
+ * leaflet row with **two** scopes, which is the whole reason the prices moved
+ * off the row: two regional leaflets print one product and each price belongs to
+ * its own scope. A DEZA web row with **no price at all**, which is the truth for
+ * that chain and must read as a statement rather than as a blank. A leaflet row
+ * whose proposal is a **sibling row** rather than an item, which is the one case
+ * whose primary action is to open something else. Then a rejection and an
+ * acceptance, so a filter asking for either by name finds one.
+ */
 export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
   [
     {
       id: 'entry-milk',
       supermarketId: MERCADONA,
       externalId: '12345',
+      sourceKind: 'OFFICIAL_API',
       name: 'Leche entera',
       brand: 'Hacendado',
       ean: '8480000123456',
       unitSize: 1,
       sizeFormat: '1 L',
-      price: 0.89,
-      unitPrice: 0.89,
-      unitPriceLabel: 'per litre',
       categoryPath: ['Lacteos', 'Leche'],
       url: 'https://tienda.mercadona.es/product/12345',
+      extra: { packaging: 'brik', published: true },
+      timesSeen: 4,
+      firstSeenAt: '2026-08-14T07:00:00.000Z',
       lastSeenAt: NOW,
+      firstRunId: 'run-catalog-completed',
+      lastRunId: 'run-catalog-completed',
+      itemId: null,
+      candidateEntryId: null,
+      status: 'UNRESOLVED',
+      matchedBy: null,
+      confidence: 0,
+      decidedAt: null,
+      prices: [
+        {
+          id: 'price-milk-national',
+          priceScopeId: MERCADONA_NATIONAL,
+          price: 0.89,
+          currency: 'EUR',
+          unitPrice: 0.89,
+          unitPriceLabel: 'l',
+          validFrom: null,
+          validUntil: null,
+          details: null,
+          observedAt: NOW,
+          runId: 'run-catalog-completed',
+        },
+      ],
     },
     {
+      // The fuzzy rung proposed a product and stopped there, which is the rule
+      // and the reason: a bad match writes a wrong price onto a real product
+      // that people then shop on, which is worse than having no price.
       id: 'entry-bread',
       supermarketId: MERCADONA,
       externalId: '23456',
+      sourceKind: 'OFFICIAL_API',
       name: 'Pan de molde integral',
       brand: 'Hacendado',
       ean: null,
       unitSize: 460,
       sizeFormat: '460 g',
-      price: 1.25,
-      unitPrice: 2.72,
-      unitPriceLabel: 'per kilo',
       categoryPath: ['Panaderia'],
       url: null,
+      extra: null,
+      timesSeen: 9,
+      firstSeenAt: '2026-07-01T07:00:00.000Z',
       lastSeenAt: NOW,
+      firstRunId: 'run-catalog-completed',
+      lastRunId: 'run-catalog-completed',
+      itemId: 'item-bread',
+      candidateEntryId: null,
+      status: 'CANDIDATE',
+      matchedBy: 'NAME_BRAND_SIZE',
+      confidence: 0.6,
+      decidedAt: null,
+      prices: [
+        {
+          id: 'price-bread-national',
+          priceScopeId: MERCADONA_NATIONAL,
+          price: 1.25,
+          currency: 'EUR',
+          unitPrice: 2.72,
+          unitPriceLabel: 'kg',
+          validFrom: null,
+          validUntil: null,
+          details: null,
+          observedAt: NOW,
+          runId: 'run-catalog-completed',
+        },
+      ],
+    },
+    {
+      // Two regional leaflets printed the same product, so the row carries two
+      // prices and the queue draws a line per scope. This is what the columns
+      // that used to sit on the row could not express.
+      id: 'entry-aceite',
+      supermarketId: DEZA,
+      externalId: 'aceite-de-oliva-virgen-serie-oro-coosur|garrafa 5 litros',
+      sourceKind: 'OFFICIAL_LEAFLET',
+      name: 'Aceite de Oliva Virgen Serie Oro Coosur',
+      brand: 'Coosur',
+      ean: null,
+      unitSize: 5,
+      sizeFormat: 'Garrafa 5 litros',
+      categoryPath: [],
+      url: null,
+      extra: {
+        page: 1,
+        promotion: null,
+        raw_text: ['Garrafa 5 litros', 'PVP recomendado'],
+      },
+      timesSeen: 3,
+      firstSeenAt: '2026-08-14T07:00:00.000Z',
+      lastSeenAt: '2026-09-03T07:20:05.000Z',
+      firstRunId: 'run-import-completed',
+      lastRunId: 'run-import-completed',
+      itemId: null,
+      candidateEntryId: null,
+      status: 'UNRESOLVED',
+      matchedBy: null,
+      confidence: 0,
+      decidedAt: null,
+      prices: [
+        {
+          id: 'price-aceite-national',
+          priceScopeId: DEZA_NATIONAL,
+          price: 19.95,
+          currency: 'EUR',
+          unitPrice: 3.99,
+          unitPriceLabel: 'l',
+          validFrom: '2026-09-10T00:00:00.000Z',
+          validUntil: '2026-09-23T22:59:59.000Z',
+          details: { page: 1 },
+          observedAt: '2026-09-03T07:20:05.000Z',
+          runId: 'run-import-completed',
+        },
+        {
+          id: 'price-aceite-cordoba',
+          priceScopeId: DEZA_CORDOBA,
+          price: 18.95,
+          currency: 'EUR',
+          unitPrice: 3.79,
+          unitPriceLabel: 'l',
+          validFrom: '2026-09-10T00:00:00.000Z',
+          validUntil: '2026-09-23T22:59:59.000Z',
+          details: { page: 1 },
+          observedAt: '2026-09-03T07:20:05.000Z',
+          runId: 'run-import-completed',
+        },
+      ],
+    },
+    {
+      // DEZA prints no price anywhere on its site, so a web row genuinely has
+      // none (backend plan 0085). The queue says so rather than showing a blank,
+      // because an operator who accepts this row and sees nothing written must
+      // not read that as a failure.
+      id: 'entry-galletas',
+      supermarketId: DEZA,
+      externalId: 'galletas-maria-cuetara|paquete-800-g',
+      sourceKind: 'OFFICIAL_WEB',
+      name: 'Galletas Maria Cuetara',
+      brand: 'Cuetara',
+      ean: null,
+      unitSize: 800,
+      sizeFormat: 'Paquete 800 g',
+      categoryPath: ['Dulces', 'Galletas'],
+      url: 'https://www.deza.es/producto/galletas-maria-cuetara',
+      extra: { shops: ['T1', 'T4', 'C2'] },
+      timesSeen: 2,
+      firstSeenAt: '2026-08-28T07:00:00.000Z',
+      lastSeenAt: '2026-09-02T07:00:00.000Z',
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-reverted',
+      itemId: null,
+      candidateEntryId: null,
+      status: 'UNRESOLVED',
+      matchedBy: null,
+      confidence: 0,
+      decidedAt: null,
+      prices: [],
+    },
+    {
+      // The proposal is another row of this chain rather than a product. The
+      // sibling is the one with the EAN, so it is the one to create the item
+      // from, which is why the primary action here opens it instead.
+      id: 'entry-leche-leaflet',
+      supermarketId: MERCADONA,
+      externalId: 'leche-entera-hacendado|brik-1-l',
+      sourceKind: 'OFFICIAL_LEAFLET',
+      name: 'LECHE ENTERA HACENDADO',
+      brand: 'Hacendado',
+      ean: null,
+      unitSize: 1,
+      sizeFormat: 'brik 1 l.',
+      categoryPath: [],
+      url: null,
+      extra: { page: 31, raw_text: ['LECHE ENTERA HACENDADO brik 1 l.'] },
+      timesSeen: 7,
+      firstSeenAt: '2026-06-02T07:00:00.000Z',
+      lastSeenAt: '2026-09-03T07:20:05.000Z',
+      firstRunId: 'run-import-completed',
+      lastRunId: 'run-import-completed',
+      itemId: null,
+      candidateEntryId: 'entry-milk',
+      status: 'CANDIDATE',
+      matchedBy: 'NAME_SIZE',
+      confidence: 0.6,
+      decidedAt: null,
+      prices: [
+        {
+          id: 'price-leche-leaflet',
+          priceScopeId: MERCADONA_NATIONAL,
+          price: 0.79,
+          currency: 'EUR',
+          unitPrice: 0.79,
+          unitPriceLabel: 'l',
+          validFrom: '2026-09-10T00:00:00.000Z',
+          validUntil: '2026-09-23T22:59:59.000Z',
+          details: { page: 31 },
+          observedAt: '2026-09-03T07:20:05.000Z',
+          runId: 'run-import-completed',
+        },
+      ],
+    },
+    {
+      // Not a product he tracks. The row stays rather than being deleted, so
+      // the next run that observes the key touches it and asks nobody.
+      id: 'entry-lote',
+      supermarketId: DEZA,
+      externalId: 'lote-degustacion-60-aniversario|',
+      sourceKind: 'OFFICIAL_LEAFLET',
+      name: 'Lote degustacion 60 aniversario',
+      brand: null,
+      ean: null,
+      unitSize: null,
+      sizeFormat: null,
+      categoryPath: [],
+      url: null,
+      extra: { page: 31 },
+      timesSeen: 2,
+      firstSeenAt: '2026-08-14T07:00:00.000Z',
+      lastSeenAt: '2026-09-03T07:20:05.000Z',
+      firstRunId: 'run-import-completed',
+      lastRunId: 'run-import-completed',
+      itemId: null,
+      candidateEntryId: null,
+      status: 'REJECTED',
+      matchedBy: 'MANUAL',
+      confidence: 1,
+      decidedAt: '2026-09-03T09:00:00.000Z',
+      prices: [],
+    },
+    {
+      // Accepted, and still carrying what the source printed. Renaming the
+      // product does not stop the next run resolving, which is the whole point
+      // of keeping the chain's own name (backend plan 0086, D8).
+      id: 'entry-agua',
+      supermarketId: DEZA,
+      externalId: 'agua-mineral-lanjaron|garrafa-5-l',
+      sourceKind: 'OFFICIAL_WEB',
+      name: 'Agua mineral Lanjaron',
+      brand: 'Lanjaron',
+      ean: null,
+      unitSize: 5,
+      sizeFormat: 'Garrafa 5 l',
+      categoryPath: ['Bebidas', 'Agua'],
+      url: null,
+      extra: null,
+      timesSeen: 11,
+      firstSeenAt: '2026-06-02T07:00:00.000Z',
+      lastSeenAt: '2026-09-02T07:00:00.000Z',
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-reverted',
+      itemId: 'item-water',
+      candidateEntryId: null,
+      status: 'ACTIVE',
+      matchedBy: 'MANUAL',
+      confidence: 1,
+      decidedAt: '2026-08-20T09:00:00.000Z',
+      prices: [],
     },
   ];
-
-/**
- * One ref that was never resolved beside one whose source has gone.
- *
- * They are different problems with different remedies, which is why the queue
- * has to be able to tell them apart: a `CANDIDATE` came from a fuzzy name match
- * and is waiting for somebody to agree, while a ref whose product has vanished
- * from the storefront cannot be confirmed by anybody.
- *
- * The second is `lastResolvedAt` set and `lastSeenAt` no newer than it, which is
- * what a settled ref that has stopped appearing looks like. There is no `GONE`
- * status to seed: `ItemSourceRefStatus` is ACTIVE, CANDIDATE, REJECTED and
- * MANUAL, so the state is derived rather than stored.
- */
-export const ITEM_SOURCE_REF_SEED: readonly Wire.HarvestItemSourceRefView[] = [
-  {
-    id: 'ref-candidate',
-    itemId: 'item-milk',
-    supermarketId: MERCADONA,
-    externalId: '12345',
-    externalUrl: 'https://tienda.mercadona.es/product/12345',
-    matchedBy: 'NAME_BRAND_SIZE',
-    status: 'CANDIDATE',
-    confidence: 0.72,
-    lastResolvedAt: null,
-    lastSeenAt: NOW,
-  },
-  {
-    id: 'ref-gone',
-    itemId: 'item-bread',
-    supermarketId: MERCADONA,
-    externalId: '23456',
-    externalUrl: null,
-    matchedBy: 'EAN',
-    status: 'CANDIDATE',
-    confidence: 0.94,
-    lastResolvedAt: '2026-08-01T09:00:00.000Z',
-    lastSeenAt: '2026-08-01T09:00:00.000Z',
-  },
-];
 
 /**
  * The shops one source names, in every state the queue draws (backend plan

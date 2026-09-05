@@ -11,18 +11,16 @@ import { DezaCatalogRunner } from './deza-catalog.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
+import { FileImportRunner } from './file-import.runner';
 import { HarvestController } from './harvest.controller';
-import { ItemSourceRefService } from './item-source-ref.service';
-import { LeafletImportRunner } from './leaflet-import.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
-import { RefreshRunner } from './refresh.runner';
 import { RunExecutor } from './run-executor.service';
-import { SourceAliasService } from './source-alias.service';
 import { SourceEntryService } from './source-entry.service';
+import { SourceIngest } from './source-ingest';
 import { SourceLocationService } from './source-location.service';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -63,19 +61,21 @@ import { SupermarketSourceService } from './supermarket-source.service';
     HarvestRunStore,
     SupermarketSourceService,
     StoreDiscoveryRunner,
+    // The second half of every run, whatever the first half was (plan 0086, D5).
+    SourceIngest,
     MercadonaCatalogRunner,
     DezaCatalogRunner,
     CatalogDiscoveryRunner,
-    RefreshRunner,
-    // The one runner that fetches nothing at all (plan 0081): its input is an
-    // uploaded document rather than a storefront.
-    LeafletImportRunner,
+    // The one runner that fetches nothing at all (plan 0086, D6): its input is
+    // an uploaded document rather than a storefront.
+    FileImportRunner,
     RunExecutor,
     HarvestRunService,
     DiscoveredPlaceService,
+    // The one queue over the one table, and the three decisions about a row
+    // (plan 0086, section 7). `SourceAliasService` and `ItemSourceRefService`
+    // were the same three decisions over two other tables and are gone.
     SourceEntryService,
-    SourceAliasService,
-    ItemSourceRefService,
     SourceLocationService,
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,

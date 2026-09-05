@@ -17,7 +17,7 @@ import {
   domainEventContracts,
   realtimeEventSchemas,
 } from './events/realtime.schemas';
-import { leafletSchemas } from './leaflet';
+import { harvestDocumentSchemas } from './harvest-document';
 import {
   accountMessageContracts,
   accountSchemas,
@@ -129,7 +129,11 @@ export const allSchemas: JsonSchema[] = [
   // it is a document an admin uploads, validated by the gateway before it
   // crosses the broker and by the harvester again at run start. It rides in the
   // same Ajv instance so `validateSchema` finds it by its own `$id`.
-  ...leafletSchemas,
+  // The file import contract (plan 0086, section 6.1), which replaces the one
+  // above. Same reason for riding here: it is a document an admin uploads or the
+  // harvester exports, validated by the gateway before it crosses the broker and
+  // by the harvester again at the spawn, found by its own `$id`.
+  ...harvestDocumentSchemas,
 ];
 
 export const messageSubjects = Object.keys(messageContracts);

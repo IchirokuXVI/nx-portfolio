@@ -6,14 +6,15 @@
 # The broker's configuration file, which exists for exactly one setting.
 #
 # `max_payload` is raised above the 1 MB default so a voice recording can reach
-# the assistant at all (luna plan 0041 section 4.2, luna plan 0045 section 3),
-# and it is **config file only**: nats-server has no `--max_payload` flag, and
+# the assistant at all (luna plan 0041 section 4.2, luna plan 0045 section 3) and
+# an uploaded `HarvestDocument` can reach the harvester (luna plan 0086, section
+# 6.2), and it is **config file only**: nats-server has no `--max_payload` flag, and
 # passing one makes it print its usage and exit — the pod then crashloops and
 # takes every service behind it with it. Both plans assumed a command line
 # argument; it is not one.
 #
 # `int64` before the value, and it is load bearing: Sprig carries a YAML integer
-# as a float64, so rendering 8388608 unaided writes "8.388608e+06", which the
+# as a float64, so rendering 16777216 unaided writes "1.6777216e+07", which the
 # broker will not parse.
 #
 # **This and `k8s/e2e/luna-shopper-backend/nats.conf` are one decision and change
@@ -29,7 +30,7 @@ metadata:
     app.kubernetes.io/part-of: luna-shopper-backend
 data:
   nats.conf: |
-    max_payload: {{ $nats.maxPayload | default 8388608 | int64 }}
+    max_payload: {{ $nats.maxPayload | default 16777216 | int64 }}
 ---
 apiVersion: v1
 kind: Service

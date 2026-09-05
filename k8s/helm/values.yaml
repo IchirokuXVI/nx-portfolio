@@ -748,20 +748,28 @@ lunaShopperBackend:
     # 2 MB of audio is about 2.7 MB encoded, and the broker would refuse it at its
     # own level, which is a failure nothing in the service could report nicely.
     #
-    # 8 MB rather than just over 3, on purpose. This is a broker wide ceiling that
-    # nothing else here comes close to, and setting it snug against the upload cap
-    # would mean the next change to either number has to move both.
+    # 16 MB, and the largest thing that crosses is what sets it. Two do: a 2 MB
+    # voice recording, which is about 2.7 MB base64'd and under 3 MB with its
+    # transcript and envelope, and a 10 MB `HarvestDocument`, which crosses whole
+    # inside `harvest.spawn` (luna plan 0086, section 6.2). It was 8 MB, which the
+    # file import would have sat against with no room for the envelope, so a
+    # document the gateway accepted would have been refused a moment later by the
+    # broker. `HARVESTER_FILE_IMPORT_MAX_BYTES` and this move as a pair.
     #
-    # **A plain integer, and not "8MB".** The template renders it through `int64`
+    # The headroom above 10 MB is deliberate, for the same reason 8 was chosen
+    # over just over 3: this is a broker wide ceiling, and setting it snug against
+    # an upload cap means the next change to either number has to move both.
+    #
+    # **A plain integer, and not "16MB".** The template renders it through `int64`
     # to dodge Sprig's float64 carrying (see `nats.yaml.tpl`), and `int64` applied
-    # to a string like "8MB" would parse as 8 — an eight byte ceiling that refuses
-    # every message the system sends.
+    # to a string like "16MB" would parse as 16 — a sixteen byte ceiling that
+    # refuses every message the system sends.
     #
     # **It is stated here and applied in two places**: this chart's NATS ConfigMap
     # and `k8s/e2e/luna-shopper-backend/nats.conf`. Raised in one and not the
     # other is a feature that works on the development machine and fails in the
     # cluster.
-    maxPayload: 8388608
+    maxPayload: 16777216
     # Guaranteed QoS, for the same reason as Postgres above.
     resources:
       requests:

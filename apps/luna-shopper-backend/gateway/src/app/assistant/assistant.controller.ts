@@ -105,7 +105,7 @@ export class AssistantController {
    * **`multipart/form-data`**, because the recording is the one leg of this
    * journey that costs the person something — a phone on mobile data — and base64
    * in a JSON body would inflate it by a third. Over the broker it *is* base64,
-   * which is why `max_payload` is 8 MB in both the compose stack and the chart;
+   * which is why `max_payload` is 16 MB in both the compose stack and the chart;
    * that trade is section 4.2.
    *
    * The byte cap lives on the interceptor, configured in this module, because the

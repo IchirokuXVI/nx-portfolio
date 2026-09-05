@@ -12,7 +12,6 @@ import {
   ServerReachability,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { Deployment } from '@portfolio/luna-shopper-admin/models';
-import { ItemRefsQueuePage } from './item-refs-queue-page';
 import { PlacesQueuePage } from './places-queue-page';
 import { RunsPage } from './runs-page';
 import { SourcesPage } from './sources-page';
@@ -55,12 +54,16 @@ function silent(): HarvestServiceI {
     importPlace: refuse,
     rejectPlace: refuse,
     listEntries: refuse,
+    acceptEntry: refuse,
     createItemFromEntry: refuse,
-    listItemRefs: refuse,
-    listUnresolvedItemRefs: refuse,
-    setManualItemRef: refuse,
-    confirmItemRef: refuse,
-    rejectItemRef: refuse,
+    rejectEntry: refuse,
+    importDocument: refuse,
+    exportRun: refuse,
+    listShops: refuse,
+    mapShop: refuse,
+    unmapShop: refuse,
+    ignoreShop: refuse,
+    unignoreShop: refuse,
     listSources: refuse,
     readSource: refuse,
     upsertSource: refuse,
@@ -104,10 +107,17 @@ async function render<T>(
 const notice = (fixture: ComponentFixture<unknown>) =>
   fixture.nativeElement.querySelector('lib-harvest-notice');
 
+/**
+ * The screens that read something the moment they are opened.
+ *
+ * The product queue is not among them and cannot be: it reads nothing until a
+ * chain is chosen, so with the harvester absent it draws its chooser rather than
+ * a notice, which is correct and is a different assertion. `entries-queue.spec`
+ * makes it.
+ */
 const screens = [
   ['runs', RunsPage],
   ['discovered places', PlacesQueuePage],
-  ['item refs', ItemRefsQueuePage],
   ['chain sources', SourcesPage],
 ] as const;
 

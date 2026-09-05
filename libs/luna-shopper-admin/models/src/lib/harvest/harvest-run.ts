@@ -54,12 +54,40 @@ export function canAbort(run: HarvestRun | null): boolean {
  *
  * A `STORE_DISCOVERY` run finds shops and writes no price, so there is nothing
  * for a revert to take back and the backend refuses one.
+ *
+ * `REFRESH` is gone (backend plan 0086, section 9). It existed only because a
+ * walk threw its prices away and something had to fetch them again; a walk
+ * writes them now, so the mode had nothing left to do. `LEAFLET_IMPORT` is
+ * `FILE_IMPORT` for the same reason the upload screen is an import screen: what
+ * arrives in a file is a run that happened somewhere else, and a leaflet is only
+ * one of the things that produces one.
  */
 export const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
-  'LEAFLET_IMPORT',
-  'REFRESH',
+  'FILE_IMPORT',
   'CATALOG_DISCOVERY',
 ];
+
+/**
+ * What a run's `updated` and `unchanged` counters are called on its own screen
+ * (admin plan 0014, section 3).
+ *
+ * A walk writes prices now, so on a price writing run those two counters are
+ * prices written and prices confirmed, which is what the ingest actually counted
+ * (backend plan 0086, section 5). On a store discovery they are shops, so they
+ * keep the neutral labels: naming a shop a price would be worse than saying
+ * nothing.
+ *
+ * The keys rather than the words, because the words are translated where they
+ * are drawn and this library holds no copy of them.
+ */
+export function runCounterKeys(run: HarvestRun): {
+  readonly updated: string;
+  readonly unchanged: string;
+} {
+  return PRICE_WRITING_MODES.includes(run.mode)
+    ? { updated: 'pricesWritten', unchanged: 'pricesConfirmed' }
+    : { updated: 'updated', unchanged: 'unchanged' };
+}
 
 /** Whether this run's writes have already been taken back. */
 export function isReverted(run: HarvestRun | null): boolean {

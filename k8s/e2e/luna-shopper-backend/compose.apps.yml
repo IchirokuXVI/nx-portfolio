@@ -92,12 +92,12 @@ services:
       VOICE_COMMENT_MAX_BYTES: '2097152'
       # Empty falls back to the contract's list, which is what browsers produce.
       VOICE_COMMENT_CONTENT_TYPES: ''
-      # The byte cap on an uploaded leaflet (plan 0081, section 7). Stated here
-      # for the reason every other number in this file is: the tier states its
-      # environment by hand and inherits nothing, and this is the one route with
-      # a body limit of its own. The default parser stays at 100 KB, which every
-      # real leaflet is well over.
-      LEAFLET_MAX_BYTES: '2097152'
+      # The byte cap on an uploaded HarvestDocument (plan 0086, section 10).
+      # Stated here for the reason every other number in this file is: the tier
+      # states its environment by hand and inherits nothing, and this is the one
+      # route with a body limit of its own. The default parser stays at 100 KB,
+      # which every real file is well over.
+      HARVESTER_FILE_IMPORT_MAX_BYTES: '10485760'
       # Short here on purpose. The assistant in this tier has no key, so every
       # transcription settles as UNAVAILABLE without a provider call and this
       # deadline is never reached; a long one would only slow a failing suite.
