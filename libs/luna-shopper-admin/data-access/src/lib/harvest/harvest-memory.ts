@@ -6,6 +6,7 @@ import {
   HARVEST_RUN_SEED,
   ITEM_SOURCE_REF_SEED,
   SOURCE_ENTRY_SEED,
+  SOURCE_LOCATION_SEED,
   SUPERMARKET_SOURCE_SEED,
 } from './harvest-seed';
 import type {
@@ -16,6 +17,7 @@ import type {
   PlaceGroupQuery,
   PlaceQuery,
   RunQuery,
+  ShopQuery,
 } from './harvest-service';
 
 /** How many rows a page holds when nothing asks for a size. */
@@ -51,6 +53,8 @@ export class HarvestMemory implements HarvestServiceI {
   private readonly _sources: Wire.HarvestSupermarketSourceView[] = clone(
     SUPERMARKET_SOURCE_SEED
   );
+  private readonly _shops: Wire.HarvestSourceLocationView[] =
+    clone(SOURCE_LOCATION_SEED);
 
   private _nextId = 1;
 
@@ -301,6 +305,67 @@ export class HarvestMemory implements HarvestServiceI {
     return this._decideRef(id, 'REJECTED');
   }
 
+  /**
+   * One chain's shops, filtered by status.
+   *
+   * Chain scoped with no default, because the route's `supermarketId` is
+   * required: a queue over every source's shops would be a list nobody could
+   * act on, since the mapping only means anything inside one chain.
+   */
+  async listShops(query: ShopQuery): Promise<Wire.HarvestSourceLocationPage> {
+    const matching = this._shops.filter(
+      (shop) =>
+        shop.supermarketId === query.supermarketId &&
+        (query.status === undefined || shop.status === query.status)
+    );
+
+    return page(matching, query);
+  }
+
+  /**
+   * Bind one row to a shop of ours.
+   *
+   * `MANUAL`, always, because a person did it. That is the whole point of the
+   * column: a row the automatic name match bound and a row somebody checked
+   * look identical otherwise and carry different confidence.
+   */
+  async mapShop(
+    id: string,
+    input: Wire.MapSourceLocationDto
+  ): Promise<Wire.HarvestSourceLocationView> {
+    const shop = this._shop(id);
+    shop.supermarketLocationId = input.supermarketLocationId;
+    shop.status = 'ACTIVE';
+    shop.matchedBy = 'MANUAL';
+    return { ...shop };
+  }
+
+  async unmapShop(id: string): Promise<Wire.HarvestSourceLocationView> {
+    const shop = this._shop(id);
+    shop.supermarketLocationId = null;
+    shop.status = 'UNMAPPED';
+    return { ...shop };
+  }
+
+  async ignoreShop(id: string): Promise<Wire.HarvestSourceLocationView> {
+    const shop = this._shop(id);
+    shop.status = 'IGNORED';
+    return { ...shop };
+  }
+
+  /**
+   * Back into the queue, at whatever the mapping already says.
+   *
+   * `ACTIVE` when the row still points at a shop of ours and `UNMAPPED` when it
+   * does not, because ignoring never cleared the binding and un-ignoring must
+   * not invent one.
+   */
+  async unignoreShop(id: string): Promise<Wire.HarvestSourceLocationView> {
+    const shop = this._shop(id);
+    shop.status = shop.supermarketLocationId === null ? 'UNMAPPED' : 'ACTIVE';
+    return { ...shop };
+  }
+
   async listSources(
     query: PageQuery
   ): Promise<Wire.HarvestSupermarketSourcePage> {
@@ -403,6 +468,14 @@ export class HarvestMemory implements HarvestServiceI {
       run.stage = null;
       run.stageLabel = null;
     }
+  }
+
+  private _shop(id: string): Wire.HarvestSourceLocationView {
+    const shop = this._shops.find((candidate) => candidate.id === id);
+    if (shop === undefined) {
+      throw notFound();
+    }
+    return shop;
   }
 
   private _decidePlace(

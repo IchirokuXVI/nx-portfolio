@@ -404,4 +404,58 @@ describe('SupermarketLocationService.list postal code filter', () => {
 
     expect(qb.andWhere).not.toHaveBeenCalled();
   });
+
+  /**
+   * The search a reference picker needs (`apps/luna-shopper-admin/plans/0011`,
+   * section 4). A chain with three hundred shops cannot be picked from without
+   * it, and a picker whose target declares none drops the term rather than
+   * failing, so the term reaching the clause is what has to be asserted.
+   */
+  it('narrows to what was typed, over the label, the address and the town', async () => {
+    const { service, qb } = listing();
+
+    await service.list({
+      userId: OWNER,
+      supermarketId: CHAIN,
+      query: '  Gran Capitán  ',
+    });
+
+    const [sql, params] = qb.andWhere.mock.calls[0] as [
+      string,
+      { term: string },
+    ];
+    expect(params).toEqual({ term: 'Gran Capitán' });
+    for (const column of [
+      "label ->> 'en'",
+      "label ->> 'es'",
+      'address',
+      'city',
+    ]) {
+      expect(sql).toContain(column);
+    }
+  });
+
+  /**
+   * `%` and `_` are wildcards to LIKE and characters to an operator, which is
+   * why the comparison is `strpos` rather than `ILIKE`. Nothing has to be
+   * escaped this way, and a forgotten escape reads as a working search that
+   * quietly matches too much.
+   */
+  it('compares by position rather than by a pattern', async () => {
+    const { service, qb } = listing();
+
+    await service.list({ userId: OWNER, supermarketId: CHAIN, query: '50%' });
+
+    const [sql] = qb.andWhere.mock.calls[0] as [string];
+    expect(sql).toContain('strpos');
+    expect(sql).not.toContain('LIKE');
+  });
+
+  it('lists the whole chain for a term that is only spaces', async () => {
+    const { service, qb } = listing();
+
+    await service.list({ userId: OWNER, supermarketId: CHAIN, query: '   ' });
+
+    expect(qb.andWhere).not.toHaveBeenCalled();
+  });
 });

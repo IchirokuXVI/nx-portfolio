@@ -192,6 +192,23 @@ export const LOCATIONS = defineResource<Location>({
   note: 'catalog.locations.note',
 
   filters: [
+    /**
+     * The term a reference picker over shops types into (admin plan 0011,
+     * section 4).
+     *
+     * It is first because it is what the picker reads, and a picker whose
+     * target declares none does not fail: it drops the term, asks for the first
+     * page, and answers every search with the same twenty shops. A chain with
+     * ten does not notice. A chain with three hundred cannot be used at all.
+     *
+     * On the descriptor rather than on the screen that needed it, because the
+     * descriptor is what the picker consults and there is exactly one of it.
+     */
+    {
+      kind: 'search',
+      param: 'query',
+      label: 'catalog.locations.filter.query',
+    },
     {
       kind: 'reference',
       param: 'supermarketId',

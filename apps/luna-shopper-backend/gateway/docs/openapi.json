@@ -14633,6 +14633,15 @@
             }
           },
           {
+            "name": "query",
+            "required": false,
+            "in": "query",
+            "description": "Only the shops whose label, in either content language, or whose address or town contains this text.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "priceScopeId",
             "required": false,
             "in": "query",

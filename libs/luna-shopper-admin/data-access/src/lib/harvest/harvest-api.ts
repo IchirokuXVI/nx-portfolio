@@ -12,6 +12,7 @@ import type {
   PlaceGroupQuery,
   PlaceQuery,
   RunQuery,
+  ShopQuery,
 } from './harvest-service';
 
 /** Everything under `/v1/admin/harvest`, which is where all of it already is. */
@@ -150,6 +151,49 @@ export class HarvestApi implements HarvestServiceI {
     });
   }
 
+  /**
+   * The shops a source names, for one chain (backend plan 0084, section 7).
+   *
+   * `shops` rather than `source-locations`, which is what the gateway calls the
+   * path. The rows are the source's shops and the mapping is what turns one of
+   * them into one of ours.
+   */
+  listShops(query: ShopQuery): Promise<Wire.HarvestSourceLocationPage> {
+    return this._send('get', `${ROOT}/shops`, { params: toParams(query) });
+  }
+
+  mapShop(
+    id: string,
+    input: Wire.MapSourceLocationDto
+  ): Promise<Wire.HarvestSourceLocationView> {
+    return this._send('put', `${ROOT}/shops/${segment(id)}/location`, {
+      body: input,
+    });
+  }
+
+  /**
+   * Back to `UNMAPPED`, leaving what was already written alone.
+   *
+   * A `DELETE` on the binding rather than a `POST` to a verb, because unmapping
+   * removes the one thing mapping added. It is the only route in this file that
+   * is one.
+   */
+  unmapShop(id: string): Promise<Wire.HarvestSourceLocationView> {
+    return this._send('delete', `${ROOT}/shops/${segment(id)}/location`);
+  }
+
+  ignoreShop(id: string): Promise<Wire.HarvestSourceLocationView> {
+    return this._send('post', `${ROOT}/shops/${segment(id)}/ignore`, {
+      body: {},
+    });
+  }
+
+  unignoreShop(id: string): Promise<Wire.HarvestSourceLocationView> {
+    return this._send('post', `${ROOT}/shops/${segment(id)}/unignore`, {
+      body: {},
+    });
+  }
+
   listSources(query: PageQuery): Promise<Wire.HarvestSupermarketSourcePage> {
     return this._send('get', `${ROOT}/sources`, { params: toParams(query) });
   }
@@ -188,7 +232,7 @@ export class HarvestApi implements HarvestServiceI {
   }
 
   private async _send<R>(
-    method: 'get' | 'post' | 'put',
+    method: 'get' | 'post' | 'put' | 'delete',
     path: string,
     options: { params?: HttpParams; body?: unknown } = {}
   ): Promise<R> {

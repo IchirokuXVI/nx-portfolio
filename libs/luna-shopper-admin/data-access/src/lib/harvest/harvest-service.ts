@@ -54,6 +54,15 @@ export interface HarvestServiceI {
   confirmItemRef(id: string): Promise<Wire.HarvestItemSourceRefView>;
   rejectItemRef(id: string): Promise<Wire.HarvestItemSourceRefView>;
 
+  listShops(query: ShopQuery): Promise<Wire.HarvestSourceLocationPage>;
+  mapShop(
+    id: string,
+    input: Wire.MapSourceLocationDto
+  ): Promise<Wire.HarvestSourceLocationView>;
+  unmapShop(id: string): Promise<Wire.HarvestSourceLocationView>;
+  ignoreShop(id: string): Promise<Wire.HarvestSourceLocationView>;
+  unignoreShop(id: string): Promise<Wire.HarvestSourceLocationView>;
+
   listSources(query: PageQuery): Promise<Wire.HarvestSupermarketSourcePage>;
   readSource(supermarketId: string): Promise<Wire.HarvestSupermarketSourceView>;
   upsertSource(
@@ -99,6 +108,19 @@ export interface ItemRefQuery extends PageQuery {
   readonly itemId?: string;
   readonly supermarketId?: string;
   readonly status?: string;
+}
+
+/**
+ * The shops one source names (backend plan 0084, section 7).
+ *
+ * `supermarketId` is **required** and every other collection query's is not.
+ * `source_locations` is unique on (`supermarketId`, `externalId`) and the
+ * mapping only means anything inside one chain, so there is no route that
+ * answers "every source's shops" and no screen that could use one.
+ */
+export interface ShopQuery extends PageQuery {
+  readonly supermarketId: string;
+  readonly status?: Wire.EnumsSourceLocationStatus;
 }
 
 /**

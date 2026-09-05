@@ -4,6 +4,7 @@ import { PlacesQueuePage } from './places-queue-page';
 import { HARVEST_LINKS, HARVEST_SEGMENT, harvestRoutes } from './routes';
 import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
+import { ShopsQueuePage } from './shops-queue-page';
 import { SourcesPage } from './sources-page';
 
 const [branch] = harvestRoutes();
@@ -15,7 +16,7 @@ describe('harvestRoutes', () => {
     expect(branch.path).toBe(HARVEST_SEGMENT);
   });
 
-  it('has a screen for each of the five subjects', () => {
+  it('has a screen for each subject', () => {
     expect(children.map((route) => route.component)).toEqual([
       undefined,
       RunsPage,
@@ -23,6 +24,7 @@ describe('harvestRoutes', () => {
       PlacesQueuePage,
       EntriesQueuePage,
       ItemRefsQueuePage,
+      ShopsQueuePage,
       SourcesPage,
     ]);
   });

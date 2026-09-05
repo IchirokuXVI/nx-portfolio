@@ -820,6 +820,22 @@ export interface ListSupermarketLocationsRequest extends PageQuery {
   userId: string;
   supermarketId: string;
   /**
+   * Free text over the shop's label, in either content language, and over its
+   * address and town. Absent lists the whole chain.
+   *
+   * The same plain substring match {@link ListSupermarketsRequest.query} is,
+   * and for the same reason: a shop has no search document, its address is a
+   * line of text, and the operator typing here is completing something they
+   * are reading off another screen.
+   *
+   * It exists for a reference picker rather than for a filter bar
+   * (`apps/luna-shopper-admin/plans/0011`, section 4). A chain with ten shops
+   * does not need one and a chain with three hundred cannot be used without
+   * one, because a picker with nowhere to put the term drops it and answers
+   * every search with the same first page.
+   */
+  query?: string;
+  /**
    * Only the shops that sell at this scope (plan 0066, section 4). A price is
    * keyed by scope and a scope is not a place, so this is how a price is turned
    * into somewhere to go. Absent lists the whole chain, as before.
