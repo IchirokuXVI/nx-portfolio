@@ -22029,6 +22029,7 @@
             "type": "string",
             "enum": [
               "mercadona-api",
+              "deza-web",
               "osm-places",
               "manual"
             ]
@@ -24594,6 +24595,7 @@
         "type": "string",
         "enum": [
           "mercadona-api",
+          "deza-web",
           "osm-places",
           "manual"
         ]
@@ -26256,6 +26258,10 @@
               "null"
             ]
           },
+          "report": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "correlationId": {
             "type": [
               "string",
@@ -26291,6 +26297,7 @@
           "stageLabel",
           "abortRequestedAt",
           "error",
+          "report",
           "correlationId",
           "requestedByUserId"
         ],

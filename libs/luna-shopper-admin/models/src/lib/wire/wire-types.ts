@@ -880,7 +880,7 @@ export type UpsertSupermarketLocationItemDto = {
  * `UpsertSupermarketSourceDto` in the gateway's OpenAPI document.
  */
 export type UpsertSupermarketSourceDto = {
-  adapterKey: 'mercadona-api' | 'osm-places' | 'manual';
+  adapterKey: 'mercadona-api' | 'deza-web' | 'osm-places' | 'manual';
   enabled?: boolean;
   config?: {
     [key: string]: unknown;
@@ -1688,7 +1688,11 @@ export type CommonUserIdResult = {
 /**
  * `enums.AdapterKey` in the gateway's OpenAPI document.
  */
-export type EnumsAdapterKey = 'mercadona-api' | 'osm-places' | 'manual';
+export type EnumsAdapterKey =
+  | 'mercadona-api'
+  | 'deza-web'
+  | 'osm-places'
+  | 'manual';
 
 /**
  * `enums.AuthProvider` in the gateway's OpenAPI document.
@@ -2318,6 +2322,9 @@ export type HarvestHarvestRunView = {
   stageLabel: string | null;
   abortRequestedAt: string | null;
   error: string | null;
+  report: {
+    [key: string]: unknown;
+  };
   correlationId: string | null;
   requestedByUserId: string | null;
 };

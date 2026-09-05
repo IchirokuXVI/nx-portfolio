@@ -120,6 +120,24 @@ export class HarvestRun extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   error!: string | null;
 
+  /**
+   * What the run has to say about itself beyond its counters (plan 0085,
+   * section 3). Empty when it has nothing.
+   *
+   * It is not an error and it does not fail a run. A DEZA query returns at most
+   * 300 rows however it is filtered, so a run splits a capped section by search
+   * term until a pass adds nothing new or a budget runs out, and what it could
+   * not finish has to be **stated** rather than left to look like a whole
+   * catalog. The same bag carries the availability rows a person had typed,
+   * which plan 0084 section 3 declines to overwrite and requires the run to
+   * report instead.
+   *
+   * Free form and never queried, which is why it is one jsonb column rather than
+   * a table: nothing decides on it, and a person reads it once.
+   */
+  @Column({ type: 'jsonb', default: () => `'{}'::jsonb` })
+  report!: Record<string, unknown>;
+
   @Column({ type: 'varchar', nullable: true })
   correlationId!: string | null;
 

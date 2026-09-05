@@ -23,6 +23,7 @@ type Source = Wire.HarvestSupermarketSourceView;
 /** The adapters `UpsertSupermarketSourceDto` accepts. */
 const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
   'mercadona-api',
+  'deza-web',
   'osm-places',
   'manual',
 ];

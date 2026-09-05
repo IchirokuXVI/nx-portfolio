@@ -787,6 +787,9 @@ describe('contract schemas', () => {
           stageLabel: 'Querying OpenStreetMap',
           abortRequestedAt: null,
           error: null,
+          // Empty: a run says nothing beyond its counters until it has something
+          // to say, which for a store discovery is never (plan 0085).
+          report: {},
           correlationId: 'c',
           requestedByUserId: 'owner',
         }).valid
