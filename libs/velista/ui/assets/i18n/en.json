@@ -1014,7 +1014,7 @@
       "cheapest": "Cheapest",
       "noPrice": "No price",
       "asOf": "Prices from {{when}}",
-      "asOfTyped": "Prices from {{when}}, entered by hand"
+      "asOfStale": "Prices from {{when}}, and some may be out of date"
     },
     "allocate": {
       "open": "Split between lists",

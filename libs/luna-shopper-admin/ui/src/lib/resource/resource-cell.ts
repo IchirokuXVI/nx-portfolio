@@ -27,6 +27,14 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
       }}</a>
     } @else {
       {{ cell().text }}
+      <!-- A localized text shown through its fallback (plan 0079): the words
+           are there, the language the operator reads is not, and this is the
+           one place that says so. -->
+      @for (locale of cell().missing ?? []; track locale) {
+        <span class="missing">{{
+          'resource.value.missingLocale' | rokuT: { locale }
+        }}</span>
+      }
     }
   `,
   styles: `
@@ -41,6 +49,17 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
 
     a {
       color: var(--admin-accent);
+    }
+
+    .missing {
+      display: inline-block;
+      margin-inline-start: 0.4em;
+      padding: 0 0.4em;
+      border: 1px solid var(--admin-ink-muted);
+      border-radius: 999px;
+      font-size: 0.8em;
+      color: var(--admin-ink-muted);
+      white-space: nowrap;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

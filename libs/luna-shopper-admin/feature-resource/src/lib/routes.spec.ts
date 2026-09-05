@@ -190,3 +190,68 @@ describe('adminRoutes with sections', () => {
     ]);
   });
 });
+
+/**
+ * A resource whose `:id` is taken by a detail component of its own (plan 0009,
+ * section 1).
+ *
+ * `detail` wins at `:id`, because a row that is read is a different screen from
+ * the one that changes it. Without a second route, turning on `edit` for a zone
+ * or a list would change nothing at all: the generic form would have nowhere to
+ * be reached, and the operator would find a resource that claims to be editable
+ * and offers no way to edit it.
+ */
+describe('resourceRoutes for a resource with its own detail screen', () => {
+  class ZoneDetail {}
+
+  const zones = defineResource<Shop>({
+    ...shops,
+    name: 'zones',
+    segment: 'zones',
+    detail: ZoneDetail,
+    actions: { edit: true },
+  });
+
+  it('puts the form at `:id/edit`, beside the detail screen at `:id`', () => {
+    const [branch] = resourceRoutes(zones);
+    const children = branch.children ?? [];
+
+    expect(children.map((route) => route.path)).toEqual([
+      '',
+      ':id/edit',
+      ':id',
+    ]);
+    expect(children.map((route) => route.component)).toEqual([
+      ResourceListPage,
+      ResourceFormPage,
+      ZoneDetail,
+    ]);
+    expect(children[1].data?.[RESOURCE_FORM_MODE]).toBe('edit');
+  });
+
+  /** A read only resource with a detail screen gets no form to reach at all. */
+  it('declares no edit route for a resource that cannot be changed', () => {
+    const readOnly = defineResource<Shop>({
+      ...shops,
+      name: 'baskets',
+      segment: 'baskets',
+      detail: ZoneDetail,
+      actions: undefined,
+    });
+    const [branch] = resourceRoutes(readOnly);
+
+    expect(branch.children?.map((route) => route.path)).toEqual(['', ':id']);
+  });
+
+  /**
+   * A resource whose detail view already **is** the form needs no second route:
+   * for it, `:id` is the editor.
+   */
+  it('adds nothing where the generic form is already the detail screen', () => {
+    const [branch] = resourceRoutes(shops);
+
+    expect(branch.children?.map((route) => route.path)).not.toContain(
+      ':id/edit'
+    );
+  });
+});

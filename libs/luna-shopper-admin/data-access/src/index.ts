@@ -9,6 +9,7 @@ export * from './lib/auth/session-memory';
 export * from './lib/auth/session-service';
 export * from './lib/auth/session-storage';
 export * from './lib/auth/session-store';
+export * from './lib/client-version-interceptor';
 export * from './lib/data-access-providers';
 export * from './lib/deployment/deployment-api';
 export * from './lib/deployment/deployment-memory';

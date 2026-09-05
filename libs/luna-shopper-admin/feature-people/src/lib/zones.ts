@@ -29,6 +29,13 @@ export const ZONE_STATUS_OPTIONS = [
  * a zone they are merely in, of any membership status, because "why can this
  * person not see their zone" is the question the screen exists to answer.
  *
+ * **Two fields change and the other six do not** (plan 0009, section 3.1).
+ * `name` and `config` are the whole of what a zone's own owner may change, and
+ * an operator gets exactly the same two. The join code is regenerated rather
+ * than typed, ownership is transferred rather than assigned, and the two
+ * deletion columns are a pair written in one transaction. Each of the six says
+ * so on the form rather than sitting there looking like a missing feature.
+ *
  * The owner column is the one place plan 0074's second call shows through.
  * Zones live in core's database and users live in auth's, with no foreign key
  * between them, so the gateway fetches the names of a page's owners in one
@@ -46,40 +53,78 @@ export const ZONES = defineResource<Zone>({
   detail: ZoneDetailPage,
 
   fields: [
-    { kind: 'text', name: 'id', label: 'people.zones.id', editable: false },
-    { kind: 'text', name: 'name', label: 'people.zones.name', editable: false },
+    {
+      kind: 'text',
+      name: 'id',
+      label: 'people.zones.id',
+      help: 'people.field.idHelp',
+      editable: false,
+    },
+    {
+      kind: 'text',
+      name: 'name',
+      label: 'people.zones.name',
+      required: true,
+      maxLength: 80,
+    },
+    {
+      kind: 'json',
+      name: 'config',
+      label: 'people.zones.config',
+      help: 'people.zones.configHelp',
+    },
     {
       kind: 'text',
       name: 'ownerName',
       label: 'people.zones.owner',
+      help: 'people.zones.ownerHelp',
       editable: false,
       // The rule from plan 0074, section 3, as one expression: a name the
       // gateway could not resolve is drawn as the id it could not resolve.
       read: (row) => row.ownerName ?? row.ownerUserId,
     },
     {
+      kind: 'text',
+      name: 'joinCode',
+      label: 'people.zones.joinCode',
+      help: 'people.zones.joinCodeHelp',
+      editable: false,
+    },
+    {
       kind: 'enum',
       name: 'status',
       label: 'people.zones.status.label',
       options: ZONE_STATUS_OPTIONS,
+      help: 'people.zones.statusHelp',
+      editable: false,
+    },
+    {
+      kind: 'date',
+      name: 'markedForDeletionAt',
+      label: 'people.zones.markedForDeletionAt',
+      time: true,
+      help: 'people.zones.markedForDeletionAtHelp',
       editable: false,
     },
     {
       kind: 'number',
       name: 'memberCount',
       label: 'people.zones.memberCount',
+      help: 'people.zones.memberCountHelp',
       editable: false,
     },
     {
       kind: 'number',
       name: 'listCount',
       label: 'people.zones.listCount',
+      help: 'people.zones.listCountHelp',
       editable: false,
     },
     {
       kind: 'date',
       name: 'createdAt',
       label: 'people.zones.createdAt',
+      help: 'people.field.createdAtHelp',
       editable: false,
     },
   ],
@@ -120,7 +165,10 @@ export const ZONES = defineResource<Zone>({
     },
   ],
 
+  formNote: 'people.broadcast',
+
   actions: {
+    edit: true,
     named: () => {
       const directory = inject(DIRECTORY_SERVICE);
 
@@ -136,6 +184,29 @@ export const ZONES = defineResource<Zone>({
           run: async (row) => {
             await directory.regenerateJoinCode(row.id);
           },
+        },
+        {
+          // The pair `status` and `markedForDeletionAt`, written together.
+          // Typing either alone produces a zone the reaper either never removes
+          // or removes anyway, and neither state has a repair, which is why
+          // this is an act and not two fields (backend plan 0077, section 4.2).
+          name: 'mark-for-deletion',
+          label: 'people.zones.action.markForDeletion',
+          available: (row) => row.status !== 'MARKED_FOR_DELETION',
+          confirm: {
+            heading: 'people.zones.confirm.markForDeletion.heading',
+            body: 'people.zones.confirm.markForDeletion.body',
+            confirm: 'people.zones.confirm.markForDeletion.confirm',
+          },
+          run: (row) => directory.setZoneDeletionMark(row.id, true),
+        },
+        {
+          // Not confirmed, because it is the undo. Asking before taking back a
+          // mistake is a click that teaches an operator to click through.
+          name: 'restore-zone',
+          label: 'people.zones.action.restore',
+          available: (row) => row.status === 'MARKED_FOR_DELETION',
+          run: (row) => directory.setZoneDeletionMark(row.id, false),
         },
         {
           name: 'delete-zone',

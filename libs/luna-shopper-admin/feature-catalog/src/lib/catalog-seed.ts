@@ -214,12 +214,15 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
 ];
 
 /**
- * Prices, and the pin that plan 0005 section 4 exists for.
+ * Effective prices: the row a shopper sees for each (product, scope), chosen
+ * among the rows in {@link ITEM_PRICE_SEED} (backend plan 0080, section 7).
  *
- * The second row is `ADMIN`: somebody typed it, and no automated fetch will
- * overwrite it until the price is cleared again. With nothing listening it is
- * what makes "list everything I have pinned" and "revert this one" real on the
- * screen rather than only in the gateway.
+ * The second row is `ADMIN` and it **won**: somebody typed 8.45 over a crawl
+ * that said 8.9, and the crawl has repeated 8.9 since, which is what the
+ * seven day protection is for. The first is a crawl price shown on
+ * sufferance: its source has not confirmed it for a week, so it is flagged
+ * stale rather than hidden. With nothing listening these are what make "what
+ * have I overridden" and "what is out of date" real on the screen.
  *
  * `unitPrice` is the source's own number and is **not** `price / unitSize`. The
  * obvious derivation disagrees with the source on 110 of 4,232 products, so the
@@ -234,8 +237,12 @@ export const PRICE_SEED: readonly Wire.CatalogSupermarketItemView[] = [
     currency: 'EUR',
     unitPrice: 0.89,
     unitPriceLabel: '1 L',
-    priceObservedAt: '2026-08-30T06:12:00.000Z',
-    priceSourceKind: 'OFFICIAL_API',
+    observedAt: '2026-08-20T06:12:00.000Z',
+    sourceKind: 'OFFICIAL_API',
+    // Nothing current prices it: the crawl stopped a fortnight ago.
+    stale: true,
+    validUntil: null,
+    itemPriceId: 'ip_milk_4661_api',
     available: true,
   },
   {
@@ -246,9 +253,12 @@ export const PRICE_SEED: readonly Wire.CatalogSupermarketItemView[] = [
     currency: 'EUR',
     unitPrice: 8.45,
     unitPriceLabel: '1 L',
-    priceObservedAt: '2026-07-14T09:40:00.000Z',
-    // Typed in, and therefore permanent until somebody clears it.
-    priceSourceKind: 'ADMIN',
+    observedAt: '2026-09-03T09:40:00.000Z',
+    // Typed in, protected, and undisputed: the crawl still says what it said.
+    sourceKind: 'ADMIN',
+    stale: false,
+    validUntil: null,
+    itemPriceId: 'ip_oil_4661_admin',
     available: true,
   },
   {
@@ -259,10 +269,107 @@ export const PRICE_SEED: readonly Wire.CatalogSupermarketItemView[] = [
     currency: 'EUR',
     unitPrice: 1.05,
     unitPriceLabel: '1 L',
-    priceObservedAt: '2026-08-28T18:05:00.000Z',
-    priceSourceKind: 'ADMIN',
+    observedAt: '2026-08-28T18:05:00.000Z',
+    sourceKind: 'ADMIN',
+    stale: false,
+    validUntil: null,
+    itemPriceId: 'ip_milk_consum_admin',
     available: false,
   },
+];
+
+/**
+ * Every price a source gave (backend plan 0080, section 2): the rows behind
+ * {@link PRICE_SEED}, newest first within a pair.
+ *
+ * The olive oil pair is the case plan 0080 section 4.2 is about: a crawl said
+ * 8.9, the operator typed 8.45 and the row recorded what it overrode, and the
+ * crawl confirmed 8.9 twice since. The snapshot is what keeps 8.45 shown.
+ */
+export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
+  {
+    id: 'ip_oil_4661_admin',
+    itemId: 'it_olive_oil_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'ADMIN',
+    price: 8.45,
+    currency: 'EUR',
+    unitPrice: 8.45,
+    unitPriceLabel: '1 L',
+    observedAt: '2026-09-03T09:40:00.000Z',
+    lastObservedAt: '2026-09-03T09:40:00.000Z',
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: null,
+    lastObservedRunId: null,
+    overrides: { OFFICIAL_API: { price: 8.9, unitPrice: 8.9 } },
+    protectedUntil: '2026-09-10T09:40:00.000Z',
+  },
+  {
+    id: 'ip_oil_4661_api',
+    itemId: 'it_olive_oil_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price: 8.9,
+    currency: 'EUR',
+    unitPrice: 8.9,
+    unitPriceLabel: '1 L',
+    observedAt: '2026-09-01T06:12:00.000Z',
+    lastObservedAt: '2026-09-05T06:12:00.000Z',
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: 'run_2026_09_01',
+    lastObservedRunId: 'run_2026_09_05',
+    overrides: null,
+    protectedUntil: null,
+  },
+  {
+    id: 'ip_milk_4661_api',
+    itemId: 'it_milk_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price: 0.89,
+    currency: 'EUR',
+    unitPrice: 0.89,
+    unitPriceLabel: '1 L',
+    observedAt: '2026-08-12T06:12:00.000Z',
+    lastObservedAt: '2026-08-20T06:12:00.000Z',
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: 'run_2026_08_12',
+    lastObservedRunId: 'run_2026_08_20',
+    overrides: null,
+    protectedUntil: null,
+  },
+  {
+    id: 'ip_milk_consum_admin',
+    itemId: 'it_milk_1l',
+    priceScopeId: 'ps_consum_centro',
+    sourceKind: 'ADMIN',
+    price: 1.05,
+    currency: 'EUR',
+    unitPrice: 1.05,
+    unitPriceLabel: '1 L',
+    observedAt: '2026-08-28T18:05:00.000Z',
+    lastObservedAt: '2026-08-28T18:05:00.000Z',
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: null,
+    lastObservedRunId: null,
+    // Nothing automated prices Consum, so there was nothing to override.
+    overrides: {},
+    protectedUntil: '2026-09-04T18:05:00.000Z',
+  },
+];
+
+/** The six policy rows, as the migration seeds them (backend plan 0080, section 3). */
+export const PRICE_POLICY_SEED: readonly Wire.CatalogPricePolicyView[] = [
+  { sourceKind: 'OFFICIAL_LEAFLET', priority: 10, maxAgeDays: null, enabled: true },
+  { sourceKind: 'OFFICIAL_API', priority: 20, maxAgeDays: 7, enabled: true },
+  { sourceKind: 'OFFICIAL_WEB', priority: 30, maxAgeDays: 7, enabled: true },
+  { sourceKind: 'ADMIN', priority: 40, maxAgeDays: null, enabled: true },
+  { sourceKind: 'USER_RECEIPT', priority: 50, maxAgeDays: null, enabled: true },
+  { sourceKind: 'USER_REPORTED', priority: 60, maxAgeDays: null, enabled: false },
 ];
 
 /**

@@ -1,4 +1,4 @@
-import { localizedTextValue } from './localized-text';
+import { localizedTextValue, missingLocales } from './localized-text';
 import { formatMoney } from './money';
 import { idOf, type ResourceDescriptor } from './resource-descriptor';
 import type { FieldDescriptor, ResourceRow } from './resource-field';
@@ -26,6 +26,14 @@ export interface ResourceCell {
   readonly key?: string;
   /** Where a `url` field points, so the list can draw a link. */
   readonly href?: string;
+  /**
+   * The content locales a localized text has no words in (plan 0079).
+   *
+   * The cell shows the fallback, so a Spanish only name reads as its Spanish
+   * name in an English table; this is what marks it as one still waiting for
+   * an English one, which is the flag plan 0038 section 11 asked for.
+   */
+  readonly missing?: readonly string[];
 }
 
 /** A row, ready to render. */
@@ -79,7 +87,11 @@ export function toCell<T extends ResourceRow>(
   switch (field.kind) {
     case 'localized-text': {
       const text = localizedTextValue(value, options.contentLocales);
-      return text === '' ? EMPTY : { text };
+      if (text === '') {
+        return EMPTY;
+      }
+      const missing = missingLocales(value, options.contentLocales);
+      return missing.length === 0 ? { text } : { text, missing };
     }
 
     case 'money': {
@@ -116,6 +128,14 @@ export function toCell<T extends ResourceRow>(
     // where a reference is shown by name (plan 0004, section 6).
     case 'reference':
       return { text: String(value) };
+
+    // Printed rather than described. There is nothing this app knows about the
+    // shape, so the only honest cell is the value itself, on one line: a cell
+    // is a table cell, and the form is where it is read across several.
+    case 'json': {
+      const text = JSON.stringify(value);
+      return text === undefined || text === '{}' ? EMPTY : { text };
+    }
   }
 }
 

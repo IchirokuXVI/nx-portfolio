@@ -39,6 +39,21 @@ export interface ResourceSource<T extends ResourceRow = ResourceRow> {
    */
   collectionPath?(values: Readonly<Record<string, unknown>>): string | null;
   /**
+   * Where **one row** lives, when it is not `path/{id}`.
+   *
+   * A chain's shop is read at `/locations/{id}`, so a collection that hangs off
+   * a parent does not imply a member that does. A membership and a list line do
+   * imply one: the gateway has `PATCH /v1/admin/zones/{zoneId}/members/{id}` and
+   * no flat route at all, so the parent has to be in the member URL as well as
+   * in the collection's.
+   *
+   * The argument is the row's address, which for these resources is the
+   * composite {@link key} `(parent, own id)`, so the function splits it with
+   * `compositeParts` and puts both halves back in the path. `null` means the
+   * address does not read, which is a not found rather than a guess.
+   */
+  memberPath?(id: string): string | null;
+  /**
    * The names {@link collectionPath} consumes.
    *
    * They are part of the URL, so they are **not** also sent as a query
@@ -46,6 +61,12 @@ export interface ResourceSource<T extends ResourceRow = ResourceRow> {
    * and the validation pipe refuses a property a DTO does not declare, so
    * sending it as well as putting it in the path would turn every create into a
    * 400.
+   *
+   * They are also **put back on every row that comes out**, because a nested
+   * collection does not repeat what its URL already said: a membership arrives
+   * with no `zoneId` on it, and its only address afterwards is the pair
+   * `(zoneId, membershipId)`. A value the row already carries is left alone, so
+   * a shop keeps the `supermarketId` the server sent.
    */
   readonly pathParams?: readonly string[];
   /**

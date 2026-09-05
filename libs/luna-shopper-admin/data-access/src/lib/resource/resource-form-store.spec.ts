@@ -161,15 +161,21 @@ describe('ResourceFormStore messages', () => {
     const store = createStore(new FakeGateway());
     await store.load();
 
-    store.set('name', { en: 'Bonpreu', es: '' });
+    store.set('name', { en: '', es: '' });
 
     expect(store.messagesFor('name')).toEqual([
-      {
-        kind: 'key',
-        key: 'resource.error.missingLocale',
-        args: { locale: 'es' },
-      },
+      { kind: 'key', key: 'resource.error.missingAnyLocale' },
     ]);
+  });
+
+  /** A name in one language is a whole name (plan 0079). */
+  it('says nothing about a name that has one of its languages', async () => {
+    const store = createStore(new FakeGateway());
+    await store.load();
+
+    store.set('name', { en: 'Bonpreu', es: '' });
+
+    expect(store.messagesFor('name')).toEqual([]);
   });
 
   it('complains about every field once a submit has been attempted', async () => {
@@ -178,7 +184,7 @@ describe('ResourceFormStore messages', () => {
 
     await store.submit();
 
-    expect(store.messagesFor('name')).toHaveLength(2);
+    expect(store.messagesFor('name')).toHaveLength(1);
     expect(store.valid()).toBe(false);
   });
 

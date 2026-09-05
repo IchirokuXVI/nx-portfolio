@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { LineView } from '@portfolio/luna-shopper/contracts';
+import {
+  MembershipStatus,
+  type LineView,
+} from '@portfolio/luna-shopper/contracts';
 import { GatewayApiClient, type ApiCaller } from './gateway-api.client';
 import type { ContextList } from './list-resolution';
 
@@ -106,7 +109,25 @@ export class TurnContextFactory {
   }
 
   async open(caller: ApiCaller): Promise<TurnContext> {
-    const zones = await this.api.listZones(caller);
+    // **APPROVED only, and the filter is load bearing.** `GET /v1/zones` is
+    // `listMine`, which returns APPROVED *and* PENDING memberships on purpose, so
+    // somebody who has asked to join a zone can see the one they are waiting on.
+    // `GET /v1/zones/:id/lists` calls `requireApproved` and answers 403 for the
+    // PENDING half, so reading every zone this route returns asks the gateway for
+    // something it has already decided this caller may not have.
+    //
+    // Without this the fan-out below threw on the first pending zone and the whole
+    // turn became a 500: one outstanding join request made the assistant unusable,
+    // voice and text alike, for as long as the request stayed pending. It never
+    // showed up in testing because a fresh account owns its zones and has none.
+    //
+    // A pending zone contributes nothing rather than being reported: there is no
+    // list in it to talk about, and the caller knows they are waiting because they
+    // asked. `openScoped` needs no equivalent, since it reads the one zone the
+    // caller is already acting inside.
+    const zones = (await this.api.listZones(caller)).filter(
+      (zone) => zone.myStatus === MembershipStatus.APPROVED
+    );
 
     // One request per zone. Bounded by how many zones a person is in, which the
     // domain keeps small, and it is the only way to see every list rather than

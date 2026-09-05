@@ -23,6 +23,7 @@ import {
   CatalogAuditService,
 } from './catalog-audit.service';
 import { toPriceScopeView } from './catalog.mappers';
+import { EffectivePriceService } from './effective-price.service';
 import { PlatformAdminService } from './platform-admin.service';
 
 const PG_UNIQUE_VIOLATION = '23505';
@@ -50,7 +51,8 @@ export class PriceScopeService {
     @InjectRepository(Supermarket)
     private readonly supermarkets: Repository<Supermarket>,
     private readonly admin: PlatformAdminService,
-    private readonly audit: CatalogAuditService
+    private readonly audit: CatalogAuditService,
+    private readonly effective: EffectivePriceService
   ) {}
 
   async create(req: CreatePriceScopeRequest): Promise<PriceScopeView> {
@@ -63,9 +65,13 @@ export class PriceScopeService {
       label: req.label ?? null,
     });
     try {
-      const saved = await this.audit.write(actor, (tx) =>
-        tx.create(PriceScope, draft)
-      );
+      const saved = await this.audit.write(actor, async (tx) => {
+        const created = await tx.create(PriceScope, draft);
+        // A scope made later inherits the chain's national prices on arrival
+        // (plan 0080, section 6).
+        await this.effective.inheritNational(tx.manager, created);
+        return created;
+      });
       return toPriceScopeView(saved);
     } catch (error) {
       if (isPgError(error, PG_UNIQUE_VIOLATION)) {
@@ -173,7 +179,7 @@ export class PriceScopeService {
     if (existing) {
       return existing;
     }
-    return tx.create(
+    const created = await tx.create(
       PriceScope,
       this.scopes.create({
         supermarketId,
@@ -182,6 +188,10 @@ export class PriceScopeService {
         label,
       })
     );
+    // The same inheritance `create` gives a scope made by hand (plan 0080,
+    // section 6): a chain priced nationally prices its new shop at once.
+    await this.effective.inheritNational(tx.manager, created);
+    return created;
   }
 
   /** Load a scope, asserting it belongs to the chain the caller named. */

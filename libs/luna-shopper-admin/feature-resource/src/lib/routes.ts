@@ -54,6 +54,29 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
             ]
           : []),
 
+        // The edit screen, for a resource whose `:id` is taken by a detail
+        // component of its own.
+        //
+        // Without it, turning on `edit` for a zone or a list would change
+        // nothing at all: `detail` wins at `:id`, so the generic form would
+        // have no route to be reached at, and the operator would find a
+        // resource that claims to be editable and offers no way to edit it.
+        // The resources whose detail view *is* the generic form need no such
+        // route, because for them `:id` is already the editor.
+        //
+        // Before `:id` for readability only. A terminal route has to consume
+        // the whole remaining URL, so `:id` cannot match two segments whatever
+        // the order.
+        ...(descriptor.detail !== undefined && descriptor.actions?.edit === true
+          ? [
+              {
+                path: ':id/edit',
+                component: descriptor.editor ?? ResourceFormPage,
+                data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
+              },
+            ]
+          : []),
+
         // The detail screen: the resource's own component where it named one,
         // and the generic form otherwise, which draws the fields it cannot
         // change beside the ones it can. A resource with neither has no such

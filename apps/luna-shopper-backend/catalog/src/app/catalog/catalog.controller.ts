@@ -3,7 +3,9 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
   ITEM_PATTERNS,
+  ITEM_PRICE_PATTERNS,
   POSTAL_CODE_PATTERNS,
+  PRICE_POLICY_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
@@ -11,6 +13,19 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AdminListSupermarketItemsRequest,
+  type AddItemPriceBatchRequest,
+  type AddItemPriceBatchResult,
+  type AddItemPriceRequest,
+  type ItemPriceIdRequest,
+  type ItemPricePage,
+  type ItemPriceView,
+  type ListItemPricesRequest,
+  type ListPricePoliciesRequest,
+  type PricePolicyListView,
+  type PricePolicyView,
+  type SetSupermarketItemAvailabilityRequest,
+  type SetSupermarketItemAvailabilityResult,
+  type UpdatePricePolicyRequest,
   type AdminPostalCodePage,
   type CountLocationsByPostalCodeRequest,
   type CreateItemRequest,
@@ -56,7 +71,6 @@ import {
   type ShopPage,
   type SummarizeLocationsByChainRequest,
   type SupermarketIdRequest,
-  type SupermarketItemIdRequest,
   type SupermarketItemPage,
   type SupermarketItemView,
   type SupermarketLocationChainSummariesView,
@@ -72,13 +86,12 @@ import {
   type UpdateProductGroupRequest,
   type UpdateSupermarketLocationRequest,
   type UpdateSupermarketRequest,
-  type UpsertSupermarketItemBatchRequest,
-  type UpsertSupermarketItemBatchResult,
-  type UpsertSupermarketItemRequest,
   type UpsertSupermarketLocationItemRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { PostalCodeService } from './postal-code.service';
+import { PricePolicyService } from './price-policy.service';
 import { PriceScopeService } from './price-scope.service';
 import { ProductGroupService } from './product-group.service';
 import { ScopeResolverService } from './scope-resolver.service';
@@ -104,7 +117,9 @@ export class CatalogController {
     private readonly locationItems: SupermarketLocationItemService,
     private readonly productGroups: ProductGroupService,
     private readonly scopeResolver: ScopeResolverService,
-    private readonly postalCodes: PostalCodeService
+    private readonly postalCodes: PostalCodeService,
+    private readonly itemPrices: ItemPriceService,
+    private readonly pricePolicies: PricePolicyService
   ) {}
 
   // --- Supermarkets --------------------------------------------------------
@@ -411,27 +426,53 @@ export class CatalogController {
     return this.locationItems.listByLocation(req);
   }
 
-  // --- Supermarket items (per location price/position) ---------------------
+  // --- Item prices: every price a source gave (plan 0080) --------------------
 
-  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.upsert)
-  upsertSupermarketItem(
-    @Payload() req: UpsertSupermarketItemRequest
-  ): Promise<SupermarketItemView> {
-    return this.supermarketItems.upsert(req);
+  @MessagePattern(ITEM_PRICE_PATTERNS.add)
+  addItemPrice(@Payload() req: AddItemPriceRequest): Promise<ItemPriceView> {
+    return this.itemPrices.add(req);
   }
 
-  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.upsertBatch)
-  upsertSupermarketItemBatch(
-    @Payload() req: UpsertSupermarketItemBatchRequest
-  ): Promise<UpsertSupermarketItemBatchResult> {
-    return this.supermarketItems.upsertBatch(req);
+  @MessagePattern(ITEM_PRICE_PATTERNS.addBatch)
+  addItemPriceBatch(
+    @Payload() req: AddItemPriceBatchRequest
+  ): Promise<AddItemPriceBatchResult> {
+    return this.itemPrices.addBatch(req);
   }
 
-  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.delete)
-  deleteSupermarketItem(
-    @Payload() req: SupermarketItemIdRequest
-  ): Promise<{ id: string }> {
-    return this.supermarketItems.delete(req);
+  @MessagePattern(ITEM_PRICE_PATTERNS.list)
+  listItemPrices(@Payload() req: ListItemPricesRequest): Promise<ItemPricePage> {
+    return this.itemPrices.list(req);
+  }
+
+  @MessagePattern(ITEM_PRICE_PATTERNS.delete)
+  deleteItemPrice(@Payload() req: ItemPriceIdRequest): Promise<{ id: string }> {
+    return this.itemPrices.delete(req);
+  }
+
+  // --- Price policies (plan 0080, section 3) --------------------------------
+
+  @MessagePattern(PRICE_POLICY_PATTERNS.list)
+  listPricePolicies(
+    @Payload() req: ListPricePoliciesRequest
+  ): Promise<PricePolicyListView> {
+    return this.pricePolicies.list(req);
+  }
+
+  @MessagePattern(PRICE_POLICY_PATTERNS.update)
+  updatePricePolicy(
+    @Payload() req: UpdatePricePolicyRequest
+  ): Promise<PricePolicyView> {
+    return this.pricePolicies.update(req);
+  }
+
+  // --- Supermarket items: the materialized row (plan 0080, section 7) --------
+
+  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.setAvailability)
+  setSupermarketItemAvailability(
+    @Payload() req: SetSupermarketItemAvailabilityRequest
+  ): Promise<SetSupermarketItemAvailabilityResult> {
+    return this.supermarketItems.setAvailability(req);
   }
 
   @MessagePattern(SUPERMARKET_ITEM_PATTERNS.get)

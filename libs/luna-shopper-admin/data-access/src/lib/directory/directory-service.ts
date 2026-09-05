@@ -3,16 +3,22 @@ import { serviceToken } from '@portfolio/shared/data-access';
 import { DirectoryMemory } from './directory-memory';
 
 /**
- * The seven things an operator can do to a person or a household (plan 0007,
- * section 1).
+ * The things an operator can do to a person or a household that are not a field
+ * (plan 0007, section 1, widened by plan 0009).
  *
- * **Seven methods and not a row editor.** A catalog item's name is a name, and
+ * **Named acts and not a row editor.** A catalog item's name is a name, and
  * writing it is safe and complete. A list line participates in settlements,
  * generated list bindings, permission sets and realtime broadcasts other
  * clients have already applied, and deleting a user runs
  * `account-deletion.service` across three databases. The invariants live in
  * services rather than in constraints, so each of these calls the same service
  * the user facing app calls and none of them writes a row.
+ *
+ * Plan 0009 made most of those rows editable through the generic form, and the
+ * ones that stayed here are the ones that are still not fields. Each of them
+ * does more than write a column: a zone's deletion mark is two columns written
+ * together, a membership's status is four verbs along a state machine, and a
+ * line's approval is a service call that emits.
  *
  * An action with no service behind it is not here. If an operator needs
  * something this interface does not offer, it is a backend plan and not a form
@@ -58,7 +64,45 @@ export interface DirectoryServiceI {
 
   /** Remove a member and refuse them the join code. */
   banMember(zoneId: string, membershipId: string): Promise<void>;
+
+  /**
+   * Mark a zone for deletion, or take the mark off again.
+   *
+   * One method for both directions, because `status` and `markedForDeletionAt`
+   * are written and read together and typing either alone produces a zone the
+   * reaper either never removes or removes anyway. Neither state is reachable
+   * through any other code path and neither has a repair, which is why this is
+   * an act rather than two fields (backend plan 0077, section 4.2).
+   */
+  setZoneDeletionMark(zoneId: string, marked: boolean): Promise<void>;
+
+  /**
+   * Let a waiting member in.
+   *
+   * `approvedByUserId` is left null, and the column stays nullable for exactly
+   * this: an operator is not a member of the zone, so there is no membership id
+   * to record, and every other reader treats that column as a user's id.
+   */
+  approveMember(zoneId: string, membershipId: string): Promise<void>;
+
+  /** Refuse a waiting member, which removes the pending row. */
+  rejectMember(zoneId: string, membershipId: string): Promise<void>;
+
+  /**
+   * Approve or reject one line of a standing list.
+   *
+   * One route and one service call, which is why it is an act rather than a
+   * select on the form: an act can be confirmed and a select cannot.
+   */
+  setLineApproval(
+    listId: string,
+    lineId: string,
+    status: LineApproval
+  ): Promise<void>;
 }
+
+/** Where a line is in its approval, which is the whole of `LineApprovalStatus`. */
+export type LineApproval = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 // Inject THIS token, typed as the interface, never the concrete class.
 export const DIRECTORY_SERVICE = serviceToken<DirectoryServiceI>(

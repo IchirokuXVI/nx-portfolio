@@ -120,9 +120,13 @@ const sourceSnapshot = object(
   GENERATED_LIST_SCHEMA_IDS.sourceSnapshot,
   {
     profileId: nullableString(),
+    // Required and nullable, not optional: a run composed before plan 0078 has
+    // no such key in its stored `jsonb`, and the mapper reads that absence as
+    // null so the wire shape is the same for every run.
+    pricingProfileId: nullableString(),
     sources: array(ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshotEntry)),
   },
-  ['profileId', 'sources']
+  ['profileId', 'pricingProfileId', 'sources']
 );
 
 const listView = object(

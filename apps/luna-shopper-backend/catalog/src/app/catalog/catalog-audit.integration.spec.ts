@@ -17,19 +17,20 @@ import {
   CATALOG_ENTITIES,
   CatalogAudit,
   Item,
+  ItemPrice,
   PriceScope,
   ProductGroup,
   Supermarket,
   SupermarketItem,
-  SupermarketLocation,
 } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
+import { EffectivePriceService } from './effective-price.service';
+import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PriceScopeService } from './price-scope.service';
 import { ProductGroupService } from './product-group.service';
-import { SupermarketItemService } from './supermarket-item.service';
 
 /**
  * The audit trail against real Postgres (plan 0075, section 7).
@@ -57,6 +58,8 @@ const SCHEMA = 'plan0075_audit_test';
  */
 const HARVESTER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '22222222-2222-4222-8222-222222222222';
+/** The run the harvester writes under. Opaque to catalog. */
+const RUN = '33333333-3333-4333-8333-333333333333';
 
 describeIntegration('the catalog audit trail (real Postgres)', () => {
   let dataSource: DataSource;
@@ -65,7 +68,7 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
   let items: ItemService;
   let groups: ProductGroupService;
   let scopes: PriceScopeService;
-  let prices: SupermarketItemService;
+  let prices: ItemPriceService;
 
   beforeAll(async () => {
     const url = requiredEnv('CATALOG_DB_URL');
@@ -123,19 +126,21 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
       audit,
       events
     );
+    const effective = new EffectivePriceService();
     scopes = new PriceScopeService(
       dataSource.getRepository(PriceScope),
       dataSource.getRepository(Supermarket),
       admin,
-      audit
+      audit,
+      effective
     );
-    prices = new SupermarketItemService(
-      dataSource.getRepository(SupermarketItem),
+    prices = new ItemPriceService(
+      dataSource.getRepository(ItemPrice),
       dataSource.getRepository(Item),
       dataSource.getRepository(PriceScope),
-      dataSource.getRepository(SupermarketLocation),
       admin,
-      audit
+      audit,
+      effective
     );
   }, 120_000);
 
@@ -318,72 +323,89 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
       // The operator pressed "start run" and the harvester is what wrote the
       // prices. Collapsing the two would make the trail claim a person typed
       // them, which is the wrong answer to the question the trail answers.
-      await prices.upsertBatch({
+      await prices.addBatch({
         userId: HARVESTER,
         priceScopeId: scopeId,
-        priceSourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceRunId: RUN,
         entries: [{ itemId, price: 1.75, currency: 'EUR' }],
       });
 
-      const history = await trail.find({
-        where: { entity: 'supermarket_items' },
-      });
+      const history = await trail.find({ where: { entity: 'item_prices' } });
       expect(history).toHaveLength(1);
       expect(history[0]).toMatchObject({
         actorId: HARVESTER,
         actorKind: AuditActorKind.SERVICE,
         action: AuditAction.CREATE,
       });
-    });
-
-    it('writes nothing for a re-fetch that found the same price', async () => {
-      await prices.upsertBatch({
-        userId: HARVESTER,
-        priceScopeId: scopeId,
-        priceSourceKind: PriceSourceKind.OFFICIAL_WEB,
-        entries: [{ itemId, price: 1.75, currency: 'EUR' }],
-      });
-      await trail.clear();
-
-      const result = await prices.upsertBatch({
-        userId: HARVESTER,
-        priceScopeId: scopeId,
-        priceSourceKind: PriceSourceKind.OFFICIAL_WEB,
-        entries: [{ itemId, price: 1.75, currency: 'EUR' }],
-      });
-
-      // The row was still saved, because an unchanged price with a stale
-      // observation time reads as an unrefreshed one. What did not happen is a
-      // history entry: a price that did not change is not history.
-      expect(result).toMatchObject({ created: 0, updated: 0, unchanged: 1 });
+      // The materialized row is derived and its changes are not audited
+      // separately (plan 0080, section 9).
       expect(
         await trail.find({ where: { entity: 'supermarket_items' } })
       ).toEqual([]);
+      const shown = await dataSource
+        .getRepository(SupermarketItem)
+        .findOneByOrFail({ itemId, priceScopeId: scopeId });
+      expect(Number(shown.price)).toBe(1.75);
+      expect(shown.priceSourceKind).toBe(PriceSourceKind.OFFICIAL_WEB);
     });
 
-    it('records the price that did move, and only the price', async () => {
-      await prices.upsertBatch({
+    it('writes nothing for a re-fetch that found the same price', async () => {
+      await prices.addBatch({
         userId: HARVESTER,
         priceScopeId: scopeId,
-        priceSourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceRunId: RUN,
         entries: [{ itemId, price: 1.75, currency: 'EUR' }],
       });
       await trail.clear();
 
-      await prices.upsertBatch({
+      const result = await prices.addBatch({
         userId: HARVESTER,
         priceScopeId: scopeId,
-        priceSourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceRunId: RUN,
+        entries: [{ itemId, price: 1.75, currency: 'EUR' }],
+      });
+
+      // The current row's `lastObservedAt` moved and nothing else did, and a
+      // confirmation records nothing: a price that did not change is not
+      // history (plan 0080, section 9).
+      expect(result).toEqual({ inserted: 0, confirmed: 1 });
+      expect(await trail.find({ where: { entity: 'item_prices' } })).toEqual(
+        []
+      );
+      expect(
+        await dataSource.getRepository(ItemPrice).count({ where: { itemId } })
+      ).toBe(1);
+    });
+
+    it('records the price that did move as a new row, and leaves the old one alone', async () => {
+      await prices.addBatch({
+        userId: HARVESTER,
+        priceScopeId: scopeId,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceRunId: RUN,
+        entries: [{ itemId, price: 1.75, currency: 'EUR' }],
+      });
+      await trail.clear();
+
+      await prices.addBatch({
+        userId: HARVESTER,
+        priceScopeId: scopeId,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceRunId: RUN,
         entries: [{ itemId, price: 1.89, currency: 'EUR' }],
       });
 
-      const history = await trail.find({
-        where: { entity: 'supermarket_items' },
-      });
+      const history = await trail.find({ where: { entity: 'item_prices' } });
       expect(history).toHaveLength(1);
-      expect(history[0].action).toBe(AuditAction.UPDATE);
-      expect(history[0].before).toEqual({ price: 1.75 });
-      expect(history[0].after).toEqual({ price: 1.89 });
+      expect(history[0].action).toBe(AuditAction.CREATE);
+      expect(history[0].after).toMatchObject({ price: 1.89 });
+      const rows = await dataSource
+        .getRepository(ItemPrice)
+        .find({ where: { itemId }, order: { observedAt: 'ASC' } });
+      expect(rows.map((row) => Number(row.price))).toEqual([1.75, 1.89]);
     });
   });
 });

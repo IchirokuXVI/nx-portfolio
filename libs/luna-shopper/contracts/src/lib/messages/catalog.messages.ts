@@ -12,16 +12,28 @@ import type { AdminCredential } from './admin-auth.messages';
  * Catalog message contracts (plan 0012). The gateway calls these on the catalog
  * service over NATS. Writes are gated behind a platform-admin role (the app owner
  * alone); reads are open to any authenticated user. Every localized text field
- * carries at least English and Spanish (plan 0004, section 12). The catalog owns
+ * carries at least one of English and Spanish (plan 0004, section 12; widened
+ * from both by plan 0079). The catalog owns
  * its own database and is referenced from core only by an opaque `itemId`; it is
  * deliberately NOT part of the realtime fan-out, so it defines no events.
  */
 
-/** A reference/catalog text stored multilingual (English + Spanish minimum). */
-export interface LocalizedText {
-  en: string;
-  es: string;
-}
+/**
+ * The languages the catalog writes its names in, in the order a reader falls
+ * through them (plan 0079).
+ */
+export const CONTENT_LOCALES = ['en', 'es'] as const;
+export type ContentLocale = (typeof CONTENT_LOCALES)[number];
+
+/**
+ * A name in at least one of the languages the catalog serves (plan 0079).
+ *
+ * A language the name does not have is **absent, never null**, so a third
+ * language is a new key and not a migration over every row. At least one key is
+ * present, and every present value is a non blank string. `{}` is not a name,
+ * and neither is `{ en: null }`: the gateway refuses both.
+ */
+export type LocalizedText = Partial<Record<ContentLocale, string>>;
 
 /**
  * Alternative words for one thing, per locale (plan 0048, section 1).
@@ -142,15 +154,22 @@ export const PRODUCT_GROUP_PATTERNS = {
   list: 'productGroup.list',
 } as const;
 
+/**
+ * The materialized row: the price a shopper sees for one product in one scope
+ * (plan 0080, section 7).
+ *
+ * Since plan 0080 nothing writes a price here. Every price a source gives is a
+ * row in `item_prices` (see {@link ITEM_PRICE_PATTERNS}), and this table holds
+ * the one section 4 chose among them, recomputed inside the write that made it
+ * necessary. What is still written here directly is availability, because it is
+ * a scope wide fact about stock and not a price.
+ */
 export const SUPERMARKET_ITEM_PATTERNS = {
-  upsert: 'supermarketItem.upsert',
   /**
-   * Write many prices in one call (plan 0038, section 7). A harvest run writes
-   * hundreds of prices per scope and would otherwise make one NATS round trip per
-   * item; the payload cap is what bounds a batch, not a policy.
+   * Whether a scope carries a product at all, for many products at once (plan
+   * 0080, section 9). A 404 from a detail call sets it and states no price.
    */
-  upsertBatch: 'supermarketItem.upsertBatch',
-  delete: 'supermarketItem.delete',
+  setAvailability: 'supermarketItem.setAvailability',
   get: 'supermarketItem.get',
   listByItem: 'supermarketItem.listByItem',
   listByLocation: 'supermarketItem.listByLocation',
@@ -163,9 +182,48 @@ export const SUPERMARKET_ITEM_PATTERNS = {
    * those all start from something the caller already named: a product, a shop,
    * a scope. This one starts from nothing, which is the question "what have I
    * pinned by hand" and is the whole reason the price screen exists. It is
-   * reachable only through `/v2/admin/catalog/supermarket-items`.
+   * reachable only through `/v3/admin/catalog/supermarket-items`.
    */
   adminList: 'supermarketItem.adminList',
+} as const;
+
+/**
+ * Every price a source gave (plan 0080, section 2).
+ *
+ * One dated row per number a source stated, per product, per scope, per kind.
+ * A write that repeats the current number moves `lastObservedAt` and inserts
+ * nothing, so the table grows with price changes rather than with runs. No
+ * write ever changes another row's values: which price is shown is decided on
+ * every read from the stored rows and the clock (section 4), and materialized
+ * on `supermarket_items`.
+ */
+export const ITEM_PRICE_PATTERNS = {
+  /** One row. An `ADMIN` add computes its override snapshot server side. */
+  add: 'itemPrice.add',
+  /**
+   * Many rows of one kind for one scope, which is how a run writes. Answers how
+   * many were inserted and how many merely confirmed (section 9).
+   */
+  addBatch: 'itemPrice.addBatch',
+  /** The history of one (item, scope), newest first, paged. Operator only. */
+  list: 'itemPrice.list',
+  /**
+   * Remove one row by id. Operator only, and the materialized row is recomputed
+   * behind it. A typed price with a typo is a row the operator removes and
+   * adds again: editing a price is inserting a price.
+   */
+  delete: 'itemPrice.delete',
+} as const;
+
+/**
+ * The policy per source kind (plan 0080, section 3): its priority, how old a
+ * row of that kind may be before it stops being eligible, and whether the kind
+ * counts at all. Six rows, seeded by the migration, owner editable.
+ */
+export const PRICE_POLICY_PATTERNS = {
+  list: 'pricePolicy.list',
+  /** Recomputes every materialized row behind it, synchronously. */
+  update: 'pricePolicy.update',
 } as const;
 
 /**
@@ -377,11 +435,15 @@ export interface ProductGroupView {
 }
 
 /**
- * A price quoted by a search result, from the {@link SupermarketItemView} rows
- * plan 0038 already writes (plan 0048, section 3).
+ * A price quoted by a search result, from the materialized
+ * {@link SupermarketItemView} rows (plan 0048, section 3).
  *
  * It carries the source kind and the observation time, so a hand entered price is
- * presentable as one rather than passed off as a chain's published number.
+ * presentable as one rather than passed off as a chain's published number. Since
+ * plan 0080 it also says whether the number is **stale**: the policy decided that
+ * nothing currently eligible prices this product, and this is the newest thing
+ * anybody said. A client draws that flag rather than inferring it from the date,
+ * because only the server knows which kinds have a maximum age.
  */
 export interface ItemOfferView {
   /** Which product this price is for. Named, because a group's offer is a member's. */
@@ -392,8 +454,12 @@ export interface ItemOfferView {
   /** Verbatim, and never recomputed (plan 0038, section 2.4). */
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  priceObservedAt: string | null;
-  priceSourceKind: PriceSourceKind;
+  /** The effective row's `lastObservedAt`. Null when there is no price row. */
+  observedAt: string | null;
+  /** Null when there is no price row at all. */
+  sourceKind: PriceSourceKind | null;
+  /** Plan 0080, section 5: shown because nothing better exists, not because it is current. */
+  stale: boolean;
 }
 
 export interface ItemView {
@@ -458,10 +524,18 @@ export interface ProductGroupOfferView {
 }
 
 /**
- * The price of one item within one price scope (plan 0038, section 5.2). It was
- * keyed on the store until the scope arrived, which is what stopped Mercadona
- * writing twelve identical rows for Córdoba. What is genuinely per store (where
- * the product sits in the aisle) moved to {@link SupermarketLocationItemView}.
+ * The price a shopper sees for one item within one price scope (plan 0038,
+ * section 5.2, sharpened by plan 0080, section 7). It was keyed on the store
+ * until the scope arrived, which is what stopped Mercadona writing twelve
+ * identical rows for Córdoba. What is genuinely per store (where the product
+ * sits in the aisle) moved to {@link SupermarketLocationItemView}.
+ *
+ * Since plan 0080 this is **the price chosen among several**, not the price. The
+ * rows a source gave are {@link ItemPriceView}; this is the one the policy picked,
+ * and `stale`, `validUntil` and `itemPriceId` say on what terms. Two fields were
+ * renamed with that change of meaning (`priceObservedAt` to `observedAt`,
+ * `priceSourceKind` to `sourceKind`), on purpose: a client built before it
+ * cannot silently read a stale number as fresh, it reads two missing fields.
  */
 export interface SupermarketItemView {
   id: string;
@@ -483,15 +557,87 @@ export interface SupermarketItemView {
    * be parsed into a unit.
    */
   unitPriceLabel: string | null;
-  /** Without it a price has no age. */
-  priceObservedAt: string | null;
-  priceSourceKind: PriceSourceKind;
+  /** The effective row's `lastObservedAt`. Without it a price has no age. */
+  observedAt: string | null;
+  /** The effective row's kind. Null when no row prices this key at all. */
+  sourceKind: PriceSourceKind | null;
+  /**
+   * Nothing eligible priced this key, so the newest row of any kind is shown
+   * and flagged (plan 0080, section 5). A number with a date beats a blank.
+   */
+  stale: boolean;
+  /** The effective row's window end, so a client can say "until Sunday". */
+  validUntil: string | null;
+  /** The `item_prices` row section 4 chose. Null when there is none. */
+  itemPriceId: string | null;
   /**
    * Whether the scope carries this product at all. Scope wide rather than per
    * store because an automated source can only answer it at that level: a 404
    * from a detail call means "not stocked in this warehouse".
    */
   available: boolean;
+}
+
+/**
+ * The value an `ADMIN` row recorded for one automated kind when it was inserted
+ * (plan 0080, section 4.2).
+ */
+export interface ItemPriceOverride {
+  price: number | null;
+  unitPrice: number | null;
+}
+
+/**
+ * The override snapshot on an `ADMIN` row: one entry per automated kind that had
+ * a current row for this key at the instant the operator typed. An empty object
+ * records that there was none.
+ */
+export type ItemPriceOverrides = Partial<
+  Record<PriceSourceKind, ItemPriceOverride>
+>;
+
+/**
+ * One price a source gave (plan 0080, section 2).
+ *
+ * A row is an interval, not an event: `observedAt` is the first time this source
+ * stated this number and `lastObservedAt` the last. A run that sees the same
+ * number moves the second and writes nothing else.
+ */
+export interface ItemPriceView {
+  id: string;
+  itemId: string;
+  priceScopeId: string;
+  sourceKind: PriceSourceKind;
+  /** What the till charges for one pack. */
+  price: number | null;
+  currency: string | null;
+  /** The source's own figure, verbatim, never recomputed. */
+  unitPrice: number | null;
+  /** Text, never a unit (plan 0038, section 2.4). */
+  unitPriceLabel: string | null;
+  observedAt: string;
+  lastObservedAt: string;
+  /** The row applies from here. Null means from `observedAt`. */
+  validFrom: string | null;
+  /** Exclusive. Null means until superseded. */
+  validUntil: string | null;
+  /** The harvest run that wrote it. Opaque, never joined. */
+  sourceRunId: string | null;
+  /** The run that last moved `lastObservedAt`. Plan 0082 reads it. */
+  lastObservedRunId: string | null;
+  /** `ADMIN` rows only. */
+  overrides: ItemPriceOverrides | null;
+  /** `ADMIN` rows only: `observedAt` plus seven days. */
+  protectedUntil: string | null;
+}
+
+/** One row of `price_policies` (plan 0080, section 3). Lower priority wins. */
+export interface PricePolicyView {
+  sourceKind: PriceSourceKind;
+  priority: number;
+  /** Null means a row of this kind never ages out. */
+  maxAgeDays: number | null;
+  enabled: boolean;
 }
 
 /**
@@ -878,77 +1024,101 @@ export interface ListProductGroupsRequest extends PageQuery {
   query?: string;
 }
 
-// --- Supermarket item requests ---------------------------------------------
+// --- Item price requests (plan 0080, section 9) -----------------------------
 
-/**
- * Write one price for one item in one scope. Called by hand through the gateway
- * it sets `priceSourceKind` to ADMIN and **pins** the row: section 6.5's rule is
- * that an automated fetch will not overwrite it afterwards.
- */
-export interface UpsertSupermarketItemRequest extends AdminCredential {
-  itemId: string;
-  priceScopeId: string;
+/** The values one price row carries, shared by the single and the batch write. */
+export interface ItemPriceValues {
   price?: number | null;
   currency?: string | null;
   unitPrice?: number | null;
   unitPriceLabel?: string | null;
-  available?: boolean;
   /**
-   * Where this number came from. Defaults to ADMIN, which is what a person
-   * editing through the gateway means. A harvest run sends OFFICIAL_API, and the
-   * service then applies section 6.5 rather than writing unconditionally.
+   * When the source observed it. Defaults to now. A repeated value with an
+   * earlier date than the current row's `lastObservedAt` moves nothing, which
+   * is what makes the reference seed idempotent for free (section 2.1).
    */
-  priceSourceKind?: PriceSourceKind;
-  /** When the source observed it. Defaults to now for an ADMIN write. */
-  priceObservedAt?: string | null;
-}
-
-/** One entry of a batch write. The scope and the actor are stated once, above. */
-export interface SupermarketItemBatchEntry {
-  itemId: string;
-  price?: number | null;
-  currency?: string | null;
-  unitPrice?: number | null;
-  unitPriceLabel?: string | null;
-  available?: boolean;
-  priceObservedAt?: string | null;
+  observedAt?: string | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
 }
 
 /**
- * Write many prices for one scope in one call (plan 0038, section 7), so a run
- * does not make one round trip per item. Section 6.5 is applied per entry, and
- * the entries it declined are reported rather than silently dropped.
+ * Write one price row. Called by hand through the gateway it is an `ADMIN` row,
+ * and the service computes the override snapshot of section 4.2 itself: a
+ * caller supplied one is refused by the schema.
  */
-export interface UpsertSupermarketItemBatchRequest extends AdminCredential {
+export interface AddItemPriceRequest extends AdminCredential, ItemPriceValues {
+  itemId: string;
   priceScopeId: string;
-  priceSourceKind: PriceSourceKind;
-  entries: SupermarketItemBatchEntry[];
+  sourceKind: PriceSourceKind;
+  /** The harvest run writing it, when one is. A run may write official kinds only. */
+  sourceRunId?: string | null;
+}
+
+/** One entry of a batch write. The scope, the kind and the run are stated once, above. */
+export interface ItemPriceBatchEntry extends ItemPriceValues {
+  itemId: string;
 }
 
 /**
- * What a batch did. `skipped` carries the rows section 6.5 refused to overwrite,
- * with the value that was fetched, because a disagreement the owner cannot see is
- * the same as no rule at all.
+ * Write many rows of one kind for one scope in one call, so a run does not make
+ * one round trip per item. The kind must be an official one when a run id is
+ * given: no adapter may write a user kind (backlog 0001, section 2.3).
  */
-export interface UpsertSupermarketItemBatchResult {
-  created: number;
-  updated: number;
-  unchanged: number;
-  skipped: SupermarketItemPriceDisagreement[];
+export interface AddItemPriceBatchRequest extends AdminCredential {
+  priceScopeId: string;
+  sourceKind: PriceSourceKind;
+  sourceRunId?: string | null;
+  entries: ItemPriceBatchEntry[];
 }
 
-export interface SupermarketItemPriceDisagreement {
+/**
+ * What a batch did. `inserted` is a new row, `confirmed` a current row whose
+ * `lastObservedAt` moved. The run counters `updated` and `unchanged` map onto
+ * them.
+ */
+export interface AddItemPriceBatchResult {
+  inserted: number;
+  confirmed: number;
+}
+
+export interface ListItemPricesRequest extends PageQuery, AdminCredential {
   itemId: string;
-  /** The price already stored, which was not touched. */
-  storedPrice: number | null;
-  storedSourceKind: PriceSourceKind;
-  /** What the source said instead. */
-  fetchedPrice: number | null;
+  priceScopeId: string;
 }
 
-export interface SupermarketItemIdRequest extends AdminCredential {
-  supermarketItemId: string;
+export interface ItemPriceIdRequest extends AdminCredential {
+  itemPriceId: string;
 }
+
+/** Whether a scope carries each of these products. Carries no price. */
+export interface SetSupermarketItemAvailabilityRequest extends AdminCredential {
+  priceScopeId: string;
+  entries: { itemId: string; available: boolean }[];
+}
+
+export interface SetSupermarketItemAvailabilityResult {
+  /** Rows created or changed. A row already saying so counts for nothing. */
+  updated: number;
+}
+
+// --- Price policy requests (plan 0080, section 3) ---------------------------
+
+/** The credential and nothing else: there are six rows and no filter to offer. */
+export type ListPricePoliciesRequest = AdminCredential;
+
+export interface PricePolicyListView {
+  items: PricePolicyView[];
+}
+
+export interface UpdatePricePolicyRequest extends AdminCredential {
+  sourceKind: PriceSourceKind;
+  priority?: number;
+  maxAgeDays?: number | null;
+  enabled?: boolean;
+}
+
+// --- Supermarket item requests ---------------------------------------------
 
 export interface GetSupermarketItemRequest {
   userId: string;
@@ -992,11 +1162,10 @@ export interface AdminListSupermarketItemsRequest
   itemId?: string;
   /** One scope's prices, which is what a chain's price table is. */
   priceScopeId?: string;
-  /**
-   * `ADMIN` answers "what have I overridden", which plan 0038 section 6.5 makes
-   * permanent and invisible and which nothing else can currently ask.
-   */
-  priceSourceKind?: PriceSourceKind;
+  /** `ADMIN` answers "what have I overridden": the effective rows an operator's price won. */
+  sourceKind?: PriceSourceKind;
+  /** The rows whose every price is ineligible and are shown on sufferance (plan 0080, section 5). */
+  stale?: boolean;
   /** The scope wide flag, not the per store override on `SupermarketLocationItem`. */
   available?: boolean;
 }
@@ -1188,6 +1357,7 @@ export type SupermarketLocationPage = Paginated<SupermarketLocationView>;
 export type ShopPage = Paginated<ShopView>;
 export type ItemPage = Paginated<ItemView>;
 export type SupermarketItemPage = Paginated<SupermarketItemView>;
+export type ItemPricePage = Paginated<ItemPriceView>;
 export type PriceScopePage = Paginated<PriceScopeView>;
 export type SupermarketLocationItemPage =
   Paginated<SupermarketLocationItemView>;

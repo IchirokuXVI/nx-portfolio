@@ -381,3 +381,161 @@ describe('ResourceApiGateways, on the routes that are not plain CRUD', () => {
     await expect(read).resolves.toMatchObject({ id: 'sli1' });
   });
 });
+
+/**
+ * A collection that hangs off a parent, whose members hang off it too (plan
+ * 0009, section 3.2).
+ *
+ * A chain's shop is listed under its chain and read at `/locations/{id}`, so
+ * `collectionPath` was enough for it. A membership has no flat route at all:
+ * both URLs are nested, which is what `memberPath` is for, and the row is
+ * addressed by the pair.
+ *
+ * The rows come back without the value that addressed them, because the URL
+ * already said it. Putting it back is what keeps them addressable.
+ */
+describe('a nested resource', () => {
+  let gateways: ResourceApiGateways;
+  let http: HttpTestingController;
+
+  const ZONE = 'z-1';
+  const MEMBERSHIP = 'm-1';
+  const ADDRESS = `${ZONE}~${MEMBERSHIP}`;
+  const MEMBERS = `${GATEWAY}/v1/admin/zones/${ZONE}/members`;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: ADMIN_API_CONFIG, useValue: { gatewayBaseUrl: GATEWAY } },
+        ApiUrl,
+        ResourceApiGateways,
+      ],
+    });
+
+    gateways = TestBed.inject(ResourceApiGateways);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  const gateway = () =>
+    gateways.for({
+      path: '/v1/admin/zones/{zoneId}/members',
+      collectionPath: (values) => {
+        const zoneId = values['zoneId'];
+        return typeof zoneId === 'string' && zoneId !== ''
+          ? `/v1/admin/zones/${zoneId}/members`
+          : null;
+      },
+      memberPath: (id) => {
+        const [zoneId, membershipId] = id.split('~');
+        return zoneId === undefined || membershipId === undefined
+          ? null
+          : `/v1/admin/zones/${zoneId}/members/${membershipId}`;
+      },
+      pathParams: ['zoneId'],
+      key: ['zoneId', 'membershipId'],
+      idField: 'membershipId',
+    });
+
+  it('lists under the parent, and never sends the parent twice', async () => {
+    const listing = gateway().list({ filters: { zoneId: ZONE } });
+    const request = http.expectOne((candidate) => candidate.url === MEMBERS);
+
+    expect(request.request.method).toBe('GET');
+    // In the path already. `PageQueryDto` does not declare it, and the
+    // validation pipe refuses a property no DTO declares.
+    expect(request.request.params.has('zoneId')).toBe(false);
+
+    request.flush({
+      items: [{ membershipId: MEMBERSHIP, username: 'rosa' }],
+      nextCursor: null,
+    });
+
+    const page = await listing;
+    expect(page.items[0]['zoneId']).toBe(ZONE);
+  });
+
+  /**
+   * Not an empty list and not a request: the collection has no address until
+   * the filter naming it is given, and the screen says which one is missing.
+   */
+  it('asks for nothing at all until the parent is named', async () => {
+    const page = await gateway().list({});
+
+    expect(page).toEqual({ items: [], nextCursor: null });
+    http.expectNone(() => true);
+  });
+
+  it('reads one row under the parent, and stamps the parent back on', async () => {
+    const reading = gateway().read(ADDRESS);
+    const request = http.expectOne(
+      (candidate) => candidate.url === `${MEMBERS}/${MEMBERSHIP}`
+    );
+
+    expect(request.request.method).toBe('GET');
+    request.flush({ membershipId: MEMBERSHIP, username: 'rosa' });
+
+    expect(await reading).toEqual({
+      membershipId: MEMBERSHIP,
+      username: 'rosa',
+      zoneId: ZONE,
+    });
+  });
+
+  it('patches the member URL, with the parent out of the body', async () => {
+    const saving = gateway().update(ADDRESS, {
+      username: 'rosa',
+      zoneId: ZONE,
+    });
+    const request = http.expectOne(
+      (candidate) => candidate.url === `${MEMBERS}/${MEMBERSHIP}`
+    );
+
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ username: 'rosa' });
+
+    request.flush({ membershipId: MEMBERSHIP, username: 'rosa' });
+    await saving;
+  });
+
+  /**
+   * A keyed resource is normally read first, so a delete can quote the row's own
+   * uuid. Here the composite **is** the address, and reading first would produce
+   * `/members/{id}`, which is not a route.
+   */
+  it('deletes the member URL without reading the row first', async () => {
+    const removing = gateway().remove(ADDRESS);
+    const request = http.expectOne(
+      (candidate) => candidate.url === `${MEMBERS}/${MEMBERSHIP}`
+    );
+
+    expect(request.request.method).toBe('DELETE');
+    request.flush(null);
+    await removing;
+  });
+
+  /** A URL somebody edited by hand is a not found, rather than a guess. */
+  it('refuses an address with the wrong number of parts', async () => {
+    await expect(gateway().read('only-one-part')).rejects.toBeDefined();
+  });
+
+  /**
+   * The server's answer wins. A shop really does carry its `supermarketId`, and
+   * a stamp that overwrote it would be this app inventing data.
+   */
+  it('leaves a value the row already carries alone', async () => {
+    const listing = gateway().list({ filters: { zoneId: ZONE } });
+    const request = http.expectOne((candidate) => candidate.url === MEMBERS);
+
+    request.flush({
+      items: [{ membershipId: MEMBERSHIP, zoneId: 'z-from-the-server' }],
+      nextCursor: null,
+    });
+
+    const page = await listing;
+    expect(page.items[0]['zoneId']).toBe('z-from-the-server');
+  });
+});

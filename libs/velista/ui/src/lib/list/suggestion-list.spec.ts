@@ -51,6 +51,7 @@ function offer(
     unitPriceLabel: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
+    stale: false,
     priceScopeId: 'scope-cordoba',
   };
 }

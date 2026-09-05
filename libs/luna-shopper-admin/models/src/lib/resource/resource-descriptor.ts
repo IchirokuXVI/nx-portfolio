@@ -228,6 +228,21 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * command instead of an empty toolbar (plan 0007, section 2).
    */
   readonly note?: string;
+  /**
+   * A translation key for a sentence on the **form**, above the fields.
+   *
+   * Separate from {@link note}, because the two screens have different things
+   * to say: the lines list says there is no way to add one, and the line form
+   * says that saving is seen immediately by everybody in the zone. A resource
+   * needing both would otherwise have to choose.
+   *
+   * It exists for plan 0009, section 7. Every write to a zone, a membership, a
+   * list or a line emits the realtime event a member's own edit emits, so a
+   * change lands under somebody's thumb while they are shopping. The alternative
+   * to saying so was a confirmation on every edit, which is a click people stop
+   * reading.
+   */
+  readonly formNote?: string;
   readonly filters?: readonly FilterDescriptor[];
   /**
    * Filter parameters this list cannot be read without.

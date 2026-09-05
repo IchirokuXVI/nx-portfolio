@@ -166,3 +166,96 @@ describe('DirectoryApi', () => {
     http.verify();
   });
 });
+
+/**
+ * The acts plan 0009 adds, each against the route backend plan 0077 built for
+ * it.
+ *
+ * They are acts rather than fields because each does more than write a column.
+ * The assertion here is the same one the seven above make, and the only one
+ * worth making in this class: the method and the URL.
+ */
+describe('DirectoryApi, for the writes that are not fields', () => {
+  const LIST = 'list-1';
+  const LINE = 'line-1';
+
+  /**
+   * One service method, two routes, because the two directions are `POST` and
+   * `DELETE` on the same address. Both write `status` and `markedForDeletionAt`
+   * in one transaction, which is the whole reason this is not two fields.
+   */
+  it('marks a zone for deletion with a POST', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.setZoneDeletionMark(ZONE, true);
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/zones/${ZONE}/deletion-mark`
+    );
+    expect(request.request.method).toBe('POST');
+    request.flush({});
+
+    await expect(done).resolves.toBeUndefined();
+    http.verify();
+  });
+
+  it('takes the mark off again with a DELETE', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.setZoneDeletionMark(ZONE, false);
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/zones/${ZONE}/deletion-mark`
+    );
+    expect(request.request.method).toBe('DELETE');
+    request.flush({});
+
+    await expect(done).resolves.toBeUndefined();
+    http.verify();
+  });
+
+  it('lets a waiting member in through the approve route', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.approveMember(ZONE, MEMBERSHIP);
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/zones/${ZONE}/members/${MEMBERSHIP}/approve`
+    );
+    expect(request.request.method).toBe('POST');
+    request.flush({});
+
+    await expect(done).resolves.toBeUndefined();
+    http.verify();
+  });
+
+  it('refuses one through the reject route', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.rejectMember(ZONE, MEMBERSHIP);
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/zones/${ZONE}/members/${MEMBERSHIP}/reject`
+    );
+    expect(request.request.method).toBe('POST');
+    request.flush({});
+
+    await expect(done).resolves.toBeUndefined();
+    http.verify();
+  });
+
+  /**
+   * One route for both answers, with the answer in the body. It is a service
+   * call rather than a select on the form, because an act can be confirmed.
+   */
+  it('sets a line approval, with the state in the body', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.setLineApproval(LIST, LINE, 'APPROVED');
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/lists/${LIST}/lines/${LINE}/approval`
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ status: 'APPROVED' });
+    request.flush({});
+
+    await expect(done).resolves.toBeUndefined();
+    http.verify();
+  });
+});

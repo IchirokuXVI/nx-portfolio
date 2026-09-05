@@ -48,6 +48,7 @@ const offer = (price: number | null): ProductOffer => ({
   unitPriceLabel: 'EUR/L',
   observedAt: new Date('2026-09-01T06:00:00.000Z'),
   sourceKind: 'OFFICIAL_WEB',
+  stale: false,
   priceScopeId: 'scope-a',
 });
 

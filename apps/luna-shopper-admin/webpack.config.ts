@@ -1,6 +1,7 @@
 import { composePlugins } from '@nx/webpack';
 import { DefinePlugin } from 'webpack';
 import merge from 'webpack-merge';
+import { DEV_APP_VERSION } from './app-version';
 
 /**
  * Where the Luna Shopper backend is when nobody says otherwise: the port its config
@@ -41,6 +42,12 @@ export default composePlugins(async (config) =>
       new DefinePlugin({
         'process.env.LUNA_GATEWAY_URL': JSON.stringify(
           process.env.LUNA_GATEWAY_URL || DEV_LUNA_GATEWAY_URL
+        ),
+        // Which build this is (backend plan 0080, section 11). A development
+        // build is not a release and says so, which `isOlderThan` never
+        // compares against a floor.
+        'process.env.LUNA_ADMIN_APP_VERSION': JSON.stringify(
+          process.env.LUNA_ADMIN_APP_VERSION || DEV_APP_VERSION
         ),
       }),
     ],

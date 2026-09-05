@@ -631,6 +631,31 @@ export class ProfileService {
     };
   }
 
+  /**
+   * The profile a run is priced against, resolved once when the run is composed
+   * (plan 0078, section 3).
+   *
+   * The same two step ladder {@link resolveGenerationSources} starts with, and
+   * deliberately only those two steps: a named profile is loaded through
+   * {@link load}, so a stranger's id is refused before anything is written and
+   * a profile the caller does not own can never price a run; otherwise it is
+   * the caller's default, which `ensureProfiles` creates for an account that
+   * has none. So the answer is never null for a run composed after that plan.
+   *
+   * It stops short of the source resolution below because pricing does not read
+   * a profile's sources. Plan 0050 section 2 still lets an explicit `sources`
+   * request short circuit them, and this call leaves that order untouched.
+   */
+  async pricingProfileId(
+    userId: string,
+    profileId?: string | null
+  ): Promise<string> {
+    const profile = profileId
+      ? await this.load(userId, profileId)
+      : await this.defaultProfile(userId);
+    return profile.id;
+  }
+
   // --- Reading ---------------------------------------------------------------
 
   /**

@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   ItemSourceRefStatus,
   PriceSourceKind,
-  type SupermarketItemBatchEntry,
+  type ItemPriceBatchEntry,
 } from '@portfolio/luna-shopper/contracts';
 import { MercadonaClient } from '@portfolio/luna-shopper/mercadona';
 import { Repository } from 'typeorm';
@@ -98,7 +98,7 @@ export class RefreshRunner {
 
     await context.setStage('FETCH', `Re-fetching ${all.length} item(s)`);
     const observedAt = new Date();
-    const entries: SupermarketItemBatchEntry[] = [];
+    const entries: ItemPriceBatchEntry[] = [];
     const unavailable: string[] = [];
 
     await runWorkerPool({
@@ -125,8 +125,7 @@ export class RefreshRunner {
           currency: product.currency,
           unitPrice: product.unitPrice,
           unitPriceLabel: product.unitPriceLabel,
-          available: true,
-          priceObservedAt: observedAt.toISOString(),
+          observedAt: observedAt.toISOString(),
         });
         ref.lastSeenAt = observedAt;
         ref.lastResolvedAt = observedAt;
@@ -148,44 +147,52 @@ export class RefreshRunner {
     await context.flush();
   }
 
+  /**
+   * Two writes, not one (plan 0080, section 9): the prices, as rows stamped
+   * with this run, and the availability, as the scope wide fact it is. A 404
+   * carries no price, and a price row carries no claim about stock.
+   *
+   * The counters map onto what the batch answers: a new row is `updated` (the
+   * source said something new) and a confirmed row is `unchanged`. Nothing is
+   * `created` here any more, because the materialized row a shopper reads is
+   * derived and the run does not see it.
+   */
   private async writePrices(
     context: RunContext,
     priceScopeId: string,
-    entries: SupermarketItemBatchEntry[],
+    entries: ItemPriceBatchEntry[],
     unavailable: string[]
   ): Promise<void> {
-    const batches: SupermarketItemBatchEntry[][] = [];
-    const all = [
-      ...entries,
-      ...unavailable.map((itemId) => ({ itemId, available: false })),
-    ];
-    for (let i = 0; i < all.length; i += 200) {
-      batches.push(all.slice(i, i + 200));
-    }
-
-    for (const batch of batches) {
-      const result = await this.catalog.upsertPrices(
+    for (const batch of chunked(entries, 200)) {
+      const result = await this.catalog.addPrices(
         priceScopeId,
         batch,
+        context.runId,
         PriceSourceKind.OFFICIAL_API
       );
       await context.report({
-        created: result.created,
-        updated: result.updated,
-        unchanged: result.unchanged,
+        updated: result.inserted,
+        unchanged: result.confirmed,
       });
-      for (const disagreement of result.skipped) {
-        // Reported rather than silent: a price the owner typed in is left alone
-        // (section 6.5), and a disagreement nobody can see is the same as having
-        // no rule at all.
-        this.logger.log(
-          `Run ${context.runId}: item ${disagreement.itemId} kept its ` +
-            `${disagreement.storedSourceKind} price of ${disagreement.storedPrice}; ` +
-            `the source said ${disagreement.fetchedPrice}`
-        );
-      }
+    }
+
+    const availability = [
+      ...entries.map((entry) => ({ itemId: entry.itemId, available: true })),
+      ...unavailable.map((itemId) => ({ itemId, available: false })),
+    ];
+    for (const batch of chunked(availability, 200)) {
+      await this.catalog.setAvailability(priceScopeId, batch);
     }
   }
+}
+
+/** Chunked so one run's batch does not exceed the broker's payload cap. */
+function chunked<T>(all: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < all.length; i += size) {
+    batches.push(all.slice(i, i + size));
+  }
+  return batches;
 }
 
 function readWarehouse(config: Record<string, unknown>): string {

@@ -135,30 +135,67 @@ describe('validateDraft', () => {
   });
 
   it('is empty when there is nothing wrong', () => {
-    expect(validateDraft(descriptor, draftFor(descriptor, row))).toEqual({});
+    expect(
+      validateDraft(descriptor, draftFor(descriptor, row), 'create', {})
+    ).toEqual({});
   });
 
   /**
-   * Named rather than a bare "required": the control is several inputs, and
-   * "required" under a box the operator has not scrolled to says less than the
-   * language does.
+   * Required means "in at least one language" (plan 0079). A supermarket
+   * leaflet is printed in Spanish only, and the product it names is a complete
+   * product; the list shows the fallback and marks the gap.
    */
-  it('names each missing locale of a required localized field', () => {
+  it('accepts a required localized field with one language blank', () => {
     expect(
-      validateDraft(descriptor, draftWith({ name: { en: 'Milk', es: '' } }))
+      validateDraft(
+        descriptor,
+        draftWith({ name: { en: 'Milk', es: '' } }),
+        'create',
+        {}
+      )
+    ).toEqual({});
+    expect(
+      validateDraft(
+        descriptor,
+        draftWith({ name: { en: '', es: 'Leche' } }),
+        'create',
+        {}
+      )
+    ).toEqual({});
+  });
+
+  it('refuses a required localized field with every language blank, once', () => {
+    expect(
+      validateDraft(
+        descriptor,
+        draftWith({ name: { en: '', es: '  ' } }),
+        'create',
+        {}
+      )
     ).toEqual({
-      name: [
-        {
-          kind: 'key',
-          key: 'resource.error.missingLocale',
-          args: { locale: 'es' },
-        },
-      ],
+      name: [{ kind: 'key', key: 'resource.error.missingAnyLocale' }],
     });
   });
 
+  /**
+   * The wire refuses `''` and refuses `null` alike: a language the name does
+   * not have is spelled by leaving it out (plan 0079).
+   */
+  it('submits only the languages that have text', () => {
+    expect(
+      toInput(
+        descriptor,
+        draftWith({ name: { en: '', es: 'Leche' } }),
+        'create',
+        {}
+      )
+    ).toEqual(expect.objectContaining({ name: { es: 'Leche' } }));
+  });
+
   it('refuses money with more decimals than the column has', () => {
-    expect(validateDraft(descriptor, draftWith({ price: '1.239' }))).toEqual({
+    expect(
+      validateDraft(descriptor, draftWith({ price: '1.239' }), 'create', {})
+    ).toEqual({
       price: [
         {
           kind: 'key',
@@ -171,23 +208,37 @@ describe('validateDraft', () => {
 
   it('accepts on the unit price the precision the price refuses', () => {
     expect(
-      validateDraft(descriptor, draftWith({ unitPrice: '1.2345' }))
+      validateDraft(
+        descriptor,
+        draftWith({ unitPrice: '1.2345' }),
+        'create',
+        {}
+      )
     ).toEqual({});
   });
 
   it('refuses a website that is not an http url', () => {
     expect(
-      validateDraft(descriptor, draftWith({ websiteUrl: 'bonpreu.example' }))
+      validateDraft(
+        descriptor,
+        draftWith({ websiteUrl: 'bonpreu.example' }),
+        'create',
+        {}
+      )
     ).toEqual({
       websiteUrl: [{ kind: 'key', key: 'resource.error.notAUrl' }],
     });
   });
 
   it('refuses a fractional count and a negative one', () => {
-    expect(validateDraft(descriptor, draftWith({ stores: '2.5' }))).toEqual({
+    expect(
+      validateDraft(descriptor, draftWith({ stores: '2.5' }), 'create', {})
+    ).toEqual({
       stores: [{ kind: 'key', key: 'resource.error.notAnInteger' }],
     });
-    expect(validateDraft(descriptor, draftWith({ stores: '-1' }))).toEqual({
+    expect(
+      validateDraft(descriptor, draftWith({ stores: '-1' }), 'create', {})
+    ).toEqual({
       stores: [
         { kind: 'key', key: 'resource.error.tooSmall', args: { min: 0 } },
       ],
@@ -202,7 +253,9 @@ describe('validateDraft', () => {
     expect(
       validateDraft(
         descriptor,
-        draftWith({ price: '', websiteUrl: '', stores: '' })
+        draftWith({ price: '', websiteUrl: '', stores: '' }),
+        'create',
+        {}
       )
     ).toEqual({});
   });
@@ -298,5 +351,139 @@ describe('toInput', () => {
 
     expect(input).not.toHaveProperty('unitPrice');
     expect(Object.keys(input)).toEqual(['price']);
+  });
+});
+
+/**
+ * A `jsonb` column with no shape this app knows (plan 0009, section 3.1).
+ *
+ * The control holds text, because that is what a textarea holds and because
+ * half typed JSON has to survive under the operator's cursor. The parse happens
+ * once, on the way out, and only after validation has agreed it reads.
+ */
+describe('a json field', () => {
+  interface Household {
+    id: string;
+    config: Record<string, unknown>;
+  }
+
+  const zone: ResourceDescriptor<Household> = {
+    name: 'zones',
+    segment: 'zones',
+    labels: { one: 'zones.one', many: 'zones.many' },
+    title: (row) => row.id,
+    fields: [
+      { kind: 'text', name: 'id', label: 'zones.id', editable: false },
+      { kind: 'json', name: 'config', label: 'zones.config' },
+    ],
+    list: { columns: ['id'], compact: ['id'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  };
+
+  const row: Household = { id: 'z1', config: { currency: 'EUR' } };
+
+  it('opens with the object printed, so it can be read before it is changed', () => {
+    expect(draftFor(zone, row, 'edit')['config']).toBe(
+      '{\n  "currency": "EUR"\n}'
+    );
+  });
+
+  it('submits the object rather than the text the control held', () => {
+    const original = draftFor(zone, row, 'edit');
+    const draft = { ...original, config: '{ "currency": "GBP" }' };
+
+    expect(toInput(zone, draft, 'edit', original)).toEqual({
+      config: { currency: 'GBP' },
+    });
+  });
+
+  it('refuses text that does not read, and text that reads as something else', () => {
+    const original = draftFor(zone, row, 'edit');
+
+    for (const bad of ['{ nope', '[1, 2]', '"a string"', '7']) {
+      expect(
+        validateDraft(zone, { ...original, config: bad }, 'edit', original)
+      ).toEqual({
+        config: [{ kind: 'key', key: 'resource.error.notAnObject' }],
+      });
+    }
+  });
+});
+
+/**
+ * Validation checks exactly what a submit would send, which for an edit is only
+ * what changed (plan 0009, section 3.2).
+ *
+ * The row this exists for is a zone owner's membership. It holds `role: OWNER`,
+ * which the picker must not offer, because `setRole` refuses it and ownership is
+ * a transfer. Checking that untouched value would leave the form permanently
+ * invalid over a field nobody edited, and an owner's per zone name could never
+ * be corrected.
+ */
+describe('validateDraft over an edit', () => {
+  interface Membership {
+    membershipId: string;
+    username: string;
+    role: string;
+  }
+
+  const membership: ResourceDescriptor<Membership> = {
+    name: 'memberships',
+    segment: 'memberships',
+    labels: { one: 'memberships.one', many: 'memberships.many' },
+    idField: 'membershipId',
+    title: (row) => row.username,
+    fields: [
+      {
+        kind: 'text',
+        name: 'username',
+        label: 'memberships.username',
+        required: true,
+      },
+      {
+        kind: 'enum',
+        name: 'role',
+        label: 'memberships.role',
+        options: [
+          { value: 'ADMIN', label: 'memberships.role.ADMIN' },
+          { value: 'MEMBER', label: 'memberships.role.MEMBER' },
+        ],
+      },
+    ],
+    list: { columns: ['username'], compact: ['username'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  };
+
+  const owner: Membership = {
+    membershipId: 'm1',
+    username: 'rosa',
+    role: 'OWNER',
+  };
+
+  it('says nothing about a value the picker does not offer and nobody touched', () => {
+    const original = draftFor(membership, owner, 'edit');
+
+    expect(validateDraft(membership, original, 'edit', original)).toEqual({});
+  });
+
+  it('still refuses that field once it has been changed to something wrong', () => {
+    const original = draftFor(membership, owner, 'edit');
+    const draft = { ...original, role: 'GUEST' };
+
+    expect(validateDraft(membership, draft, 'edit', original)).toEqual({
+      role: [{ kind: 'key', key: 'resource.error.notAnOption' }],
+    });
+  });
+
+  it('checks every field of a create, changed or not', () => {
+    const empty = draftFor(membership, null, 'create');
+
+    expect(validateDraft(membership, empty, 'create', empty)).toEqual({
+      username: [{ kind: 'key', key: 'resource.error.required' }],
+    });
   });
 });

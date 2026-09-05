@@ -2,6 +2,7 @@ import {
   ITEMS,
   LOCATION_ITEMS,
   LOCATIONS,
+  PRICE_POLICIES,
   PRICE_SCOPES,
   PRICES,
   PRODUCT_GROUPS,
@@ -10,7 +11,9 @@ import {
 import {
   ADMINS,
   BASKETS,
+  LIST_LINES,
   LISTS,
+  MEMBERSHIPS,
   USERS,
   ZONES,
 } from '@portfolio/luna-shopper-admin/feature-people';
@@ -41,6 +44,15 @@ import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models
  * comparable, then the prices, which need a product and a scope to exist at all.
  * The per shop rows are last: they are the narrowest question in the catalog and
  * the one asked least often.
+ *
+ * `0009` adds the two nested collections, each straight after the resource it
+ * hangs off: a membership after zones, a line after lists. Neither can be listed
+ * from nothing, so both are usually reached by opening a row on their parent's
+ * detail screen rather than from the navigation.
+ *
+ * Backend plan 0080 puts the price policies straight after the prices they
+ * decide between: six rows, read once and changed rarely, and an operator who
+ * has just seen a stale badge on the price list is the one who opens them.
  */
 export const ADMIN_RESOURCES: readonly AnyResourceDescriptor[] = [
   SUPERMARKETS,
@@ -49,10 +61,13 @@ export const ADMIN_RESOURCES: readonly AnyResourceDescriptor[] = [
   ITEMS,
   PRODUCT_GROUPS,
   PRICES,
+  PRICE_POLICIES,
   LOCATION_ITEMS,
   USERS,
   ZONES,
+  MEMBERSHIPS,
   LISTS,
+  LIST_LINES,
   BASKETS,
   ADMINS,
 ];

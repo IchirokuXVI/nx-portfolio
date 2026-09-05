@@ -1,6 +1,9 @@
 import type {
   ItemOfferView,
+  ItemPriceView,
   ItemView,
+  LocalizedText,
+  PricePolicyView,
   PriceScopeView,
   ProductGroupView,
   SupermarketItemView,
@@ -10,6 +13,8 @@ import type {
 } from '@portfolio/luna-shopper/contracts';
 import type {
   Item,
+  ItemPrice,
+  PricePolicy,
   PriceScope,
   ProductGroup,
   Supermarket,
@@ -17,6 +22,26 @@ import type {
   SupermarketLocation,
   SupermarketLocationItem,
 } from '../entities';
+
+/**
+ * The sort key for a localized name, in SQL: English, else Spanish, never null
+ * (plan 0079, section 3).
+ *
+ * The three admin listings that page by name use it in the `ORDER BY`, in the
+ * keyset seek and, through {@link displayName}, in the cursor value, and the
+ * three must agree. A row comparison with a NULL member yields NULL and a NULL
+ * predicate drops the row, so seeking on `name ->> 'en'` alone made every
+ * Spanish only product appear on no page at all, with nothing to say so. Not
+ * indexed, and not worth indexing: these are admin listings of a few thousand
+ * rows.
+ */
+export const displayNameSql = (alias: string): string =>
+  `coalesce(${alias}.name ->> 'en', ${alias}.name ->> 'es', '')`;
+
+/** The TypeScript half of {@link displayNameSql}: the same rule, for the cursor. */
+export function displayName(name: LocalizedText): string {
+  return name.en ?? name.es ?? '';
+}
 
 /**
  * Postgres `numeric` comes back as a **string** through node-postgres, so every
@@ -108,6 +133,14 @@ export function toItemView(row: Item, bestOffer?: ItemOfferView): ItemView {
   return bestOffer ? { ...view, bestOffer } : view;
 }
 
+/** A timestamp on the wire, or null. Raw rows hand back strings, entities hand back dates. */
+function toInstant(value: Date | string | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return (value instanceof Date ? value : new Date(value)).toISOString();
+}
+
 export function toItemOfferView(row: SupermarketItem): ItemOfferView {
   return {
     itemId: row.itemId,
@@ -116,10 +149,9 @@ export function toItemOfferView(row: SupermarketItem): ItemOfferView {
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
-    priceObservedAt: row.priceObservedAt
-      ? row.priceObservedAt.toISOString()
-      : null,
-    priceSourceKind: row.priceSourceKind,
+    observedAt: toInstant(row.priceObservedAt),
+    sourceKind: row.priceSourceKind ?? null,
+    stale: row.stale ?? false,
   };
 }
 
@@ -134,11 +166,42 @@ export function toSupermarketItemView(
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
-    priceObservedAt: row.priceObservedAt
-      ? row.priceObservedAt.toISOString()
-      : null,
-    priceSourceKind: row.priceSourceKind,
+    observedAt: toInstant(row.priceObservedAt),
+    sourceKind: row.priceSourceKind ?? null,
+    stale: row.stale ?? false,
+    validUntil: toInstant(row.validUntil),
+    itemPriceId: row.itemPriceId ?? null,
     available: row.available,
+  };
+}
+
+export function toItemPriceView(row: ItemPrice): ItemPriceView {
+  return {
+    id: row.id,
+    itemId: row.itemId,
+    priceScopeId: row.priceScopeId,
+    sourceKind: row.sourceKind,
+    price: toNumber(row.price),
+    currency: row.currency,
+    unitPrice: toNumber(row.unitPrice),
+    unitPriceLabel: row.unitPriceLabel,
+    observedAt: toInstant(row.observedAt) ?? '',
+    lastObservedAt: toInstant(row.lastObservedAt) ?? '',
+    validFrom: toInstant(row.validFrom),
+    validUntil: toInstant(row.validUntil),
+    sourceRunId: row.sourceRunId ?? null,
+    lastObservedRunId: row.lastObservedRunId ?? null,
+    overrides: row.overrides ?? null,
+    protectedUntil: toInstant(row.protectedUntil),
+  };
+}
+
+export function toPricePolicyView(row: PricePolicy): PricePolicyView {
+  return {
+    sourceKind: row.sourceKind,
+    priority: row.priority,
+    maxAgeDays: row.maxAgeDays ?? null,
+    enabled: row.enabled,
   };
 }
 

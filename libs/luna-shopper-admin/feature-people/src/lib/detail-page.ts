@@ -96,6 +96,23 @@ export abstract class DetailPage<T extends ResourceRow> {
     void this.router.navigate(['..'], { relativeTo: this.route });
   }
 
+  /**
+   * Open this row's form.
+   *
+   * `edit` beside `:id`, which is the route the factory declares for a resource
+   * that has both a detail component of its own and `edit: true`. Without that
+   * second route the generic form would have nowhere to be reached, because
+   * `detail` wins at `:id` (plan 0009, section 1).
+   */
+  edit(): void {
+    void this.router.navigate(['edit'], { relativeTo: this.route });
+  }
+
+  /** Whether this screen offers a way to change the row it is showing. */
+  get canEdit(): boolean {
+    return this.descriptor.actions?.edit === true;
+  }
+
   ask(pending: PendingConfirm): void {
     this.actionErrorKey.set(null);
     this.asking.set(pending);

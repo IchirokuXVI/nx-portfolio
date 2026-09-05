@@ -220,9 +220,18 @@ export class FieldControl {
       : undefined;
   }
 
+  /**
+   * Whether the control is a textarea.
+   *
+   * A `json` field always is: it holds a printed object, which is several lines
+   * before it is anything worth reading.
+   */
   multiline(): boolean {
     const field = this.field();
-    return field.kind === 'text' && field.multiline === true;
+    return (
+      field.kind === 'json' ||
+      (field.kind === 'text' && field.multiline === true)
+    );
   }
 
   dateType(): string {

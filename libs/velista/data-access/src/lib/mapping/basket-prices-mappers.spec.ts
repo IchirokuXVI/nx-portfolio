@@ -28,8 +28,9 @@ const OFFER = {
   currency: 'EUR',
   unitPrice: 0.95,
   unitPriceLabel: 'EUR/L',
-  priceObservedAt: '2026-09-01T06:00:00.000Z',
-  priceSourceKind: 'OFFICIAL_WEB',
+  observedAt: '2026-09-01T06:00:00.000Z',
+  sourceKind: 'OFFICIAL_WEB',
+  stale: false,
 };
 
 const PRODUCT = {
@@ -76,6 +77,7 @@ describe('toBasketView: prices and places (velista 0062)', () => {
     const view = basket({ products: [{ ...PRODUCT, bestOffer: OFFER }] });
 
     expect(view?.products.get('i-milk')?.offer).toEqual({
+      stale: false,
       price: 0.95,
       currency: 'EUR',
       unitPrice: 0.95,
@@ -98,7 +100,7 @@ describe('toBasketView: prices and places (velista 0062)', () => {
 
   it("reads a source kind this build does not know as the chain's own", () => {
     const view = basket({
-      products: [{ ...PRODUCT, bestOffer: { ...OFFER, priceSourceKind: 'X' } }],
+      products: [{ ...PRODUCT, bestOffer: { ...OFFER, sourceKind: 'X' } }],
     });
 
     // Not `ADMIN`: the only value that changes a sentence is never guessed.

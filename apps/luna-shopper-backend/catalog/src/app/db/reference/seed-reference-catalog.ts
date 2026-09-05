@@ -1,12 +1,13 @@
 import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { In } from 'typeorm';
+import { recomputeEffectivePrices } from '../../catalog/effective-price.service';
+import { writeItemPrices } from '../../catalog/item-price-writer';
 import {
   Item,
   PriceScope,
   ProductGroup,
   Supermarket,
-  SupermarketItem,
   SupermarketLocation,
 } from '../../entities';
 import { EL_JAMON_ITEMS, SUPERCASH_ITEMS } from './authored';
@@ -18,7 +19,6 @@ import {
   locationId,
   priceScopeId,
   supermarketId,
-  supermarketItemId,
 } from './ids';
 import { MERCADONA_ITEMS } from './mercadona';
 import { REFERENCE_STORES } from './stores';
@@ -30,15 +30,13 @@ export interface ReferenceSeedReport {
   stores: number;
   /** Products this run created. */
   items: number;
-  /** Prices this run wrote. */
+  /** Price rows this run inserted. A rerun that found every value inserts none. */
   prices: number;
   /**
    * Products a harvest already carried, so only their group was set. Zero in a
    * database that has never run a discovery, which is the normal case.
    */
   adopted: number;
-  /** Prices left alone because a person had typed one in. */
-  preserved: number;
 }
 
 const MERCADONA_BRAND_KEY = 'Q377705';
@@ -76,7 +74,6 @@ export async function seedReferenceCatalog(
       items: 0,
       prices: 0,
       adopted: 0,
-      preserved: 0,
     };
 
     // --- 1. The groups ----------------------------------------------------
@@ -304,10 +301,14 @@ async function seedMercadona(
 /**
  * Creates a set of products and their receipt prices.
  *
- * The price rule is plan 0038 section 6.5, and it bites harder here than
- * anywhere else it applies: this runs on every boot, so without the check one
- * price corrected by hand through the admin surface would survive exactly until
- * the next restart.
+ * The prices are one `USER_RECEIPT` row per product in `item_prices` (plan
+ * 0080, section 9), with the receipt date as `observedAt`, through the same
+ * insert on change writer a run uses. A rerun finds the same value and a date
+ * that is not later, and moves nothing: the seed is idempotent for free.
+ *
+ * An owner's `ADMIN` row is not in the seed's way any more, and the seed does
+ * not look for one. Both rows coexist, and `price_policies` decides which one
+ * a shopper sees.
  */
 async function writeItems(
   m: EntityManager,
@@ -333,24 +334,17 @@ async function writeItems(
   await m.getRepository(Item).upsert(itemRows, ['id']);
   report.items += itemRows.length;
 
-  const ids = items.map((it) => supermarketItemId(storeSlug, it.slug));
-  const existing = await m.getRepository(SupermarketItem).find({
-    where: { id: In(ids) },
-    select: { id: true, priceSourceKind: true },
+  const scope = await m.getRepository(PriceScope).findOneByOrFail({
+    id: scopeId,
   });
-  const admin = new Set(
-    existing
-      .filter((r) => r.priceSourceKind === PriceSourceKind.ADMIN)
-      .map((r) => r.id)
-  );
-
-  const priceRows = items
-    .map((it) => ({ it, id: supermarketItemId(storeSlug, it.slug) }))
-    .filter(({ id }) => !admin.has(id))
-    .map(({ it, id }) => ({
-      id,
+  const now = new Date();
+  const outcome = await writeItemPrices(m, {
+    scope,
+    sourceKind: PriceSourceKind.USER_RECEIPT,
+    sourceRunId: null,
+    now,
+    entries: items.map((it) => ({
       itemId: itemId(storeSlug, it.slug),
-      priceScopeId: scopeId,
       // A counter product's receipt figure is per kilogram, which is not what
       // one of them costs, so it goes to the per unit fields and `price` stays
       // null rather than claiming a pack price nobody paid.
@@ -358,11 +352,17 @@ async function writeItems(
       currency: 'EUR',
       unitPrice: it.price,
       unitPriceLabel: it.perKilo ? 'kg' : 'ud',
-      priceObservedAt: new Date(`${it.observedAt}T00:00:00.000Z`),
-      priceSourceKind: PriceSourceKind.USER_RECEIPT,
-      available: true,
-    }));
-  await m.getRepository(SupermarketItem).upsert(priceRows, ['id']);
-  report.prices += priceRows.length;
-  report.preserved += admin.size;
+      observedAt: `${it.observedAt}T00:00:00.000Z`,
+    })),
+  });
+  report.prices += outcome.inserted.length;
+
+  // The materialized row, for every product the seed priced: the scope has an
+  // opinion about all of them, and a shopper reads that row and not the one
+  // above it.
+  await recomputeEffectivePrices(
+    m,
+    items.map((it) => ({ itemId: itemId(storeSlug, it.slug), priceScopeId: scopeId })),
+    now
+  );
 }

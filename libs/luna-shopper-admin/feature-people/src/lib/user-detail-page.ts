@@ -27,11 +27,12 @@ const ZONE_LIMIT = 50;
 /**
  * One account (plan 0007, section 2).
  *
- * The account, the zones it is in, and the two named actions. Nothing here is
- * editable and nothing ever will be: there is no `PATCH /v1/admin/users/:id`
- * and backend plan 0074 puts one permanently out of scope, because the
- * invariants around a user live in `account-deletion.service` and its
- * neighbours rather than in constraints.
+ * The account, the zones it is in, the two named actions, and a way through to
+ * the form. `0074` put editing a user permanently out of scope on the grounds
+ * that the invariants live in `account-deletion.service` and its neighbours
+ * rather than in constraints; backend plan 0077 reversed that for exactly the
+ * two columns it could put a service behind, and the form is where they are
+ * changed.
  *
  * **`displayName` is shown here and not in the list.** It is whatever an
  * identity provider supplied, which for a Google sign in is somebody's real
@@ -86,6 +87,11 @@ const ZONE_LIMIT = 50;
             <p class="failed" role="alert">{{ key | rokuT }}</p>
           }
           <div class="actions">
+            @if (canEdit) {
+              <button (click)="edit()" [disabled]="busy()" type="button">
+                {{ 'resource.action.edit' | rokuT }}
+              </button>
+            }
             @if (canResend()) {
               <button
                 (click)="askToResend(user)"

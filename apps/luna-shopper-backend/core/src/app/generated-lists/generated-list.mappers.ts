@@ -5,6 +5,7 @@ import type {
   GeneratedListLineView,
   GeneratedListParticipantView,
   GeneratedListSourceName,
+  GeneratedListSourceSnapshot,
   GeneratedListSummaryView,
   GeneratedListView,
   SettlementOutcome,
@@ -25,6 +26,22 @@ import type {
  * service reads every line's origins and options in one query each whatever the
  * size of the basket.
  */
+
+/**
+ * The stored snapshot as the contract describes it (plan 0078, section 3.2).
+ *
+ * `sourceSnapshot` is a `jsonb` column, so a run composed before that plan
+ * carries no `pricingProfileId` key at all. The contract makes the field
+ * required and nullable rather than optional, so the absence is read as null
+ * here and every run leaves core with the same shape. Nothing is written back:
+ * the owner's default today is a guess about what an old run was composed
+ * against, and this column is a record rather than a guess.
+ */
+function readSnapshot(
+  snapshot: GeneratedListSourceSnapshot
+): GeneratedListSourceSnapshot {
+  return { ...snapshot, pricingProfileId: snapshot.pricingProfileId ?? null };
+}
 
 export function toOriginView(
   row: GeneratedListLineOrigin
@@ -151,7 +168,7 @@ export function toBasketView(
   // them are the plainest zone data there is. Both go under the same rule as the
   // line's three fields.
   return seesZoneData
-    ? { ...view, sourceSnapshot: row.sourceSnapshot, sourceNames }
+    ? { ...view, sourceSnapshot: readSnapshot(row.sourceSnapshot), sourceNames }
     : view;
 }
 
@@ -166,7 +183,7 @@ export function toGeneratedListView(
     name: row.name,
     status: row.status,
     generatedAt: row.generatedAt.toISOString(),
-    sourceSnapshot: row.sourceSnapshot,
+    sourceSnapshot: readSnapshot(row.sourceSnapshot),
     lines,
   };
 }

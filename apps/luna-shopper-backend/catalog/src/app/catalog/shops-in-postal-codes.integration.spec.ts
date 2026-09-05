@@ -16,6 +16,7 @@ import {
 import { CatalogAuditService } from './catalog-audit.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
+import { EffectivePriceService } from './effective-price.service';
 import { PriceScopeService } from './price-scope.service';
 import { SupermarketLocationService } from './supermarket-location.service';
 
@@ -92,7 +93,8 @@ describeIntegration('the shops in your postal codes (real Postgres)', () => {
       dataSource.getRepository(PriceScope),
       dataSource.getRepository(Supermarket),
       admin,
-      audit
+      audit,
+      new EffectivePriceService()
     );
     locations = new SupermarketLocationService(
       dataSource.getRepository(SupermarketLocation),

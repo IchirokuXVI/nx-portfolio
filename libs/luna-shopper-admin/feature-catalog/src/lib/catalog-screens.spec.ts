@@ -18,6 +18,7 @@ import { ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
 import { ITEMS } from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
+import { PRICE_POLICIES } from './price-policies';
 import { PriceScopeNotice } from './price-scope-notice';
 import { PRICE_SCOPES } from './price-scopes';
 import { PRICES } from './prices';
@@ -52,6 +53,7 @@ const ALL = [
   ITEMS,
   PRODUCT_GROUPS,
   PRICES,
+  PRICE_POLICIES,
   LOCATION_ITEMS,
 ];
 
@@ -144,22 +146,18 @@ async function chooseFilter(
   await settle(fixture);
 }
 
-describe('the price list', () => {
-  it('draws every price, whoever set it', async () => {
+describe('the effective price list', () => {
+  it('draws every effective price, whichever source won', async () => {
     const fixture = await boot('/prices');
 
     expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(3);
   });
 
-  /**
-   * "What have I typed in and pinned." Section 4 is that this question is
-   * currently unanswerable anywhere else, because the confirmation queue that
-   * would have surfaced a disagreement does not exist.
-   */
+  /** "What have I overridden": the effective rows an operator's price won. */
   it('narrows to the prices somebody typed in', async () => {
     const fixture = await boot('/prices');
 
-    await chooseFilter(fixture, 'priceSourceKind', 'ADMIN');
+    await chooseFilter(fixture, 'sourceKind', 'ADMIN');
 
     const rows = fixture.nativeElement.querySelectorAll('tbody tr');
     expect(rows).toHaveLength(2);
@@ -168,82 +166,93 @@ describe('the price list', () => {
     );
   });
 
-  /** So a stale price is recognisable as stale rather than merely as a number. */
-  it('shows when each price was last seen', async () => {
+  /**
+   * Backend plan 0080, section 5: the server flags a price shown on
+   * sufferance, and the screen draws the flag rather than working it out from
+   * the date.
+   */
+  it('shows the source, the date and the stale flag', async () => {
     const fixture = await boot('/prices');
 
     const headers = [...fixture.nativeElement.querySelectorAll('thead th')].map(
       (cell) => (cell as HTMLElement).textContent?.trim()
     );
 
-    expect(headers).toContain('catalog.prices.priceSourceKind');
-    expect(headers).toContain('catalog.prices.priceObservedAt');
+    expect(headers).toContain('catalog.prices.sourceKind');
+    expect(headers).toContain('catalog.prices.observedAt');
+    expect(headers).toContain('catalog.prices.stale');
   });
 });
 
-describe('reverting a pinned price', () => {
+describe('a price and its history', () => {
   /**
-   * Nothing in the gateway sets `priceSourceKind` back: the upsert DTO has no
-   * such property. What lifts the pin is the **price** going null, because
-   * `decidePriceWrite` writes over any row that has no price whatever its source
-   * kind says. So this asserts the price is gone, which is the thing that
-   * matters, rather than a label that has not moved.
+   * The second screen of plan 0080, section 10: the effective row at the top
+   * and every row a source gave below it, with the override line beside the
+   * typed row that is still inside its protection window.
    */
-  it('clears the typed price, and asks before it does', async () => {
-    const fixture = await boot('/prices');
-    await chooseFilter(fixture, 'priceSourceKind', 'ADMIN');
-
-    buttonSaying(fixture, 'catalog.prices.action.revert')?.click();
-    await settle(fixture);
-
-    expect(text(fixture)).toContain('catalog.prices.confirm.revert.heading');
-
-    buttonSaying(fixture, 'catalog.prices.confirm.revert.confirm')?.click();
+  it('draws the effective row and the rows behind it', async () => {
+    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
     await settle(fixture);
     await settle(fixture);
 
-    // The row is still there and its price is not. A row with no price is one
-    // an automated run may write again.
-    const rows = fixture.nativeElement.querySelectorAll('tbody tr');
-    expect(rows).toHaveLength(2);
-    expect(rowsText(fixture)).not.toContain('8.45');
+    expect(text(fixture)).toContain('catalog.prices.history.effective');
+    // Two rows behind the olive oil price: the typed one and the crawl it
+    // overrode.
+    expect(fixture.nativeElement.querySelectorAll('.rows li')).toHaveLength(2);
+    expect(text(fixture)).toContain('catalog.priceSourceKind.ADMIN');
+    expect(text(fixture)).toContain('catalog.priceSourceKind.OFFICIAL_API');
+    // The typed row says what it is overriding, from its own snapshot.
+    expect(text(fixture)).toContain('catalog.prices.history.overriding');
   });
 
-  /** A harvested price is not pinned, so there is nothing to revert. */
-  it('is not offered on a price an automated source set', async () => {
-    const fixture = await boot('/prices');
-    await chooseFilter(fixture, 'priceSourceKind', 'OFFICIAL_API');
+  /**
+   * Editing a price is inserting a price: the only write on a row is its
+   * removal, and it asks first. The effective row is read again afterwards
+   * rather than guessed, because the server recomputes it.
+   */
+  it('removes a row after asking, and re-reads what is shown', async () => {
+    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
+    await settle(fixture);
+    await settle(fixture);
 
-    expect(
-      buttonSaying(fixture, 'catalog.prices.action.revert')
-    ).toBeUndefined();
+    [...fixture.nativeElement.querySelectorAll('.rows li button')][0]?.click();
+    await settle(fixture);
+    expect(text(fixture)).toContain('catalog.prices.confirm.remove.heading');
+
+    buttonSaying(fixture, 'catalog.prices.confirm.remove.confirm')?.click();
+    await settle(fixture);
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(fixture.nativeElement.querySelectorAll('.rows li')).toHaveLength(1);
+  });
+
+  it('offers to add a price, which is the form and not an edit', async () => {
+    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
+    await settle(fixture);
+
+    buttonSaying(fixture, 'catalog.prices.history.add')?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(TestBed.inject(Router).url).toBe('/prices/new');
   });
 });
 
 describe('the price form', () => {
   /**
-   * Section 2, and the whole reason this screen is not a plain descriptor. A
-   * price is keyed on `(itemId, priceScopeId)`, and twelve shops served by one
-   * warehouse share one row, so the screen has to say which scope and how many
-   * shops that is.
-   *
-   * The assertion is on the notice's inputs rather than on its text, because
-   * every sentence it draws interpolates and the testing translator does not.
+   * Section 2 of plan 0005 still: a price is keyed on `(itemId, priceScopeId)`,
+   * and twelve shops served by one warehouse share one row, so the screen has
+   * to say which scope and how many shops that is. With no scope chosen yet
+   * the notice says so, and it is on the screen.
    */
-  it('names the scope, its kind, and how many shops it covers', async () => {
-    const fixture = await boot('/prices/it_milk_1l~ps_mercadona_4661');
-    await settle(fixture);
+  it('draws the scope notice on the add a price form', async () => {
+    const fixture = await boot('/prices/new');
     await settle(fixture);
 
     const notice = fixture.debugElement.query(By.directive(PriceScopeNotice));
     expect(notice).not.toBeNull();
-
-    const inputs = notice.componentInstance as PriceScopeNotice;
-    expect(inputs.scopeName()).toBe('Córdoba warehouse');
-    expect(inputs.kindLabel()).toBe('catalog.priceScopeKind.WAREHOUSE');
-    // Two shops in the seed price against warehouse 4661.
-    expect(inputs.locationCount()).toBe(2);
-    expect(inputs.atLeast()).toBe(false);
+    expect((notice.componentInstance as PriceScopeNotice).scopeName()).toBeNull();
   });
 
   /**
@@ -261,18 +270,16 @@ describe('the price form', () => {
     expect(resources).toContain('price-scopes');
     expect(resources).not.toContain('locations');
   });
+});
 
-  /** The pair is what the row *is*, so it is settable once and then shown. */
-  it('does not offer to move an existing price to another scope', async () => {
-    const fixture = await boot('/prices/it_milk_1l~ps_mercadona_4661');
-    await settle(fixture);
+describe('the price policies', () => {
+  it('lists the six rows of the plan', async () => {
+    const fixture = await boot('/price-policies');
 
-    const resources = fixture.debugElement
-      .queryAll(By.directive(ReferencePicker))
-      .map((found) => found.componentInstance.resource() as string);
-
-    expect(resources).not.toContain('price-scopes');
-    expect(resources).not.toContain('items');
+    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(6);
+    // The kind is the row's title, drawn as the value it is keyed on.
+    expect(rowsText(fixture)).toContain('OFFICIAL_LEAFLET');
+    expect(rowsText(fixture)).toContain('USER_REPORTED');
   });
 });
 

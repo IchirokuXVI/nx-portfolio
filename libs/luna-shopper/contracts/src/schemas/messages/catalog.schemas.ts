@@ -9,7 +9,9 @@ import {
   ADMIN_POSTAL_CODE_PATTERNS,
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
+  ITEM_PRICE_PATTERNS,
   POSTAL_CODE_PATTERNS,
+  PRICE_POLICY_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
   SCOPE_ORIGINS,
@@ -90,18 +92,27 @@ export const CATALOG_SCHEMA_IDS = {
   searchItemsRequest: schemaId('msg/item.search/request'),
   findItemByEanRequest: schemaId('msg/item.findByEan/request'),
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
-  upsertSupermarketItemRequest: schemaId('msg/supermarketItem.upsert/request'),
-  upsertSupermarketItemBatchRequest: schemaId(
-    'msg/supermarketItem.upsertBatch/request'
+  // Plan 0080: every price a source gave, and the policy that picks one.
+  itemPriceOverride: schemaId('catalog/ItemPriceOverride'),
+  itemPriceOverrides: schemaId('catalog/ItemPriceOverrides'),
+  itemPriceView: schemaId('catalog/ItemPriceView'),
+  itemPricePage: schemaId('catalog/ItemPricePage'),
+  pricePolicyView: schemaId('catalog/PricePolicyView'),
+  pricePolicyListView: schemaId('catalog/PricePolicyListView'),
+  addItemPriceRequest: schemaId('msg/itemPrice.add/request'),
+  itemPriceBatchEntry: schemaId('catalog/ItemPriceBatchEntry'),
+  addItemPriceBatchRequest: schemaId('msg/itemPrice.addBatch/request'),
+  addItemPriceBatchResult: schemaId('catalog/AddItemPriceBatchResult'),
+  listItemPricesRequest: schemaId('msg/itemPrice.list/request'),
+  itemPriceIdRequest: schemaId('msg/itemPrice.id/request'),
+  setSupermarketItemAvailabilityRequest: schemaId(
+    'msg/supermarketItem.setAvailability/request'
   ),
-  supermarketItemBatchEntry: schemaId('catalog/SupermarketItemBatchEntry'),
-  supermarketItemPriceDisagreement: schemaId(
-    'catalog/SupermarketItemPriceDisagreement'
+  setSupermarketItemAvailabilityResult: schemaId(
+    'catalog/SetSupermarketItemAvailabilityResult'
   ),
-  upsertSupermarketItemBatchResult: schemaId(
-    'catalog/UpsertSupermarketItemBatchResult'
-  ),
-  supermarketItemIdRequest: schemaId('msg/supermarketItem.id/request'),
+  listPricePoliciesRequest: schemaId('msg/pricePolicy.list/request'),
+  updatePricePolicyRequest: schemaId('msg/pricePolicy.update/request'),
   getSupermarketItemRequest: schemaId('msg/supermarketItem.get/request'),
   listByItemRequest: schemaId('msg/supermarketItem.listByItem/request'),
   listByLocationRequest: schemaId('msg/supermarketItem.listByLocation/request'),
@@ -159,15 +170,26 @@ export const CATALOG_SCHEMA_IDS = {
 } as const;
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
+/** A kind, or null for a materialized row no price row stands behind (plan 0080). */
+const nullableSourceKind = (): JsonSchema => ({
+  anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
+});
 const nullableLocalized = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
 });
 
-const localizedText = object(
-  CATALOG_SCHEMA_IDS.localizedText,
-  { en: nonEmptyString(), es: nonEmptyString() },
-  ['en', 'es']
-);
+// Plan 0079: a name carries the languages it has. Neither key is required, a
+// missing language is an absent key and never null (so a null fails the string
+// branch), `minProperties` refuses `{}`, and `additionalProperties: false` keeps
+// a language the catalog cannot serve out of the row.
+const localizedText: JsonSchema = {
+  ...object(
+    CATALOG_SCHEMA_IDS.localizedText,
+    { en: nonEmptyString(), es: nonEmptyString() },
+    []
+  ),
+  minProperties: 1,
+};
 
 /** Per locale alternative words, so `leche` and `milk` reach one group (0048). */
 const localizedSynonyms = object(
@@ -271,8 +293,9 @@ const itemOfferView = object(
     currency: nullableString(),
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
-    priceObservedAt: nullableString(),
-    priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    observedAt: nullableString(),
+    sourceKind: nullableSourceKind(),
+    stale: boolean(),
   },
   [
     'itemId',
@@ -281,8 +304,9 @@ const itemOfferView = object(
     'currency',
     'unitPrice',
     'unitPriceLabel',
-    'priceObservedAt',
-    'priceSourceKind',
+    'observedAt',
+    'sourceKind',
+    'stale',
   ]
 );
 
@@ -362,8 +386,11 @@ const supermarketItemView = object(
     currency: nullableString(),
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
-    priceObservedAt: nullableString(),
-    priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    observedAt: nullableString(),
+    sourceKind: nullableSourceKind(),
+    stale: boolean(),
+    validUntil: nullableString(),
+    itemPriceId: nullableString(),
     available: boolean(),
   },
   [
@@ -374,10 +401,88 @@ const supermarketItemView = object(
     'currency',
     'unitPrice',
     'unitPriceLabel',
-    'priceObservedAt',
-    'priceSourceKind',
+    'observedAt',
+    'sourceKind',
+    'stale',
+    'validUntil',
+    'itemPriceId',
     'available',
   ]
+);
+
+// --- Item prices and policies (plan 0080) ----------------------------------
+
+const itemPriceOverride = object(
+  CATALOG_SCHEMA_IDS.itemPriceOverride,
+  { price: numberOrNull(), unitPrice: numberOrNull() },
+  ['price', 'unitPrice']
+);
+// Keyed by source kind. A free object rather than one property per kind, so a
+// kind added to the enum later needs no schema change here.
+const itemPriceOverrides: JsonSchema = {
+  $id: CATALOG_SCHEMA_IDS.itemPriceOverrides,
+  type: 'object',
+  additionalProperties: ref(CATALOG_SCHEMA_IDS.itemPriceOverride),
+};
+const itemPriceView = object(
+  CATALOG_SCHEMA_IDS.itemPriceView,
+  {
+    id: nonEmptyString(),
+    itemId: nonEmptyString(),
+    priceScopeId: nonEmptyString(),
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    price: numberOrNull(),
+    currency: nullableString(),
+    unitPrice: numberOrNull(),
+    unitPriceLabel: nullableString(),
+    observedAt: nonEmptyString(),
+    lastObservedAt: nonEmptyString(),
+    validFrom: nullableString(),
+    validUntil: nullableString(),
+    sourceRunId: nullableString(),
+    lastObservedRunId: nullableString(),
+    overrides: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceOverrides), { type: 'null' }],
+    },
+    protectedUntil: nullableString(),
+  },
+  [
+    'id',
+    'itemId',
+    'priceScopeId',
+    'sourceKind',
+    'price',
+    'currency',
+    'unitPrice',
+    'unitPriceLabel',
+    'observedAt',
+    'lastObservedAt',
+    'validFrom',
+    'validUntil',
+    'sourceRunId',
+    'lastObservedRunId',
+    'overrides',
+    'protectedUntil',
+  ]
+);
+const itemPricePage = paginated(
+  CATALOG_SCHEMA_IDS.itemPricePage,
+  CATALOG_SCHEMA_IDS.itemPriceView
+);
+const pricePolicyView = object(
+  CATALOG_SCHEMA_IDS.pricePolicyView,
+  {
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    priority: integer(),
+    maxAgeDays: { type: ['integer', 'null'], minimum: 1 },
+    enabled: boolean(),
+  },
+  ['sourceKind', 'priority', 'maxAgeDays', 'enabled']
+);
+const pricePolicyListView = object(
+  CATALOG_SCHEMA_IDS.pricePolicyListView,
+  { items: array(ref(CATALOG_SCHEMA_IDS.pricePolicyView)) },
+  ['items']
 );
 
 const supermarketLocationItemView = object(
@@ -674,65 +779,106 @@ const listProductGroupsRequest = object(
   ['userId']
 );
 
-const priceFields = {
+// The values one price row carries (plan 0080, section 9). No `overrides` and
+// no `protectedUntil`: an ADMIN add computes its snapshot server side, and a
+// caller supplying one is refused by `additionalProperties: false`.
+const itemPriceValues = {
   price: numberOrNull(),
   currency: nullableString(),
   unitPrice: numberOrNull(),
   unitPriceLabel: nullableString(),
-  available: boolean(),
-  priceObservedAt: nullableString(),
+  observedAt: nullableString(),
+  validFrom: nullableString(),
+  validUntil: nullableString(),
 };
 
-const upsertSupermarketItemRequest = object(
-  CATALOG_SCHEMA_IDS.upsertSupermarketItemRequest,
+const addItemPriceRequest = object(
+  CATALOG_SCHEMA_IDS.addItemPriceRequest,
   {
     ...adminCredentialProperties,
     itemId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
-    priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
-    ...priceFields,
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    sourceRunId: nullableString(),
+    ...itemPriceValues,
+  },
+  ['userId', 'itemId', 'priceScopeId', 'sourceKind']
+);
+const itemPriceBatchEntry = object(
+  CATALOG_SCHEMA_IDS.itemPriceBatchEntry,
+  { itemId: nonEmptyString(), ...itemPriceValues },
+  ['itemId']
+);
+const addItemPriceBatchRequest = object(
+  CATALOG_SCHEMA_IDS.addItemPriceBatchRequest,
+  {
+    ...adminCredentialProperties,
+    priceScopeId: nonEmptyString(),
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    sourceRunId: nullableString(),
+    entries: array(ref(CATALOG_SCHEMA_IDS.itemPriceBatchEntry)),
+  },
+  ['userId', 'priceScopeId', 'sourceKind', 'entries']
+);
+const addItemPriceBatchResult = object(
+  CATALOG_SCHEMA_IDS.addItemPriceBatchResult,
+  {
+    inserted: integer({ minimum: 0 }),
+    confirmed: integer({ minimum: 0 }),
+  },
+  ['inserted', 'confirmed']
+);
+const listItemPricesRequest = object(
+  CATALOG_SCHEMA_IDS.listItemPricesRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    priceScopeId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
   },
   ['userId', 'itemId', 'priceScopeId']
 );
-const supermarketItemBatchEntry = object(
-  CATALOG_SCHEMA_IDS.supermarketItemBatchEntry,
-  { itemId: nonEmptyString(), ...priceFields },
-  ['itemId']
+const itemPriceIdRequest = object(
+  CATALOG_SCHEMA_IDS.itemPriceIdRequest,
+  { ...adminCredentialProperties, itemPriceId: nonEmptyString() },
+  ['userId', 'itemPriceId']
 );
-const upsertSupermarketItemBatchRequest = object(
-  CATALOG_SCHEMA_IDS.upsertSupermarketItemBatchRequest,
+const setSupermarketItemAvailabilityRequest = object(
+  CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityRequest,
   {
     ...adminCredentialProperties,
     priceScopeId: nonEmptyString(),
-    priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
-    entries: array(ref(CATALOG_SCHEMA_IDS.supermarketItemBatchEntry)),
+    entries: array({
+      type: 'object',
+      properties: { itemId: nonEmptyString(), available: boolean() },
+      required: ['itemId', 'available'],
+      additionalProperties: false,
+    }),
   },
-  ['userId', 'priceScopeId', 'priceSourceKind', 'entries']
+  ['userId', 'priceScopeId', 'entries']
 );
-const supermarketItemPriceDisagreement = object(
-  CATALOG_SCHEMA_IDS.supermarketItemPriceDisagreement,
+const setSupermarketItemAvailabilityResult = object(
+  CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityResult,
+  { updated: integer({ minimum: 0 }) },
+  ['updated']
+);
+const listPricePoliciesRequest = object(
+  CATALOG_SCHEMA_IDS.listPricePoliciesRequest,
+  { ...adminCredentialProperties },
+  ['userId']
+);
+const updatePricePolicyRequest = object(
+  CATALOG_SCHEMA_IDS.updatePricePolicyRequest,
   {
-    itemId: nonEmptyString(),
-    storedPrice: numberOrNull(),
-    storedSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
-    fetchedPrice: numberOrNull(),
+    ...adminCredentialProperties,
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    priority: integer(),
+    maxAgeDays: { type: ['integer', 'null'], minimum: 1 },
+    enabled: boolean(),
   },
-  ['itemId', 'storedPrice', 'storedSourceKind', 'fetchedPrice']
-);
-const upsertSupermarketItemBatchResult = object(
-  CATALOG_SCHEMA_IDS.upsertSupermarketItemBatchResult,
-  {
-    created: integer({ minimum: 0 }),
-    updated: integer({ minimum: 0 }),
-    unchanged: integer({ minimum: 0 }),
-    skipped: array(ref(CATALOG_SCHEMA_IDS.supermarketItemPriceDisagreement)),
-  },
-  ['created', 'updated', 'unchanged', 'skipped']
-);
-const supermarketItemIdRequest = object(
-  CATALOG_SCHEMA_IDS.supermarketItemIdRequest,
-  { ...adminCredentialProperties, supermarketItemId: nonEmptyString() },
-  ['userId', 'supermarketItemId']
+  ['userId', 'sourceKind']
 );
 const getSupermarketItemRequest = object(
   CATALOG_SCHEMA_IDS.getSupermarketItemRequest,
@@ -785,7 +931,8 @@ const adminListSupermarketItemsRequest = object(
     ...adminCredentialProperties,
     itemId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
-    priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    stale: boolean(),
     available: boolean(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
@@ -1235,12 +1382,22 @@ export const catalogSchemas: JsonSchema[] = [
   listProductGroupsRequest,
   findItemByEanRequest,
   findItemByEanResult,
-  upsertSupermarketItemRequest,
-  supermarketItemBatchEntry,
-  upsertSupermarketItemBatchRequest,
-  supermarketItemPriceDisagreement,
-  upsertSupermarketItemBatchResult,
-  supermarketItemIdRequest,
+  itemPriceOverride,
+  itemPriceOverrides,
+  itemPriceView,
+  itemPricePage,
+  pricePolicyView,
+  pricePolicyListView,
+  addItemPriceRequest,
+  itemPriceBatchEntry,
+  addItemPriceBatchRequest,
+  addItemPriceBatchResult,
+  listItemPricesRequest,
+  itemPriceIdRequest,
+  setSupermarketItemAvailabilityRequest,
+  setSupermarketItemAvailabilityResult,
+  listPricePoliciesRequest,
+  updatePricePolicyRequest,
   getSupermarketItemRequest,
   listByItemRequest,
   listByLocationRequest,
@@ -1375,17 +1532,33 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.listProductGroupsRequest,
     response: CATALOG_SCHEMA_IDS.productGroupPage,
   },
-  [SUPERMARKET_ITEM_PATTERNS.upsert]: {
-    request: CATALOG_SCHEMA_IDS.upsertSupermarketItemRequest,
-    response: CATALOG_SCHEMA_IDS.supermarketItemView,
+  [ITEM_PRICE_PATTERNS.add]: {
+    request: CATALOG_SCHEMA_IDS.addItemPriceRequest,
+    response: CATALOG_SCHEMA_IDS.itemPriceView,
   },
-  [SUPERMARKET_ITEM_PATTERNS.upsertBatch]: {
-    request: CATALOG_SCHEMA_IDS.upsertSupermarketItemBatchRequest,
-    response: CATALOG_SCHEMA_IDS.upsertSupermarketItemBatchResult,
+  [ITEM_PRICE_PATTERNS.addBatch]: {
+    request: CATALOG_SCHEMA_IDS.addItemPriceBatchRequest,
+    response: CATALOG_SCHEMA_IDS.addItemPriceBatchResult,
   },
-  [SUPERMARKET_ITEM_PATTERNS.delete]: {
-    request: CATALOG_SCHEMA_IDS.supermarketItemIdRequest,
+  [ITEM_PRICE_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listItemPricesRequest,
+    response: CATALOG_SCHEMA_IDS.itemPricePage,
+  },
+  [ITEM_PRICE_PATTERNS.delete]: {
+    request: CATALOG_SCHEMA_IDS.itemPriceIdRequest,
     response: COMMON_IDS.idResult,
+  },
+  [PRICE_POLICY_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listPricePoliciesRequest,
+    response: CATALOG_SCHEMA_IDS.pricePolicyListView,
+  },
+  [PRICE_POLICY_PATTERNS.update]: {
+    request: CATALOG_SCHEMA_IDS.updatePricePolicyRequest,
+    response: CATALOG_SCHEMA_IDS.pricePolicyView,
+  },
+  [SUPERMARKET_ITEM_PATTERNS.setAvailability]: {
+    request: CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityRequest,
+    response: CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityResult,
   },
   [SUPERMARKET_ITEM_PATTERNS.get]: {
     request: CATALOG_SCHEMA_IDS.getSupermarketItemRequest,

@@ -1,12 +1,15 @@
 import {
   ApiProperty,
   ApiPropertyOptional,
+  ApiSchema,
   IntersectionType,
 } from '@nestjs/swagger';
 import {
+  CONTENT_LOCALES,
   ITEM_LOOKUP_LIMITS,
   ItemCategory,
   PriceScopeKind,
+  PriceSourceKind,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
@@ -15,8 +18,10 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -24,7 +29,10 @@ import {
   MaxLength,
   Min,
   MinLength,
+  registerDecorator,
+  ValidateIf,
   ValidateNested,
+  ValidationArguments,
 } from 'class-validator';
 
 /**
@@ -57,19 +65,91 @@ export class LookupItemsDto {
   ids!: string[];
 }
 
-/** A localized text value carrying at least English and Spanish (plan 0012). */
-export class LocalizedTextDto {
-  @ApiProperty({ maxLength: 200 })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(200)
-  en!: string;
+const LOCALIZED_TEXT_MAX_LENGTH = 200;
 
-  @ApiProperty({ maxLength: 200 })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(200)
-  es!: string;
+/**
+ * One language of a localized text (plan 0079): absent, or a non blank string
+ * within the length.
+ *
+ * One decorator rather than `@ValidateIf` + `@IsString()` + `@MinLength()`,
+ * because `@ValidateIf` switches off every validator on the property, including
+ * the class rule `AtLeastOneLocale` below, for exactly the value that rule has
+ * to see. A **null** is refused here on purpose: a language the name does not
+ * have is left out of the object, and the gateway does not translate one
+ * spelling into the other.
+ */
+export function LocalizedHalf(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'localizedHalf',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown): boolean {
+          return (
+            value === undefined ||
+            (typeof value === 'string' &&
+              value.trim() !== '' &&
+              value.length <= LOCALIZED_TEXT_MAX_LENGTH)
+          );
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} must be left out or be a non blank string of at most ${LOCALIZED_TEXT_MAX_LENGTH} characters`;
+        },
+      },
+    });
+  };
+}
+
+/**
+ * The one rule of a localized text no single property can state (plan 0079):
+ * at least one content locale carries a non blank string. `{}` is not a name.
+ * Applied to one property because class-validator has no class level
+ * decorator, and reads the whole object through `args.object`.
+ */
+export function AtLeastOneLocale(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'atLeastOneLocale',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(_value: unknown, args: ValidationArguments): boolean {
+          const text = args.object as Record<string, unknown>;
+          return CONTENT_LOCALES.some((locale) => {
+            const entry = text[locale];
+            return typeof entry === 'string' && entry.trim() !== '';
+          });
+        },
+        defaultMessage(): string {
+          return `at least one of ${CONTENT_LOCALES.join(', ')} must be a non blank string`;
+        },
+      },
+    });
+  };
+}
+
+/**
+ * A localized text value in at least one of the catalog's languages (plan 0012,
+ * widened by plan 0079).
+ *
+ * A language the name does not have is **left out**, never sent as null. What
+ * stops an empty name reaching catalog is `AtLeastOneLocale`, and nothing else
+ * does.
+ */
+@ApiSchema({
+  description:
+    'A name in at least one of the languages the catalog serves. A language the name does not have is left out, never null.',
+})
+export class LocalizedTextDto {
+  @ApiPropertyOptional({ maxLength: LOCALIZED_TEXT_MAX_LENGTH, minLength: 1 })
+  @AtLeastOneLocale()
+  @LocalizedHalf()
+  en?: string;
+
+  @ApiPropertyOptional({ maxLength: LOCALIZED_TEXT_MAX_LENGTH, minLength: 1 })
+  @LocalizedHalf()
+  es?: string;
 }
 
 /**
@@ -410,9 +490,17 @@ export class UpdatePriceScopeDto {
   label?: LocalizedTextDto | null;
 }
 
-// --- Supermarket items (per SCOPE price, since plan 0038) ------------------
+// --- Item prices: every price a source gave (plan 0080) ---------------------
 
-export class UpsertSupermarketItemDto {
+/**
+ * One price row, typed in by an operator.
+ *
+ * No `overrides` and no `protectedUntil`: an `ADMIN` row's override snapshot is
+ * computed by catalog at the instant of the insert (plan 0080, section 4.2),
+ * and a caller supplied one is refused. No `sourceRunId` either: a person is
+ * not a run.
+ */
+export class AddItemPriceDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   itemId!: string;
@@ -424,6 +512,15 @@ export class UpsertSupermarketItemDto {
   })
   @IsUUID()
   priceScopeId!: string;
+
+  @ApiPropertyOptional({
+    enum: PriceSourceKind,
+    description:
+      'Defaults to ADMIN, which is what a person typing through the back office means. The two user kinds are refused until backlog 0008 opens them.',
+  })
+  @IsOptional()
+  @IsEnum(PriceSourceKind)
+  sourceKind?: PriceSourceKind;
 
   @ApiPropertyOptional({ nullable: true, minimum: 0 })
   @IsOptional()
@@ -459,10 +556,98 @@ export class UpsertSupermarketItemDto {
   @MaxLength(32)
   unitPriceLabel?: string | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    format: 'date-time',
+    description: 'When the price was observed. Defaults to now.',
+  })
+  @IsOptional()
+  @IsDateString()
+  observedAt?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    format: 'date-time',
+    description: 'The row applies from here. Absent means from `observedAt`.',
+  })
+  @IsOptional()
+  @IsDateString()
+  validFrom?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    format: 'date-time',
+    description:
+      'Exclusive. Absent means until superseded. The owner’s field, for a price known to be temporary.',
+  })
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string | null;
+}
+
+/** The history of one (item, scope), newest first (plan 0080, section 9). */
+export class ListItemPricesQueryDto extends PageQueryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  itemId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  priceScopeId!: string;
+}
+
+/** Whether a scope carries one product. */
+export class AvailabilityEntryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  itemId!: string;
+
+  @ApiProperty()
+  @IsBoolean()
+  available!: boolean;
+}
+
+/**
+ * Whether a scope carries each of these products (plan 0080, section 9). A
+ * fact about stock and not about price, which is why it is the one write left
+ * on the materialized row.
+ */
+export class SetSupermarketItemAvailabilityDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  priceScopeId!: string;
+
+  @ApiProperty({ type: [AvailabilityEntryDto] })
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => AvailabilityEntryDto)
+  entries!: AvailabilityEntryDto[];
+}
+
+/** One policy row's editable half (plan 0080, section 3). */
+export class UpdatePricePolicyDto {
+  @ApiPropertyOptional({ description: 'Lower wins.' })
+  @IsOptional()
+  @IsInt()
+  priority?: number;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    minimum: 1,
+    description:
+      'How old a row of this kind may be before it stops being eligible. Null means it never ages out.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  maxAgeDays?: number | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
-  available?: boolean;
+  enabled?: boolean;
 }
 
 // --- The per store half (plan 0038, section 5.2) ---------------------------

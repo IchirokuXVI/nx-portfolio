@@ -105,8 +105,9 @@ export class AdminListLocationsQueryDto extends CatalogListQueryDto {
  * The price list, which is the one read with no user facing counterpart at all
  * (plan 0005, section 4).
  *
- * `priceSourceKind=ADMIN` is the question "what have I typed in and pinned",
- * which plan 0038 section 6.5 makes permanent and which nothing else can ask.
+ * `sourceKind=ADMIN` is the question "what have I overridden": the effective
+ * rows an operator's price won (plan 0080, section 10). `stale=true` is "what
+ * is shown on sufferance". Nothing else can ask either.
  */
 export class AdminListSupermarketItemsQueryDto extends CatalogListQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
@@ -119,10 +120,23 @@ export class AdminListSupermarketItemsQueryDto extends CatalogListQueryDto {
   @IsUUID()
   priceScopeId?: string;
 
-  @ApiPropertyOptional({ enum: PriceSourceKind })
+  @ApiPropertyOptional({
+    enum: PriceSourceKind,
+    description:
+      'The effective row’s kind. ADMIN answers "what have I overridden".',
+  })
   @IsOptional()
   @IsEnum(PriceSourceKind)
-  priceSourceKind?: PriceSourceKind;
+  sourceKind?: PriceSourceKind;
+
+  @ApiPropertyOptional({
+    description:
+      'The rows shown on sufferance: nothing eligible prices them, so the newest row of any kind is shown and flagged (plan 0080, section 5).',
+  })
+  @IsOptional()
+  @Transform(asBoolean)
+  @IsBoolean()
+  stale?: boolean;
 
   @ApiPropertyOptional({
     description:

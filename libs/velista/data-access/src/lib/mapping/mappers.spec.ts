@@ -1077,8 +1077,9 @@ describe('toCatalogItem: the price it used to drop', () => {
       currency: 'EUR',
       unitPrice: 1.05,
       unitPriceLabel: 'EUR/L',
-      priceObservedAt: '2026-09-01T08:00:00.000Z',
-      priceSourceKind: 'OFFICIAL_WEB',
+      observedAt: '2026-09-01T08:00:00.000Z',
+      sourceKind: 'OFFICIAL_WEB',
+      stale: true,
       priceScopeId: 'scope-cordoba',
     },
   };
@@ -1091,6 +1092,8 @@ describe('toCatalogItem: the price it used to drop', () => {
       unitPriceLabel: 'EUR/L',
       observedAt: new Date('2026-09-01T08:00:00.000Z'),
       sourceKind: 'OFFICIAL_WEB',
+      // Read off the wire (backend plan 0080, section 5), never inferred.
+      stale: true,
       priceScopeId: 'scope-cordoba',
     });
   });
@@ -1190,8 +1193,9 @@ describe('toCatalogSuggestion', () => {
     currency: 'EUR',
     unitPrice: 1.05,
     unitPriceLabel: 'EUR/L',
-    priceObservedAt: '2026-09-01T08:00:00.000Z',
-    priceSourceKind: 'OFFICIAL_WEB',
+    observedAt: '2026-09-01T08:00:00.000Z',
+    sourceKind: 'OFFICIAL_WEB',
+    stale: false,
     priceScopeId: 'scope-cordoba',
   };
 

@@ -2,6 +2,7 @@ import {
   emptyLocalizedText,
   fromLocalizedLines,
   missingLocales,
+  presentLocalizedText,
   toLocalizedLines,
   toLocalizedText,
 } from './localized-text';
@@ -63,11 +64,58 @@ export function emptyValue<T extends ResourceRow>(
   }
 }
 
+/**
+ * A `jsonb` value, printed for a textarea.
+ *
+ * Two spaces of indent, because the operator has to be able to read it before
+ * they can change it, and an object printed on one line is not readable at a
+ * phone's width. An unprintable value falls back to an empty object rather than
+ * throwing: the form is the screen an operator opens to fix a bad row, so it
+ * has to be able to draw one.
+ */
+export function printJson(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * A `jsonb` column, as the object it has to be, or `null` when it does not read.
+ *
+ * `null` for anything that is not an object: an array and a number both parse,
+ * and neither is what the column holds. Validation asks this before a submit,
+ * so the failing answer never reaches the wire.
+ */
+export function parseJsonObject(
+  text: string
+): Readonly<Record<string, unknown>> | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === 'object' &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /** One row value, as the control that edits it holds it. */
 function toDraftValue<T extends ResourceRow>(
   field: FieldDescriptor<T>,
   value: unknown
 ): DraftValue {
+  if (field.kind === 'json') {
+    return printJson(value);
+  }
+
   if (field.kind === 'boolean') {
     if (field.nullable === true) {
       return typeof value === 'boolean' ? value : null;
@@ -185,16 +233,33 @@ export const REQUIRED_KEY = 'resource.error.required';
  *
  * A field with nothing wrong is absent rather than present with an empty array,
  * so a caller can ask whether the map is empty and get the right answer.
+ *
+ * **It checks exactly what {@link toInput} would send**, which is why it takes
+ * the same `original` and applies the same rule: a create is every editable
+ * field, and an edit is only what changed. Validating a value a `PATCH` is not
+ * going to carry is validating the server's data rather than the operator's
+ * input, and there is a row where the difference decides whether the screen
+ * works at all. A zone owner's membership holds `role: OWNER`, which the picker
+ * must not offer, because `setRole` refuses it and ownership is a transfer. If
+ * that untouched value were checked, an owner's per zone name could never be
+ * corrected: the form would be permanently invalid over a field nobody edited
+ * and nothing would say why.
  */
 export function validateDraft<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>,
   draft: ResourceDraft,
-  mode: FormMode
+  mode: FormMode,
+  original: ResourceDraft
 ): Readonly<Record<string, FieldMessage[]>> {
   const problems: Record<string, FieldMessage[]> = {};
+  const changed = new Set(changedFields(draft, original));
 
   for (const field of descriptor.fields) {
     if (!isEditable(field, mode)) {
+      continue;
+    }
+
+    if (mode === 'edit' && !changed.has(field.name)) {
       continue;
     }
 
@@ -214,14 +279,15 @@ function validateField<T extends ResourceRow>(
   const messages: FieldMessage[] = [];
 
   if (field.kind === 'localized-text') {
-    const missing = missingLocales(value, field.locales);
-    if (field.required === true) {
-      // One message per missing locale, rather than one for the field. The
-      // control is several inputs, and "required" under a Spanish box the
-      // operator has not reached says less than naming the language does.
-      for (const locale of missing) {
-        messages.push(fieldMessage('resource.error.missingLocale', { locale }));
-      }
+    if (
+      field.required === true &&
+      missingLocales(value, field.locales).length === field.locales.length
+    ) {
+      // Required means "in at least one language" (plan 0079): a name a chain
+      // prints in Spanish only is a complete name, and the row it lands in
+      // shows the fallback and marks the gap. Only a name in no language at
+      // all is refused, and it is refused once, for the field.
+      messages.push(fieldMessage('resource.error.missingAnyLocale'));
     }
 
     if (
@@ -312,6 +378,12 @@ function validateField<T extends ResourceRow>(
       }
       break;
 
+    case 'json':
+      if (parseJsonObject(String(value)) === null) {
+        messages.push(fieldMessage('resource.error.notAnObject'));
+      }
+      break;
+
     case 'boolean':
     case 'reference':
       break;
@@ -343,9 +415,20 @@ function toWireValue<T extends ResourceRow>(
   }
 
   if (field.kind === 'localized-text') {
+    // A blank box is a language the name does not have, and the wire spells
+    // that by leaving the key out (plan 0079): `''` and `null` are both
+    // refused there.
     return field.list === true
       ? fromLocalizedLines(value, field.locales)
-      : toLocalizedText(value);
+      : presentLocalizedText(value);
+  }
+
+  if (field.kind === 'json') {
+    // Validation runs first and refuses text that does not read as an object,
+    // so the fallback is unreachable from the form. It answers an empty object
+    // rather than throwing, for the reason money answers its text unchanged: a
+    // caller that skipped validation should get the server's answer.
+    return parseJsonObject(String(value)) ?? {};
   }
 
   if (isEmptyValue(value)) {

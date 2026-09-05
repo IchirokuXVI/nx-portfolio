@@ -353,6 +353,15 @@ export class GeneratedListBasketService {
    * profile. The snapshot exists for exactly this class of question, and ranking
    * a search inside a basket is plan 0050 section 1's "explain a three week old
    * basket to the person looking at it" applied live.
+   *
+   * **The field read is `pricingProfileId`, not `profileId`** (plan 0078). The
+   * other one answers whose sources the run read, and a request that names its
+   * own sources reads none, so it is null on every run velista has ever
+   * created. Reading it here is why no basket has ever shown a price. This one
+   * is the owner's profile captured when the run was composed, which is the row
+   * section 5.1's table accepts, and it is null only on a run composed before
+   * that plan. Such a run stays unpriced, which is the same table's "no scope
+   * at all" fallback.
    */
   async searchScope(
     req: GetGeneratedListBasketRequest
@@ -362,7 +371,9 @@ export class GeneratedListBasketService {
     const { list } = await this.resolve(req);
     return {
       ownerUserId: list.ownerUserId,
-      profileId: list.sourceSnapshot.profileId,
+      // A snapshot stored before plan 0078 has no such key, and `undefined` is
+      // not a value this message carries: read the absence as null.
+      profileId: list.sourceSnapshot.pricingProfileId ?? null,
     };
   }
 

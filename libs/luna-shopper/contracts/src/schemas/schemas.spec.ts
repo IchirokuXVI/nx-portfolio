@@ -382,6 +382,27 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
+    it('generatedList.get carries both snapshot profiles (plan 0078, section 3)', () => {
+      // The two fields answer two questions, and the run this stands for is the
+      // shape velista always sends: it named its own sources, so no profile's
+      // sources were read, and it still names the profile the basket is priced
+      // against.
+      expect(
+        validateMessageResponse('generatedList.get', {
+          id: 'gl',
+          name: null,
+          status: 'DRAFT',
+          generatedAt: '2026-01-01T00:00:00.000Z',
+          sourceSnapshot: {
+            profileId: null,
+            pricingProfileId: 'sp-1',
+            sources: [{ zoneId: 'z', listId: 'l' }],
+          },
+          lines: [],
+        }).valid
+      ).toBe(true);
+    });
+
     it('generatedList.participant.list response names an account (plan 0054, section 2)', () => {
       // The two names are separate fields, and both are required: a registered
       // participant who typed nothing on the join screen still has an account
@@ -629,8 +650,9 @@ describe('contract schemas', () => {
                 currency: 'EUR',
                 unitPrice: 1.15,
                 unitPriceLabel: 'L',
-                priceObservedAt: '2026-08-30T10:00:00.000Z',
-                priceSourceKind: 'OFFICIAL_API',
+                observedAt: '2026-08-30T10:00:00.000Z',
+                sourceKind: 'OFFICIAL_API',
+                stale: false,
               },
             },
           ],
@@ -771,12 +793,13 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('supermarketItem.upsertBatch reports what it refused to overwrite (plan 0038, section 6.5)', () => {
+    it('itemPrice.addBatch writes one kind for one scope with its run (plan 0080, section 9)', () => {
       expect(
-        validateMessageRequest('supermarketItem.upsertBatch', {
+        validateMessageRequest('itemPrice.addBatch', {
           userId: 'owner',
           priceScopeId: 'scope-1',
-          priceSourceKind: 'OFFICIAL_API',
+          sourceKind: 'OFFICIAL_API',
+          sourceRunId: 'run-1',
           entries: [
             {
               itemId: 'i',
@@ -786,25 +809,73 @@ describe('contract schemas', () => {
               // The source's own label, verbatim. It reads "100 ml" on a per
               // litre number, which is why it is text and not a unit.
               unitPriceLabel: '100 ml',
-              available: true,
-              priceObservedAt: '2026-08-30T10:00:00.000Z',
+              observedAt: '2026-08-30T10:00:00.000Z',
             },
           ],
         }).valid
       ).toBe(true);
       expect(
-        validateMessageResponse('supermarketItem.upsertBatch', {
-          created: 0,
-          updated: 0,
-          unchanged: 0,
-          skipped: [
-            {
-              itemId: 'i',
-              storedPrice: 1.75,
-              storedSourceKind: 'ADMIN',
-              fetchedPrice: 1.8,
-            },
-          ],
+        validateMessageResponse('itemPrice.addBatch', {
+          inserted: 1,
+          confirmed: 0,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('itemPrice.add refuses a caller supplied override snapshot (plan 0080, section 4.2)', () => {
+      const request = {
+        userId: 'owner',
+        itemId: 'i',
+        priceScopeId: 'scope-1',
+        sourceKind: 'ADMIN',
+        price: 1.29,
+        currency: 'EUR',
+      };
+      expect(validateMessageRequest('itemPrice.add', request).valid).toBe(true);
+      expect(
+        validateMessageRequest('itemPrice.add', {
+          ...request,
+          overrides: { OFFICIAL_API: { price: 1.19, unitPrice: null } },
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('itemPrice.add', {
+          id: 'p1',
+          itemId: 'i',
+          priceScopeId: 'scope-1',
+          sourceKind: 'ADMIN',
+          price: 1.29,
+          currency: 'EUR',
+          unitPrice: null,
+          unitPriceLabel: null,
+          observedAt: '2026-09-05T10:00:00.000Z',
+          lastObservedAt: '2026-09-05T10:00:00.000Z',
+          validFrom: null,
+          validUntil: null,
+          sourceRunId: null,
+          lastObservedRunId: null,
+          overrides: { OFFICIAL_API: { price: 1.19, unitPrice: null } },
+          protectedUntil: '2026-09-12T10:00:00.000Z',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('supermarketItem.get answers the materialized row with its flag (plan 0080, section 7)', () => {
+      expect(
+        validateMessageResponse('supermarketItem.get', {
+          id: 'si',
+          itemId: 'i',
+          priceScopeId: 'scope-1',
+          price: 1.19,
+          currency: 'EUR',
+          unitPrice: null,
+          unitPriceLabel: null,
+          observedAt: '2026-08-30T10:00:00.000Z',
+          sourceKind: 'OFFICIAL_API',
+          stale: true,
+          validUntil: null,
+          itemPriceId: 'p1',
+          available: true,
         }).valid
       ).toBe(true);
     });
@@ -1025,6 +1096,22 @@ describe('contract schemas', () => {
   });
 
   describe('malformed payloads fail', () => {
+    it('rejects a snapshot that omits the pricing profile (plan 0078)', () => {
+      // Required and nullable, not optional. Core reads a pre plan 0078 row's
+      // missing key as null before the view leaves it, so a payload on the wire
+      // without the key is a mapper that stopped doing that.
+      expect(
+        validateMessageResponse('generatedList.get', {
+          id: 'gl',
+          name: null,
+          status: 'DRAFT',
+          generatedAt: '2026-01-01T00:00:00.000Z',
+          sourceSnapshot: { profileId: null, sources: [] },
+          lines: [],
+        }).valid
+      ).toBe(false);
+    });
+
     it('missing a required field', () => {
       expect(
         validateMessageRequest('auth.register', { email: 'a@b.com' }).valid
@@ -1092,6 +1179,34 @@ describe('contract schemas', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }).valid
       ).toBe(true);
+    });
+
+    describe('a name in one language (plan 0079)', () => {
+      const create = (name: unknown) =>
+        validateMessageRequest('supermarket.create', { userId: 'owner', name })
+          .valid;
+
+      it('accepts a name in either language alone, or both', () => {
+        expect(create({ es: 'Leche' })).toBe(true);
+        expect(create({ en: 'Milk' })).toBe(true);
+        expect(create({ en: 'Milk', es: 'Leche' })).toBe(true);
+      });
+
+      it('refuses a name in no language', () => {
+        expect(create({})).toBe(false);
+      });
+
+      it('refuses null: a missing language is an absent key, not a null one', () => {
+        expect(create({ en: null, es: 'Leche' })).toBe(false);
+      });
+
+      it('refuses a blank string in any language', () => {
+        expect(create({ en: '', es: 'Leche' })).toBe(false);
+      });
+
+      it('refuses a language the catalog does not serve', () => {
+        expect(create({ fr: 'Lait' })).toBe(false);
+      });
     });
 
     it('catalog item.create rejects a missing required enum (plan 0012)', () => {

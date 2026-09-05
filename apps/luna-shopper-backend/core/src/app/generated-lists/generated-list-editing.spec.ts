@@ -69,7 +69,7 @@ function build(options: {
     name: null,
     status: GeneratedListStatus.DRAFT,
     generatedAt: new Date('2026-09-01T10:00:00.000Z'),
-    sourceSnapshot: { profileId: null, sources: [] },
+    sourceSnapshot: { profileId: null, pricingProfileId: null, sources: [] },
     defaultTargetListId: options.defaultTargetListId ?? null,
     idempotencyKey: null,
   } as GeneratedList;

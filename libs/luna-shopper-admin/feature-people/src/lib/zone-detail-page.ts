@@ -5,11 +5,16 @@ import {
   inject,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { DIRECTORY_SERVICE } from '@portfolio/luna-shopper-admin/data-access';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import {
+  DIRECTORY_SERVICE,
+  GatewayError,
+} from '@portfolio/luna-shopper-admin/data-access';
+import { gatewayErrorKey } from '@portfolio/luna-shopper-admin/feature-resource';
+import { compositeId, type Wire } from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
 import { DetailFacts, DetailFrame, type DetailFact } from './detail-frame';
 import { DetailPage, nameOrId } from './detail-page';
+import { MEMBERSHIPS } from './memberships';
 import { instant } from './people-format';
 import type { ZoneRow } from './people-seed';
 
@@ -19,15 +24,21 @@ type Member = Wire.AdminCoreAdminZoneMemberView;
  * One household (plan 0007, section 2).
  *
  * Its membership with roles and states, its lists **by name and count**, and
- * the five named actions that touch it. Not its lists' contents: reading what a
+ * the named actions that touch it. Not its lists' contents: reading what a
  * household wrote down is a deliberate click on the list itself, and browsing
  * zones must not be a way to end up having read one by accident.
  *
- * The three membership actions and the two zone actions all delegate to the
- * service the zone's own admins reach, which is the whole reason they are named
- * actions and not a row editor: a kick and a ban are membership state plus the
- * broadcasts other clients have already applied, and transferring ownership is
- * two role changes and the zone's owner in one transaction.
+ * Every action here delegates to the service the zone's own admins reach, which
+ * is the whole reason they are named actions and not a row editor: a kick and a
+ * ban are membership state plus the broadcasts other clients have already
+ * applied, transferring ownership is two role changes and the zone's owner in
+ * one transaction, and the deletion mark is two columns that are only ever
+ * written together.
+ *
+ * **What can be typed is on the form, and this screen links to it** (plan 0009,
+ * section 3). A zone's name and its config are the two columns a service stands
+ * behind; each member row leads to that member's own form for their role and
+ * their per zone name.
  *
  * An **ownerless** zone is an ordinary state here rather than an error. The
  * owner deleted their account, the zone outlived them, and transferring
@@ -68,6 +79,17 @@ type Member = Wire.AdminCoreAdminZoneMemberView;
                     </span>
                   </div>
                   <div class="actions">
+                    <!-- Through to the one membership, which is where its role
+                         and its per zone name are changed. This screen keeps
+                         the whole membership, because seeing it at once is what
+                         a zone detail is for (plan 0009, section 3.2). -->
+                    <button
+                      (click)="openMembership(zone, member)"
+                      [disabled]="busy()"
+                      type="button"
+                    >
+                      {{ 'people.zones.action.openMembership' | rokuT }}
+                    </button>
                     @if (canTransfer(member)) {
                       <button
                         (click)="askToTransfer(zone, member)"
@@ -133,6 +155,11 @@ type Member = Wire.AdminCoreAdminZoneMemberView;
         <section>
           <h2>{{ 'people.detail.actions' | rokuT }}</h2>
           <div class="actions">
+            @if (canEdit) {
+              <button (click)="edit()" [disabled]="busy()" type="button">
+                {{ 'resource.action.edit' | rokuT }}
+              </button>
+            }
             <button
               (click)="askToRegenerate(zone)"
               [disabled]="busy()"
@@ -140,6 +167,22 @@ type Member = Wire.AdminCoreAdminZoneMemberView;
             >
               {{ 'people.zones.action.regenerateJoinCode' | rokuT }}
             </button>
+            @if (zone.status === 'MARKED_FOR_DELETION') {
+              <!-- Not confirmed, because it is the undo. Asking before taking
+                   back a mistake is a click that teaches an operator to click
+                   through the next one. -->
+              <button (click)="restore(zone)" [disabled]="busy()" type="button">
+                {{ 'people.zones.action.restore' | rokuT }}
+              </button>
+            } @else {
+              <button
+                (click)="askToMarkForDeletion(zone)"
+                [disabled]="busy()"
+                type="button"
+              >
+                {{ 'people.zones.action.markForDeletion' | rokuT }}
+              </button>
+            }
             <button
               (click)="askToDelete(zone)"
               [disabled]="busy()"
@@ -319,6 +362,19 @@ export class ZoneDetailPage extends DetailPage<ZoneRow> {
     this.go(['/lists', listId]);
   }
 
+  /**
+   * Through to one membership's own screen.
+   *
+   * The pair, because that is a membership's address: there is no flat route
+   * for one, so both halves are in every URL that reaches it.
+   */
+  openMembership(zone: ZoneRow, member: Member): void {
+    this.go([
+      `/${MEMBERSHIPS.segment}`,
+      compositeId([zone.id, member.membershipId]),
+    ]);
+  }
+
   /** The owner is already the owner. Everybody else can be handed the zone. */
   canTransfer(member: Member): boolean {
     return member.role !== 'OWNER';
@@ -379,6 +435,31 @@ export class ZoneDetailPage extends DetailPage<ZoneRow> {
         await this._directory.regenerateJoinCode(zone.id);
       },
     });
+  }
+
+  askToMarkForDeletion(zone: ZoneRow): void {
+    this.ask({
+      heading: 'people.zones.confirm.markForDeletion.heading',
+      body: 'people.zones.confirm.markForDeletion.body',
+      confirm: 'people.zones.confirm.markForDeletion.confirm',
+      args: { name: zone.name },
+      run: () => this._directory.setZoneDeletionMark(zone.id, true),
+    });
+  }
+
+  /** The undo, run on the first click and then read back. */
+  async restore(zone: ZoneRow): Promise<void> {
+    this.busy.set(true);
+    try {
+      await this._directory.setZoneDeletionMark(zone.id, false);
+      await this.load();
+    } catch (error) {
+      this.actionErrorKey.set(
+        gatewayErrorKey(error instanceof GatewayError ? error : null)
+      );
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   askToDelete(zone: ZoneRow): void {
