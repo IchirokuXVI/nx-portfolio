@@ -39,7 +39,7 @@ const MODES: readonly HarvestRunMode[] = [
  * the top, and reading one is a screen of its own that polls, so the row here
  * links out to that rather than to an edit form there is no such thing as.
  *
- * The three switches sit above the list rather than on a settings screen
+ * The switches sit above the list rather than on a settings screen
  * somewhere, because the question they answer is "why did my run do nothing",
  * and that question is asked here, looking at a run that did nothing.
  *
@@ -318,9 +318,8 @@ export class RunsPage {
   /**
    * Why the last attempt to start would not start.
    *
-   * The spawn refusal is the only direct evidence any of the three switches
-   * offers, so it is kept and shown rather than folded into a general failure
-   * message. A 409 is different again: something is already running, which is
+   * The spawn refusal is the only direct evidence either switch offers, so it
+   * is kept and shown rather than folded into a general failure message. A 409 is different again: something is already running, which is
    * not a switch and has an obvious remedy.
    */
   readonly blockedKey = computed(() => {

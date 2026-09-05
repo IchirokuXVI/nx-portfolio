@@ -12,7 +12,7 @@ import {
  *
  * Two questions, and they are the same question asked from two directions.
  * Section 4 asks whether an empty screen means "nothing has happened" or "there
- * is no harvester here", and section 3 asks which of the three switches are off.
+ * is no harvester here", and section 3 asks which of the two switches are off.
  * Both are answered from the deployment plus whatever this app has actually
  * observed, so they are answered once, here, rather than five times.
  *
@@ -42,7 +42,7 @@ export class HarvestShell {
     harvesterDeployed(this._deployments.deployment())
   );
 
-  /** The three switches of section 3, with the unknown ones left unknown. */
+  /** The two switches of section 3, with the unknown one left unknown. */
   readonly switches = computed(() =>
     harvestSwitches({
       deployment: this._deployments.deployment(),
@@ -86,7 +86,7 @@ export class HarvestShell {
     this._spawnRefusal.set(reason);
   }
 
-  /** The runs the list last saw, which is where the storefront switch shows. */
+  /** The runs the list last saw, which is where a service refusal shows. */
   observeRuns(runs: readonly HarvestRun[]): void {
     this._recentRuns.set(runs);
   }

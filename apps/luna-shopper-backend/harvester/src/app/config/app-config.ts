@@ -6,18 +6,20 @@ import { readKey } from './read-key';
 /**
  * Harvester configuration (plan 0038, section 4.1).
  *
- * Two switches decide whether this service does anything at all, and they are
- * both **off by default**:
+ * One switch here decides whether this service does anything at all, and it is
+ * **off by default**: `HARVEST_ENABLED` gates every run mode, and with it false
+ * the service boots, answers its health probes and its read subjects, and
+ * refuses to spawn.
  *
- * - `HARVEST_ENABLED` gates every run mode. With it false the service boots,
- *   answers its health probes and its read subjects, and refuses to spawn.
- * - `MERCADONA_ENABLED` gates the one third party storefront specifically, so
- *   the chain can be dropped without dropping the service (section 8.1). If
- *   Mercadona ever asks, this goes false and the catalog keeps working on hand
- *   entered prices, which is the property backlog 0001 section 5.4 designs for.
- *
- * Defaulting both to false is deliberate: a deploy that turns fetching on is a
+ * Defaulting it to false is deliberate: a deploy that turns fetching on is a
  * decision someone makes, never something that happens because a pod started.
+ *
+ * The per chain switch is not here and never comes back (plan 0083). It is
+ * `supermarket_sources.enabled`, off by default, one row per chain, written from
+ * the back office. A variable named after a storefront needed a new variable per
+ * storefront, threaded through this file, the config map, `_env.tpl` and both
+ * `luna-slot` scripts before a run could start; the column that already existed
+ * answers the same question per chain and takes no redeploy.
  */
 export const LOG_LEVELS = [
   'fatal',
@@ -87,7 +89,6 @@ export const harvesterValidationSchema = Joi.object({
   /** How often the drain worker looks for a due row. */
   HARVEST_DISCOVERY_POLL_SECONDS: Joi.number().integer().min(5).default(60),
 
-  MERCADONA_ENABLED: Joi.boolean().default(false),
   MERCADONA_BASE_URL: Joi.string().allow('').default(''),
   OVERPASS_URL: Joi.string().allow('').default(''),
   NOMINATIM_URL: Joi.string().allow('').default(''),
@@ -117,7 +118,6 @@ export interface HarvesterConfig {
   discoveryCooldownDays: number;
   discoveryMaxAttempts: number;
   discoveryPollSeconds: number;
-  mercadonaEnabled: boolean;
   mercadonaBaseUrl: string | undefined;
   overpassUrl: string | undefined;
   nominatimUrl: string | undefined;
@@ -170,7 +170,6 @@ export const harvesterConfiguration = registerAs(
     discoveryPollSeconds: Number(
       process.env.HARVEST_DISCOVERY_POLL_SECONDS ?? 60
     ),
-    mercadonaEnabled: parseBoolean(process.env.MERCADONA_ENABLED, false),
     mercadonaBaseUrl: optional(process.env.MERCADONA_BASE_URL),
     overpassUrl: optional(process.env.OVERPASS_URL),
     nominatimUrl: optional(process.env.NOMINATIM_URL),

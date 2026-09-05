@@ -73,25 +73,27 @@ describe('harvesterDeployed', () => {
 });
 
 describe('harvestSwitches', () => {
-  it('names the three switches, in order', () => {
+  /**
+   * Two, not three. Backend plan 0083 deleted the per chain variable this panel
+   * used to guess at, and the per chain switch is a source row shown and edited
+   * on the sources screen. A row for it here would suggest it is the same kind
+   * of thing as the deployment configuration beside it.
+   */
+  it('names the two switches, in order', () => {
     expect(harvestSwitches(evidence()).map((item) => item.name)).toEqual([
       'deployed',
       'harvestEnabled',
-      'mercadonaEnabled',
     ]);
   });
 
   /**
-   * Nothing reports `HARVEST_ENABLED` or `MERCADONA_ENABLED`, so before anything
-   * has been attempted the honest answer is that this app does not know. Both
-   * default to false, so a guess of `off` would be right most of the time and
-   * wrong exactly when somebody is working out why their run did nothing.
+   * Nothing reports `HARVEST_ENABLED`, so before anything has been attempted
+   * the honest answer is that this app does not know. It defaults to false, so
+   * a guess of `off` would be right most of the time and wrong exactly when
+   * somebody is working out why their run did nothing.
    */
-  it('says it does not know the two it cannot read', () => {
-    const given = evidence();
-
-    expect(stateOf(given, 'harvestEnabled')).toBe('unknown');
-    expect(stateOf(given, 'mercadonaEnabled')).toBe('unknown');
+  it('says it does not know the one it cannot read', () => {
+    expect(stateOf(evidence(), 'harvestEnabled')).toBe('unknown');
   });
 
   it('reads the harvester as off in a cluster the chart excludes it from', () => {
@@ -131,42 +133,34 @@ describe('harvestSwitches', () => {
     expect(stateOf(given, 'harvestEnabled')).toBe('on');
   });
 
-  /**
-   * The storefront switch does not refuse the spawn. The run starts and the
-   * runner refuses on its first step, so the evidence is on the finished run.
-   */
-  it('reads MERCADONA_ENABLED as off from a run that failed naming it', () => {
+  it('reads HARVEST_ENABLED as off from a run that failed naming it', () => {
     const given = evidence({
       recentRuns: [
         run({
           status: 'FAILED',
           error:
-            'MERCADONA_ENABLED is false, so this deployment does not fetch.',
+            'Harvesting is disabled on this deployment (HARVEST_ENABLED is false).',
         }),
       ],
     });
 
-    expect(stateOf(given, 'mercadonaEnabled')).toBe('off');
+    expect(stateOf(given, 'harvestEnabled')).toBe('off');
   });
 
-  it('reads MERCADONA_ENABLED as on from a run that fetched anything', () => {
+  /**
+   * A run that fetched from a storefront used to be read as evidence about a
+   * per chain variable. There is no such variable now, and a fetch says nothing
+   * about a chain's row that the sources screen does not say directly.
+   */
+  it('learns nothing about the panel from a run that fetched', () => {
     const given = evidence({
       recentRuns: [run({ mode: 'CATALOG_DISCOVERY', processed: 12 })],
     });
 
-    expect(stateOf(given, 'mercadonaEnabled')).toBe('on');
-  });
-
-  /**
-   * A store discovery reads OpenStreetMap and never touches the storefront, so
-   * it says nothing at all about that switch.
-   */
-  it('learns nothing about MERCADONA_ENABLED from a store discovery', () => {
-    const given = evidence({
-      recentRuns: [run({ mode: 'STORE_DISCOVERY', processed: 340 })],
-    });
-
-    expect(stateOf(given, 'mercadonaEnabled')).toBe('unknown');
+    expect(harvestSwitches(given).map((item) => item.name)).toEqual([
+      'deployed',
+      'harvestEnabled',
+    ]);
   });
 
   it('says where every state came from', () => {

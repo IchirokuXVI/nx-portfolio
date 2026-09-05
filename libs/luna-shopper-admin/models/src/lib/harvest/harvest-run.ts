@@ -79,18 +79,15 @@ export function runProgress(run: HarvestRun): RunProgress {
 }
 
 /**
- * Why a run will not start, in the vocabulary of section 3's three switches.
+ * Why a run will not start, in the vocabulary of section 3's switches.
  *
- * `service-off` is `HARVEST_ENABLED`, `storefront-off` is `MERCADONA_ENABLED`,
- * and `chain-disabled` is the per chain flag this app can actually change. The
- * fourth is the honest one: no route reports the first two until something has
- * been attempted, so before an attempt the answer is that nothing is known.
+ * `service-off` is `HARVEST_ENABLED` and `chain-disabled` is the per chain flag
+ * this app can actually change, which since backend plan `0083` is the only per
+ * chain switch there is. The third is the honest one: no route reports the
+ * first until something has been attempted, so before an attempt the answer is
+ * that nothing is known.
  */
-export type RunBlockReason =
-  | 'service-off'
-  | 'storefront-off'
-  | 'chain-disabled'
-  | 'unknown';
+export type RunBlockReason = 'service-off' | 'chain-disabled' | 'unknown';
 
 /**
  * What a failure to start meant, read from what the server actually said.
@@ -98,8 +95,8 @@ export type RunBlockReason =
  * The harvester refuses a spawn with `HARVEST_ENABLED` false as a
  * `NotConfiguredException`, which reaches this app as a 501 carrying
  * `not_configured`. That is a statement about the deployment rather than about
- * the request, and it is the one switch of the three whose state the app can
- * learn without a route that reports it.
+ * the request, and it is the one switch whose state the app can learn without a
+ * route that reports it.
  */
 export function spawnBlockReason(error: {
   readonly code: string;
@@ -113,22 +110,16 @@ export function spawnBlockReason(error: {
 /**
  * What a finished run's own error message meant.
  *
- * `MERCADONA_ENABLED` false does not refuse the spawn. The run starts, the
- * catalog runner refuses on its first step, and the run finalizes as FAILED with
- * that sentence in `error`. So the storefront switch is legible only from a run
- * that already tried, which is why this reads the run rather than the request.
+ * There used to be a second reason read here, `storefront-off`, from a run that
+ * started and whose runner refused on its first step because a variable named
+ * after that storefront was false. Backend plan `0083` deleted that variable: a
+ * chain is switched off by its own source row, which refuses the spawn instead,
+ * so no run finalizes with a storefront refusal any more and the reason went
+ * with it.
  *
  * Matching on the variable's name rather than on the whole sentence, because the
  * name is the part of that message that is a contract with anything.
  */
 export function failureBlockReason(run: HarvestRun): RunBlockReason | null {
-  const message = run.error ?? '';
-
-  if (message.includes('MERCADONA_ENABLED')) {
-    return 'storefront-off';
-  }
-  if (message.includes('HARVEST_ENABLED')) {
-    return 'service-off';
-  }
-  return null;
+  return (run.error ?? '').includes('HARVEST_ENABLED') ? 'service-off' : null;
 }

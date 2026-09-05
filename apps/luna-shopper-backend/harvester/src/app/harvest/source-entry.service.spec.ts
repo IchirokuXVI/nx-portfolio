@@ -47,6 +47,11 @@ const CREATED: ItemView = {
   productGroupId: null,
 };
 
+const SETTINGS = {
+  userAgent: 'LunaShopper/0.1 (test)',
+  mercadonaBaseUrl: undefined,
+};
+
 function build(englishName: string | null) {
   const createItem = jest.fn(async () => CREATED);
   const refs = {
@@ -59,9 +64,7 @@ function build(englishName: string | null) {
     { createItem, findItemByEan: jest.fn() } as never,
     { findBySupermarket: jest.fn(async () => null) } as never,
     { requireAdmin: jest.fn(async () => ({ actorId: 'owner' })) } as never,
-    {
-      getOrThrow: () => ({ mercadonaEnabled: false }),
-    } as never
+    { getOrThrow: () => SETTINGS } as never
   );
   // The fetch itself is one HTTP request to Mercadona and is not what this
   // file is about. What is asserted is what the service does with its answer.
@@ -107,5 +110,56 @@ describe('SourceEntryService.createItem', () => {
         status: ItemSourceRefStatus.ACTIVE,
       })
     );
+  });
+});
+
+/**
+ * The per chain switch is the source's own row (plan 0083), and this is the one
+ * fetch in the service with no spawn in front of it: `harvest-run.service.ts`
+ * refuses a run for a disabled source, but creating an item is not a run.
+ *
+ * So `fetchEnglishName` is left real here, unlike above, and the assertion is
+ * that it never gets as far as a client. A source row that is off, and a
+ * supermarket with no row at all, both answer null and the item is written with
+ * the languages the entry already had.
+ */
+describe('SourceEntryService.fetchEnglishName', () => {
+  function withSource(source: unknown) {
+    const createItem = jest.fn(async () => CREATED);
+    const findBySupermarket = jest.fn(async () => source);
+    const service = new SourceEntryService(
+      { findOne: jest.fn(async () => ENTRY) } as never,
+      {
+        create: jest.fn((value: unknown) => value),
+        save: jest.fn(async (value: unknown) => value),
+      } as never,
+      { createItem, findItemByEan: jest.fn() } as never,
+      { findBySupermarket } as never,
+      { requireAdmin: jest.fn(async () => ({ actorId: 'owner' })) } as never,
+      { getOrThrow: () => SETTINGS } as never
+    );
+    return { service, createItem, findBySupermarket };
+  }
+
+  it('does not fetch an English name for a chain whose source is disabled', async () => {
+    const { service, createItem, findBySupermarket } = withSource({
+      enabled: false,
+      config: { warehouse: 'mad1' },
+    });
+
+    await service.createItem({ userId: 'owner', entryId: ENTRY.id });
+
+    expect(findBySupermarket).toHaveBeenCalledWith(ENTRY.supermarketId);
+    const request = createItem.mock.calls[0][0] as { name: unknown };
+    expect(request.name).toEqual({ es: 'Leche entera' });
+  });
+
+  it('does not fetch one for a supermarket with no source row', async () => {
+    const { service, createItem } = withSource(null);
+
+    await service.createItem({ userId: 'owner', entryId: ENTRY.id });
+
+    const request = createItem.mock.calls[0][0] as { name: unknown };
+    expect(request.name).toEqual({ es: 'Leche entera' });
   });
 });

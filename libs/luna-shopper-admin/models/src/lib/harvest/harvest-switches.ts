@@ -3,18 +3,24 @@ import type { HarvestRun, RunBlockReason } from './harvest-run';
 import { failureBlockReason } from './harvest-run';
 
 /**
- * The three switches of plan 0006 section 3, and how much of each one this app
- * can honestly claim to know.
+ * The switches of plan 0006 section 3, and how much of each one this app can
+ * honestly claim to know.
  *
- * They are three because they are three different decisions, and conflating
- * them in the UI would misrepresent what they mean. What the plan did not
- * account for is that only the first of the three is readable: the gateway
- * exposes no route reporting `HARVEST_ENABLED` or `MERCADONA_ENABLED`, and
- * section 1 of that plan says no backend change is needed. So this file states
- * the honest position for each, including where the answer is "not yet known",
- * and the screen renders that third state rather than a false `off`.
+ * There were three, and backend plan `0083` deleted the third. It was a variable
+ * named after one storefront, so a second chain would have needed a second
+ * variable; the per chain switch is now `supermarket_sources.enabled`, a row
+ * this app already reads and already writes on the sources screen. What is left
+ * here is
+ * the two that are not per chain, and they are two because they are two
+ * different decisions: whether the service exists, and whether it may run.
  *
- * Guessing `off` would be the worst available answer. Both default to false, so
+ * Only the first of the two is readable. The gateway exposes no route reporting
+ * `HARVEST_ENABLED`, and section 1 of that plan says no backend change is
+ * needed. So this file states the honest position for each, including where the
+ * answer is "not yet known", and the screen renders that third state rather
+ * than a false `off`.
+ *
+ * Guessing `off` would be the worst available answer. It defaults to false, so
  * a guess would be right most of the time and wrong exactly when an operator is
  * trying to work out why their run did nothing.
  */
@@ -22,8 +28,8 @@ export type SwitchState = 'on' | 'off' | 'unknown';
 
 /** One switch, and the account of how its state was arrived at. */
 export interface HarvestSwitch {
-  /** Which of the three. Also the translation key suffix. */
-  readonly name: 'deployed' | 'harvestEnabled' | 'mercadonaEnabled';
+  /** Which of the two. Also the translation key suffix. */
+  readonly name: 'deployed' | 'harvestEnabled';
   readonly state: SwitchState;
   /** A translation key saying where the state came from. */
   readonly source: string;
@@ -36,7 +42,7 @@ export interface HarvestSwitch {
  * the decision lives: `lunaShopperBackend.harvester.enabled` is false in both
  * `values.production.yaml` and `values.staging.yaml` on purpose, so nothing
  * renders in either cluster (plan 0006, section 4). That is a fixed property of
- * this repository, not a runtime accident, and it is the one of the three
+ * this repository, not a runtime accident, and it is the one of the two
  * switches this app can state without asking anybody.
  *
  * An unrecognised deployment answers `true`, and the direction matters. Saying
@@ -63,27 +69,22 @@ export interface HarvestEvidence {
   readonly reachable: boolean | null;
   /** A spawn that was refused, and what the refusal meant. */
   readonly spawnRefusal: RunBlockReason | null;
-  /** The most recent finished runs, which is where a storefront refusal lands. */
+  /** The most recent finished runs, which is where a service refusal lands. */
   readonly recentRuns: readonly HarvestRun[];
 }
 
 /**
- * The three switches, in the order the screen shows them.
+ * The two switches, in the order the screen shows them.
  *
- * Read the second and third from behaviour, because nothing reports them.
- * `HARVEST_ENABLED` false refuses a spawn with a 501, and `MERCADONA_ENABLED`
- * false lets the run start and fails it on its first step, so both leave a trace
- * that this app can read. Neither leaves one before anything has been tried,
- * and that case is `unknown`.
+ * Read the second from behaviour, because nothing reports it. `HARVEST_ENABLED`
+ * false refuses a spawn with a 501 and a run that reached RUNNING proves it was
+ * on, so it leaves a trace this app can read either way. It leaves none before
+ * anything has been tried, and that case is `unknown`.
  */
 export function harvestSwitches(
   evidence: HarvestEvidence
 ): readonly HarvestSwitch[] {
-  return [
-    deployedSwitch(evidence),
-    harvestEnabledSwitch(evidence),
-    mercadonaEnabledSwitch(evidence),
-  ];
+  return [deployedSwitch(evidence), harvestEnabledSwitch(evidence)];
 }
 
 function deployedSwitch(evidence: HarvestEvidence): HarvestSwitch {
@@ -147,35 +148,6 @@ function harvestEnabledSwitch(evidence: HarvestEvidence): HarvestSwitch {
   }
   return {
     name: 'harvestEnabled',
-    state: 'unknown',
-    source: 'harvest.switch.from.nothing',
-  };
-}
-
-function mercadonaEnabledSwitch(evidence: HarvestEvidence): HarvestSwitch {
-  const catalogRuns = evidence.recentRuns.filter(
-    (run) => run.mode === 'CATALOG_DISCOVERY' || run.mode === 'REFRESH'
-  );
-
-  if (catalogRuns.some((run) => failureBlockReason(run) === 'storefront-off')) {
-    return {
-      name: 'mercadonaEnabled',
-      state: 'off',
-      source: 'harvest.switch.from.failure',
-    };
-  }
-  // Anything fetched at all is proof the storefront gate was open: the runner
-  // refuses before its first request when the switch is off, so a run with a
-  // processed count above zero could not have got there.
-  if (catalogRuns.some((run) => run.processed > 0)) {
-    return {
-      name: 'mercadonaEnabled',
-      state: 'on',
-      source: 'harvest.switch.from.run',
-    };
-  }
-  return {
-    name: 'mercadonaEnabled',
     state: 'unknown',
     source: 'harvest.switch.from.nothing',
   };

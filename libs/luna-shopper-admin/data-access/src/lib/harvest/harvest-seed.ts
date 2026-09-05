@@ -10,10 +10,10 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
  * that ever renders.
  *
  * So it is built to exercise the states the screens exist for rather than to
- * look tidy. One run still going with a known total, one that failed because the
- * storefront switch was off, one aborted. Places that are near duplicates of each
- * other, which is the case the review queue is for. A ref whose source is gone
- * beside one that was never resolved.
+ * look tidy. One run still going with a known total, one that failed for a
+ * reason this app cannot translate, one aborted. Places that are near duplicates
+ * of each other, which is the case the review queue is for. A ref whose source is
+ * gone beside one that was never resolved.
  */
 
 /** Fixed, so that a spec asserting on a row can name it. */
@@ -49,10 +49,12 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     requestedByUserId: null,
   },
   {
-    // The storefront switch, as it actually presents itself: the spawn is
-    // accepted, the runner refuses on its first step, and the run finalizes
-    // carrying the sentence that names the variable.
-    id: 'run-catalog-storefront-off',
+    // A failure this app cannot explain, which is the common case and the one
+    // the run screen shows in the server's own words. It used to be a storefront
+    // refusal; backend plan 0083 deleted the variable that produced one, and a
+    // chain that is switched off is now refused at the spawn and never becomes a
+    // run at all.
+    id: 'run-catalog-failed',
     supermarketId: MERCADONA,
     sourceId: 'source-mercadona',
     mode: 'CATALOG_DISCOVERY',
@@ -72,8 +74,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     stage: null,
     stageLabel: null,
     abortRequestedAt: null,
-    error:
-      'MERCADONA_ENABLED is false, so this deployment does not fetch from that storefront.',
+    error: 'The storefront stopped answering after 41 requests (ECONNRESET).',
     correlationId: 'seed-correlation-2',
     requestedByUserId: null,
   },

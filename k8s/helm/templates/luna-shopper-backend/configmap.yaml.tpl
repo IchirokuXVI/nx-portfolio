@@ -111,11 +111,11 @@ part of the render and would trip that very check.
   #
   # HARVEST_ENABLED is a SECOND switch, separate from `harvester.enabled`: that one
   # decides whether the pod exists, this one whether it may fetch. Both default
-  # false. MERCADONA_ENABLED narrows it again to the one storefront (section 8.1),
-  # so the chain can be dropped without dropping the service.
+  # false. There is no third: which chains may be fetched is a row per chain in
+  # the harvester's own database, off by default, written from the back office
+  # (plan 0083), so adding a chain never touches this file.
   HARVESTER_ACTOR_ID: {{ $harvest.actorId | default "" | quote }}
   HARVEST_ENABLED: {{ $harvest.harvestEnabled | default false | quote }}
-  MERCADONA_ENABLED: {{ $harvest.mercadonaEnabled | default false | quote }}
   # An honest User-Agent naming the app and a contact address, never a browser
   # impersonation.
   HARVEST_USER_AGENT: {{ $harvest.userAgent | default "" | quote }}

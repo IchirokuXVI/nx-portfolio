@@ -139,17 +139,18 @@ describe('spawnBlockReason', () => {
 
 describe('failureBlockReason', () => {
   /**
-   * The storefront switch does not refuse the spawn. The run starts, the catalog
-   * runner refuses on its first step, and the sentence lands in `error`.
+   * A run that stopped because one chain was switched off is not a thing that
+   * happens any more. Backend plan 0083 deleted the per chain variable, and a
+   * disabled chain is refused at the spawn by its own source row, so a run
+   * naming a storefront reads as an ordinary failure in the server's own words.
    */
-  it('reads a storefront refusal off the finished run', () => {
+  it('does not invent a storefront reason for a run that named one', () => {
     const failed = run({
       status: 'FAILED',
-      error:
-        'MERCADONA_ENABLED is false, so this deployment does not fetch from that storefront.',
+      error: 'Mercadona stopped answering after 41 requests.',
     });
 
-    expect(failureBlockReason(failed)).toBe('storefront-off');
+    expect(failureBlockReason(failed)).toBeNull();
   });
 
   it('reads a service refusal off the finished run', () => {

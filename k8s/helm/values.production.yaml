@@ -165,9 +165,10 @@ lunaShopperBackend:
   # comfortable inside both numbers.
   #
   # TO FOLLOW STAGING, once the soak has shown real profile edits producing runs:
-  # set `enabled` and `harvestEnabled` true here, and leave `mercadonaEnabled`
-  # alone. That third switch is a separate decision about one storefront, and
-  # store discovery never touches one. Then run
+  # set `enabled` and `harvestEnabled` true here, and leave every chain's
+  # `supermarket_sources` row off. That per chain switch is a separate decision
+  # about one storefront (plan 0083), it lives in the database rather than in
+  # this file, and store discovery never touches a storefront. Then run
   # `k8s/bootstrap/provision-release.sh --check --env production` BEFORE the
   # deploy: it renders the chart and asserts every secretKeyRef exists, which is
   # exactly the failure a newly enabled service introduces. The two keys it needs
