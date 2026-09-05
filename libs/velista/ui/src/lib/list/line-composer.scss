@@ -116,11 +116,9 @@
 // alone since it is also the only bin glyph on screen. The same treatment
 // `RecordingRow` gives its own trash, for the same reasons.
 //
-// Pushed to the trailing end of the row, which is the whole of section 6.2: the space
-// between it and stop is whatever the row is wide. A logical property, so right to
-// left keeps the relationship rather than the side.
+// It leads the row, which is where `RecordingRow` puts its own bin, so the two ends
+// mean the same thing on every screen that records.
 .discard {
-  margin-inline-start: auto;
   border: 1px solid var(--app-status-danger-border);
   background: transparent;
   color: var(--app-status-danger-fg);
@@ -130,7 +128,12 @@
 // the only control that ended a recording and there was nothing destructive beside it
 // to confuse it with. With a trash in the row, coral on both would say the two do the
 // same kind of thing, and mistaking them costs the whole recording.
+//
+// Pushed to the trailing end of the row, which is the whole of section 6.2: the space
+// between it and the bin is whatever the row is wide. A logical property, so right to
+// left keeps the relationship rather than the side.
 .stop {
+  margin-inline-start: auto;
   border: 0;
   background: var(--app-action-bg);
   color: var(--app-text-on-action);
