@@ -121,7 +121,7 @@ describe('SessionLifecycle', () => {
   beforeEach(async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-09-03T09:00:00.000Z'));
-    sessionStorage.clear();
+    localStorage.clear();
     control.refreshes = 0;
     control.refreshFails = false;
     setVisibility('visible');
@@ -151,7 +151,7 @@ describe('SessionLifecycle', () => {
     // entirely.
     jest.restoreAllMocks();
     jest.useRealTimers();
-    sessionStorage.clear();
+    localStorage.clear();
   });
 
   /**
@@ -384,7 +384,7 @@ describe('SessionLifecycle', () => {
       await expect(held).resolves.toBe(false);
       expect(lifecycle.locked()).toBe(false);
       expect(sessions.signedIn()).toBe(false);
-      expect(sessionStorage.length).toBe(0);
+      expect(localStorage.length).toBe(0);
     });
 
     /**
@@ -426,6 +426,139 @@ describe('SessionLifecycle', () => {
 
     expect(lifecycle.warning()).toBe(true);
     expect(control.refreshes).toBe(0);
+  });
+
+  /**
+   * The tabs beside this one (plan 0013, sections 3 and 5).
+   *
+   * Every case here arrives as a `storage` event, which is how a browser tells a
+   * tab what another tab wrote and the only thing this app hears from them.
+   * jsdom does not broadcast between its storage areas, so the event is
+   * dispatched by hand, exactly as a browser delivers it to a tab that did not
+   * write.
+   */
+  describe('another tab', () => {
+    const KEY = 'luna-shopper-admin.session';
+
+    /**
+     * A tab writing a token that lasts a full lifetime from now.
+     *
+     * The clock has to have moved for this to mean anything: under frozen fake
+     * timers a token minted now expires at the same instant as the one already
+     * held, and a session that does not last longer is correctly refused.
+     */
+    function wrote(token: string): void {
+      const now = Date.now();
+      const raw = JSON.stringify({
+        adminId: 'adm_1',
+        username: 'ops',
+        displayName: 'Operations',
+        accessToken: token,
+        expiresAt: new Date(now + LIFETIME).toISOString(),
+        receivedAt: new Date(now).toISOString(),
+      });
+      localStorage.setItem(KEY, raw);
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: KEY, newValue: raw })
+      );
+    }
+
+    /** A tab signing out, which removes the one key this app writes. */
+    function signedOut(): void {
+      localStorage.removeItem(KEY);
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: KEY, newValue: null })
+      );
+    }
+
+    it('hands over the token it renewed', async () => {
+      const before = sessions.token();
+      await advance(MINUTE);
+
+      wrote('renewed-elsewhere');
+      await drain();
+
+      expect(sessions.token()).toBe('renewed-elsewhere');
+      expect(sessions.token()).not.toBe(before);
+      // Nothing was asked of the gateway. The other tab did the asking.
+      expect(control.refreshes).toBe(0);
+    });
+
+    /**
+     * What an operator with five tabs open actually feels. The token expired
+     * while they were away, every tab covered itself, and the password they type
+     * into one of them takes the cover off the rest.
+     */
+    it('takes down this overlay when it re-authenticates', async () => {
+      await advance(LIFETIME);
+      const held = lifecycle.recover();
+      await drain();
+      expect(lifecycle.locked()).toBe(true);
+
+      wrote('after-the-password');
+      await drain();
+
+      expect(lifecycle.locked()).toBe(false);
+      expect(sessions.token()).toBe('after-the-password');
+      // And the request that was waiting behind the overlay is released against
+      // the token that arrived, rather than failing.
+      await expect(held).resolves.toBe(true);
+    });
+
+    /** One shared token means one sign out. */
+    it('ends this session when it signs out', async () => {
+      signedOut();
+      await drain();
+
+      expect(sessions.signedIn()).toBe(false);
+      expect(lifecycle.locked()).toBe(false);
+    });
+
+    it('fails what waited behind the overlay when it signs out', async () => {
+      await advance(LIFETIME);
+      const held = lifecycle.recover();
+      await drain();
+
+      signedOut();
+      await drain();
+
+      await expect(held).resolves.toBe(false);
+      expect(sessions.signedIn()).toBe(false);
+    });
+
+    /**
+     * An older token is refused rather than adopted. The browser says nothing
+     * about the order two tabs' writes landed in, and taking the older one would
+     * replace a live session with one closer to expiry.
+     */
+    it('is ignored when its token is no better than the held one', async () => {
+      const before = sessions.token();
+      const raw = JSON.stringify({
+        adminId: 'adm_1',
+        username: 'ops',
+        displayName: 'Operations',
+        accessToken: 'older',
+        expiresAt: new Date(Date.now() + MINUTE).toISOString(),
+        receivedAt: new Date(Date.now()).toISOString(),
+      });
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: KEY, newValue: raw })
+      );
+      await drain();
+
+      expect(sessions.token()).toBe(before);
+    });
+
+    /** Nothing is listening once the app has torn down. */
+    it('is not heard after the lifecycle stops', async () => {
+      await advance(MINUTE);
+      lifecycle.stop();
+
+      wrote('too-late');
+      await drain();
+
+      expect(sessions.token()).not.toBe('too-late');
+    });
   });
 
   /**

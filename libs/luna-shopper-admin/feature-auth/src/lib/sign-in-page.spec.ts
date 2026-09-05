@@ -128,8 +128,8 @@ async function submit(fixture: ComponentFixture<SignInPage>) {
 }
 
 describe('SignInPage', () => {
-  beforeEach(() => sessionStorage.clear());
-  afterEach(() => sessionStorage.clear());
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
 
   describe('the form', () => {
     it('asks for a username and a password, and nothing else', async () => {
@@ -356,17 +356,19 @@ describe('SignInPage', () => {
 
   /**
    * Asserted directly, because it is the property the whole storage decision
-   * turns on: `sessionStorage` is cleared when the browser closes and
-   * `localStorage` is not, so a token in the wrong one outlives the sitting.
+   * turns on (plan 0013, section 2): `localStorage` is per origin rather than
+   * per tab, so signing in here signs in every tab of this app, including the
+   * ones the operator opens afterwards.
    */
-  it('never writes the token to localStorage', async () => {
+  it('writes the token where every tab can read it', async () => {
     localStorage.clear();
+    sessionStorage.clear();
     const { fixture } = await render({ session });
 
     fill(fixture, 'ops', 'pw');
     await submit(fixture);
 
-    expect(localStorage.length).toBe(0);
-    expect(sessionStorage.length).toBe(1);
+    expect(localStorage.getItem('luna-shopper-admin.session')).not.toBeNull();
+    expect(sessionStorage.length).toBe(0);
   });
 });

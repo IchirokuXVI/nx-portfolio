@@ -10,9 +10,11 @@ import {
 import {
   ADMIN_SESSION_POLICY,
   decideKeepalive,
+  type AdminSession,
   type SignInFailure,
 } from '@portfolio/luna-shopper-admin/models';
 import { ServerReachability } from '../health/server-reachability';
+import { SessionStorage } from './session-storage';
 import { SessionStore } from './session-store';
 
 /**
@@ -65,9 +67,11 @@ export class SessionLifecycle {
   private readonly _policy = inject(ADMIN_SESSION_POLICY);
   private readonly _document = inject(DOCUMENT);
   private readonly _reachability = inject(ServerReachability);
+  private readonly _storage = inject(SessionStorage);
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
   private _started = false;
+  private _unwatch: (() => void) | null = null;
 
   /**
    * The last real interaction, or zero for "not yet".
@@ -167,6 +171,12 @@ export class SessionLifecycle {
     }
     this._document.addEventListener('visibilitychange', this.onVisibility);
 
+    // What the other tabs are doing (plan 0013, section 3). Started here rather
+    // than in the store for the same reason everything else in this class is:
+    // the store is asked for a token, and a tab that nobody has asked yet is
+    // exactly the tab that has to hear about a renewal it did not make.
+    this._unwatch = this._storage.watch(this.onSharedSession);
+
     this.evaluate();
   }
 
@@ -180,6 +190,8 @@ export class SessionLifecycle {
       });
     }
     this._document.removeEventListener('visibilitychange', this.onVisibility);
+    this._unwatch?.();
+    this._unwatch = null;
   }
 
   /**
@@ -417,6 +429,54 @@ export class SessionLifecycle {
     if (!this._locked()) {
       this.evaluate();
     }
+  };
+
+  /**
+   * Another tab wrote the session, or cleared it (plan 0013, sections 3 and 5).
+   *
+   * Three outcomes, and the middle one is the one worth reading twice.
+   *
+   * - **Cleared.** Somebody signed out, in a tab that may not be this one. This
+   *   tab signs out too, which fails everything waiting behind the overlay and
+   *   sends the guard to the login screen.
+   * - **A newer token while this tab is locked.** The operator re-authenticated
+   *   somewhere, and this tab's overlay is asking for a password that already
+   *   exists. It comes down, and every request that 401'd is released against
+   *   the token that arrived. Being able to unlock a tab from another one is the
+   *   point of sharing the session, not a side effect of it: the alternative is
+   *   an operator typing the same password into every tab they had open.
+   * - **A newer token while this tab is running.** Adopted, and the timer is
+   *   re-armed against the new expiry. This is the ordinary case, and it is what
+   *   makes four tabs cost one renewal.
+   *
+   * A session that does not supersede the held one changes nothing, and says so
+   * by doing nothing: `adopt` answers `false` and there is no timer to re-arm.
+   */
+  private readonly onSharedSession = (session: AdminSession | null): void => {
+    if (session === null) {
+      // Only when there was something to lose. A tab with no session hears this
+      // for every other tab's expiry sweep, and signing out of nothing would
+      // still fail the waiters and count as an event.
+      if (this._sessions.session() !== null || this._locked()) {
+        this.signOut();
+      }
+      return;
+    }
+
+    if (!this._sessions.adopt(session)) {
+      return;
+    }
+
+    if (this._locked()) {
+      this._locked.set(false);
+      // The password was typed in another tab, and typing it is interaction.
+      // Without recording it here the adopted session would count as idle from
+      // birth and this tab would warn at a fifth of its life.
+      this._lastActivityAt = Date.now();
+      this.settle(true);
+    }
+
+    this.evaluate();
   };
 
   private readonly onVisibility = (): void => {

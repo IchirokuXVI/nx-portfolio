@@ -67,8 +67,8 @@ const asPath = (result: unknown) =>
   result instanceof UrlTree ? result.toString() : result;
 
 describe('requireSession', () => {
-  beforeEach(() => sessionStorage.clear());
-  afterEach(() => sessionStorage.clear());
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
 
   it('lets a signed in operator through', async () => {
     const { sessions, run } = setup();
@@ -96,8 +96,8 @@ describe('requireSession', () => {
 });
 
 describe('requireNoSession', () => {
-  beforeEach(() => sessionStorage.clear());
-  afterEach(() => sessionStorage.clear());
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
 
   it('lets a signed out operator reach the login screen', () => {
     const { run } = setup();

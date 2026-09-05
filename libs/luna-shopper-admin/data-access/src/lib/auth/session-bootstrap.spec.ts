@@ -120,8 +120,8 @@ function build(
 }
 
 describe('SessionBootstrap', () => {
-  beforeEach(() => sessionStorage.clear());
-  afterEach(() => sessionStorage.clear());
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
 
   it('signs in when the server offers an autologin', async () => {
     const { bootstrap, sessions, calls } = build({
