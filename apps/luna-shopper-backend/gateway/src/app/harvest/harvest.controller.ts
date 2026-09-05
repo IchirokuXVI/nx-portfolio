@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpStatus,
   Param,
@@ -15,6 +16,7 @@ import {
   HARVEST_PATTERNS,
   ITEM_SOURCE_REF_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
+  SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlacePage,
@@ -25,6 +27,8 @@ import {
   type ItemSourceRefView,
   type ItemView,
   type SourceCatalogEntryPage,
+  type SourceLocationPage,
+  type SourceLocationView,
   type SupermarketSourcePage,
   type SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
@@ -41,9 +45,11 @@ import {
   HarvestRunListQueryDto,
   ImportDiscoveredPlaceDto,
   ItemSourceRefListQueryDto,
+  MapSourceLocationDto,
   SetManualItemSourceRefDto,
   SetSourceEnabledDto,
   SourceEntryListQueryDto,
+  SourceLocationListQueryDto,
   SpawnHarvestRunDto,
   UpsertSupermarketSourceDto,
 } from './harvest.dto';
@@ -355,6 +361,100 @@ export class AdminHarvestItemRefsController {
       ...adminCredential(admin),
       refId: id,
     });
+  }
+}
+
+/**
+ * The shops a source names, and the mappings that let a run write availability
+ * for them (plan 0084, section 7).
+ *
+ * The fourth review queue, beside places, entries and item refs. A row here is a
+ * decision with three outcomes, one of which binds a foreign record, and none of
+ * which is "edit this row's fields": `externalId` and `printedName` are the
+ * source's, and no route offers to change either.
+ *
+ * **Mapping a shop does not backfill it.** The availability the run skipped
+ * stays skipped until the next run, and the back office says so at the moment of
+ * mapping. Without that line the natural reading of a green `ACTIVE` badge is
+ * "the data is here now", and it is not.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/shops', version: '1' })
+export class AdminHarvestShopsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: SourceLocationListQueryDto
+  ): Promise<SourceLocationPage> {
+    return this.nats.send<SourceLocationPage>(SOURCE_LOCATION_PATTERNS.list, {
+      ...adminCredential(admin),
+      supermarketId: query.supermarketId,
+      status: query.status,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  @Put(':id/location')
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.map)
+  @ApiProblemResponses({ body: true })
+  map(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: MapSourceLocationDto
+  ): Promise<SourceLocationView> {
+    return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.map, {
+      ...adminCredential(admin),
+      sourceLocationId: id,
+      supermarketLocationId: dto.supermarketLocationId,
+    });
+  }
+
+  @Delete(':id/location')
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.unmap)
+  unmap(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<SourceLocationView> {
+    return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.unmap, {
+      ...adminCredential(admin),
+      sourceLocationId: id,
+    });
+  }
+
+  /** A place the source lists that we do not sell from. */
+  @Post(':id/ignore')
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.ignore, {
+    status: HttpStatus.CREATED,
+  })
+  ignore(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<SourceLocationView> {
+    return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.ignore, {
+      ...adminCredential(admin),
+      sourceLocationId: id,
+    });
+  }
+
+  @Post(':id/unignore')
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.unignore, {
+    status: HttpStatus.CREATED,
+  })
+  unignore(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<SourceLocationView> {
+    return this.nats.send<SourceLocationView>(
+      SOURCE_LOCATION_PATTERNS.unignore,
+      { ...adminCredential(admin), sourceLocationId: id }
+    );
   }
 }
 

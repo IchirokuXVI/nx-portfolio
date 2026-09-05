@@ -387,6 +387,11 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       supermarketLocationId: 'loc_cordoba_centro',
       positionInStore: 'Aisle 4, cold shelf',
       available: true,
+      // Typed by the operator, so no crawl may overwrite it (backend plan
+      // 0084, section 3).
+      availabilitySourceKind: 'ADMIN',
+      availabilityObservedAt: '2026-08-02T09:15:00.000Z',
+      availabilitySourceRunId: null,
     },
     {
       id: 'sli_oil_centro',
@@ -394,6 +399,10 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       supermarketLocationId: 'loc_cordoba_centro',
       positionInStore: 'Aisle 7',
       available: false,
+      // A crawl said so, and the next crawl may say otherwise.
+      availabilitySourceKind: 'OFFICIAL_WEB',
+      availabilityObservedAt: '2026-09-01T06:40:00.000Z',
+      availabilitySourceRunId: 'run_deza_1',
     },
     {
       id: 'sli_milk_oeste',
@@ -402,5 +411,8 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       positionInStore: null,
       // Nobody has checked this shop. Not the same as "not available here".
       available: null,
+      availabilitySourceKind: null,
+      availabilityObservedAt: null,
+      availabilitySourceRunId: null,
     },
   ];

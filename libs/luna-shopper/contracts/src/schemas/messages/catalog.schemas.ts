@@ -167,6 +167,15 @@ export const CATALOG_SCHEMA_IDS = {
   listLocationItemsRequest: schemaId(
     'msg/supermarketLocationItem.listByLocation/request'
   ),
+  setLocationItemAvailabilityRequest: schemaId(
+    'msg/supermarketLocationItem.setAvailability/request'
+  ),
+  locationItemAvailabilityConflict: schemaId(
+    'catalog/SupermarketLocationItemAvailabilityConflict'
+  ),
+  setLocationItemAvailabilityResult: schemaId(
+    'catalog/SetSupermarketLocationItemAvailabilityResult'
+  ),
 } as const;
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
@@ -493,8 +502,20 @@ const supermarketLocationItemView = object(
     supermarketLocationId: nonEmptyString(),
     positionInStore: nullableString(),
     available: { type: ['boolean', 'null'] },
+    availabilitySourceKind: nullableSourceKind(),
+    availabilityObservedAt: nullableString(),
+    availabilitySourceRunId: nullableString(),
   },
-  ['id', 'itemId', 'supermarketLocationId', 'positionInStore', 'available']
+  [
+    'id',
+    'itemId',
+    'supermarketLocationId',
+    'positionInStore',
+    'available',
+    'availabilitySourceKind',
+    'availabilityObservedAt',
+    'availabilitySourceRunId',
+  ]
 );
 
 const supermarketPage = paginated(
@@ -1056,7 +1077,6 @@ const upsertLocationItemRequest = object(
     itemId: nonEmptyString(),
     supermarketLocationId: nonEmptyString(),
     positionInStore: nullableString(),
-    available: { type: ['boolean', 'null'] },
   },
   ['userId', 'itemId', 'supermarketLocationId']
 );
@@ -1079,6 +1099,41 @@ const listLocationItemsRequest = object(
     order: string(),
   },
   ['userId', 'supermarketLocationId']
+);
+const setLocationItemAvailabilityRequest = object(
+  CATALOG_SCHEMA_IDS.setLocationItemAvailabilityRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketLocationId: nonEmptyString(),
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    sourceRunId: nullableString(),
+    observedAt: string(),
+    entries: array({
+      type: 'object',
+      properties: { itemId: nonEmptyString(), available: boolean() },
+      required: ['itemId', 'available'],
+      additionalProperties: false,
+    }),
+  },
+  ['userId', 'supermarketLocationId', 'sourceKind', 'entries']
+);
+const locationItemAvailabilityConflict = object(
+  CATALOG_SCHEMA_IDS.locationItemAvailabilityConflict,
+  {
+    itemId: nonEmptyString(),
+    held: { type: ['boolean', 'null'] },
+    offered: boolean(),
+  },
+  ['itemId', 'held', 'offered']
+);
+const setLocationItemAvailabilityResult = object(
+  CATALOG_SCHEMA_IDS.setLocationItemAvailabilityResult,
+  {
+    written: integer({ minimum: 0 }),
+    skipped: integer({ minimum: 0 }),
+    conflicts: array(ref(CATALOG_SCHEMA_IDS.locationItemAvailabilityConflict)),
+  },
+  ['written', 'skipped', 'conflicts']
 );
 
 // --- Postal code geography (plan 0060, sections 5 and 7) --------------------
@@ -1415,6 +1470,9 @@ export const catalogSchemas: JsonSchema[] = [
   upsertLocationItemRequest,
   getLocationItemRequest,
   listLocationItemsRequest,
+  setLocationItemAvailabilityRequest,
+  locationItemAvailabilityConflict,
+  setLocationItemAvailabilityResult,
   postalCodeDistanceView,
   resolveNearestPostalCodeRequest,
   nearestPostalCodeView,
@@ -1611,6 +1669,10 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_LOCATION_ITEM_PATTERNS.listByLocation]: {
     request: CATALOG_SCHEMA_IDS.listLocationItemsRequest,
     response: CATALOG_SCHEMA_IDS.supermarketLocationItemPage,
+  },
+  [SUPERMARKET_LOCATION_ITEM_PATTERNS.setAvailability]: {
+    request: CATALOG_SCHEMA_IDS.setLocationItemAvailabilityRequest,
+    response: CATALOG_SCHEMA_IDS.setLocationItemAvailabilityResult,
   },
   [POSTAL_CODE_PATTERNS.nearest]: {
     request: CATALOG_SCHEMA_IDS.resolveNearestPostalCodeRequest,

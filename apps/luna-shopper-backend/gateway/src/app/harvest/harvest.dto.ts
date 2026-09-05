@@ -6,6 +6,7 @@ import {
   HarvestRunStatus,
   ItemSourceRefStatus,
   ItemCategory,
+  SourceLocationStatus,
   type AdapterKey,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
@@ -183,6 +184,17 @@ export class UpsertSupermarketSourceDto {
   maxRequestsPerSecond?: number;
 }
 
+/** Bind one source shop to a catalog location (plan 0084, section 7). */
+export class MapSourceLocationDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Must belong to the same chain as the row being mapped; the harvester checks that against catalog rather than trusting the picker.',
+  })
+  @IsUUID()
+  supermarketLocationId!: string;
+}
+
 export class SetSourceEnabledDto {
   @ApiProperty()
   @IsBoolean()
@@ -254,6 +266,30 @@ export class SourceEntryListQueryDto extends PageQueryDto {
   @IsString()
   @MaxLength(120)
   query?: string;
+}
+
+/**
+ * The shops queue, one chain at a time (plan 0084, section 7).
+ *
+ * `supermarketId` is **on the DTO** rather than a `@Query('supermarketId')`
+ * argument beside it. `createValidationPipe` sets `whitelist` with
+ * `forbidNonWhitelisted`, so a property the declared class does not carry is
+ * refused with a 400 however correctly the handler then reads it from a
+ * parameter of its own.
+ */
+export class SourceLocationListQueryDto extends PageQueryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  supermarketId!: string;
+
+  @ApiPropertyOptional({
+    enum: SourceLocationStatus,
+    description:
+      'The queue defaults to UNMAPPED in the back office, because it exists to be drained. The other two are reachable so a wrong mapping can be found and undone.',
+  })
+  @IsOptional()
+  @IsEnum(SourceLocationStatus)
+  status?: SourceLocationStatus;
 }
 
 export class ItemSourceRefListQueryDto extends PageQueryDto {

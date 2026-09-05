@@ -17267,6 +17267,102 @@
         ]
       }
     },
+    "/v1/admin/catalog/location-items/availability": {
+      "put": {
+        "operationId": "AdminCatalogLocationItemsController_setAvailability_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSupermarketLocationItemAvailabilityDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `supermarketLocationItem.setAvailability` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.SetSupermarketLocationItemAvailabilityResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/harvest/runs": {
       "post": {
         "operationId": "AdminHarvestRunsController_spawn_v1",
@@ -18696,6 +18792,464 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/harvest.ItemSourceRefView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/shops": {
+      "get": {
+        "operationId": "AdminHarvestShopsController_list_v1",
+        "parameters": [
+          {
+            "name": "supermarketId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "The queue defaults to UNMAPPED in the back office, because it exists to be drained. The other two are reachable so a wrong mapping can be found and undone.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "UNMAPPED",
+                "IGNORED"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `sourceLocation.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceLocationPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/shops/{id}/location": {
+      "put": {
+        "operationId": "AdminHarvestShopsController_map_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapSourceLocationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `sourceLocation.map` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceLocationView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminHarvestShopsController_unmap_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `sourceLocation.unmap` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceLocationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/shops/{id}/ignore": {
+      "post": {
+        "operationId": "AdminHarvestShopsController_ignore_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `sourceLocation.ignore` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceLocationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/shops/{id}/unignore": {
+      "post": {
+        "operationId": "AdminHarvestShopsController_unignore_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `sourceLocation.unignore` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceLocationView"
                 }
               }
             }
@@ -21295,16 +21849,55 @@
             "type": "string",
             "nullable": true,
             "maxLength": 120
-          },
-          "available": {
-            "type": "boolean",
-            "nullable": true,
-            "description": "A per store override meaning \"someone checked this specific shop\". Null clears it and defers to the scope’s answer, which is not the same as saying \"not available here\"."
           }
         },
         "required": [
           "itemId",
           "supermarketLocationId"
+        ]
+      },
+      "SetSupermarketLocationItemAvailabilityDto": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "OFFICIAL_API",
+              "OFFICIAL_WEB",
+              "OFFICIAL_LEAFLET",
+              "ADMIN",
+              "USER_RECEIPT",
+              "USER_REPORTED"
+            ],
+            "description": "Who is writing. ADMIN is a person, and a person’s row is protected from every automated writer with no expiry."
+          },
+          "sourceRunId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The harvest run behind an automated write. Null for a person’s."
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the writer observed it. Defaults to now."
+          },
+          "entries": {
+            "description": "A value for every product the caller resolved, positive and negative: a shop missing from a product’s list of shops does not stock it, and dropping the negatives leaves a run unable to say anything negative.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AvailabilityEntryDto"
+            }
+          }
+        },
+        "required": [
+          "supermarketLocationId",
+          "sourceKind",
+          "entries"
         ]
       },
       "SpawnHarvestRunDto": {
@@ -21414,6 +22007,19 @@
           "itemId",
           "supermarketId",
           "externalId"
+        ]
+      },
+      "MapSourceLocationDto": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Must belong to the same chain as the row being mapped; the harvester checks that against catalog rather than trusting the picker."
+          }
+        },
+        "required": [
+          "supermarketLocationId"
         ]
       },
       "UpsertSupermarketSourceDto": {
@@ -23398,6 +24004,31 @@
         ],
         "additionalProperties": false
       },
+      "catalog.SetSupermarketLocationItemAvailabilityResult": {
+        "type": "object",
+        "properties": {
+          "written": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.SupermarketLocationItemAvailabilityConflict"
+            }
+          }
+        },
+        "required": [
+          "written",
+          "skipped",
+          "conflicts"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ShopChainSummariesView": {
         "type": "object",
         "properties": {
@@ -23619,6 +24250,30 @@
         ],
         "additionalProperties": false
       },
+      "catalog.SupermarketLocationItemAvailabilityConflict": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "held": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "offered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "itemId",
+          "held",
+          "offered"
+        ],
+        "additionalProperties": false
+      },
       "catalog.SupermarketLocationItemPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -23668,6 +24323,28 @@
               "boolean",
               "null"
             ]
+          },
+          "availabilitySourceKind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PriceSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availabilityObservedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "availabilitySourceRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -23675,7 +24352,10 @@
           "itemId",
           "supermarketLocationId",
           "positionInStore",
-          "available"
+          "available",
+          "availabilitySourceKind",
+          "availabilityObservedAt",
+          "availabilitySourceRunId"
         ],
         "additionalProperties": false
       },
@@ -24015,6 +24695,7 @@
           "EXTERNAL_ID",
           "EAN",
           "NAME_BRAND_SIZE",
+          "NAME_SIZE",
           "MANUAL"
         ]
       },
@@ -24128,6 +24809,14 @@
         "enum": [
           "BOUGHT",
           "NOT_AVAILABLE"
+        ]
+      },
+      "enums.SourceLocationStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "UNMAPPED",
+          "IGNORED"
         ]
       },
       "enums.UnitOfMeasure": {
@@ -25809,6 +26498,96 @@
           "categoryPath",
           "url",
           "lastSeenAt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SourceLocationPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceLocationView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "harvest.SourceLocationView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "externalId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "printedName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.SourceLocationStatus"
+          },
+          "matchedBy": {
+            "$ref": "#/components/schemas/enums.ItemSourceMatch"
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "firstRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "externalId",
+          "printedName",
+          "supermarketLocationId",
+          "status",
+          "matchedBy",
+          "firstSeenAt",
+          "lastSeenAt",
+          "firstRunId",
+          "lastRunId"
         ],
         "additionalProperties": false
       },

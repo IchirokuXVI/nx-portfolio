@@ -19,6 +19,7 @@ import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { RefreshRunner } from './refresh.runner';
 import { RunExecutor } from './run-executor.service';
 import { SourceEntryService } from './source-entry.service';
+import { SourceLocationService } from './source-location.service';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
 import { SupermarketSourceService } from './supermarket-source.service';
 
@@ -65,6 +66,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
     DiscoveredPlaceService,
     SourceEntryService,
     ItemSourceRefService,
+    SourceLocationService,
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,
     PostalCodeDiscoveryWorker,

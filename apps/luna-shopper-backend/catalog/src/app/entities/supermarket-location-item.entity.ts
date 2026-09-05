@@ -1,3 +1,4 @@
+import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { Item } from './item.entity';
@@ -33,11 +34,43 @@ export class SupermarketLocationItem extends BaseEntity {
   positionInStore!: string | null;
 
   /**
-   * A **nullable override** meaning "someone checked this specific shop". Null
-   * means "no store specific information, use the scope's". Two columns, two
-   * different claims, neither pretending to be the other: the scope's `available`
-   * is what an automated source can populate, and this one is what a person can.
+   * A **nullable override** meaning "somebody checked this specific shop". Null
+   * is still "no store specific information, use the scope's", and a crawl that
+   * has never seen a shop leaves it null rather than writing false, because
+   * absence of a crawl is not absence of a product.
+   *
+   * **Since plan 0084 an automated source may write it too.** The old comment
+   * here reserved the column for a person, and that was a finding about one
+   * source rather than about sources: DEZA's only availability claim is per
+   * shop. So the column stays where it is and gains the three provenance
+   * columns below, and the row records which of the two wrote it.
    */
   @Column({ type: 'boolean', nullable: true })
   available!: boolean | null;
+
+  /**
+   * Who last wrote {@link available} (plan 0084, section 2).
+   *
+   * Nullable with no default, and the migration deliberately backfills nothing:
+   * a row written before that plan came from a person or from nothing and the
+   * database cannot tell which. `ADMIN` protects rows nobody typed;
+   * `OFFICIAL_WEB` lets a crawl overwrite a person. Null is read as "no
+   * provenance recorded", which the write path treats as `ADMIN` whenever
+   * `available` is not null.
+   */
+  @Column({
+    type: 'enum',
+    enum: PriceSourceKind,
+    enumName: 'price_source_kind',
+    nullable: true,
+  })
+  availabilitySourceKind!: PriceSourceKind | null;
+
+  /** When that writer stated it. */
+  @Column({ type: 'timestamptz', nullable: true })
+  availabilityObservedAt!: Date | null;
+
+  /** The harvest run that wrote it. Opaque, never joined (plan 0082 reads it). */
+  @Column({ type: 'uuid', nullable: true })
+  availabilitySourceRunId!: string | null;
 }

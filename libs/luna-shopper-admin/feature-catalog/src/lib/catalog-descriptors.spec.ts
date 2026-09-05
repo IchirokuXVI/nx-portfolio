@@ -381,19 +381,6 @@ describe('availability', () => {
   });
 
   /**
-   * A per shop row an operator merely opened must not come back saying "not
-   * sold here". The column has three answers and the draft starts on the third.
-   */
-  it('starts a per shop override at "nobody has checked"', () => {
-    const draft = draftFor(LOCATION_ITEMS, null, 'create');
-
-    expect(draft['available']).toBeNull();
-
-    const input = toInput(LOCATION_ITEMS, draft, 'create', {});
-    expect(input['available']).toBeNull();
-  });
-
-  /**
    * A price row carries no claim about stock (backend plan 0080, section 2),
    * so the add a price form must not send the flag: the DTO refuses it.
    */
@@ -401,6 +388,29 @@ describe('availability', () => {
     expect(
       isEditable(fieldOf(PRICES, 'available') as FieldDescriptor<ResourceRow>, 'create')
     ).toBe(false);
+  });
+
+  /**
+   * Nor is it something the per shop form sends any more (backend plan 0084,
+   * section 4). The column gained provenance and left
+   * `supermarketLocationItem.upsert`, so a checkbox here would send a field the
+   * route drops and report a change nobody made.
+   */
+  it('is not something the per shop form sends either', () => {
+    expect(
+      isEditable(
+        fieldOf(LOCATION_ITEMS, 'available') as FieldDescriptor<ResourceRow>,
+        'create'
+      )
+    ).toBe(false);
+
+    // Not merely left null: absent. A row an operator merely opened must not
+    // come back saying anything at all about stock.
+    const draft = draftFor(LOCATION_ITEMS, null, 'create');
+    expect(draft).not.toHaveProperty('available');
+    expect(toInput(LOCATION_ITEMS, draft, 'create', {})).not.toHaveProperty(
+      'available'
+    );
   });
 
   it('carries the three answers a shop row really holds', () => {

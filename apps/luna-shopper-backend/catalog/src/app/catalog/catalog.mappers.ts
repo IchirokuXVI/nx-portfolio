@@ -214,5 +214,10 @@ export function toSupermarketLocationItemView(
     supermarketLocationId: row.supermarketLocationId,
     positionInStore: row.positionInStore,
     available: row.available,
+    availabilitySourceKind: row.availabilitySourceKind,
+    availabilityObservedAt: row.availabilityObservedAt
+      ? row.availabilityObservedAt.toISOString()
+      : null,
+    availabilitySourceRunId: row.availabilitySourceRunId,
   };
 }

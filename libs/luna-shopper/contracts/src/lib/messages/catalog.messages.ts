@@ -261,9 +261,29 @@ export const PRICE_SCOPE_PATTERNS = {
  * aisle is not something a warehouse can answer.
  */
 export const SUPERMARKET_LOCATION_ITEM_PATTERNS = {
+  /**
+   * The operator's route for the rest of the row. **It no longer writes
+   * `available`** (plan 0084, section 4): a hand written availability records
+   * its own provenance and becomes protected, so it goes through
+   * {@link SUPERMARKET_LOCATION_ITEM_PATTERNS.setAvailability} with
+   * `sourceKind: ADMIN` like everything else that writes that column.
+   */
   upsert: 'supermarketLocationItem.upsert',
   get: 'supermarketLocationItem.get',
   listByLocation: 'supermarketLocationItem.listByLocation',
+  /**
+   * Whether one shop carries each of these products (plan 0084, section 4).
+   *
+   * **A batch, because the caller has one shop and thousands of products.** A
+   * crawl of DEZA produces ten calls, one per shop; per item calls would be tens
+   * of thousands of NATS round trips for one run.
+   *
+   * **An automated fetch never overwrites a person.** A row a person wrote is
+   * skipped and reported in `conflicts` rather than overwritten or cleared, and
+   * there is no protection window: an owner who marked a product absent from one
+   * shop marked a fact about that shop.
+   */
+  setAvailability: 'supermarketLocationItem.setAvailability',
 } as const;
 
 // --- Views -----------------------------------------------------------------
@@ -652,6 +672,17 @@ export interface SupermarketLocationItemView {
   supermarketLocationId: string;
   positionInStore: string | null;
   available: boolean | null;
+  /**
+   * Who last wrote `available` (plan 0084, section 2). Null means no provenance
+   * was recorded, and section 3 gives that the safe reading: a null kind beside
+   * a non null `available` is treated as `ADMIN`, because nothing but a person
+   * ever wrote the column before this.
+   */
+  availabilitySourceKind: PriceSourceKind | null;
+  /** When that writer stated it. */
+  availabilityObservedAt: string | null;
+  /** The harvest run that wrote it. Opaque, never joined. */
+  availabilitySourceRunId: string | null;
 }
 
 // --- Supermarket requests --------------------------------------------------
@@ -1330,12 +1361,57 @@ export interface ShopChainSummariesView {
 
 // --- Supermarket location item requests ------------------------------------
 
+/**
+ * The rest of the row, and `positionInStore` is what that means. **`available`
+ * is not settable here** (plan 0084, section 4): the column carries provenance
+ * now, and a value written with none would be a person's claim that no automated
+ * writer could tell from an unwritten one.
+ */
 export interface UpsertSupermarketLocationItemRequest extends AdminCredential {
   itemId: string;
   supermarketLocationId: string;
   positionInStore?: string | null;
-  /** Null clears the override and defers to the scope's `available`. */
-  available?: boolean | null;
+}
+
+/**
+ * Whether one shop carries each of these products (plan 0084, section 4).
+ *
+ * **Absence is a claim, and this is the parameter that says so.** A DEZA product
+ * listing names the shops that carry it, so a shop missing from that list does
+ * not stock the product. `entries` therefore carries `available: false` rows,
+ * and a caller is expected to send a value for every product it resolved rather
+ * than only the positive ones.
+ */
+export interface SetSupermarketLocationItemAvailabilityRequest extends AdminCredential {
+  supermarketLocationId: string;
+  /** Who is writing. `ADMIN` is a person, and a person's row is protected. */
+  sourceKind: PriceSourceKind;
+  /** The harvest run behind an automated write. Null for a person's. */
+  sourceRunId?: string | null;
+  /** When the writer observed it. Defaults to now. */
+  observedAt?: string;
+  entries: { itemId: string; available: boolean }[];
+}
+
+/** One row an automated writer declined to touch, because a person owns it. */
+export interface SupermarketLocationItemAvailabilityConflict {
+  itemId: string;
+  /** What the person's row says. Null is "use the scope's". */
+  held: boolean | null;
+  /** What the automated writer offered and did not write. */
+  offered: boolean;
+}
+
+export interface SetSupermarketLocationItemAvailabilityResult {
+  /** Rows created or changed. */
+  written: number;
+  /**
+   * Entries that wrote nothing: a row a person owns, or one already saying
+   * exactly this. `written + skipped` is the number of entries sent.
+   */
+  skipped: number;
+  /** The person owned half of `skipped`, itemised, so a run can report it. */
+  conflicts: SupermarketLocationItemAvailabilityConflict[];
 }
 
 export interface GetSupermarketLocationItemRequest {

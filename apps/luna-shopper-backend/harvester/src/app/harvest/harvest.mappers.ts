@@ -5,6 +5,7 @@ import type {
   ItemSourceRefView,
   PostalCodeDiscoveryRequestView,
   SourceCatalogEntryView,
+  SourceLocationView,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
 import type {
@@ -13,6 +14,7 @@ import type {
   ItemSourceRef,
   PostalCodeDiscoveryRequest,
   SourceCatalogEntry,
+  SourceLocation,
   SupermarketSource,
 } from '../entities';
 
@@ -134,6 +136,29 @@ export function toItemSourceRefView(row: ItemSourceRef): ItemSourceRefView {
     confidence: Number(row.confidence),
     lastResolvedAt: iso(row.lastResolvedAt),
     lastSeenAt: iso(row.lastSeenAt),
+  };
+}
+
+/**
+ * One shop a source names (plan 0084, section 6).
+ *
+ * `externalId` is the source's own code and `printedName` is what it displayed;
+ * the view carries both because the queue is read by a person who recognises the
+ * street and acts on the code.
+ */
+export function toSourceLocationView(row: SourceLocation): SourceLocationView {
+  return {
+    id: row.id,
+    supermarketId: row.supermarketId,
+    externalId: row.externalId,
+    printedName: row.printedName,
+    supermarketLocationId: row.supermarketLocationId,
+    status: row.status,
+    matchedBy: row.matchedBy,
+    firstSeenAt: row.firstSeenAt.toISOString(),
+    lastSeenAt: row.lastSeenAt.toISOString(),
+    firstRunId: row.firstRunId,
+    lastRunId: row.lastRunId,
   };
 }
 

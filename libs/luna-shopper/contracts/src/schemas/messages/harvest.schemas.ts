@@ -6,6 +6,7 @@ import {
   ItemSourceMatch,
   ItemSourceRefStatus,
   PostalCodeDiscoveryStatus,
+  SourceLocationStatus,
 } from '../../lib/enums/harvest.enums';
 import {
   ADAPTER_KEYS,
@@ -14,6 +15,7 @@ import {
   ITEM_SOURCE_REF_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
+  SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
 } from '../../lib/messages/harvest.messages';
 import {
@@ -52,6 +54,7 @@ export const HARVEST_SCHEMA_IDS = {
   postalCodeDiscoveryStatus: schemaId('enums/PostalCodeDiscoveryStatus'),
   itemSourceMatch: schemaId('enums/ItemSourceMatch'),
   discoveredPlaceStatus: schemaId('enums/DiscoveredPlaceStatus'),
+  sourceLocationStatus: schemaId('enums/SourceLocationStatus'),
   adapterKey: schemaId('enums/AdapterKey'),
 
   harvestRunView: schemaId('harvest/HarvestRunView'),
@@ -60,6 +63,7 @@ export const HARVEST_SCHEMA_IDS = {
   discoveredPlaceGroupsResult: schemaId('harvest/DiscoveredPlaceGroupsResult'),
   sourceCatalogEntryView: schemaId('harvest/SourceCatalogEntryView'),
   itemSourceRefView: schemaId('harvest/ItemSourceRefView'),
+  sourceLocationView: schemaId('harvest/SourceLocationView'),
   supermarketSourceView: schemaId('harvest/SupermarketSourceView'),
   postalCodeDiscoveryRequestView: schemaId(
     'harvest/PostalCodeDiscoveryRequestView'
@@ -69,6 +73,7 @@ export const HARVEST_SCHEMA_IDS = {
   discoveredPlacePage: schemaId('harvest/DiscoveredPlacePage'),
   sourceCatalogEntryPage: schemaId('harvest/SourceCatalogEntryPage'),
   itemSourceRefPage: schemaId('harvest/ItemSourceRefPage'),
+  sourceLocationPage: schemaId('harvest/SourceLocationPage'),
   supermarketSourcePage: schemaId('harvest/SupermarketSourcePage'),
   postalCodeDiscoveryRequestPage: schemaId(
     'harvest/PostalCodeDiscoveryRequestPage'
@@ -84,6 +89,9 @@ export const HARVEST_SCHEMA_IDS = {
   listRefsRequest: schemaId('msg/itemSourceRef.list/request'),
   refIdRequest: schemaId('msg/itemSourceRef.id/request'),
   setManualRefRequest: schemaId('msg/itemSourceRef.setManual/request'),
+  listSourceLocationsRequest: schemaId('msg/sourceLocation.list/request'),
+  mapSourceLocationRequest: schemaId('msg/sourceLocation.map/request'),
+  sourceLocationIdRequest: schemaId('msg/sourceLocation.id/request'),
   listEntriesRequest: schemaId('msg/sourceEntry.list/request'),
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
   upsertSourceRequest: schemaId('msg/supermarketSource.upsert/request'),
@@ -325,6 +333,40 @@ const itemSourceRefView = object(
 );
 
 /**
+ * One shop a source names (plan 0084, section 6). Keyed on the source's own
+ * code, so a shop the chain renames keeps its mapping.
+ */
+const sourceLocationView = object(
+  HARVEST_SCHEMA_IDS.sourceLocationView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    externalId: nonEmptyString(),
+    printedName: nonEmptyString(),
+    supermarketLocationId: nullableString(),
+    status: ref(HARVEST_SCHEMA_IDS.sourceLocationStatus),
+    matchedBy: ref(HARVEST_SCHEMA_IDS.itemSourceMatch),
+    firstSeenAt: nonEmptyString(),
+    lastSeenAt: nonEmptyString(),
+    firstRunId: nullableString(),
+    lastRunId: nullableString(),
+  },
+  [
+    'id',
+    'supermarketId',
+    'externalId',
+    'printedName',
+    'supermarketLocationId',
+    'status',
+    'matchedBy',
+    'firstSeenAt',
+    'lastSeenAt',
+    'firstRunId',
+    'lastRunId',
+  ]
+);
+
+/**
  * One row of the postal code discovery queue (plan 0063, section 3).
  *
  * `discoveredAt` is the cooldown's anchor and `nextAttemptAt` the backoff's, and
@@ -376,6 +418,10 @@ const sourceCatalogEntryPage = paginated(
 const itemSourceRefPage = paginated(
   HARVEST_SCHEMA_IDS.itemSourceRefPage,
   HARVEST_SCHEMA_IDS.itemSourceRefView
+);
+const sourceLocationPage = paginated(
+  HARVEST_SCHEMA_IDS.sourceLocationPage,
+  HARVEST_SCHEMA_IDS.sourceLocationView
 );
 const supermarketSourcePage = paginated(
   HARVEST_SCHEMA_IDS.supermarketSourcePage,
@@ -488,6 +534,33 @@ const setManualRefRequest = object(
   ['userId', 'itemId', 'supermarketId', 'externalId']
 );
 
+const listSourceLocationsRequest = object(
+  HARVEST_SCHEMA_IDS.listSourceLocationsRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: nonEmptyString(),
+    status: ref(HARVEST_SCHEMA_IDS.sourceLocationStatus),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'supermarketId']
+);
+const mapSourceLocationRequest = object(
+  HARVEST_SCHEMA_IDS.mapSourceLocationRequest,
+  {
+    ...adminCredentialProperties,
+    sourceLocationId: nonEmptyString(),
+    supermarketLocationId: nonEmptyString(),
+  },
+  ['userId', 'sourceLocationId', 'supermarketLocationId']
+);
+const sourceLocationIdRequest = object(
+  HARVEST_SCHEMA_IDS.sourceLocationIdRequest,
+  { ...adminCredentialProperties, sourceLocationId: nonEmptyString() },
+  ['userId', 'sourceLocationId']
+);
+
 const listEntriesRequest = object(
   HARVEST_SCHEMA_IDS.listEntriesRequest,
   {
@@ -578,6 +651,10 @@ export const harvestSchemas: JsonSchema[] = [
     HARVEST_SCHEMA_IDS.discoveredPlaceStatus,
     Object.values(DiscoveredPlaceStatus)
   ),
+  enumOf(
+    HARVEST_SCHEMA_IDS.sourceLocationStatus,
+    Object.values(SourceLocationStatus)
+  ),
   enumOf(HARVEST_SCHEMA_IDS.adapterKey, ADAPTER_KEYS),
   enumOf(
     HARVEST_SCHEMA_IDS.postalCodeDiscoveryStatus,
@@ -590,11 +667,13 @@ export const harvestSchemas: JsonSchema[] = [
   discoveredPlaceGroupsResult,
   sourceCatalogEntryView,
   itemSourceRefView,
+  sourceLocationView,
   postalCodeDiscoveryRequestView,
   harvestRunPage,
   discoveredPlacePage,
   sourceCatalogEntryPage,
   itemSourceRefPage,
+  sourceLocationPage,
   supermarketSourcePage,
   postalCodeDiscoveryRequestPage,
   spawnRunRequest,
@@ -607,6 +686,9 @@ export const harvestSchemas: JsonSchema[] = [
   listRefsRequest,
   refIdRequest,
   setManualRefRequest,
+  listSourceLocationsRequest,
+  mapSourceLocationRequest,
+  sourceLocationIdRequest,
   listEntriesRequest,
   createItemFromEntryRequest,
   upsertSourceRequest,
@@ -671,6 +753,26 @@ export const harvestMessageContracts: Record<
   [ITEM_SOURCE_REF_PATTERNS.setManual]: {
     request: HARVEST_SCHEMA_IDS.setManualRefRequest,
     response: HARVEST_SCHEMA_IDS.itemSourceRefView,
+  },
+  [SOURCE_LOCATION_PATTERNS.list]: {
+    request: HARVEST_SCHEMA_IDS.listSourceLocationsRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationPage,
+  },
+  [SOURCE_LOCATION_PATTERNS.map]: {
+    request: HARVEST_SCHEMA_IDS.mapSourceLocationRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationView,
+  },
+  [SOURCE_LOCATION_PATTERNS.unmap]: {
+    request: HARVEST_SCHEMA_IDS.sourceLocationIdRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationView,
+  },
+  [SOURCE_LOCATION_PATTERNS.ignore]: {
+    request: HARVEST_SCHEMA_IDS.sourceLocationIdRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationView,
+  },
+  [SOURCE_LOCATION_PATTERNS.unignore]: {
+    request: HARVEST_SCHEMA_IDS.sourceLocationIdRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationView,
   },
   [SOURCE_ENTRY_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listEntriesRequest,

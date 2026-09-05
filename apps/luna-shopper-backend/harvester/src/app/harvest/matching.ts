@@ -2,6 +2,7 @@ import {
   ItemSourceMatch,
   ItemSourceRefStatus,
   type ItemView,
+  type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
 
 /**
@@ -110,6 +111,67 @@ export class ItemMatchIndex {
     }
     return null;
   }
+}
+
+/** A catalog location, as the default shop match sees it (plan 0084, section 6). */
+export interface LocationCandidate {
+  id: string;
+  label: LocalizedText | null;
+  address: string | null;
+}
+
+/**
+ * The chain's shops, indexed by every name they answer to.
+ *
+ * **The default is an exact name match and nothing cleverer.** A source's
+ * printed shop name is compared, normalized, against the chain's location labels
+ * and addresses through the same {@link normalizeName} everything else uses.
+ * Exactly one hit maps the shop; zero hits or more than one leaves it
+ * `UNMAPPED`, where a person decides.
+ *
+ * Two names of one location that normalize alike still count once, which is why
+ * the buckets hold a set of ids rather than a list: "Ronda del Marrubial" as
+ * both the label and the address is one shop, not an ambiguity.
+ */
+export class LocationNameIndex {
+  private readonly byName = new Map<string, Set<string>>();
+
+  constructor(locations: LocationCandidate[]) {
+    for (const location of locations) {
+      for (const name of namesOf(location)) {
+        const key = normalizeName(name);
+        if (!key) {
+          continue;
+        }
+        const bucket = this.byName.get(key);
+        if (bucket) {
+          bucket.add(location.id);
+        } else {
+          this.byName.set(key, new Set([location.id]));
+        }
+      }
+    }
+  }
+
+  /** The one location this name is, or null when it is none or several. */
+  match(printedName: string): string | null {
+    const key = normalizeName(printedName);
+    if (!key) {
+      return null;
+    }
+    const bucket = this.byName.get(key);
+    if (!bucket || bucket.size !== 1) {
+      return null;
+    }
+    return [...bucket][0];
+  }
+}
+
+function namesOf(location: LocationCandidate): string[] {
+  const label = location.label;
+  return [label?.es, label?.en, location.address].filter(
+    (name): name is string => typeof name === 'string' && name.trim() !== ''
+  );
 }
 
 function nameKey(

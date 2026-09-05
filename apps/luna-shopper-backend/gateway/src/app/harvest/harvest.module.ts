@@ -5,6 +5,7 @@ import {
   AdminHarvestItemRefsController,
   AdminHarvestPlacesController,
   AdminHarvestRunsController,
+  AdminHarvestShopsController,
   AdminHarvestSourcesController,
 } from './harvest.controller';
 
@@ -22,6 +23,7 @@ import {
     AdminHarvestPlacesController,
     AdminHarvestEntriesController,
     AdminHarvestItemRefsController,
+    AdminHarvestShopsController,
     AdminHarvestSourcesController,
   ],
 })

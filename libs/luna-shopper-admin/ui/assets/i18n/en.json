@@ -353,7 +353,7 @@
       "positionInStore": "Position in the shop",
       "positionInStoreHelp": "Where the product sits, such as an aisle. Per shop, because a warehouse cannot answer it.",
       "available": "Available in this shop",
-      "availableHelp": "An override for this shop alone. Leave it unset and the scope’s own answer stands, which is not the same as saying no.",
+      "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so.",
       "note": "These rows are read one shop at a time, because an aisle is a fact about one shop. Choose a shop to begin.",
       "filter": {
         "supermarketLocationId": "Shop"

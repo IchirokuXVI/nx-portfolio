@@ -370,6 +370,13 @@ export type LookupItemsDto = {
 };
 
 /**
+ * `MapSourceLocationDto` in the gateway's OpenAPI document.
+ */
+export type MapSourceLocationDto = {
+  supermarketLocationId: string;
+};
+
+/**
  * `ProblemDetails` in the gateway's OpenAPI document.
  *
  * The RFC 7807 error envelope, served as `application/problem+json`. `message` is already translated to the request locale, so a client can show it without knowing any backend error code; `code` is the stable value to branch on.
@@ -586,6 +593,23 @@ export type SetSourceEnabledDto = {
  */
 export type SetSupermarketItemAvailabilityDto = {
   priceScopeId: string;
+  entries: AvailabilityEntryDto[];
+};
+
+/**
+ * `SetSupermarketLocationItemAvailabilityDto` in the gateway's OpenAPI document.
+ */
+export type SetSupermarketLocationItemAvailabilityDto = {
+  supermarketLocationId: string;
+  sourceKind:
+    | 'OFFICIAL_API'
+    | 'OFFICIAL_WEB'
+    | 'OFFICIAL_LEAFLET'
+    | 'ADMIN'
+    | 'USER_RECEIPT'
+    | 'USER_REPORTED';
+  sourceRunId?: string | null;
+  observedAt?: string;
   entries: AvailabilityEntryDto[];
 };
 
@@ -850,7 +874,6 @@ export type UpsertSupermarketLocationItemDto = {
   itemId: string;
   supermarketLocationId: string;
   positionInStore?: string | null;
-  available?: boolean | null;
 };
 
 /**
@@ -1480,6 +1503,15 @@ export type CatalogSetSupermarketItemAvailabilityResult = {
 };
 
 /**
+ * `catalog.SetSupermarketLocationItemAvailabilityResult` in the gateway's OpenAPI document.
+ */
+export type CatalogSetSupermarketLocationItemAvailabilityResult = {
+  written: number;
+  skipped: number;
+  conflicts: CatalogSupermarketLocationItemAvailabilityConflict[];
+};
+
+/**
  * `catalog.ShopChainSummariesView` in the gateway's OpenAPI document.
  */
 export type CatalogShopChainSummariesView = {
@@ -1549,6 +1581,15 @@ export type CatalogSupermarketItemView = {
 };
 
 /**
+ * `catalog.SupermarketLocationItemAvailabilityConflict` in the gateway's OpenAPI document.
+ */
+export type CatalogSupermarketLocationItemAvailabilityConflict = {
+  itemId: string;
+  held: boolean | null;
+  offered: boolean;
+};
+
+/**
  * `catalog.SupermarketLocationItemPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -1567,6 +1608,9 @@ export type CatalogSupermarketLocationItemView = {
   supermarketLocationId: string;
   positionInStore: string | null;
   available: boolean | null;
+  availabilitySourceKind: EnumsPriceSourceKind | unknown;
+  availabilityObservedAt: string | null;
+  availabilitySourceRunId: string | null;
 };
 
 /**
@@ -1732,6 +1776,7 @@ export type EnumsItemSourceMatch =
   | 'EXTERNAL_ID'
   | 'EAN'
   | 'NAME_BRAND_SIZE'
+  | 'NAME_SIZE'
   | 'MANUAL';
 
 /**
@@ -1827,6 +1872,11 @@ export type EnumsProfilePostalCodeSource = 'TYPED' | 'DEVICE' | 'NEARBY';
  * `enums.SettlementOutcome` in the gateway's OpenAPI document.
  */
 export type EnumsSettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
+
+/**
+ * `enums.SourceLocationStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsSourceLocationStatus = 'ACTIVE' | 'UNMAPPED' | 'IGNORED';
 
 /**
  * `enums.UnitOfMeasure` in the gateway's OpenAPI document.
@@ -2326,6 +2376,33 @@ export type HarvestSourceCatalogEntryView = {
   categoryPath: string[];
   url: string | null;
   lastSeenAt: string;
+};
+
+/**
+ * `harvest.SourceLocationPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestSourceLocationPage = {
+  items: HarvestSourceLocationView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.SourceLocationView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceLocationView = {
+  id: string;
+  supermarketId: string;
+  externalId: string;
+  printedName: string;
+  supermarketLocationId: string | null;
+  status: EnumsSourceLocationStatus;
+  matchedBy: EnumsItemSourceMatch;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  firstRunId: string | null;
+  lastRunId: string | null;
 };
 
 /**

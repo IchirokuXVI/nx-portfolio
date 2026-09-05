@@ -6,6 +6,7 @@ import { PostalCodePoints1756400000000 } from './1756400000000-PostalCodePoints'
 import { DerivedPostalCodes1756500000000 } from './1756500000000-DerivedPostalCodes';
 import { CatalogAudit1756600000000 } from './1756600000000-CatalogAudit';
 import { ItemPrices1756700000000 } from './1756700000000-ItemPrices';
+import { LocationItemAvailabilityProvenance1756800000000 } from './1756800000000-LocationItemAvailabilityProvenance';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -25,4 +26,5 @@ export const CATALOG_MIGRATIONS = [
   DerivedPostalCodes1756500000000,
   CatalogAudit1756600000000,
   ItemPrices1756700000000,
+  LocationItemAvailabilityProvenance1756800000000,
 ];
