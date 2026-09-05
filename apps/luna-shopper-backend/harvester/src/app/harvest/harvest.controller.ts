@@ -7,6 +7,7 @@ import {
   POSTAL_CODE_DISCOVERY_PATTERNS,
   POSTAL_CODE_EVENTS,
   SOURCE_ENTRY_PATTERNS,
+  SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
@@ -27,12 +28,17 @@ import {
   type ListItemSourceRefsRequest,
   type ListPostalCodeDiscoveryRequestsRequest,
   type ListSourceEntriesRequest,
+  type ListSourceLocationsRequest,
   type ListSupermarketSourcesRequest,
+  type MapSourceLocationRequest,
   type PostalCodeDiscoveryRequestPage,
   type PostalCodesAddedEvent,
   type SetManualItemSourceRefRequest,
   type SetSupermarketSourceEnabledRequest,
   type SourceCatalogEntryPage,
+  type SourceLocationIdRequest,
+  type SourceLocationPage,
+  type SourceLocationView,
   type SpawnHarvestRunRequest,
   type SupermarketSourceIdRequest,
   type SupermarketSourcePage,
@@ -44,6 +50,7 @@ import { HarvestRunService } from './harvest-run.service';
 import { ItemSourceRefService } from './item-source-ref.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { SourceEntryService } from './source-entry.service';
+import { SourceLocationService } from './source-location.service';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 /**
@@ -66,6 +73,7 @@ export class HarvestController {
     private readonly places: DiscoveredPlaceService,
     private readonly entries: SourceEntryService,
     private readonly refs: ItemSourceRefService,
+    private readonly shops: SourceLocationService,
     private readonly sources: SupermarketSourceService,
     private readonly discovery: PostalCodeDiscoveryService
   ) {}
@@ -165,6 +173,43 @@ export class HarvestController {
     @Payload() req: CreateItemFromSourceEntryRequest
   ): Promise<ItemView> {
     return this.entries.createItem(req);
+  }
+
+  // --- Source locations: which shop of theirs is which of ours (plan 0084) --
+
+  @MessagePattern(SOURCE_LOCATION_PATTERNS.list)
+  listSourceLocations(
+    @Payload() req: ListSourceLocationsRequest
+  ): Promise<SourceLocationPage> {
+    return this.shops.list(req);
+  }
+
+  @MessagePattern(SOURCE_LOCATION_PATTERNS.map)
+  mapSourceLocation(
+    @Payload() req: MapSourceLocationRequest
+  ): Promise<SourceLocationView> {
+    return this.shops.map(req);
+  }
+
+  @MessagePattern(SOURCE_LOCATION_PATTERNS.unmap)
+  unmapSourceLocation(
+    @Payload() req: SourceLocationIdRequest
+  ): Promise<SourceLocationView> {
+    return this.shops.unmap(req);
+  }
+
+  @MessagePattern(SOURCE_LOCATION_PATTERNS.ignore)
+  ignoreSourceLocation(
+    @Payload() req: SourceLocationIdRequest
+  ): Promise<SourceLocationView> {
+    return this.shops.ignore(req);
+  }
+
+  @MessagePattern(SOURCE_LOCATION_PATTERNS.unignore)
+  unignoreSourceLocation(
+    @Payload() req: SourceLocationIdRequest
+  ): Promise<SourceLocationView> {
+    return this.shops.unignore(req);
   }
 
   // --- Item source refs ----------------------------------------------------

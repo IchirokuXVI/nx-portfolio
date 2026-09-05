@@ -7,6 +7,7 @@ import {
   PRICE_SCOPE_PATTERNS,
   PriceSourceKind,
   SUPERMARKET_ITEM_PATTERNS,
+  SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AddItemPriceBatchResult,
@@ -22,6 +23,8 @@ import {
   type PriceScopePage,
   type PriceScopeView,
   type SetSupermarketItemAvailabilityResult,
+  type SetSupermarketLocationItemAvailabilityResult,
+  type SupermarketLocationPage,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
@@ -155,6 +158,37 @@ export class CatalogClient {
     });
   }
 
+  /**
+   * A chain's shops. The default name match of plan 0084, section 6 compares a
+   * source's printed shop name against these labels and addresses, and
+   * `sourceLocation.map` checks that the location a person picked really belongs
+   * to the chain whose queue they are draining.
+   *
+   * A page at a time, like every other read here: the harvester holds these ids
+   * opaquely and a chain has tens of shops, not thousands.
+   */
+  /** One shop, to check that a mapping a person made points where they think. */
+  getSupermarketLocation(
+    supermarketLocationId: string
+  ): Promise<SupermarketLocationView> {
+    return this.send(SUPERMARKET_LOCATION_PATTERNS.get, {
+      userId: this.actor(),
+      supermarketLocationId,
+    });
+  }
+
+  listSupermarketLocations(
+    supermarketId: string,
+    cursor?: string
+  ): Promise<SupermarketLocationPage> {
+    return this.send(SUPERMARKET_LOCATION_PATTERNS.list, {
+      userId: this.actor(),
+      supermarketId,
+      cursor,
+      limit: 100,
+    });
+  }
+
   // --- Writes --------------------------------------------------------------
 
   createSupermarket(
@@ -228,6 +262,35 @@ export class CatalogClient {
     return this.send(SUPERMARKET_ITEM_PATTERNS.setAvailability, {
       userId: this.actor(),
       priceScopeId,
+      entries,
+    });
+  }
+
+  /**
+   * Whether one shop carries each of these products (plan 0084, section 4).
+   *
+   * One call per shop, carrying a value for every product the run resolved,
+   * positive **and** negative: a source that names the shops carrying a product
+   * says by omission that the rest do not, and throwing that away leaves the run
+   * unable to state anything negative.
+   *
+   * Catalog decides what it may write. A row a person typed is skipped and comes
+   * back in `conflicts` rather than overwritten, and the run reports the
+   * disagreement instead of applying it.
+   */
+  setLocationAvailability(
+    supermarketLocationId: string,
+    entries: { itemId: string; available: boolean }[],
+    sourceRunId: string | null,
+    sourceKind: PriceSourceKind = PriceSourceKind.OFFICIAL_WEB,
+    observedAt?: Date
+  ): Promise<SetSupermarketLocationItemAvailabilityResult> {
+    return this.send(SUPERMARKET_LOCATION_ITEM_PATTERNS.setAvailability, {
+      userId: this.actor(),
+      supermarketLocationId,
+      sourceKind,
+      sourceRunId,
+      observedAt: observedAt?.toISOString(),
       entries,
     });
   }

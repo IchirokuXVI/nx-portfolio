@@ -75,7 +75,37 @@ export enum ItemSourceMatch {
   EAN = 'EAN',
   /** Normalized name plus brand plus size. Produces a CANDIDATE, never an ACTIVE. */
   NAME_BRAND_SIZE = 'NAME_BRAND_SIZE',
+  /**
+   * Normalized name, and a size where the subject has one (plan 0084, section
+   * 6). A shop has neither a brand nor a size, so the rung that maps one to a
+   * catalog location is a name comparison and says so rather than borrowing a
+   * label that names two fields it never read.
+   */
+  NAME_SIZE = 'NAME_SIZE',
   MANUAL = 'MANUAL',
+}
+
+/**
+ * What has become of one shop a source names (plan 0084, section 6).
+ *
+ * The row exists the moment a run first sees the shop, whatever came of it, so
+ * a shop nobody has mapped is a row in a queue rather than a silence in a log.
+ */
+export enum SourceLocationStatus {
+  /** Bound to a catalog location. The only status a run writes availability for. */
+  ACTIVE = 'ACTIVE',
+  /**
+   * Seen, and nobody has said which of our shops it is. A run skips it, counts
+   * it, and finishes: an unknown location needs no action from the run.
+   */
+  UNMAPPED = 'UNMAPPED',
+  /**
+   * A place the source lists that we do not sell from: DEZA publishes eighteen
+   * centres of which ten carry products, and the rest are warehouses, a
+   * cafeteria, a bakery and a beauty salon. Marking one is a person's act, and
+   * a run never does it.
+   */
+  IGNORED = 'IGNORED',
 }
 
 /**

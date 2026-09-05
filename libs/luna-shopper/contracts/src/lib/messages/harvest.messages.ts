@@ -6,6 +6,7 @@ import type {
   ItemSourceMatch,
   ItemSourceRefStatus,
   PostalCodeDiscoveryStatus,
+  SourceLocationStatus,
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
@@ -55,6 +56,27 @@ export const ITEM_SOURCE_REF_PATTERNS = {
 export const SOURCE_ENTRY_PATTERNS = {
   list: 'sourceEntry.list',
   createItem: 'sourceEntry.createItem',
+} as const;
+
+/**
+ * Which shop of theirs is which of ours (plan 0084, section 7).
+ *
+ * A source that answers availability per shop names its shops by its own code,
+ * and only a person can say which catalog location each one is. These are the
+ * five acts of that queue: read it, bind a row, unbind it, and take a place we
+ * do not sell from out of the queue for good.
+ *
+ * **Mapping a shop does not backfill it.** The availability a run skipped stays
+ * skipped until the next run, which is the opposite of `sourceAlias.accept`: a
+ * leaflet offer sits in the run's stored document, and a shop's availability is
+ * one boolean per product across a whole assortment that no run stored.
+ */
+export const SOURCE_LOCATION_PATTERNS = {
+  list: 'sourceLocation.list',
+  map: 'sourceLocation.map',
+  unmap: 'sourceLocation.unmap',
+  ignore: 'sourceLocation.ignore',
+  unignore: 'sourceLocation.unignore',
 } as const;
 
 export const SUPERMARKET_SOURCE_PATTERNS = {
@@ -201,6 +223,35 @@ export interface SourceCatalogEntryView {
   lastSeenAt: string;
 }
 
+/**
+ * One shop a source names, and the catalog location it points at once somebody
+ * says which (plan 0084, section 6).
+ *
+ * **The key is the source's own code, not the name it prints.** DEZA labels each
+ * shop `T1` to `T7`, `C1`, `C2` and `Z1` in the markup and prints "Ronda del
+ * Marrubial" beside it. Only the first survives a rename, and a mapping keyed on
+ * the display name detaches the day marketing retitles a shop, into `UNMAPPED`,
+ * which reads as "they closed it".
+ */
+export interface SourceLocationView {
+  id: string;
+  supermarketId: string;
+  /** The source's own key for the shop, e.g. `T1`. */
+  externalId: string;
+  /** What the source displayed, exactly. */
+  printedName: string;
+  /** The catalog location this is, set on `ACTIVE` only. */
+  supermarketLocationId: string | null;
+  status: SourceLocationStatus;
+  /** `NAME_SIZE` for the default exact name match, `MANUAL` when a person bound it. */
+  matchedBy: ItemSourceMatch;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  /** The run that created the row, and the run that last saw the shop. */
+  firstRunId: string | null;
+  lastRunId: string | null;
+}
+
 /** The link between one catalog item and one chain's product. */
 export interface ItemSourceRefView {
   id: string;
@@ -303,6 +354,28 @@ export interface CreateItemFromSourceEntryRequest extends AdminCredential {
   category?: string;
 }
 
+// --- Source location requests (plan 0084, section 7) ------------------------
+
+/**
+ * The queue, one chain at a time. The chain is required because the table is
+ * unique on (`supermarketId`, `externalId`) and a mapping only means anything
+ * within one chain.
+ */
+export interface ListSourceLocationsRequest extends PageQuery, AdminCredential {
+  supermarketId: string;
+  status?: SourceLocationStatus;
+}
+
+/** Bind one row to a catalog location: `ACTIVE`, `matchedBy: MANUAL`. */
+export interface MapSourceLocationRequest extends AdminCredential {
+  sourceLocationId: string;
+  supermarketLocationId: string;
+}
+
+export interface SourceLocationIdRequest extends AdminCredential {
+  sourceLocationId: string;
+}
+
 // --- Item source ref requests ----------------------------------------------
 
 export interface ListItemSourceRefsRequest extends PageQuery, AdminCredential {
@@ -351,6 +424,7 @@ export type HarvestRunPage = Paginated<HarvestRunView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
 export type ItemSourceRefPage = Paginated<ItemSourceRefView>;
+export type SourceLocationPage = Paginated<SourceLocationView>;
 export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
 
 // --- The postal code discovery queue (plan 0063) ---------------------------

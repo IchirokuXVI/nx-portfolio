@@ -25,6 +25,8 @@ import {
   type PricePolicyView,
   type SetSupermarketItemAvailabilityRequest,
   type SetSupermarketItemAvailabilityResult,
+  type SetSupermarketLocationItemAvailabilityRequest,
+  type SetSupermarketLocationItemAvailabilityResult,
   type UpdatePricePolicyRequest,
   type AdminPostalCodePage,
   type CountLocationsByPostalCodeRequest,
@@ -424,6 +426,18 @@ export class CatalogController {
     @Payload() req: ListSupermarketLocationItemsRequest
   ): Promise<SupermarketLocationItemPage> {
     return this.locationItems.listByLocation(req);
+  }
+
+  /**
+   * Whether one shop carries each of these products (plan 0084, section 4). A
+   * batch, because the caller has one shop and thousands of products, and an
+   * automated writer never overwrites a value a person typed in.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_ITEM_PATTERNS.setAvailability)
+  setLocationItemAvailability(
+    @Payload() req: SetSupermarketLocationItemAvailabilityRequest
+  ): Promise<SetSupermarketLocationItemAvailabilityResult> {
+    return this.locationItems.setAvailability(req);
   }
 
   // --- Item prices: every price a source gave (plan 0080) --------------------

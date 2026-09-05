@@ -99,6 +99,13 @@ export function fakeAudit(
             target: EntityTarget<ObjectLiteral>,
             options: unknown
           ) => bindingFor(target).repository.findOne?.(options as never),
+          find: async (target: EntityTarget<ObjectLiteral>, options: unknown) =>
+            bindingFor(target).repository.find?.(options as never) ?? [],
+          // A caller that reads its own writes back inside the transaction
+          // (plan 0084's scope derivation does) needs `create` here too, and
+          // the bound repository's is the one the spec already asserts on.
+          create: (target: EntityTarget<ObjectLiteral>, draft: ObjectLiteral) =>
+            bindingFor(target).repository.create?.(draft as never) ?? draft,
           delete: async (
             target: EntityTarget<ObjectLiteral>,
             criteria: unknown
