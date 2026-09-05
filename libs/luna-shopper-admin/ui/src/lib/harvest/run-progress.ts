@@ -5,9 +5,10 @@ import {
   input,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type {
-  HarvestRun,
-  RunProgress,
+import {
+  runCounterKeys,
+  type HarvestRun,
+  type RunProgress,
 } from '@portfolio/luna-shopper-admin/models';
 
 /**
@@ -147,12 +148,21 @@ export class RunProgressView {
    */
   readonly stageLabel = computed(() => this.run().stageLabel);
 
+  /**
+   * The run's own counters, shown separately rather than summed.
+   *
+   * Two of them are renamed on a run that writes prices (admin plan 0014,
+   * section 3): a walk writes prices now, so its `updated` and `unchanged` are
+   * prices written and prices confirmed, which is what the ingest counted. On a
+   * store discovery they are shops, so they keep the neutral words.
+   */
   readonly counters = computed(() => {
     const run = this.run();
+    const keys = runCounterKeys(run);
     return [
       { key: 'created', value: run.created },
-      { key: 'updated', value: run.updated },
-      { key: 'unchanged', value: run.unchanged },
+      { key: keys.updated, value: run.updated },
+      { key: keys.unchanged, value: run.unchanged },
       { key: 'notFound', value: run.notFound },
       // What a rule dropped, which is not the same as what failed (backend plan
       // 0081, section 7). A loyalty gated leaflet offer is skipped on purpose

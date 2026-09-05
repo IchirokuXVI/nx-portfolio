@@ -4,22 +4,22 @@ import { GatewayError } from '../gateway-error';
 import {
   DISCOVERED_PLACE_SEED,
   HARVEST_RUN_SEED,
-  ITEM_SOURCE_REF_SEED,
-  SOURCE_ALIAS_SEED,
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
   SUPERMARKET_SOURCE_SEED,
 } from './harvest-seed';
 import type {
-  AliasQuery,
+  AcceptSourceEntryInput,
+  CreateItemFromSourceEntryInput,
   EntryQuery,
   HarvestServiceI,
-  ItemRefQuery,
+  ImportHarvestDocumentInput,
   PageQuery,
   PlaceGroupQuery,
   PlaceQuery,
   RunQuery,
   ShopQuery,
+  SourceEntryAcceptResult,
 } from './harvest-service';
 
 /** How many rows a page holds when nothing asks for a size. */
@@ -50,15 +50,11 @@ export class HarvestMemory implements HarvestServiceI {
   );
   private readonly _entries: Wire.HarvestSourceCatalogEntryView[] =
     clone(SOURCE_ENTRY_SEED);
-  private readonly _refs: Wire.HarvestItemSourceRefView[] =
-    clone(ITEM_SOURCE_REF_SEED);
   private readonly _sources: Wire.HarvestSupermarketSourceView[] = clone(
     SUPERMARKET_SOURCE_SEED
   );
   private readonly _shops: Wire.HarvestSourceLocationView[] =
     clone(SOURCE_LOCATION_SEED);
-  private readonly _aliases: Wire.HarvestSourceAliasView[] =
-    clone(SOURCE_ALIAS_SEED);
 
   private _nextId = 1;
 
@@ -173,7 +169,7 @@ export class HarvestMemory implements HarvestServiceI {
    *
    * The price count is the run's own `created`, which is what the confirmation
    * offered. The real service answers what catalog actually deleted, and the
-   * two differ when an accepted alias wrote more rows on the run's behalf; with
+   * two differ when an accepted row wrote more prices on the run's behalf; with
    * no catalog behind this there is nothing better to say.
    */
   async revertRun(id: string): Promise<Wire.HarvestHarvestRunView> {
@@ -254,6 +250,13 @@ export class HarvestMemory implements HarvestServiceI {
     return this._decidePlace(id, 'REJECTED', null);
   }
 
+  /**
+   * One chain's rows, filtered as the queue filters them.
+   *
+   * No status asked for means the queue: `CANDIDATE` and `UNRESOLVED` together,
+   * which is what is waiting for a person. That default is the route's, not the
+   * screen's, so it lives here rather than in the page.
+   */
   async listEntries(
     query: EntryQuery
   ): Promise<Wire.HarvestSourceCatalogEntryPage> {
@@ -261,105 +264,98 @@ export class HarvestMemory implements HarvestServiceI {
     const matching = this._entries.filter(
       (entry) =>
         entry.supermarketId === query.supermarketId &&
-        (term === '' || entry.name.toLowerCase().includes(term))
+        (query.status === undefined
+          ? entry.status === 'CANDIDATE' || entry.status === 'UNRESOLVED'
+          : entry.status === query.status) &&
+        (query.sourceKind === undefined ||
+          entry.sourceKind === query.sourceKind) &&
+        (term === '' ||
+          entry.name.toLowerCase().includes(term) ||
+          (entry.brand ?? '').toLowerCase().includes(term) ||
+          (entry.ean ?? '').includes(term))
     );
 
     return page(matching, query);
-  }
-
-  async createItemFromEntry(
-    supermarketId: string,
-    entryId: string,
-    input: Wire.CreateItemFromEntryDto
-  ): Promise<Wire.CatalogItemView> {
-    const entry = this._entries.find(
-      (candidate) =>
-        candidate.id === entryId && candidate.supermarketId === supermarketId
-    );
-    if (entry === undefined) {
-      throw notFound();
-    }
-
-    // Imported entries leave the queue, so the next one comes up by itself.
-    this._entries.splice(this._entries.indexOf(entry), 1);
-
-    return {
-      id: `item-${this._nextId++}`,
-      name: { en: entry.name, es: entry.name },
-      brand: entry.brand,
-      imageUrl: null,
-      sku: entry.externalId,
-      ean: entry.ean,
-      unitSize: entry.unitSize,
-      category: input.category ?? 'OTHER',
-      defaultUnit: 'UNIT',
-      productGroupId: null,
-    };
-  }
-
-  async listItemRefs(
-    query: ItemRefQuery
-  ): Promise<Wire.HarvestItemSourceRefPage> {
-    return page(
-      this._refs.filter((ref) => matchesRef(ref, query)),
-      query
-    );
-  }
-
-  async listUnresolvedItemRefs(
-    query: ItemRefQuery
-  ): Promise<Wire.HarvestItemSourceRefPage> {
-    const matching = this._refs.filter(
-      (ref) => ref.status === 'CANDIDATE' && matchesRef(ref, query)
-    );
-
-    return page(matching, query);
-  }
-
-  async setManualItemRef(
-    input: Wire.SetManualItemSourceRefDto
-  ): Promise<Wire.HarvestItemSourceRefView> {
-    const existing = this._refs.find(
-      (ref) =>
-        ref.itemId === input.itemId && ref.supermarketId === input.supermarketId
-    );
-
-    const now = new Date().toISOString();
-    if (existing !== undefined) {
-      existing.externalId = input.externalId;
-      existing.matchedBy = 'MANUAL';
-      existing.status = 'MANUAL';
-      existing.confidence = 1;
-      existing.lastResolvedAt = now;
-      return { ...existing };
-    }
-
-    const ref: Wire.HarvestItemSourceRefView = {
-      id: `ref-${this._nextId++}`,
-      itemId: input.itemId,
-      supermarketId: input.supermarketId,
-      externalId: input.externalId,
-      externalUrl: null,
-      matchedBy: 'MANUAL',
-      status: 'MANUAL',
-      confidence: 1,
-      lastResolvedAt: now,
-      lastSeenAt: now,
-    };
-    this._refs.push(ref);
-    return { ...ref };
-  }
-
-  async confirmItemRef(id: string): Promise<Wire.HarvestItemSourceRefView> {
-    return this._decideRef(id, 'ACTIVE');
-  }
-
-  async rejectItemRef(id: string): Promise<Wire.HarvestItemSourceRefView> {
-    return this._decideRef(id, 'REJECTED');
   }
 
   /**
-   * A leaflet, imported (backend plan 0081, sections 7 and 8).
+   * Bind a row to a product the catalog already holds.
+   *
+   * The chain's own `name` is **not touched**, which is the owner's rule and the
+   * reason the column exists: the item can be renamed at will afterwards and the
+   * next run that observes the same key still resolves.
+   */
+  async acceptEntry(
+    id: string,
+    input: AcceptSourceEntryInput
+  ): Promise<SourceEntryAcceptResult> {
+    const entry = this._entry(id);
+    this._bind(entry, input.itemId);
+
+    return {
+      entry: { ...entry },
+      pricesWritten: writablePrices(entry),
+      createdItem: null,
+    };
+  }
+
+  /**
+   * The same, for a product the catalog does not hold yet.
+   *
+   * Every field of the input is optional and the row is the default for each, so
+   * this fills in from the row exactly as the harvester does. `name.en` may be
+   * absent and stays absent (backend plan 0079): before that plan the only way
+   * to save a leaflet product was to copy the Spanish string into English, where
+   * it claimed to be a translation.
+   */
+  async createItemFromEntry(
+    id: string,
+    input: CreateItemFromSourceEntryInput
+  ): Promise<SourceEntryAcceptResult> {
+    const entry = this._entry(id);
+    const es = input.name?.es ?? entry.name;
+    const en = input.name?.en;
+
+    const item: Wire.CatalogItemView = {
+      id: `item-${this._nextId++}`,
+      name: en === undefined || en === '' ? { es } : { es, en },
+      brand: input.brand ?? entry.brand,
+      imageUrl: null,
+      sku: entry.externalId,
+      ean: input.ean ?? entry.ean,
+      unitSize: input.unitSize ?? entry.unitSize,
+      category: input.category ?? 'OTHER',
+      defaultUnit: input.defaultUnit ?? 'UNIT',
+      productGroupId: null,
+    };
+
+    this._bind(entry, item.id);
+
+    return {
+      entry: { ...entry },
+      pricesWritten: writablePrices(entry),
+      createdItem: item,
+    };
+  }
+
+  /**
+   * Not a product he tracks.
+   *
+   * The row stays as `REJECTED` rather than being deleted, so the next run that
+   * observes the key touches it and asks nobody. The status is the owner's, and
+   * a run does not get to overwrite a decision.
+   */
+  async rejectEntry(id: string): Promise<Wire.HarvestSourceCatalogEntryView> {
+    const entry = this._entry(id);
+    entry.status = 'REJECTED';
+    entry.itemId = null;
+    entry.matchedBy = 'MANUAL';
+    entry.decidedAt = new Date().toISOString();
+    return { ...entry };
+  }
+
+  /**
+   * A document, imported (backend plan 0086, section 6.2).
    *
    * The refusal modelled here is the **document** one: a second upload of one
    * digest for one chain is 409, and reverting the earlier run is what makes a
@@ -372,8 +368,8 @@ export class HarvestMemory implements HarvestServiceI {
    * the audience this seed exists for. The runs screen already draws that
    * refusal, from `spawnRun`, which does enforce it.
    */
-  async importLeaflet(
-    input: Wire.ImportLeafletDto
+  async importDocument(
+    input: ImportHarvestDocumentInput
   ): Promise<Wire.HarvestHarvestRunView> {
     const sha256 = digestOf(input.document);
     const duplicate = this._runs.find(
@@ -405,7 +401,7 @@ export class HarvestMemory implements HarvestServiceI {
       // Never a source. An upload fetches nothing, so a chain that publishes
       // only leaflets needs no source row at all.
       sourceId: null,
-      mode: 'LEAFLET_IMPORT',
+      mode: 'FILE_IMPORT',
       trigger: 'MANUAL',
       status: 'PENDING',
       requestedAt: now,
@@ -440,96 +436,49 @@ export class HarvestMemory implements HarvestServiceI {
   }
 
   /**
-   * One chain's queued printed names.
+   * A finished run's rows, as a document (backend plan 0086, section 6.2).
    *
-   * No status asked for means the queue: `CANDIDATE` and `UNRESOLVED` together,
-   * which is what is waiting for a person. That default is the route's, not
-   * this screen's, so it lives here rather than in the page.
+   * Only the rows this run was the last to observe, which is the rule the export
+   * button's own help text states: a chain walked again since answers fewer
+   * rows. Modelling it here rather than answering every row keeps the button's
+   * warning honest with nothing listening.
    */
-  async listAliases(query: AliasQuery): Promise<Wire.HarvestSourceAliasPage> {
-    const term = (query.query ?? '').trim().toLowerCase();
-    const matching = this._aliases.filter(
-      (alias) =>
-        alias.supermarketId === query.supermarketId &&
-        (query.status === undefined
-          ? alias.status === 'CANDIDATE' || alias.status === 'UNRESOLVED'
-          : alias.status === query.status) &&
-        (term === '' || alias.printedName.toLowerCase().includes(term))
+  async exportRun(id: string): Promise<Readonly<Record<string, unknown>>> {
+    const run = this._runs.find((candidate) => candidate.id === id);
+    if (run === undefined) {
+      throw notFound();
+    }
+
+    const rows = this._entries.filter(
+      (entry) =>
+        entry.supermarketId === run.supermarketId && entry.lastRunId === run.id
     );
 
-    return page(matching, query);
-  }
-
-  /**
-   * Bind a printed name to a product the catalog already holds.
-   *
-   * `printedName` is **not touched**, which is the owner's rule and the reason
-   * the table exists: the item can be renamed at will afterwards and the next
-   * leaflet that prints the same string still resolves.
-   */
-  async acceptAlias(
-    id: string,
-    input: Wire.AcceptSourceAliasDto
-  ): Promise<Wire.HarvestSourceAliasAcceptResult> {
-    const alias = this._alias(id);
-    alias.itemId = input.itemId;
-    alias.status = 'ACTIVE';
-    alias.matchedBy = 'MANUAL';
-    alias.confidence = 1;
-
-    // Accepting writes the price the row was queued for, with the run's own id,
-    // so an operator working the queue does not have to upload the document a
-    // second time to get the prices he just resolved.
     return {
-      alias: { ...alias },
-      pricesWritten: alias.offerPrice === null ? 0 : 1,
-      item: null,
+      schema_version: 1,
+      sha256: `memory-${run.id}`,
+      producer: {
+        name: 'luna-harvester',
+        version: '0.0.0',
+        produced_at: new Date().toISOString(),
+      },
+      hints: {
+        chain_id: run.supermarketId,
+        source_kind: rows[0]?.sourceKind ?? 'OFFICIAL_API',
+      },
+      products: rows.map((entry) => ({
+        id: entry.id,
+        external_id: entry.externalId,
+        name: entry.name,
+        brand: entry.brand,
+        ean: entry.ean,
+        size: { label: entry.sizeFormat, quantity: entry.unitSize },
+        category_path: entry.categoryPath,
+        url: entry.url,
+        extra: entry.extra,
+      })),
+      warnings: [],
     };
-  }
-
-  /**
-   * The same, for a product the catalog does not hold yet.
-   *
-   * `name.en` may be absent and stays absent (backend plan 0079). Before that
-   * plan the only way to save a leaflet product was to copy the Spanish string
-   * into English, and a shopper reading English then saw a Spanish name that
-   * claimed to be a translation rather than one arriving through the fallback.
-   */
-  async createItemFromAlias(
-    id: string,
-    input: Wire.CreateItemFromAliasDto
-  ): Promise<Wire.HarvestSourceAliasAcceptResult> {
-    const alias = this._alias(id);
-    const item: Wire.CatalogItemView = {
-      id: `item-${this._nextId++}`,
-      name: input.name,
-      brand: input.brand ?? null,
-      imageUrl: null,
-      sku: null,
-      ean: input.ean ?? null,
-      unitSize: input.unitSize ?? null,
-      category: input.category,
-      defaultUnit: input.defaultUnit,
-      productGroupId: null,
-    };
-
-    alias.itemId = item.id;
-    alias.status = 'ACTIVE';
-    alias.matchedBy = 'MANUAL';
-    alias.confidence = 1;
-
-    return {
-      alias: { ...alias },
-      pricesWritten: alias.offerPrice === null ? 0 : 1,
-      item,
-    };
-  }
-
-  async rejectAlias(id: string): Promise<Wire.HarvestSourceAliasView> {
-    const alias = this._alias(id);
-    alias.status = 'REJECTED';
-    alias.matchedBy = 'MANUAL';
-    return { ...alias };
   }
 
   /**
@@ -697,12 +646,25 @@ export class HarvestMemory implements HarvestServiceI {
     }
   }
 
-  private _alias(id: string): Wire.HarvestSourceAliasView {
-    const alias = this._aliases.find((candidate) => candidate.id === id);
-    if (alias === undefined) {
+  private _entry(id: string): Wire.HarvestSourceCatalogEntryView {
+    const entry = this._entries.find((candidate) => candidate.id === id);
+    if (entry === undefined) {
       throw notFound();
     }
-    return alias;
+    return entry;
+  }
+
+  /** What accept and create both do to a row once the product is known. */
+  private _bind(
+    entry: Wire.HarvestSourceCatalogEntryView,
+    itemId: string
+  ): void {
+    entry.itemId = itemId;
+    entry.candidateEntryId = null;
+    entry.status = 'ACTIVE';
+    entry.matchedBy = 'MANUAL';
+    entry.confidence = 1;
+    entry.decidedAt = new Date().toISOString();
   }
 
   private _shop(id: string): Wire.HarvestSourceLocationView {
@@ -728,31 +690,21 @@ export class HarvestMemory implements HarvestServiceI {
     return { ...place };
   }
 
-  private _decideRef(
-    id: string,
-    status: Wire.EnumsItemSourceRefStatus
-  ): Wire.HarvestItemSourceRefView {
-    const ref = this._refs.find((candidate) => candidate.id === id);
-    if (ref === undefined) {
-      throw notFound();
-    }
-
-    ref.status = status;
-    ref.lastResolvedAt = new Date().toISOString();
-    return { ...ref };
-  }
 }
 
-function matchesRef(
-  ref: Wire.HarvestItemSourceRefView,
-  query: ItemRefQuery
-): boolean {
-  return (
-    (query.itemId === undefined || ref.itemId === query.itemId) &&
-    (query.supermarketId === undefined ||
-      ref.supermarketId === query.supermarketId) &&
-    (query.status === undefined || ref.status === query.status)
-  );
+/**
+ * How many prices accepting this row would write (backend plan 0086, section 7).
+ *
+ * Every price whose window has not closed, one per scope, which is why a row
+ * with two regional leaflets writes two and a DEZA row writes none. The count is
+ * what the confirmation sentence names, and getting it wrong here would teach an
+ * operator with no backend that accepting a priceless row had failed.
+ */
+function writablePrices(entry: Wire.HarvestSourceCatalogEntryView): number {
+  const now = Date.now();
+  return entry.prices.filter(
+    (price) => price.validUntil === null || Date.parse(price.validUntil) > now
+  ).length;
 }
 
 /** One page of a list, by index, with a cursor that says whether there is more. */
@@ -812,11 +764,7 @@ function mintRunId(index: number): string {
  * the only property the in-memory dedupe needs.
  */
 function digestOf(document: Readonly<Record<string, unknown>>): string {
-  const source = document['source'];
-  const stated =
-    typeof source === 'object' && source !== null
-      ? (source as Record<string, unknown>)['sha256']
-      : null;
+  const stated = document['sha256'];
 
   return typeof stated === 'string' && stated !== ''
     ? stated

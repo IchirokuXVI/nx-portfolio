@@ -407,15 +407,12 @@
     "nav": {
       "runs": "Harvest runs",
       "places": "Discovered places",
-      "entries": "Source entries",
-      "itemRefs": "Item links",
-      "leafletUpload": "Import a leaflet",
-      "leafletQueue": "Leaflet names",
+      "entries": "Source products",
+      "import": "Import a file",
       "shops": "Source shops",
       "sources": "Chain sources"
     },
     "match": {
-      "EXTERNAL_ID": "The source's own identifier",
       "EAN": "Barcode",
       "NAME_BRAND_SIZE": "Name, brand and size",
       "NAME_SIZE": "Name match",
@@ -424,8 +421,18 @@
     "mode": {
       "STORE_DISCOVERY": "Store discovery",
       "CATALOG_DISCOVERY": "Catalog discovery",
-      "REFRESH": "Price refresh",
-      "LEAFLET_IMPORT": "Leaflet import"
+      "FILE_IMPORT": "File import"
+    },
+    "sourceKind": {
+      "OFFICIAL_API": "The chain's API",
+      "OFFICIAL_WEB": "The chain's website",
+      "OFFICIAL_LEAFLET": "A leaflet"
+    },
+    "entryStatus": {
+      "CANDIDATE": "A product was proposed",
+      "UNRESOLVED": "Nothing matched",
+      "ACTIVE": "Bound to a product",
+      "REJECTED": "Rejected"
     },
     "unit": {
       "UNIT": "Unit",
@@ -536,8 +543,10 @@
         "attribution": "A run's writes are recorded against the harvester service, not against you. Starting one is what is being recorded here.",
         "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
         "failed": "The run did not start, and the server did not say why.",
-        "leaflet": "A leaflet import starts from the document itself: the file says which chain printed it, what is on offer and when the prices apply. Drop it on the import screen.",
-        "openUpload": "Go to the leaflet import"
+        "priceScope": "Price scope to write to",
+        "priceScopeHelp": "A walk writes the prices it reads, so it has to be told which scope they belong to. Only asked for a chain fetched through an API that publishes prices; a site that prints none needs no scope.",
+        "fileImport": "A file import starts from the document itself: the file says what was observed, and you say which chain, which scope and what observed it. Drop it on the import screen.",
+        "openUpload": "Go to the file import"
       }
     },
     "run": {
@@ -556,6 +565,8 @@
         "created": "Created",
         "updated": "Updated",
         "unchanged": "Unchanged",
+        "pricesWritten": "Prices written",
+        "pricesConfirmed": "Prices confirmed",
         "notFound": "Not stocked",
         "skipped": "Skipped by a rule",
         "failed": "Failed"
@@ -565,14 +576,20 @@
         "lead": "One line per decision this run made without asking. The extractor's own lost tiles are here too, so what it lost and what the import dropped read in one place."
       },
       "queue": {
-        "open": "Work through the names this chain has queued",
-        "count": "{{count}} offers went to the queue"
+        "open": "Work through what this chain has queued",
+        "count": "{{count}} products went to the queue"
+      },
+      "export": {
+        "action": "Export this run as a file",
+        "working": "Preparing the file\u2026",
+        "help": "The file holds the products this run was the last to observe, so a chain walked again since answers fewer of them. Export the newest run of a chain. It is a read, so it works whether or not this deployment is allowed to start runs: a machine that may crawl exports, and a cluster that may not imports.",
+        "failed": "The export did not come back. Nothing was written and nothing was changed."
       },
       "revert": {
         "action": "Revert this run",
         "heading": "Delete what this run wrote?",
         "confirm": "Delete the {{prices}} prices this run wrote. Prices another run wrote, and prices you typed in yourself, are kept. This cannot be undone.",
-        "confirmLeaflet": "Delete the {{prices}} prices this run wrote and {{queued}} rows waiting in the queue. Accepted and rejected names are kept. This cannot be undone."
+        "confirmImport": "Delete the {{prices}} prices this run wrote and {{queued}} rows waiting in the queue. Accepted and rejected products are kept. This cannot be undone."
       },
       "reverted": {
         "chip": "Reverted",
@@ -615,99 +632,111 @@
       }
     },
     "entries": {
-      "heading": "Source entries",
-      "empty": "Every entry for this chain has a catalog item.",
-      "import": "Create a catalog item",
-      "category": "Category",
-      "categoryHelp": "The one thing the source does not tell us. Everything else on the item comes from the entry.",
+      "heading": "Source products",
+      "empty": "Every product this chain named has been decided.",
+      "accept": "Yes, it is this product",
+      "openSibling": "Open the row it points at",
+      "reject": "Not a product we track",
+      "timesSeen": "Seen {{count}} times",
+      "extra": "Everything else the source sent",
+      "lastRun": "The run that last saw it",
       "choose": {
-        "body": "Entries belong to one chain, so choose which chain to work through. The queue reads that chain's entries that have no catalog item yet.",
-        "supermarketId": "Chain identifier",
-        "submit": "Open the queue"
+        "body": "A source product belongs to the chain that named it, so choose which chain to work through. The queue reads that chain's products that nobody has decided yet, whatever named them.",
+        "chain": "Chain"
+      },
+      "filter": {
+        "status": "State",
+        "queued": "Waiting for a decision",
+        "sourceKind": "What named it",
+        "anyKind": "Anything"
+      },
+      "prices": {
+        "heading": "What it costs, by scope",
+        "none": "No price on this row. That is not a gap: a site that prints no price gives us none, and a leaflet tile with no single unit price gives us none either."
+      },
+      "proposal": {
+        "heading": "What was proposed",
+        "item": "A product was proposed by name, {{confidence}}% sure. Nothing was written: agreeing here is what binds it and writes the prices.",
+        "sibling": "This looks like {{name}}, another row of this chain. That row is the one with the barcode, so it is the one to create the product from.",
+        "siblingElsewhere": "The row it points at ({{id}}) is not in this queue, which usually means somebody has already decided it. Accept or create here instead.",
+        "none": "Nothing in the catalog looked like it, so find the product or create it."
+      },
+      "written": {
+        "none": "Nothing was written for {{name}}, because this row carries no price. That is the truth for a chain that prints none, and it is not a failure.",
+        "one": "One price written for {{name}}: {{prices}}.",
+        "many": "{{count}} prices written for {{name}}: {{prices}}."
+      },
+      "rejectConfirm": {
+        "heading": "Reject this product?",
+        "body": "The row stays as rejected, so no run asks about it again. You can find it later by asking for rejected rows."
       },
       "field": {
-        "brand": "Brand",
-        "externalId": "Source identifier",
-        "ean": "EAN",
-        "sizeFormat": "Size",
-        "price": "Price",
-        "unitPrice": "Unit price",
+        "externalId": "The source's own identifier",
         "categoryPath": "Source category",
-        "url": "Product page"
-      }
-    },
-    "refs": {
-      "heading": "Item links",
-      "empty": "Every link has been resolved.",
-      "confirm": "Yes, this is the product",
-      "reject": "No, unlink it",
-      "confidence": "{{percent}}% confident",
-      "problem": {
-        "unmatched": "Never resolved",
-        "stale": "Stopped appearing at the source"
+        "url": "Product page",
+        "status": "State",
+        "lastSeen": "Last seen"
       },
-      "correct": {
-        "heading": "Point it somewhere else",
-        "help": "If the match is wrong, give the source's own identifier for the right product. That replaces the link rather than removing it, so the item keeps a price.",
-        "externalId": "Source identifier",
-        "submit": "Use this one instead"
+      "bind": {
+        "heading": "Point it at a product we have"
       },
-      "field": {
-        "itemId": "Catalog item",
-        "supermarketId": "Chain",
-        "externalId": "Source identifier",
-        "matchedBy": "Matched by",
-        "status": "Status",
-        "externalUrl": "Product page",
-        "lastSeenAt": "Last seen"
+      "create": {
+        "heading": "Or create the product",
+        "help": "Every field starts as the source stated it and only what you change is sent: the rest is filled in from the row. The English name may be left empty, and then the product lists with a missing translation tag and a shopper reading English sees the Spanish name. Whatever the product ends up called, the name the source printed is what the next run resolves against.",
+        "fromRow": "As the row says",
+        "nameEs": "Name in Spanish",
+        "nameEn": "Name in English (optional)",
+        "brand": "Brand",
+        "ean": "Barcode",
+        "unitSize": "Size",
+        "category": "Category",
+        "defaultUnit": "Sold by",
+        "submit": "Create it and bind the row"
       }
     },
-    "sources": {
-      "heading": "Chain sources",
-      "lead": "How each chain is fetched, and whether it is fetched at all. This switch is per chain and is the one on this screen that can be changed from here.",
-      "empty": "No chain has a source configured.",
-      "enabled": "Fetching",
-      "disabled": "Not fetching",
-      "edit": "Change how it is fetched",
-      "field": {
-        "adapter": "Adapter",
-        "workers": "Workers",
-        "rate": "Requests per second",
-        "lastRunAt": "Last run",
-        "lastSuccessAt": "Last success",
-        "failures": "Failures in a row"
-      }
-    },
-    "leaflets": {
-      "heading": "Import a leaflet",
-      "lead": "Drop the JSON the extractor produced. Nothing here changes the document: an edited file has a different digest, and the digest is what stops the same leaflet being imported twice.",
-      "file": "The leaflet document",
+    "imports": {
+      "heading": "Import a file",
+      "lead": "Drop the JSON a producer made: a leaflet extractor, a person typing a chain's prices, or the export of a walk that ran on another machine. Nothing here changes the document, because an edited file has a different digest and the digest is what stops the same file being imported twice.",
+      "file": "The document",
       "rejected": {
-        "not-json": "That file is not JSON. Check that it is the extractor's output and not the PDF.",
-        "not-a-document": "That file reads as JSON but has no offers in it, so it did not come from the leaflet extractor."
+        "not-json": "That file is not JSON. Check that it is the producer's output and not the PDF.",
+        "not-a-document": "That file reads as JSON but has no products in it, so it did not come from a harvest producer."
       },
       "read": {
         "heading": "What the file says",
-        "retailer": "Retailer",
-        "chainId": "Chain identifier in the file",
-        "file": "Source file",
+        "producer": "Made by",
+        "producerVersion": "Producer version",
+        "producedAt": "Made at",
+        "schemaVersion": "Schema version",
         "sha256": "Digest",
-        "pages": "Pages",
-        "offers": "Offers",
-        "warnings": "Extractor warnings",
-        "chainIdHint": "The chain identifier is shown and never used to look anything up. Two extractors spell one chain two ways, so pick the chain yourself below."
+        "products": "Products",
+        "warnings": "Producer warnings"
+      },
+      "hints": {
+        "set": "Chain, scope and source were set from the file.",
+        "kept": "The file names them too, but your choices were kept.",
+        "mixed": "Some were set from the file and some of your choices were kept.",
+        "setLine": "{{field}}: set to {{value}} from the file.",
+        "keptLine": "{{field}}: kept as {{kept}}. The file says {{value}}.",
+        "unknownLine": "{{field}}: the file names {{id}}, which this deployment does not have. Choose one yourself."
       },
       "chain": "Chain",
       "scope": "Price scope",
       "scopeNeedsChain": "Choose the chain first. Scopes belong to a chain, so there is nothing to choose between until there is one.",
-      "noNational": "This chain has no national scope. Most leaflets are nationwide, so create one and come back.",
+      "noNational": "This chain has no national scope. Most uploads are nationwide, so create one and come back.",
       "createScope": "Create a price scope in a new tab",
       "refreshScopes": "Look again",
+      "sourceKind": "What observed it",
+      "sourceKindChoose": "Choose one",
+      "sourceKindHelp": "What the products and the prices are stamped with, and what decides which price a shopper sees when two sources disagree. A walk of a chain's API imported here is an API price, not a leaflet price: the upload is not what observed it.",
       "validFrom": "Valid from",
       "validUntil": "Valid until",
-      "datesRequired": "Both dates are needed. The file states none, or states only one, and the import is refused without both.",
+      "datesRequired": "The file carries a window, so both dates are needed. Change them freely; they apply to every product that states none of its own.",
       "import": "Start the import",
-      "importing": "Importing…",
+      "importing": "Importing\u2026",
+      "started": "The import has started.",
+      "openQueue": "Work through what it queued",
+      "openRun": "Watch the run",
       "conflict": {
         "already-imported": "This chain has already imported this exact document. Revert that run first, then import the corrected file.",
         "run-in-progress": "A run for this chain is already in progress. Only one runs at a time, so wait for it or abort it first.",
@@ -715,51 +744,10 @@
       },
       "failures": {
         "heading": "The document was refused",
-        "lead": "One entry per offer, with every complaint about it. Fix the file in the extractor and drop it again: nothing on this screen edits the document."
+        "lead": "One entry per product, with every complaint about it. Fix the file in the producer and drop it again: nothing on this screen edits the document."
       },
       "preview": {
-        "heading": "What would be imported",
-        "byPageAsc": "Sort by page, first to last",
-        "byPageDesc": "Sort by page, last to first",
-        "loyalty": "Card price"
-      },
-      "note": {
-        "loyalty": "Skipped: the price on this tile is for loyalty card holders, and that is not what a shopper without the card pays.",
-        "conditional": "Queued, not written: the printed price is the second unit's or the price at a quantity, and this tile states no single unit price."
-      }
-    },
-    "aliases": {
-      "heading": "Leaflet names",
-      "empty": "Every printed name for this chain has been decided.",
-      "accept": "Yes, it is this product",
-      "reject": "Not a product we track",
-      "timesSeen": "Printed {{count}} times",
-      "written": "{{count}} price rows written for {{name}} at {{price}}.",
-      "rawText": "What the extractor read on the tile",
-      "choose": {
-        "body": "A printed name belongs to the chain that printed it, so choose which chain to work through. The queue reads that chain's names that no leaflet could resolve.",
-        "chain": "Chain"
-      },
-      "field": {
-        "price": "Leaflet price",
-        "unitPrice": "Comparison price",
-        "page": "Page",
-        "confidence": "Extractor confidence",
-        "lastSeen": "Last printed"
-      },
-      "bind": {
-        "heading": "Point it at a product we have",
-        "candidate": "A product was proposed by name. Nothing was written: agreeing here is what binds the name and writes the leaflet's price."
-      },
-      "create": {
-        "heading": "Or create the product",
-        "help": "The Spanish name starts as the leaflet printed it and can be changed freely. The English name may be left empty: the product lists with a missing translation tag and a shopper reading English sees the Spanish name. Whatever the product ends up called, the name the leaflet printed is what the next leaflet resolves against.",
-        "nameEs": "Name in Spanish",
-        "nameEn": "Name in English (optional)",
-        "brand": "Brand",
-        "category": "Category",
-        "defaultUnit": "Sold by",
-        "submit": "Create it and bind the name"
+        "heading": "What would be imported"
       }
     },
     "shops": {

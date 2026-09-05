@@ -10,9 +10,15 @@ import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
+  RESOURCE_GATEWAYS,
   toGatewayError,
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  priceScopeSource,
+  type PriceScope,
+} from '@portfolio/luna-shopper-admin/feature-catalog';
+import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   failureBlockReason,
   spawnBlockReason,
@@ -20,7 +26,11 @@ import {
   type HarvestRunMode,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { HarvestNotice, SwitchPanel } from '@portfolio/luna-shopper-admin/ui';
+import {
+  HarvestNotice,
+  ReferencePicker,
+  SwitchPanel,
+} from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
@@ -30,21 +40,38 @@ const REVERTED_OPTIONS = ['any', 'reverted', 'standing'] as const;
 type RevertedFilter = (typeof REVERTED_OPTIONS)[number];
 
 /**
- * The four run modes, in the order the picker offers them.
+ * The three run modes, in the order the picker offers them.
  *
- * `LEAFLET_IMPORT` is one of them and is the only one this form does not start
- * (admin plan 0010, section 2). An import needs a document, and a document is a
- * file, a preview and a validation failure that names the offer it is about.
- * None of that fits three text inputs, so choosing it here sends the operator
- * to the screen that does rather than growing this one a fourth mode's worth of
- * fields.
+ * `REFRESH` is gone (backend plan 0086, section 9). It existed only because a
+ * walk threw its prices away and something had to fetch them again; a walk
+ * writes them now, so the mode had nothing left to do and the form cannot name
+ * it. `LEAFLET_IMPORT` is `FILE_IMPORT`, which is the same run under a name that
+ * does not claim a leaflet produced the file.
+ *
+ * `FILE_IMPORT` is the only one this form does not start (admin plan 0010,
+ * section 2). An import needs a document, and a document is a file, a preview
+ * and a validation failure that names the product it is about. None of that fits
+ * three text inputs, so choosing it here sends the operator to the screen that
+ * does rather than growing this one a mode's worth of fields.
  */
 const MODES: readonly HarvestRunMode[] = [
   'STORE_DISCOVERY',
   'CATALOG_DISCOVERY',
-  'REFRESH',
-  'LEAFLET_IMPORT',
+  'FILE_IMPORT',
 ];
+
+/** How far the scope read walks looking for the chain's `NATIONAL` one. */
+const SCOPE_PAGE = 100;
+
+/**
+ * The adapter whose walk writes prices and therefore needs a scope to write
+ * them to (backend plan 0086, section 9).
+ *
+ * DEZA's site prints no price anywhere, so its walk writes none and the spawn
+ * accepts a scope for it and ignores it. A field that does nothing is a lie in a
+ * form, so it is not offered.
+ */
+const SCOPED_ADAPTER = 'mercadona-api';
 
 /**
  * The runs screen: what has run, what is running, and how to start one.
@@ -71,6 +98,7 @@ const MODES: readonly HarvestRunMode[] = [
     RouterLink,
     RokuTranslatorPipe,
     HarvestNotice,
+    ReferencePicker,
     SwitchPanel,
   ],
   template: `
@@ -101,11 +129,33 @@ const MODES: readonly HarvestRunMode[] = [
           <label>
             <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
             <input
+              (ngModelChange)="onChainChange()"
               [(ngModel)]="supermarketId"
               name="supermarketId"
               type="text"
             />
           </label>
+        }
+
+        <!-- A walk writes prices now, so a Mercadona walk needs to be told
+             which scope to write them to and the spawn refuses one without it
+             (backend plan 0086, section 9). Shown on the adapter rather than on
+             the mode, because a DEZA walk is the same mode and writes none. -->
+        @if (needsScope()) {
+          <div class="field">
+            <span>{{ 'harvest.runs.start.priceScope' | rokuT }}</span>
+            <lib-reference-picker
+              (valueChange)="priceScopeId.set($event)"
+              [controlId]="'run-scope'"
+              [lookup]="references"
+              [resource]="'price-scopes'"
+              [scope]="scopeFilter()"
+              [value]="priceScopeId()"
+            />
+            <p class="attribution">
+              {{ 'harvest.runs.start.priceScopeHelp' | rokuT }}
+            </p>
+          </div>
         }
 
         @if (mode() === 'STORE_DISCOVERY') {
@@ -123,14 +173,14 @@ const MODES: readonly HarvestRunMode[] = [
       <p class="attribution">{{ 'harvest.runs.start.attribution' | rokuT }}</p>
 
       @if (uploading()) {
-        <p class="attribution">{{ 'harvest.runs.start.leaflet' | rokuT }}</p>
+        <p class="attribution">{{ 'harvest.runs.start.fileImport' | rokuT }}</p>
         <a [routerLink]="uploadLink()" class="primary">{{
           'harvest.runs.start.openUpload' | rokuT
         }}</a>
       } @else {
         <button
           (click)="start()"
-          [disabled]="starting()"
+          [disabled]="starting() || !ready()"
           class="primary"
           type="button"
         >
@@ -241,14 +291,16 @@ const MODES: readonly HarvestRunMode[] = [
       inline-size: 100%;
     }
 
-    label {
+    label,
+    .field {
       display: flex;
       flex: 1 1 12rem;
       flex-direction: column;
       gap: var(--admin-space-1);
     }
 
-    label span {
+    label span,
+    .field > span {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
@@ -363,15 +415,22 @@ const MODES: readonly HarvestRunMode[] = [
 })
 export class RunsPage {
   private readonly _service = inject(HARVEST_SERVICE);
+  /** The chosen chain's scopes, read for their `kind`, as the import reads them. */
+  private readonly _scopes =
+    inject(RESOURCE_GATEWAYS).for<PriceScope>(priceScopeSource());
 
   readonly shell = inject(HarvestShell);
+  readonly references = inject(ResourceReferences);
 
   readonly modes = MODES;
 
   readonly mode = signal<HarvestRunMode>('CATALOG_DISCOVERY');
   readonly supermarketId = signal('');
+  readonly priceScopeId = signal('');
   readonly postalCode = signal('');
   readonly country = signal('');
+  /** The chosen chain's adapter, once a source read has answered. `''` until. */
+  readonly adapterKey = signal('');
 
   /**
    * The reverted filter (backend plan 0082, section 6), as three choices rather
@@ -401,17 +460,109 @@ export class RunsPage {
    * screen that takes one rather than a start button that would be refused for
    * a body it has no field for (admin plan 0010, section 2).
    */
-  readonly uploading = computed(() => this.mode() === 'LEAFLET_IMPORT');
+  readonly uploading = computed(() => this.mode() === 'FILE_IMPORT');
 
   /**
-   * Where a leaflet is dropped.
+   * Whether this walk has to be told which scope to write its prices to.
+   *
+   * The adapter decides, not the mode: `CATALOG_DISCOVERY` runs against either
+   * `mercadona-api` or `deza-web` since backend plan 0085, and only the first
+   * writes a price. The spawn refuses a Mercadona walk without a scope and
+   * accepts and ignores one for DEZA, so the field appears exactly where it is
+   * required.
+   */
+  readonly needsScope = computed(
+    () =>
+      this.mode() === 'CATALOG_DISCOVERY' && this.adapterKey() === SCOPED_ADAPTER
+  );
+
+  /** The chain the scope picker reads within, which it cannot read without. */
+  readonly scopeFilter = computed(() => ({
+    supermarketId: this.supermarketId().trim(),
+  }));
+
+  /**
+   * Whether the form has everything the spawn will require.
+   *
+   * Only the scope is checked here, because it is the only field whose absence
+   * is a refusal the operator can see coming: everything else the spawn wants is
+   * either optional or is the mode itself. Asked so the button is disabled
+   * rather than pressed and answered with a 400 about a field that was on
+   * screen, empty, the whole time.
+   */
+  readonly ready = computed(() => !this.needsScope() || this.priceScopeId() !== '');
+
+  /**
+   * Where a document is dropped.
    *
    * Absolute rather than relative, for the reason the queues give: `..` needs a
    * route above it to pop and throws outright when there is none, and this
    * component is rendered directly in its spec.
    */
   uploadLink(): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'leaflets', 'upload'];
+    return ['/', HARVEST_SEGMENT, 'imports', 'upload'];
+  }
+
+  /**
+   * The chain changed, so what is known about its source did too.
+   *
+   * The adapter is read rather than guessed, because it is what decides whether
+   * the scope picker is offered at all, and the scope is cleared with it: a
+   * scope of the previous chain is not a scope of this one.
+   */
+  onChainChange(): void {
+    this.priceScopeId.set('');
+    this.adapterKey.set('');
+    void this._readAdapter();
+  }
+
+  /**
+   * Which adapter this chain is fetched with, from its source row.
+   *
+   * A failure leaves the adapter unknown, which hides the picker. That is the
+   * safe way round: a chain with no source row cannot be walked at all, so the
+   * spawn refuses it before the scope is ever looked at, and offering a field
+   * for a run that cannot start would be noise.
+   */
+  private async _readAdapter(): Promise<void> {
+    const supermarketId = this.supermarketId().trim();
+    if (supermarketId === '') {
+      return;
+    }
+
+    try {
+      const source = await this._service.readSource(supermarketId);
+      this.adapterKey.set(source.adapterKey);
+      this.shell.observeReachable();
+      if (source.adapterKey === SCOPED_ADAPTER) {
+        await this._preselectNationalScope(supermarketId);
+      }
+    } catch {
+      this.adapterKey.set('');
+    }
+  }
+
+  /**
+   * The chain's `NATIONAL` scope, preselected as the import screen preselects it.
+   *
+   * Most walks price nationally, and a chain with several warehouse scopes
+   * should not present them as equally plausible. A chain with none leaves the
+   * picker empty and the operator chooses.
+   */
+  private async _preselectNationalScope(supermarketId: string): Promise<void> {
+    try {
+      const page = await this._scopes.list({
+        filters: { supermarketId },
+        limit: SCOPE_PAGE,
+      });
+      const national = page.items.find((scope) => scope.kind === 'NATIONAL');
+      if (national !== undefined && this.priceScopeId() === '') {
+        this.priceScopeId.set(national.id);
+      }
+    } catch {
+      // The picker can still be typed into, so a failed read costs a shortcut
+      // rather than the field.
+    }
   }
 
   readonly rows = computed(() =>
@@ -515,6 +666,10 @@ export class RunsPage {
     const input: Wire.SpawnHarvestRunDto = { mode: this.mode() };
     const optional = {
       supermarketId: this.supermarketId().trim(),
+      // Sent only where it means something. `deza-web` accepts one and ignores
+      // it, so sending it there would be this screen asserting a fact about a
+      // run that has none.
+      priceScopeId: this.needsScope() ? this.priceScopeId() : '',
       postalCode: this.postalCode().trim(),
       country: this.country().trim(),
     };
