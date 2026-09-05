@@ -3,6 +3,8 @@ import {
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  PriceSourceKind,
+  type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
@@ -21,38 +23,37 @@ import {
 } from './harvest-run.store';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { RunExecutor } from './run-executor.service';
-import type { SourceAliasService } from './source-alias.service';
+import type { SourceEntryRevert } from './source-entry-revert.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
 
 const ADMIN = 'owner-1';
 const SUPERMARKET = '5efa0000-0000-4000-a000-000000000001';
 const SCOPE = '5efa0000-0000-4000-a000-0000000000ff';
 
-/** A minimal leaflet, valid against the import schema (plan 0081, section 4). */
-function leaflet(
-  patch: { starts_on?: string | null; ends_on?: string | null } = {}
-) {
+/**
+ * A minimal `HarvestDocument`, valid against the schema (plan 0086, 6.1).
+ *
+ * `validity` is a block or it is absent: a document that states no window is
+ * exactly what a walk's export is, and the import writes a price with none.
+ */
+function harvestDocument(
+  patch: { validity?: { from: string; until: string } | null } = {}
+): HarvestDocument {
+  const validity =
+    patch.validity === undefined
+      ? { from: '2026-08-27', until: '2026-09-23' }
+      : patch.validity;
   return {
-    schema_version: '1.0',
-    source: { file: 'leaflet.pdf', sha256: 'c'.repeat(64), page_count: 1 },
-    retailer: {
-      name: 'El Jamon',
-      country: 'ES',
-      currency: 'EUR',
-      language: 'es',
-    },
-    validity: {
-      starts_on: '2026-08-27',
-      ends_on: '2026-09-23',
-      ...patch,
-    },
-    offers: [
+    schema_version: 1,
+    sha256: 'c'.repeat(64),
+    producer: { name: 'leaflet-extractor', version: '0.4.0' },
+    ...(validity ? { validity } : {}),
+    products: [
       {
         id: 'p01-o01',
-        page: 1,
-        product: { name: 'Cerveza Alhambra Tradicional' },
-        pricing: { price: { amount: 0.53, currency: 'EUR' }, basis: 'unit' },
-        source: 'pdf-text' as const,
+        name: 'Cerveza Alhambra Tradicional',
+        price: { amount: 0.53, currency: 'EUR' },
+        extra: { page: 1 },
       },
     ],
   };
@@ -206,6 +207,7 @@ function build(
       : ({
           id: 'src-1',
           supermarketId: SUPERMARKET,
+          adapterKey: 'mercadona-api',
           enabled: true,
           workers: 4,
           maxRequestsPerSecond: 4,
@@ -221,9 +223,9 @@ function build(
     getOrThrow: () => settings(overrides.config),
   } as unknown as ConfigService;
 
-  const aliases = {
-    deleteUndecidedFrom: jest.fn(async () => 9),
-  } as unknown as SourceAliasService;
+  const rows = {
+    revert: jest.fn(async () => ({ prices: 12, entries: 9 })),
+  } as unknown as SourceEntryRevert;
 
   const catalog = {
     deletePricesByRun: jest.fn(async () => ({
@@ -237,12 +239,12 @@ function build(
     store,
     executor,
     sources,
-    aliases,
+    rows,
     catalog,
     admin,
     config
   );
-  return { service, store, executor, sources, aliases, catalog, created };
+  return { service, store, executor, sources, rows, catalog, created };
 }
 
 /**
@@ -253,20 +255,20 @@ function build(
  * much as the one where it does.
  */
 describe('HarvestRunService.revert', () => {
-  it('deletes the prices first, then the undecided aliases, then marks the run', async () => {
+  it('deletes the prices first, then the undecided rows, then marks the run', async () => {
     // The order is the whole design of section 5. Catalog goes first, so a
     // failure between the two leaves prices gone and the run unmarked, which a
     // retry completes. The other order would show a run as reverted whose
     // prices still existed.
     const calls: string[] = [];
-    const { service, store, aliases, catalog } = build({ run: finished() });
+    const { service, store, rows, catalog } = build({ run: finished() });
     (catalog.deletePricesByRun as jest.Mock).mockImplementation(async () => {
       calls.push('catalog');
       return { deleted: 214, reset: 3, recomputed: 217 };
     });
-    (aliases.deleteUndecidedFrom as jest.Mock).mockImplementation(async () => {
-      calls.push('aliases');
-      return 9;
+    (rows.revert as jest.Mock).mockImplementation(async () => {
+      calls.push('rows');
+      return { prices: 12, entries: 9 };
     });
     (store.markReverted as jest.Mock).mockImplementation(async () => {
       calls.push('mark');
@@ -279,15 +281,17 @@ describe('HarvestRunService.revert', () => {
 
     const view = await service.revert({ userId: ADMIN, runId: 'run-1' });
 
-    expect(calls).toEqual(['catalog', 'aliases', 'mark']);
+    expect(calls).toEqual(['catalog', 'rows', 'mark']);
     expect(catalog.deletePricesByRun).toHaveBeenCalledWith('run-1');
-    expect(aliases.deleteUndecidedFrom).toHaveBeenCalledWith('run-1');
+    // Both halves of section 8: the run's price observations, and the rows this
+    // run alone stands behind that nobody decided on.
+    expect(rows.revert).toHaveBeenCalledWith('run-1');
     expect(view.revertedPriceCount).toBe(214);
     expect(view.revertedByUserId).toBe(ADMIN);
   });
 
   it('counts what catalog deleted, not what the run thought it wrote', async () => {
-    // An alias accepted after the run wrote more rows on the run's behalf, so
+    // A row accepted after the run wrote more prices on the run's behalf, so
     // the run's own `created` is a floor rather than the answer.
     const { service, store, catalog } = build({ run: finished() });
     (catalog.deletePricesByRun as jest.Mock).mockResolvedValue({
@@ -351,13 +355,25 @@ describe('HarvestRunService.revert', () => {
     expect(catalog.deletePricesByRun).toHaveBeenCalledWith('run-1');
   });
 
-  it('reverts a leaflet import, which is the mode it was designed for', async () => {
+  it('reverts a file import, which is the mode it was designed for', async () => {
     const { service, catalog } = build({
-      run: finished({ mode: HarvestRunMode.LEAFLET_IMPORT }),
+      run: finished({ mode: HarvestRunMode.FILE_IMPORT }),
     });
 
     await service.revert({ userId: ADMIN, runId: 'run-1' });
     expect(catalog.deletePricesByRun).toHaveBeenCalledWith('run-1');
+  });
+
+  it('reverts a catalog discovery, which writes prices now', async () => {
+    // Before plan 0086 a walk wrote no price and a REFRESH did. The walk writes
+    // them, so it is a mode a revert means something for.
+    const { service, catalog, rows } = build({
+      run: finished({ mode: HarvestRunMode.CATALOG_DISCOVERY }),
+    });
+
+    await service.revert({ userId: ADMIN, runId: 'run-1' });
+    expect(catalog.deletePricesByRun).toHaveBeenCalledWith('run-1');
+    expect(rows.revert).toHaveBeenCalledWith('run-1');
   });
 
   it('completes a retry after a failure between the two databases', async () => {
@@ -443,15 +459,49 @@ describe('HarvestRunService.spawn', () => {
     ).rejects.toBeInstanceOf(ValidationException);
   });
 
-  it('refuses a refresh with no scope to write the prices for', async () => {
+  it('refuses a mercadona walk with no scope to write the prices for', async () => {
+    // The walk fetches a price for every one of 4,232 products (plan 0086, D4),
+    // so it needs somewhere to put them. This is the sentence a REFRESH used.
     const { service } = build();
     await expect(
       service.spawn({
         userId: ADMIN,
-        mode: HarvestRunMode.REFRESH,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
         supermarketId: SUPERMARKET,
       })
     ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('starts a DEZA crawl with no scope, and ignores one it is given', async () => {
+    // The site prints no price, and a required field that does nothing is a lie
+    // in a form (plan 0086, section 9).
+    const { service, store } = build({ source: { adapterKey: 'deza-web' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        priceScopeId: null,
+      })
+    );
+  });
+
+  it('refuses a REFRESH, which is not a run mode any more', async () => {
+    const { service, store } = build();
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: 'REFRESH' as HarvestRunMode,
+        supermarketId: SUPERMARKET,
+        priceScopeId: SCOPE,
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(store.create).not.toHaveBeenCalled();
   });
 
   it('refuses a chain that has no configured source', async () => {
@@ -491,6 +541,7 @@ describe('HarvestRunService.spawn', () => {
         userId: ADMIN,
         mode: HarvestRunMode.CATALOG_DISCOVERY,
         supermarketId: SUPERMARKET,
+        priceScopeId: SCOPE,
       })
     ).rejects.toThrow(/run-already-going/);
     await expect(
@@ -498,6 +549,7 @@ describe('HarvestRunService.spawn', () => {
         userId: ADMIN,
         mode: HarvestRunMode.CATALOG_DISCOVERY,
         supermarketId: SUPERMARKET,
+        priceScopeId: SCOPE,
       })
     ).rejects.toBeInstanceOf(ConflictException);
   });
@@ -541,28 +593,29 @@ describe('HarvestRunService.abort', () => {
 });
 
 /**
- * A run with no source (plan 0081, section 1).
+ * A run with no source (plan 0081, section 1; plan 0086, D6).
  *
  * `SupermarketSource` is fetching configuration: an adapter key, politeness,
  * workers, a rate. An upload fetches nothing and has none of those, so a chain
- * that publishes only leaflets has to work with no source row at all. That is
- * why this mode is the one exception to the check every other mode makes.
+ * with no adapter at all has to work with no source row. That is why this mode
+ * is the one exception to the check every other mode makes.
  */
-describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
+describe('HarvestRunService.spawn, a file import (plan 0086)', () => {
   it('starts with no configured source at all', async () => {
     const { service, store } = build({ source: null });
 
     await service.spawn({
       userId: ADMIN,
-      mode: HarvestRunMode.LEAFLET_IMPORT,
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       supermarketId: SUPERMARKET,
       priceScopeId: SCOPE,
-      document: leaflet(),
+      document: harvestDocument(),
     });
 
     expect(store.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        mode: HarvestRunMode.LEAFLET_IMPORT,
+        mode: HarvestRunMode.FILE_IMPORT,
         supermarketId: SUPERMARKET,
         // Null even for a chain that does have one: no source was used.
         sourceId: null,
@@ -576,10 +629,11 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
 
     await service.spawn({
       userId: ADMIN,
-      mode: HarvestRunMode.LEAFLET_IMPORT,
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       supermarketId: SUPERMARKET,
       priceScopeId: SCOPE,
-      document: leaflet(),
+      document: harvestDocument(),
     });
 
     const payload = (store.create as jest.Mock).mock.calls[0][0].payload;
@@ -587,7 +641,7 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
     // them onto every row and an accept reads them back later (section 5).
     expect(payload.validFrom).toBe('2026-08-26T22:00:00.000Z');
     expect(payload.validUntil).toBe('2026-09-23T22:00:00.000Z');
-    expect(payload.document.offers).toHaveLength(1);
+    expect(payload.document.products).toHaveLength(1);
   });
 
   it('takes the admin override over the document dates', async () => {
@@ -595,12 +649,13 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
 
     await service.spawn({
       userId: ADMIN,
-      mode: HarvestRunMode.LEAFLET_IMPORT,
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       supermarketId: SUPERMARKET,
       priceScopeId: SCOPE,
       validFrom: '2026-09-01',
       validUntil: '2026-09-07',
-      document: leaflet(),
+      document: harvestDocument(),
     });
 
     const payload = (store.create as jest.Mock).mock.calls[0][0].payload;
@@ -608,19 +663,88 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
     expect(payload.validUntil).toBe('2026-09-07T22:00:00.000Z');
   });
 
-  it('refuses a run with a null bound and no override', async () => {
+  it('stores no window for a document that states none', async () => {
+    // A walk's own export states no validity, because a storefront price has
+    // none (plan 0086, section 5). That is not a refusal any more.
+    const { service, store } = build({ source: null });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      supermarketId: SUPERMARKET,
+      priceScopeId: SCOPE,
+      document: harvestDocument({ validity: null }),
+    });
+
+    const payload = (store.create as jest.Mock).mock.calls[0][0].payload;
+    expect(payload.validFrom).toBeUndefined();
+    expect(payload.validUntil).toBeUndefined();
+  });
+
+  it('refuses half a window, which never expires or applies now', async () => {
     const { service, store } = build({ source: null });
 
     await expect(
       service.spawn({
         userId: ADMIN,
-        mode: HarvestRunMode.LEAFLET_IMPORT,
+        mode: HarvestRunMode.FILE_IMPORT,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
         supermarketId: SUPERMARKET,
         priceScopeId: SCOPE,
-        document: leaflet({ starts_on: null }),
+        validFrom: '2026-09-01',
+        document: harvestDocument({ validity: null }),
       })
     ).rejects.toBeInstanceOf(ValidationException);
     expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a user source kind: no upload writes one', async () => {
+    const { service, store } = build({ source: null });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.FILE_IMPORT,
+        sourceKind: PriceSourceKind.USER_RECEIPT,
+        supermarketId: SUPERMARKET,
+        priceScopeId: SCOPE,
+        document: harvestDocument(),
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses an import with no source kind to stamp the prices with', async () => {
+    const { service } = build({ source: null });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.FILE_IMPORT,
+        supermarketId: SUPERMARKET,
+        priceScopeId: SCOPE,
+        document: harvestDocument(),
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('stamps the kind the caller named, not the upload', async () => {
+    // A re-imported Mercadona walk stamps OFFICIAL_API, because that is what
+    // observed the price (plan 0086, section 6.2).
+    const { service, store } = build({ source: null });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      supermarketId: SUPERMARKET,
+      priceScopeId: SCOPE,
+      document: harvestDocument(),
+    });
+
+    const payload = (store.create as jest.Mock).mock.calls[0][0].payload;
+    expect(payload.sourceKind).toBe(PriceSourceKind.OFFICIAL_API);
   });
 
   it('refuses a document the schema cannot read, before inserting anything', async () => {
@@ -631,10 +755,11 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
     await expect(
       service.spawn({
         userId: ADMIN,
-        mode: HarvestRunMode.LEAFLET_IMPORT,
+        mode: HarvestRunMode.FILE_IMPORT,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
         supermarketId: SUPERMARKET,
         priceScopeId: SCOPE,
-        document: { ...leaflet(), schema_version: '9.9' } as never,
+        document: { ...harvestDocument(), schema_version: 9 } as never,
       })
     ).rejects.toBeInstanceOf(ValidationException);
     expect(store.create).not.toHaveBeenCalled();
@@ -646,9 +771,10 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
     await expect(
       service.spawn({
         userId: ADMIN,
-        mode: HarvestRunMode.LEAFLET_IMPORT,
+        mode: HarvestRunMode.FILE_IMPORT,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
         supermarketId: SUPERMARKET,
-        document: leaflet(),
+        document: harvestDocument(),
       })
     ).rejects.toBeInstanceOf(ValidationException);
   });
@@ -664,10 +790,11 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
     await expect(
       service.spawn({
         userId: ADMIN,
-        mode: HarvestRunMode.LEAFLET_IMPORT,
+        mode: HarvestRunMode.FILE_IMPORT,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
         supermarketId: SUPERMARKET,
         priceScopeId: SCOPE,
-        document: leaflet(),
+        document: harvestDocument(),
       })
     ).rejects.toMatchObject({
       // A different sentence from the active run conflict, because the next
@@ -689,10 +816,11 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
     await expect(
       service.spawn({
         userId: ADMIN,
-        mode: HarvestRunMode.LEAFLET_IMPORT,
+        mode: HarvestRunMode.FILE_IMPORT,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
         supermarketId: SUPERMARKET,
         priceScopeId: SCOPE,
-        document: leaflet(),
+        document: harvestDocument(),
       })
     ).rejects.toBeInstanceOf(ConflictException);
   });
@@ -709,10 +837,11 @@ describe('HarvestRunService.spawn, a leaflet import (plan 0081)', () => {
     await expect(
       service.spawn({
         userId: ADMIN,
-        mode: HarvestRunMode.LEAFLET_IMPORT,
+        mode: HarvestRunMode.FILE_IMPORT,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
         supermarketId: SUPERMARKET,
         priceScopeId: SCOPE,
-        document: leaflet(),
+        document: harvestDocument(),
       })
     ).rejects.toBeInstanceOf(NotConfiguredException);
   });
