@@ -212,7 +212,11 @@ export class HarvestRunStore {
     return row;
   }
 
-  async markRunning(runId: string, stage: string, label: string): Promise<void> {
+  async markRunning(
+    runId: string,
+    stage: string,
+    label: string
+  ): Promise<void> {
     await this.runs.update(
       { id: runId },
       {
@@ -371,6 +375,30 @@ export class HarvestRunStore {
     await this.runs.update({ id: runId }, { heartbeatAt: new Date() });
   }
 
+  /**
+   * Mark a run reverted (plan 0082, section 5, step 4).
+   *
+   * The **last** step of the operation, and deliberately so. Catalog deletes
+   * first, so a failure between the two leaves prices already gone and a run
+   * not yet marked, which a retry completes: `itemPrice.deleteByRun` on a run
+   * with no rows answers zeros. The other order would show a run as reverted
+   * whose prices still existed, and nothing would ever go back for them.
+   *
+   * The status is untouched. It says how the run ended, and that did not
+   * change.
+   */
+  async markReverted(
+    runId: string,
+    revertedByUserId: string | null,
+    priceCount: number
+  ): Promise<HarvestRun> {
+    const row = await this.load(runId);
+    row.revertedAt = new Date();
+    row.revertedByUserId = revertedByUserId;
+    row.revertedPriceCount = priceCount;
+    return this.runs.save(row);
+  }
+
   repository(): Repository<HarvestRun> {
     return this.runs;
   }
@@ -393,4 +421,3 @@ function violates(error: unknown, index: string): boolean {
     .driverError;
   return driver?.constraint === index;
 }
-

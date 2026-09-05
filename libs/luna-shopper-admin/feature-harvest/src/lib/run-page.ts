@@ -4,12 +4,14 @@ import {
   computed,
   DestroyRef,
   inject,
+  signal,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { RunWatches } from '@portfolio/luna-shopper-admin/data-access';
 import { failureBlockReason } from '@portfolio/luna-shopper-admin/models';
 import {
+  ConfirmDialog,
   HarvestNotice,
   RunProgressView,
 } from '@portfolio/luna-shopper-admin/ui';
@@ -37,7 +39,13 @@ import { HarvestShell } from './harvest-shell';
  */
 @Component({
   selector: 'lib-run-page',
-  imports: [RouterLink, RokuTranslatorPipe, HarvestNotice, RunProgressView],
+  imports: [
+    RouterLink,
+    RokuTranslatorPipe,
+    ConfirmDialog,
+    HarvestNotice,
+    RunProgressView,
+  ],
   template: `
     <p class="back">
       <a routerLink="..">{{ 'harvest.run.back' | rokuT }}</a>
@@ -53,6 +61,11 @@ import { HarvestShell } from './harvest-shell';
         <p [class]="run.status" class="status">
           {{ 'harvest.status.' + run.status | rokuT }}
         </p>
+        <!-- Beside the status and never instead of it: a revert takes back what
+             the run wrote and does not change how the run ended. -->
+        @if (run.revertedAt !== null) {
+          <p class="reverted">{{ 'harvest.run.reverted.chip' | rokuT }}</p>
+        }
       </header>
 
       <lib-run-progress [progress]="watch.progress()!" [run]="run" />
@@ -86,14 +99,38 @@ import { HarvestShell } from './harvest-shell';
         }
       </dl>
 
-      @if (watch.canAbort()) {
-        <button (click)="watch.abort()" class="danger" type="button">
-          {{ 'harvest.run.abort' | rokuT }}
-        </button>
-      } @else if (watch.aborting()) {
-        <button disabled type="button">
-          {{ 'resource.action.working' | rokuT }}
-        </button>
+      @if (run.revertedAt !== null) {
+        <p class="note">{{ 'harvest.run.reverted.done' | rokuT }}</p>
+      }
+
+      <div class="controls">
+        @if (watch.canAbort()) {
+          <button (click)="watch.abort()" class="danger" type="button">
+            {{ 'harvest.run.abort' | rokuT }}
+          </button>
+        } @else if (watch.aborting()) {
+          <button disabled type="button">
+            {{ 'resource.action.working' | rokuT }}
+          </button>
+        }
+
+        @if (watch.canRevert()) {
+          <button (click)="confirming.set(true)" class="danger" type="button">
+            {{ 'harvest.run.revert.action' | rokuT }}
+          </button>
+        }
+      </div>
+
+      @if (confirming()) {
+        <lib-confirm-dialog
+          (confirm)="revert()"
+          (dismiss)="confirming.set(false)"
+          [bodyArgs]="confirmCounts()"
+          [bodyKey]="confirmBodyKey()"
+          [busy]="watch.reverting()"
+          [confirmKey]="'harvest.run.revert.action'"
+          [headingKey]="'harvest.run.revert.heading'"
+        />
       }
     }
   `,
@@ -172,6 +209,21 @@ import { HarvestShell } from './harvest-shell';
       border-color: var(--admin-danger);
       color: var(--admin-danger-ink);
     }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+    }
+
+    .reverted {
+      padding: var(--admin-space-1) var(--admin-space-2);
+      border-radius: var(--admin-radius);
+      background: var(--admin-danger-wash);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--admin-danger-ink);
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -206,9 +258,58 @@ export class RunPage {
       { key: 'started', value: formatInstant(run.startedAt) },
       { key: 'finished', value: formatInstant(run.finishedAt) },
       { key: 'heartbeat', value: formatInstant(run.heartbeatAt) },
+      // What the revert actually did, from the operation's own answer rather
+      // than from the estimate the confirmation offered (backend plan 0082).
+      { key: 'reverted', value: formatInstant(run.revertedAt) },
+      {
+        key: 'revertedPrices',
+        value:
+          run.revertedPriceCount === null ? '' : String(run.revertedPriceCount),
+      },
+      { key: 'revertedBy', value: run.revertedByUserId ?? '' },
       { key: 'correlationId', value: run.correlationId ?? '' },
     ];
   });
+
+  /** Whether the confirmation is up. Nothing is deleted until it is answered. */
+  readonly confirming = signal(false);
+
+  /**
+   * The numbers the confirmation names (backend plan 0082, section 6).
+   *
+   * They are the run's **own counters**, not a fresh count from catalog, and
+   * that is deliberate: `created` is the price rows the run inserted and
+   * `notFound` is the offers it queued, so the sentence costs no extra read.
+   * They are an estimate, and they can be low, because an alias accepted after
+   * the run wrote more rows on the run's behalf. What the operation actually
+   * deleted is shown afterwards, from the reply.
+   */
+  readonly confirmCounts = computed(() => {
+    const run = this.watch.run();
+    return {
+      prices: run?.created ?? 0,
+      queued: run?.notFound ?? 0,
+    };
+  });
+
+  /**
+   * Which sentence to confirm with.
+   *
+   * A leaflet import is the only mode that leaves rows waiting for a person, so
+   * it is the only one whose confirmation mentions the queue. For a refresh or
+   * a catalog discovery `notFound` counts products the chain does not stock,
+   * which has nothing to do with a queue and would read as a lie.
+   */
+  readonly confirmBodyKey = computed(() =>
+    this.watch.run()?.mode === 'LEAFLET_IMPORT'
+      ? 'harvest.run.revert.confirmLeaflet'
+      : 'harvest.run.revert.confirm'
+  );
+
+  async revert(): Promise<void> {
+    await this.watch.revert();
+    this.confirming.set(false);
+  }
 
   constructor() {
     this.watch.start();

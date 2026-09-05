@@ -100,6 +100,19 @@ export class HarvestController {
     return this.runs.abort(req);
   }
 
+  /**
+   * Take back everything a run wrote (plan 0082), and let a corrected upload of
+   * the same document through.
+   *
+   * Not an abort with a different name. An abort keeps what was already
+   * fetched; this deletes it, which is why it is offered only on a run that has
+   * finished.
+   */
+  @MessagePattern(HARVEST_PATTERNS.revert)
+  revert(@Payload() req: HarvestRunIdRequest): Promise<HarvestRunView> {
+    return this.runs.revert(req);
+  }
+
   @MessagePattern(HARVEST_PATTERNS.runGet)
   getRun(@Payload() req: HarvestRunIdRequest): Promise<HarvestRunView> {
     return this.runs.get(req);

@@ -34,6 +34,18 @@ import type { ItemView } from './catalog.messages';
 export const HARVEST_PATTERNS = {
   spawn: 'harvest.spawn',
   abort: 'harvest.abort',
+  /**
+   * Take back everything a run wrote (plan 0082). Allowed on a finished run
+   * whose mode writes prices, refused on a second attempt and on a run that
+   * writes none.
+   *
+   * Not the same act as {@link abort}. An abort stops a run and **keeps** what
+   * it already fetched, because prices already fetched are valid data. A revert
+   * says the data was wrong and deletes it, which is why a run has to be
+   * finished before it can be reverted: abort it first, then revert what it
+   * flushed.
+   */
+  revert: 'harvest.revert',
   runGet: 'harvest.run.get',
   runList: 'harvest.run.list',
 } as const;
@@ -214,6 +226,25 @@ export interface HarvestRunView {
   report: Record<string, unknown>;
   correlationId: string | null;
   requestedByUserId: string | null;
+  /**
+   * When this run's writes were taken back (plan 0082), null for a run that
+   * still stands.
+   *
+   * **The status is not changed by a revert.** The status says how the run
+   * ended and that did not change, so a reverted run keeps its own and carries
+   * this beside it.
+   */
+  revertedAt: string | null;
+  /** The operator who reverted it. */
+  revertedByUserId: string | null;
+  /**
+   * How many `item_prices` rows the revert deleted, null until one happens.
+   *
+   * The rows the run inserted, including those an alias accept wrote on its
+   * behalf. Rows the run only confirmed were reset rather than deleted and are
+   * not counted here.
+   */
+  revertedPriceCount: number | null;
 }
 
 /**
@@ -440,6 +471,15 @@ export interface ListHarvestRunsRequest extends PageQuery, AdminCredential {
   supermarketId?: string;
   mode?: HarvestRunMode;
   status?: HarvestRunStatus;
+  /**
+   * Reverted runs only, or unreverted runs only (plan 0082, section 6). Absent
+   * lists both, which is what the runs screen asks for.
+   *
+   * A filter of its own rather than a status, because a revert does not change
+   * how the run ended: a reverted run is still the COMPLETED or FAILED run it
+   * was.
+   */
+  reverted?: boolean;
 }
 
 // --- Discovered place requests ---------------------------------------------

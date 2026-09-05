@@ -4,8 +4,8 @@ import {
   DiscoveredPlaceStatus,
   HarvestRunMode,
   HarvestRunStatus,
-  ItemSourceRefStatus,
   ItemCategory,
+  ItemSourceRefStatus,
   SourceAliasStatus,
   SourceLocationStatus,
   UnitOfMeasure,
@@ -55,7 +55,8 @@ export class SpawnHarvestRunDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'The scope a REFRESH writes its prices for. Required for REFRESH.',
+    description:
+      'The scope a REFRESH writes its prices for. Required for REFRESH.',
   })
   @IsOptional()
   @IsUUID()
@@ -343,6 +344,14 @@ export class HarvestRunListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(HarvestRunStatus)
   status?: HarvestRunStatus;
+
+  @ApiPropertyOptional({
+    description:
+      'Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  reverted?: boolean;
 }
 
 export class DiscoveredPlaceListQueryDto extends PageQueryDto {
@@ -351,7 +360,9 @@ export class DiscoveredPlaceListQueryDto extends PageQueryDto {
   @IsUUID()
   runId?: string;
 
-  @ApiPropertyOptional({ description: 'A `brand:wikidata` key, e.g. `Q377705`.' })
+  @ApiPropertyOptional({
+    description: 'A `brand:wikidata` key, e.g. `Q377705`.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(32)

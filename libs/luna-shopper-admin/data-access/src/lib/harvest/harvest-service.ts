@@ -26,6 +26,14 @@ export interface HarvestServiceI {
   listRuns(query: RunQuery): Promise<Wire.HarvestHarvestRunPage>;
   readRun(id: string): Promise<Wire.HarvestHarvestRunView>;
   abortRun(id: string): Promise<Wire.HarvestHarvestRunView>;
+  /**
+   * Take back everything a finished run wrote (backend plan 0082).
+   *
+   * Beside `abortRun` and not folded into it, because they are opposite acts on
+   * a run at opposite ends of its life. An abort stops one that is going and
+   * keeps what it already fetched; this deletes what a finished one wrote.
+   */
+  revertRun(id: string): Promise<Wire.HarvestHarvestRunView>;
 
   listPlaces(query: PlaceQuery): Promise<Wire.HarvestDiscoveredPlacePage>;
   placeGroups(
@@ -85,6 +93,13 @@ export interface RunQuery extends PageQuery {
   readonly supermarketId?: string;
   readonly mode?: string;
   readonly status?: string;
+  /**
+   * Reverted runs only, or unreverted runs only. Absent asks for both.
+   *
+   * Not a status. A revert does not change how the run ended, so a reverted run
+   * is still the COMPLETED or FAILED run it was and the list draws both facts.
+   */
+  readonly reverted?: boolean;
 }
 
 export interface PlaceQuery extends PageQuery {

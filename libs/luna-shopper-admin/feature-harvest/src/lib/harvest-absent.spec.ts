@@ -49,6 +49,7 @@ function silent(): HarvestServiceI {
     listRuns: refuse,
     readRun: refuse,
     abortRun: refuse,
+    revertRun: refuse,
     listPlaces: refuse,
     placeGroups: refuse,
     importPlace: refuse,

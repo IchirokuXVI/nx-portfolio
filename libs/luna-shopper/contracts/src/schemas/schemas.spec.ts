@@ -800,6 +800,12 @@ describe('contract schemas', () => {
           report: {},
           correlationId: 'c',
           requestedByUserId: 'owner',
+          // Null on a run whose writes still stand, and stated rather than
+          // left out: a revert is a fact about the run and every field of the
+          // view is required (plan 0082, section 5).
+          revertedAt: null,
+          revertedByUserId: null,
+          revertedPriceCount: null,
         }).valid
       ).toBe(true);
     });

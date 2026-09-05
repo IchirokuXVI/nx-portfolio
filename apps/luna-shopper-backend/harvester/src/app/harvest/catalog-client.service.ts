@@ -14,6 +14,7 @@ import {
   type CreateItemRequest,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
+  type DeleteItemPricesByRunResult,
   type FindItemByEanResult,
   type ItemPage,
   type ItemPriceBatchEntry,
@@ -247,6 +248,22 @@ export class CatalogClient {
       sourceKind,
       sourceRunId,
       entries,
+    });
+  }
+
+  /**
+   * Take back everything one run said about prices (plan 0082, section 2).
+   *
+   * The first of a revert's two steps, and it goes first on purpose: catalog
+   * and the harvester are two databases with no transaction between them, so a
+   * failure after this one leaves prices gone and the run unmarked, which a
+   * retry finishes. A run with no rows answers zeros rather than failing, which
+   * is what makes that retry always the right response.
+   */
+  deletePricesByRun(sourceRunId: string): Promise<DeleteItemPricesByRunResult> {
+    return this.send(ITEM_PRICE_PATTERNS.deleteByRun, {
+      userId: this.actor(),
+      sourceRunId,
     });
   }
 

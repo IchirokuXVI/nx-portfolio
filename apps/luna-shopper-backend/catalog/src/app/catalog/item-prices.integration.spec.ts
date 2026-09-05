@@ -13,7 +13,10 @@ import {
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
 import {
+  AuditAction,
+  AuditActorKind,
   CATALOG_ENTITIES,
+  CatalogAudit,
   Item,
   ItemPrice,
   PricePolicy,
@@ -49,6 +52,7 @@ const SCHEMA = 'plan0080_item_prices_test';
 const HARVESTER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '22222222-2222-4222-8222-222222222222';
 const RUN = '33333333-3333-4333-8333-333333333333';
+const OTHER_RUN = '44444444-4444-4444-8444-444444444444';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -176,12 +180,17 @@ describeIntegration('item prices (real Postgres)', () => {
       .findOneBy({ itemId, priceScopeId: scopeId });
   }
 
-  function crawl(price: number, observedAt: Date, scopeId = warehouseId) {
+  function crawl(
+    price: number,
+    observedAt: Date,
+    scopeId = warehouseId,
+    runId = RUN
+  ) {
     return prices.addBatch({
       userId: HARVESTER,
       priceScopeId: scopeId,
       sourceKind: PriceSourceKind.OFFICIAL_API,
-      sourceRunId: RUN,
+      sourceRunId: runId,
       entries: [
         {
           itemId,
@@ -363,6 +372,149 @@ describeIntegration('item prices (real Postgres)', () => {
         await held.release();
       }
       expect(await sweep.tick(now)).toBe(1);
+    });
+  });
+
+  /**
+   * A reverted run leaves nothing behind (plan 0082).
+   *
+   * The half a fake cannot prove: that "written by this run" and "only
+   * confirmed by this run" really are disjoint after the delete, that the
+   * details row goes by cascade, and that the materialized row falls back to
+   * whatever is left rather than keeping a number nothing supports any more.
+   */
+  describe('reverting a run (plan 0082)', () => {
+    it('deletes only that run rows and recomputes what is left', async () => {
+      const day1 = new Date('2026-09-01T06:00:00.000Z');
+      await crawl(1.19, day1);
+      const typed = await prices.add({
+        userId: OPERATOR,
+        itemId,
+        priceScopeId: warehouseId,
+        sourceKind: PriceSourceKind.ADMIN,
+        price: 1.29,
+        currency: 'EUR',
+      });
+      expect(Number((await shown(warehouseId))?.price)).toBe(1.29);
+
+      const result = await prices.deleteByRun({
+        userId: HARVESTER,
+        sourceRunId: RUN,
+      });
+
+      expect(result.deleted).toBe(1);
+      expect(result.reset).toBe(0);
+      expect(result.recomputed).toBeGreaterThan(0);
+      // The ADMIN row carries no run id and is never touched.
+      const left = await dataSource.getRepository(ItemPrice).find();
+      expect(left).toHaveLength(1);
+      expect(left[0].id).toBe(typed.id);
+      expect(Number((await shown(warehouseId))?.price)).toBe(1.29);
+    });
+
+    it('leaves another run rows alone', async () => {
+      await crawl(1.19, new Date('2026-09-01T06:00:00.000Z'));
+      // A second run, at the national scope so it is a row of its own rather
+      // than a confirmation of the first.
+      await crawl(
+        2.49,
+        new Date('2026-09-02T06:00:00.000Z'),
+        nationalId,
+        OTHER_RUN
+      );
+
+      await prices.deleteByRun({ userId: HARVESTER, sourceRunId: RUN });
+
+      const left = await dataSource.getRepository(ItemPrice).find();
+      expect(left).toHaveLength(1);
+      expect(left[0].sourceRunId).toBe(OTHER_RUN);
+      // The warehouse falls back to the chain national row (section 6).
+      expect(Number((await shown(warehouseId))?.price)).toBe(2.49);
+    });
+
+    it('withdraws a confirmation rather than deleting the row it agreed with', async () => {
+      const day1 = new Date('2026-09-01T06:00:00.000Z');
+      const day2 = new Date('2026-09-02T06:00:00.000Z');
+      await crawl(1.19, day1, warehouseId, OTHER_RUN);
+      // The same number again, from the run about to be reverted: no row is
+      // inserted, only `lastObservedAt` moves.
+      expect(await crawl(1.19, day2)).toEqual({ inserted: 0, confirmed: 1 });
+
+      const result = await prices.deleteByRun({
+        userId: HARVESTER,
+        sourceRunId: RUN,
+      });
+
+      expect(result).toMatchObject({ deleted: 0, reset: 1 });
+      const rows = await dataSource.getRepository(ItemPrice).find();
+      expect(rows).toHaveLength(1);
+      // The row ages as if the run never happened. The previous
+      // `lastObservedAt` was overwritten and cannot be restored, so it goes
+      // back to `observedAt`, which errs toward stale on purpose.
+      expect(rows[0].lastObservedAt).toEqual(day1);
+      expect(rows[0].lastObservedRunId).toBe(OTHER_RUN);
+    });
+
+    it('answers zeros for a run with no rows, so a retry is always safe', async () => {
+      await expect(
+        prices.deleteByRun({ userId: HARVESTER, sourceRunId: OTHER_RUN })
+      ).resolves.toEqual({ deleted: 0, reset: 0, recomputed: 0 });
+    });
+
+    it('takes the price with it, leaving no price at all where it was the only one', async () => {
+      await crawl(1.19, new Date('2026-09-01T06:00:00.000Z'));
+      expect(Number((await shown(warehouseId))?.price)).toBe(1.19);
+
+      await prices.deleteByRun({ userId: HARVESTER, sourceRunId: RUN });
+
+      const row = await shown(warehouseId);
+      expect(row?.price ?? null).toBeNull();
+      expect(row?.itemPriceId ?? null).toBeNull();
+      // Availability is deliberately untouched: it carries no run id and has no
+      // history, so a reverted refresh leaves it as it found it.
+      expect(row?.available).toBe(true);
+    });
+
+    it('fans a national delete out to every scope of the chain (section 6)', async () => {
+      await crawl(1.49, new Date('2026-09-01T06:00:00.000Z'), nationalId);
+      expect(Number((await shown(warehouseId))?.price)).toBe(1.49);
+
+      const result = await prices.deleteByRun({
+        userId: HARVESTER,
+        sourceRunId: RUN,
+      });
+
+      expect(result.deleted).toBe(1);
+      // The national key and the warehouse that inherited from it.
+      expect(result.recomputed).toBeGreaterThanOrEqual(2);
+      expect((await shown(warehouseId))?.price ?? null).toBeNull();
+      expect((await shown(nationalId))?.price ?? null).toBeNull();
+    });
+
+    it('writes an audit row for every delete, with the run id in what was there', async () => {
+      await crawl(1.19, new Date('2026-09-01T06:00:00.000Z'));
+      const written = await dataSource
+        .getRepository(ItemPrice)
+        .findOneByOrFail({ sourceRunId: RUN });
+
+      await prices.deleteByRun({ userId: HARVESTER, sourceRunId: RUN });
+
+      // By the row's own id: the trail is append only and outlives the rows
+      // every other case here created.
+      const trail = await dataSource.getRepository(CatalogAudit).find({
+        where: {
+          entity: 'item_prices',
+          entityId: written.id,
+          action: AuditAction.DELETE,
+        },
+      });
+      expect(trail).toHaveLength(1);
+      // The harvester is a service, not an admin: a run started by the owner
+      // still writes as the machine that made the change.
+      expect(trail[0].actorKind).toBe(AuditActorKind.SERVICE);
+      // Nothing is added to the trail to carry the run id: `sourceRunId` is a
+      // column of the row that was deleted, so it is in `before` already.
+      expect(trail[0].before).toMatchObject({ sourceRunId: RUN, price: 1.19 });
     });
   });
 

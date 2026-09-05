@@ -35,6 +35,9 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     error: null,
     correlationId: null,
     requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
     ...over,
   };
 }
@@ -75,6 +78,13 @@ function reader(reads: readonly HarvestRun[]): RunReader & { calls: number } {
       return answer;
     },
     abortRun: async () => run({ status: 'ABORTED', abortRequestedAt: 'x' }),
+    revertRun: async () =>
+      run({
+        status: 'COMPLETED',
+        revertedAt: '2026-09-05T10:00:00.000Z',
+        revertedByUserId: 'owner-1',
+        revertedPriceCount: 214,
+      }),
   };
 }
 
@@ -296,6 +306,69 @@ describe('RunWatch', () => {
     await settle();
 
     expect(watch.canAbort()).toBe(false);
+    watch.stop();
+  });
+});
+/**
+ * Taking the run's writes back (backend plan 0082).
+ *
+ * Applied from the reply rather than from a poll, which is the difference from
+ * an abort: the run is already finished, so polling has stopped and there is no
+ * next read to notice. Nothing here half applies a revert, and the counts on
+ * screen afterwards are the ones the operation answered.
+ */
+describe('RunWatch.revert', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('applies the answer straight away, counts and all', async () => {
+    const service = reader([run({ status: 'COMPLETED' })]);
+    const watch = new RunWatch(service, fakeDocument(), 'run-1');
+
+    watch.start();
+    await settle();
+    expect(watch.canRevert()).toBe(true);
+
+    await watch.revert();
+
+    expect(watch.run()?.revertedPriceCount).toBe(214);
+    // The status is untouched: it says how the run ended.
+    expect(watch.run()?.status).toBe('COMPLETED');
+    expect(watch.canRevert()).toBe(false);
+    watch.stop();
+  });
+
+  it('does nothing at all on a run it would not offer it for', async () => {
+    const service = reader([run({ status: 'RUNNING' })]);
+    const revert = jest.spyOn(service, 'revertRun');
+    const watch = new RunWatch(service, fakeDocument(), 'run-1');
+
+    watch.start();
+    await settle();
+    await watch.revert();
+
+    expect(revert).not.toHaveBeenCalled();
+    watch.stop();
+  });
+
+  it('leaves the run as it was and shows the failure', async () => {
+    const service = reader([run({ status: 'COMPLETED' })]);
+    service.revertRun = async () => {
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: '',
+      });
+    };
+    const watch = new RunWatch(service, fakeDocument(), 'run-1');
+
+    watch.start();
+    await settle();
+    await watch.revert();
+
+    expect(watch.error()?.status).toBe(409);
+    expect(watch.run()?.revertedAt).toBeNull();
+    expect(watch.reverting()).toBe(false);
     watch.stop();
   });
 });

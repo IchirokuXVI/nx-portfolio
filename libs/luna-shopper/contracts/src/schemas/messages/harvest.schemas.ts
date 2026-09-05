@@ -189,6 +189,11 @@ const harvestRunView = object(
     report: freeObject(),
     correlationId: nullableString(),
     requestedByUserId: nullableString(),
+    // Plan 0082. The status is untouched by a revert: it says how the run
+    // ended, and that did not change.
+    revertedAt: nullableString(),
+    revertedByUserId: nullableString(),
+    revertedPriceCount: integerOrNull(),
   },
   [
     'id',
@@ -218,6 +223,9 @@ const harvestRunView = object(
     'report',
     'correlationId',
     'requestedByUserId',
+    'revertedAt',
+    'revertedByUserId',
+    'revertedPriceCount',
   ]
 );
 
@@ -587,6 +595,8 @@ const listRunsRequest = object(
     supermarketId: string(),
     mode: ref(HARVEST_SCHEMA_IDS.harvestRunMode),
     status: ref(HARVEST_SCHEMA_IDS.harvestRunStatus),
+    // Plan 0082, section 6. Absent lists both.
+    reverted: boolean(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -899,6 +909,10 @@ export const harvestMessageContracts: Record<
     response: HARVEST_SCHEMA_IDS.harvestRunView,
   },
   [HARVEST_PATTERNS.abort]: {
+    request: HARVEST_SCHEMA_IDS.runIdRequest,
+    response: HARVEST_SCHEMA_IDS.harvestRunView,
+  },
+  [HARVEST_PATTERNS.revert]: {
     request: HARVEST_SCHEMA_IDS.runIdRequest,
     response: HARVEST_SCHEMA_IDS.harvestRunView,
   },
