@@ -1,0 +1,80 @@
+You are reading ONE page of a Spanish supermarket promotional leaflet (folleto).
+
+Return ONLY a JSON array of the product offers advertised on this page.
+No prose, no explanation, no markdown code fence. Just the array.
+
+Each element of the array:
+
+{
+  "name": "product description as printed, without the price",
+  "brand": "manufacturer brand, or null",
+  "format": "the pack as printed, e.g. lata 33 cl. / 20 cl., Pack-6 / kilo / 750 ml., or null",
+  "price": 0.00,
+  "basis": "unit" | "pack" | "kg",
+  "was_price": 0.00,
+  "unit_price": 0.00,
+  "unit_price_per": "l" | "kg" | "unit" | "100ml" | "100g",
+  "loyalty": false,
+  "promotion": null
+}
+
+"promotion" is either null or an object:
+
+{
+  "type": "price_drop" | "second_unit_discount" | "multibuy_unit_price"
+        | "multibuy_total" | "n_for_m" | "buy_n_get_free" | "pack_bonus",
+  "required_quantity": 0,
+  "effective_unit_price": 0.00,
+  "total_price": 0.00,
+  "single_unit_price": 0.00
+}
+
+Rules, in order of importance:
+
+1. "price" is always the price of ONE unit, and it is the price the tile
+   advertises. When the tile prints a promotion, that is the promotional price
+   per unit, NOT the price of buying one unit outside the offer. The
+   "Llevando 1 unidad" figure goes in "single_unit_price", never in "price".
+   For "2 UNIDADES POR 1 EUR", "price" is 0.50 and "total_price" is 1.00.
+2. A number labelled "cada litro le sale a", "el litro le sale a",
+   "el kilo le sale a" or "100 ml. le sale a" is a UNIT price, not the
+   product price. Put it in "unit_price" and set "unit_price_per". Record the
+   basis as printed and never convert it: "100 ml. le sale a 0,93" is
+   unit_price 0.93 with unit_price_per "100ml". The product price is elsewhere
+   on the tile.
+3. Spanish decimals use a comma. Write 2,59 as 2.59.
+4. "ANTES" marks the old, struck-through price. That is "was_price".
+5. "kilo" or "Kilo" as the format means "basis": "kg".
+6. Promotion wording maps like this:
+   - only an ANTES price            -> "price_drop"
+   - "-50% 2a Unidad"               -> "second_unit_discount"
+   - "COMPRANDO 12 UNIDADES"        -> "multibuy_unit_price"
+   - "2 unidades por 1,18"          -> "multibuy_total"
+   - "2 X 1" or "3 X 2"             -> "n_for_m"
+   - "LLEVANDO 3, GRATIS 1"         -> "buy_n_get_free"
+   - "Pack-3+1 GRATIS"              -> "pack_bonus"
+7. Use null for anything the page does not state. Do not invent values and do
+   not compute a value the page does not print.
+8. Ignore raffles, store adverts, app promotions, social media icons and legal
+   small print. Only include products that carry a price.
+9. Set "loyalty" to true when the tile sits inside a "descuentos ifamilia"
+   frame or badge, which means the price needs the shop loyalty card. Set it to
+   false otherwise. The badge is a green and red logo above or around the tile,
+   and it covers every product inside its frame.
+
+WHY THREE OF THESE FIELDS MATTER MORE THAN THE REST
+
+The reading is turned into a HarvestDocument (backend plan 0086, section 6.1)
+by tools/to-harvest-document.mjs, and that script decides which number on a tile
+a shopper actually pays for one unit. It reads exactly three things to decide:
+
+- "loyalty". True means the tile states no price at all, because a card price is
+  not the price a non member pays.
+- "promotion.type" and "promotion.single_unit_price". For a second unit, a
+  multibuy or a buy N get one free, the big number is not what one unit costs.
+  The single unit price is, and without it the tile states no price.
+- "basis". A "kg" or "l" basis is a price per weight or volume, so it becomes a
+  unit price and the product gets no till price.
+
+Get those three right even when you are unsure about the rest. A wrong price is
+worse than a missing one.
