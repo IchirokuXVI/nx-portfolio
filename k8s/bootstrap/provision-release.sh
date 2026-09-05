@@ -194,6 +194,31 @@ assert_url_safe() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# The uuid catalog knows the harvester by (plan 0081, section 11).
+#
+# It lives in the app Secret rather than in a values file, and the reason is
+# storage rather than secrecy: a uuid is not a secret, but it has to EXIST in
+# both clusters now, and the Secret is the only per environment store this
+# script owns. The chart owns the ConfigMap and a helm upgrade would overwrite
+# anything written into it, while a values field is a hand edit somebody forgets
+# and `--check` cannot see.
+#
+# `keep_or_generate` is what makes it stable: the id is generated once and kept
+# on every later run, because catalog's audit trail attributes every row a run
+# wrote to it and a new id would orphan the old ones.
+# ---------------------------------------------------------------------------
+generate_actor_id() {
+  # `uuidgen` is not everywhere; openssl is, and this script already needs it.
+  local hex
+  hex="$(openssl rand -hex 16 | tr -d '\r\n')"
+  # Version 4, variant 10xx, the way any uuid library would set them.
+  printf '%s-%s-4%s-%s%s-%s' \
+    "${hex:0:8}" "${hex:8:4}" "${hex:13:3}" \
+    "$(printf '%x' $(( 0x8 + (0x${hex:16:1} % 4) )))" "${hex:17:3}" \
+    "${hex:20:12}"
+}
+
 generate_db_password() {
   # '\r' as well as '\n': an openssl that emits CRLF (Git Bash on Windows does,
   # and this script is edited there) would otherwise leave a carriage return on
@@ -466,6 +491,10 @@ CORE_DB_PASSWORD="$(keep_or_generate "$CORE_DB_SECRET" POSTGRES_PASSWORD generat
 CATALOG_DB_PASSWORD="$(keep_or_generate "$CATALOG_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 HARVESTER_DB_PASSWORD="$(keep_or_generate "$HARVESTER_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 
+# The harvester's identity in catalog. Kept once generated: every price row a
+# run wrote is attributed to this uuid, and a fresh one would orphan them.
+HARVESTER_ACTOR_ID="$(keep_or_generate "$APP_SECRET" HARVESTER_ACTOR_ID generate_actor_id)"
+
 # The JWT keypair. Losing it does not lose data, but every issued access and
 # refresh token becomes unverifiable at once, which logs out every user
 # simultaneously (plan 0005, section 5). It is written to the operator's copy
@@ -569,6 +598,7 @@ apply_secret "$APP_SECRET" \
   --from-literal=CORE_DB_URL="$CORE_DB_URL" \
   --from-literal=CATALOG_DB_URL="$CATALOG_DB_URL" \
   --from-literal=HARVESTER_DB_URL="$HARVESTER_DB_URL" \
+  --from-literal=HARVESTER_ACTOR_ID="$HARVESTER_ACTOR_ID" \
   --from-literal=AUTH_JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \
   --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY"   --from-literal=ADMIN_JWT_PRIVATE_KEY="$ADMIN_JWT_PRIVATE_KEY"   --from-literal=ADMIN_JWT_PUBLIC_KEY="$ADMIN_JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
@@ -622,6 +652,8 @@ ${HARVESTER_DB_SECRET}/POSTGRES_PASSWORD: ${HARVESTER_DB_PASSWORD}
 ${APP_SECRET}/AUTH_DB_URL: ${AUTH_DB_URL}
 ${APP_SECRET}/CORE_DB_URL: ${CORE_DB_URL}
 ${APP_SECRET}/CATALOG_DB_URL: ${CATALOG_DB_URL}
+${APP_SECRET}/HARVESTER_DB_URL: ${HARVESTER_DB_URL}
+${APP_SECRET}/HARVESTER_ACTOR_ID: ${HARVESTER_ACTOR_ID}
 ${APP_SECRET}/GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
 ${APP_SECRET}/SMTP_PASS: ${SMTP_PASS}
 ${APP_SECRET}/GEMINI_API_KEY: ${GEMINI_API_KEY}

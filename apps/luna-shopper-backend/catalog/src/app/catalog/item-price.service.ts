@@ -4,6 +4,8 @@ import type {
   AddItemPriceBatchRequest,
   AddItemPriceBatchResult,
   AddItemPriceRequest,
+  DeleteItemPricesByRunRequest,
+  DeleteItemPricesByRunResult,
   ItemPriceIdRequest,
   ItemPricePage,
   ItemPriceView,
@@ -15,11 +17,14 @@ import {
   encodeCursor,
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { Repository, type EntityManager } from 'typeorm';
 import { Item, ItemPrice, PriceScope } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { toItemPriceView } from './catalog.mappers';
-import { EffectivePriceService } from './effective-price.service';
+import {
+  EffectivePriceService,
+  type PriceKey,
+} from './effective-price.service';
 import { writeItemPrices } from './item-price-writer';
 import { PlatformAdminService } from './platform-admin.service';
 
@@ -157,6 +162,10 @@ export class ItemPriceService {
       .createQueryBuilder('p')
       .where('p."itemId" = :itemId', { itemId: req.itemId })
       .andWhere('p."priceScopeId" = :scopeId', { scopeId: req.priceScopeId })
+      // The one read that wants what a leaflet printed beside the number
+      // (plan 0081, section 6.4). Left joined here and nowhere else: the
+      // recompute reads this table on every write and must not pay for it.
+      .leftJoinAndSelect('p.details', 'details')
       .orderBy('p.observedAt', 'DESC')
       .addOrderBy('p.id', 'DESC')
       .take(limit + 1);
@@ -195,6 +204,125 @@ export class ItemPriceService {
       await this.effective.recompute(tx.manager, keys);
     });
     return { id: req.itemPriceId };
+  }
+
+  /**
+   * Take back everything one run said about prices (plan 0082, section 2), in
+   * one transaction.
+   *
+   * Three things happen, and the order of the first two is what makes the
+   * second one cheap to express. Every row carrying this `sourceRunId` is
+   * deleted, details cascading with it. Then every row still carrying it in
+   * `lastObservedRunId` is a row the run **confirmed** rather than wrote, and
+   * the confirmation is withdrawn: `lastObservedAt` goes back to `observedAt`
+   * and `lastObservedRunId` back to `sourceRunId`. Reading the confirmations
+   * after the delete is what makes "written by this run" and "only confirmed by
+   * this run" two disjoint sets with no `sourceRunId <> :run` clause and no
+   * argument about how SQL compares a null to anything.
+   *
+   * The previous `lastObservedAt` was overwritten and is gone, so it cannot be
+   * restored. The row ages as if the run never happened, which errs toward
+   * stale, and where the only thing keeping a price fresh was a run the owner
+   * distrusts, stale is the honest state.
+   *
+   * `ADMIN` rows carry no run id and are never touched. So does a `USER_RECEIPT`
+   * row from the reference seed. Rows another run wrote are never touched.
+   *
+   * **Availability is not restored.** A refresh that met a 404 wrote
+   * `available: false` through `supermarketItem.setAvailability`, which carries
+   * no run id and has no history (plan 0080, section 2). A 404 from a chain's
+   * own detail endpoint is the chain's answer about its own stock, and the next
+   * refresh states it again either way. It is a stated limit rather than a
+   * hidden one.
+   *
+   * A run with no rows answers zeros. That is not a special case, it is what
+   * makes the harvester's two database operation safe to retry after a partial
+   * failure (plan 0082, section 5).
+   *
+   * The actor is whoever the gate let through, which for the only caller there
+   * is means the harvester as a `SERVICE`. The run id is in every audit row's
+   * `before` already, because `sourceRunId` is a column of the row that was
+   * deleted, so plan 0075's trail answers why a price vanished on Tuesday with
+   * nothing added here.
+   */
+  async deleteByRun(
+    req: DeleteItemPricesByRunRequest
+  ): Promise<DeleteItemPricesByRunResult> {
+    const actor = await this.admin.requireAdmin(req);
+    const now = new Date();
+
+    return this.audit.write(actor, async (tx) => {
+      const written = await tx.manager.find(ItemPrice, {
+        where: { sourceRunId: req.sourceRunId },
+      });
+      if (written.length > 0) {
+        // One statement for the rows, then one audit row each, as the batch
+        // write records its inserts: a run writes thousands of prices and
+        // deleting them one round trip at a time is the same work twice.
+        await tx.manager.delete(ItemPrice, { sourceRunId: req.sourceRunId });
+        for (const row of written) {
+          await tx.recordDelete(ItemPrice, row);
+        }
+      }
+
+      const confirmed = await tx.manager.find(ItemPrice, {
+        where: { lastObservedRunId: req.sourceRunId },
+      });
+      for (const row of confirmed) {
+        const before = { ...row };
+        row.lastObservedAt = row.observedAt;
+        row.lastObservedRunId = row.sourceRunId;
+        await tx.update(ItemPrice, before, row);
+      }
+
+      const keys = await this.affectedBy(tx.manager, [
+        ...written,
+        ...confirmed,
+      ]);
+      await this.effective.recompute(tx.manager, keys, now);
+      return {
+        deleted: written.length,
+        reset: confirmed.length,
+        recomputed: keys.length,
+      };
+    });
+  }
+
+  /**
+   * Every (item, scope) key these rows belonged to, deduplicated, including the
+   * fan out a NATIONAL row causes (plan 0080, section 6).
+   *
+   * Grouped by scope before asking, because `affectedKeys` reads the scope once
+   * per call and a run's rows are nearly always all at one scope.
+   */
+  private async affectedBy(
+    manager: EntityManager,
+    rows: readonly ItemPrice[]
+  ): Promise<PriceKey[]> {
+    const byScope = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const items = byScope.get(row.priceScopeId) ?? new Set<string>();
+      items.add(row.itemId);
+      byScope.set(row.priceScopeId, items);
+    }
+
+    const keys: PriceKey[] = [];
+    const seen = new Set<string>();
+    for (const [priceScopeId, items] of byScope) {
+      const fanned = await this.effective.affectedKeys(
+        manager,
+        [...items],
+        priceScopeId
+      );
+      for (const key of fanned) {
+        const token = `${key.itemId}|${key.priceScopeId}`;
+        if (!seen.has(token)) {
+          seen.add(token);
+          keys.push(key);
+        }
+      }
+    }
+    return keys;
   }
 
   private async requireItemAndScope(

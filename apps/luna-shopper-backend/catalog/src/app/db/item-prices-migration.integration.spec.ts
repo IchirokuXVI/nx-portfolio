@@ -56,10 +56,31 @@ describeIntegration('item prices migration (real Postgres)', () => {
     }
   });
 
+  /**
+   * Back to the world before plan 0080's migration, whatever has landed since.
+   *
+   * It used to be one `undoLastMigration()`, which was the same thing while
+   * `ItemPrices` was the newest migration and stopped being it the moment plan
+   * 0084 added one after it: the single undo then left the schema **at** 0080
+   * rather than before it, and the pre migration rows this file seeds no longer
+   * fit. The spec beside this one learned the same lesson when plan 0048 landed;
+   * counting from the migration this file is about keeps it from being a trap
+   * for the next plan too.
+   */
+  async function migrateDownToBeforeItemPrices(): Promise<void> {
+    const index = CATALOG_MIGRATIONS.findIndex(
+      (migration) => migration.name === 'ItemPrices1756700000000'
+    );
+    expect(index).toBeGreaterThanOrEqual(0);
+    for (let i = CATALOG_MIGRATIONS.length - 1; i >= index; i -= 1) {
+      await dataSource.undoLastMigration();
+    }
+  }
+
   it('carries every pre existing price across unchanged, with a row behind it', async () => {
     // 1. The world as it was: everything up to plan 0075.
     await dataSource.runMigrations();
-    await dataSource.undoLastMigration();
+    await migrateDownToBeforeItemPrices();
 
     // 2. A chain with one warehouse scope, and three rows in the old shape:
     //    a crawl price eight days old, a typed price, and an availability only
@@ -176,7 +197,7 @@ describeIntegration('item prices migration (real Postgres)', () => {
   }, 120_000);
 
   it('reverses cleanly', async () => {
-    await dataSource.undoLastMigration();
+    await migrateDownToBeforeItemPrices();
     const columns = await dataSource.query(
       `SELECT column_name FROM information_schema.columns
        WHERE table_schema = $1 AND table_name = 'supermarket_items'`,

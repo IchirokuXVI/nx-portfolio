@@ -3,24 +3,26 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import type { HarvestSwitch } from '@portfolio/luna-shopper-admin/models';
 
 /**
- * The three switches, shown and not editable (plan 0006, section 3).
+ * The switches, shown and not editable (plan 0006, section 3).
  *
- * They are three because they are three different decisions, and this panel
- * exists so that "why did my run do nothing" is answerable from the screen. Two
- * of them are deployment configuration rather than application state, and a back
- * office button that edited a cluster's config map is a different and much
- * larger feature, so nothing here is a control.
+ * There were three and backend plan `0083` deleted the third, so there are two:
+ * whether the service exists in this environment, and whether a service that
+ * exists may start a run. Both are deployment configuration rather than
+ * application state, and a back office button that edited a cluster's config map
+ * is a different and much larger feature, so nothing here is a control. The
+ * panel exists so that "why did my run do nothing" is answerable from the
+ * screen.
  *
  * The per chain `enabled` flag is the one switch this app does change, and it is
  * deliberately **not** here: it lives on the sources screen beside the chain it
  * belongs to, because putting it in this panel would suggest it is the same kind
- * of thing as the other three.
+ * of thing as the two above.
  *
  * A switch may be `unknown`, and that state is drawn rather than rounded to
- * `off`. Nothing reports `HARVEST_ENABLED` or `MERCADONA_ENABLED`, so before
- * anything has been attempted this app genuinely does not know; both default to
- * false, so a guess would be right most of the time and wrong exactly when
- * somebody is trying to work out what is going on.
+ * `off`. Nothing reports `HARVEST_ENABLED`, so before anything has been
+ * attempted this app genuinely does not know; it defaults to false, so a guess
+ * would be right most of the time and wrong exactly when somebody is trying to
+ * work out what is going on.
  */
 @Component({
   selector: 'lib-switch-panel',

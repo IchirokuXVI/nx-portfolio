@@ -155,6 +155,27 @@ describe('the admin catalog lists, over HTTP', () => {
     }
   });
 
+  /**
+   * The shop search the mapping picker of admin plan `0011` sends. It is scoped
+   * to a chain and typed into, and the pipe validates the whole query object
+   * against the declared class, so a term the class does not carry is a 400
+   * however well the handler would have read it.
+   */
+  it("carries a shop search term through to the broker, beside the chain's own", async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/supermarkets/sm-1/locations?query=gran%20capit`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['query']).toBe('gran capit');
+      expect(sent[0].payload['supermarketId']).toBe('sm-1');
+    } finally {
+      await nest.close();
+    }
+  });
+
   it('lists every chain when no term is typed', async () => {
     const { nest, sent, origin } = await boot();
     try {

@@ -320,8 +320,10 @@ lunaShopperBackend:
     # There is deliberately no admin list here any more (plan 0072). Writing the
     # catalog is proved by a signature the service verifies for itself, so an
     # admin is created with one database write and no restart, and no value in
-    # this file can grant the role. What services may write catalog is rendered
-    # into `SERVICE_ACTOR_IDS` from `harvester.actorId` below.
+    # this file can grant the role. What services may write catalog is
+    # `SERVICE_ACTOR_IDS`, which comes from the per environment Secret that
+    # `provision-release.sh` writes rather than from this file (plan 0081,
+    # section 11).
     # The oldest velista build this deployment will serve (velista plan 0034).
     #
     # Empty switches the mechanism off, which is how both clusters run: the gateway
@@ -398,16 +400,21 @@ lunaShopperBackend:
   harvester:
     enabled: false
 
-    # The uuid the harvester writes to catalog as (backlog 0001, section 4.1;
-    # plan 0072, section 4). It is the single source for catalog's
-    # `SERVICE_ACTOR_IDS`, rendered from this value in the ConfigMap rather than
-    # restated beside it, so the pair cannot drift.
+    # THE ACTOR ID IS NOT HERE ANY MORE (plan 0081, section 11).
     #
-    # It used to have to appear in `config.platformAdminUserIds` too, which made
-    # the harvester an admin. It is a service, and catalog now has a separate door
-    # for services. Empty means the harvester cannot write anything, which is the
-    # safe default and exactly what it should do when nobody has set it up.
-    actorId: ''
+    # The uuid the harvester writes to catalog as (backlog 0001, section 4.1;
+    # plan 0072, section 4) is generated once per cluster by
+    # `provision-release.sh` and kept in the per environment Secret, and both
+    # `HARVESTER_ACTOR_ID` and catalog's `SERVICE_ACTOR_IDS` are read from that
+    # one key, so the pair still cannot drift.
+    #
+    # A uuid is not a secret, and it was a ConfigMap value for exactly that
+    # reason. What moved it is that it has to EXIST in both clusters now: an
+    # import writes prices, `CatalogClient.actor()` throws without an id, and
+    # the Secret is the only per cluster store the provisioning script owns. The
+    # chart owns the ConfigMap and would overwrite anything written there.
+    # `--check` then asserts the key exists before a deploy, which a values file
+    # somebody forgot to edit could never do.
 
     # Whether the pod may start a run at all. Separate from `enabled` on purpose:
     # bringing the service up and letting it fetch from a third party are two
@@ -420,21 +427,22 @@ lunaShopperBackend:
     # drains a real backlog rather than starting from nothing.
     harvestEnabled: false
 
-    # And the same again for the one storefront (plan 0038, section 8.1). If
-    # Mercadona ever objects, this goes false and the catalog keeps working on
-    # hand entered prices, which is the property backlog 0001 section 5.4 designs
-    # for.
+    # There is no per chain key here, and there is not meant to be (plan 0083).
+    # Which chains may be fetched is a row per chain in the harvester's own
+    # database, `supermarket_sources.enabled`, off by default and written from
+    # the back office. A variable named after a storefront needed a new one per
+    # storefront, threaded through the service config, this file, the ConfigMap
+    # and both `luna-slot` scripts before a run could start.
     #
-    # False in both clusters today, and that is a decision about Mercadona rather
-    # than about the harvester: store discovery reads OpenStreetMap and never
-    # touches a storefront, so "the service exists and finds shops" and "the
-    # service reads a supermarket's prices" stay separable, which is the whole
-    # point of section 8.1 having two switches. Enabling this in a cluster is its
+    # Every chain's row is off in both clusters today, and that is a decision
+    # about the chains rather than about the harvester: store discovery reads
+    # OpenStreetMap and never touches a storefront, so "the service exists and
+    # finds shops" and "the service reads a supermarket's prices" stay separable,
+    # which is the whole point of section 8.1. Turning one on in a cluster is its
     # own call to make when there is a reason to make it, and the double fetch
     # rule in that section is the first thing to settle when it comes up: two
     # clusters walking the same assortment is twice the requests for one copy of
     # the answer. Runs happen against the local compose stack until then.
-    mercadonaEnabled: false
 
     # An HONEST User-Agent naming the app and a contact address, and specifically
     # not the Chrome impersonation the public reference implementations use. Set

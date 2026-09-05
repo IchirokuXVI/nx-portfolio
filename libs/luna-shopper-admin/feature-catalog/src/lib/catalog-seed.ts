@@ -33,6 +33,22 @@ const CONSUM = 'sm_consum';
  */
 export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
   {
+    /**
+     * The nationwide scope, which is what a leaflet price belongs to (backend
+     * plan 0080, section 6; admin plan 0010, section 2).
+     *
+     * One row per chain at most, and the seed carries it for Mercadona and not
+     * for Consum on purpose: the upload screen preselects a chain's `NATIONAL`
+     * scope where there is one and offers to create one where there is not, and
+     * both states have to be reachable with nothing listening.
+     */
+    id: 'ps_mercadona_national',
+    supermarketId: MERCADONA,
+    kind: 'NATIONAL',
+    externalKey: null,
+    label: { en: 'Nationwide', es: 'Nacional' },
+  },
+  {
     id: 'ps_mercadona_4661',
     supermarketId: MERCADONA,
     kind: 'WAREHOUSE',
@@ -304,6 +320,7 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     lastObservedRunId: null,
     overrides: { OFFICIAL_API: { price: 8.9, unitPrice: 8.9 } },
     protectedUntil: '2026-09-10T09:40:00.000Z',
+    details: null,
   },
   {
     id: 'ip_oil_4661_api',
@@ -322,6 +339,7 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     lastObservedRunId: 'run_2026_09_05',
     overrides: null,
     protectedUntil: null,
+    details: null,
   },
   {
     id: 'ip_milk_4661_api',
@@ -340,6 +358,7 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     lastObservedRunId: 'run_2026_08_20',
     overrides: null,
     protectedUntil: null,
+    details: null,
   },
   {
     id: 'ip_milk_consum_admin',
@@ -359,17 +378,28 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     // Nothing automated prices Consum, so there was nothing to override.
     overrides: {},
     protectedUntil: '2026-09-04T18:05:00.000Z',
+    details: null,
   },
 ];
 
 /** The six policy rows, as the migration seeds them (backend plan 0080, section 3). */
 export const PRICE_POLICY_SEED: readonly Wire.CatalogPricePolicyView[] = [
-  { sourceKind: 'OFFICIAL_LEAFLET', priority: 10, maxAgeDays: null, enabled: true },
+  {
+    sourceKind: 'OFFICIAL_LEAFLET',
+    priority: 10,
+    maxAgeDays: null,
+    enabled: true,
+  },
   { sourceKind: 'OFFICIAL_API', priority: 20, maxAgeDays: 7, enabled: true },
   { sourceKind: 'OFFICIAL_WEB', priority: 30, maxAgeDays: 7, enabled: true },
   { sourceKind: 'ADMIN', priority: 40, maxAgeDays: null, enabled: true },
   { sourceKind: 'USER_RECEIPT', priority: 50, maxAgeDays: null, enabled: true },
-  { sourceKind: 'USER_REPORTED', priority: 60, maxAgeDays: null, enabled: false },
+  {
+    sourceKind: 'USER_REPORTED',
+    priority: 60,
+    maxAgeDays: null,
+    enabled: false,
+  },
 ];
 
 /**
@@ -387,6 +417,11 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       supermarketLocationId: 'loc_cordoba_centro',
       positionInStore: 'Aisle 4, cold shelf',
       available: true,
+      // Typed by the operator, so no crawl may overwrite it (backend plan
+      // 0084, section 3).
+      availabilitySourceKind: 'ADMIN',
+      availabilityObservedAt: '2026-08-02T09:15:00.000Z',
+      availabilitySourceRunId: null,
     },
     {
       id: 'sli_oil_centro',
@@ -394,6 +429,10 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       supermarketLocationId: 'loc_cordoba_centro',
       positionInStore: 'Aisle 7',
       available: false,
+      // A crawl said so, and the next crawl may say otherwise.
+      availabilitySourceKind: 'OFFICIAL_WEB',
+      availabilityObservedAt: '2026-09-01T06:40:00.000Z',
+      availabilitySourceRunId: 'run_deza_1',
     },
     {
       id: 'sli_milk_oeste',
@@ -402,5 +441,8 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       positionInStore: null,
       // Nobody has checked this shop. Not the same as "not available here".
       available: null,
+      availabilitySourceKind: null,
+      availabilityObservedAt: null,
+      availabilitySourceRunId: null,
     },
   ];

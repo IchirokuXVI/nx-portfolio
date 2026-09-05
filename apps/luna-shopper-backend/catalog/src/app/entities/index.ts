@@ -1,4 +1,5 @@
 import { CatalogAudit } from './catalog-audit.entity';
+import { ItemPriceDetailsRow } from './item-price-details.entity';
 import { ItemPrice } from './item-price.entity';
 import { Item } from './item.entity';
 import { PostalCodePoint } from './postal-code-point.entity';
@@ -16,6 +17,7 @@ export {
   AuditActorKind,
   CatalogAudit,
 } from './catalog-audit.entity';
+export { ItemPriceDetailsRow } from './item-price-details.entity';
 export { ItemPrice } from './item-price.entity';
 export { Item } from './item.entity';
 export { PostalCodePoint } from './postal-code-point.entity';
@@ -38,6 +40,9 @@ export const CATALOG_ENTITIES = [
   // Every price a source gave, and the policy that picks one (plan 0080). The
   // materialized row below them is derived from both.
   ItemPrice,
+  // What a leaflet printed beside a price (plan 0081, section 6.4). Kept off
+  // `item_prices` because that table is read on every recompute.
+  ItemPriceDetailsRow,
   PricePolicy,
   SupermarketItem,
   SupermarketLocationItem,

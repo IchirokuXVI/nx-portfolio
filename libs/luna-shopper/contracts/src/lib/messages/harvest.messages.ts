@@ -1,14 +1,20 @@
+import type { LeafletDocument } from '../../schemas/leaflet/leaflet-document';
+import type { ItemCategory, UnitOfMeasure } from '../enums/catalog.enums';
 import type {
   DiscoveredPlaceStatus,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  HarvestWarningCode,
   ItemSourceMatch,
   ItemSourceRefStatus,
   PostalCodeDiscoveryStatus,
+  SourceAliasStatus,
+  SourceLocationStatus,
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
+import type { ItemView } from './catalog.messages';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
@@ -28,6 +34,18 @@ import type { AdminCredential } from './admin-auth.messages';
 export const HARVEST_PATTERNS = {
   spawn: 'harvest.spawn',
   abort: 'harvest.abort',
+  /**
+   * Take back everything a run wrote (plan 0082). Allowed on a finished run
+   * whose mode writes prices, refused on a second attempt and on a run that
+   * writes none.
+   *
+   * Not the same act as {@link abort}. An abort stops a run and **keeps** what
+   * it already fetched, because prices already fetched are valid data. A revert
+   * says the data was wrong and deletes it, which is why a run has to be
+   * finished before it can be reverted: abort it first, then revert what it
+   * flushed.
+   */
+  revert: 'harvest.revert',
   runGet: 'harvest.run.get',
   runList: 'harvest.run.list',
 } as const;
@@ -57,6 +75,41 @@ export const SOURCE_ENTRY_PATTERNS = {
   createItem: 'sourceEntry.createItem',
 } as const;
 
+/**
+ * Which shop of theirs is which of ours (plan 0084, section 7).
+ *
+ * A source that answers availability per shop names its shops by its own code,
+ * and only a person can say which catalog location each one is. These are the
+ * five acts of that queue: read it, bind a row, unbind it, and take a place we
+ * do not sell from out of the queue for good.
+ *
+ * **Mapping a shop does not backfill it.** The availability a run skipped stays
+ * skipped until the next run, which is the opposite of `sourceAlias.accept`: a
+ * leaflet offer sits in the run's stored document, and a shop's availability is
+ * one boolean per product across a whole assortment that no run stored.
+ */
+export const SOURCE_LOCATION_PATTERNS = {
+  list: 'sourceLocation.list',
+  map: 'sourceLocation.map',
+  unmap: 'sourceLocation.unmap',
+  ignore: 'sourceLocation.ignore',
+  unignore: 'sourceLocation.unignore',
+} as const;
+
+/**
+ * The printed names a chain used, and the queue an admin works through (plan
+ * 0081, sections 2 and 3).
+ *
+ * `accept` and `createItem` are the only two things that ever produce an ACTIVE
+ * alias, and both are a person. A run proposes and never binds.
+ */
+export const SOURCE_ALIAS_PATTERNS = {
+  list: 'sourceAlias.list',
+  accept: 'sourceAlias.accept',
+  createItem: 'sourceAlias.createItem',
+  reject: 'sourceAlias.reject',
+} as const;
+
 export const SUPERMARKET_SOURCE_PATTERNS = {
   upsert: 'supermarketSource.upsert',
   get: 'supermarketSource.get',
@@ -64,8 +117,21 @@ export const SUPERMARKET_SOURCE_PATTERNS = {
   setEnabled: 'supermarketSource.setEnabled',
 } as const;
 
-/** The adapter keys the harvester knows how to run (plan 0038, section 4.2). */
-export const ADAPTER_KEYS = ['mercadona-api', 'osm-places', 'manual'] as const;
+/**
+ * The adapter keys the harvester knows how to run (plan 0038, section 4.2).
+ *
+ * `deza-web` is the second storefront and the first whose only claim is per shop
+ * availability (plan 0085). It shares `CATALOG_DISCOVERY` with `mercadona-api`,
+ * because a walk of a chain's whole assortment is a catalog discovery whatever
+ * the source looks like, so this field is what the runner selects its client
+ * from rather than the mode.
+ */
+export const ADAPTER_KEYS = [
+  'mercadona-api',
+  'deza-web',
+  'osm-places',
+  'manual',
+] as const;
 export type AdapterKey = (typeof ADAPTER_KEYS)[number];
 
 // --- Views -----------------------------------------------------------------
@@ -119,13 +185,132 @@ export interface HarvestRunView {
   unchanged: number;
   /** A 404 from a detail call: "not stocked here" is a value, not a failure. */
   notFound: number;
+  /**
+   * Offers a rule dropped or sent to the queue (plan 0081, section 7). Backlog
+   * 0001 section 7.2 listed it among the counters and plan 0038 dropped it
+   * because nothing skipped anything. Now something does.
+   */
+  skipped: number;
   failed: number;
   stage: string | null;
   stageLabel: string | null;
+  /**
+   * Every decision the run made that was not a write, with the offer it was
+   * about (plan 0081, section 7). The run page reads as a list of them.
+   */
+  warnings: HarvestRunWarning[];
+  /**
+   * The digest of the document a LEAFLET_IMPORT run read, null for every other
+   * mode. A second upload of the same file for the same chain is refused until
+   * the first run is reverted.
+   */
+  documentSha256: string | null;
   abortRequestedAt: string | null;
   error: string | null;
+  /**
+   * What the run has to say about itself beyond its counters, empty when it has
+   * nothing (plan 0085, section 3).
+   *
+   * It exists because **completeness cannot be proven against every source**. A
+   * DEZA query returns at most 300 rows however it is filtered, so a run splits
+   * a capped section by search term until a pass adds nothing new or a budget
+   * runs out, and the honest artifact is then the list of sections it could not
+   * finish rather than a number. The same bag carries the availability rows a
+   * person had typed, which plan 0084 section 3 declines to overwrite and
+   * requires the run to report instead.
+   *
+   * Deliberately free form. It is a summary for a person reading a finished run,
+   * not a structure anything decides on, and pinning a schema to it would make
+   * every new kind of remark a contract change.
+   */
+  report: Record<string, unknown>;
   correlationId: string | null;
   requestedByUserId: string | null;
+  /**
+   * When this run's writes were taken back (plan 0082), null for a run that
+   * still stands.
+   *
+   * **The status is not changed by a revert.** The status says how the run
+   * ended and that did not change, so a reverted run keeps its own and carries
+   * this beside it.
+   */
+  revertedAt: string | null;
+  /** The operator who reverted it. */
+  revertedByUserId: string | null;
+  /**
+   * How many `item_prices` rows the revert deleted, null until one happens.
+   *
+   * The rows the run inserted, including those an alias accept wrote on its
+   * behalf. Rows the run only confirmed were reset rather than deleted and are
+   * not counted here.
+   */
+  revertedPriceCount: number | null;
+}
+
+/**
+ * One thing a run decided and did not write (plan 0081, section 7).
+ *
+ * `offerId` is the leaflet tile id where there is one, so the admin can find the
+ * tile in the document he uploaded. A warning carried through from the extractor
+ * itself names a page and no offer.
+ */
+export interface HarvestRunWarning {
+  code: HarvestWarningCode;
+  /** The leaflet tile this is about, or null for an extractor warning. */
+  offerId: string | null;
+  /** The page it was printed on, when the document said. */
+  page: number | null;
+  /** The printed name, so a row reads without opening the document. */
+  name: string | null;
+  message: string;
+}
+
+/**
+ * One printed name a chain used, and what became of it (plan 0081, section 2).
+ *
+ * **Accepting an alias sets `itemId` and never touches `printedName`.** One
+ * product appears in many leaflets and each names it differently; renaming the
+ * item must not change the string the chain printed, or the next leaflet that
+ * prints it stops resolving.
+ */
+export interface SourceAliasView {
+  id: string;
+  supermarketId: string;
+  /** normalizeName(name), a pipe, then normalizeName(format.raw). Section 2.1. */
+  aliasKey: string;
+  /** The printed product name, exactly. Never rewritten by an accept. */
+  printedName: string;
+  /** The printed format, exactly. It is in the key; the brand is not. */
+  printedFormat: string | null;
+  /** The printed brand, when the extractor read one. Shown, and in no key. */
+  printedBrand: string | null;
+  /** Set on ACTIVE only. Opaque here, as every catalog id is. */
+  itemId: string | null;
+  /** What the fuzzy rung proposed, for the queue to show. */
+  candidateItemId: string | null;
+  /** A discovery entry the fuzzy rung proposed, when no item exists yet. */
+  candidateEntryId: string | null;
+  status: SourceAliasStatus;
+  matchedBy: ItemSourceMatch;
+  /** 0..1. Below 1 only for a NAME_SIZE proposal. */
+  confidence: number;
+  timesSeen: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  /** The run that created it. Plan 0082 deletes undecided rows by this. */
+  firstRunId: string | null;
+  lastRunId: string | null;
+  /** The leaflet price this row is waiting on, for the queue to show. */
+  offerPrice: number | null;
+  offerCurrency: string | null;
+  offerUnitPrice: number | null;
+  offerUnitPriceLabel: string | null;
+  /** The page the tile was printed on, in the run that queued it. */
+  offerPage: number | null;
+  /** Every fragment the extractor assigned to the tile, where it kept them. */
+  offerRawText: string[];
+  /** How sure the extractor was about the tile, where it said. */
+  offerConfidence: number | null;
 }
 
 /**
@@ -201,6 +386,35 @@ export interface SourceCatalogEntryView {
   lastSeenAt: string;
 }
 
+/**
+ * One shop a source names, and the catalog location it points at once somebody
+ * says which (plan 0084, section 6).
+ *
+ * **The key is the source's own code, not the name it prints.** DEZA labels each
+ * shop `T1` to `T7`, `C1`, `C2` and `Z1` in the markup and prints "Ronda del
+ * Marrubial" beside it. Only the first survives a rename, and a mapping keyed on
+ * the display name detaches the day marketing retitles a shop, into `UNMAPPED`,
+ * which reads as "they closed it".
+ */
+export interface SourceLocationView {
+  id: string;
+  supermarketId: string;
+  /** The source's own key for the shop, e.g. `T1`. */
+  externalId: string;
+  /** What the source displayed, exactly. */
+  printedName: string;
+  /** The catalog location this is, set on `ACTIVE` only. */
+  supermarketLocationId: string | null;
+  status: SourceLocationStatus;
+  /** `NAME_SIZE` for the default exact name match, `MANUAL` when a person bound it. */
+  matchedBy: ItemSourceMatch;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  /** The run that created the row, and the run that last saw the shop. */
+  firstRunId: string | null;
+  lastRunId: string | null;
+}
+
 /** The link between one catalog item and one chain's product. */
 export interface ItemSourceRefView {
   id: string;
@@ -233,6 +447,20 @@ export interface SpawnHarvestRunRequest extends AdminCredential {
   radiusMetres?: number;
   /** Restrict a store discovery run's report to these `brand:wikidata` keys. */
   brandKeys?: string[];
+  /**
+   * The leaflet, for a LEAFLET_IMPORT run (plan 0081, section 7). Validated
+   * against its own versioned schema by the gateway before it crosses the
+   * broker, and by the harvester again at run start: the harvester owns the
+   * schema version, and a broker message is not a trusted input.
+   */
+  document?: LeafletDocument;
+  /**
+   * The admin validity override, as YYYY-MM-DD local days in Spain (section 5).
+   * Required when the document own bound is null, and offered always; the
+   * backend turns both into Europe/Madrid instants.
+   */
+  validFrom?: string | null;
+  validUntil?: string | null;
 }
 
 export interface HarvestRunIdRequest extends AdminCredential {
@@ -243,6 +471,15 @@ export interface ListHarvestRunsRequest extends PageQuery, AdminCredential {
   supermarketId?: string;
   mode?: HarvestRunMode;
   status?: HarvestRunStatus;
+  /**
+   * Reverted runs only, or unreverted runs only (plan 0082, section 6). Absent
+   * lists both, which is what the runs screen asks for.
+   *
+   * A filter of its own rather than a status, because a revert does not change
+   * how the run ended: a reverted run is still the COMPLETED or FAILED run it
+   * was.
+   */
+  reverted?: boolean;
 }
 
 // --- Discovered place requests ---------------------------------------------
@@ -303,6 +540,28 @@ export interface CreateItemFromSourceEntryRequest extends AdminCredential {
   category?: string;
 }
 
+// --- Source location requests (plan 0084, section 7) ------------------------
+
+/**
+ * The queue, one chain at a time. The chain is required because the table is
+ * unique on (`supermarketId`, `externalId`) and a mapping only means anything
+ * within one chain.
+ */
+export interface ListSourceLocationsRequest extends PageQuery, AdminCredential {
+  supermarketId: string;
+  status?: SourceLocationStatus;
+}
+
+/** Bind one row to a catalog location: `ACTIVE`, `matchedBy: MANUAL`. */
+export interface MapSourceLocationRequest extends AdminCredential {
+  sourceLocationId: string;
+  supermarketLocationId: string;
+}
+
+export interface SourceLocationIdRequest extends AdminCredential {
+  sourceLocationId: string;
+}
+
 // --- Item source ref requests ----------------------------------------------
 
 export interface ListItemSourceRefsRequest extends PageQuery, AdminCredential {
@@ -320,6 +579,61 @@ export interface SetManualItemSourceRefRequest extends AdminCredential {
   itemId: string;
   supermarketId: string;
   externalId: string;
+}
+
+// --- Source alias requests (plan 0081, sections 2 and 3) -------------------
+
+export interface ListSourceAliasesRequest extends PageQuery, AdminCredential {
+  supermarketId: string;
+  /** Absent lists CANDIDATE and UNRESOLVED, which is the queue. */
+  status?: SourceAliasStatus;
+  /** Free text over the printed name, format and brand. */
+  query?: string;
+}
+
+export interface SourceAliasIdRequest extends AdminCredential {
+  aliasId: string;
+}
+
+/** Bind a queued printed name to a product the catalog already holds. */
+export interface AcceptSourceAliasRequest extends AdminCredential {
+  aliasId: string;
+  itemId: string;
+}
+
+/**
+ * Bind a queued printed name to a product created for it, in one call.
+ *
+ * The operator changes the name and the brand freely; the alias keeps what the
+ * leaflet printed whatever the item ends up called (section 2). `name.en` may
+ * be absent, which plan 0079 made legal: a shopper in English sees the Spanish
+ * name through the fallback.
+ */
+export interface CreateItemFromSourceAliasRequest extends AdminCredential {
+  aliasId: string;
+  name: { es?: string; en?: string };
+  brand?: string | null;
+  ean?: string | null;
+  unitSize?: number | null;
+  category: ItemCategory;
+  defaultUnit: UnitOfMeasure;
+}
+
+/**
+ * What accepting a queued name did (plan 0081, section 3).
+ *
+ * **Accepting writes the price it was queued for.** The run is over by then and
+ * the offer sits in the run stored document, so the accept reads every non
+ * reverted import for that chain whose validity is still open and writes the
+ * prices with each run own id. Without it an admin who works the queue would
+ * have to upload the document a second time.
+ */
+export interface SourceAliasAcceptResult {
+  alias: SourceAliasView;
+  /** How many `item_prices` rows the accept wrote from stored documents. */
+  pricesWritten: number;
+  /** The product this call created, or null when it bound an existing one. */
+  item: ItemView | null;
 }
 
 // --- Supermarket source requests -------------------------------------------
@@ -351,7 +665,9 @@ export type HarvestRunPage = Paginated<HarvestRunView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
 export type ItemSourceRefPage = Paginated<ItemSourceRefView>;
+export type SourceLocationPage = Paginated<SourceLocationView>;
 export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
+export type SourceAliasPage = Paginated<SourceAliasView>;
 
 // --- The postal code discovery queue (plan 0063) ---------------------------
 

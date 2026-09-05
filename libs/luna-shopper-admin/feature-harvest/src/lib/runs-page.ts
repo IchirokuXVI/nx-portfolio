@@ -22,13 +22,28 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { HarvestNotice, SwitchPanel } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
+import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
 
-/** The three run modes, in the order the picker offers them. */
+/** What the reverted filter can be asked for. `any` sends no filter at all. */
+const REVERTED_OPTIONS = ['any', 'reverted', 'standing'] as const;
+type RevertedFilter = (typeof REVERTED_OPTIONS)[number];
+
+/**
+ * The four run modes, in the order the picker offers them.
+ *
+ * `LEAFLET_IMPORT` is one of them and is the only one this form does not start
+ * (admin plan 0010, section 2). An import needs a document, and a document is a
+ * file, a preview and a validation failure that names the offer it is about.
+ * None of that fits three text inputs, so choosing it here sends the operator
+ * to the screen that does rather than growing this one a fourth mode's worth of
+ * fields.
+ */
 const MODES: readonly HarvestRunMode[] = [
   'STORE_DISCOVERY',
   'CATALOG_DISCOVERY',
   'REFRESH',
+  'LEAFLET_IMPORT',
 ];
 
 /**
@@ -39,7 +54,7 @@ const MODES: readonly HarvestRunMode[] = [
  * the top, and reading one is a screen of its own that polls, so the row here
  * links out to that rather than to an edit form there is no such thing as.
  *
- * The three switches sit above the list rather than on a settings screen
+ * The switches sit above the list rather than on a settings screen
  * somewhere, because the question they answer is "why did my run do nothing",
  * and that question is asked here, looking at a run that did nothing.
  *
@@ -80,10 +95,18 @@ const MODES: readonly HarvestRunMode[] = [
           </select>
         </label>
 
-        <label>
-          <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
-          <input [(ngModel)]="supermarketId" name="supermarketId" type="text" />
-        </label>
+        <!-- An import states its chain on the upload screen, beside the
+             document that says which chain printed it (admin plan 0010). -->
+        @if (!uploading()) {
+          <label>
+            <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
+            <input
+              [(ngModel)]="supermarketId"
+              name="supermarketId"
+              type="text"
+            />
+          </label>
+        }
 
         @if (mode() === 'STORE_DISCOVERY') {
           <label>
@@ -99,23 +122,47 @@ const MODES: readonly HarvestRunMode[] = [
 
       <p class="attribution">{{ 'harvest.runs.start.attribution' | rokuT }}</p>
 
-      <button
-        (click)="start()"
-        [disabled]="starting()"
-        class="primary"
-        type="button"
-      >
-        {{
-          (starting()
-            ? 'harvest.runs.start.starting'
-            : 'harvest.runs.start.submit'
-          ) | rokuT
-        }}
-      </button>
+      @if (uploading()) {
+        <p class="attribution">{{ 'harvest.runs.start.leaflet' | rokuT }}</p>
+        <a [routerLink]="uploadLink()" class="primary">{{
+          'harvest.runs.start.openUpload' | rokuT
+        }}</a>
+      } @else {
+        <button
+          (click)="start()"
+          [disabled]="starting()"
+          class="primary"
+          type="button"
+        >
+          {{
+            (starting()
+              ? 'harvest.runs.start.starting'
+              : 'harvest.runs.start.submit'
+            ) | rokuT
+          }}
+        </button>
+      }
 
       @if (blockedKey(); as key) {
         <p class="failure" role="alert">{{ key | rokuT }}</p>
       }
+    </section>
+
+    <section class="filters">
+      <label>
+        <span>{{ 'harvest.runs.filter.reverted' | rokuT }}</span>
+        <select
+          (ngModelChange)="onRevertedChange()"
+          [(ngModel)]="reverted"
+          name="reverted"
+        >
+          @for (option of revertedOptions; track option) {
+            <option [value]="option">
+              {{ 'harvest.runs.filter.revertedOption.' + option | rokuT }}
+            </option>
+          }
+        </select>
+      </label>
     </section>
 
     @if (failed()) {
@@ -133,6 +180,15 @@ const MODES: readonly HarvestRunMode[] = [
               <span [class]="row.status" class="status">
                 {{ 'harvest.status.' + row.status | rokuT }}
               </span>
+              <!-- A second chip rather than a replacement: the status says how
+                   the run ended and a revert does not change that. -->
+              @if (row.reverted !== '') {
+                <span [title]="row.revertedBy" class="reverted">
+                  {{
+                    'harvest.runs.row.reverted' | rokuT: { when: row.reverted }
+                  }}
+                </span>
+              }
               <span class="when">{{ row.requested }}</span>
               <span class="counts">
                 {{
@@ -208,6 +264,18 @@ const MODES: readonly HarvestRunMode[] = [
       color: var(--admin-accent-ink);
     }
 
+    /* The way to the upload, which is a link and not a button because it goes
+       to a screen rather than doing something. It still looks like the primary
+       action, because on that mode it is the only one there is. */
+    a.primary {
+      display: inline-flex;
+      align-items: center;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border-radius: var(--admin-radius);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
     .failure {
       padding: var(--admin-space-3);
       border: 1px solid var(--admin-danger);
@@ -267,6 +335,20 @@ const MODES: readonly HarvestRunMode[] = [
       color: var(--admin-danger-ink);
     }
 
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+    }
+
+    .reverted {
+      padding: var(--admin-space-1) var(--admin-space-2);
+      border-radius: var(--admin-radius);
+      background: var(--admin-danger-wash);
+      font-size: 0.75rem;
+      color: var(--admin-danger-ink);
+    }
+
     .when,
     .counts,
     .reason {
@@ -291,6 +373,17 @@ export class RunsPage {
   readonly postalCode = signal('');
   readonly country = signal('');
 
+  /**
+   * The reverted filter (backend plan 0082, section 6), as three choices rather
+   * than a checkbox.
+   *
+   * A checkbox has two states and the filter has three: reverted only,
+   * unreverted only, and both, which is what the screen opens on. A tri state
+   * checkbox would encode the same thing less legibly.
+   */
+  readonly revertedOptions = REVERTED_OPTIONS;
+  readonly reverted = signal<RevertedFilter>('any');
+
   readonly starting = signal(false);
   readonly loading = signal(true);
   readonly runs = signal<readonly HarvestRun[]>([]);
@@ -301,6 +394,26 @@ export class RunsPage {
     () => this.error() !== null && this.runs().length === 0
   );
 
+  /**
+   * Whether the chosen mode is the one this form cannot start.
+   *
+   * A leaflet import needs a document, so this form offers the way to the
+   * screen that takes one rather than a start button that would be refused for
+   * a body it has no field for (admin plan 0010, section 2).
+   */
+  readonly uploading = computed(() => this.mode() === 'LEAFLET_IMPORT');
+
+  /**
+   * Where a leaflet is dropped.
+   *
+   * Absolute rather than relative, for the reason the queues give: `..` needs a
+   * route above it to pop and throws outright when there is none, and this
+   * component is rendered directly in its spec.
+   */
+  uploadLink(): readonly string[] {
+    return ['/', HARVEST_SEGMENT, 'leaflets', 'upload'];
+  }
+
   readonly rows = computed(() =>
     this.runs().map((run) => ({
       id: run.id,
@@ -309,6 +422,11 @@ export class RunsPage {
       requested: formatInstant(run.requestedAt),
       processed: run.processed,
       failed: run.failed,
+      // Empty when the run still stands, which is what the row branches on.
+      reverted: formatInstant(run.revertedAt),
+      // On hover rather than in the row: the operator id is a uuid, and a row
+      // that spelled one out would be mostly uuid.
+      revertedBy: run.revertedByUserId ?? '',
       // A finished run that failed because of a switch says which one, on the
       // row, because that is where somebody is looking when they wonder.
       reasonKey: reasonKey(failureBlockReason(run)),
@@ -318,9 +436,8 @@ export class RunsPage {
   /**
    * Why the last attempt to start would not start.
    *
-   * The spawn refusal is the only direct evidence any of the three switches
-   * offers, so it is kept and shown rather than folded into a general failure
-   * message. A 409 is different again: something is already running, which is
+   * The spawn refusal is the only direct evidence either switch offers, so it
+   * is kept and shown rather than folded into a general failure message. A 409 is different again: something is already running, which is
    * not a switch and has an obvious remedy.
    */
   readonly blockedKey = computed(() => {
@@ -342,12 +459,21 @@ export class RunsPage {
     void this.load();
   }
 
+  /** The filter is a server side one, so changing it is a fresh read. */
+  onRevertedChange(): void {
+    void this.load();
+  }
+
   async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
 
     try {
-      const page = await this._service.listRuns({ limit: 20 });
+      const filter = this.reverted();
+      const page = await this._service.listRuns({
+        limit: 20,
+        ...(filter === 'any' ? {} : { reverted: filter === 'reverted' }),
+      });
       this.runs.set(page.items);
       this.shell.observeReachable();
       // The runs are where a storefront refusal is legible, so the switch panel

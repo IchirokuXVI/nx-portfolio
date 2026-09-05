@@ -26,7 +26,8 @@
 # place is for. A cluster runs store discovery, which is two requests per postal
 # code per month, and it pays a fourth Postgres to do it. Catalog discovery is
 # 4,383 requests over tens of minutes, and it happens here, on a machine with room
-# for it, and nowhere else: MERCADONA_ENABLED is false in both clusters.
+# for it, and nowhere else: every chain's `supermarket_sources` row is off in both
+# clusters, which is the per chain switch (plan 0083).
 
 # The project name (container/network/volume namespace) is overridable so that
 # several git worktrees can each run a fully isolated copy of this stack at the

@@ -19,11 +19,16 @@ export type LocationItem = Wire.CatalogSupermarketLocationItemView;
  *
  * **`available` here is not the `available` on a price, and the two are not
  * shown as one checkbox.** On a price it is scope wide: this product is sold at
- * this scope. Here it is a nullable **override** meaning somebody checked this
- * specific shop, and null means "use whatever the scope says", which is a
- * different claim from "not available here". Two columns making two different
- * claims, so they carry two different labels and this one says what its empty
- * state means.
+ * this scope. Here it is a nullable claim about one shop, and null means "use
+ * whatever the scope says", which is a different claim from "not available
+ * here". Two columns making two different claims, so they carry two different
+ * labels and this one says what its empty state means.
+ *
+ * **Neither is written from its form.** Backend plan 0084 gave the per shop
+ * column provenance and took it off `supermarketLocationItem.upsert`, because a
+ * crawl writes it too now and the row has to record which writer did. So it is
+ * shown here and set through the availability route, exactly as the scope wide
+ * flag on a price already was.
  *
  * Three things about its shape, all of them the gateway's rather than choices:
  *
@@ -94,6 +99,13 @@ export const LOCATION_ITEMS = defineResource<LocationItem>({
       // scope. So the field is nullable, and clearing it is not the same as
       // saying no.
       nullable: true,
+      // **Read only since backend plan 0084.** The column carries provenance
+      // now, and `supermarketLocationItem.upsert` no longer writes it: a crawl
+      // writes it through `setAvailability`, and so does a person, so that the
+      // row records which of them said so and an automated fetch can be refused
+      // the ones a person filled. A checkbox on this form would send a field
+      // the route drops, which is worse than not offering one.
+      editable: false,
     },
   ],
 

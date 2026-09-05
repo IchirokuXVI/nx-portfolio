@@ -27,6 +27,7 @@ import {
   array,
   boolean,
   enumOf,
+  freeObject,
   integer,
   JsonSchema,
   nonEmptyString,
@@ -95,6 +96,7 @@ export const CATALOG_SCHEMA_IDS = {
   // Plan 0080: every price a source gave, and the policy that picks one.
   itemPriceOverride: schemaId('catalog/ItemPriceOverride'),
   itemPriceOverrides: schemaId('catalog/ItemPriceOverrides'),
+  itemPriceDetails: schemaId('catalog/ItemPriceDetails'),
   itemPriceView: schemaId('catalog/ItemPriceView'),
   itemPricePage: schemaId('catalog/ItemPricePage'),
   pricePolicyView: schemaId('catalog/PricePolicyView'),
@@ -105,6 +107,8 @@ export const CATALOG_SCHEMA_IDS = {
   addItemPriceBatchResult: schemaId('catalog/AddItemPriceBatchResult'),
   listItemPricesRequest: schemaId('msg/itemPrice.list/request'),
   itemPriceIdRequest: schemaId('msg/itemPrice.id/request'),
+  deleteItemPricesByRunRequest: schemaId('msg/itemPrice.deleteByRun/request'),
+  deleteItemPricesByRunResult: schemaId('catalog/DeleteItemPricesByRunResult'),
   setSupermarketItemAvailabilityRequest: schemaId(
     'msg/supermarketItem.setAvailability/request'
   ),
@@ -167,9 +171,19 @@ export const CATALOG_SCHEMA_IDS = {
   listLocationItemsRequest: schemaId(
     'msg/supermarketLocationItem.listByLocation/request'
   ),
+  setLocationItemAvailabilityRequest: schemaId(
+    'msg/supermarketLocationItem.setAvailability/request'
+  ),
+  locationItemAvailabilityConflict: schemaId(
+    'catalog/SupermarketLocationItemAvailabilityConflict'
+  ),
+  setLocationItemAvailabilityResult: schemaId(
+    'catalog/SetSupermarketLocationItemAvailabilityResult'
+  ),
 } as const;
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
+const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
 /** A kind, or null for a materialized row no price row stands behind (plan 0080). */
 const nullableSourceKind = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
@@ -424,6 +438,23 @@ const itemPriceOverrides: JsonSchema = {
   type: 'object',
   additionalProperties: ref(CATALOG_SCHEMA_IDS.itemPriceOverride),
 };
+/**
+ * What a leaflet printed beside a price (plan 0081, section 6.4). Stored
+ * verbatim on its own table and read by nothing but the admin price history;
+ * `promotion` and `loyalty` are the extractor objects exactly as they arrived,
+ * so neither is described field by field here.
+ */
+const itemPriceDetails = object(
+  CATALOG_SCHEMA_IDS.itemPriceDetails,
+  {
+    offerId: nullableString(),
+    page: integerOrNull(),
+    rawText: array(string()),
+    promotion: { anyOf: [freeObject(), { type: 'null' }] },
+    loyalty: { anyOf: [freeObject(), { type: 'null' }] },
+  },
+  ['offerId', 'page', 'rawText', 'promotion', 'loyalty']
+);
 const itemPriceView = object(
   CATALOG_SCHEMA_IDS.itemPriceView,
   {
@@ -445,6 +476,9 @@ const itemPriceView = object(
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceOverrides), { type: 'null' }],
     },
     protectedUntil: nullableString(),
+    details: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceDetails), { type: 'null' }],
+    },
   },
   [
     'id',
@@ -463,6 +497,7 @@ const itemPriceView = object(
     'lastObservedRunId',
     'overrides',
     'protectedUntil',
+    'details',
   ]
 );
 const itemPricePage = paginated(
@@ -493,8 +528,20 @@ const supermarketLocationItemView = object(
     supermarketLocationId: nonEmptyString(),
     positionInStore: nullableString(),
     available: { type: ['boolean', 'null'] },
+    availabilitySourceKind: nullableSourceKind(),
+    availabilityObservedAt: nullableString(),
+    availabilitySourceRunId: nullableString(),
   },
-  ['id', 'itemId', 'supermarketLocationId', 'positionInStore', 'available']
+  [
+    'id',
+    'itemId',
+    'supermarketLocationId',
+    'positionInStore',
+    'available',
+    'availabilitySourceKind',
+    'availabilityObservedAt',
+    'availabilitySourceRunId',
+  ]
 );
 
 const supermarketPage = paginated(
@@ -617,6 +664,9 @@ const listLocationsRequest = object(
   {
     userId: nonEmptyString(),
     supermarketId: nonEmptyString(),
+    // Admin plan 0011, section 4: free text over the label, the address and the
+    // town, for the reference picker that binds a source's shop to one of ours.
+    query: string(),
     // Plan 0066, section 4: only the shops that sell at this scope.
     priceScopeId: nonEmptyString(),
     // Plan 0073, section 4: the guessed postal codes, for the operator's review.
@@ -790,6 +840,12 @@ const itemPriceValues = {
   observedAt: nullableString(),
   validFrom: nullableString(),
   validUntil: nullableString(),
+  // The leaflet tile behind the row, when a leaflet import is writing it (plan
+  // 0081, section 6.4). Kept off `item_prices` itself: that table is read on
+  // every recompute.
+  details: {
+    anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceDetails), { type: 'null' }],
+  },
 };
 
 const addItemPriceRequest = object(
@@ -844,6 +900,20 @@ const itemPriceIdRequest = object(
   CATALOG_SCHEMA_IDS.itemPriceIdRequest,
   { ...adminCredentialProperties, itemPriceId: nonEmptyString() },
   ['userId', 'itemPriceId']
+);
+const deleteItemPricesByRunRequest = object(
+  CATALOG_SCHEMA_IDS.deleteItemPricesByRunRequest,
+  { ...adminCredentialProperties, sourceRunId: nonEmptyString() },
+  ['userId', 'sourceRunId']
+);
+const deleteItemPricesByRunResult = object(
+  CATALOG_SCHEMA_IDS.deleteItemPricesByRunResult,
+  {
+    deleted: integer({ minimum: 0 }),
+    reset: integer({ minimum: 0 }),
+    recomputed: integer({ minimum: 0 }),
+  },
+  ['deleted', 'reset', 'recomputed']
 );
 const setSupermarketItemAvailabilityRequest = object(
   CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityRequest,
@@ -1056,7 +1126,6 @@ const upsertLocationItemRequest = object(
     itemId: nonEmptyString(),
     supermarketLocationId: nonEmptyString(),
     positionInStore: nullableString(),
-    available: { type: ['boolean', 'null'] },
   },
   ['userId', 'itemId', 'supermarketLocationId']
 );
@@ -1079,6 +1148,41 @@ const listLocationItemsRequest = object(
     order: string(),
   },
   ['userId', 'supermarketLocationId']
+);
+const setLocationItemAvailabilityRequest = object(
+  CATALOG_SCHEMA_IDS.setLocationItemAvailabilityRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketLocationId: nonEmptyString(),
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    sourceRunId: nullableString(),
+    observedAt: string(),
+    entries: array({
+      type: 'object',
+      properties: { itemId: nonEmptyString(), available: boolean() },
+      required: ['itemId', 'available'],
+      additionalProperties: false,
+    }),
+  },
+  ['userId', 'supermarketLocationId', 'sourceKind', 'entries']
+);
+const locationItemAvailabilityConflict = object(
+  CATALOG_SCHEMA_IDS.locationItemAvailabilityConflict,
+  {
+    itemId: nonEmptyString(),
+    held: { type: ['boolean', 'null'] },
+    offered: boolean(),
+  },
+  ['itemId', 'held', 'offered']
+);
+const setLocationItemAvailabilityResult = object(
+  CATALOG_SCHEMA_IDS.setLocationItemAvailabilityResult,
+  {
+    written: integer({ minimum: 0 }),
+    skipped: integer({ minimum: 0 }),
+    conflicts: array(ref(CATALOG_SCHEMA_IDS.locationItemAvailabilityConflict)),
+  },
+  ['written', 'skipped', 'conflicts']
 );
 
 // --- Postal code geography (plan 0060, sections 5 and 7) --------------------
@@ -1384,6 +1488,7 @@ export const catalogSchemas: JsonSchema[] = [
   findItemByEanResult,
   itemPriceOverride,
   itemPriceOverrides,
+  itemPriceDetails,
   itemPriceView,
   itemPricePage,
   pricePolicyView,
@@ -1394,6 +1499,8 @@ export const catalogSchemas: JsonSchema[] = [
   addItemPriceBatchResult,
   listItemPricesRequest,
   itemPriceIdRequest,
+  deleteItemPricesByRunRequest,
+  deleteItemPricesByRunResult,
   setSupermarketItemAvailabilityRequest,
   setSupermarketItemAvailabilityResult,
   listPricePoliciesRequest,
@@ -1415,6 +1522,9 @@ export const catalogSchemas: JsonSchema[] = [
   upsertLocationItemRequest,
   getLocationItemRequest,
   listLocationItemsRequest,
+  setLocationItemAvailabilityRequest,
+  locationItemAvailabilityConflict,
+  setLocationItemAvailabilityResult,
   postalCodeDistanceView,
   resolveNearestPostalCodeRequest,
   nearestPostalCodeView,
@@ -1548,6 +1658,10 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.itemPriceIdRequest,
     response: COMMON_IDS.idResult,
   },
+  [ITEM_PRICE_PATTERNS.deleteByRun]: {
+    request: CATALOG_SCHEMA_IDS.deleteItemPricesByRunRequest,
+    response: CATALOG_SCHEMA_IDS.deleteItemPricesByRunResult,
+  },
   [PRICE_POLICY_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listPricePoliciesRequest,
     response: CATALOG_SCHEMA_IDS.pricePolicyListView,
@@ -1611,6 +1725,10 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_LOCATION_ITEM_PATTERNS.listByLocation]: {
     request: CATALOG_SCHEMA_IDS.listLocationItemsRequest,
     response: CATALOG_SCHEMA_IDS.supermarketLocationItemPage,
+  },
+  [SUPERMARKET_LOCATION_ITEM_PATTERNS.setAvailability]: {
+    request: CATALOG_SCHEMA_IDS.setLocationItemAvailabilityRequest,
+    response: CATALOG_SCHEMA_IDS.setLocationItemAvailabilityResult,
   },
   [POSTAL_CODE_PATTERNS.nearest]: {
     request: CATALOG_SCHEMA_IDS.resolveNearestPostalCodeRequest,

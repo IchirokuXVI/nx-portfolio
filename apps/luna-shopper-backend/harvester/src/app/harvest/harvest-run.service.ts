@@ -25,16 +25,46 @@ import {
   getRequestContext,
 } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
-import { ActiveRunExistsError, HarvestRunStore } from './harvest-run.store';
+import { CatalogClient } from './catalog-client.service';
+import {
+  ActiveRunExistsError,
+  DocumentAlreadyImportedError,
+  HarvestRunStore,
+} from './harvest-run.store';
 import { toHarvestRunView } from './harvest.mappers';
+import { readLeafletDocument } from './leaflet-document.reader';
+import { resolveLeafletWindow } from './leaflet-validity';
 import { PlatformAdminService } from './platform-admin.service';
 import { RunExecutor } from './run-executor.service';
+import { SourceAliasService } from './source-alias.service';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface RunCursor {
   value: string;
   id: string;
 }
+
+/**
+ * The modes that write prices, and therefore the modes a revert means anything
+ * for (plan 0082, section 5).
+ *
+ * A `STORE_DISCOVERY` run writes no price at all: it finds shops. Reverting one
+ * would delete nothing and mark it anyway, which reads as an act that happened
+ * when none did.
+ */
+const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
+  HarvestRunMode.LEAFLET_IMPORT,
+  HarvestRunMode.REFRESH,
+  HarvestRunMode.CATALOG_DISCOVERY,
+];
+
+/** The statuses a run never leaves, and the only ones a revert is offered on. */
+const FINISHED_STATUSES: readonly HarvestRunStatus[] = [
+  HarvestRunStatus.COMPLETED,
+  HarvestRunStatus.FAILED,
+  HarvestRunStatus.ABORTED,
+  HarvestRunStatus.STALE,
+];
 
 /**
  * The run surface (plan 0038, section 7), platform admin gated like everything
@@ -55,6 +85,8 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     private readonly store: HarvestRunStore,
     private readonly executor: RunExecutor,
     private readonly sources: SupermarketSourceService,
+    private readonly aliases: SourceAliasService,
+    private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService
   ) {}
@@ -96,17 +128,24 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const { supermarketId, priceScopeId, payload } = this.validate(req);
+    const { supermarketId, priceScopeId, payload, documentSha256 } =
+      this.validate(req);
     const source = supermarketId
       ? await this.sources.findBySupermarket(supermarketId)
       : null;
-    if (supermarketId && !source) {
+    // A LEAFLET_IMPORT needs no source and must not be refused for wanting one
+    // (plan 0081, section 1). `SupermarketSource` is fetching configuration, an
+    // upload fetches nothing, and a chain that publishes only leaflets has no
+    // row at all. The run still carries `sourceId: null` where the chain does
+    // have one, because no source was used.
+    const needsSource = req.mode !== HarvestRunMode.LEAFLET_IMPORT;
+    if (needsSource && supermarketId && !source) {
       throw new ValidationException(
         'That supermarket has no configured source. Create one with ' +
           'supermarketSource.upsert before starting a run.'
       );
     }
-    if (source && !source.enabled) {
+    if (needsSource && source && !source.enabled) {
       throw new ValidationException(
         'That source is disabled. Enable it with supermarketSource.setEnabled.'
       );
@@ -117,11 +156,12 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         mode: req.mode,
         trigger: HarvestRunTrigger.MANUAL,
         supermarketId,
-        sourceId: source?.id ?? null,
+        sourceId: needsSource ? (source?.id ?? null) : null,
         priceScopeId,
         requestedByUserId: req.userId,
         correlationId: getRequestContext()?.correlationId ?? null,
         payload,
+        documentSha256,
       });
       // The reaper compares heartbeats, so a run gets one the moment it exists
       // rather than when it starts working: a process that dies in between would
@@ -130,6 +170,17 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       this.executor.start(run.id);
       return toHarvestRunView(run);
     } catch (error) {
+      if (error instanceof DocumentAlreadyImportedError) {
+        // A different sentence from the one below, because the next step is
+        // different: this file is already imported, and importing it again
+        // means reverting that run first (plan 0081, section 7).
+        throw new ConflictException(
+          error.existingRunId
+            ? `That document has already been imported for this chain by run ` +
+                `${error.existingRunId}. Revert that run to import it again.`
+            : 'That document has already been imported for this chain'
+        );
+      }
       if (error instanceof ActiveRunExistsError) {
         // A 409 carrying the active run's id, so the caller can watch that one
         // instead of guessing (section 7).
@@ -153,6 +204,73 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     const run = await this.store.requestAbort(req.runId);
     this.executor.cancel(req.runId);
     return toHarvestRunView(run);
+  }
+
+  /**
+   * Take back everything a run wrote (plan 0082).
+   *
+   * A revert is a **hard delete** of the rows the run wrote, followed by a
+   * recompute of every key it touched. It is not a retraction flag: the owner's
+   * decision is that a reverted run must not introduce anything, and a wrong
+   * price kept behind a flag is still a number somebody can draw a chart from.
+   * That does not contradict the rule that old prices are never lost. A
+   * superseded price is a true statement about a day and is never deleted by
+   * any path; a reverted run's rows are claims the owner says were wrong, and
+   * keeping those falsifies the record in the other direction.
+   *
+   * **Not the same act as an abort**, which is why a run has to be finished
+   * before this is offered. An abort stops a run and keeps what it already
+   * fetched, because prices already fetched are valid data. A `PENDING` or
+   * `RUNNING` run is refused here: abort it first, then revert what it flushed.
+   *
+   * **Two databases, and the order matters.** Catalog goes first. A failure
+   * after it leaves the prices gone and the run not yet marked, and a second
+   * call finds nothing left to delete, deletes the aliases and completes the
+   * mark: the operation is idempotent up to the mark, and a retry is always the
+   * right response to a failure. The other order would show a run as reverted
+   * whose prices still existed.
+   *
+   * Setting `revertedAt` is also what lets a corrected upload of the same
+   * document through plan 0081's per document dedupe index, which excludes
+   * reverted runs for exactly this reason.
+   */
+  async revert(req: HarvestRunIdRequest): Promise<HarvestRunView> {
+    const userId = await this.admin.requireAdmin(req);
+    const run = await this.store.load(req.runId);
+
+    if (run.revertedAt) {
+      // There is nothing left to revert, and the second request is a mistake
+      // worth telling the caller about rather than answering with a shrug.
+      throw new ConflictException(
+        `That run was already reverted at ${run.revertedAt.toISOString()}.`
+      );
+    }
+    if (!FINISHED_STATUSES.includes(run.status)) {
+      throw new ConflictException(
+        `A ${run.status} run cannot be reverted. Abort it first, then revert ` +
+          'what it flushed.'
+      );
+    }
+    if (!PRICE_WRITING_MODES.includes(run.mode)) {
+      throw new ValidationException(
+        `A ${run.mode} run writes no price, so there is nothing to revert.`
+      );
+    }
+
+    const prices = await this.catalog.deletePricesByRun(run.id);
+    const aliases = await this.aliases.deleteUndecidedFrom(run.id);
+    const reverted = await this.store.markReverted(
+      run.id,
+      userId,
+      prices.deleted
+    );
+
+    this.logger.log(
+      `Reverted run ${run.id}: ${prices.deleted} price row(s) deleted, ` +
+        `${prices.reset} confirmation(s) withdrawn, ${prices.recomputed} key(s) ` +
+        `recomputed, ${aliases} undecided alias(es) removed.`
+    );
+    return toHarvestRunView(reverted);
   }
 
   async get(req: HarvestRunIdRequest): Promise<HarvestRunView> {
@@ -179,6 +297,13 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     }
     if (req.status) {
       qb.andWhere('r.status = :status', { status: req.status });
+    }
+    if (req.reverted !== undefined) {
+      // A filter of its own rather than a status (plan 0082, section 6): a
+      // revert does not change how the run ended.
+      qb.andWhere(
+        req.reverted ? 'r."revertedAt" IS NOT NULL' : 'r."revertedAt" IS NULL'
+      );
     }
     if (cursor) {
       qb.andWhere('(r."requestedAt", r.id) < (:cv, :cid)', {
@@ -211,7 +336,9 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
    */
   async reapStale(): Promise<void> {
     try {
-      const reaped = await this.store.reapStale(this.settings().staleAfterSeconds);
+      const reaped = await this.store.reapStale(
+        this.settings().staleAfterSeconds
+      );
       if (reaped > 0) {
         this.logger.warn(`Reaped ${reaped} stale harvest run(s)`);
       }
@@ -231,7 +358,11 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     supermarketId: string | null;
     priceScopeId: string | null;
     payload: Record<string, unknown>;
+    documentSha256: string | null;
   } {
+    if (req.mode === HarvestRunMode.LEAFLET_IMPORT) {
+      return this.validateLeaflet(req);
+    }
     if (req.mode === HarvestRunMode.STORE_DISCOVERY) {
       if (!req.postalCode) {
         throw new ValidationException(
@@ -241,6 +372,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       return {
         supermarketId: null,
         priceScopeId: null,
+        documentSha256: null,
         payload: {
           postalCode: req.postalCode,
           country: req.country ?? 'es',
@@ -264,9 +396,71 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     return {
       supermarketId: req.supermarketId,
       priceScopeId: req.priceScopeId ?? null,
+      documentSha256: null,
       payload: {
         supermarketId: req.supermarketId,
         priceScopeId: req.priceScopeId ?? null,
+      },
+    };
+  }
+
+  /**
+   * A leaflet import needs a chain, a scope and a document (plan 0081, section
+   * 1), and its validity has to resolve before the run exists.
+   *
+   * The document is validated **here**, in the harvester, because the harvester
+   * owns the schema version and a broker message is not a trusted input: the
+   * gateway's own validation is the first of the two the plan asks for, not the
+   * only one.
+   *
+   * The window is resolved here too, so a run with a null bound is refused
+   * before it is inserted rather than failing eighteen offers in, and so the
+   * instants are stored on the run for an alias accept to write with later
+   * (section 3).
+   */
+  private validateLeaflet(req: SpawnHarvestRunRequest): {
+    supermarketId: string | null;
+    priceScopeId: string | null;
+    payload: Record<string, unknown>;
+    documentSha256: string | null;
+  } {
+    if (!req.supermarketId) {
+      throw new ValidationException(
+        'A leaflet import needs the chain the leaflet is from. `chain_id` in ' +
+          'the document is a hint the upload screen shows, never a lookup key.'
+      );
+    }
+    if (!req.priceScopeId) {
+      throw new ValidationException(
+        'A leaflet import needs the price scope to write the prices for. Most ' +
+          'leaflets are nationwide, so that is usually the chain NATIONAL scope.'
+      );
+    }
+    if (!req.document) {
+      throw new ValidationException('A leaflet import needs a document.');
+    }
+
+    const document = readLeafletDocument(req.document);
+    const window = resolveLeafletWindow({
+      documentStartsOn: document.validity.starts_on,
+      documentEndsOn: document.validity.ends_on,
+      overrideFrom: req.validFrom,
+      overrideUntil: req.validUntil,
+    });
+
+    return {
+      supermarketId: req.supermarketId,
+      priceScopeId: req.priceScopeId,
+      documentSha256: document.source.sha256,
+      payload: {
+        supermarketId: req.supermarketId,
+        priceScopeId: req.priceScopeId,
+        // The resolved instants, not the local days: the runner writes them
+        // onto every price row and an accept reads them back to decide whether
+        // this import is still open.
+        validFrom: window.validFrom.toISOString(),
+        validUntil: window.validUntil.toISOString(),
+        document,
       },
     };
   }

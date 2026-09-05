@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpStatus,
   Param,
@@ -13,9 +15,13 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
+  HarvestRunMode,
   ITEM_SOURCE_REF_PATTERNS,
+  SOURCE_ALIAS_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
+  SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
+  validateLeafletDocument,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlacePage,
   type DiscoveredPlaceView,
@@ -24,7 +30,12 @@ import {
   type ItemSourceRefPage,
   type ItemSourceRefView,
   type ItemView,
+  type SourceAliasAcceptResult,
+  type SourceAliasPage,
+  type SourceAliasView,
   type SourceCatalogEntryPage,
+  type SourceLocationPage,
+  type SourceLocationView,
   type SupermarketSourcePage,
   type SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
@@ -35,15 +46,21 @@ import { ActingAdmin } from '../admin/current-admin.decorator';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  AcceptSourceAliasDto,
+  CreateItemFromAliasDto,
   CreateItemFromEntryDto,
   DiscoveredPlaceGroupQueryDto,
   DiscoveredPlaceListQueryDto,
   HarvestRunListQueryDto,
   ImportDiscoveredPlaceDto,
+  ImportLeafletDto,
   ItemSourceRefListQueryDto,
+  MapSourceLocationDto,
   SetManualItemSourceRefDto,
   SetSourceEnabledDto,
+  SourceAliasListQueryDto,
   SourceEntryListQueryDto,
+  SourceLocationListQueryDto,
   SpawnHarvestRunDto,
   UpsertSupermarketSourceDto,
 } from './harvest.dto';
@@ -109,6 +126,7 @@ export class AdminHarvestRunsController {
       supermarketId: query.supermarketId,
       mode: query.mode,
       status: query.status,
+      reverted: query.reverted,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -141,6 +159,215 @@ export class AdminHarvestRunsController {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.abort, {
       ...adminCredential(admin),
       runId: id,
+    });
+  }
+
+  /**
+   * Take back everything the run wrote (plan 0082).
+   *
+   * The opposite of the route above it, and the pairing is the point: an abort
+   * stops a run and **keeps** what it already fetched, this deletes what it
+   * wrote. So a run has to have finished before this is allowed: abort it
+   * first, then revert what it flushed.
+   *
+   * Answers the run with `revertedAt` and the counts the operation produced,
+   * 409 for a run that was already reverted or is still going, and 400 for a
+   * mode that writes no price.
+   */
+  @Post(':id/revert')
+  @ApiContractResponse(HARVEST_PATTERNS.revert, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, conflict: true })
+  revert(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<HarvestRunView> {
+    return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.revert, {
+      ...adminCredential(admin),
+      runId: id,
+    });
+  }
+}
+
+/**
+ * The leaflet upload (plan 0081, section 7).
+ *
+ * **This is the only route in the gateway with its own body limit.** Nest's JSON
+ * parser defaults to 100 KB and this gateway configured none, so every real
+ * leaflet (337 KB and 349 KB for the two committed extractions) was refused with
+ * a bare 413 before the route existed. `main.ts` creates the app with
+ * `bodyParser: false` and mounts this path's parser at `LEAFLET_MAX_BYTES`
+ * ahead of the default one.
+ *
+ * Multipart is deliberately not used: the admin produces JSON, the schema
+ * validates JSON, and a form part around it adds a parse step for nothing.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/leaflets', version: '1' })
+export class AdminHarvestLeafletsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Validate the document, then start a `LEAFLET_IMPORT` run for it.
+   *
+   * The validation here is the first of two (section 4). It happens **before**
+   * the document crosses the broker, so a malformed file is answered in
+   * milliseconds with every failure named by its JSON path and its offer id
+   * rather than after a run has been inserted. The harvester validates again at
+   * spawn, because it owns the schema version and a broker message is not a
+   * trusted input.
+   *
+   * Answers the PENDING run, like the spawn route beside it, and 409 with the
+   * earlier run's id when this chain has already imported this exact file.
+   */
+  @Post()
+  @ApiContractResponse(HARVEST_PATTERNS.spawn, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, conflict: true })
+  importLeaflet(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: ImportLeafletDto
+  ): Promise<HarvestRunView> {
+    const { valid, failures } = validateLeafletDocument(dto.document);
+    if (!valid) {
+      // One line per failure, each starting with the JSON path, because the
+      // house filter keys the envelope's `errors` map on the first word. The
+      // offer id rides in the text so the upload screen can highlight the tile
+      // rather than an array index nobody can find in the file.
+      throw new BadRequestException({
+        error: 'The leaflet document does not match the import schema',
+        message: failures.map(
+          (failure) =>
+            `${failure.path || '/'} ${failure.message}` +
+            (failure.offerId ? ` (offer ${failure.offerId})` : '')
+        ),
+      });
+    }
+
+    return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.spawn, {
+      ...adminCredential(admin),
+      mode: HarvestRunMode.LEAFLET_IMPORT,
+      supermarketId: dto.supermarketId,
+      priceScopeId: dto.priceScopeId,
+      validFrom: dto.validFrom ?? null,
+      validUntil: dto.validUntil ?? null,
+      document: dto.document,
+    });
+  }
+}
+
+/**
+ * The queue of printed names a leaflet import could not resolve (plan 0081,
+ * sections 2 and 3).
+ *
+ * Three decisions per row, and **all three are a person's**: accept to a product
+ * the catalog holds, accept as a new product, or reject. A run proposes and
+ * never binds, because a bad fuzzy match writes a wrong price onto a real
+ * product that people then shop on.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({
+  path: 'admin/harvest/supermarkets/:supermarketId/aliases',
+  version: '1',
+})
+export class AdminHarvestAliasesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('supermarketId') supermarketId: string,
+    @Query() query: SourceAliasListQueryDto
+  ): Promise<SourceAliasPage> {
+    return this.nats.send<SourceAliasPage>(SOURCE_ALIAS_PATTERNS.list, {
+      ...adminCredential(admin),
+      supermarketId,
+      status: query.status,
+      query: query.query,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+}
+
+/**
+ * The three decisions themselves, addressed by the alias rather than by the
+ * chain: an alias id is unique, and an operator acting on a row has it.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/aliases', version: '1' })
+export class AdminHarvestAliasDecisionsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Bind a printed name to a product, and write the price it was queued for.
+   *
+   * The write is the half that is easy to miss: the run that queued this row is
+   * over, the offer sits in its stored document, and without writing here an
+   * admin who works the queue would have to upload the same file again to get
+   * the prices he just resolved.
+   */
+  @Post(':id/accept')
+  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.accept, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  accept(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: AcceptSourceAliasDto
+  ): Promise<SourceAliasAcceptResult> {
+    return this.nats.send<SourceAliasAcceptResult>(
+      SOURCE_ALIAS_PATTERNS.accept,
+      { ...adminCredential(admin), aliasId: id, itemId: dto.itemId }
+    );
+  }
+
+  /**
+   * The same, for a product the catalog does not hold yet: one call that
+   * creates the item and binds the alias, the way `entries/:entryId/item` does
+   * for a discovery entry. `name.en` may be left out (plan 0079).
+   */
+  @Post(':id/item')
+  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.createItem, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  createItem(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: CreateItemFromAliasDto
+  ): Promise<SourceAliasAcceptResult> {
+    return this.nats.send<SourceAliasAcceptResult>(
+      SOURCE_ALIAS_PATTERNS.createItem,
+      { ...adminCredential(admin), aliasId: id, ...dto }
+    );
+  }
+
+  /**
+   * Not a product he tracks. The row stays as REJECTED rather than being
+   * deleted, so the next leaflet that prints the string skips it with a warning
+   * instead of asking again.
+   */
+  @Post(':id/reject')
+  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.reject, {
+    status: HttpStatus.CREATED,
+  })
+  reject(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<SourceAliasView> {
+    return this.nats.send<SourceAliasView>(SOURCE_ALIAS_PATTERNS.reject, {
+      ...adminCredential(admin),
+      aliasId: id,
     });
   }
 }
@@ -235,7 +462,10 @@ export class AdminHarvestPlacesController {
 @ApiBearerAuth('access-token')
 @UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
-@Controller({ path: 'admin/harvest/supermarkets/:supermarketId/entries', version: '1' })
+@Controller({
+  path: 'admin/harvest/supermarkets/:supermarketId/entries',
+  version: '1',
+})
 export class AdminHarvestEntriesController {
   constructor(private readonly nats: NatsClient) {}
 
@@ -355,6 +585,100 @@ export class AdminHarvestItemRefsController {
       ...adminCredential(admin),
       refId: id,
     });
+  }
+}
+
+/**
+ * The shops a source names, and the mappings that let a run write availability
+ * for them (plan 0084, section 7).
+ *
+ * The fourth review queue, beside places, entries and item refs. A row here is a
+ * decision with three outcomes, one of which binds a foreign record, and none of
+ * which is "edit this row's fields": `externalId` and `printedName` are the
+ * source's, and no route offers to change either.
+ *
+ * **Mapping a shop does not backfill it.** The availability the run skipped
+ * stays skipped until the next run, and the back office says so at the moment of
+ * mapping. Without that line the natural reading of a green `ACTIVE` badge is
+ * "the data is here now", and it is not.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/shops', version: '1' })
+export class AdminHarvestShopsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: SourceLocationListQueryDto
+  ): Promise<SourceLocationPage> {
+    return this.nats.send<SourceLocationPage>(SOURCE_LOCATION_PATTERNS.list, {
+      ...adminCredential(admin),
+      supermarketId: query.supermarketId,
+      status: query.status,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  @Put(':id/location')
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.map)
+  @ApiProblemResponses({ body: true })
+  map(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: MapSourceLocationDto
+  ): Promise<SourceLocationView> {
+    return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.map, {
+      ...adminCredential(admin),
+      sourceLocationId: id,
+      supermarketLocationId: dto.supermarketLocationId,
+    });
+  }
+
+  @Delete(':id/location')
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.unmap)
+  unmap(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<SourceLocationView> {
+    return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.unmap, {
+      ...adminCredential(admin),
+      sourceLocationId: id,
+    });
+  }
+
+  /** A place the source lists that we do not sell from. */
+  @Post(':id/ignore')
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.ignore, {
+    status: HttpStatus.CREATED,
+  })
+  ignore(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<SourceLocationView> {
+    return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.ignore, {
+      ...adminCredential(admin),
+      sourceLocationId: id,
+    });
+  }
+
+  @Post(':id/unignore')
+  @ApiContractResponse(SOURCE_LOCATION_PATTERNS.unignore, {
+    status: HttpStatus.CREATED,
+  })
+  unignore(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<SourceLocationView> {
+    return this.nats.send<SourceLocationView>(
+      SOURCE_LOCATION_PATTERNS.unignore,
+      { ...adminCredential(admin), sourceLocationId: id }
+    );
   }
 }
 

@@ -4,14 +4,20 @@ import {
   DiscoveredPlaceStatus,
   HarvestRunMode,
   HarvestRunStatus,
-  ItemSourceRefStatus,
   ItemCategory,
+  ItemSourceRefStatus,
+  SourceAliasStatus,
+  SourceLocationStatus,
+  UnitOfMeasure,
   type AdapterKey,
+  type LeafletDocument,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
   IsInt,
@@ -23,6 +29,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 /**
@@ -48,7 +55,8 @@ export class SpawnHarvestRunDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'The scope a REFRESH writes its prices for. Required for REFRESH.',
+    description:
+      'The scope a REFRESH writes its prices for. Required for REFRESH.',
   })
   @IsOptional()
   @IsUUID()
@@ -91,6 +99,125 @@ export class SpawnHarvestRunDto {
   @IsArray()
   @IsString({ each: true })
   brandKeys?: string[];
+}
+
+/**
+ * The name a product created from a queued leaflet row is saved with (plan
+ * 0081, section 3; plan 0079).
+ *
+ * One locale is enough: a leaflet prints Spanish, and a product with no English
+ * name is legal since plan 0079. A reader in English sees the Spanish string
+ * through the fallback, and the catalog screens list what still wants
+ * translating.
+ */
+export class LocalizedNameDto {
+  @ApiPropertyOptional({ maxLength: 200 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  es?: string;
+
+  @ApiPropertyOptional({ maxLength: 200 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  en?: string;
+}
+
+/**
+ * One leaflet upload (plan 0081, section 7).
+ *
+ * The document is **not** described field by field here. It has its own
+ * versioned JSON Schema in the contracts library, the gateway validates against
+ * that before the document crosses the broker, and restating the shape as a DTO
+ * would be a second copy to drift from the first.
+ */
+export class ImportLeafletDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The chain this leaflet is from. The document `retailer.chain_id` is a hint the upload screen shows beside this picker and is never a lookup key: two extractors spell one chain two ways.',
+  })
+  @IsUUID()
+  supermarketId!: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The scope the prices are written for. Most leaflets are nationwide, so usually the chain NATIONAL scope, which then reaches every scope of that chain.',
+  })
+  @IsUUID()
+  priceScopeId!: string;
+
+  @ApiPropertyOptional({
+    format: 'date',
+    description:
+      'Override the document `validity.starts_on`, as a local day in Spain. Required when the document states none: the backend refuses a run with a null bound.',
+  })
+  @IsOptional()
+  @IsDateString()
+  validFrom?: string;
+
+  @ApiPropertyOptional({
+    format: 'date',
+    description:
+      'Override the document `validity.ends_on`, as a local day in Spain. Inclusive: a leaflet valid to the 23rd is valid through the whole of the 23rd.',
+  })
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string;
+
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: true,
+    description:
+      'The leaflet, as `tmp/leaflet` produced it. Validated against the versioned import schema this backend can read; a document that fails is answered 400 with every failure named by its JSON path and its offer id.',
+  })
+  @IsObject()
+  document!: LeafletDocument;
+}
+
+/** Bind a queued printed name to a product the catalog already holds. */
+export class AcceptSourceAliasDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  itemId!: string;
+}
+
+/**
+ * Create the product a queued printed name is for, and bind it, in one call.
+ * The alias keeps what the leaflet printed whatever the item is called.
+ */
+export class CreateItemFromAliasDto {
+  @ApiProperty({ type: LocalizedNameDto })
+  @ValidateNested()
+  @Type(() => LocalizedNameDto)
+  name!: LocalizedNameDto;
+
+  @ApiPropertyOptional({ maxLength: 120, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  brand?: string | null;
+
+  @ApiPropertyOptional({ maxLength: 32, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  ean?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  unitSize?: number | null;
+
+  @ApiProperty({ enum: ItemCategory })
+  @IsEnum(ItemCategory)
+  category!: ItemCategory;
+
+  @ApiProperty({ enum: UnitOfMeasure })
+  @IsEnum(UnitOfMeasure)
+  defaultUnit!: UnitOfMeasure;
 }
 
 export class ImportDiscoveredPlaceDto {
@@ -183,6 +310,17 @@ export class UpsertSupermarketSourceDto {
   maxRequestsPerSecond?: number;
 }
 
+/** Bind one source shop to a catalog location (plan 0084, section 7). */
+export class MapSourceLocationDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Must belong to the same chain as the row being mapped; the harvester checks that against catalog rather than trusting the picker.',
+  })
+  @IsUUID()
+  supermarketLocationId!: string;
+}
+
 export class SetSourceEnabledDto {
   @ApiProperty()
   @IsBoolean()
@@ -206,6 +344,14 @@ export class HarvestRunListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(HarvestRunStatus)
   status?: HarvestRunStatus;
+
+  @ApiPropertyOptional({
+    description:
+      'Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  reverted?: boolean;
 }
 
 export class DiscoveredPlaceListQueryDto extends PageQueryDto {
@@ -214,7 +360,9 @@ export class DiscoveredPlaceListQueryDto extends PageQueryDto {
   @IsUUID()
   runId?: string;
 
-  @ApiPropertyOptional({ description: 'A `brand:wikidata` key, e.g. `Q377705`.' })
+  @ApiPropertyOptional({
+    description: 'A `brand:wikidata` key, e.g. `Q377705`.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(32)
@@ -248,6 +396,55 @@ export class SourceEntryListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsBoolean()
   unmatchedOnly?: boolean;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
+}
+
+/**
+ * The shops queue, one chain at a time (plan 0084, section 7).
+ *
+ * `supermarketId` is **on the DTO** rather than a `@Query('supermarketId')`
+ * argument beside it. `createValidationPipe` sets `whitelist` with
+ * `forbidNonWhitelisted`, so a property the declared class does not carry is
+ * refused with a 400 however correctly the handler then reads it from a
+ * parameter of its own.
+ */
+export class SourceLocationListQueryDto extends PageQueryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  supermarketId!: string;
+
+  @ApiPropertyOptional({
+    enum: SourceLocationStatus,
+    description:
+      'The queue defaults to UNMAPPED in the back office, because it exists to be drained. The other two are reachable so a wrong mapping can be found and undone.',
+  })
+  @IsOptional()
+  @IsEnum(SourceLocationStatus)
+  status?: SourceLocationStatus;
+}
+
+/**
+ * The alias queue, per chain. The chain is chosen first, as the entries queue
+ * does, because the queue is per chain by construction.
+ *
+ * The chain is a path segment here rather than a property on this class, so the
+ * trap plan 0084 met next door does not apply: `forbidNonWhitelisted` refuses a
+ * QUERY parameter the class does not declare, and a route parameter is not one.
+ */
+export class SourceAliasListQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    enum: SourceAliasStatus,
+    description:
+      'Absent lists CANDIDATE and UNRESOLVED, which is the queue: the rows waiting for a person.',
+  })
+  @IsOptional()
+  @IsEnum(SourceAliasStatus)
+  status?: SourceAliasStatus;
 
   @ApiPropertyOptional({ maxLength: 120 })
   @IsOptional()

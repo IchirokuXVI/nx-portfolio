@@ -31,9 +31,11 @@ export class SupermarketSource extends BaseEntity {
   adapterKey!: AdapterKey;
 
   /**
-   * Off by default. `MERCADONA_ENABLED` is the other half of the switch: if the
-   * chain ever objects, the flag goes false and the catalog keeps working on hand
-   * entered prices (section 8.1).
+   * Off by default, and **the** per chain switch (plan 0083). If a chain ever
+   * objects, this row goes false and the catalog keeps working on hand entered
+   * prices (section 8.1). It is written from the back office through
+   * `supermarketSource.setEnabled`, so turning one chain off takes no redeploy
+   * and adding a chain adds a row rather than an environment variable.
    */
   @Column({ type: 'boolean', default: false })
   enabled!: boolean;

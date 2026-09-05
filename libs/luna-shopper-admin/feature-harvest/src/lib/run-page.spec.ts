@@ -46,21 +46,71 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     updated: 900,
     unchanged: 800,
     notFound: 84,
+    // What a rule dropped, which a crawl never does and a leaflet import does
+    // six times over (backend plan 0081, section 7).
+    skipped: 0,
     failed: 16,
     stage: 'fetch-products',
     stageLabel: 'Fetching products',
+    warnings: [],
+    documentSha256: null,
     abortRequestedAt: null,
     error: null,
+    report: {},
     correlationId: 'cid-1',
     requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
     ...over,
   };
 }
 
-async function render(answer: HarvestRun): Promise<ComponentFixture<RunPage>> {
+/** A leaflet import that finished, with one warning of each shape. */
+function leafletRun(over: Partial<HarvestRun> = {}): HarvestRun {
+  return run({
+    mode: 'LEAFLET_IMPORT',
+    status: 'COMPLETED',
+    supermarketId: 'sm_deza',
+    totalPlanned: 48,
+    processed: 48,
+    notFound: 5,
+    skipped: 6,
+    failed: 0,
+    stage: null,
+    stageLabel: null,
+    finishedAt: '2026-09-03T07:20:09.000Z',
+    documentSha256: 'f62fa7ac367008e1',
+    warnings: [
+      {
+        code: 'LOYALTY_REQUIRED',
+        offerId: 'p36-o01',
+        page: 36,
+        name: 'Champu Elvive',
+        message: 'Skipped: the price is for loyalty card holders.',
+      },
+      {
+        // The extractor's own lost tile, carried through, so what it lost and
+        // what the import dropped read in one table.
+        code: 'EXTRACTOR',
+        offerId: null,
+        page: 2,
+        name: null,
+        message: 'tile has no readable price',
+      },
+    ],
+    ...over,
+  });
+}
+
+async function render(
+  answer: HarvestRun,
+  reverted?: HarvestRun
+): Promise<ComponentFixture<RunPage>> {
   const service = {
     readRun: async () => answer,
     abortRun: async () => answer,
+    revertRun: async () => reverted ?? answer,
   } as unknown as HarvestServiceI;
 
   TestBed.resetTestingModule();
@@ -154,19 +204,20 @@ describe('RunPage, arriving mid run', () => {
   });
 
   /**
-   * A failure naming one of the three switches is translated into this app's own
+   * A failure naming one of the switches is translated into this app's own
    * explanation, rather than shown as the harvester's raw sentence.
    */
-  it('explains a run that the storefront switch stopped', async () => {
+  it('explains a run that the service switch stopped', async () => {
     const fixture = await render(
       run({
         status: 'FAILED',
-        error: 'MERCADONA_ENABLED is false, so this deployment does not fetch.',
+        error:
+          'Harvesting is disabled on this deployment (HARVEST_ENABLED is false).',
       })
     );
 
     expect(fixture.componentInstance.blockedKey()).toBe(
-      'harvest.blocked.storefront-off'
+      'harvest.blocked.service-off'
     );
     fixture.componentInstance.watch.stop();
   });
@@ -197,6 +248,19 @@ describe('RunPage, arriving mid run', () => {
     fixture.componentInstance.watch.stop();
   });
 
+  /**
+   * `skipped` is a counter of its own and not folded into `failed` (backend
+   * plan 0081, section 7). A loyalty gated offer is dropped on purpose, and
+   * reporting six of those as failures would report a working import as broken.
+   */
+  it('counts what a rule dropped separately from what failed', async () => {
+    const fixture = await render(leafletRun());
+
+    expect(text(fixture)).toContain('harvest.run.counter.skipped');
+    expect(fixture.componentInstance.watch.run()?.skipped).toBe(6);
+    fixture.componentInstance.watch.stop();
+  });
+
   /** The teardown is on the component, because a route injector is never destroyed. */
   it('stops watching when the screen goes away', async () => {
     const fixture = await render(run());
@@ -206,5 +270,183 @@ describe('RunPage, arriving mid run', () => {
     fixture.destroy();
 
     expect(stop).toHaveBeenCalled();
+  });
+});
+
+/**
+ * The leaflet half of the run screen (admin plan 0010, sections 5 and 7).
+ *
+ * Everything here is drawn on the run's mode alone, so a catalog discovery
+ * carries none of it. That guard is the test: a crawl's warnings list is empty,
+ * so without it every catalog run anybody opened would show an empty table and
+ * a link to a queue that has nothing to do with it.
+ */
+describe('RunPage, for a leaflet import', () => {
+  it('lists the warnings, by offer and code', async () => {
+    const fixture = await render(leafletRun());
+    const page = fixture.componentInstance;
+
+    expect(page.leaflet()).toBe(true);
+    expect(page.warnings()).toEqual([
+      {
+        key: '0',
+        code: 'LOYALTY_REQUIRED',
+        offerId: 'p36-o01',
+        page: '36',
+        name: 'Champu Elvive',
+        message: 'Skipped: the price is for loyalty card holders.',
+      },
+      {
+        key: '1',
+        code: 'EXTRACTOR',
+        offerId: '',
+        page: '2',
+        name: '',
+        message: 'tile has no readable price',
+      },
+    ]);
+    expect(text(fixture)).toContain('harvest.warning.LOYALTY_REQUIRED');
+    expect(text(fixture)).toContain('harvest.warning.EXTRACTOR');
+    page.watch.stop();
+  });
+
+  /**
+   * `notFound` on an import is offers put in front of a person, which is a
+   * different number from the same counter on a crawl, where it means a product
+   * the storefront no longer stocks.
+   */
+  it('links to the queue this run filled, for this run chain', async () => {
+    const fixture = await render(leafletRun());
+    const page = fixture.componentInstance;
+
+    expect(page.queued()).toBe(5);
+    expect(page.queueLink()).toEqual({
+      path: ['/', 'harvest', 'leaflets', 'queue'],
+      params: { supermarketId: 'sm_deza' },
+    });
+    expect(text(fixture)).toContain('harvest.run.queue.open');
+    page.watch.stop();
+  });
+
+  it('draws none of it for a discovery run', async () => {
+    const fixture = await render(run());
+    const page = fixture.componentInstance;
+
+    expect(page.leaflet()).toBe(false);
+    expect(page.warnings()).toEqual([]);
+    expect(page.queued()).toBe(0);
+    expect(text(fixture)).not.toContain('harvest.run.warnings.heading');
+    expect(text(fixture)).not.toContain('harvest.run.queue.open');
+    page.watch.stop();
+  });
+});
+
+/**
+ * Taking a run's writes back (backend plan 0082, section 6).
+ *
+ * The control is drawn for a finished run of a price writing mode that has not
+ * been reverted already, and for nothing else. It is a hard delete with no undo,
+ * so a button that appeared where the server would refuse it would be teaching
+ * an operator to press through a 409.
+ */
+describe('RunPage, reverting a run', () => {
+  it('offers the revert on a finished run that wrote prices', async () => {
+    const fixture = await render(
+      run({ status: 'COMPLETED', finishedAt: '2026-09-03T09:20:00.000Z' })
+    );
+
+    expect(fixture.componentInstance.watch.canRevert()).toBe(true);
+    expect(text(fixture)).toContain('harvest.run.revert.action');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('offers nothing on a run still going: abort it first', async () => {
+    const fixture = await render(run());
+
+    expect(fixture.componentInstance.watch.canRevert()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.run.revert.action');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('offers nothing on a store discovery run, which wrote no price', async () => {
+    const fixture = await render(
+      run({ mode: 'STORE_DISCOVERY', status: 'COMPLETED' })
+    );
+
+    expect(fixture.componentInstance.watch.canRevert()).toBe(false);
+    fixture.componentInstance.watch.stop();
+  });
+
+  /**
+   * The counts are asserted as the dialog's inputs and not as rendered text:
+   * the testing translator answers with the key and interpolates nothing, so a
+   * sentence read off the DOM would prove only that a key was used.
+   */
+  it('confirms with the numbers the run itself reported', async () => {
+    const fixture = await render(
+      run({ status: 'COMPLETED', created: 214, notFound: 9 })
+    );
+    const page = fixture.componentInstance;
+
+    expect(page.confirmCounts()).toEqual({ prices: 214, queued: 9 });
+    // A crawl's `notFound` counts products the chain does not stock, which is
+    // not a queue, so its sentence does not mention one.
+    expect(page.confirmBodyKey()).toBe('harvest.run.revert.confirm');
+    page.watch.stop();
+  });
+
+  it('names the queue as well, for the one mode that fills it', async () => {
+    const fixture = await render(
+      run({
+        mode: 'LEAFLET_IMPORT',
+        status: 'COMPLETED',
+        created: 41,
+        notFound: 6,
+      })
+    );
+    const page = fixture.componentInstance;
+
+    expect(page.confirmBodyKey()).toBe('harvest.run.revert.confirmLeaflet');
+    expect(page.confirmCounts()).toEqual({ prices: 41, queued: 6 });
+    page.watch.stop();
+  });
+
+  it('nothing is deleted until the confirmation is answered', async () => {
+    const fixture = await render(run({ status: 'COMPLETED' }));
+    const page = fixture.componentInstance;
+    const revert = jest.spyOn(page.watch, 'revert');
+
+    page.confirming.set(true);
+    fixture.detectChanges();
+
+    expect(revert).not.toHaveBeenCalled();
+    expect(text(fixture)).toContain('harvest.run.revert.heading');
+    page.watch.stop();
+  });
+
+  it('shows the state and the count the operation answered', async () => {
+    const done = run({
+      status: 'COMPLETED',
+      revertedAt: '2026-09-05T10:00:00.000Z',
+      revertedByUserId: 'owner-1',
+      revertedPriceCount: 214,
+    });
+    const fixture = await render(run({ status: 'COMPLETED' }), done);
+    const page = fixture.componentInstance;
+
+    page.confirming.set(true);
+    await page.revert();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.confirming()).toBe(false);
+    // The status is unchanged, and the chip is drawn beside it rather than in
+    // place of it: how the run ended did not change.
+    expect(page.watch.run()?.status).toBe('COMPLETED');
+    expect(text(fixture)).toContain('harvest.run.reverted.chip');
+    expect(text(fixture)).toContain('214');
+    // And the control is gone, because there is nothing left to take back.
+    expect(page.watch.canRevert()).toBe(false);
+    page.watch.stop();
   });
 });

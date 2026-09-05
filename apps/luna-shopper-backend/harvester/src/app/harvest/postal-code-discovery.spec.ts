@@ -44,7 +44,6 @@ function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
     discoveryCooldownDays: 30,
     discoveryMaxAttempts: 3,
     discoveryPollSeconds: 60,
-    mercadonaEnabled: false,
     mercadonaBaseUrl: undefined,
     overpassUrl: undefined,
     nominatimUrl: undefined,

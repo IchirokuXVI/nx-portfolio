@@ -7,6 +7,8 @@ export * from './lib/app-version';
 export * from './lib/deployment';
 export * from './lib/harvest/harvest-run';
 export * from './lib/harvest/harvest-switches';
+export * from './lib/harvest/leaflet';
+export * from './lib/harvest/run-warnings';
 export * from './lib/reachability-policy';
 export * from './lib/resource/composite-id';
 export * from './lib/resource/localized-text';

@@ -16,15 +16,33 @@ export interface ReferenceOption {
   readonly title: string;
 }
 
+/**
+ * Values the picker's own screen fixes, by query parameter name.
+ *
+ * Not everything a picker offers can be listed from nothing. A chain's shops
+ * are read at `/supermarkets/{id}/locations`, so a picker over them answers an
+ * empty page until the chain is named, and the chain is a fact about the screen
+ * rather than something the operator types (admin plan 0011, section 4).
+ */
+export type ReferenceScope = Readonly<Record<string, string>>;
+
 export interface ReferenceLookup {
   /**
-   * Rows of `resource` matching what the operator typed.
+   * Rows of `resource` matching what the operator typed, within `scope`.
    *
    * An empty term is a request for the first page rather than for nothing: a
    * picker that shows an empty list until something is typed hides the answer
    * from an operator who does not know what the options are called.
+   *
+   * `scope` sits **beside** the term rather than replacing it. The two answer
+   * different questions: the scope says which collection is being read at all,
+   * and the term narrows it.
    */
-  search(resource: string, term: string): Promise<readonly ReferenceOption[]>;
+  search(
+    resource: string,
+    term: string,
+    scope?: ReferenceScope
+  ): Promise<readonly ReferenceOption[]>;
 
   /**
    * The row an id names, for a field that arrived already filled in.

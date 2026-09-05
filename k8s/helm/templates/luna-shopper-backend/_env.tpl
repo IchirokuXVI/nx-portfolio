@@ -120,7 +120,14 @@ ValidationPipe never sees a file and Express's body limits do not apply to a
 multipart stream. The assistant and core each apply their own number again to
 what actually crossed the broker.
 */}}
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS") }}
+{{- /*
+The third byte cap, and the only one that is not a multipart interceptor's (plan
+0081, section 7). The leaflet upload is JSON, so what enforces it is the route's
+own body parser, mounted ahead of the 100 KB default because Nest's built in one
+cannot vary per route. Gateway only: the harvester reads the document off a
+broker message, and NATS carries 8 MB.
+*/}}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS" "LEAFLET_MAX_BYTES") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
@@ -183,14 +190,20 @@ payload that reached the broker without passing the interceptor.
       name: {{ $sec }}
       key: ADMIN_JWT_PUBLIC_KEY
 # The other door, for callers that are machines rather than people (section 4).
-# The harvester's actor id is its only member, and it is a ConfigMap value rather
-# than a Secret because a uuid is not a secret. That is precisely why it no longer
-# grants admin: it names a service, and services may write catalog.
+# The harvester's actor id is its only member, and it names a service rather than
+# a person, which is precisely why it no longer grants admin.
+#
+# From the Secret rather than the ConfigMap since plan 0081 section 11, and not
+# because a uuid is secret. It is generated once per cluster by
+# `provision-release.sh`, and the Secret is the only per environment store that
+# script owns: the chart owns the ConfigMap and a helm upgrade would overwrite
+# anything written there. One key feeds this and the harvester's own copy, so
+# the two cannot name different actors.
 - name: SERVICE_ACTOR_IDS
   valueFrom:
-    configMapKeyRef:
-      name: {{ $cfg }}
-      key: SERVICE_ACTOR_IDS
+    secretKeyRef:
+      name: {{ $sec }}
+      key: HARVESTER_ACTOR_ID
 {{- end }}
 {{- if eq $svc.role "harvester" }}
 # The harvester (plan 0038). It owns the fourth database, verifies tokens offline
@@ -213,7 +226,13 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: ADMIN_JWT_PUBLIC_KEY
-{{- range $key := (list "HARVESTER_ACTOR_ID" "HARVEST_ENABLED" "HARVEST_USER_AGENT" "HARVEST_BATCH_SIZE" "HARVEST_DEFAULT_WORKERS" "HARVEST_DEFAULT_MAX_RPS" "HARVEST_STALE_AFTER" "HARVEST_FAILURE_RATIO" "HARVEST_DISCOVERY_RADIUS" "HARVEST_DISCOVERY_COOLDOWN_DAYS" "HARVEST_DISCOVERY_MAX_ATTEMPTS" "HARVEST_DISCOVERY_POLL_SECONDS" "MERCADONA_ENABLED" "OVERPASS_URL" "NOMINATIM_URL") }}
+# The same uuid catalog is told to accept, from the same Secret key.
+- name: HARVESTER_ACTOR_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: HARVESTER_ACTOR_ID
+{{- range $key := (list "HARVEST_ENABLED" "HARVEST_USER_AGENT" "HARVEST_BATCH_SIZE" "HARVEST_DEFAULT_WORKERS" "HARVEST_DEFAULT_MAX_RPS" "HARVEST_STALE_AFTER" "HARVEST_FAILURE_RATIO" "HARVEST_DISCOVERY_RADIUS" "HARVEST_DISCOVERY_COOLDOWN_DAYS" "HARVEST_DISCOVERY_MAX_ATTEMPTS" "HARVEST_DISCOVERY_POLL_SECONDS" "OVERPASS_URL" "NOMINATIM_URL") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

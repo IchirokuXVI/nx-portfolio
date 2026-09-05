@@ -1,7 +1,10 @@
 import {
   canAbort,
+  canRevert,
   failureBlockReason,
+  isReverted,
   isTerminalRun,
+  PRICE_WRITING_MODES,
   runProgress,
   spawnBlockReason,
   TERMINAL_RUN_STATUSES,
@@ -33,6 +36,9 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     error: null,
     correlationId: null,
     requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
     ...over,
   };
 }
@@ -139,17 +145,18 @@ describe('spawnBlockReason', () => {
 
 describe('failureBlockReason', () => {
   /**
-   * The storefront switch does not refuse the spawn. The run starts, the catalog
-   * runner refuses on its first step, and the sentence lands in `error`.
+   * A run that stopped because one chain was switched off is not a thing that
+   * happens any more. Backend plan 0083 deleted the per chain variable, and a
+   * disabled chain is refused at the spawn by its own source row, so a run
+   * naming a storefront reads as an ordinary failure in the server's own words.
    */
-  it('reads a storefront refusal off the finished run', () => {
+  it('does not invent a storefront reason for a run that named one', () => {
     const failed = run({
       status: 'FAILED',
-      error:
-        'MERCADONA_ENABLED is false, so this deployment does not fetch from that storefront.',
+      error: 'Mercadona stopped answering after 41 requests.',
     });
 
-    expect(failureBlockReason(failed)).toBe('storefront-off');
+    expect(failureBlockReason(failed)).toBeNull();
   });
 
   it('reads a service refusal off the finished run', () => {
@@ -168,5 +175,64 @@ describe('failureBlockReason', () => {
 
   it('is null for a run that did not fail', () => {
     expect(failureBlockReason(run({ status: 'COMPLETED' }))).toBeNull();
+  });
+});
+/**
+ * Which runs the revert control belongs on (backend plan 0082).
+ *
+ * The three conditions are the server's own refusals, asked here so the button
+ * is absent rather than present and answered with a 409. A revert is a hard
+ * delete with no undo, and a control that appears where it cannot work teaches
+ * an operator to press through the refusal.
+ */
+describe('isReverted', () => {
+  it('is false while the run still stands', () => {
+    expect(isReverted(run())).toBe(false);
+  });
+
+  it('is true once its writes were taken back', () => {
+    expect(isReverted(run({ revertedAt: '2026-09-04T08:00:00.000Z' }))).toBe(
+      true
+    );
+  });
+
+  it('is false for no run at all', () => {
+    expect(isReverted(null)).toBe(false);
+  });
+});
+
+describe('canRevert', () => {
+  it.each(PRICE_WRITING_MODES)('is true for a finished %s run', (mode) => {
+    expect(canRevert(run({ mode, status: 'COMPLETED' }))).toBe(true);
+  });
+
+  it('is false for a store discovery run, which wrote no price', () => {
+    expect(
+      canRevert(run({ mode: 'STORE_DISCOVERY', status: 'COMPLETED' }))
+    ).toBe(false);
+  });
+
+  it.each(['PENDING', 'RUNNING'] as const)(
+    'is false while the run is %s: abort it first',
+    (status) => {
+      expect(canRevert(run({ status }))).toBe(false);
+    }
+  );
+
+  /** An abort keeps what was fetched, so there is something left to take back. */
+  it('is true for an aborted run, which flushed what it had', () => {
+    expect(canRevert(run({ status: 'ABORTED' }))).toBe(true);
+  });
+
+  it('is false once it has been reverted: there is nothing left', () => {
+    expect(
+      canRevert(
+        run({ status: 'COMPLETED', revertedAt: '2026-09-04T08:00:00.000Z' })
+      )
+    ).toBe(false);
+  });
+
+  it('is false for no run at all', () => {
+    expect(canRevert(null)).toBe(false);
   });
 });

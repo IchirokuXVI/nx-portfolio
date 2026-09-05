@@ -213,6 +213,21 @@ export const ITEM_PRICE_PATTERNS = {
    * adds again: editing a price is inserting a price.
    */
   delete: 'itemPrice.delete',
+  /**
+   * Take back everything one harvest run said about prices (plan 0082, section
+   * 2), in one transaction.
+   *
+   * A revert is a **hard delete**, not a retraction flag. The rows a reverted
+   * run wrote are that run's claims, and a revert says the claims were wrong; a
+   * wrong claim kept in the history is a record of an error rather than of the
+   * past. Superseding is a different act on different rows and is never a
+   * delete: a source that changed its mind wrote a new row, and the old one is
+   * a true statement about a day.
+   *
+   * `ADMIN` rows carry no run id and are never touched, and neither is any row
+   * another run wrote.
+   */
+  deleteByRun: 'itemPrice.deleteByRun',
 } as const;
 
 /**
@@ -261,9 +276,29 @@ export const PRICE_SCOPE_PATTERNS = {
  * aisle is not something a warehouse can answer.
  */
 export const SUPERMARKET_LOCATION_ITEM_PATTERNS = {
+  /**
+   * The operator's route for the rest of the row. **It no longer writes
+   * `available`** (plan 0084, section 4): a hand written availability records
+   * its own provenance and becomes protected, so it goes through
+   * {@link SUPERMARKET_LOCATION_ITEM_PATTERNS.setAvailability} with
+   * `sourceKind: ADMIN` like everything else that writes that column.
+   */
   upsert: 'supermarketLocationItem.upsert',
   get: 'supermarketLocationItem.get',
   listByLocation: 'supermarketLocationItem.listByLocation',
+  /**
+   * Whether one shop carries each of these products (plan 0084, section 4).
+   *
+   * **A batch, because the caller has one shop and thousands of products.** A
+   * crawl of DEZA produces ten calls, one per shop; per item calls would be tens
+   * of thousands of NATS round trips for one run.
+   *
+   * **An automated fetch never overwrites a person.** A row a person wrote is
+   * skipped and reported in `conflicts` rather than overwritten or cleared, and
+   * there is no protection window: an owner who marked a product absent from one
+   * shop marked a fact about that shop.
+   */
+  setAvailability: 'supermarketLocationItem.setAvailability',
 } as const;
 
 // --- Views -----------------------------------------------------------------
@@ -597,6 +632,28 @@ export type ItemPriceOverrides = Partial<
 >;
 
 /**
+ * What a leaflet printed beside a price, stored verbatim and read by nothing
+ * except the admin price history (plan 0081, section 6.4).
+ *
+ * It sits on its own table keyed by the price row rather than on `item_prices`
+ * itself: that table is read on every recompute, and a jsonb blob on every row
+ * is weight the hot path would pay for nothing.
+ *
+ * `promotion` and `loyalty` are the extractor objects exactly as they arrived.
+ * The importer reads `promotion.type` to decide which number is the price
+ * (section 6.2), and nothing reads either again.
+ */
+export interface ItemPriceDetails {
+  /** The leaflet tile id, so a row can be found in the stored document. */
+  offerId: string | null;
+  page: number | null;
+  /** Every text fragment the extractor assigned to the tile. */
+  rawText: string[];
+  promotion: Record<string, unknown> | null;
+  loyalty: Record<string, unknown> | null;
+}
+
+/**
  * One price a source gave (plan 0080, section 2).
  *
  * A row is an interval, not an event: `observedAt` is the first time this source
@@ -629,6 +686,11 @@ export interface ItemPriceView {
   overrides: ItemPriceOverrides | null;
   /** `ADMIN` rows only: `observedAt` plus seven days. */
   protectedUntil: string | null;
+  /**
+   * What a leaflet printed beside this price (plan 0081, section 6.4). Present
+   * only on the history read, and null for every row no leaflet wrote.
+   */
+  details: ItemPriceDetails | null;
 }
 
 /** One row of `price_policies` (plan 0080, section 3). Lower priority wins. */
@@ -652,6 +714,17 @@ export interface SupermarketLocationItemView {
   supermarketLocationId: string;
   positionInStore: string | null;
   available: boolean | null;
+  /**
+   * Who last wrote `available` (plan 0084, section 2). Null means no provenance
+   * was recorded, and section 3 gives that the safe reading: a null kind beside
+   * a non null `available` is treated as `ADMIN`, because nothing but a person
+   * ever wrote the column before this.
+   */
+  availabilitySourceKind: PriceSourceKind | null;
+  /** When that writer stated it. */
+  availabilityObservedAt: string | null;
+  /** The harvest run that wrote it. Opaque, never joined. */
+  availabilitySourceRunId: string | null;
 }
 
 // --- Supermarket requests --------------------------------------------------
@@ -761,6 +834,22 @@ export interface SupermarketLocationIdRequest extends AdminCredential {
 export interface ListSupermarketLocationsRequest extends PageQuery {
   userId: string;
   supermarketId: string;
+  /**
+   * Free text over the shop's label, in either content language, and over its
+   * address and town. Absent lists the whole chain.
+   *
+   * The same plain substring match {@link ListSupermarketsRequest.query} is,
+   * and for the same reason: a shop has no search document, its address is a
+   * line of text, and the operator typing here is completing something they
+   * are reading off another screen.
+   *
+   * It exists for a reference picker rather than for a filter bar
+   * (`apps/luna-shopper-admin/plans/0011`, section 4). A chain with ten shops
+   * does not need one and a chain with three hundred cannot be used without
+   * one, because a picker with nowhere to put the term drops it and answers
+   * every search with the same first page.
+   */
+  query?: string;
   /**
    * Only the shops that sell at this scope (plan 0066, section 4). A price is
    * keyed by scope and a scope is not a place, so this is how a price is turned
@@ -1040,6 +1129,14 @@ export interface ItemPriceValues {
   observedAt?: string | null;
   validFrom?: string | null;
   validUntil?: string | null;
+  /**
+   * The leaflet tile behind this price (plan 0081, section 6.4). Stored on
+   * `item_price_details`, keyed by the row this write inserts, and read by
+   * nothing but the admin price history. Ignored when the write confirms an
+   * existing row rather than inserting one: the details belong to a row, and a
+   * confirmation writes no row.
+   */
+  details?: ItemPriceDetails | null;
 }
 
 /**
@@ -1089,6 +1186,34 @@ export interface ListItemPricesRequest extends PageQuery, AdminCredential {
 
 export interface ItemPriceIdRequest extends AdminCredential {
   itemPriceId: string;
+}
+
+/**
+ * Take back one run's prices (plan 0082, section 2). Sent by the harvester as
+ * the first step of `harvest.revert`, and by nothing else.
+ */
+export interface DeleteItemPricesByRunRequest extends AdminCredential {
+  sourceRunId: string;
+}
+
+/**
+ * What a revert did in catalog.
+ *
+ * `deleted` counts the rows the run inserted, including those an alias accept
+ * wrote on its behalf, which carry the run's id for exactly this reason.
+ * `reset` counts the rows the run only confirmed: their `lastObservedAt` goes
+ * back to `observedAt` and their `lastObservedRunId` back to `sourceRunId`,
+ * because the freshness a distrusted run introduced is part of what it
+ * introduced. `recomputed` counts the (item, scope) keys worked out again,
+ * including the fan out a NATIONAL scope causes.
+ *
+ * A run with no rows answers zeros rather than failing, which is what makes the
+ * two database operation safe to retry (section 5).
+ */
+export interface DeleteItemPricesByRunResult {
+  deleted: number;
+  reset: number;
+  recomputed: number;
 }
 
 /** Whether a scope carries each of these products. Carries no price. */
@@ -1330,12 +1455,57 @@ export interface ShopChainSummariesView {
 
 // --- Supermarket location item requests ------------------------------------
 
+/**
+ * The rest of the row, and `positionInStore` is what that means. **`available`
+ * is not settable here** (plan 0084, section 4): the column carries provenance
+ * now, and a value written with none would be a person's claim that no automated
+ * writer could tell from an unwritten one.
+ */
 export interface UpsertSupermarketLocationItemRequest extends AdminCredential {
   itemId: string;
   supermarketLocationId: string;
   positionInStore?: string | null;
-  /** Null clears the override and defers to the scope's `available`. */
-  available?: boolean | null;
+}
+
+/**
+ * Whether one shop carries each of these products (plan 0084, section 4).
+ *
+ * **Absence is a claim, and this is the parameter that says so.** A DEZA product
+ * listing names the shops that carry it, so a shop missing from that list does
+ * not stock the product. `entries` therefore carries `available: false` rows,
+ * and a caller is expected to send a value for every product it resolved rather
+ * than only the positive ones.
+ */
+export interface SetSupermarketLocationItemAvailabilityRequest extends AdminCredential {
+  supermarketLocationId: string;
+  /** Who is writing. `ADMIN` is a person, and a person's row is protected. */
+  sourceKind: PriceSourceKind;
+  /** The harvest run behind an automated write. Null for a person's. */
+  sourceRunId?: string | null;
+  /** When the writer observed it. Defaults to now. */
+  observedAt?: string;
+  entries: { itemId: string; available: boolean }[];
+}
+
+/** One row an automated writer declined to touch, because a person owns it. */
+export interface SupermarketLocationItemAvailabilityConflict {
+  itemId: string;
+  /** What the person's row says. Null is "use the scope's". */
+  held: boolean | null;
+  /** What the automated writer offered and did not write. */
+  offered: boolean;
+}
+
+export interface SetSupermarketLocationItemAvailabilityResult {
+  /** Rows created or changed. */
+  written: number;
+  /**
+   * Entries that wrote nothing: a row a person owns, or one already saying
+   * exactly this. `written + skipped` is the number of entries sent.
+   */
+  skipped: number;
+  /** The person owned half of `skipped`, itemised, so a run can report it. */
+  conflicts: SupermarketLocationItemAvailabilityConflict[];
 }
 
 export interface GetSupermarketLocationItemRequest {

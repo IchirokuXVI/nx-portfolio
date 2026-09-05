@@ -230,36 +230,52 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
 
 ## Luna Shopper backend
 
-### The harvester runs locally and nowhere else
+### The harvester is deployed, and what it may do is three switches
 
 `luna-shopper-backend-harvester` (plan 0038) fetches prices from supermarket
 storefronts and store locations from OpenStreetMap, and writes what it finds into
 catalog over NATS. It was the sixth backend service to land (`assistant`, plan
 0039, is the seventh) and it owns the fourth Postgres, after auth, core and
-catalog.
+catalog. **Its fourth run mode fetches nothing at all**: `LEAFLET_IMPORT` (plan 0081) reads a JSON document an admin uploads. The output is identical to the
+output of a crawl and only the fetching differs, which is why it is a run here
+rather than a write in catalog.
 
-**It is deployed in both clusters, and no run can write to catalog in either.**
-`values.staging.yaml` sets `enabled: true`, `harvestEnabled: true` and
-`mercadonaEnabled: false` (k8s plan 0008): the pod runs store discovery only, and
-never fetches a storefront. `values.production.yaml` sets `enabled: true` with no
-`harvestEnabled`, so the pod runs and refuses every spawn. Both clusters leave
-`actorId` empty, so even a run that started could not write a price: catalog
-rejects a service actor it does not know. A catalog discovery run is 4,383 HTTP
-requests over about eighteen minutes, and price runs happen here against the
-compose stack, where the development machine has room for them.
+**It is deployed in both clusters, and both may now start a run.**
+`values.staging.yaml` and `values.production.yaml` both set `enabled: true` and
+`harvestEnabled: true`. No storefront is fetched from either, because that is a
+row per chain in the harvester's own database and every one of them is off
+(plan 0083). A catalog discovery run is 4,383 HTTP requests over about eighteen
+minutes, and price crawls still happen here against the compose stack, where the
+development machine has room for them. What a cluster runs is store discovery,
+which is two requests, and leaflet imports, which are none.
 
-There are **three** switches, and they are three because they are three different
-decisions:
+**The actor id is provisioned, not configured.** `provision-release.sh`
+generates the uuid catalog knows the harvester by once per cluster and keeps it
+in the per environment Secret; both `HARVESTER_ACTOR_ID` and catalog's
+`SERVICE_ACTOR_IDS` read that one key. It is not a values field any more, and
+`--check` fails when it is missing, which is the point: without it
+`CatalogClient.actor()` throws and an import writes nothing.
 
-| Switch                                        | Decides                                                 |
-| --------------------------------------------- | ------------------------------------------------------- |
-| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all          |
-| `HARVEST_ENABLED`                             | whether a pod that exists may start any run             |
-| `MERCADONA_ENABLED`                           | whether that one storefront specifically may be fetched |
+There are **two** switches in configuration, and they are two because they are two
+different decisions:
 
-All three default to false, including in the `.env` that `luna-slot.sh` writes.
-Bringing the service up and letting it fetch from a third party are not the same
-thing, and section 8.1 of the plan is why the second and third exist separately.
+| Switch                                        | Decides                                        |
+| --------------------------------------------- | ---------------------------------------------- |
+| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all |
+| `HARVEST_ENABLED`                             | whether a pod that exists may start any run    |
+
+Both default to false, including in the `.env` that `luna-slot.sh` writes.
+Bringing the service up and letting it start runs are not the same thing, and
+section 8.1 of the plan is why they exist separately.
+
+**Whether a given chain may be fetched is neither of them: it is a row** (plan
+0083). `supermarket_sources.enabled`, off by default, one per chain, written from
+the back office through `supermarketSource.setEnabled`, and the spawn refuses a
+run for a source whose row says false. There was an environment variable doing
+that for one storefront by name; a second chain would have needed a second
+variable threaded through `app-config.ts`, the config map, `_env.tpl` and both
+`luna-slot` scripts before a run could start, so it was deleted in favour of the
+column that already existed. **Do not add a per chain environment variable.**
 
 Two rules that are easy to break by accident:
 
@@ -274,11 +290,38 @@ Two rules that are easy to break by accident:
   that changed it and by a sixty second sweep when only the clock moved. Never
   write a price to `supermarket_items` directly, and never decide at write time
   which source wins.
+- **No automated match ever binds a printed name to a product** (plan 0081). A
+  leaflet import resolves an offer through `source_aliases`, chain scoped and
+  keyed on the normalized printed name plus the printed format and never the
+  brand. A fuzzy hit inserts a `CANDIDATE` and writes **no price**; only an
+  admin accepting one in the queue creates an `ACTIVE` alias, and accepting is
+  what then writes the price the row was queued for. Accepting sets `itemId`
+  and never touches `printedName`, so renaming the product does not stop the
+  next leaflet resolving.
 
-`@portfolio/luna-shopper/mercadona` and `@portfolio/luna-shopper/osm-places` are
-framework free by hard constraint: no TypeORM, no Nest, no database, and every
-test runs against checked in fixtures with no network. Refresh those fixtures
-with each library's `capture-fixtures` target, never by hand.
+**One mode, two adapters** (plan 0085). `CATALOG_DISCOVERY` now runs against
+either `mercadona-api` or `deza-web`, and the run picks between them on
+`supermarket_sources.adapterKey` rather than on the mode: a walk of a chain's
+whole assortment is a catalog discovery whether the chain answers JSON or renders
+a page. `CatalogDiscoveryRunner` is the dispatcher and holds no fetching of its
+own. Two things the DEZA half is built around and neither is a detail:
+
+- **It writes no price, ever.** The site prints none. The blank `wpdz-precio-ok`
+  elements in its markup are the storefront's own hidden pricing, and a parser
+  that read them would write zeros. What a run produces is candidate products and
+  per shop availability, positive **and** negative: the popup names the shops
+  that carry a product, so a shop it did not name does not stock it.
+- **Completeness cannot be proven against it.** Every query answers at most 300
+  rows however it is filtered, so a capped section is split by search term until
+  a pass adds nothing new or a budget of 25 queries runs out. The honest artifact
+  is `harvest_runs.report`, which names every section the budget could not
+  finish. Do not add a number that claims otherwise.
+
+`@portfolio/luna-shopper/mercadona`, `@portfolio/luna-shopper/deza` and
+`@portfolio/luna-shopper/osm-places` are framework free by hard constraint: no
+TypeORM, no Nest, no database, and every test runs against checked in fixtures
+with no network. Refresh those fixtures with each library's `capture-fixtures`
+target, never by hand.
 
 - **The committed OpenAPI document must always be current.** Any change to a gateway route, a
   request or response DTO, an error code, or a contract schema in `libs/luna-shopper/contracts`

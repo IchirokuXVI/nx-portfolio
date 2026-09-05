@@ -666,15 +666,58 @@ export class UpsertSupermarketLocationItemDto {
   @IsString()
   @MaxLength(120)
   positionInStore?: string | null;
+}
+
+/**
+ * Whether one shop carries each of these products (plan 0084, section 4).
+ *
+ * The per store `available` left this route's DTO with that plan. It carries
+ * provenance now, and a value written with none would be a person's claim that
+ * no automated writer could tell from an unwritten one, so a person states the
+ * kind here like everything else that writes the column.
+ */
+export class SetSupermarketLocationItemAvailabilityDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  supermarketLocationId!: string;
+
+  @ApiProperty({
+    enum: PriceSourceKind,
+    description:
+      'Who is writing. ADMIN is a person, and a person’s row is protected from every automated writer with no expiry.',
+  })
+  @IsEnum(PriceSourceKind)
+  sourceKind!: PriceSourceKind;
 
   @ApiPropertyOptional({
+    format: 'uuid',
     nullable: true,
     description:
-      'A per store override meaning "someone checked this specific shop". Null clears it and defers to the scope’s answer, which is not the same as saying "not available here".',
+      'The harvest run behind an automated write. Null for a person’s.',
   })
   @IsOptional()
-  @IsBoolean()
-  available?: boolean | null;
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  sourceRunId?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'date-time',
+    description: 'When the writer observed it. Defaults to now.',
+  })
+  @IsOptional()
+  @IsDateString()
+  observedAt?: string;
+
+  @ApiProperty({
+    type: [AvailabilityEntryDto],
+    description:
+      'A value for every product the caller resolved, positive and negative: a shop missing from a product’s list of shops does not stock it, and dropping the negatives leaves a run unable to say anything negative.',
+  })
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => AvailabilityEntryDto)
+  entries!: AvailabilityEntryDto[];
 }
 
 // --- Queries ---------------------------------------------------------------

@@ -1,17 +1,22 @@
 import type { Route } from '@angular/router';
 import type { ShellLink } from '@portfolio/luna-shopper-admin/ui';
+import { AliasesQueuePage } from './aliases-queue-page';
 import { EntriesQueuePage } from './entries-queue-page';
+import { HARVEST_SEGMENT } from './harvest-paths';
 import { ItemRefsQueuePage } from './item-refs-queue-page';
+import { LeafletUploadPage } from './leaflet-upload-page';
 import { PlacesQueuePage } from './places-queue-page';
+import { queuedAliases } from './queued-aliases';
 import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
+import { ShopsQueuePage } from './shops-queue-page';
 import { SourcesPage } from './sources-page';
 
-/** Where the harvester screens live, under the app root. */
-export const HARVEST_SEGMENT = 'harvest';
+export { HARVEST_SEGMENT };
 
 /**
- * The harvester's five screens (plan 0006).
+ * The harvester's screens: the five of plan 0006, and the fourth queue admin
+ * plan 0011 added beside them.
  *
  * Written out rather than generated from descriptors, which is what the plan
  * says up front: a run is a process you start, watch and abort, and an import
@@ -36,6 +41,14 @@ export function harvestRoutes(): Route[] {
         { path: 'places', component: PlacesQueuePage },
         { path: 'entries', component: EntriesQueuePage },
         { path: 'item-refs', component: ItemRefsQueuePage },
+        // The two halves of a leaflet (admin plan 0010): the file goes in at
+        // the first and the printed names it could not resolve come out at the
+        // second. Two screens rather than one, because an upload is a thing you
+        // do once and a queue is a thing you work through, and nothing about
+        // the second belongs on the same page as the first.
+        { path: 'leaflets/upload', component: LeafletUploadPage },
+        { path: 'leaflets/queue', component: AliasesQueuePage },
+        { path: 'shops', component: ShopsQueuePage },
         { path: 'sources', component: SourcesPage },
       ],
     },
@@ -58,5 +71,19 @@ export const HARVEST_LINKS: readonly ShellLink[] = [
   { path: `/${HARVEST_SEGMENT}/places`, label: 'harvest.nav.places' },
   { path: `/${HARVEST_SEGMENT}/entries`, label: 'harvest.nav.entries' },
   { path: `/${HARVEST_SEGMENT}/item-refs`, label: 'harvest.nav.itemRefs' },
+  {
+    path: `/${HARVEST_SEGMENT}/leaflets/upload`,
+    label: 'harvest.nav.leafletUpload',
+  },
+  {
+    path: `/${HARVEST_SEGMENT}/leaflets/queue`,
+    label: 'harvest.nav.leafletQueue',
+    // How much is waiting behind it, once a chain has been chosen and read
+    // (admin plan 0010, section 4). The queue is per chain by construction, so
+    // there is nothing to count until the operator names one; the badge is
+    // silent until then rather than claiming a drained queue.
+    badge: () => queuedAliases(),
+  },
+  { path: `/${HARVEST_SEGMENT}/shops`, label: 'harvest.nav.shops' },
   { path: `/${HARVEST_SEGMENT}/sources`, label: 'harvest.nav.sources' },
 ];

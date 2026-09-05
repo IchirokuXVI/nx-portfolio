@@ -34,6 +34,7 @@ import {
   type ProductGroupPage,
   type ProductGroupView,
   type SetSupermarketItemAvailabilityResult,
+  type SetSupermarketLocationItemAvailabilityResult,
   type SupermarketItemPage,
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
@@ -66,6 +67,7 @@ import {
   ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
   SetSupermarketItemAvailabilityDto,
+  SetSupermarketLocationItemAvailabilityDto,
   UpdateItemDto,
   UpdatePricePolicyDto,
   UpdatePriceScopeDto,
@@ -230,6 +232,7 @@ export class AdminCatalogSupermarketsController {
       {
         userId: admin.adminId,
         supermarketId: id,
+        query: query.query,
         priceScopeId: query.priceScopeId,
         postalCodeSource: query.postalCodeSource,
         cursor: query.cursor,
@@ -758,6 +761,28 @@ export class AdminCatalogLocationItemsController {
         cursor: query.cursor,
         limit: query.limit,
       }
+    );
+  }
+
+  /**
+   * Whether this shop carries each of these products (plan 0084, section 4).
+   *
+   * The route `upsert` no longer covers, and the operator's way to state a fact
+   * about one shop: `sourceKind: ADMIN` records who said it, and from then on no
+   * crawl overwrites it. A crawl reaches the same subject over NATS as a service
+   * actor and is refused this column wherever a person already filled it,
+   * getting the disagreement back in `conflicts` instead.
+   */
+  @Put('availability')
+  @ApiContractResponse(SUPERMARKET_LOCATION_ITEM_PATTERNS.setAvailability)
+  @ApiProblemResponses({ body: true })
+  setAvailability(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: SetSupermarketLocationItemAvailabilityDto
+  ): Promise<SetSupermarketLocationItemAvailabilityResult> {
+    return this.nats.send<SetSupermarketLocationItemAvailabilityResult>(
+      SUPERMARKET_LOCATION_ITEM_PATTERNS.setAvailability,
+      { ...adminCredential(admin), ...dto }
     );
   }
 }

@@ -3,9 +3,12 @@ import {
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  HarvestWarningCode,
   ItemSourceMatch,
   ItemSourceRefStatus,
   PostalCodeDiscoveryStatus,
+  SourceAliasStatus,
+  SourceLocationStatus,
 } from '../../lib/enums/harvest.enums';
 import {
   ADAPTER_KEYS,
@@ -13,7 +16,9 @@ import {
   HARVEST_PATTERNS,
   ITEM_SOURCE_REF_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
+  SOURCE_ALIAS_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
+  SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
 } from '../../lib/messages/harvest.messages';
 import {
@@ -52,14 +57,21 @@ export const HARVEST_SCHEMA_IDS = {
   postalCodeDiscoveryStatus: schemaId('enums/PostalCodeDiscoveryStatus'),
   itemSourceMatch: schemaId('enums/ItemSourceMatch'),
   discoveredPlaceStatus: schemaId('enums/DiscoveredPlaceStatus'),
+  sourceLocationStatus: schemaId('enums/SourceLocationStatus'),
   adapterKey: schemaId('enums/AdapterKey'),
+  sourceAliasStatus: schemaId('enums/SourceAliasStatus'),
+  harvestWarningCode: schemaId('enums/HarvestWarningCode'),
 
+  harvestRunWarning: schemaId('harvest/HarvestRunWarning'),
   harvestRunView: schemaId('harvest/HarvestRunView'),
+  sourceAliasView: schemaId('harvest/SourceAliasView'),
+  sourceAliasAcceptResult: schemaId('harvest/SourceAliasAcceptResult'),
   discoveredPlaceView: schemaId('harvest/DiscoveredPlaceView'),
   discoveredPlaceGroup: schemaId('harvest/DiscoveredPlaceGroup'),
   discoveredPlaceGroupsResult: schemaId('harvest/DiscoveredPlaceGroupsResult'),
   sourceCatalogEntryView: schemaId('harvest/SourceCatalogEntryView'),
   itemSourceRefView: schemaId('harvest/ItemSourceRefView'),
+  sourceLocationView: schemaId('harvest/SourceLocationView'),
   supermarketSourceView: schemaId('harvest/SupermarketSourceView'),
   postalCodeDiscoveryRequestView: schemaId(
     'harvest/PostalCodeDiscoveryRequestView'
@@ -69,7 +81,9 @@ export const HARVEST_SCHEMA_IDS = {
   discoveredPlacePage: schemaId('harvest/DiscoveredPlacePage'),
   sourceCatalogEntryPage: schemaId('harvest/SourceCatalogEntryPage'),
   itemSourceRefPage: schemaId('harvest/ItemSourceRefPage'),
+  sourceLocationPage: schemaId('harvest/SourceLocationPage'),
   supermarketSourcePage: schemaId('harvest/SupermarketSourcePage'),
+  sourceAliasPage: schemaId('harvest/SourceAliasPage'),
   postalCodeDiscoveryRequestPage: schemaId(
     'harvest/PostalCodeDiscoveryRequestPage'
   ),
@@ -84,12 +98,19 @@ export const HARVEST_SCHEMA_IDS = {
   listRefsRequest: schemaId('msg/itemSourceRef.list/request'),
   refIdRequest: schemaId('msg/itemSourceRef.id/request'),
   setManualRefRequest: schemaId('msg/itemSourceRef.setManual/request'),
+  listSourceLocationsRequest: schemaId('msg/sourceLocation.list/request'),
+  mapSourceLocationRequest: schemaId('msg/sourceLocation.map/request'),
+  sourceLocationIdRequest: schemaId('msg/sourceLocation.id/request'),
   listEntriesRequest: schemaId('msg/sourceEntry.list/request'),
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
   upsertSourceRequest: schemaId('msg/supermarketSource.upsert/request'),
   sourceIdRequest: schemaId('msg/supermarketSource.id/request'),
   setSourceEnabledRequest: schemaId('msg/supermarketSource.setEnabled/request'),
   listSourcesRequest: schemaId('msg/supermarketSource.list/request'),
+  listAliasesRequest: schemaId('msg/sourceAlias.list/request'),
+  aliasIdRequest: schemaId('msg/sourceAlias.id/request'),
+  acceptAliasRequest: schemaId('msg/sourceAlias.accept/request'),
+  createItemFromAliasRequest: schemaId('msg/sourceAlias.createItem/request'),
   listDiscoveryRequestsRequest: schemaId(
     'msg/postalCodeDiscovery.list/request'
   ),
@@ -154,13 +175,25 @@ const harvestRunView = object(
     updated: integer({ minimum: 0 }),
     unchanged: integer({ minimum: 0 }),
     notFound: integer({ minimum: 0 }),
+    // Offers a rule dropped or queued (plan 0081, section 7).
+    skipped: integer({ minimum: 0 }),
     failed: integer({ minimum: 0 }),
     stage: nullableString(),
     stageLabel: nullableString(),
+    warnings: array(ref(HARVEST_SCHEMA_IDS.harvestRunWarning)),
+    documentSha256: nullableString(),
     abortRequestedAt: nullableString(),
     error: nullableString(),
+    // Free form on purpose: a summary for a person reading a finished run, not a
+    // structure anything decides on (plan 0085, section 3).
+    report: freeObject(),
     correlationId: nullableString(),
     requestedByUserId: nullableString(),
+    // Plan 0082. The status is untouched by a revert: it says how the run
+    // ended, and that did not change.
+    revertedAt: nullableString(),
+    revertedByUserId: nullableString(),
+    revertedPriceCount: integerOrNull(),
   },
   [
     'id',
@@ -179,14 +212,113 @@ const harvestRunView = object(
     'updated',
     'unchanged',
     'notFound',
+    'skipped',
     'failed',
     'stage',
     'stageLabel',
+    'warnings',
+    'documentSha256',
     'abortRequestedAt',
     'error',
+    'report',
     'correlationId',
     'requestedByUserId',
+    'revertedAt',
+    'revertedByUserId',
+    'revertedPriceCount',
   ]
+);
+
+/**
+ * One decision a run made that was not a write (plan 0081, section 7). Every
+ * skip and every queue entry is one, so the run page reads as a list of them.
+ */
+const harvestRunWarning = object(
+  HARVEST_SCHEMA_IDS.harvestRunWarning,
+  {
+    code: ref(HARVEST_SCHEMA_IDS.harvestWarningCode),
+    offerId: nullableString(),
+    page: integerOrNull(),
+    name: nullableString(),
+    message: string(),
+  },
+  ['code', 'offerId', 'page', 'name', 'message']
+);
+
+/**
+ * One printed name a chain used (plan 0081, section 2). Accepting sets `itemId`
+ * and never touches `printedName`: the alias records what the leaflet printed,
+ * whatever the item is renamed to afterwards.
+ */
+const sourceAliasView = object(
+  HARVEST_SCHEMA_IDS.sourceAliasView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    aliasKey: string(),
+    printedName: nonEmptyString(),
+    printedFormat: nullableString(),
+    printedBrand: nullableString(),
+    itemId: nullableString(),
+    candidateItemId: nullableString(),
+    candidateEntryId: nullableString(),
+    status: ref(HARVEST_SCHEMA_IDS.sourceAliasStatus),
+    matchedBy: ref(HARVEST_SCHEMA_IDS.itemSourceMatch),
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    timesSeen: integer({ minimum: 0 }),
+    firstSeenAt: string({ format: 'date-time' }),
+    lastSeenAt: string({ format: 'date-time' }),
+    firstRunId: nullableString(),
+    lastRunId: nullableString(),
+    offerPrice: numberOrNull(),
+    offerCurrency: nullableString(),
+    offerUnitPrice: numberOrNull(),
+    offerUnitPriceLabel: nullableString(),
+    offerPage: integerOrNull(),
+    offerRawText: array(string()),
+    offerConfidence: numberOrNull(),
+  },
+  [
+    'id',
+    'supermarketId',
+    'aliasKey',
+    'printedName',
+    'printedFormat',
+    'printedBrand',
+    'itemId',
+    'candidateItemId',
+    'candidateEntryId',
+    'status',
+    'matchedBy',
+    'confidence',
+    'timesSeen',
+    'firstSeenAt',
+    'lastSeenAt',
+    'firstRunId',
+    'lastRunId',
+    'offerPrice',
+    'offerCurrency',
+    'offerUnitPrice',
+    'offerUnitPriceLabel',
+    'offerPage',
+    'offerRawText',
+    'offerConfidence',
+  ]
+);
+
+/**
+ * What accepting a queued name did. `pricesWritten` is the point of answering
+ * anything beyond the row: the accept writes the price the alias was queued
+ * for, from every still open import that saw the string (section 3).
+ */
+const sourceAliasAcceptResult = object(
+  HARVEST_SCHEMA_IDS.sourceAliasAcceptResult,
+  {
+    alias: ref(HARVEST_SCHEMA_IDS.sourceAliasView),
+    pricesWritten: integer({ minimum: 0 }),
+    item: { oneOf: [ref(CATALOG_SCHEMA_IDS.itemView), { type: 'null' }] },
+  },
+  ['alias', 'pricesWritten', 'item']
 );
 
 const discoveredPlaceView = object(
@@ -325,6 +457,40 @@ const itemSourceRefView = object(
 );
 
 /**
+ * One shop a source names (plan 0084, section 6). Keyed on the source's own
+ * code, so a shop the chain renames keeps its mapping.
+ */
+const sourceLocationView = object(
+  HARVEST_SCHEMA_IDS.sourceLocationView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    externalId: nonEmptyString(),
+    printedName: nonEmptyString(),
+    supermarketLocationId: nullableString(),
+    status: ref(HARVEST_SCHEMA_IDS.sourceLocationStatus),
+    matchedBy: ref(HARVEST_SCHEMA_IDS.itemSourceMatch),
+    firstSeenAt: nonEmptyString(),
+    lastSeenAt: nonEmptyString(),
+    firstRunId: nullableString(),
+    lastRunId: nullableString(),
+  },
+  [
+    'id',
+    'supermarketId',
+    'externalId',
+    'printedName',
+    'supermarketLocationId',
+    'status',
+    'matchedBy',
+    'firstSeenAt',
+    'lastSeenAt',
+    'firstRunId',
+    'lastRunId',
+  ]
+);
+
+/**
  * One row of the postal code discovery queue (plan 0063, section 3).
  *
  * `discoveredAt` is the cooldown's anchor and `nextAttemptAt` the backoff's, and
@@ -377,9 +543,17 @@ const itemSourceRefPage = paginated(
   HARVEST_SCHEMA_IDS.itemSourceRefPage,
   HARVEST_SCHEMA_IDS.itemSourceRefView
 );
+const sourceLocationPage = paginated(
+  HARVEST_SCHEMA_IDS.sourceLocationPage,
+  HARVEST_SCHEMA_IDS.sourceLocationView
+);
 const supermarketSourcePage = paginated(
   HARVEST_SCHEMA_IDS.supermarketSourcePage,
   HARVEST_SCHEMA_IDS.supermarketSourceView
+);
+const sourceAliasPage = paginated(
+  HARVEST_SCHEMA_IDS.sourceAliasPage,
+  HARVEST_SCHEMA_IDS.sourceAliasView
 );
 const postalCodeDiscoveryRequestPage = paginated(
   HARVEST_SCHEMA_IDS.postalCodeDiscoveryRequestPage,
@@ -399,6 +573,13 @@ const spawnRunRequest = object(
     country: string(),
     radiusMetres: integer({ minimum: 1 }),
     brandKeys: array(string()),
+    // The leaflet, for a LEAFLET_IMPORT run. A free object here on purpose: it
+    // is validated against its own versioned schema (plan 0081, section 4) by
+    // the gateway before it crosses the broker and by the harvester again at
+    // run start, and restating that shape here would be a second copy to drift.
+    document: freeObject(),
+    validFrom: nullableString(),
+    validUntil: nullableString(),
   },
   ['userId', 'mode']
 );
@@ -414,6 +595,8 @@ const listRunsRequest = object(
     supermarketId: string(),
     mode: ref(HARVEST_SCHEMA_IDS.harvestRunMode),
     status: ref(HARVEST_SCHEMA_IDS.harvestRunStatus),
+    // Plan 0082, section 6. Absent lists both.
+    reverted: boolean(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -488,6 +671,33 @@ const setManualRefRequest = object(
   ['userId', 'itemId', 'supermarketId', 'externalId']
 );
 
+const listSourceLocationsRequest = object(
+  HARVEST_SCHEMA_IDS.listSourceLocationsRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: nonEmptyString(),
+    status: ref(HARVEST_SCHEMA_IDS.sourceLocationStatus),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'supermarketId']
+);
+const mapSourceLocationRequest = object(
+  HARVEST_SCHEMA_IDS.mapSourceLocationRequest,
+  {
+    ...adminCredentialProperties,
+    sourceLocationId: nonEmptyString(),
+    supermarketLocationId: nonEmptyString(),
+  },
+  ['userId', 'sourceLocationId', 'supermarketLocationId']
+);
+const sourceLocationIdRequest = object(
+  HARVEST_SCHEMA_IDS.sourceLocationIdRequest,
+  { ...adminCredentialProperties, sourceLocationId: nonEmptyString() },
+  ['userId', 'sourceLocationId']
+);
+
 const listEntriesRequest = object(
   HARVEST_SCHEMA_IDS.listEntriesRequest,
   {
@@ -549,6 +759,55 @@ const listSourcesRequest = object(
   ['userId']
 );
 
+const listAliasesRequest = object(
+  HARVEST_SCHEMA_IDS.listAliasesRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: nonEmptyString(),
+    status: ref(HARVEST_SCHEMA_IDS.sourceAliasStatus),
+    query: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'supermarketId']
+);
+const aliasIdRequest = object(
+  HARVEST_SCHEMA_IDS.aliasIdRequest,
+  { ...adminCredentialProperties, aliasId: nonEmptyString() },
+  ['userId', 'aliasId']
+);
+const acceptAliasRequest = object(
+  HARVEST_SCHEMA_IDS.acceptAliasRequest,
+  {
+    ...adminCredentialProperties,
+    aliasId: nonEmptyString(),
+    itemId: nonEmptyString(),
+  },
+  ['userId', 'aliasId', 'itemId']
+);
+const createItemFromAliasRequest = object(
+  HARVEST_SCHEMA_IDS.createItemFromAliasRequest,
+  {
+    ...adminCredentialProperties,
+    aliasId: nonEmptyString(),
+    // One locale is enough since plan 0079: a leaflet product is saved with its
+    // Spanish name and no English one, and a reader in English sees the Spanish
+    // string through the fallback.
+    name: {
+      type: 'object',
+      additionalProperties: false,
+      properties: { es: string(), en: string() },
+    },
+    brand: nullableString(),
+    ean: nullableString(),
+    unitSize: numberOrNull(),
+    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+  },
+  ['userId', 'aliasId', 'name', 'category', 'defaultUnit']
+);
+
 const listDiscoveryRequestsRequest = object(
   HARVEST_SCHEMA_IDS.listDiscoveryRequestsRequest,
   {
@@ -578,24 +837,42 @@ export const harvestSchemas: JsonSchema[] = [
     HARVEST_SCHEMA_IDS.discoveredPlaceStatus,
     Object.values(DiscoveredPlaceStatus)
   ),
+  enumOf(
+    HARVEST_SCHEMA_IDS.sourceLocationStatus,
+    Object.values(SourceLocationStatus)
+  ),
   enumOf(HARVEST_SCHEMA_IDS.adapterKey, ADAPTER_KEYS),
+  enumOf(
+    HARVEST_SCHEMA_IDS.sourceAliasStatus,
+    Object.values(SourceAliasStatus)
+  ),
+  enumOf(
+    HARVEST_SCHEMA_IDS.harvestWarningCode,
+    Object.values(HarvestWarningCode)
+  ),
   enumOf(
     HARVEST_SCHEMA_IDS.postalCodeDiscoveryStatus,
     Object.values(PostalCodeDiscoveryStatus)
   ),
   supermarketSourceView,
+  harvestRunWarning,
   harvestRunView,
+  sourceAliasView,
+  sourceAliasAcceptResult,
   discoveredPlaceView,
   discoveredPlaceGroup,
   discoveredPlaceGroupsResult,
   sourceCatalogEntryView,
   itemSourceRefView,
+  sourceLocationView,
   postalCodeDiscoveryRequestView,
   harvestRunPage,
   discoveredPlacePage,
   sourceCatalogEntryPage,
   itemSourceRefPage,
+  sourceLocationPage,
   supermarketSourcePage,
+  sourceAliasPage,
   postalCodeDiscoveryRequestPage,
   spawnRunRequest,
   runIdRequest,
@@ -607,12 +884,19 @@ export const harvestSchemas: JsonSchema[] = [
   listRefsRequest,
   refIdRequest,
   setManualRefRequest,
+  listSourceLocationsRequest,
+  mapSourceLocationRequest,
+  sourceLocationIdRequest,
   listEntriesRequest,
   createItemFromEntryRequest,
   upsertSourceRequest,
   sourceIdRequest,
   setSourceEnabledRequest,
   listSourcesRequest,
+  listAliasesRequest,
+  aliasIdRequest,
+  acceptAliasRequest,
+  createItemFromAliasRequest,
   listDiscoveryRequestsRequest,
 ];
 
@@ -625,6 +909,10 @@ export const harvestMessageContracts: Record<
     response: HARVEST_SCHEMA_IDS.harvestRunView,
   },
   [HARVEST_PATTERNS.abort]: {
+    request: HARVEST_SCHEMA_IDS.runIdRequest,
+    response: HARVEST_SCHEMA_IDS.harvestRunView,
+  },
+  [HARVEST_PATTERNS.revert]: {
     request: HARVEST_SCHEMA_IDS.runIdRequest,
     response: HARVEST_SCHEMA_IDS.harvestRunView,
   },
@@ -672,6 +960,26 @@ export const harvestMessageContracts: Record<
     request: HARVEST_SCHEMA_IDS.setManualRefRequest,
     response: HARVEST_SCHEMA_IDS.itemSourceRefView,
   },
+  [SOURCE_LOCATION_PATTERNS.list]: {
+    request: HARVEST_SCHEMA_IDS.listSourceLocationsRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationPage,
+  },
+  [SOURCE_LOCATION_PATTERNS.map]: {
+    request: HARVEST_SCHEMA_IDS.mapSourceLocationRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationView,
+  },
+  [SOURCE_LOCATION_PATTERNS.unmap]: {
+    request: HARVEST_SCHEMA_IDS.sourceLocationIdRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationView,
+  },
+  [SOURCE_LOCATION_PATTERNS.ignore]: {
+    request: HARVEST_SCHEMA_IDS.sourceLocationIdRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationView,
+  },
+  [SOURCE_LOCATION_PATTERNS.unignore]: {
+    request: HARVEST_SCHEMA_IDS.sourceLocationIdRequest,
+    response: HARVEST_SCHEMA_IDS.sourceLocationView,
+  },
   [SOURCE_ENTRY_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listEntriesRequest,
     response: HARVEST_SCHEMA_IDS.sourceCatalogEntryPage,
@@ -695,6 +1003,22 @@ export const harvestMessageContracts: Record<
   [SUPERMARKET_SOURCE_PATTERNS.setEnabled]: {
     request: HARVEST_SCHEMA_IDS.setSourceEnabledRequest,
     response: HARVEST_SCHEMA_IDS.supermarketSourceView,
+  },
+  [SOURCE_ALIAS_PATTERNS.list]: {
+    request: HARVEST_SCHEMA_IDS.listAliasesRequest,
+    response: HARVEST_SCHEMA_IDS.sourceAliasPage,
+  },
+  [SOURCE_ALIAS_PATTERNS.accept]: {
+    request: HARVEST_SCHEMA_IDS.acceptAliasRequest,
+    response: HARVEST_SCHEMA_IDS.sourceAliasAcceptResult,
+  },
+  [SOURCE_ALIAS_PATTERNS.createItem]: {
+    request: HARVEST_SCHEMA_IDS.createItemFromAliasRequest,
+    response: HARVEST_SCHEMA_IDS.sourceAliasAcceptResult,
+  },
+  [SOURCE_ALIAS_PATTERNS.reject]: {
+    request: HARVEST_SCHEMA_IDS.aliasIdRequest,
+    response: HARVEST_SCHEMA_IDS.sourceAliasView,
   },
   [POSTAL_CODE_DISCOVERY_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listDiscoveryRequestsRequest,
