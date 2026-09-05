@@ -10,7 +10,9 @@ import {
   ERROR_CODES,
   enableApiVersioning,
 } from '@portfolio/luna-shopper/platform';
+import { readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { join } from 'node:path';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import { NatsClient } from '../messaging/nats-client';
 import { AdminHarvestImportsController } from './harvest.controller';
@@ -289,6 +291,29 @@ describe('POST /v1/admin/harvest/imports', () => {
     });
 
     expect(response.status).toBe(400);
+  });
+
+  it('accepts the contract library own fixture, so the two cannot disagree', async () => {
+    // The document the schema's own spec validates, sent over the wire. If this
+    // route and that schema ever describe different files, this is what says so.
+    const fixture = JSON.parse(
+      readFileSync(
+        join(
+          process.cwd(),
+          'libs/luna-shopper/contracts/src/schemas/harvest-document/__fixtures__/minimal.harvest-document.json'
+        ),
+        'utf8'
+      )
+    );
+
+    const response = await post(context.origin, {
+      supermarketId: SUPERMARKET,
+      priceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      document: fixture,
+    });
+
+    expect(response.status).toBe(201);
   });
 
   it('passes the admin override through as the local days it was given', async () => {

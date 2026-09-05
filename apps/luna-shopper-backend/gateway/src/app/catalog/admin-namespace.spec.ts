@@ -167,8 +167,9 @@ const ADMIN_CONTROLLERS = [
   AdminCatalogLocationItemsController,
   AdminHarvestRunsController,
   AdminHarvestPlacesController,
+  // One queue over one table since plan 0086. `AdminHarvestItemRefsController`
+  // and the two alias controllers were the same queue over two other tables.
   AdminHarvestEntriesController,
-  // The one upload route, which replaced the leaflet one (plan 0086, D6).
   AdminHarvestImportsController,
   AdminHarvestSourcesController,
 ];

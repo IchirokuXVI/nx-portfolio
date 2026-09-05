@@ -61,6 +61,7 @@ export const HARVEST_SCHEMA_IDS = {
   harvestRunWarning: schemaId('harvest/HarvestRunWarning'),
   harvestRunView: schemaId('harvest/HarvestRunView'),
   harvestRunExportResult: schemaId('harvest/HarvestRunExportResult'),
+  harvestDocument: schemaId('harvest/HarvestDocument'),
   discoveredPlaceView: schemaId('harvest/DiscoveredPlaceView'),
   discoveredPlaceGroup: schemaId('harvest/DiscoveredPlaceGroup'),
   discoveredPlaceGroupsResult: schemaId('harvest/DiscoveredPlaceGroupsResult'),
@@ -439,16 +440,32 @@ const sourceEntryAcceptResult = object(
 );
 
 /**
- * A run's export (plan 0086, section 6.2). The document is a free object here
- * for the same reason the spawn's is: it has its own versioned JSON schema, and
- * restating that shape would be a second copy to drift from it.
+ * The file a run exports and a run imports (plan 0086, section 6).
+ *
+ * **A free object here on purpose.** It has its own versioned JSON schema under
+ * `schemas/harvest-document/`, which the gateway validates an upload against
+ * before it crosses the broker and the harvester validates again at the spawn.
+ * Restating the field list here would be a second copy to drift from the one
+ * that actually decides, exactly as the spawn request's `document` already is.
+ *
+ * It exists as a named schema so the export route can `$ref` it: a gateway route
+ * documents its body from something this library publishes, and a document is
+ * what that route answers.
  */
+const harvestDocument: JsonSchema = {
+  $id: HARVEST_SCHEMA_IDS.harvestDocument,
+  description:
+    'A HarvestDocument (plan 0086, section 6.1), validated against its own versioned JSON schema rather than against this description.',
+  ...freeObject(),
+};
+
+/** A run's export: the document, with what a caller needs to name the file. */
 const harvestRunExportResult = object(
   HARVEST_SCHEMA_IDS.harvestRunExportResult,
   {
     supermarketId: nonEmptyString(),
     priceScopeId: nullableString(),
-    document: freeObject(),
+    document: ref(HARVEST_SCHEMA_IDS.harvestDocument),
   },
   ['supermarketId', 'priceScopeId', 'document']
 );
@@ -806,6 +823,7 @@ export const harvestSchemas: JsonSchema[] = [
   supermarketSourceView,
   harvestRunWarning,
   harvestRunView,
+  harvestDocument,
   harvestRunExportResult,
   discoveredPlaceView,
   discoveredPlaceGroup,

@@ -2345,66 +2345,10 @@ export type HarvestDiscoveredPlaceView = {
 /**
  * `harvest.HarvestDocument` in the gateway's OpenAPI document.
  *
- * A list of products as a source described them, whoever produced it (plan 0086, section 6.1).
+ * A HarvestDocument (plan 0086, section 6.1), validated against its own versioned JSON schema rather than against this description.
  */
 export type HarvestHarvestDocument = {
-  schema_version: unknown;
-  sha256: string;
-  producer?: {
-    name: string;
-    version?: string | null;
-    produced_at?: string | null;
-    run_id?: string | null;
-  } | null;
-  hints?: {
-    chain_id?: string | null;
-    price_scope_id?: string | null;
-    source_kind?: 'OFFICIAL_API' | 'OFFICIAL_WEB' | 'OFFICIAL_LEAFLET' | null;
-  } | null;
-  validity?: {
-    from: string;
-    until: string;
-  } | null;
-  products: {
-    id?: string | null;
-    external_id?: string | null;
-    name: string;
-    brand?: string | null;
-    ean?: string | null;
-    size?: {
-      label?: string | null;
-      quantity?: number | null;
-      unit?: string | null;
-    } | null;
-    price?: {
-      amount: number;
-      currency: string;
-    } | null;
-    unit_price?: {
-      amount: number;
-      label: string;
-      currency?: string | null;
-    } | null;
-    validity?: {
-      from: string;
-      until: string;
-    } | null;
-    observed_at?: string | null;
-    category_path?: string[] | null;
-    url?: string | null;
-    extra?: {
-      [key: string]: unknown;
-    } | null;
-  }[];
-  warnings?:
-    | {
-        message: string;
-        product_id?: string | null;
-        extra?: {
-          [key: string]: unknown;
-        } | null;
-      }[]
-    | null;
+  [key: string]: unknown;
 };
 
 /**

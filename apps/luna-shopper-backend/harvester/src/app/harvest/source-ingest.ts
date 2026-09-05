@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { toItemPriceDetails } from './harvest.mappers';
 import {
   FUZZY_CONFIDENCE,
   ItemMatchIndex,
@@ -203,7 +204,10 @@ export class SourceIngest {
     // Step 4. Only an `ACTIVE` row is owed a price: a fuzzy match never writes
     // one, because a wrong number on a real product is worse than no number.
     const owed = outcomes
-      .map((outcome, index) => ({ outcome, observation: input.observations[index] }))
+      .map((outcome, index) => ({
+        outcome,
+        observation: input.observations[index],
+      }))
       .filter(({ outcome, observation }) => outcome.itemId && observation.price)
       .map(({ outcome, observation }) =>
         priceEntryFor(outcome.itemId as string, observation)
@@ -376,10 +380,11 @@ export class SourceIngest {
    * row is `unchanged`. Nothing is `created` here, because the row a shopper
    * reads is derived and the run never sees it (plan 0080).
    *
-   * **`details` is deliberately not sent.** `ItemPriceDetails` is a leaflet tile
-   * with named fields, and an observation's `extra` is a free bag no rule may
-   * read (plan 0086, D6). The bag is stored on the row and on the
-   * `source_entry_prices` row, which is where the queue shows it.
+   * `details` is a **translation** of the observation's `extra` rather than a
+   * pass through: `extra` is free and catalog's `item_price_details` is not, so
+   * the five keys that table holds are taken where the producer used those names
+   * and everything else stays on the row, where the queue shows it. Nothing on
+   * either side reads it to decide anything (plan 0086, D6).
    */
   private async writePrices(
     context: RunContext,
@@ -454,5 +459,6 @@ function priceEntryFor(
     validFrom: price?.validFrom?.toISOString() ?? null,
     validUntil: price?.validUntil?.toISOString() ?? null,
     observedAt: observation.observedAt.toISOString(),
+    details: toItemPriceDetails(observation.extra),
   };
 }

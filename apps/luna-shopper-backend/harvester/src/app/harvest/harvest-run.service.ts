@@ -38,7 +38,7 @@ import { toHarvestRunView } from './harvest.mappers';
 import { resolveImportWindow } from './import-window';
 import { PlatformAdminService } from './platform-admin.service';
 import { RunExecutor } from './run-executor.service';
-import { SourceEntryRevert } from './source-entry-revert.service';
+import { SourceEntryService } from './source-entry.service';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface RunCursor {
@@ -102,7 +102,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     private readonly store: HarvestRunStore,
     private readonly executor: RunExecutor,
     private readonly sources: SupermarketSourceService,
-    private readonly rows: SourceEntryRevert,
+    private readonly rows: SourceEntryService,
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService
@@ -278,7 +278,12 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     }
 
     const prices = await this.catalog.deletePricesByRun(run.id);
-    const rows = await this.rows.revert(run.id);
+    // Section 8's two deletes, in the harvester's own database. The rows this
+    // run alone stands behind that nobody decided on, and the price each scope
+    // stated for it: they are the run's claims, and an accept after the revert
+    // must not write them again.
+    const observed = await this.rows.deleteObservedPricesFrom(run.id);
+    const undecided = await this.rows.deleteUndecidedFrom(run.id);
     const reverted = await this.store.markReverted(
       run.id,
       userId,
@@ -288,7 +293,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `Reverted run ${run.id}: ${prices.deleted} price row(s) deleted, ` +
         `${prices.reset} confirmation(s) withdrawn, ${prices.recomputed} key(s) ` +
-        `recomputed, ${rows.prices} price observation(s) and ${rows.entries} ` +
+        `recomputed, ${observed} price observation(s) and ${undecided} ` +
         'undecided row(s) removed.'
     );
     return toHarvestRunView(reverted);

@@ -23,7 +23,7 @@ import {
 } from './harvest-run.store';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { RunExecutor } from './run-executor.service';
-import type { SourceEntryRevert } from './source-entry-revert.service';
+import type { SourceEntryService } from './source-entry.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
 
 const ADMIN = 'owner-1';
@@ -224,8 +224,9 @@ function build(
   } as unknown as ConfigService;
 
   const rows = {
-    revert: jest.fn(async () => ({ prices: 12, entries: 9 })),
-  } as unknown as SourceEntryRevert;
+    deleteObservedPricesFrom: jest.fn(async () => 12),
+    deleteUndecidedFrom: jest.fn(async () => 9),
+  } as unknown as SourceEntryService;
 
   const catalog = {
     deletePricesByRun: jest.fn(async () => ({
@@ -266,9 +267,15 @@ describe('HarvestRunService.revert', () => {
       calls.push('catalog');
       return { deleted: 214, reset: 3, recomputed: 217 };
     });
-    (rows.revert as jest.Mock).mockImplementation(async () => {
+    (rows.deleteObservedPricesFrom as jest.Mock).mockImplementation(
+      async () => {
+        calls.push('rows');
+        return 12;
+      }
+    );
+    (rows.deleteUndecidedFrom as jest.Mock).mockImplementation(async () => {
       calls.push('rows');
-      return { prices: 12, entries: 9 };
+      return 9;
     });
     (store.markReverted as jest.Mock).mockImplementation(async () => {
       calls.push('mark');
@@ -281,11 +288,12 @@ describe('HarvestRunService.revert', () => {
 
     const view = await service.revert({ userId: ADMIN, runId: 'run-1' });
 
-    expect(calls).toEqual(['catalog', 'rows', 'mark']);
+    expect(calls).toEqual(['catalog', 'rows', 'rows', 'mark']);
     expect(catalog.deletePricesByRun).toHaveBeenCalledWith('run-1');
     // Both halves of section 8: the run's price observations, and the rows this
     // run alone stands behind that nobody decided on.
-    expect(rows.revert).toHaveBeenCalledWith('run-1');
+    expect(rows.deleteObservedPricesFrom).toHaveBeenCalledWith('run-1');
+    expect(rows.deleteUndecidedFrom).toHaveBeenCalledWith('run-1');
     expect(view.revertedPriceCount).toBe(214);
     expect(view.revertedByUserId).toBe(ADMIN);
   });
@@ -373,7 +381,7 @@ describe('HarvestRunService.revert', () => {
 
     await service.revert({ userId: ADMIN, runId: 'run-1' });
     expect(catalog.deletePricesByRun).toHaveBeenCalledWith('run-1');
-    expect(rows.revert).toHaveBeenCalledWith('run-1');
+    expect(rows.deleteUndecidedFrom).toHaveBeenCalledWith('run-1');
   });
 
   it('completes a retry after a failure between the two databases', async () => {

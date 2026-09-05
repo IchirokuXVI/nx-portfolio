@@ -74,16 +74,6 @@ export interface HarvestDocumentProducer {
   version?: string | null;
   /** ISO 8601. The default `observed_at` for a product that states none. */
   produced_at?: string | null;
-  /**
-   * The run that produced the file, when the harvester's own export produced it.
-   *
-   * Plan 0086 section 6.2 asks `producer` to name the harvester **and the run**,
-   * which is why it is a field rather than something a producer squeezes into
-   * `name`. Like the rest of the block it is shown on the importing cluster's
-   * run page and read by no rule: a run id from another environment names
-   * nothing here.
-   */
-  run_id?: string | null;
 }
 
 /**

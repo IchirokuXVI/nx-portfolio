@@ -19,7 +19,6 @@ import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { RunExecutor } from './run-executor.service';
-import { SourceEntryRevert } from './source-entry-revert.service';
 import { SourceEntryService } from './source-entry.service';
 import { SourceIngest } from './source-ingest';
 import { SourceLocationService } from './source-location.service';
@@ -77,8 +76,6 @@ import { SupermarketSourceService } from './supermarket-source.service';
     // (plan 0086, section 7). `SourceAliasService` and `ItemSourceRefService`
     // were the same three decisions over two other tables and are gone.
     SourceEntryService,
-    // Section 8's two deletes, which are the harvester's half of a revert.
-    SourceEntryRevert,
     SourceLocationService,
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,

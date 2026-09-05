@@ -298,6 +298,9 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
           validFrom: null,
           validUntil: null,
           observedAt: '2026-09-05T10:00:00.000Z',
+          // A walk states no leaflet tile, so the translation of its empty bag
+          // is no details row at all.
+          details: null,
         },
       ],
       RUN,

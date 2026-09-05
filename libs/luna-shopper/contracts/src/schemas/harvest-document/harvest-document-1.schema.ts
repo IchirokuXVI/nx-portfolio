@@ -164,11 +164,6 @@ export const harvestDocument1Schema: JsonSchema = {
         name: { type: 'string', minLength: 1 },
         version: { type: ['string', 'null'] },
         produced_at: { type: ['string', 'null'] },
-        run_id: {
-          type: ['string', 'null'],
-          description:
-            "The harvester's own run, when the harvester's export produced the file. Shown on the importing cluster's run page, read by no rule.",
-        },
       },
     },
     hints: {
