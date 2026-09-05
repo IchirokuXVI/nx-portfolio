@@ -12,22 +12,10 @@ import {
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
-  type AdminListSupermarketItemsRequest,
   type AddItemPriceBatchRequest,
   type AddItemPriceBatchResult,
   type AddItemPriceRequest,
-  type ItemPriceIdRequest,
-  type ItemPricePage,
-  type ItemPriceView,
-  type ListItemPricesRequest,
-  type ListPricePoliciesRequest,
-  type PricePolicyListView,
-  type PricePolicyView,
-  type SetSupermarketItemAvailabilityRequest,
-  type SetSupermarketItemAvailabilityResult,
-  type SetSupermarketLocationItemAvailabilityRequest,
-  type SetSupermarketLocationItemAvailabilityResult,
-  type UpdatePricePolicyRequest,
+  type AdminListSupermarketItemsRequest,
   type AdminPostalCodePage,
   type CountLocationsByPostalCodeRequest,
   type CreateItemRequest,
@@ -35,6 +23,8 @@ import {
   type CreateProductGroupRequest,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
+  type DeleteItemPricesByRunRequest,
+  type DeleteItemPricesByRunResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
   type GetItemsRequest,
@@ -43,9 +33,14 @@ import {
   type GetSupermarketLocationItemRequest,
   type ItemIdRequest,
   type ItemPage,
+  type ItemPriceIdRequest,
+  type ItemPricePage,
+  type ItemPriceView,
   type ItemView,
   type ListAdminPostalCodesRequest,
+  type ListItemPricesRequest,
   type ListNearbyPostalCodesRequest,
+  type ListPricePoliciesRequest,
   type ListPriceScopesRequest,
   type ListProductGroupsRequest,
   type ListSupermarketItemsByItemRequest,
@@ -57,6 +52,8 @@ import {
   type NearbyPostalCodesView,
   type NearestPostalCodeView,
   type PostalCodeLocationCountsView,
+  type PricePolicyListView,
+  type PricePolicyView,
   type PriceScopeIdRequest,
   type PriceScopePage,
   type PriceScopeView,
@@ -70,6 +67,10 @@ import {
   type SearchItemsRequest,
   type SearchOffersRequest,
   type SearchShopsRequest,
+  type SetSupermarketItemAvailabilityRequest,
+  type SetSupermarketItemAvailabilityResult,
+  type SetSupermarketLocationItemAvailabilityRequest,
+  type SetSupermarketLocationItemAvailabilityResult,
   type ShopPage,
   type SummarizeLocationsByChainRequest,
   type SupermarketIdRequest,
@@ -84,6 +85,7 @@ import {
   type SupermarketPage,
   type SupermarketView,
   type UpdateItemRequest,
+  type UpdatePricePolicyRequest,
   type UpdatePriceScopeRequest,
   type UpdateProductGroupRequest,
   type UpdateSupermarketLocationRequest,
@@ -455,13 +457,26 @@ export class CatalogController {
   }
 
   @MessagePattern(ITEM_PRICE_PATTERNS.list)
-  listItemPrices(@Payload() req: ListItemPricesRequest): Promise<ItemPricePage> {
+  listItemPrices(
+    @Payload() req: ListItemPricesRequest
+  ): Promise<ItemPricePage> {
     return this.itemPrices.list(req);
   }
 
   @MessagePattern(ITEM_PRICE_PATTERNS.delete)
   deleteItemPrice(@Payload() req: ItemPriceIdRequest): Promise<{ id: string }> {
     return this.itemPrices.delete(req);
+  }
+
+  /**
+   * Take one run's prices back (plan 0082, section 2). The harvester's first
+   * step of a revert, and its only caller.
+   */
+  @MessagePattern(ITEM_PRICE_PATTERNS.deleteByRun)
+  deleteItemPricesByRun(
+    @Payload() req: DeleteItemPricesByRunRequest
+  ): Promise<DeleteItemPricesByRunResult> {
+    return this.itemPrices.deleteByRun(req);
   }
 
   // --- Price policies (plan 0080, section 3) --------------------------------

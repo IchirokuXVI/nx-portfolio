@@ -86,6 +86,11 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     report: row.report ?? {},
     correlationId: row.correlationId,
     requestedByUserId: row.requestedByUserId,
+    // Plan 0082. Three fields and no status change: a reverted run is still the
+    // COMPLETED or FAILED run it was, and this is drawn beside that.
+    revertedAt: iso(row.revertedAt),
+    revertedByUserId: row.revertedByUserId ?? null,
+    revertedPriceCount: row.revertedPriceCount ?? null,
   };
 }
 

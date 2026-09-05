@@ -213,6 +213,21 @@ export const ITEM_PRICE_PATTERNS = {
    * adds again: editing a price is inserting a price.
    */
   delete: 'itemPrice.delete',
+  /**
+   * Take back everything one harvest run said about prices (plan 0082, section
+   * 2), in one transaction.
+   *
+   * A revert is a **hard delete**, not a retraction flag. The rows a reverted
+   * run wrote are that run's claims, and a revert says the claims were wrong; a
+   * wrong claim kept in the history is a record of an error rather than of the
+   * past. Superseding is a different act on different rows and is never a
+   * delete: a source that changed its mind wrote a new row, and the old one is
+   * a true statement about a day.
+   *
+   * `ADMIN` rows carry no run id and are never touched, and neither is any row
+   * another run wrote.
+   */
+  deleteByRun: 'itemPrice.deleteByRun',
 } as const;
 
 /**
@@ -1171,6 +1186,34 @@ export interface ListItemPricesRequest extends PageQuery, AdminCredential {
 
 export interface ItemPriceIdRequest extends AdminCredential {
   itemPriceId: string;
+}
+
+/**
+ * Take back one run's prices (plan 0082, section 2). Sent by the harvester as
+ * the first step of `harvest.revert`, and by nothing else.
+ */
+export interface DeleteItemPricesByRunRequest extends AdminCredential {
+  sourceRunId: string;
+}
+
+/**
+ * What a revert did in catalog.
+ *
+ * `deleted` counts the rows the run inserted, including those an alias accept
+ * wrote on its behalf, which carry the run's id for exactly this reason.
+ * `reset` counts the rows the run only confirmed: their `lastObservedAt` goes
+ * back to `observedAt` and their `lastObservedRunId` back to `sourceRunId`,
+ * because the freshness a distrusted run introduced is part of what it
+ * introduced. `recomputed` counts the (item, scope) keys worked out again,
+ * including the fan out a NATIONAL scope causes.
+ *
+ * A run with no rows answers zeros rather than failing, which is what makes the
+ * two database operation safe to retry (section 5).
+ */
+export interface DeleteItemPricesByRunResult {
+  deleted: number;
+  reset: number;
+  recomputed: number;
 }
 
 /** Whether a scope carries each of these products. Carries no price. */

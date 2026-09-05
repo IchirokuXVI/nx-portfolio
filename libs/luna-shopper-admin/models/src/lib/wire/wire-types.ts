@@ -2425,6 +2425,9 @@ export type HarvestHarvestRunView = {
   };
   correlationId: string | null;
   requestedByUserId: string | null;
+  revertedAt: string | null;
+  revertedByUserId: string | null;
+  revertedPriceCount: number | null;
 };
 
 /**

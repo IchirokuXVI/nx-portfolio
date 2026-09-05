@@ -107,6 +107,8 @@ export const CATALOG_SCHEMA_IDS = {
   addItemPriceBatchResult: schemaId('catalog/AddItemPriceBatchResult'),
   listItemPricesRequest: schemaId('msg/itemPrice.list/request'),
   itemPriceIdRequest: schemaId('msg/itemPrice.id/request'),
+  deleteItemPricesByRunRequest: schemaId('msg/itemPrice.deleteByRun/request'),
+  deleteItemPricesByRunResult: schemaId('catalog/DeleteItemPricesByRunResult'),
   setSupermarketItemAvailabilityRequest: schemaId(
     'msg/supermarketItem.setAvailability/request'
   ),
@@ -899,6 +901,20 @@ const itemPriceIdRequest = object(
   { ...adminCredentialProperties, itemPriceId: nonEmptyString() },
   ['userId', 'itemPriceId']
 );
+const deleteItemPricesByRunRequest = object(
+  CATALOG_SCHEMA_IDS.deleteItemPricesByRunRequest,
+  { ...adminCredentialProperties, sourceRunId: nonEmptyString() },
+  ['userId', 'sourceRunId']
+);
+const deleteItemPricesByRunResult = object(
+  CATALOG_SCHEMA_IDS.deleteItemPricesByRunResult,
+  {
+    deleted: integer({ minimum: 0 }),
+    reset: integer({ minimum: 0 }),
+    recomputed: integer({ minimum: 0 }),
+  },
+  ['deleted', 'reset', 'recomputed']
+);
 const setSupermarketItemAvailabilityRequest = object(
   CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityRequest,
   {
@@ -1483,6 +1499,8 @@ export const catalogSchemas: JsonSchema[] = [
   addItemPriceBatchResult,
   listItemPricesRequest,
   itemPriceIdRequest,
+  deleteItemPricesByRunRequest,
+  deleteItemPricesByRunResult,
   setSupermarketItemAvailabilityRequest,
   setSupermarketItemAvailabilityResult,
   listPricePoliciesRequest,
@@ -1639,6 +1657,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PRICE_PATTERNS.delete]: {
     request: CATALOG_SCHEMA_IDS.itemPriceIdRequest,
     response: COMMON_IDS.idResult,
+  },
+  [ITEM_PRICE_PATTERNS.deleteByRun]: {
+    request: CATALOG_SCHEMA_IDS.deleteItemPricesByRunRequest,
+    response: CATALOG_SCHEMA_IDS.deleteItemPricesByRunResult,
   },
   [PRICE_POLICY_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listPricePoliciesRequest,

@@ -114,6 +114,11 @@ export class HarvestMemory implements HarvestServiceI {
       // The audit trail attributes a run's writes to the service and not to the
       // operator who started it (plan 0006, section 6; backend plan 0075).
       requestedByUserId: null,
+      // Nothing has been taken back from a run that has not run (backend plan
+      // 0082).
+      revertedAt: null,
+      revertedByUserId: null,
+      revertedPriceCount: null,
     };
 
     this._runs.unshift(run);
@@ -126,7 +131,9 @@ export class HarvestMemory implements HarvestServiceI {
         (query.supermarketId === undefined ||
           run.supermarketId === query.supermarketId) &&
         (query.mode === undefined || run.mode === query.mode) &&
-        (query.status === undefined || run.status === query.status)
+        (query.status === undefined || run.status === query.status) &&
+        (query.reverted === undefined ||
+          query.reverted === (run.revertedAt !== null))
     );
 
     return page(matching, query);
@@ -153,6 +160,45 @@ export class HarvestMemory implements HarvestServiceI {
     run.abortRequestedAt = new Date().toISOString();
     run.status = 'ABORTED';
     run.finishedAt = run.abortRequestedAt;
+    return { ...run };
+  }
+
+  /**
+   * Take back what a run wrote (backend plan 0082).
+   *
+   * The refusals are the real one's, because they are what the screen draws
+   * around: a second revert is a 409, and so is one asked of a run that has not
+   * finished. The status is left exactly as it was, which is the rule the chip
+   * on the runs list exists to show.
+   *
+   * The price count is the run's own `created`, which is what the confirmation
+   * offered. The real service answers what catalog actually deleted, and the
+   * two differ when an accepted alias wrote more rows on the run's behalf; with
+   * no catalog behind this there is nothing better to say.
+   */
+  async revertRun(id: string): Promise<Wire.HarvestHarvestRunView> {
+    const run = this._runs.find((candidate) => candidate.id === id);
+    if (run === undefined) {
+      throw notFound();
+    }
+    if (run.revertedAt !== null) {
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: '',
+      });
+    }
+    if (run.status === 'PENDING' || run.status === 'RUNNING') {
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: '',
+      });
+    }
+
+    run.revertedAt = new Date().toISOString();
+    run.revertedByUserId = 'operator';
+    run.revertedPriceCount = run.created;
     return { ...run };
   }
 
@@ -335,7 +381,11 @@ export class HarvestMemory implements HarvestServiceI {
         run.supermarketId === input.supermarketId &&
         run.documentSha256 !== null &&
         run.documentSha256 === sha256 &&
-        run.status !== 'FAILED'
+        run.status !== 'FAILED' &&
+        // A reverted run does not block a corrected upload, which is the whole
+        // of backend plan 0082's requirement on the index: reverting is how a
+        // document that was imported wrongly gets imported again.
+        run.revertedAt === null
     );
     if (duplicate !== undefined) {
       throw new GatewayError({
@@ -379,6 +429,10 @@ export class HarvestMemory implements HarvestServiceI {
       report: {},
       correlationId: null,
       requestedByUserId: null,
+      // Nothing has run, so there is nothing to have taken back.
+      revertedAt: null,
+      revertedByUserId: null,
+      revertedPriceCount: null,
     };
 
     this._runs.unshift(run);

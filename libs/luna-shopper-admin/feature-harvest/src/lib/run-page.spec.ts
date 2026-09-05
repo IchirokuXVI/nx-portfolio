@@ -59,6 +59,9 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     report: {},
     correlationId: 'cid-1',
     requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
     ...over,
   };
 }
@@ -100,10 +103,14 @@ function leafletRun(over: Partial<HarvestRun> = {}): HarvestRun {
   });
 }
 
-async function render(answer: HarvestRun): Promise<ComponentFixture<RunPage>> {
+async function render(
+  answer: HarvestRun,
+  reverted?: HarvestRun
+): Promise<ComponentFixture<RunPage>> {
   const service = {
     readRun: async () => answer,
     abortRun: async () => answer,
+    revertRun: async () => reverted ?? answer,
   } as unknown as HarvestServiceI;
 
   TestBed.resetTestingModule();
@@ -330,6 +337,116 @@ describe('RunPage, for a leaflet import', () => {
     expect(page.queued()).toBe(0);
     expect(text(fixture)).not.toContain('harvest.run.warnings.heading');
     expect(text(fixture)).not.toContain('harvest.run.queue.open');
+    page.watch.stop();
+  });
+});
+
+/**
+ * Taking a run's writes back (backend plan 0082, section 6).
+ *
+ * The control is drawn for a finished run of a price writing mode that has not
+ * been reverted already, and for nothing else. It is a hard delete with no undo,
+ * so a button that appeared where the server would refuse it would be teaching
+ * an operator to press through a 409.
+ */
+describe('RunPage, reverting a run', () => {
+  it('offers the revert on a finished run that wrote prices', async () => {
+    const fixture = await render(
+      run({ status: 'COMPLETED', finishedAt: '2026-09-03T09:20:00.000Z' })
+    );
+
+    expect(fixture.componentInstance.watch.canRevert()).toBe(true);
+    expect(text(fixture)).toContain('harvest.run.revert.action');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('offers nothing on a run still going: abort it first', async () => {
+    const fixture = await render(run());
+
+    expect(fixture.componentInstance.watch.canRevert()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.run.revert.action');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('offers nothing on a store discovery run, which wrote no price', async () => {
+    const fixture = await render(
+      run({ mode: 'STORE_DISCOVERY', status: 'COMPLETED' })
+    );
+
+    expect(fixture.componentInstance.watch.canRevert()).toBe(false);
+    fixture.componentInstance.watch.stop();
+  });
+
+  /**
+   * The counts are asserted as the dialog's inputs and not as rendered text:
+   * the testing translator answers with the key and interpolates nothing, so a
+   * sentence read off the DOM would prove only that a key was used.
+   */
+  it('confirms with the numbers the run itself reported', async () => {
+    const fixture = await render(
+      run({ status: 'COMPLETED', created: 214, notFound: 9 })
+    );
+    const page = fixture.componentInstance;
+
+    expect(page.confirmCounts()).toEqual({ prices: 214, queued: 9 });
+    // A crawl's `notFound` counts products the chain does not stock, which is
+    // not a queue, so its sentence does not mention one.
+    expect(page.confirmBodyKey()).toBe('harvest.run.revert.confirm');
+    page.watch.stop();
+  });
+
+  it('names the queue as well, for the one mode that fills it', async () => {
+    const fixture = await render(
+      run({
+        mode: 'LEAFLET_IMPORT',
+        status: 'COMPLETED',
+        created: 41,
+        notFound: 6,
+      })
+    );
+    const page = fixture.componentInstance;
+
+    expect(page.confirmBodyKey()).toBe('harvest.run.revert.confirmLeaflet');
+    expect(page.confirmCounts()).toEqual({ prices: 41, queued: 6 });
+    page.watch.stop();
+  });
+
+  it('nothing is deleted until the confirmation is answered', async () => {
+    const fixture = await render(run({ status: 'COMPLETED' }));
+    const page = fixture.componentInstance;
+    const revert = jest.spyOn(page.watch, 'revert');
+
+    page.confirming.set(true);
+    fixture.detectChanges();
+
+    expect(revert).not.toHaveBeenCalled();
+    expect(text(fixture)).toContain('harvest.run.revert.heading');
+    page.watch.stop();
+  });
+
+  it('shows the state and the count the operation answered', async () => {
+    const done = run({
+      status: 'COMPLETED',
+      revertedAt: '2026-09-05T10:00:00.000Z',
+      revertedByUserId: 'owner-1',
+      revertedPriceCount: 214,
+    });
+    const fixture = await render(run({ status: 'COMPLETED' }), done);
+    const page = fixture.componentInstance;
+
+    page.confirming.set(true);
+    await page.revert();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.confirming()).toBe(false);
+    // The status is unchanged, and the chip is drawn beside it rather than in
+    // place of it: how the run ended did not change.
+    expect(page.watch.run()?.status).toBe('COMPLETED');
+    expect(text(fixture)).toContain('harvest.run.reverted.chip');
+    expect(text(fixture)).toContain('214');
+    // And the control is gone, because there is nothing left to take back.
+    expect(page.watch.canRevert()).toBe(false);
     page.watch.stop();
   });
 });
