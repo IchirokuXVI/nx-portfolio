@@ -66,7 +66,8 @@
     "value": {
       "none": "None",
       "yes": "Yes",
-      "no": "No"
+      "no": "No",
+      "missingLocale": "no {{locale}}"
     },
     "list": {
       "loading": "Loading…",
@@ -128,7 +129,7 @@
     },
     "error": {
       "required": "This is needed.",
-      "missingLocale": "The {{locale}} text is needed.",
+      "missingAnyLocale": "A name in at least one language is needed.",
       "tooLong": "Use at most {{max}} characters.",
       "localeTooLong": "The {{locale}} text must be at most {{max}} characters.",
       "notAUrl": "Write a full web address, starting with http:// or https://.",

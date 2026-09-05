@@ -141,11 +141,11 @@ describe('validateDraft', () => {
   });
 
   /**
-   * Named rather than a bare "required": the control is several inputs, and
-   * "required" under a box the operator has not scrolled to says less than the
-   * language does.
+   * Required means "in at least one language" (plan 0079). A supermarket
+   * leaflet is printed in Spanish only, and the product it names is a complete
+   * product; the list shows the fallback and marks the gap.
    */
-  it('names each missing locale of a required localized field', () => {
+  it('accepts a required localized field with one language blank', () => {
     expect(
       validateDraft(
         descriptor,
@@ -153,15 +153,43 @@ describe('validateDraft', () => {
         'create',
         {}
       )
+    ).toEqual({});
+    expect(
+      validateDraft(
+        descriptor,
+        draftWith({ name: { en: '', es: 'Leche' } }),
+        'create',
+        {}
+      )
+    ).toEqual({});
+  });
+
+  it('refuses a required localized field with every language blank, once', () => {
+    expect(
+      validateDraft(
+        descriptor,
+        draftWith({ name: { en: '', es: '  ' } }),
+        'create',
+        {}
+      )
     ).toEqual({
-      name: [
-        {
-          kind: 'key',
-          key: 'resource.error.missingLocale',
-          args: { locale: 'es' },
-        },
-      ],
+      name: [{ kind: 'key', key: 'resource.error.missingAnyLocale' }],
     });
+  });
+
+  /**
+   * The wire refuses `''` and refuses `null` alike: a language the name does
+   * not have is spelled by leaving it out (plan 0079).
+   */
+  it('submits only the languages that have text', () => {
+    expect(
+      toInput(
+        descriptor,
+        draftWith({ name: { en: '', es: 'Leche' } }),
+        'create',
+        {}
+      )
+    ).toEqual(expect.objectContaining({ name: { es: 'Leche' } }));
   });
 
   it('refuses money with more decimals than the column has', () => {

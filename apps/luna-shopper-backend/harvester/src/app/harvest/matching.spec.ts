@@ -78,10 +78,7 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
 
   it('refuses to guess when two items normalize to the same key', () => {
     // Two products under one key is precisely the case where guessing does harm.
-    const index = new ItemMatchIndex([
-      item({ id: 'a' }),
-      item({ id: 'b' }),
-    ]);
+    const index = new ItemMatchIndex([item({ id: 'a' }), item({ id: 'b' })]);
     expect(
       index.match({
         externalId: '4241',
@@ -104,6 +101,30 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
         unitSize: 5,
       })
     ).toBeNull();
+  });
+
+  it('indexes an item with no Spanish name under its English one (plan 0079)', () => {
+    // The index used to call `.toLowerCase()` on `name.es`, which is a TypeError
+    // for a name in one language. An English only item is a candidate at best,
+    // but it is indexed, and it is found by the English words.
+    const index = new ItemMatchIndex([
+      item({ name: { en: 'Olive oil' }, brand: 'Hacendado', unitSize: 1 }),
+    ]);
+
+    expect(
+      index.match({
+        externalId: '4241',
+        name: 'Olive Oil',
+        brand: 'Hacendado',
+        ean: null,
+        unitSize: 1,
+      })
+    ).toEqual({
+      itemId: 'item-1',
+      matchedBy: ItemSourceMatch.NAME_BRAND_SIZE,
+      status: ItemSourceRefStatus.CANDIDATE,
+      confidence: 0.6,
+    });
   });
 
   it('finds nothing rather than something wrong when nothing matches', () => {

@@ -64,6 +64,25 @@ export function localizedTextValue(
   return Object.values(text).find((entry) => entry.trim() !== '') ?? '';
 }
 
+/**
+ * The languages a value actually has: the string entries that are not blank,
+ * and nothing else (plan 0079).
+ *
+ * What a submit sends. The form seeds `''` per locale so that every input
+ * renders, and the wire refuses `''` and refuses `null` alike: a language the
+ * name does not have is spelled by leaving it out, and this is where the form
+ * translates a blank box into that.
+ */
+export function presentLocalizedText(value: unknown): LocalizedText {
+  const text: Record<string, string> = {};
+  for (const [locale, entry] of Object.entries(toLocalizedText(value))) {
+    if (entry.trim() !== '') {
+      text[locale] = entry;
+    }
+  }
+  return text;
+}
+
 /** One empty string per locale, which is what a create form starts from. */
 export function emptyLocalizedText(locales: readonly string[]): LocalizedText {
   return Object.fromEntries(locales.map((locale) => [locale, '']));

@@ -30,6 +30,8 @@ import { Item, ProductGroup, SupermarketItem } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
+  displayName,
+  displayNameSql,
   toItemOfferView,
   toItemView,
   toProductGroupView,
@@ -192,11 +194,7 @@ export class ItemService {
       tx.update(Item, before, row)
     );
     if (saved.productGroupId !== groupBefore) {
-      this.events.itemGroupChanged(
-        saved.id,
-        groupBefore,
-        saved.productGroupId
-      );
+      this.events.itemGroupChanged(saved.id, groupBefore, saved.productGroupId);
     }
     return toItemView(saved);
   }
@@ -624,9 +622,7 @@ export class ItemService {
     // is a syntax error here. Leaving the key out is the same ordering anyway,
     // since a key every row ties on decides nothing.
     const barcodeKey =
-      term.ean === null
-        ? ''
-        : `(${barcode}) DESC NULLS LAST,\n               `;
+      term.ean === null ? '' : `(${barcode}) DESC NULLS LAST,\n               `;
 
     const filters: string[] = [];
     if (req.category) {
@@ -834,9 +830,9 @@ export class ItemService {
         });
       }
     } else {
-      qb.orderBy(`i.name ->> 'en'`, 'ASC').addOrderBy('i.id', 'ASC');
+      qb.orderBy(displayNameSql('i'), 'ASC').addOrderBy('i.id', 'ASC');
       if (cursor) {
-        qb.andWhere(`(i.name ->> 'en', i.id) > (:cv, :cid)`, {
+        qb.andWhere(`(${displayNameSql('i')}, i.id) > (:cv, :cid)`, {
           cv: cursor.value,
           cid: cursor.id,
         });
@@ -851,7 +847,7 @@ export class ItemService {
     if (order === 'updated') {
       return row.updatedAt.toISOString();
     }
-    return row.name.en;
+    return displayName(row.name);
   }
 }
 

@@ -178,11 +178,18 @@ const nullableLocalized = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
 });
 
-const localizedText = object(
-  CATALOG_SCHEMA_IDS.localizedText,
-  { en: nonEmptyString(), es: nonEmptyString() },
-  ['en', 'es']
-);
+// Plan 0079: a name carries the languages it has. Neither key is required, a
+// missing language is an absent key and never null (so a null fails the string
+// branch), `minProperties` refuses `{}`, and `additionalProperties: false` keeps
+// a language the catalog cannot serve out of the row.
+const localizedText: JsonSchema = {
+  ...object(
+    CATALOG_SCHEMA_IDS.localizedText,
+    { en: nonEmptyString(), es: nonEmptyString() },
+    []
+  ),
+  minProperties: 1,
+};
 
 /** Per locale alternative words, so `leche` and `milk` reach one group (0048). */
 const localizedSynonyms = object(

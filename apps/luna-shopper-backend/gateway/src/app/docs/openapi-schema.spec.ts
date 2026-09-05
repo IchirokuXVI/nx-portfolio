@@ -103,6 +103,18 @@ function sampleOf(schema: Record<string, unknown>): unknown {
       for (const key of required) {
         payload[key] = sampleOf(properties[key] ?? {});
       }
+      // A localized text requires no key in particular and at least one of
+      // them (plan 0079): `minProperties` is the rule, and an empty sample
+      // would fail it and report the sampler's disagreement as the document's.
+      const minProperties = schema['minProperties'];
+      const [first] = Object.keys(properties);
+      if (
+        typeof minProperties === 'number' &&
+        Object.keys(payload).length < minProperties &&
+        first !== undefined
+      ) {
+        payload[first] = sampleOf(properties[first]);
+      }
       return payload;
     }
     default:

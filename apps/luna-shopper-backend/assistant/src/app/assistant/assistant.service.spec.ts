@@ -4,6 +4,7 @@ import {
   AssistantRole,
   LineApprovalStatus,
   ListResolutionBranch,
+  MembershipStatus,
   SettlementOutcome,
   UsernamePropagation,
   type AssistantTurnRequest,
@@ -1217,6 +1218,81 @@ describe('AssistantService', () => {
     });
   });
 
+  describe('a zone the caller has only asked to join', () => {
+    /**
+     * The production defect this locks down, found 2026-09-05 on `velista.app`.
+     *
+     * `GET /v1/zones` is `listMine`, which returns APPROVED **and** PENDING
+     * memberships, so somebody can see the zone they are waiting on.
+     * `GET /v1/zones/:id/lists` calls `requireApproved` and answers 403 for the
+     * PENDING half. The index used to read every zone the first route returned, so
+     * the 403 escaped as an unhandled error and every turn became a 500: one
+     * outstanding join request made the assistant unusable, voice and text alike.
+     *
+     * The stand in throws here rather than returning nothing, because returning
+     * nothing would pass with the filter removed. The gateway refuses, and the
+     * only way through this test is not to ask.
+     */
+    function apiWithAPendingZone(): RecordingApi {
+      const api = new RecordingApi();
+      api.zones = [
+        zone('zone-home', 'Casa'),
+        zone('zone-waiting', 'Familia', MembershipStatus.PENDING),
+      ];
+
+      const approved = api.listLists.bind(api);
+      api.listLists = async (caller: ApiCaller, zoneId: string) => {
+        if (zoneId === 'zone-waiting') {
+          throw new GatewayApiError(
+            403,
+            'You do not have permission to do that.',
+            'forbidden'
+          );
+        }
+        return approved(caller, zoneId);
+      };
+
+      return api;
+    }
+
+    it('is never read, so the turn survives it', async () => {
+      const api = apiWithAPendingZone();
+      const service = build(
+        new FakeModelProvider([FakeModelProvider.says('¡Hola!')]),
+        api
+      );
+
+      const reply = await service.turn(turnRequest('hola'));
+
+      expect(reply.reply).toBe('¡Hola!');
+      expect(api.of('listLists').map((call) => call.detail['zoneId'])).toEqual([
+        'zone-home',
+      ]);
+    });
+
+    it('contributes no list to the index', async () => {
+      const api = apiWithAPendingZone();
+      api.listsByZone.set('zone-waiting', [
+        list('list-unreachable', 'zone-waiting', 'Compra'),
+      ]);
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('query_lists', { item: 'leche' }),
+          FakeModelProvider.says('No.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('hay leche?'));
+
+      // Nothing in the waiting zone is readable, so nothing in it may be quoted
+      // back at the caller as though it were theirs to act on.
+      expect(
+        api.of('listLines').map((call) => call.detail['listId'])
+      ).not.toContain('list-unreachable');
+    });
+  });
+
   describe('section 5: it fetches lazily', () => {
     it('does not read a single line for a turn that called no tool', async () => {
       const api = new RecordingApi();
@@ -1726,8 +1802,20 @@ describe('AssistantService.transcribe', () => {
 // fixtures
 // ---------------------------------------------------------------------------
 
-function zone(id: string, name: string): MyZoneView {
-  return { id, name } as MyZoneView;
+/**
+ * A zone the caller is in, APPROVED unless the test says otherwise.
+ *
+ * `myStatus` has to be here rather than left off: the context index reads only the
+ * approved half, because `GET /v1/zones` returns PENDING memberships too and the
+ * lists route refuses them. A fixture with no status is a zone the filter drops,
+ * which would silently empty the index for every test in this file.
+ */
+function zone(
+  id: string,
+  name: string,
+  myStatus: MembershipStatus = MembershipStatus.APPROVED
+): MyZoneView {
+  return { id, name, myStatus } as MyZoneView;
 }
 
 function list(id: string, zoneId: string, name: string): ListView {

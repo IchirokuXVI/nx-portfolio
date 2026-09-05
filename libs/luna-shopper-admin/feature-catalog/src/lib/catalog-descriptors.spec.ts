@@ -415,9 +415,28 @@ describe('availability', () => {
 describe('localized names', () => {
   /**
    * The column is one `jsonb` object. Submitting only the language that was
-   * typed in would erase the other one.
+   * typed in would erase the other one, so the whole draft goes, and the draft
+   * holds every language the form opened with.
    */
-  it('submit every locale, including the ones nobody touched', () => {
+  it('submits every locale that has text, including the ones nobody touched', () => {
+    const draft = draftFor(ITEMS, null, 'create');
+    const typed = {
+      ...draft,
+      name: { en: 'Whole milk', es: 'Leche entera' },
+      category: 'DAIRY',
+      defaultUnit: 'LITER',
+    };
+
+    const input = toInput(ITEMS, typed, 'create', draft);
+
+    expect(input['name']).toEqual({ en: 'Whole milk', es: 'Leche entera' });
+  });
+
+  /**
+   * A blank box is a language the name does not have, and the wire spells that
+   * by leaving the key out (plan 0079): `''` and `null` are both refused there.
+   */
+  it('leaves a blank locale out rather than sending an empty string', () => {
     const draft = draftFor(ITEMS, null, 'create');
     const typed = {
       ...draft,
@@ -428,7 +447,7 @@ describe('localized names', () => {
 
     const input = toInput(ITEMS, typed, 'create', draft);
 
-    expect(input['name']).toEqual({ en: 'Whole milk', es: '' });
+    expect(input['name']).toEqual({ en: 'Whole milk' });
   });
 
   /** One entry per line, because a line break is what a synonym cannot contain. */
