@@ -52,21 +52,29 @@ export const APP_BASE_URL_LOCALE_PLACEHOLDER = '{locale}';
 export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
 
 /**
- * 2 MB, the default cap on an uploaded leaflet (plan 0081, section 7).
+ * 6 MB, the default cap on an uploaded `HarvestDocument` (plan 0086, section 10).
  *
- * The arithmetic it belongs to: the two full El Jamon extractions are 337 KB
- * and 349 KB, a full leaflet read by a model is about 260 KB, and NATS carries
- * 8 MB, so the broker needs nothing. What the route needs is a limit at all:
- * Nest's JSON body parser defaults to 100 KB and this gateway configured none,
- * so **every real leaflet was refused with a bare 413** until this existed.
+ * **The figure is provisional and the plan says to measure it.** It has to hold
+ * the export of a finished Mercadona walk, and nobody has produced one yet: a
+ * chain's whole assortment is 4,232 products, so the arithmetic says somewhere
+ * between 1 MB and 2 MB and the number to trust is the one taken from a real
+ * export. Raise or lower this once that measurement exists, and say what it was.
+ *
+ * **What it may not become is 8 MB or more.** The document crosses the broker
+ * inside `harvest.spawn`, NATS `max_payload` is 8 MB, and the envelope and
+ * headers ride with it, so a body at the broker's own ceiling is one the broker
+ * refuses after the gateway accepted it. 6 MB leaves that headroom.
+ *
+ * For scale at the other end: the two full El Jamon leaflet extractions are
+ * 337 KB and 349 KB, which is what the 2 MB this replaces was sized for.
  */
-export const DEFAULT_LEAFLET_MAX_BYTES = 2 * 1024 * 1024;
+export const DEFAULT_IMPORT_MAX_BYTES = 6 * 1024 * 1024;
 
 /**
  * 100 KB, the cap on every other JSON body, which is Express's own default
  * stated rather than inherited.
  *
- * Since the app is created with `bodyParser: false` so the leaflet route can
+ * Since the app is created with `bodyParser: false` so the import route can
  * have its own limit, the default parser is mounted by hand, and a default that
  * is not written down is one nobody can find when a body is refused.
  */
@@ -228,18 +236,25 @@ export const gatewayValidationSchema = Joi.object({
     .default(45000),
 
   /**
-   * The byte cap on an uploaded leaflet (plan 0081, section 7).
+   * The byte cap on an uploaded `HarvestDocument` (plan 0086, section 10).
    *
    * Its own number rather than a share of the audio caps above, for the reason
    * they are separate from each other: three routes with three audiences, and
-   * tuning one should not move the others. The floor is 64 KB because a leaflet
-   * smaller than that is not one, and validated by Joi like every other number
-   * so a typo fails the process at boot.
+   * tuning one should not move the others. The floor is 64 KB because a file
+   * smaller than that is not a chain's assortment, and validated by Joi like
+   * every other number so a typo fails the process at boot.
+   *
+   * **Still spelled `LEAFLET_MAX_BYTES` on purpose.** The route it caps became a
+   * file import rather than a leaflet upload, but the name is what four
+   * deployment files already set (the Helm config map, its env template and both
+   * `luna-slot` scripts), and renaming an environment variable in the same
+   * release that renames the route is a second thing to get wrong for no
+   * behaviour. It moves when something else takes those files anyway.
    */
   LEAFLET_MAX_BYTES: Joi.number()
     .integer()
     .min(64 * 1024)
-    .default(DEFAULT_LEAFLET_MAX_BYTES),
+    .default(DEFAULT_IMPORT_MAX_BYTES),
 
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
@@ -290,8 +305,8 @@ export interface GatewayConfig {
   minClientVersion: string;
   /** The byte cap the voice route's multipart interceptor enforces (plan 0041). */
   assistantAudioMaxBytes: number;
-  /** The byte cap the leaflet upload route's own JSON parser holds (plan 0081). */
-  leafletMaxBytes: number;
+  /** The byte cap the file import route's own JSON parser holds (plan 0086). */
+  importMaxBytes: number;
   /** The voice comment route's own caps (plan 0045). */
   voiceComment: {
     maxBytes: number;
@@ -360,8 +375,8 @@ export const gatewayConfiguration = registerAs(
     assistantAudioMaxBytes: Number(
       process.env.ASSISTANT_AUDIO_MAX_BYTES ?? DEFAULT_AUDIO_MAX_BYTES
     ),
-    leafletMaxBytes: Number(
-      process.env.LEAFLET_MAX_BYTES ?? DEFAULT_LEAFLET_MAX_BYTES
+    importMaxBytes: Number(
+      process.env.LEAFLET_MAX_BYTES ?? DEFAULT_IMPORT_MAX_BYTES
     ),
     voiceComment: {
       maxBytes: Number(
