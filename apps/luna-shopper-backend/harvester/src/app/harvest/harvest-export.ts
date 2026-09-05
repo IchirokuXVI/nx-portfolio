@@ -1,6 +1,10 @@
-import type {
-  HarvestDocument,
+import {
   PriceSourceKind,
+  type HarvestDocument,
+  type HarvestDocumentHints,
+  type HarvestDocumentProduct,
+  type HarvestDocumentSize,
+  type HarvestDocumentValidity,
 } from '@portfolio/luna-shopper/contracts';
 import { createHash } from 'node:crypto';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
@@ -29,6 +33,13 @@ import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 /** The Spanish civil timezone, as `leaflet-validity.ts` named it. */
 const EXPORT_TIMEZONE = 'Europe/Madrid';
 
+/** The three kinds a file may state, and the three a row may hold. */
+const OFFICIAL_KINDS: Record<string, HarvestDocumentHints['source_kind']> = {
+  [PriceSourceKind.OFFICIAL_API]: 'OFFICIAL_API',
+  [PriceSourceKind.OFFICIAL_WEB]: 'OFFICIAL_WEB',
+  [PriceSourceKind.OFFICIAL_LEAFLET]: 'OFFICIAL_LEAFLET',
+};
+
 export interface HarvestExportRun {
   id: string;
   supermarketId: string;
@@ -43,10 +54,21 @@ export interface HarvestExportInput {
   producedAt: Date;
 }
 
-/** What names the harvester in a file it produced, so a run page can say so. */
-export const HARVEST_PRODUCER_NAME = 'luna-harvester';
-/** The producer's own version, which is this export format's, not the service's. */
+/** The export format's own version, which is not the service's. */
 export const HARVEST_PRODUCER_VERSION = '1';
+
+/**
+ * What names the harvester and the run in a file it produced.
+ *
+ * **The run id rides in the name** because `producer` has three fields and none
+ * of them is a run: the schema is `additionalProperties: false` and a field for
+ * one producer's private handle is not a field a file schema should carry. The
+ * run page shows this string as where the file came from, so it reads as a
+ * sentence rather than as a key nobody but this backend could use.
+ */
+export function producerName(runId: string): string {
+  return `luna-harvester run ${runId}`;
+}
 
 export function buildHarvestDocument(
   input: HarvestExportInput
@@ -56,17 +78,14 @@ export function buildHarvestDocument(
   );
   const kind = dominantKind(input.entries);
 
-  const document: Record<string, unknown> = {
+  const document: HarvestDocument = {
     schema_version: 1,
     // Filled below, once the rest of the document is settled.
     sha256: '',
     producer: {
-      name: HARVEST_PRODUCER_NAME,
+      name: producerName(input.run.id),
       version: HARVEST_PRODUCER_VERSION,
       produced_at: input.producedAt.toISOString(),
-      // Which run this was, so the run page of the cluster that imports it can
-      // name where the rows came from (plan 0086, section 6.2).
-      run_id: input.run.id,
     },
     // The three hints, filled. They are for the upload screen and nothing here
     // depends on a reader honouring them: ids do not survive an environment
@@ -81,8 +100,8 @@ export function buildHarvestDocument(
     products,
   };
 
-  document['sha256'] = digestOf(document);
-  return document as HarvestDocument;
+  document.sha256 = digestOf(document);
+  return document;
 }
 
 /**
@@ -91,7 +110,7 @@ export function buildHarvestDocument(
  * Taken over the document with its own `sha256` emptied, because a value cannot
  * be part of what produces it. A reader that wants to check one does the same.
  */
-export function digestOf(document: Record<string, unknown>): string {
+export function digestOf(document: HarvestDocument): string {
   const withoutDigest = { ...document, sha256: '' };
   return createHash('sha256')
     .update(JSON.stringify(withoutDigest))
@@ -115,7 +134,7 @@ function priceFor(
 function toProduct(
   entry: SourceCatalogEntry,
   price: SourceEntryPrice | null
-): Record<string, unknown> {
+): HarvestDocumentProduct {
   const size = sizeOf(entry);
   const validity = validityOf(price);
   return {
@@ -150,7 +169,7 @@ function toProduct(
   };
 }
 
-function sizeOf(entry: SourceCatalogEntry): Record<string, unknown> | null {
+function sizeOf(entry: SourceCatalogEntry): HarvestDocumentSize | null {
   const quantity = entry.unitSize === null ? null : Number(entry.unitSize);
   if (!entry.sizeFormat && quantity === null) {
     return null;
@@ -172,7 +191,7 @@ function sizeOf(entry: SourceCatalogEntry): Record<string, unknown> | null {
  */
 function validityOf(
   price: SourceEntryPrice | null
-): Record<string, string> | null {
+): HarvestDocumentValidity | null {
   if (!price?.validFrom || !price?.validUntil) {
     return null;
   }
@@ -198,9 +217,13 @@ function localDay(instant: Date): string {
  *
  * Every row of an export was observed by one run, so they agree in practice;
  * taking the commonest rather than the first means a mixed set still answers
- * something true of most of it rather than of whichever row sorted first.
+ * something true of most of it rather than of whichever row sorted first. A kind
+ * the file schema does not carry, which is any user kind, answers nothing: no
+ * upload may write one, so no export may propose one either.
  */
-function dominantKind(entries: SourceCatalogEntry[]): PriceSourceKind | null {
+function dominantKind(
+  entries: SourceCatalogEntry[]
+): HarvestDocumentHints['source_kind'] {
   const counts = new Map<PriceSourceKind, number>();
   for (const entry of entries) {
     counts.set(entry.sourceKind, (counts.get(entry.sourceKind) ?? 0) + 1);
@@ -213,5 +236,5 @@ function dominantKind(entries: SourceCatalogEntry[]): PriceSourceKind | null {
       bestCount = count;
     }
   }
-  return best;
+  return best === null ? null : (OFFICIAL_KINDS[best] ?? null);
 }
