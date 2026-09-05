@@ -12,7 +12,6 @@ import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
 import { HarvestController } from './harvest.controller';
-import { ItemSourceRefService } from './item-source-ref.service';
 import { LeafletImportRunner } from './leaflet-import.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import { PlatformAdminService } from './platform-admin.service';
@@ -21,7 +20,6 @@ import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { RefreshRunner } from './refresh.runner';
 import { RunExecutor } from './run-executor.service';
-import { SourceAliasService } from './source-alias.service';
 import { SourceEntryService } from './source-entry.service';
 import { SourceLocationService } from './source-location.service';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
@@ -73,9 +71,10 @@ import { SupermarketSourceService } from './supermarket-source.service';
     RunExecutor,
     HarvestRunService,
     DiscoveredPlaceService,
+    // The one queue over the one table, and the three decisions about a row
+    // (plan 0086, section 7). `SourceAliasService` and `ItemSourceRefService`
+    // were the same three decisions over two other tables and are gone.
     SourceEntryService,
-    SourceAliasService,
-    ItemSourceRefService,
     SourceLocationService,
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,

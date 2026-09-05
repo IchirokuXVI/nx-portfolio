@@ -5,12 +5,12 @@ import {
   HarvestRunMode,
   HarvestRunStatus,
   ItemCategory,
-  ItemSourceRefStatus,
-  SourceAliasStatus,
+  PriceSourceKind,
+  SourceEntryStatus,
   SourceLocationStatus,
   UnitOfMeasure,
   type AdapterKey,
-  type LeafletDocument,
+  type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Type } from 'class-transformer';
@@ -47,7 +47,7 @@ export class SpawnHarvestRunDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Required for CATALOG_DISCOVERY and REFRESH.',
+    description: 'Required for CATALOG_DISCOVERY and FILE_IMPORT.',
   })
   @IsOptional()
   @IsUUID()
@@ -56,7 +56,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The scope a REFRESH writes its prices for. Required for REFRESH.',
+      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices; a `deza-web` one accepts it and ignores it, because the site prints none.',
   })
   @IsOptional()
   @IsUUID()
@@ -125,18 +125,29 @@ export class LocalizedNameDto {
 }
 
 /**
- * One leaflet upload (plan 0081, section 7).
+ * The three official kinds, which are the only ones an upload may write (plan
+ * 0086, section 9). `catalog.addPrices` enforces the same rule; stating it here
+ * refuses the request before it crosses the broker.
+ */
+export const IMPORTABLE_SOURCE_KINDS = [
+  PriceSourceKind.OFFICIAL_API,
+  PriceSourceKind.OFFICIAL_WEB,
+  PriceSourceKind.OFFICIAL_LEAFLET,
+] as const;
+
+/**
+ * One file import (plan 0086, section 6).
  *
  * The document is **not** described field by field here. It has its own
  * versioned JSON Schema in the contracts library, the gateway validates against
  * that before the document crosses the broker, and restating the shape as a DTO
  * would be a second copy to drift from the first.
  */
-export class ImportLeafletDto {
+export class ImportHarvestDocumentDto {
   @ApiProperty({
     format: 'uuid',
     description:
-      'The chain this leaflet is from. The document `retailer.chain_id` is a hint the upload screen shows beside this picker and is never a lookup key: two extractors spell one chain two ways.',
+      'The chain this file is from. The document hints.chain_id fills the upload screen picker and is never a lookup key: ids do not survive an environment change.',
   })
   @IsUUID()
   supermarketId!: string;
@@ -149,10 +160,18 @@ export class ImportLeafletDto {
   @IsUUID()
   priceScopeId!: string;
 
+  @ApiProperty({
+    enum: IMPORTABLE_SOURCE_KINDS,
+    description:
+      'What observed these products, which is what the rows and the prices are stamped with. Not what the upload is: a re-imported Mercadona walk is OFFICIAL_API, because that is what saw the price.',
+  })
+  @IsIn([...IMPORTABLE_SOURCE_KINDS])
+  sourceKind!: PriceSourceKind;
+
   @ApiPropertyOptional({
     format: 'date',
     description:
-      'Override the document `validity.starts_on`, as a local day in Spain. Required when the document states none: the backend refuses a run with a null bound.',
+      'Override the document validity.from, as a local day in Spain. Required when the document states none: the backend refuses a run with a null bound.',
   })
   @IsOptional()
   @IsDateString()
@@ -161,7 +180,7 @@ export class ImportLeafletDto {
   @ApiPropertyOptional({
     format: 'date',
     description:
-      'Override the document `validity.ends_on`, as a local day in Spain. Inclusive: a leaflet valid to the 23rd is valid through the whole of the 23rd.',
+      'Override the document validity.until, as a local day in Spain. Inclusive: a file valid to the 23rd is valid through the whole of the 23rd.',
   })
   @IsOptional()
   @IsDateString()
@@ -171,53 +190,10 @@ export class ImportLeafletDto {
     type: 'object',
     additionalProperties: true,
     description:
-      'The leaflet, as `tmp/leaflet` produced it. Validated against the versioned import schema this backend can read; a document that fails is answered 400 with every failure named by its JSON path and its offer id.',
+      'The file, as a HarvestDocument: a leaflet extractor, a person typing a chain’s prices, or another cluster’s harvest export all produce one. Validated against the versioned schema this backend can read; a document that fails is answered 400 with every failure named by its JSON path and its product id.',
   })
   @IsObject()
-  document!: LeafletDocument;
-}
-
-/** Bind a queued printed name to a product the catalog already holds. */
-export class AcceptSourceAliasDto {
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
-  itemId!: string;
-}
-
-/**
- * Create the product a queued printed name is for, and bind it, in one call.
- * The alias keeps what the leaflet printed whatever the item is called.
- */
-export class CreateItemFromAliasDto {
-  @ApiProperty({ type: LocalizedNameDto })
-  @ValidateNested()
-  @Type(() => LocalizedNameDto)
-  name!: LocalizedNameDto;
-
-  @ApiPropertyOptional({ maxLength: 120, nullable: true })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  brand?: string | null;
-
-  @ApiPropertyOptional({ maxLength: 32, nullable: true })
-  @IsOptional()
-  @IsString()
-  @MaxLength(32)
-  ean?: string | null;
-
-  @ApiPropertyOptional({ nullable: true })
-  @IsOptional()
-  @IsNumber()
-  unitSize?: number | null;
-
-  @ApiProperty({ enum: ItemCategory })
-  @IsEnum(ItemCategory)
-  category!: ItemCategory;
-
-  @ApiProperty({ enum: UnitOfMeasure })
-  @IsEnum(UnitOfMeasure)
-  defaultUnit!: UnitOfMeasure;
+  document!: HarvestDocument;
 }
 
 export class ImportDiscoveredPlaceDto {
@@ -236,7 +212,45 @@ export class ImportDiscoveredPlaceDto {
   priceScopeId?: string;
 }
 
+/** Bind a queued row to a product the catalog already holds (plan 0086, section 7). */
+export class AcceptSourceEntryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  itemId!: string;
+}
+
+/**
+ * Create the product a queued row is for, and bind it, in one call.
+ *
+ * **Every field is optional**, which is the difference from the alias form this
+ * replaces: the row already holds a default for each, so an operator sends only
+ * what he changed and the backend fills the rest. What he cannot change is the
+ * row itself, which keeps what the source printed whatever the item is called.
+ */
 export class CreateItemFromEntryDto {
+  @ApiPropertyOptional({ type: LocalizedNameDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedNameDto)
+  name?: LocalizedNameDto;
+
+  @ApiPropertyOptional({ maxLength: 120, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  brand?: string | null;
+
+  @ApiPropertyOptional({ maxLength: 32, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  ean?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  unitSize?: number | null;
+
   @ApiPropertyOptional({
     enum: ItemCategory,
     description:
@@ -245,21 +259,14 @@ export class CreateItemFromEntryDto {
   @IsOptional()
   @IsEnum(ItemCategory)
   category?: ItemCategory;
-}
 
-export class SetManualItemSourceRefDto {
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
-  itemId!: string;
-
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
-  supermarketId!: string;
-
-  @ApiProperty({ maxLength: 64 })
-  @IsString()
-  @MaxLength(64)
-  externalId!: string;
+  @ApiPropertyOptional({
+    enum: UnitOfMeasure,
+    description: 'Override the unit the source’s own size text mapped to.',
+  })
+  @IsOptional()
+  @IsEnum(UnitOfMeasure)
+  defaultUnit?: UnitOfMeasure;
 }
 
 export class UpsertSupermarketSourceDto {
@@ -388,14 +395,37 @@ export class DiscoveredPlaceGroupQueryDto {
   sampleSize?: number;
 }
 
+/**
+ * The one queue, per chain (plan 0086, section 10).
+ *
+ * `supermarketId` is **on the DTO** rather than a `@Query('supermarketId')`
+ * argument beside it. `createValidationPipe` sets `whitelist` with
+ * `forbidNonWhitelisted`, so a property the declared class does not carry is
+ * refused with a 400 however correctly the handler then reads it from a
+ * parameter of its own.
+ */
 export class SourceEntryListQueryDto extends PageQueryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  supermarketId!: string;
+
   @ApiPropertyOptional({
+    enum: SourceEntryStatus,
     description:
-      'Only entries the matching ladder could not tie to a catalog item: the candidate new products the owner reviews.',
+      'Absent lists CANDIDATE and UNRESOLVED, which is the queue: the rows waiting for a person. Naming one reaches a decision to look up or undo.',
   })
   @IsOptional()
-  @IsBoolean()
-  unmatchedOnly?: boolean;
+  @IsEnum(SourceEntryStatus)
+  status?: SourceEntryStatus;
+
+  @ApiPropertyOptional({
+    enum: PriceSourceKind,
+    description:
+      'Which kind of observation to show, so an operator working through one file’s rows is not interleaved with a walk’s 4,000.',
+  })
+  @IsOptional()
+  @IsEnum(PriceSourceKind)
+  sourceKind?: PriceSourceKind;
 
   @ApiPropertyOptional({ maxLength: 120 })
   @IsOptional()
@@ -426,46 +456,4 @@ export class SourceLocationListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(SourceLocationStatus)
   status?: SourceLocationStatus;
-}
-
-/**
- * The alias queue, per chain. The chain is chosen first, as the entries queue
- * does, because the queue is per chain by construction.
- *
- * The chain is a path segment here rather than a property on this class, so the
- * trap plan 0084 met next door does not apply: `forbidNonWhitelisted` refuses a
- * QUERY parameter the class does not declare, and a route parameter is not one.
- */
-export class SourceAliasListQueryDto extends PageQueryDto {
-  @ApiPropertyOptional({
-    enum: SourceAliasStatus,
-    description:
-      'Absent lists CANDIDATE and UNRESOLVED, which is the queue: the rows waiting for a person.',
-  })
-  @IsOptional()
-  @IsEnum(SourceAliasStatus)
-  status?: SourceAliasStatus;
-
-  @ApiPropertyOptional({ maxLength: 120 })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  query?: string;
-}
-
-export class ItemSourceRefListQueryDto extends PageQueryDto {
-  @ApiPropertyOptional({ format: 'uuid' })
-  @IsOptional()
-  @IsUUID()
-  supermarketId?: string;
-
-  @ApiPropertyOptional({ format: 'uuid' })
-  @IsOptional()
-  @IsUUID()
-  itemId?: string;
-
-  @ApiPropertyOptional({ enum: ItemSourceRefStatus })
-  @IsOptional()
-  @IsEnum(ItemSourceRefStatus)
-  status?: ItemSourceRefStatus;
 }
