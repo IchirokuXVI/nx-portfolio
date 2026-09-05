@@ -130,7 +130,12 @@ export class SourceEntryService {
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.prices', 'p')
       .where('e."supermarketId" = :sid', { sid: req.supermarketId })
-      .orderBy('e."lastSeenAt"', 'DESC')
+      // The **property** path, not a quoted column. `take` beside a
+      // `leftJoinAndSelect` makes TypeORM page through a DISTINCT subquery, and
+      // it rewrites an ORDER BY into that subquery by prefixing the alias:
+      // `e."lastSeenAt"` becomes `distinctAlias.e_"lastSeenAt"`, which is not a
+      // column any more and fails at runtime for every request.
+      .orderBy('e.lastSeenAt', 'DESC')
       .addOrderBy('e.id', 'DESC')
       .take(limit + 1);
     if (req.status) {
