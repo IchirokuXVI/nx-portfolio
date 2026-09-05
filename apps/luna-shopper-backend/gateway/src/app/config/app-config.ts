@@ -47,28 +47,30 @@ export const APP_BASE_URL_LOCALE_PLACEHOLDER = '{locale}';
  * rather than imported across an app boundary — these are two deployables and a
  * shared constant between them would be a library nobody else wants. The
  * arithmetic it belongs to: base64 takes 2 MB to about 2.7 MB on the broker leg,
- * the transcript and envelope take it under 3 MB, and NATS `max_payload` is 8 MB.
+ * the transcript and envelope take it under 3 MB, and NATS `max_payload` is
+ * 16 MB.
  */
 export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
 
 /**
- * 6 MB, the default cap on an uploaded `HarvestDocument` (plan 0086, section 10).
+ * 10 MB, the default cap on an uploaded `HarvestDocument` (plan 0086, section 10).
  *
- * **The figure is provisional and the plan says to measure it.** It has to hold
- * the export of a finished Mercadona walk, and nobody has produced one yet: a
- * chain's whole assortment is 4,232 products, so the arithmetic says somewhere
- * between 1 MB and 2 MB and the number to trust is the one taken from a real
- * export. Raise or lower this once that measurement exists, and say what it was.
+ * It has to hold the export of a finished Mercadona walk, which is a chain's
+ * whole assortment: 4,232 products, so the arithmetic says somewhere between
+ * 1 MB and 2 MB and 10 MB is room for several times that. For scale at the other
+ * end, the two full El Jamon leaflet extractions are 337 KB and 349 KB, which is
+ * what the 2 MB this replaces was sized for.
  *
- * **What it may not become is 8 MB or more.** The document crosses the broker
- * inside `harvest.spawn`, NATS `max_payload` is 8 MB, and the envelope and
- * headers ride with it, so a body at the broker's own ceiling is one the broker
- * refuses after the gateway accepted it. 6 MB leaves that headroom.
- *
- * For scale at the other end: the two full El Jamon leaflet extractions are
- * 337 KB and 349 KB, which is what the 2 MB this replaces was sized for.
+ * **The broker was raised to fit it.** The document crosses the broker whole
+ * inside `harvest.spawn`, and NATS `max_payload` was 8 MB, so a 10 MB body would
+ * have been accepted here and refused a moment later by the broker, which is the
+ * worst place to find a limit. `max_payload` is 16 MB now, in
+ * `k8s/e2e/luna-shopper-backend/nats.conf` and
+ * `lunaShopperBackend.nats.maxPayload` in the chart, which are one decision and
+ * change together. A raise here beyond that leaves the same trap, so this number
+ * and that one move as a pair.
  */
-export const DEFAULT_IMPORT_MAX_BYTES = 6 * 1024 * 1024;
+export const DEFAULT_IMPORT_MAX_BYTES = 10 * 1024 * 1024;
 
 /**
  * 100 KB, the cap on every other JSON body, which is Express's own default
@@ -244,14 +246,12 @@ export const gatewayValidationSchema = Joi.object({
    * smaller than that is not a chain's assortment, and validated by Joi like
    * every other number so a typo fails the process at boot.
    *
-   * **Still spelled `LEAFLET_MAX_BYTES` on purpose.** The route it caps became a
-   * file import rather than a leaflet upload, but the name is what four
-   * deployment files already set (the Helm config map, its env template and both
-   * `luna-slot` scripts), and renaming an environment variable in the same
-   * release that renames the route is a second thing to get wrong for no
-   * behaviour. It moves when something else takes those files anyway.
+   * It was `LEAFLET_MAX_BYTES` until plan 0086, which is what the route was when
+   * only a leaflet extractor produced the file. A harvest export, a crawl that
+   * ran somewhere else and a person typing a chain's prices all produce one now,
+   * so the name says what it caps.
    */
-  LEAFLET_MAX_BYTES: Joi.number()
+  HARVESTER_FILE_IMPORT_MAX_BYTES: Joi.number()
     .integer()
     .min(64 * 1024)
     .default(DEFAULT_IMPORT_MAX_BYTES),
@@ -376,7 +376,7 @@ export const gatewayConfiguration = registerAs(
       process.env.ASSISTANT_AUDIO_MAX_BYTES ?? DEFAULT_AUDIO_MAX_BYTES
     ),
     importMaxBytes: Number(
-      process.env.LEAFLET_MAX_BYTES ?? DEFAULT_IMPORT_MAX_BYTES
+      process.env.HARVESTER_FILE_IMPORT_MAX_BYTES ?? DEFAULT_IMPORT_MAX_BYTES
     ),
     voiceComment: {
       maxBytes: Number(

@@ -204,8 +204,10 @@ services:
     image: nats:2.10-alpine
     restart: unless-stopped
     # `-c` for one setting: `max_payload` is raised above the broker's 1 MB default
-    # so a voice recording can reach the assistant at all (plan 0041, section 4.2)
-    # and a voice comment can reach core (plan 0045, section 3), and it is **config
+    # so a voice recording can reach the assistant at all (plan 0041, section 4.2),
+    # a voice comment can reach core (plan 0045, section 3) and an uploaded
+    # `HarvestDocument` can reach the harvester (plan 0086, section 6.2) — that
+    # last one is what took it from 8 MB to 16. It is **config
     # file only** — there is no `--max_payload` flag, and passing one makes
     # nats-server print its usage and exit, which brings the container up unhealthy
     # and takes every service behind it with it. `nats.conf` beside this file
