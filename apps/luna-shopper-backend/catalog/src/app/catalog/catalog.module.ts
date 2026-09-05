@@ -11,7 +11,11 @@ import {
 } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogController } from './catalog.controller';
+import { EffectivePriceService } from './effective-price.service';
+import { EffectivePriceSweep } from './effective-price.sweep';
+import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
+import { PricePolicyService } from './price-policy.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
@@ -56,6 +60,12 @@ import { SupermarketService } from './supermarket.service';
     PlatformAdminService,
     // Every write below it runs inside a transaction this opens (plan 0075).
     CatalogAuditService,
+    // Which price a shopper sees, materialized inside every price write and
+    // kept current by the sweep when only the clock moved (plan 0080).
+    EffectivePriceService,
+    EffectivePriceSweep,
+    ItemPriceService,
+    PricePolicyService,
     SupermarketService,
     PriceScopeService,
     SupermarketLocationService,

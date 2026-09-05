@@ -55,11 +55,11 @@ export enum PostalCodeSource {
 /**
  * Where a stored price came from (plan 0038, section 5.3).
  *
- * It ships with backlog 0001's full value set even though only OFFICIAL_API and
- * ADMIN are reachable today, because adding a value to a Postgres enum later is a
- * migration and defining them now is free. The rule that reads it is section 6.5:
- * an automated fetch never overwrites a price a person typed in, it reports the
- * disagreement instead.
+ * It ships with backlog 0001's full value set even though only a few are
+ * reachable today, because adding a value to a Postgres enum later is a
+ * migration and defining them now is free. Since plan 0080 every kind's rows are
+ * stored side by side in `item_prices`, and `price_policies` plus the `ADMIN`
+ * row's protection window decide which one a shopper sees.
  */
 export enum PriceSourceKind {
   OFFICIAL_API = 'OFFICIAL_API',

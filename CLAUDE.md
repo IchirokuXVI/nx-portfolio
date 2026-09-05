@@ -238,14 +238,15 @@ catalog over NATS. It was the sixth backend service to land (`assistant`, plan
 0039, is the seventh) and it owns the fourth Postgres, after auth, core and
 catalog.
 
-**It is switched off in production and in staging, on purpose, and the chart says
-so in both values files.** A catalog discovery run is 4,383 HTTP requests over
-about eighteen minutes, and running it costs a fourth Postgres with its own volume
-plus another Node process; the development machine has room for that and the two
-VPSs do not. So `lunaShopperBackend.harvester.enabled` is false everywhere,
-nothing renders in either cluster (no Deployment, Service, PDB, migration Job,
-StatefulSet, PVC or backup CronJob), and runs happen here against the compose
-stack. The chart still describes it fully, so the files do not drift.
+**It is deployed in both clusters, and no run can write to catalog in either.**
+`values.staging.yaml` sets `enabled: true`, `harvestEnabled: true` and
+`mercadonaEnabled: false` (k8s plan 0008): the pod runs store discovery only, and
+never fetches a storefront. `values.production.yaml` sets `enabled: true` with no
+`harvestEnabled`, so the pod runs and refuses every spawn. Both clusters leave
+`actorId` empty, so even a run that started could not write a price: catalog
+rejects a service actor it does not know. A catalog discovery run is 4,383 HTTP
+requests over about eighteen minutes, and price runs happen here against the
+compose stack, where the development machine has room for them.
 
 There are **three** switches, and they are three because they are three different
 decisions:
@@ -265,9 +266,14 @@ Two rules that are easy to break by accident:
 - **`bulk_price` is stored verbatim and never recomputed.** The obvious
   derivation disagrees with the chain on 110 of 4,232 products, in the field
   whose only purpose is comparison.
-- **An automated fetch never overwrites a price a person typed in** (plan 0038,
-  section 6.5). It reports the disagreement instead. When `ItemPrice` and
-  `PricePolicy` arrive that rule is _deleted_, not extended.
+- **Every source's price is stored side by side, and nothing overwrites** (plan
+  0080). A run writes rows of `item_prices` stamped with its run id, an operator
+  adds an `ADMIN` row beside them, and `price_policies` plus the `ADMIN` row's
+  seven day protection snapshot decide on every read which one a shopper sees.
+  The answer is materialized on `supermarket_items`, recomputed inside the write
+  that changed it and by a sixty second sweep when only the clock moved. Never
+  write a price to `supermarket_items` directly, and never decide at write time
+  which source wins.
 
 `@portfolio/luna-shopper/mercadona` and `@portfolio/luna-shopper/osm-places` are
 framework free by hard constraint: no TypeORM, no Nest, no database, and every

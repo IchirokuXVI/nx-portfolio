@@ -270,32 +270,54 @@
       "priceScopeId": "Price scope",
       "priceScopeIdHelp": "A price belongs to a scope and not to a shop. Every shop that prices against this scope shows this price.",
       "price": "Price",
-      "priceHelp": "Clearing it lets the next automated run write this row again.",
+      "priceHelp": "What the till charges for one pack. Leave it empty for a product priced per kilogram.",
       "currency": "Currency",
       "unitPrice": "Unit price",
       "unitPriceHelp": "The source’s own price per reference unit. Type it in. It is never worked out from the price and the size, because the two disagree on about one product in forty.",
       "unitPriceLabel": "Unit price label",
       "unitPriceLabelHelp": "The source’s own words for the unit price, such as 100 ml, or lv for washing machine loads. Free text and not a unit.",
+      "validFrom": "Valid from",
+      "validFromHelp": "Leave it empty for a price that applies from the moment it is added.",
+      "validUntil": "Valid until",
+      "validUntilHelp": "For a price you know is temporary. Leave it empty for one that holds until a better source replaces it.",
       "available": "Sold at this scope",
       "availableHelp": "Scope wide. Whether one particular shop has it is a separate answer, on that shop’s own row.",
-      "priceSourceKind": "Source",
-      "priceSourceKindHelp": "Set by the server. A price you type in is recorded as typed in, and no automated run will overwrite it while it is there.",
-      "priceObservedAt": "Seen at",
-      "priceObservedAtHelp": "When the price was last observed. The server sets it on every write.",
-      "note": "A price belongs to a price scope, not to a shop. Changing one here changes it for every shop that scope covers.",
+      "sourceKind": "Source",
+      "sourceKindHelp": "Where the shown price came from. A price you add is recorded as typed in here. It is protected for seven days against a source repeating what you overrode, and a source saying something new is shown at once.",
+      "observedAt": "Seen at",
+      "observedAtHelp": "When the shown price was last observed by its source.",
+      "stale": "Out of date",
+      "staleHelp": "Nothing currently eligible prices this product, so the newest price anybody gave is shown and flagged. Set by the server from the price policies.",
+      "note": "The price a shopper sees, chosen among every price a source gave. A price belongs to a price scope, not to a shop. Open a row to see the prices behind it, add one, or remove one.",
       "filter": {
         "itemId": "Product",
         "priceScopeId": "Price scope",
-        "priceSourceKind": "Source",
+        "sourceKind": "Source",
+        "stale": "Out of date",
         "available": "Sold at this scope"
       },
-      "action": {
-        "revert": "Revert to harvested"
+      "history": {
+        "back": "Back to the prices",
+        "scope": "Scope",
+        "effective": "Shown to shoppers",
+        "noEffective": "No price is shown for this product in this scope.",
+        "staleYes": "Yes, nothing current prices it",
+        "staleNo": "No",
+        "rows": "Every price a source gave",
+        "none": "No source has priced this product in this scope.",
+        "shown": "shown",
+        "seen": "Seen",
+        "lastSeen": "last",
+        "run": "run",
+        "overriding": "Overriding {{kind}} at {{price}}",
+        "remove": "Remove",
+        "actions": "Actions",
+        "add": "Add a price"
       },
       "confirm": {
-        "revert": {
-          "heading": "Remove this typed price?",
-          "body": "The price typed in for {{name}} is removed, and the next automated run may write this row again. The row itself stays, and it is still listed as typed in until a run replaces it.",
+        "remove": {
+          "heading": "Remove this price?",
+          "body": "The {{kind}} price of {{price}} is removed from the history, and the price shoppers see is worked out again from what is left. Add a new price afterwards to correct a typo.",
           "confirm": "Remove it"
         }
       },
@@ -308,6 +330,19 @@
         "counting": "Counting the shops it covers…",
         "none": "Choose a price scope. A price belongs to a scope, not to a shop."
       }
+    },
+    "pricePolicies": {
+      "one": "price policy",
+      "many": "Price policies",
+      "sourceKind": "Source",
+      "priority": "Priority",
+      "priorityHelp": "Lower wins. A leaflet at 10 outranks a website crawl at 30 whenever both are eligible.",
+      "maxAgeDays": "Maximum age, in days",
+      "maxAgeDaysHelp": "How old a price of this source may be before it stops being eligible. Empty means it never ages out. Typed in prices have none on purpose: for a chain with no automated source they are the only truth.",
+      "enabled": "Enabled",
+      "enabledHelp": "Off removes this source from every read at once.",
+      "note": "How each source competes for the price a shopper sees. Six rows, one per source.",
+      "formNote": "Saving works out the shown price again for every product in the catalog, inside this request."
     },
     "locationItems": {
       "one": "shop row",

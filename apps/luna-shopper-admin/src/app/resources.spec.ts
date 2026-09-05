@@ -45,6 +45,7 @@ describe('ADMIN_RESOURCES', () => {
       'items',
       'product-groups',
       'prices',
+      'price-policies',
       'location-items',
       'users',
       'zones',

@@ -437,15 +437,22 @@ export class SettleSheet {
 
   /**
    * How old the prices on the pane are, once, under it (section 5.4): the
-   * oldest `observedAt` among the options shown, and whether any of them was
-   * typed in by a person rather than published by a chain, in the same
-   * sentence. Null when nothing is priced, so the pane draws nothing.
+   * oldest `observedAt` among the options shown, and whether the server
+   * flagged any of them stale, in the same sentence. Null when nothing is
+   * priced, so the pane draws nothing.
+   *
+   * The flag is read, never inferred (backend plan 0080, section 5). This used
+   * to say "entered by hand" from `sourceKind === 'ADMIN'` and let the oldest
+   * date stand for freshness, and neither can know the policy: a typed price
+   * has no maximum age, so an old one is not stale, while a crawl price a week
+   * old is. The server decides and this draws it. The date still travels, for
+   * display.
    *
    * The two are interpolated keys, so what is held here is the key and its
    * argument rather than a sentence: the template hands both to the pipe.
    */
   protected readonly pricesAsOf = computed<{
-    key: 'basket.product.asOf' | 'basket.product.asOfTyped';
+    key: 'basket.product.asOf' | 'basket.product.asOfStale';
     when: string;
   } | null>(() => {
     const line = this.line();
@@ -454,14 +461,14 @@ export class SettleSheet {
       return null;
     }
     let oldest: Date | null = null;
-    let typed = false;
+    let stale = false;
     for (const id of line.optionIds) {
       const offer = basket.products.get(id)?.offer;
       if (!offer || offer.price === null) {
         continue;
       }
-      if (offer.sourceKind === 'ADMIN') {
-        typed = true;
+      if (offer.stale) {
+        stale = true;
       }
       if (offer.observedAt && (oldest === null || offer.observedAt < oldest)) {
         oldest = offer.observedAt;
@@ -471,7 +478,7 @@ export class SettleSheet {
       return null;
     }
     return {
-      key: typed ? 'basket.product.asOfTyped' : 'basket.product.asOf',
+      key: stale ? 'basket.product.asOfStale' : 'basket.product.asOf',
       when: formatDay(oldest, this._locale()),
     };
   });

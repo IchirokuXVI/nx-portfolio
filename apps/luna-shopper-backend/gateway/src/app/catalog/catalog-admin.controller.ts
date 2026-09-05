@@ -14,20 +14,27 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   ITEM_PATTERNS,
+  ITEM_PRICE_PATTERNS,
+  PRICE_POLICY_PATTERNS,
   PRICE_SCOPE_PATTERNS,
+  PriceSourceKind,
   PRODUCT_GROUP_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type ItemPage,
+  type ItemPricePage,
+  type ItemPriceView,
   type ItemView,
+  type PricePolicyListView,
+  type PricePolicyView,
   type PriceScopePage,
   type PriceScopeView,
   type ProductGroupPage,
   type ProductGroupView,
+  type SetSupermarketItemAvailabilityResult,
   type SupermarketItemPage,
-  type SupermarketItemView,
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
@@ -49,19 +56,22 @@ import {
   AdminSearchItemsQueryDto,
 } from './catalog-admin.dto';
 import {
+  AddItemPriceDto,
   CreateItemDto,
   CreatePriceScopeDto,
   CreateProductGroupDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
+  ListItemPricesQueryDto,
   ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
+  SetSupermarketItemAvailabilityDto,
   UpdateItemDto,
+  UpdatePricePolicyDto,
   UpdatePriceScopeDto,
   UpdateProductGroupDto,
   UpdateSupermarketDto,
   UpdateSupermarketLocationDto,
-  UpsertSupermarketItemDto,
   UpsertSupermarketLocationItemDto,
 } from './catalog.dto';
 
@@ -458,11 +468,15 @@ export class AdminCatalogProductGroupsController {
 }
 
 /**
- * Prices, and the screen `apps/luna-shopper-admin/plans/0005` section 4 is about.
+ * The effective prices: the materialized rows a shopper sees (plan 0080,
+ * section 10), and the screen `apps/luna-shopper-admin/plans/0005` section 4
+ * was about before the price model beneath it changed.
  *
- * **`v2`, and the version did not move with the path.** It says what shape the
- * payload has, which is unrelated to who may send it, so bumping it here would
- * claim a change that did not happen.
+ * **`v3`**, per plan 0004's per controller versioning. The view's meaning
+ * changed from "the price" to "the price chosen among several", and two fields
+ * were renamed with it so an old build cannot silently read a stale number as
+ * fresh. Nothing here writes a price any more: the rows a source gave live at
+ * {@link AdminCatalogItemPricesController}, and this row is derived from them.
  *
  * A price belongs to a **scope**, not to a shop: `SupermarketItem` is keyed on
  * `(itemId, priceScopeId)`, and twelve stores served by one warehouse share one
@@ -473,37 +487,18 @@ export class AdminCatalogProductGroupsController {
 @ApiBearerAuth('access-token')
 @UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
-@Controller({ path: 'admin/catalog/supermarket-items', version: '2' })
+@Controller({ path: 'admin/catalog/supermarket-items', version: '3' })
 export class AdminCatalogSupermarketItemsController {
   constructor(private readonly nats: NatsClient) {}
 
   /**
-   * Write one price by hand. **This pins the row**: it sets `priceSourceKind` to
-   * `ADMIN`, and plan 0038 section 6.5 then stops every automated fetch from
-   * overwriting it, with no queue anywhere surfacing the disagreement. Listing
-   * `priceSourceKind=ADMIN` below is how a pin is found again.
-   */
-  @Put()
-  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.upsert)
-  @ApiProblemResponses({ body: true, conflict: true })
-  upsert(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Body() dto: UpsertSupermarketItemDto
-  ): Promise<SupermarketItemView> {
-    return this.nats.send<SupermarketItemView>(
-      SUPERMARKET_ITEM_PATTERNS.upsert,
-      { ...adminCredential(admin), ...dto }
-    );
-  }
-
-  /**
-   * The price table, filterable and starting from nothing.
+   * The effective price table, filterable and starting from nothing.
    *
    * The catalog's three other price lists each begin with something the caller
    * already named, a product or a shop or a scope, because that is what a shopper
    * has. This one begins with nothing, which is what makes "which prices did I
-   * type in" answerable, and it is gated for that reason rather than for what it
-   * changes.
+   * override" and "which are shown on sufferance" answerable, and it is gated
+   * for that reason rather than for what it changes.
    */
   @Get()
   @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.adminList)
@@ -517,7 +512,8 @@ export class AdminCatalogSupermarketItemsController {
         ...adminCredential(admin),
         itemId: query.itemId,
         priceScopeId: query.priceScopeId,
-        priceSourceKind: query.priceSourceKind,
+        sourceKind: query.sourceKind,
+        stale: query.stale,
         available: query.available,
         cursor: query.cursor,
         limit: query.limit,
@@ -525,15 +521,122 @@ export class AdminCatalogSupermarketItemsController {
     );
   }
 
+  /**
+   * Whether a scope carries each of these products (plan 0080, section 9). The
+   * one write left on this row, because stock is not a price: a row that does
+   * not exist yet is created with no price behind it.
+   */
+  @Put('availability')
+  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.setAvailability)
+  @ApiProblemResponses({ body: true })
+  setAvailability(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: SetSupermarketItemAvailabilityDto
+  ): Promise<SetSupermarketItemAvailabilityResult> {
+    return this.nats.send<SetSupermarketItemAvailabilityResult>(
+      SUPERMARKET_ITEM_PATTERNS.setAvailability,
+      { ...adminCredential(admin), ...dto }
+    );
+  }
+}
+
+/**
+ * Every price a source gave (plan 0080, section 10): the history behind an
+ * effective row, and the two things an operator does to it.
+ *
+ * **Editing a price is inserting a price.** An operator who typed 1.29 and
+ * meant 1.92 removes the row and adds another, and the history shows both,
+ * which is the point of a history. There is no `PATCH` here on purpose.
+ */
+@ApiTags('admin-catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/catalog/item-prices', version: '1' })
+export class AdminCatalogItemPricesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Add one row. An `ADMIN` row records what it is overriding, server side,
+   * and is protected for seven days against a repeated automated value
+   * (plan 0080, section 4.2).
+   */
+  @Post()
+  @ApiContractResponse(ITEM_PRICE_PATTERNS.add, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
+  add(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: AddItemPriceDto
+  ): Promise<ItemPriceView> {
+    return this.nats.send<ItemPriceView>(ITEM_PRICE_PATTERNS.add, {
+      ...adminCredential(admin),
+      ...dto,
+      sourceKind: dto.sourceKind ?? PriceSourceKind.ADMIN,
+    });
+  }
+
+  /** The history for one (item, scope), newest first. */
+  @Get()
+  @ApiContractResponse(ITEM_PRICE_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: ListItemPricesQueryDto
+  ): Promise<ItemPricePage> {
+    return this.nats.send<ItemPricePage>(ITEM_PRICE_PATTERNS.list, {
+      ...adminCredential(admin),
+      itemId: query.itemId,
+      priceScopeId: query.priceScopeId,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  /** Remove one row. The effective row is recomputed behind it. */
   @Delete(':id')
-  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.delete)
+  @ApiContractResponse(ITEM_PRICE_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string
   ): Promise<{ id: string }> {
-    return this.nats.send(SUPERMARKET_ITEM_PATTERNS.delete, {
+    return this.nats.send(ITEM_PRICE_PATTERNS.delete, {
       ...adminCredential(admin),
-      supermarketItemId: id,
+      itemPriceId: id,
+    });
+  }
+}
+
+/**
+ * The six policy rows (plan 0080, section 3). The smallest screen in the back
+ * office: read them, change one. A change recomputes every effective price.
+ */
+@ApiTags('admin-catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/catalog/price-policies', version: '1' })
+export class AdminCatalogPricePoliciesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(PRICE_POLICY_PATTERNS.list)
+  list(@ActingAdmin() admin: CurrentAdmin): Promise<PricePolicyListView> {
+    return this.nats.send<PricePolicyListView>(PRICE_POLICY_PATTERNS.list, {
+      ...adminCredential(admin),
+    });
+  }
+
+  @Patch(':sourceKind')
+  @ApiContractResponse(PRICE_POLICY_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
+  update(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('sourceKind') sourceKind: PriceSourceKind,
+    @Body() dto: UpdatePricePolicyDto
+  ): Promise<PricePolicyView> {
+    return this.nats.send<PricePolicyView>(PRICE_POLICY_PATTERNS.update, {
+      ...adminCredential(admin),
+      sourceKind,
+      ...dto,
     });
   }
 }

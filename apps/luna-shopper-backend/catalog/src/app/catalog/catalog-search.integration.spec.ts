@@ -314,7 +314,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       });
       const pascual = scoped.items.find((i) => i.id === ids.pascualMilk);
       expect(pascual?.bestOffer?.unitPrice).toBe(1.35);
-      expect(pascual?.bestOffer?.priceSourceKind).toBe(
+      expect(pascual?.bestOffer?.sourceKind).toBe(
         PriceSourceKind.OFFICIAL_API
       );
 
@@ -413,7 +413,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       // Verbatim, from the SupermarketItem row, never recomputed (plan 0038).
       expect(milk.offer?.unitPrice).toBe(0.89);
       expect(milk.offer?.priceScopeId).toBe(ids.scopeA);
-      expect(milk.offer?.priceObservedAt).toBe('2026-08-30T10:00:00.000Z');
+      expect(milk.offer?.observedAt).toBe('2026-08-30T10:00:00.000Z');
     });
 
     it('returns a group with null price fields when no scope has a price', async () => {

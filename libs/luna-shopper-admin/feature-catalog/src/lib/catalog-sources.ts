@@ -1,9 +1,11 @@
 import type { ResourceSource } from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
+  ITEM_PRICE_SEED,
   ITEM_SEED,
   LOCATION_ITEM_SEED,
   LOCATION_SEED,
+  PRICE_POLICY_SEED,
   PRICE_SCOPE_SEED,
   PRICE_SEED,
   PRODUCT_GROUP_SEED,
@@ -13,21 +15,25 @@ import { SUPERMARKETS_PATH } from './supermarkets';
 /**
  * Where each catalog resource lives, and how it departs from ordinary CRUD.
  *
- * Here rather than inline in each descriptor, because the price editor needs
- * two of them for itself: to name a scope it has to read one, and to say how
- * many shops share it, it has to count that scope's shops. A second copy of
- * either source would be a second chance to spell a path wrong, and one of the
- * two copies would be the one nothing exercises.
+ * Here rather than inline in each descriptor, because the price screens need
+ * several of them for themselves: to name a scope the form has to read one, to
+ * say how many shops share it, it has to count that scope's shops, and the
+ * price history page reads the effective row from one path and the rows behind
+ * it from another. A second copy of any of these would be a second chance to
+ * spell a path wrong, and one of the two copies would be the one nothing
+ * exercises.
  *
- * **`/v1/admin/catalog/**` is not uniform CRUD** (backend plan 0073), and four
- * of the seven resources say so here rather than in a hand written gateway:
+ * **`/v1/admin/catalog/**` is not uniform CRUD** (backend plan 0073), and five
+ * of the resources say so here rather than in a hand written gateway:
  *
  * | Resource        | What is different                                                     |
  * | --------------- | --------------------------------------------------------------------- |
  * | locations       | listed and created under a chain, read and changed at their own path  |
  * | price scopes    | no route reads one by id, so a member is found in the collection      |
- * | prices          | one `PUT` for create and change, keyed on `(itemId, priceScopeId)`    |
- * | location items  | the same, keyed on `(itemId, supermarketLocationId)`, and no delete   |
+ * | prices          | read only, keyed on `(itemId, priceScopeId)`, at v3 (plan 0080)       |
+ * | item prices     | inserted and removed, never changed; listed for one (item, scope)     |
+ * | price policies  | six rows keyed on their kind, changed with a `PATCH`, never created   |
+ * | location items  | one `PUT` for create and change, keyed on `(itemId, supermarketLocationId)`, and no delete |
  */
 
 /** Where the back office reads and writes shops (backend plan 0073). */
@@ -43,12 +49,24 @@ export const ITEMS_PATH = '/v1/admin/catalog/items';
 export const PRODUCT_GROUPS_PATH = '/v1/admin/catalog/product-groups';
 
 /**
- * Where the back office reads and writes prices.
+ * Where the back office reads the effective prices (backend plan 0080,
+ * section 7): the price a shopper sees, chosen among the rows behind it.
  *
- * `v2`, and the version did not move when the path did. It says what shape the
- * payload has, which is unrelated to who may send it.
+ * `v3`, because the view's meaning changed with the price model beneath it,
+ * and two of its fields were renamed so an old build cannot silently read a
+ * stale number as fresh (plan 0080, section 11). Nothing writes a price here.
  */
-export const PRICES_PATH = '/v2/admin/catalog/supermarket-items';
+export const PRICES_PATH = '/v3/admin/catalog/supermarket-items';
+
+/**
+ * Where the back office reads and writes the rows a source gave (backend plan
+ * 0080, section 9). A row is inserted and removed and never edited: editing a
+ * price is inserting a price, and the history shows both.
+ */
+export const ITEM_PRICES_PATH = '/v1/admin/catalog/item-prices';
+
+/** Where the back office reads and changes the six policy rows (plan 0080, section 3). */
+export const PRICE_POLICIES_PATH = '/v1/admin/catalog/price-policies';
 
 /** Where the back office reads and writes the per shop rows. */
 export const LOCATION_ITEMS_PATH = '/v1/admin/catalog/location-items';
@@ -107,20 +125,46 @@ export function productGroupSource(): ResourceSource<Wire.CatalogProductGroupVie
 }
 
 /**
- * Prices: one `PUT` for both create and change.
+ * Effective prices: read only, and read by the pair.
  *
- * The upsert **merges** rather than replaces, so a change sends what changed and
- * the columns it leaves out keep their values. The list takes both halves of the
- * key, so a read is one exact request rather than a walk.
+ * The list takes both halves of the key, so a read is one exact request rather
+ * than a walk. There is no write behind this source at all: the row is derived
+ * from the item prices, and the descriptor that draws it sends its one write,
+ * the add, to {@link itemPriceSource} instead.
  */
 export function priceSource(): ResourceSource<Wire.CatalogSupermarketItemView> {
   return {
     path: PRICES_PATH,
-    upsert: true,
     key: [...PRICE_KEY],
     keyFilters: [...PRICE_KEY],
     readVia: 'collection',
     seed: PRICE_SEED,
+  };
+}
+
+/**
+ * The rows a source gave: a `POST` to add one, a `DELETE` by its own uuid to
+ * remove one, and a list that takes the (item, scope) it is the history of.
+ */
+export function itemPriceSource(): ResourceSource<Wire.CatalogItemPriceView> {
+  return { path: ITEM_PRICES_PATH, seed: ITEM_PRICE_SEED };
+}
+
+/**
+ * Policies: six rows keyed on their kind, which is the id the `PATCH` takes.
+ * The list is not paged, because six rows do not need a cursor.
+ */
+export function pricePolicySource(): ResourceSource<Wire.CatalogPricePolicyView> {
+  return {
+    path: PRICE_POLICIES_PATH,
+    idField: 'sourceKind',
+    readVia: 'collection',
+    page: (body) => ({
+      items: ((body as { items?: Wire.CatalogPricePolicyView[] }).items ??
+        []) as Wire.CatalogPricePolicyView[],
+      nextCursor: null,
+    }),
+    seed: PRICE_POLICY_SEED,
   };
 }
 

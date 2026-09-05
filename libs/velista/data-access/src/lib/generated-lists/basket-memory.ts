@@ -57,6 +57,7 @@ const offer = (
   unitPriceLabel,
   observedAt: new Date('2026-09-01T06:00:00.000Z'),
   sourceKind: 'OFFICIAL_WEB',
+  stale: false,
   priceScopeId: SCOPE_MERCADONA,
 });
 

@@ -1,6 +1,7 @@
 import { composePlugins } from '@nx/webpack';
 import { DefinePlugin } from 'webpack';
 import merge from 'webpack-merge';
+import { DEFAULT_APP_VERSION } from './app-version';
 
 /**
  * The gateway this app talks to in production, and the single place it is written
@@ -44,6 +45,17 @@ export default composePlugins(async (config) =>
       new DefinePlugin({
         'process.env.LUNA_GATEWAY_URL': JSON.stringify(
           process.env.LUNA_GATEWAY_URL || DEFAULT_LUNA_GATEWAY_URL
+        ),
+        // Which build this is (backend plan 0080, section 11). CI passes the
+        // image tag as `VELISTA_APP_VERSION` to the one `nx build` that makes
+        // every bundle, and this app is built in that same run, so it reads the
+        // same value under its own name first and velista's second. Unset,
+        // this is a production build that is not a release, and the default
+        // says so rather than guessing.
+        'process.env.LUNA_ADMIN_APP_VERSION': JSON.stringify(
+          process.env.LUNA_ADMIN_APP_VERSION ||
+            process.env.VELISTA_APP_VERSION ||
+            DEFAULT_APP_VERSION
         ),
       }),
     ],

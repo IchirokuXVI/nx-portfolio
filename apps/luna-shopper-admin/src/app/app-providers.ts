@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import {
   adminAuthInterceptor,
+  clientVersionInterceptor,
   DEPLOYMENT_SERVICE,
   DeploymentApi,
   DIRECTORY_SERVICE,
@@ -34,7 +35,10 @@ import {
   provideResources,
   provideShellLinks,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ADMIN_API_CONFIG } from '@portfolio/luna-shopper-admin/models';
+import {
+  ADMIN_API_CONFIG,
+  ADMIN_APP_VERSION,
+} from '@portfolio/luna-shopper-admin/models';
 import { provideService } from '@portfolio/shared/data-access';
 import { environment } from '../environments/environment';
 import { DocumentTitle } from './document-title';
@@ -57,11 +61,22 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // The app's translations, on this injector so they sit above every route.
   ...LUNA_SHOPPER_ADMIN_TRANSLATION_PROVIDERS,
 
+  // Which build this is (backend plan 0080, section 11), from the same environment
+  // surface as the gateway URL and for the same reason: the app layer reads the
+  // environment file so no library has to. `clientVersionInterceptor` sends it on
+  // every gateway request, which is what lets a deployment's `MIN_CLIENT_VERSION`
+  // retire a back office too old to read the wire.
+  { provide: ADMIN_APP_VERSION, useValue: environment.version },
+
   // `withFetch` because it costs nothing and is what the rest of the workspace uses.
-  // The interceptor attaches the bearer token to gateway requests and to nothing
-  // else, and turns a 401 into a renewal, an overlay and a retry rather than into
-  // a lost request (plan 0003, section 6).
-  provideHttpClient(withFetch(), withInterceptors([adminAuthInterceptor])),
+  // The first interceptor attaches the bearer token to gateway requests and to
+  // nothing else, and turns a 401 into a renewal, an overlay and a retry rather
+  // than into a lost request (plan 0003, section 6). The second stamps the build
+  // version on the same requests and reloads once on a `client_too_old` refusal.
+  provideHttpClient(
+    withFetch(),
+    withInterceptors([adminAuthInterceptor, clientVersionInterceptor])
+  ),
 
   // The app's own services, which cannot provide themselves. The array is owned by
   // the library, so a service that moves is added in one place.

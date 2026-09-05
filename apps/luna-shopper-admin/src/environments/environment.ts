@@ -36,10 +36,13 @@ declare const process: { env: Record<string, string | undefined> };
 export const environment: {
   production: boolean;
   api: AdminApiConfig;
+  /** Which build this is (backend plan 0080, section 11). Substituted at build time. */
+  version: string;
 } = {
   production: false,
   api: {
     // The luna-shopper gateway (PORT defaults to 3000 in its config schema).
     gatewayBaseUrl: process.env['LUNA_GATEWAY_URL'] as string,
   },
+  version: process.env['LUNA_ADMIN_APP_VERSION'] as string,
 };

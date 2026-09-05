@@ -63,6 +63,17 @@ lunaShopperBackend:
   enabled: true
   config:
     logLevel: info
+    # The oldest client this deployment serves (velista plan 0034, set by
+    # backend plan 0080, section 11). Plan 0080 renamed two fields of the
+    # supermarket items view and moved its controllers to v3, so a velista or
+    # back office build from before it reads a missing price where there is
+    # one. Every build from before the plan is v0.5.1 or older, and every build
+    # that carries it is newer than that, so this floor retires exactly the
+    # builds that predate it whatever number the release that ships it takes.
+    # Raise it when a later wire change needs to retire builds again; never set
+    # it above the version actually deployed, or the floor refuses the client
+    # it was meant to serve.
+    minClientVersion: '0.5.2'
     # Three origins. Two of them can be serving velista, because after plan 0013
     # both can: the portfolio at `/velista` and velista's own host, which is
     # `velista.app` now. Once D5's redirect lands the portfolio entry can go.

@@ -14,10 +14,16 @@ import {
   PRICE_SOURCE_KIND_OPTIONS,
   UNIT_OF_MEASURE_OPTIONS,
 } from './catalog-enums';
-import { LOCATION_ITEM_SEED, LOCATION_SEED, PRICE_SEED } from './catalog-seed';
+import {
+  LOCATION_ITEM_SEED,
+  LOCATION_SEED,
+  PRICE_POLICY_SEED,
+  PRICE_SEED,
+} from './catalog-seed';
 import { ITEMS } from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
+import { PRICE_POLICIES } from './price-policies';
 import { PRICE_SCOPES } from './price-scopes';
 import { PRICES } from './prices';
 import { PRODUCT_GROUPS } from './product-groups';
@@ -42,6 +48,7 @@ const ALL = [
   ITEMS,
   PRODUCT_GROUPS,
   PRICES,
+  PRICE_POLICIES,
   LOCATION_ITEMS,
 ];
 
@@ -177,6 +184,45 @@ describe('the shops', () => {
 
 describe('the price form', () => {
   /**
+   * Since backend plan 0080 the form **adds a row** and never edits one: an
+   * effective price is derived, and correcting a typo is removing the row and
+   * adding another. So the descriptor offers a create and nothing else, and
+   * opens a row on a detail screen of its own rather than on the form.
+   */
+  it('adds a price and never edits or deletes the effective row', () => {
+    expect(PRICES.actions?.create).toBe(true);
+    expect(PRICES.actions?.edit).toBeUndefined();
+    expect(PRICES.actions?.delete).toBeUndefined();
+    expect(PRICES.detail).toBeDefined();
+    expect(PRICES.editor).toBeDefined();
+  });
+
+  /**
+   * `AddItemPriceDto` declares the values a row carries and nothing else, and
+   * the validation pipe refuses a property no DTO declares. So a field the row
+   * does not take must not be editable, or every add would answer 400.
+   */
+  it('types only what a price row carries, never the derived columns', () => {
+    const editable = PRICES.fields
+      .filter((field) => isEditable(field, 'create'))
+      .map((field) => field.name)
+      .sort();
+
+    expect(editable).toEqual(
+      [
+        'itemId',
+        'priceScopeId',
+        'price',
+        'currency',
+        'unitPrice',
+        'unitPriceLabel',
+        'validFrom',
+        'validUntil',
+      ].sort()
+    );
+  });
+
+  /**
    * Section 2, and the reason this screen is not a plain descriptor. A price is
    * keyed on `(itemId, priceScopeId)`; twelve shops served by one warehouse
    * share one row. Nothing on this form may point at a shop, or an operator
@@ -235,8 +281,8 @@ describe('the price form', () => {
   });
 
   /**
-   * The key columns are what the row *is*. A `PUT` with a different pair writes
-   * a second price rather than moving this one, so they are settable once.
+   * The key columns are what the row *is*: an added row is about a product in
+   * a scope, and neither is something the derived row could be moved between.
    */
   it('fixes the product and the scope once the price exists', () => {
     for (const name of ['itemId', 'priceScopeId']) {
@@ -255,13 +301,13 @@ describe('the price form', () => {
 });
 
 describe('the price list', () => {
-  /** "What have I typed in and pinned", which nothing else can ask. */
-  it('shows where a price came from and offers it as a filter', () => {
-    expect(PRICES.list.columns).toContain('priceSourceKind');
-    expect(PRICES.list.compact).toContain('priceSourceKind');
+  /** "What have I overridden": the effective rows an operator's price won. */
+  it('shows where the shown price came from and offers it as a filter', () => {
+    expect(PRICES.list.columns).toContain('sourceKind');
+    expect(PRICES.list.compact).toContain('sourceKind');
 
     const filter = (PRICES.filters ?? []).find(
-      (entry) => entry.param === 'priceSourceKind'
+      (entry) => entry.param === 'sourceKind'
     );
     expect(filter?.kind).toBe('enum');
     expect(
@@ -271,10 +317,50 @@ describe('the price list', () => {
     ).toContain('ADMIN');
   });
 
-  /** So a stale price is recognisable as stale rather than merely as a number. */
   it('shows when the price was last seen', () => {
-    expect(PRICES.list.columns).toContain('priceObservedAt');
-    expect(fieldOf(PRICES, 'priceObservedAt')?.kind).toBe('date');
+    expect(PRICES.list.columns).toContain('observedAt');
+    expect(fieldOf(PRICES, 'observedAt')?.kind).toBe('date');
+  });
+
+  /**
+   * Backend plan 0080, section 5: the flag is the server's judgement and the
+   * screen draws it as a column and offers it as a filter. It is never worked
+   * out here from the date, because only the policy knows which kinds age out.
+   */
+  it('shows the stale flag as the server sent it and filters on it', () => {
+    expect(PRICES.list.columns).toContain('stale');
+    expect(PRICES.list.compact).toContain('stale');
+    expect(fieldOf(PRICES, 'stale')?.kind).toBe('boolean');
+    expect(isEditable(fieldOf(PRICES, 'stale') as FieldDescriptor<ResourceRow>, 'create')).toBe(false);
+
+    const filter = (PRICES.filters ?? []).find((entry) => entry.param === 'stale');
+    expect(filter?.kind).toBe('boolean');
+  });
+});
+
+describe('the price policies', () => {
+  it('is edit only: six rows the migration seeded, and nothing creates a seventh', () => {
+    expect(PRICE_POLICIES.actions?.edit).toBe(true);
+    expect(PRICE_POLICIES.actions?.create).toBeUndefined();
+    expect(PRICE_POLICIES.actions?.delete).toBeUndefined();
+  });
+
+  it('is keyed on the kind, which the PATCH takes in its path', () => {
+    expect(PRICE_POLICIES.idField).toBe('sourceKind');
+    expect(idOf(PRICE_POLICIES, PRICE_POLICY_SEED[3] as unknown as ResourceRow)).toBe('ADMIN');
+    expect(isEditable(fieldOf(PRICE_POLICIES, 'sourceKind') as FieldDescriptor<ResourceRow>, 'edit')).toBe(false);
+  });
+
+  it('seeds section 3 of the plan, with no max age on the typed kind', () => {
+    expect(PRICE_POLICY_SEED.map((row) => row.sourceKind)).toEqual(
+      PRICE_SOURCE_KIND_OPTIONS.map((option) => option.value).sort(
+        (a, b) =>
+          PRICE_POLICY_SEED.findIndex((row) => row.sourceKind === a) -
+          PRICE_POLICY_SEED.findIndex((row) => row.sourceKind === b)
+      )
+    );
+    expect(PRICE_POLICY_SEED.find((row) => row.sourceKind === 'ADMIN')?.maxAgeDays).toBeNull();
+    expect(PRICE_POLICY_SEED.find((row) => row.sourceKind === 'USER_REPORTED')?.enabled).toBe(false);
   });
 });
 
@@ -308,14 +394,13 @@ describe('availability', () => {
   });
 
   /**
-   * `SupermarketItem.available` defaults to true, so a price created through an
-   * untouched checkbox would declare the product unsold at the moment it was
-   * priced.
+   * A price row carries no claim about stock (backend plan 0080, section 2),
+   * so the add a price form must not send the flag: the DTO refuses it.
    */
-  it('starts a scope wide flag at what the column defaults to', () => {
-    const draft = draftFor(PRICES, null, 'create');
-
-    expect(draft['available']).toBe(true);
+  it('is not something the add a price form sends', () => {
+    expect(
+      isEditable(fieldOf(PRICES, 'available') as FieldDescriptor<ResourceRow>, 'create')
+    ).toBe(false);
   });
 
   it('carries the three answers a shop row really holds', () => {

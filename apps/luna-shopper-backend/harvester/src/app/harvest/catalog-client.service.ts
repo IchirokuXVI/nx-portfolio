@@ -3,26 +3,28 @@ import { ConfigService } from '@nestjs/config';
 import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
   ITEM_PATTERNS,
+  ITEM_PRICE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PriceSourceKind,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type AddItemPriceBatchResult,
   type CreateItemRequest,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
   type FindItemByEanResult,
   type ItemPage,
+  type ItemPriceBatchEntry,
   type ItemView,
   type PostalCodeLocationCountsView,
   type PriceScopeKind,
   type PriceScopePage,
   type PriceScopeView,
-  type SupermarketItemBatchEntry,
+  type SetSupermarketItemAvailabilityResult,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
-  type UpsertSupermarketItemBatchResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -191,19 +193,41 @@ export class CatalogClient {
   }
 
   /**
-   * Write a batch of prices for one scope. Section 6.5 is applied on catalog's
-   * side, per entry, and the entries it declined come back in `skipped` so the
-   * run can report the disagreement rather than swallow it.
+   * Write a batch of prices for one scope, as this run (plan 0080, section 9).
+   *
+   * Every price a source gives is a row of its own, stamped with the run that
+   * wrote it so a reverted run can take its rows back (plan 0082). A value the
+   * current row already holds inserts nothing and comes back as `confirmed`.
+   * Nothing is declined any more: an owner's price and this run's coexist, and
+   * the policy decides between them on every read.
    */
-  upsertPrices(
+  addPrices(
     priceScopeId: string,
-    entries: SupermarketItemBatchEntry[],
-    priceSourceKind: PriceSourceKind = PriceSourceKind.OFFICIAL_API
-  ): Promise<UpsertSupermarketItemBatchResult> {
-    return this.send(SUPERMARKET_ITEM_PATTERNS.upsertBatch, {
+    entries: ItemPriceBatchEntry[],
+    sourceRunId: string,
+    sourceKind: PriceSourceKind = PriceSourceKind.OFFICIAL_API
+  ): Promise<AddItemPriceBatchResult> {
+    return this.send(ITEM_PRICE_PATTERNS.addBatch, {
       userId: this.actor(),
       priceScopeId,
-      priceSourceKind,
+      sourceKind,
+      sourceRunId,
+      entries,
+    });
+  }
+
+  /**
+   * Whether a scope carries each of these products. A separate write from the
+   * prices, because a 404 from a detail call says "not stocked here" and
+   * states no price (plan 0080, section 2).
+   */
+  setAvailability(
+    priceScopeId: string,
+    entries: { itemId: string; available: boolean }[]
+  ): Promise<SetSupermarketItemAvailabilityResult> {
+    return this.send(SUPERMARKET_ITEM_PATTERNS.setAvailability, {
+      userId: this.actor(),
+      priceScopeId,
       entries,
     });
   }

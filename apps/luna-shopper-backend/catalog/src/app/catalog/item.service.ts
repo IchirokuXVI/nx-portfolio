@@ -362,7 +362,7 @@ export class ItemService {
       LEFT JOIN LATERAL (
         SELECT si."itemId", si."priceScopeId", si."price", si."currency",
                si."unitPrice", si."unitPriceLabel", si."priceObservedAt",
-               si."priceSourceKind"
+               si."priceSourceKind", si."stale"
         FROM "supermarket_items" si
         JOIN "items" mi ON mi."id" = si."itemId"
         WHERE mi."productGroupId" = g."id"
@@ -410,12 +410,14 @@ export class ItemService {
                     NULL::numeric AS "offerPrice", NULL::varchar AS "offerCurrency",
                     NULL::numeric AS "offerUnitPrice", NULL::varchar AS "offerUnitPriceLabel",
                     NULL::timestamptz AS "offerObservedAt",
-                    NULL::"price_source_kind" AS "offerSourceKind"`
+                    NULL::"price_source_kind" AS "offerSourceKind",
+                    NULL::boolean AS "offerStale"`
                  : `o."itemId" AS "offerItemId", o."priceScopeId" AS "offerScopeId",
                     o."price" AS "offerPrice", o."currency" AS "offerCurrency",
                     o."unitPrice" AS "offerUnitPrice", o."unitPriceLabel" AS "offerUnitPriceLabel",
                     o."priceObservedAt" AS "offerObservedAt",
-                    o."priceSourceKind" AS "offerSourceKind"`
+                    o."priceSourceKind" AS "offerSourceKind",
+                    o."stale" AS "offerStale"`
              },
              round(${relevance}::numeric, 4) AS "relevance"
       FROM "product_groups" g${offerJoin}
@@ -536,10 +538,11 @@ export class ItemService {
       unitPrice:
         row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
       unitPriceLabel: row.offerUnitPriceLabel,
-      priceObservedAt: row.offerObservedAt
+      observedAt: row.offerObservedAt
         ? new Date(row.offerObservedAt).toISOString()
         : null,
-      priceSourceKind: row.offerSourceKind,
+      sourceKind: row.offerSourceKind ?? null,
+      stale: row.offerStale ?? false,
     };
     return { group, cheapestItem: toItemView(member, offer), offer, itemIds };
   }
@@ -863,4 +866,5 @@ interface RankedGroupRow {
   offerUnitPriceLabel: string | null;
   offerObservedAt: string | null;
   offerSourceKind: SupermarketItem['priceSourceKind'];
+  offerStale: boolean | null;
 }
