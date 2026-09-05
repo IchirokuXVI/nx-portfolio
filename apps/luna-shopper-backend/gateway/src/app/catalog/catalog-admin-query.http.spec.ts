@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  AdminCatalogItemsController,
   AdminCatalogLocationItemsController,
   AdminCatalogPriceScopesController,
   AdminCatalogSupermarketsController,
@@ -43,6 +44,7 @@ async function boot() {
         AdminCatalogSupermarketsController,
         AdminCatalogPriceScopesController,
         AdminCatalogLocationItemsController,
+        AdminCatalogItemsController,
       ],
       providers: [
         {
@@ -193,6 +195,76 @@ describe('the admin catalog lists, over HTTP', () => {
     const { nest, origin } = await boot();
     try {
       const res = await fetch(`${origin}/v1/admin/catalog/location-items`);
+
+      expect(res.status).toBe(400);
+    } finally {
+      await nest.close();
+    }
+  });
+});
+
+/**
+ * The rows that point at nothing (admin plan 0012, section 2).
+ *
+ * The back office's picker sends the literal `none` on the same parameter a
+ * uuid goes on, and the gateway is where it becomes the flag catalog knows.
+ * These run over HTTP for the same reason as the tests above: the pipe
+ * validates the whole query object, and a literal the validator does not
+ * accept is a 400 the handler never sees.
+ */
+describe('the products in no group, over HTTP', () => {
+  const GROUP = '5b8a2c1e-9d4f-4a6b-8c3d-2e1f0a9b8c7d';
+
+  it('passes a group id through as the group', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?productGroupId=${GROUP}`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['productGroupId']).toBe(GROUP);
+      expect(sent[0].payload['withoutProductGroup']).toBe(false);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('turns the literal none into the flag catalog reads', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?productGroupId=none`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['productGroupId']).toBeUndefined();
+      expect(sent[0].payload['withoutProductGroup']).toBe(true);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('refuses anything that is neither a uuid nor the literal', async () => {
+    const { nest, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?productGroupId=nothing`
+      );
+
+      expect(res.status).toBe(400);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  /** The boolean the literal replaced is gone, so a stale client hears about it. */
+  it('no longer takes withoutProductGroup as a parameter of its own', async () => {
+    const { nest, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?withoutProductGroup=true`
+      );
 
       expect(res.status).toBe(400);
     } finally {

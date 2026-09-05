@@ -11,6 +11,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
+import { IsUuidOrNone, referenceFilterDescription } from './reference-none';
 
 /**
  * A query string boolean.
@@ -102,6 +103,22 @@ export class ListAdminZonesQueryDto extends PageQueryDto {
   @IsOptional()
   @IsUUID()
   userId?: string;
+
+  /**
+   * The owner alone, where `userId` is anybody in the zone (admin plan 0012,
+   * section 3). It exists for its other answer: `none` is the zones nobody
+   * owns, which is what an owner's deletion leaves behind, and the one
+   * orphaned row the back office's people screens can hold.
+   */
+  @ApiPropertyOptional({
+    description: referenceFilterDescription(
+      'Only zones this person owns.',
+      'the zones with no owner, which is what deleting an owner leaves behind.'
+    ),
+  })
+  @IsOptional()
+  @IsUuidOrNone()
+  ownerUserId?: string;
 
   @ApiPropertyOptional({ format: 'date-time' })
   @IsOptional()

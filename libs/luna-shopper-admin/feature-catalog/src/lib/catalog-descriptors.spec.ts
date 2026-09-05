@@ -346,9 +346,16 @@ describe('the price list', () => {
     expect(PRICES.list.columns).toContain('stale');
     expect(PRICES.list.compact).toContain('stale');
     expect(fieldOf(PRICES, 'stale')?.kind).toBe('boolean');
-    expect(isEditable(fieldOf(PRICES, 'stale') as FieldDescriptor<ResourceRow>, 'create')).toBe(false);
+    expect(
+      isEditable(
+        fieldOf(PRICES, 'stale') as FieldDescriptor<ResourceRow>,
+        'create'
+      )
+    ).toBe(false);
 
-    const filter = (PRICES.filters ?? []).find((entry) => entry.param === 'stale');
+    const filter = (PRICES.filters ?? []).find(
+      (entry) => entry.param === 'stale'
+    );
     expect(filter?.kind).toBe('boolean');
   });
 });
@@ -362,8 +369,15 @@ describe('the price policies', () => {
 
   it('is keyed on the kind, which the PATCH takes in its path', () => {
     expect(PRICE_POLICIES.idField).toBe('sourceKind');
-    expect(idOf(PRICE_POLICIES, PRICE_POLICY_SEED[3] as unknown as ResourceRow)).toBe('ADMIN');
-    expect(isEditable(fieldOf(PRICE_POLICIES, 'sourceKind') as FieldDescriptor<ResourceRow>, 'edit')).toBe(false);
+    expect(
+      idOf(PRICE_POLICIES, PRICE_POLICY_SEED[3] as unknown as ResourceRow)
+    ).toBe('ADMIN');
+    expect(
+      isEditable(
+        fieldOf(PRICE_POLICIES, 'sourceKind') as FieldDescriptor<ResourceRow>,
+        'edit'
+      )
+    ).toBe(false);
   });
 
   it('seeds section 3 of the plan, with no max age on the typed kind', () => {
@@ -374,8 +388,13 @@ describe('the price policies', () => {
           PRICE_POLICY_SEED.findIndex((row) => row.sourceKind === b)
       )
     );
-    expect(PRICE_POLICY_SEED.find((row) => row.sourceKind === 'ADMIN')?.maxAgeDays).toBeNull();
-    expect(PRICE_POLICY_SEED.find((row) => row.sourceKind === 'USER_REPORTED')?.enabled).toBe(false);
+    expect(
+      PRICE_POLICY_SEED.find((row) => row.sourceKind === 'ADMIN')?.maxAgeDays
+    ).toBeNull();
+    expect(
+      PRICE_POLICY_SEED.find((row) => row.sourceKind === 'USER_REPORTED')
+        ?.enabled
+    ).toBe(false);
   });
 });
 
@@ -401,7 +420,10 @@ describe('availability', () => {
    */
   it('is not something the add a price form sends', () => {
     expect(
-      isEditable(fieldOf(PRICES, 'available') as FieldDescriptor<ResourceRow>, 'create')
+      isEditable(
+        fieldOf(PRICES, 'available') as FieldDescriptor<ResourceRow>,
+        'create'
+      )
     ).toBe(false);
   });
 
@@ -504,5 +526,25 @@ describe('localized names', () => {
       en: ['full fat milk', 'whole fat milk'],
       es: [],
     });
+  });
+});
+
+/**
+ * The products in no group (plan 0012, section 2).
+ *
+ * The question used to be a boolean filter beside the group picker. It is now a
+ * choice inside the picker, which is what lets every other nullable reference
+ * ask the same question the same way.
+ */
+describe('the product list', () => {
+  it('offers none on the group filter rather than a flag of its own', () => {
+    const group = (ITEMS.filters ?? []).find(
+      (filter) => filter.param === 'productGroupId'
+    );
+
+    expect(group?.kind === 'reference' ? group.nullable : null).toBe(true);
+    expect((ITEMS.filters ?? []).map((filter) => filter.param)).not.toContain(
+      'withoutProductGroup'
+    );
   });
 });

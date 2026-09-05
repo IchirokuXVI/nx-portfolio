@@ -1550,6 +1550,15 @@
             }
           },
           {
+            "name": "ownerUserId",
+            "required": false,
+            "in": "query",
+            "description": "Only zones this person owns. The literal `none` instead of a uuid asks for the zones with no owner, which is what deleting an owner leaves behind.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "createdAfter",
             "required": false,
             "in": "query",
@@ -15167,19 +15176,9 @@
             "name": "productGroupId",
             "required": false,
             "in": "query",
-            "description": "Only this group’s members.",
+            "description": "Only this group’s members. The literal `none` instead of a uuid asks for the products belonging to no group, which is what curation has not reached yet.",
             "schema": {
-              "format": "uuid",
               "type": "string"
-            }
-          },
-          {
-            "name": "withoutProductGroup",
-            "required": false,
-            "in": "query",
-            "description": "Only the products belonging to no group, which is what curation has not reached yet. Set beside `productGroupId` it answers with nothing, because the two together are a contradiction.",
-            "schema": {
-              "type": "boolean"
             }
           }
         ],

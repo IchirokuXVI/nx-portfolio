@@ -47,6 +47,7 @@ import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
 import { ActingAdmin } from '../admin/current-admin.decorator';
+import { referenceFilter } from '../admin/reference-none';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
@@ -325,9 +326,11 @@ export class AdminCatalogItemsController {
    * `GET /v2/admin/catalog/supermarket-items`, which lists prices as prices and
    * says which scope each belongs to.
    *
-   * `withoutProductGroup` is the filter with no user facing counterpart: an
+   * `productGroupId=none` is the filter with no user facing counterpart: an
    * ungrouped product is invisible to every "show me milk" read, so this is how
-   * the ones curation has not reached are found.
+   * the ones curation has not reached are found. Catalog knows the question as
+   * `withoutProductGroup`, and this is where the literal becomes the flag
+   * (admin plan 0012, section 2).
    */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
@@ -335,12 +338,13 @@ export class AdminCatalogItemsController {
     @ActingAdmin() admin: CurrentAdmin,
     @Query() query: AdminSearchItemsQueryDto
   ): Promise<ItemPage> {
+    const group = referenceFilter(query.productGroupId);
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: admin.adminId,
       query: query.query,
       category: query.category,
-      productGroupId: query.productGroupId,
-      withoutProductGroup: query.withoutProductGroup,
+      productGroupId: group.id,
+      withoutProductGroup: group.none,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
