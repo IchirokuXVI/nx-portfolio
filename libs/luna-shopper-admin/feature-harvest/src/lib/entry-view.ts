@@ -178,18 +178,6 @@ export function proposalOf(row: SourceEntryRow): EntryProposal {
   return row.candidateEntryId === '' ? 'none' : 'sibling';
 }
 
-/**
- * What a new product's Spanish name starts as.
- *
- * The chain's own name, exactly, and the operator changes it freely. `name.en`
- * stays empty and stays legal, which is what backend plan 0079 bought: before
- * it, saving a leaflet product meant copying the Spanish string into English,
- * where it claimed to be a translation.
- */
-export function draftItemName(row: SourceEntryRow): { es: string } {
-  return { es: row.name };
-}
-
 function readPrices(
   value: unknown,
   locale: string | undefined
