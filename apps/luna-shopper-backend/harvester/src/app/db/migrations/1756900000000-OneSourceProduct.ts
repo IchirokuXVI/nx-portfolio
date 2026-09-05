@@ -1,7 +1,15 @@
-import { Logger } from '@nestjs/common';
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-const logger = new Logger('OneSourceProduct1756900000000');
+/**
+ * TypeORM's own logger rather than Nest's, because a migration runs in three
+ * places and only one of them is a Nest process: the bundled `migrate.js` the
+ * deploy Job runs, the `migration:run` CLI, and the integration suite. Reaching
+ * for `@nestjs/common` here would add a package to a bundle that has no other
+ * reason to hold one.
+ */
+function warn(queryRunner: QueryRunner, message: string): void {
+  queryRunner.connection.logger.log('warn', message);
+}
 
 /**
  * One source product, however the source said it (plan 0086, section 11).
@@ -158,7 +166,8 @@ export class OneSourceProduct1756900000000 implements MigrationInterface {
          )
     `);
     if (orphanPrices?.count > 0) {
-      logger.warn(
+      warn(
+        queryRunner,
         `${orphanPrices.count} snapshot price(s) were dropped: no run of their ` +
           'chain ever named a price scope, so there is no scope to attribute ' +
           'them to. The next run of the chain writes them again.'
@@ -189,7 +198,8 @@ export class OneSourceProduct1756900000000 implements MigrationInterface {
        )
     `);
     if (orphanRefs?.count > 0) {
-      logger.warn(
+      warn(
+        queryRunner,
         `${orphanRefs.count} item source ref(s) named a product no run has ` +
           'observed, so there is no row to fold them into and no name to give ' +
           'them. They are dropped: nothing fetches by external id any more.'
