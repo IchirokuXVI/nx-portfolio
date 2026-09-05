@@ -165,7 +165,8 @@ function decidePrice(offer, defaultCurrency, label) {
   // chose**, which is the one place this differs from the rule as plan 0081
   // wrote it. There the two were separate branches and the promotion answered
   // first, so a per kilogram multibuy wrote its single unit price as a till
-  // price: 13 tiles of `eljamon.pdftext.json` and 2 of `eljamon.ocr.json`. A
+  // price: 13 tiles of `tmp/leaflet/eljamon.pdftext.json` and 2 of
+  // `tmp/leaflet/eljamon.ocr.json`, which is where those readings live. A
   // single unit price on a kg tile is still per kilogram.
   if (MEASURED_BASES.has(offer.pricing?.basis)) {
     const amount = conditional ? chosen : (comparison?.amount ?? chosen);

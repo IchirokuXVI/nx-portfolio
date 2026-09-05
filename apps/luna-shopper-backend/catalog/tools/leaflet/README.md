@@ -121,19 +121,31 @@ bound would put a made up date on 296 prices.
 
 ## The committed outputs
 
-Four documents produced here are committed as fixtures under
+**One** document produced here is committed as a fixture under
 `apps/luna-shopper-backend/harvester/src/app/harvest/__fixtures__/`, and a four
 product excerpt under the contract's own `__fixtures__`. Their line endings are
 pinned to LF in `.gitattributes`, so regenerating one is a real diff rather than
 a whole file one.
 
-| Fixture                                 | Products | Priced | Unit price only | Neither |
-| --------------------------------------- | -------- | ------ | --------------- | ------- |
-| `eljamon.vision.harvest-document.json`  | 48       | 31     | 11              | 6       |
-| `eljamon.ocr.harvest-document.json`     | 218      | 148    | 58              | 12      |
-| `eljamon.pdftext.harvest-document.json` | 219      | 122    | 95              | 2       |
-| `deza.vision.harvest-document.json`     | 296      | 285    | 11              | 0       |
+| Fixture                                | Products | Priced | Unit price only | Neither |
+| -------------------------------------- | -------- | ------ | --------------- | ------- |
+| `eljamon.vision.harvest-document.json` | 48       | 31     | 11              | 6       |
 
-No model output is kept in this folder. What a model returned is evidence of what
-that model returned, and it belongs beside the experiment in `tmp/leaflet`, not
-beside the tool.
+**One, and not four, because a fixture folder holds what a test reads.** The
+El Jamon OCR and pdftext conversions and the Deza one were committed beside it
+and imported by nothing, at 240 KB to 335 KB each; the three readings they were
+converted from were committed too, and their consumer went with the old leaflet
+runner. All six are deleted. They were evidence about four readings rather than
+input to a test, and evidence belongs beside the experiment in `tmp/leaflet`,
+where the full readings still are; regenerating any of them is the one command
+above. What the four measured, for the record:
+
+| Reading            | Products | Priced | Unit price only | Neither |
+| ------------------ | -------- | ------ | --------------- | ------- |
+| El Jamon (vision)  | 48       | 31     | 11              | 6       |
+| El Jamon (OCR)     | 218      | 148    | 58              | 12      |
+| El Jamon (pdftext) | 219      | 122    | 95              | 2       |
+| Deza (vision)      | 296      | 285    | 11              | 0       |
+
+No model output is kept in this folder either, for the same reason. What a model
+returned is evidence of what that model returned.
