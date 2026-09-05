@@ -1,0 +1,2530 @@
+{
+  "schema_version": 1,
+  "sha256": "f62fa7ac367008e1dd00871292e9b6be1b5d1c8cca840c40a6541cec3a58f2ea",
+  "producer": {
+    "name": "leaflet-extractor, El Jamon 60 Aniversario, eljamon_del_27_de_agosto_al_23_de_septiembre_de_2026.pdf, 40 pages, vision via claude opus 5 reading the rendered pages at 200 dpi",
+    "version": "1.0.0",
+    "produced_at": "2026-09-04T11:03:22Z"
+  },
+  "hints": {
+    "source_kind": "OFFICIAL_LEAFLET"
+  },
+  "validity": {
+    "from": "2026-08-27",
+    "until": "2026-09-23"
+  },
+  "products": [
+    {
+      "id": "p01-o01",
+      "name": "Aceite de Oliva Virgen Serie Oro Coosur",
+      "brand": "Coosur",
+      "size": {
+        "label": "Garrafa 5 litros",
+        "quantity": 5,
+        "unit": "l"
+      },
+      "price": {
+        "amount": 19.95,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 3.99,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "extra": {
+        "page": 1,
+        "section": "cover",
+        "page_has_text_layer": false,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 19.95,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 21.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 9.1,
+        "printed_unit_price": {
+          "amount": 3.99,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "container": "garrafa"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 21,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p01-o02",
+      "name": "Pizzas Refrigeradas Campofrio",
+      "brand": "Campofrio",
+      "size": {
+        "label": "360 - 410 g",
+        "quantity": 410,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 2.59,
+        "currency": "EUR"
+      },
+      "extra": {
+        "page": 1,
+        "section": "cover",
+        "page_has_text_layer": false,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 2.59,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 2.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 12.2,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 2,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o01",
+      "name": "Solomillo de Cerdo Blanco",
+      "size": {
+        "label": "Kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 7.95,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 7.95,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 9.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 20.1,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 9,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o02",
+      "name": "Costilla Duroc Extratierna Elpozo",
+      "brand": "Elpozo",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 7.95,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 7.95,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 8.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 11.2,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 8,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o03",
+      "name": "Cinta de Lomo Superjugosa Faccsa",
+      "brand": "Faccsa",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 4.75,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 4.75,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 6.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 31.7,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 6,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o04",
+      "name": "Lomo Adobado Horno Elpozo",
+      "brand": "Elpozo",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 3.99,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 3.99,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 6.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 42.6,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 6,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o05",
+      "name": "Cuartos Traseros de Pollo",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 2.75,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 2.75,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 2.99,
+          "currency": "EUR"
+        },
+        "discount_pct": 8,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 2,99"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o06",
+      "name": "Jamoncitos o Alitas de Pollo",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 2.99,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 2.99,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 3.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 24.3,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 3,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o07",
+      "name": "Chuleton de Anojo con Hueso",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 17.5,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 17.5,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 19.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 12.3,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 19,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o08",
+      "name": "Cinta de Lomo Adobada Frimancha",
+      "brand": "Frimancha",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 3.99,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 3.99,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 6.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 42.6,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 6,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o09",
+      "name": "Chuleta de Cerdo Extratierna Elpozo",
+      "brand": "Elpozo",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 4.75,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 4.75,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 5.75,
+          "currency": "EUR"
+        },
+        "discount_pct": 17.4,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 5,75"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o10",
+      "name": "Flamenquin Lomo Cerdo o Pechuga Pollo con Jamon Serrano Moreno Plaza",
+      "brand": "Moreno Plaza",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 11.95,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 11.95,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 14.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 20.1,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 14,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o11",
+      "name": "Filete 1a B Aguja Anojo",
+      "size": {
+        "label": "kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 12.95,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 12.95,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 17.5,
+          "currency": "EUR"
+        },
+        "discount_pct": 26,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 17,50"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o12",
+      "name": "Burguer Meat Mixta Frimancha",
+      "brand": "Frimancha",
+      "size": {
+        "label": "540 gr",
+        "quantity": 540,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 3.5,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 6.48,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 3.5,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 4.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 29.3,
+        "printed_unit_price": {
+          "amount": 6.48,
+          "currency": "EUR",
+          "per": "kg"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 4,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o01",
+      "name": "Cerveza con Alcohol Estrella del Sur",
+      "brand": "Estrella del Sur",
+      "size": {
+        "label": "1 L.",
+        "quantity": 1,
+        "unit": "l"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 1.05,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.18,
+          "currency": "EUR"
+        },
+        "discount_pct": 11,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,18"
+        },
+        "loyalty": {
+          "required": true,
+          "program": "descuentos ifamilia"
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o02",
+      "name": "Cerveza Alhambra Tradicional",
+      "brand": "Alhambra",
+      "size": {
+        "label": "lata 33 cl.",
+        "quantity": 33,
+        "unit": "cl"
+      },
+      "price": {
+        "amount": 0.53,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 1.61,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 0.53,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 0.74,
+          "currency": "EUR"
+        },
+        "discount_pct": 28.4,
+        "printed_unit_price": {
+          "amount": 1.61,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "container": "lata"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 0,74"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o03",
+      "name": "Cerveza 0,0 Mahou Tostada Mini",
+      "brand": "Mahou",
+      "size": {
+        "label": "20 cl., Pack-6",
+        "quantity": 20,
+        "unit": "cl"
+      },
+      "price": {
+        "amount": 2.99,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 2.49,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 2.99,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 3.66,
+          "currency": "EUR"
+        },
+        "discount_pct": 18.3,
+        "printed_unit_price": {
+          "amount": 2.49,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "pack_count": 6
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 3,66"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o04",
+      "name": "Cerveza con Alcohol San Miguel",
+      "brand": "San Miguel",
+      "size": {
+        "label": "lata 33 cl.",
+        "quantity": 33,
+        "unit": "cl"
+      },
+      "price": {
+        "amount": 0.74,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 1.36,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 0.45,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 1.36,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "container": "lata"
+        },
+        "promotion": {
+          "type": "multibuy_unit_price",
+          "raw_text": "COMPRANDO 12 UNIDADES cada unidad le sale a: 0,45 EUR",
+          "required_quantity": 12,
+          "effective_unit_price": {
+            "amount": 0.45,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 5.4,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 0.74,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "el litro le sale a 1,36"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o05",
+      "name": "Cerveza Cruzcampo Pilsen Mini",
+      "brand": "Cruzcampo",
+      "size": {
+        "label": "200 ml., Pack-6",
+        "quantity": 200,
+        "unit": "ml"
+      },
+      "price": {
+        "amount": 2.69,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 2.24,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 2.69,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 3.19,
+          "currency": "EUR"
+        },
+        "discount_pct": 15.7,
+        "printed_unit_price": {
+          "amount": 2.24,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "pack_count": 6
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 3,19"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o06",
+      "name": "Cerveza Cruzcampo",
+      "brand": "Cruzcampo",
+      "size": {
+        "label": "lata 33 cl.",
+        "quantity": 33,
+        "unit": "cl"
+      },
+      "price": {
+        "amount": 0.76,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 1.48,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 0.49,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 1.48,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "container": "lata"
+        },
+        "promotion": {
+          "type": "multibuy_unit_price",
+          "raw_text": "COMPRANDO 24 UNIDADES cada unidad le sale a: 0,49 EUR",
+          "required_quantity": 24,
+          "effective_unit_price": {
+            "amount": 0.49,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 11.76,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 0.76,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "el litro le sale a 1,48"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o07",
+      "name": "Cerveza Radler Cruzcampo",
+      "brand": "Cruzcampo",
+      "size": {
+        "label": "lata 33 cl.",
+        "quantity": 33,
+        "unit": "cl"
+      },
+      "price": {
+        "amount": 0.79,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 1.97,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 0.39,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 1.97,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "container": "lata"
+        },
+        "promotion": {
+          "type": "second_unit_discount",
+          "raw_text": "-50% 2a Unidad, la segunda unidad le sale a: 0,39 EUR",
+          "required_quantity": 2,
+          "discount_pct": 50,
+          "effective_unit_price": {
+            "amount": 0.39,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 1.18,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 0.79,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "el litro le sale a 1,97"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o08",
+      "name": "Cerveza Molen",
+      "brand": "Molen",
+      "size": {
+        "label": "lata 500 ml.",
+        "quantity": 500,
+        "unit": "ml"
+      },
+      "price": {
+        "amount": 0.57,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 1,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 0.5,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 1,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "container": "lata"
+        },
+        "promotion": {
+          "type": "multibuy_total",
+          "raw_text": "2 UNIDADES POR 1 EUR",
+          "required_quantity": 2,
+          "total_price": {
+            "amount": 1,
+            "currency": "EUR"
+          },
+          "effective_unit_price": {
+            "amount": 0.5,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 0.57,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "el litro le sale a 1"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o01",
+      "name": "Natillas Vainilla Sin Lactosa Dhul",
+      "brand": "Dhul",
+      "size": {
+        "label": "125 g., Pack-2",
+        "quantity": 125,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 0.99,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 3.96,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 0.99,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.39,
+          "currency": "EUR"
+        },
+        "discount_pct": 28.8,
+        "printed_unit_price": {
+          "amount": 3.96,
+          "currency": "EUR",
+          "per": "kg"
+        },
+        "format": {
+          "pack_count": 2
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,39"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o02",
+      "name": "Kefir Bebible Natural Ifa Eliges",
+      "brand": "Ifa Eliges",
+      "size": {
+        "label": "500 g.",
+        "quantity": 500,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 1.29,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 2.58,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 1.29,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.45,
+          "currency": "EUR"
+        },
+        "discount_pct": 11,
+        "printed_unit_price": {
+          "amount": 2.58,
+          "currency": "EUR",
+          "per": "kg"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,45"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o03",
+      "name": "Cafe Cappuccino, Machiato, Cafe Latte o sin Lactosa Starbucks",
+      "brand": "Starbucks",
+      "size": {
+        "label": "220 ml.",
+        "quantity": 220,
+        "unit": "ml"
+      },
+      "price": {
+        "amount": 1.55,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 6.77,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 1.55,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.99,
+          "currency": "EUR"
+        },
+        "discount_pct": 22.1,
+        "printed_unit_price": {
+          "amount": 6.77,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "variants": [
+          "Cappuccino",
+          "Machiato",
+          "Cafe Latte",
+          "sin Lactosa"
+        ],
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,99"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o04",
+      "name": "Nescafe Latte",
+      "brand": "Nescafe",
+      "size": {
+        "label": "205 ml.",
+        "quantity": 205,
+        "unit": "ml"
+      },
+      "price": {
+        "amount": 1.49,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 5.44,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 0.74,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 5.44,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "promotion": {
+          "type": "second_unit_discount",
+          "raw_text": "-50% 2a Unidad, la segunda unidad le sale a: 0,74 EUR",
+          "required_quantity": 2,
+          "discount_pct": 50,
+          "effective_unit_price": {
+            "amount": 0.74,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 2.23,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 1.49,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "el litro le sale a 5,44"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o05",
+      "name": "Activia con Cereales o 0% Fibra",
+      "brand": "Activia",
+      "size": {
+        "label": "120 g., Pack-4",
+        "quantity": 120,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 1.49,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 3.14,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 1.49,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 3.14,
+          "currency": "EUR",
+          "per": "kg"
+        },
+        "format": {
+          "pack_count": 4
+        },
+        "promotion": {
+          "type": "n_for_m",
+          "raw_text": "2 X 1 cada unidad le sale a: 1,49 EUR",
+          "required_quantity": 2,
+          "paid_quantity": 1,
+          "effective_unit_price": {
+            "amount": 1.49,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 2.99,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 2.99,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "el kilo le sale a 3,14"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o06",
+      "name": "Danacol Danone",
+      "brand": "Danone",
+      "size": {
+        "label": "100 g., Pack-6",
+        "quantity": 100,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 2.29,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 3.82,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 2.29,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 3.82,
+          "currency": "EUR",
+          "per": "kg"
+        },
+        "format": {
+          "pack_count": 6
+        },
+        "promotion": {
+          "type": "n_for_m",
+          "raw_text": "2 X 1 cada unidad le sale a: 2,29 EUR",
+          "required_quantity": 2,
+          "paid_quantity": 1,
+          "effective_unit_price": {
+            "amount": 2.29,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 4.59,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 4.59,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "el kilo le sale a 3,82"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o07",
+      "name": "Petit Bebedino Fresa o Fresa-Platano o Danonino para Llevar",
+      "brand": "Danone",
+      "size": {
+        "label": "100 g., Pack-4 o 70 g., Pack-4",
+        "quantity": 100,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 1.34,
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 1.34,
+          "currency": "EUR"
+        },
+        "format": {
+          "pack_count": 4
+        },
+        "variants": [
+          "Fresa",
+          "Fresa-Platano",
+          "Danonino para Llevar"
+        ],
+        "promotion": {
+          "type": "n_for_m",
+          "raw_text": "2 X 1 cada unidad le sale a: 1,34 EUR",
+          "required_quantity": 2,
+          "paid_quantity": 1,
+          "effective_unit_price": {
+            "amount": 1.34,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 4.03,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 2.69,
+            "currency": "EUR"
+          }
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o08",
+      "name": "Yogur Mix Smarties, Kit Kat o Kefir con Granola Almendra-Miel Nestle",
+      "brand": "Nestle",
+      "size": {
+        "label": "115 g., Pack-2",
+        "quantity": 115,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 1.55,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 6.74,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 1.55,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.89,
+          "currency": "EUR"
+        },
+        "discount_pct": 18,
+        "printed_unit_price": {
+          "amount": 6.74,
+          "currency": "EUR",
+          "per": "kg"
+        },
+        "format": {
+          "pack_count": 2
+        },
+        "variants": [
+          "Smarties",
+          "Kit Kat",
+          "Kefir con Granola Almendra-Miel"
+        ],
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,89"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p31-o09",
+      "name": "Kefir Bebible Natural, Multifruta sin Lactosa 0% o Fresa",
+      "brand": "Nestle",
+      "size": {
+        "label": "100 g., Pack-6",
+        "quantity": 100,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 2.25,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 3.75,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "lacteos"
+      ],
+      "extra": {
+        "page": 31,
+        "section": "lacteos",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 2.25,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 2.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 23.7,
+        "printed_unit_price": {
+          "amount": 3.75,
+          "currency": "EUR",
+          "per": "kg"
+        },
+        "format": {
+          "pack_count": 6
+        },
+        "variants": [
+          "Natural",
+          "Multifruta sin Lactosa 0%",
+          "Fresa"
+        ],
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 2,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o01",
+      "name": "Limpiador Cal Suciedad o Humedad Cillit Bang",
+      "brand": "Cillit Bang",
+      "size": {
+        "label": "750 ml.",
+        "quantity": 750,
+        "unit": "ml"
+      },
+      "price": {
+        "amount": 2.95,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 3.93,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 2.95,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 3.45,
+          "currency": "EUR"
+        },
+        "discount_pct": 14.5,
+        "printed_unit_price": {
+          "amount": 3.93,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "variants": [
+          "Cal y Suciedad",
+          "Humedad"
+        ],
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 3,45"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o02",
+      "name": "Limpiacristales Ifa Sabe",
+      "brand": "Ifa Sabe",
+      "size": {
+        "label": "Pistola 1 litro",
+        "quantity": 1,
+        "unit": "l"
+      },
+      "price": {
+        "amount": 1,
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 1,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.2,
+          "currency": "EUR"
+        },
+        "discount_pct": 16.7,
+        "format": {
+          "container": "pistola"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,20"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o03",
+      "name": "Limpiador Multiusos Ifa Sabe",
+      "brand": "Ifa Sabe",
+      "size": {
+        "label": "pistola 1 L.",
+        "quantity": 1,
+        "unit": "l"
+      },
+      "price": {
+        "amount": 1,
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 1,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.2,
+          "currency": "EUR"
+        },
+        "discount_pct": 16.7,
+        "format": {
+          "container": "pistola"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,20"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o04",
+      "name": "Friegasuelos El Jamon (Jabon Verde, Brisa Marina, Talco o Floral)",
+      "brand": "El Jamon",
+      "size": {
+        "label": "1,5 L.",
+        "quantity": 1.5,
+        "unit": "l"
+      },
+      "price": {
+        "amount": 1.25,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 0.83,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 1.25,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.39,
+          "currency": "EUR"
+        },
+        "discount_pct": 10.1,
+        "printed_unit_price": {
+          "amount": 0.83,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "variants": [
+          "Jabon Verde",
+          "Brisa Marina",
+          "Talco",
+          "Floral"
+        ],
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,39"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o05",
+      "name": "Fregona Microfibra Hilo Ifa Sabe",
+      "brand": "Ifa Sabe",
+      "size": {
+        "label": "unidad",
+        "unit": "unit"
+      },
+      "price": {
+        "amount": 1.2,
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 1.2,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.5,
+          "currency": "EUR"
+        },
+        "discount_pct": 20,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,50"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o06",
+      "name": "Estropajo Salvaunas Azul Ifa Sabe",
+      "brand": "Ifa Sabe",
+      "size": {
+        "label": "Pack-3"
+      },
+      "price": {
+        "amount": 0.5,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 0.17,
+        "label": "unit",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 0.5,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 0.75,
+          "currency": "EUR"
+        },
+        "discount_pct": 33.3,
+        "printed_unit_price": {
+          "amount": 0.17,
+          "currency": "EUR",
+          "per": "unit"
+        },
+        "format": {
+          "pack_count": 3
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 0,75"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o07",
+      "name": "Estropajo Acero Inoxidable Ifa Sabe",
+      "brand": "Ifa Sabe",
+      "size": {
+        "label": "Pack-3"
+      },
+      "price": {
+        "amount": 0.59,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 0.2,
+        "label": "unit",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 0.59,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 0.75,
+          "currency": "EUR"
+        },
+        "discount_pct": 21.3,
+        "printed_unit_price": {
+          "amount": 0.2,
+          "currency": "EUR",
+          "per": "unit"
+        },
+        "format": {
+          "pack_count": 3
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 0,75"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o08",
+      "name": "Bayeta Microfibras Bayeco",
+      "brand": "Bayeco",
+      "size": {
+        "label": "Pack-3"
+      },
+      "price": {
+        "amount": 1,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 0.33,
+        "label": "unit",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 1,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.35,
+          "currency": "EUR"
+        },
+        "discount_pct": 25.9,
+        "printed_unit_price": {
+          "amount": 0.33,
+          "currency": "EUR",
+          "per": "unit"
+        },
+        "format": {
+          "pack_count": 3
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,35"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p33-o09",
+      "name": "Bayeta Microfibras Vileda XL",
+      "brand": "Vileda",
+      "size": {
+        "label": "Pack-3+1 GRATIS"
+      },
+      "price": {
+        "amount": 2.99,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 1,
+        "label": "unit",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "drogueria"
+      ],
+      "extra": {
+        "page": 33,
+        "section": "drogueria",
+        "page_has_text_layer": true,
+        "basis": "pack",
+        "headline_price": {
+          "amount": 2.99,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 4.99,
+          "currency": "EUR"
+        },
+        "discount_pct": 40.1,
+        "printed_unit_price": {
+          "amount": 1,
+          "currency": "EUR",
+          "per": "unit"
+        },
+        "format": {
+          "pack_count": 3,
+          "bonus_units": 1
+        },
+        "promotion": {
+          "type": "pack_bonus",
+          "raw_text": "Pack-3+1 GRATIS",
+          "required_quantity": 3,
+          "free_quantity": 1
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p36-o01",
+      "name": "Champu Elvive",
+      "brand": "Elvive",
+      "size": {
+        "label": "380 ml.",
+        "quantity": 380,
+        "unit": "ml"
+      },
+      "category_path": [
+        "perfumeria"
+      ],
+      "extra": {
+        "page": 36,
+        "section": "perfumeria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 2.34,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 0.93,
+          "currency": "EUR",
+          "per": "100ml"
+        },
+        "promotion": {
+          "type": "second_unit_discount",
+          "raw_text": "-50% 2a Unidad, la segunda unidad le sale a: 2,34 EUR",
+          "required_quantity": 2,
+          "discount_pct": 50,
+          "effective_unit_price": {
+            "amount": 2.34,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 7.03,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 4.69,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "100 ml. le sale a 0,93"
+        },
+        "loyalty": {
+          "required": true,
+          "program": "descuentos ifamilia"
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p36-o02",
+      "name": "Tinte Llongueras Advance",
+      "brand": "Llongueras",
+      "size": {
+        "label": "unidad",
+        "unit": "unit"
+      },
+      "category_path": [
+        "perfumeria"
+      ],
+      "extra": {
+        "page": 36,
+        "section": "perfumeria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 3.34,
+          "currency": "EUR"
+        },
+        "promotion": {
+          "type": "second_unit_discount",
+          "raw_text": "-50% 2a Unidad, la segunda unidad le sale a: 3,34 EUR",
+          "required_quantity": 2,
+          "discount_pct": 50,
+          "effective_unit_price": {
+            "amount": 3.34,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 10.02,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 6.68,
+            "currency": "EUR"
+          }
+        },
+        "loyalty": {
+          "required": true,
+          "program": "descuentos ifamilia"
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p36-o03",
+      "name": "Champu o Acondicionador Revlon Flex",
+      "brand": "Revlon Flex",
+      "size": {
+        "label": "650 ml.",
+        "quantity": 650,
+        "unit": "ml"
+      },
+      "price": {
+        "amount": 2.79,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 0.43,
+        "label": "100ml",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "perfumeria"
+      ],
+      "extra": {
+        "page": 36,
+        "section": "perfumeria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 2.79,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 3.2,
+          "currency": "EUR"
+        },
+        "discount_pct": 12.8,
+        "printed_unit_price": {
+          "amount": 0.43,
+          "currency": "EUR",
+          "per": "100ml"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 3,20"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p36-o04",
+      "name": "Mascarilla Ifa Unnia",
+      "brand": "Ifa Unnia",
+      "size": {
+        "label": "400 ml.",
+        "quantity": 400,
+        "unit": "ml"
+      },
+      "price": {
+        "amount": 2.19,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 0.55,
+        "label": "100ml",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "perfumeria"
+      ],
+      "extra": {
+        "page": 36,
+        "section": "perfumeria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 2.19,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 2.39,
+          "currency": "EUR"
+        },
+        "discount_pct": 8.4,
+        "printed_unit_price": {
+          "amount": 0.55,
+          "currency": "EUR",
+          "per": "100ml"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 2,39"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p36-o05",
+      "name": "Champu Syoss",
+      "brand": "Syoss",
+      "size": {
+        "label": "440 ml.",
+        "quantity": 440,
+        "unit": "ml"
+      },
+      "category_path": [
+        "perfumeria"
+      ],
+      "extra": {
+        "page": 36,
+        "section": "perfumeria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 3.59,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 3.98,
+          "currency": "EUR"
+        },
+        "discount_pct": 9.8,
+        "printed_unit_price": {
+          "amount": 0.82,
+          "currency": "EUR",
+          "per": "100ml"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 3,98"
+        },
+        "loyalty": {
+          "required": true,
+          "program": "descuentos ifamilia"
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p36-o06",
+      "name": "Mascarilla Elvive",
+      "brand": "Elvive",
+      "size": {
+        "label": "310 ml.",
+        "quantity": 310,
+        "unit": "ml"
+      },
+      "category_path": [
+        "perfumeria"
+      ],
+      "extra": {
+        "page": 36,
+        "section": "perfumeria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 2.2,
+          "currency": "EUR"
+        },
+        "printed_unit_price": {
+          "amount": 1.06,
+          "currency": "EUR",
+          "per": "100ml"
+        },
+        "promotion": {
+          "type": "second_unit_discount",
+          "raw_text": "-50% 2a Unidad, la segunda unidad le sale a: 2,20 EUR",
+          "required_quantity": 2,
+          "discount_pct": 50,
+          "effective_unit_price": {
+            "amount": 2.2,
+            "currency": "EUR"
+          },
+          "total_price": {
+            "amount": 6.6,
+            "currency": "EUR"
+          },
+          "single_unit_price": {
+            "amount": 4.4,
+            "currency": "EUR"
+          },
+          "effective_unit_price_note": "100 ml. le sale a 1,06"
+        },
+        "loyalty": {
+          "required": true,
+          "program": "descuentos ifamilia"
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p36-o07",
+      "name": "Crema Corporal Hidratante Nivea",
+      "brand": "Nivea",
+      "size": {
+        "label": "250 ml.",
+        "quantity": 250,
+        "unit": "ml"
+      },
+      "category_path": [
+        "perfumeria"
+      ],
+      "extra": {
+        "page": 36,
+        "section": "perfumeria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 3.99,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 4.5,
+          "currency": "EUR"
+        },
+        "discount_pct": 11.3,
+        "printed_unit_price": {
+          "amount": 1.57,
+          "currency": "EUR",
+          "per": "100ml"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 4,50"
+        },
+        "loyalty": {
+          "required": true,
+          "program": "descuentos ifamilia"
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p36-o08",
+      "name": "Locion Rosa Mosqueta Instituto Espanol",
+      "brand": "Instituto Espanol",
+      "size": {
+        "label": "950 ml.",
+        "quantity": 950,
+        "unit": "ml"
+      },
+      "price": {
+        "amount": 4.89,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 0.52,
+        "label": "100ml",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "perfumeria"
+      ],
+      "extra": {
+        "page": 36,
+        "section": "perfumeria",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 4.89,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 5.15,
+          "currency": "EUR"
+        },
+        "discount_pct": 5,
+        "printed_unit_price": {
+          "amount": 0.52,
+          "currency": "EUR",
+          "per": "100ml"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 5,15"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "message": "p05-o01 (Cerveza con Alcohol Estrella del Sur) needs the chain's loyalty card (descuentos ifamilia), so it states no price: a card price is not the price a non member pays.",
+      "product_id": "p05-o01",
+      "extra": {
+        "page": 5
+      }
+    },
+    {
+      "message": "p36-o01 (Champu Elvive) needs the chain's loyalty card (descuentos ifamilia), so it states no price: a card price is not the price a non member pays.",
+      "product_id": "p36-o01",
+      "extra": {
+        "page": 36
+      }
+    },
+    {
+      "message": "p36-o02 (Tinte Llongueras Advance) needs the chain's loyalty card (descuentos ifamilia), so it states no price: a card price is not the price a non member pays.",
+      "product_id": "p36-o02",
+      "extra": {
+        "page": 36
+      }
+    },
+    {
+      "message": "p36-o05 (Champu Syoss) needs the chain's loyalty card (descuentos ifamilia), so it states no price: a card price is not the price a non member pays.",
+      "product_id": "p36-o05",
+      "extra": {
+        "page": 36
+      }
+    },
+    {
+      "message": "p36-o06 (Mascarilla Elvive) needs the chain's loyalty card (descuentos ifamilia), so it states no price: a card price is not the price a non member pays.",
+      "product_id": "p36-o06",
+      "extra": {
+        "page": 36
+      }
+    },
+    {
+      "message": "p36-o07 (Crema Corporal Hidratante Nivea) needs the chain's loyalty card (descuentos ifamilia), so it states no price: a card price is not the price a non member pays.",
+      "product_id": "p36-o07",
+      "extra": {
+        "page": 36
+      }
+    },
+    {
+      "message": "Only pages 1, 2, 5, 31, 33 and 36 were read by the model. The other 34 pages are not covered by this file.",
+      "extra": {
+        "page": 0
+      }
+    }
+  ]
+}
