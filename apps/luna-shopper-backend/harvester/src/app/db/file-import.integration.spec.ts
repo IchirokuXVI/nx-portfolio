@@ -44,6 +44,7 @@ describeIntegration('the one source product schema (real Postgres)', () => {
   const SOUTH = '5efa0000-0000-4000-a000-00000000b0fe';
   const RUN = '5efa0000-0000-4000-a000-00000000c001';
   const LATER_RUN = '5efa0000-0000-4000-a000-00000000c002';
+  const ADMIN = '5efa0000-0000-4000-a000-00000000a001';
   const DIGEST = 'e'.repeat(64);
   const MARK = 'file-import-integration-test';
 
@@ -64,16 +65,19 @@ describeIntegration('the one source product schema (real Postgres)', () => {
     runs = dataSource.getRepository(HarvestRun);
     entries = dataSource.getRepository(SourceCatalogEntry);
     prices = dataSource.getRepository(SourceEntryPrice);
-    // The two revert methods touch the three repositories and nothing else, so
-    // the collaborators an accept needs are deliberately absent: a call that
-    // reached one would fail loudly rather than pass on a stub.
+    // The queue read and the two revert methods touch the three repositories and
+    // the gate, and nothing else: the collaborators an accept needs are
+    // deliberately absent, so a call that reached one would fail loudly rather
+    // than pass on a stub.
     rows = new SourceEntryService(
       entries,
       prices,
       runs,
       undefined as unknown as CatalogClient,
       undefined as unknown as SupermarketSourceService,
-      undefined as unknown as PlatformAdminService,
+      {
+        requireAdmin: async () => ADMIN,
+      } as unknown as PlatformAdminService,
       undefined as unknown as ConfigService
     );
   });
@@ -322,6 +326,44 @@ describeIntegration('the one source product schema (real Postgres)', () => {
 
       await entries.delete({ id: entry.id });
       expect(await prices.find({ where: { entryId: entry.id } })).toEqual([]);
+    });
+  });
+
+  describe('the queue read', () => {
+    it('pages a joined read without mangling its own ordering', async () => {
+      // `take` beside a `leftJoinAndSelect` makes TypeORM page through a
+      // DISTINCT subquery and rewrite the ORDER BY into it. A quoted column in
+      // that clause becomes `distinctAlias.e_"lastSeenAt"`, which is not a
+      // column, and **every** request 500s. No mocked repository can see it:
+      // this test exists because a real one did.
+      const first = await entries.save(
+        row({ externalId: 'k-one', name: 'Uno', lastSeenAt: new Date(1) })
+      );
+      const second = await entries.save(
+        row({ externalId: 'k-two', name: 'Dos', lastSeenAt: new Date(2) })
+      );
+      await prices.save(
+        prices.create({
+          entryId: second.id,
+          priceScopeId: NORTH,
+          price: 0.53,
+          currency: 'EUR',
+          runId: RUN,
+        })
+      );
+
+      const page = await rows.list({
+        userId: ADMIN,
+        adminToken: 'stubbed',
+        supermarketId: CHAIN,
+        limit: 10,
+      });
+
+      // Newest observation first, which is the order a queue reads in, and each
+      // row carries its prices inline.
+      expect(page.items.map((item) => item.id)).toEqual([second.id, first.id]);
+      expect(page.items[0].prices).toHaveLength(1);
+      expect(page.items[1].prices).toEqual([]);
     });
   });
 
