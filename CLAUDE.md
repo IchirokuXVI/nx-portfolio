@@ -239,27 +239,35 @@ catalog over NATS. It was the sixth backend service to land (`assistant`, plan
 catalog.
 
 **It is deployed in both clusters, and no run can write to catalog in either.**
-`values.staging.yaml` sets `enabled: true`, `harvestEnabled: true` and
-`mercadonaEnabled: false` (k8s plan 0008): the pod runs store discovery only, and
-never fetches a storefront. `values.production.yaml` sets `enabled: true` with no
-`harvestEnabled`, so the pod runs and refuses every spawn. Both clusters leave
-`actorId` empty, so even a run that started could not write a price: catalog
-rejects a service actor it does not know. A catalog discovery run is 4,383 HTTP
-requests over about eighteen minutes, and price runs happen here against the
-compose stack, where the development machine has room for them.
+`values.staging.yaml` sets `enabled: true` and `harvestEnabled: true` (k8s plan
+0008): the pod runs store discovery only, and never fetches a storefront, because
+every chain's source row is off. `values.production.yaml` sets `enabled: true`
+with no `harvestEnabled`, so the pod runs and refuses every spawn. Both clusters
+leave `actorId` empty, so even a run that started could not write a price:
+catalog rejects a service actor it does not know. A catalog discovery run is
+4,383 HTTP requests over about eighteen minutes, and price runs happen here
+against the compose stack, where the development machine has room for them.
 
-There are **three** switches, and they are three because they are three different
-decisions:
+There are **two** switches in configuration, and they are two because they are two
+different decisions:
 
-| Switch                                        | Decides                                                 |
-| --------------------------------------------- | ------------------------------------------------------- |
-| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all          |
-| `HARVEST_ENABLED`                             | whether a pod that exists may start any run             |
-| `MERCADONA_ENABLED`                           | whether that one storefront specifically may be fetched |
+| Switch                                        | Decides                                        |
+| --------------------------------------------- | ---------------------------------------------- |
+| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all |
+| `HARVEST_ENABLED`                             | whether a pod that exists may start any run    |
 
-All three default to false, including in the `.env` that `luna-slot.sh` writes.
-Bringing the service up and letting it fetch from a third party are not the same
-thing, and section 8.1 of the plan is why the second and third exist separately.
+Both default to false, including in the `.env` that `luna-slot.sh` writes.
+Bringing the service up and letting it start runs are not the same thing, and
+section 8.1 of the plan is why they exist separately.
+
+**Whether a given chain may be fetched is neither of them: it is a row** (plan
+0083). `supermarket_sources.enabled`, off by default, one per chain, written from
+the back office through `supermarketSource.setEnabled`, and the spawn refuses a
+run for a source whose row says false. There was an environment variable doing
+that for one storefront by name; a second chain would have needed a second
+variable threaded through `app-config.ts`, the config map, `_env.tpl` and both
+`luna-slot` scripts before a run could start, so it was deleted in favour of the
+column that already existed. **Do not add a per chain environment variable.**
 
 Two rules that are easy to break by accident:
 

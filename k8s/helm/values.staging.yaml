@@ -109,8 +109,10 @@ lunaShopperBackend:
   # boots, passes its probes and refuses to spawn anything. The queue fills either
   # way, so this being false would simply build a backlog.
   #
-  # `mercadonaEnabled` stays false, and this is the section 8.1 separation working
-  # as designed rather than a leftover. Store discovery is two requests to
+  # Every chain's `supermarket_sources` row stays off, which is the per chain
+  # switch (plan 0083) and is application state rather than a key in this file.
+  # This is the section 8.1 separation working as designed rather than a
+  # leftover. Store discovery is two requests to
   # OpenStreetMap (one geocode, one Overpass query, once per postal code per
   # thirty day cooldown) and never touches a storefront. Catalog discovery is
   # 4,383 requests into somebody's shop, and it stays a decision of its own to
@@ -133,7 +135,6 @@ lunaShopperBackend:
   harvester:
     enabled: true
     harvestEnabled: true
-    mercadonaEnabled: false
 
   # The reference catalog, on (plan 0067). This is what staging is for: a
   # deployed environment with real products and real prices to click through, and

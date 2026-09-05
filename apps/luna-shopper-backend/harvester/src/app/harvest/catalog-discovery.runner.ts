@@ -65,14 +65,11 @@ export class CatalogDiscoveryRunner {
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
+    // No per chain gate here (plan 0083). `harvest-run.service.ts` refuses the
+    // spawn when `source.enabled` is false, so a disabled chain never reaches
+    // this method and a second check would only ever guard a run that could not
+    // have started.
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
-    if (!settings.mercadonaEnabled) {
-      throw new Error(
-        'MERCADONA_ENABLED is false, so this deployment does not fetch from ' +
-          'Mercadona. That switch exists so the chain can be dropped without ' +
-          'dropping the service (plan 0038, section 8.1).'
-      );
-    }
 
     const warehouse = readWarehouse(source.config);
     const client = new MercadonaClient({

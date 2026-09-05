@@ -184,11 +184,14 @@ export class SourceEntryService {
     entry: SourceCatalogEntry
   ): Promise<string | null> {
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
-    if (!settings.mercadonaEnabled) {
+    // The row is the per chain switch (plan 0083). This is the one fetch in the
+    // service that no spawn stands in front of, so it asks the source itself
+    // before reaching a storefront.
+    const source = await this.sources.findBySupermarket(entry.supermarketId);
+    if (source === null || !source.enabled) {
       return null;
     }
-    const source = await this.sources.findBySupermarket(entry.supermarketId);
-    const warehouse = source?.config?.['warehouse'];
+    const warehouse = source.config?.['warehouse'];
     if (typeof warehouse !== 'string' || warehouse.length === 0) {
       return null;
     }

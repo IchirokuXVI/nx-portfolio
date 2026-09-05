@@ -184,7 +184,7 @@ export class RunPage {
     this._route.snapshot.paramMap.get('id') ?? ''
   );
 
-  /** A finished run whose failure names one of the three switches. */
+  /** A finished run whose failure names one of the switches. */
   readonly blockedKey = computed(() => {
     const run = this.watch.run();
     if (run === null) {

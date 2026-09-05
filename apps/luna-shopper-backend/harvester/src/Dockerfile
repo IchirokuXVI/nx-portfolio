@@ -1,9 +1,9 @@
 # Luna Shopper harvester image (plan 0038, section 4.1; plan 0002, section 3).
 #
 # A long running Node process. No build time config is baked in; every value comes
-# from the runtime environment, including the two switches that decide whether it
-# fetches anything at all (HARVEST_ENABLED, MERCADONA_ENABLED), both off by
-# default.
+# from the runtime environment, including HARVEST_ENABLED, the switch that decides
+# whether it may start a run at all, off by default. Which chains it may fetch is
+# not an environment variable: it is a row per chain in its own database.
 #
 # Built in its **minimal form**: HTTP and JSON only, no Chromium and no OCR
 # engine, so it is not yet the largest image in the system. Backlog 0001's leaflet

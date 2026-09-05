@@ -31,14 +31,16 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
  * Per chain fetching configuration (plan 0006, sections 3 and 8).
  *
  * This is where the **one** switch of section 3 that the app is allowed to
- * change lives. `enabled` is per chain and is application state, unlike
- * `HARVEST_ENABLED` and `MERCADONA_ENABLED`, which are deployment configuration
- * and are shown on the runs screen without a control beside them.
+ * change lives, and since backend plan `0083` it is also the only per chain
+ * switch there is anywhere: the variable that used to gate one storefront by
+ * name is gone, and this row answers that question for every chain. `enabled` is
+ * application state, unlike `HARVEST_ENABLED`, which is deployment configuration
+ * and is shown on the runs screen without a control beside it.
  *
- * Putting it here rather than in the switch panel is the point. Three deployment
+ * Putting it here rather than in the switch panel is the point. Deployment
  * switches an operator cannot touch and one they can, all in a row, would read
- * as four of the same kind of thing, and the whole reason the panel exists is
- * that they are not.
+ * as the same kind of thing, and the whole reason the panel exists is that they
+ * are not.
  *
  * `enabled` gets its own route because describing a chain and starting to fetch
  * it are two decisions. The toggle calls that route directly, so turning a chain

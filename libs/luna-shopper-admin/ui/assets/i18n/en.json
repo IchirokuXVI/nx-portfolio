@@ -446,13 +446,12 @@
     },
     "blocked": {
       "service-off": "Harvesting is switched off on this deployment. HARVEST_ENABLED is false, so no run can start. It is server configuration and cannot be changed from here.",
-      "storefront-off": "That storefront is switched off on this deployment. MERCADONA_ENABLED is false, so the run started and stopped before fetching anything. It is server configuration and cannot be changed from here.",
       "chain-disabled": "That chain is switched off. Turn it on under chain sources, which is application state rather than server configuration.",
       "unknown": "The run could not start, and the server did not say which switch stopped it."
     },
     "switch": {
       "heading": "What is allowed to happen",
-      "lead": "Three separate decisions, none of them changed from here. They are shown because otherwise there is no way to tell a run that did nothing from a run that was never allowed to.",
+      "lead": "Two separate decisions, neither of them changed from here. They are shown because otherwise there is no way to tell a run that did nothing from a run that was never allowed to. Whether a chain may be fetched is a third decision, and it is on the chain sources screen.",
       "state": {
         "on": "On",
         "off": "Off",
@@ -460,13 +459,11 @@
       },
       "name": {
         "deployed": "Harvester deployed",
-        "harvestEnabled": "HARVEST_ENABLED",
-        "mercadonaEnabled": "MERCADONA_ENABLED"
+        "harvestEnabled": "HARVEST_ENABLED"
       },
       "what": {
         "deployed": "Whether the service exists in this environment at all. Set in the Helm chart.",
-        "harvestEnabled": "Whether a running service may start any run. Set in the service configuration.",
-        "mercadonaEnabled": "Whether that one storefront may be fetched. Set in the service configuration."
+        "harvestEnabled": "Whether a running service may start any run. Set in the service configuration."
       },
       "from": {
         "chart": "From the chart, which switches the harvester off in production and in staging.",

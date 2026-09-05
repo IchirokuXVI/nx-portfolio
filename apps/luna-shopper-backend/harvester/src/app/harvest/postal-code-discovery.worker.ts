@@ -38,9 +38,10 @@ import { RunExecutor } from './run-executor.service';
  * **`HARVEST_ENABLED` gates only this half.** With it false the queue still
  * fills and nothing drains, so turning the switch on later drains a real backlog
  * of the codes users actually asked about rather than starting from nothing.
- * `MERCADONA_ENABLED` does not enter into it at all: a store discovery run reads
- * OpenStreetMap and never touches a storefront, so discovery with price scraping
- * off is a coherent configuration and the one `k8s/plans/0008` deploys.
+ * A chain's own switch does not enter into it at all: a store discovery run
+ * reads OpenStreetMap and never touches a storefront, so discovery with every
+ * chain's row off is a coherent configuration and the one `k8s/plans/0008`
+ * deploys.
  */
 @Injectable()
 export class PostalCodeDiscoveryWorker

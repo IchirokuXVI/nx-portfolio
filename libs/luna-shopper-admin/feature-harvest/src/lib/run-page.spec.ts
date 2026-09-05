@@ -154,19 +154,20 @@ describe('RunPage, arriving mid run', () => {
   });
 
   /**
-   * A failure naming one of the three switches is translated into this app's own
+   * A failure naming one of the switches is translated into this app's own
    * explanation, rather than shown as the harvester's raw sentence.
    */
-  it('explains a run that the storefront switch stopped', async () => {
+  it('explains a run that the service switch stopped', async () => {
     const fixture = await render(
       run({
         status: 'FAILED',
-        error: 'MERCADONA_ENABLED is false, so this deployment does not fetch.',
+        error:
+          'Harvesting is disabled on this deployment (HARVEST_ENABLED is false).',
       })
     );
 
     expect(fixture.componentInstance.blockedKey()).toBe(
-      'harvest.blocked.storefront-off'
+      'harvest.blocked.service-off'
     );
     fixture.componentInstance.watch.stop();
   });

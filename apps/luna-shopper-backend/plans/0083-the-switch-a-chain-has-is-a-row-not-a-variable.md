@@ -1,3 +1,5 @@
+> **PR:** [#218](https://github.com/IchirokuXVI/nx-portfolio/pull/218)
+
 # 0083 The switch a chain has is a row, not a variable
 
 `MERCADONA_ENABLED` gates one storefront by name. Plan `0038` section 8.1 introduced it when there

@@ -56,13 +56,9 @@ export class RefreshRunner {
     input: RefreshInput,
     source: SupermarketSource
   ): Promise<void> {
+    // No per chain gate here (plan 0083), for the same reason as in the catalog
+    // runner: the spawn already refused a source whose row says disabled.
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
-    if (!settings.mercadonaEnabled) {
-      throw new Error(
-        'MERCADONA_ENABLED is false, so this deployment does not fetch from ' +
-          'Mercadona (plan 0038, section 8.1).'
-      );
-    }
 
     const warehouse = readWarehouse(source.config);
     const client = new MercadonaClient({

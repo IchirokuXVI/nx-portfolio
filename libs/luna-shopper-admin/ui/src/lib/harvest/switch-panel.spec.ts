@@ -4,13 +4,13 @@ import type { HarvestSwitch } from '@portfolio/luna-shopper-admin/models';
 import { SwitchPanel } from './switch-panel';
 
 /**
- * Section 7's third test: **the three switches render their real values and are
- * not editable.**
+ * Section 7's third test: **the switches render their real values and are not
+ * editable.**
  *
- * The second half of that is the load bearing one here. Two of the three are
- * deployment configuration, and a back office control that edited a cluster's
- * config map is a different and much larger feature, so this panel must contain
- * no control at all.
+ * The second half of that is the load bearing one here. Both are deployment
+ * configuration, and a back office control that edited a cluster's config map is
+ * a different and much larger feature, so this panel must contain no control at
+ * all.
  */
 
 const shown: readonly HarvestSwitch[] = [
@@ -19,11 +19,6 @@ const shown: readonly HarvestSwitch[] = [
     name: 'harvestEnabled',
     state: 'unknown',
     source: 'harvest.switch.from.nothing',
-  },
-  {
-    name: 'mercadonaEnabled',
-    state: 'on',
-    source: 'harvest.switch.from.run',
   },
 ];
 
@@ -45,7 +40,7 @@ describe('SwitchPanel', () => {
   it('draws one row per switch', async () => {
     const fixture = await render();
 
-    expect(fixture.nativeElement.querySelectorAll('li')).toHaveLength(3);
+    expect(fixture.nativeElement.querySelectorAll('li')).toHaveLength(2);
   });
 
   it('names each switch and says what it decides', async () => {
@@ -65,7 +60,6 @@ describe('SwitchPanel', () => {
     expect(states).toEqual([
       'harvest.switch.state.off',
       'harvest.switch.state.unknown',
-      'harvest.switch.state.on',
     ]);
   });
 
@@ -97,8 +91,8 @@ describe('SwitchPanel', () => {
   });
 
   /**
-   * The point of the panel. It shows all three and changes none of them: they
-   * are deployment configuration, not application state.
+   * The point of the panel. It shows both and changes neither: they are
+   * deployment configuration, not application state.
    */
   it('offers no control of any kind', async () => {
     const panel = (await render()).nativeElement;

@@ -54,40 +54,48 @@ Polling requirements that matter:
   discovery, so the screen is built for something watched intermittently: it must be correct on
   arrival, not only correct if you watched it from the start.
 
-## 3. The three switches, which are three decisions
+## 3. The switches, which are separate decisions
 
-There are three separate controls over whether harvesting happens, and conflating them in the UI
-would misrepresent what they mean.
+There are separate controls over whether harvesting happens, and conflating them in the UI would
+misrepresent what they mean.
 
 | Switch                                 | Decides                                        | Where it lives                  |
 | -------------------------------------- | ---------------------------------------------- | ------------------------------- |
 | `lunaShopperBackend.harvester.enabled` | whether the service exists in a cluster at all | Helm. Not in this app.          |
 | `HARVEST_ENABLED`                      | whether a pod that exists may start any run    | Service config. Read only here. |
-| `MERCADONA_ENABLED`                    | whether that one storefront may be fetched     | Service config. Read only here. |
 
-All three default to false. The app **shows** all three and **changes** none of them: they are
-deployment configuration, not application state, and a back office button that edits a cluster's
-config map is a different and much larger feature.
+Both default to false. The app **shows** both and **changes** neither: they are deployment
+configuration, not application state, and a back office button that edits a cluster's config map is
+a different and much larger feature.
+
+**This table had a third row, and backend plan `0083` deleted it.** `MERCADONA_ENABLED` gated one
+storefront by name, so a second chain would have needed a second variable. The per chain switch is
+now `supermarket_sources.enabled` alone, which is the row the next paragraph is about.
 
 What the app does change is `PUT sources/:supermarketId/enabled`, which is per chain and is
 application state.
 
 The screen must make the distinction legible, because "why did my run do nothing" is otherwise
-unanswerable from the UI. When a run cannot start, the reason is displayed: the service is off, the
-storefront is off, or the chain is disabled.
+unanswerable from the UI. When a run cannot start, the reason is displayed: the service is off, or
+the chain is disabled.
 
-**"Read only here" was optimistic, and PR #193 says so instead.** No route reports `HARVEST_ENABLED`
-or `MERCADONA_ENABLED`, and section 1 rules out adding one, so two of the three cannot be read at
-all. The panel shows all three and renders a **third state, "not known"**, rather than guessing
-`off`: both default to false, so a guess would be right most of the time and wrong in exactly the
-situation this panel exists for.
+**"Read only here" was optimistic, and PR #193 says so instead.** No route reports
+`HARVEST_ENABLED`, and section 1 rules out adding one, so one of the two cannot be read at all. The
+panel shows both and renders a **third state, "not known"**, rather than guessing `off`: it defaults
+to false, so a guess would be right most of the time and wrong in exactly the situation this panel
+exists for.
 
 Where behaviour reveals a switch, it is read. `HARVEST_ENABLED` false refuses a spawn with a 501
-carrying `not_configured`; `MERCADONA_ENABLED` false lets the run start and fails it on its first
-step with the variable named in `error`; and the first switch is answered from the chart, which
-fixes it for both clusters. So the last paragraph above holds in full, and only the static panel is
-short of what this section asked for. Reporting the two literally needs a gateway route, which is a
-backend change and therefore a plan of its own.
+carrying `not_configured`, and the first switch is answered from the chart, which fixes it for both
+clusters. So the last paragraph above holds in full, and only the static panel is short of what this
+section asked for. Reporting the remaining one literally needs a gateway route, which is a backend
+change and therefore a plan of its own.
+
+**Backend plan `0083` halved that gap.** It deleted `MERCADONA_ENABLED`, so the panel is two rows
+rather than three, one of which is a real value rather than an unknown. What used to be the third
+row is a source row the app already reads and already writes on the sources screen. The unread route
+this section wants is now for `HARVEST_ENABLED` alone, which is one variable for the whole service
+rather than one per chain, and is a much smaller thing to want.
 
 ## 4. The harvester does not run in a cluster
 
@@ -135,7 +143,7 @@ reports that a run was started, not that the operator changed 4,000 prices.
 
 - Polling starts on a running run, stops on a terminal one, and pauses on a hidden tab.
 - A run screen opened mid-run renders correct state without having observed the start.
-- The three switches render their real values and are not editable.
+- The switches render their real values and are not editable.
 - With the harvester absent, every screen says so rather than rendering empty.
 - Each queue's confirm and reject call the right route and advance to the next item.
 

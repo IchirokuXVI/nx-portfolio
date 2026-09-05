@@ -420,21 +420,22 @@ lunaShopperBackend:
     # drains a real backlog rather than starting from nothing.
     harvestEnabled: false
 
-    # And the same again for the one storefront (plan 0038, section 8.1). If
-    # Mercadona ever objects, this goes false and the catalog keeps working on
-    # hand entered prices, which is the property backlog 0001 section 5.4 designs
-    # for.
+    # There is no per chain key here, and there is not meant to be (plan 0083).
+    # Which chains may be fetched is a row per chain in the harvester's own
+    # database, `supermarket_sources.enabled`, off by default and written from
+    # the back office. A variable named after a storefront needed a new one per
+    # storefront, threaded through the service config, this file, the ConfigMap
+    # and both `luna-slot` scripts before a run could start.
     #
-    # False in both clusters today, and that is a decision about Mercadona rather
-    # than about the harvester: store discovery reads OpenStreetMap and never
-    # touches a storefront, so "the service exists and finds shops" and "the
-    # service reads a supermarket's prices" stay separable, which is the whole
-    # point of section 8.1 having two switches. Enabling this in a cluster is its
+    # Every chain's row is off in both clusters today, and that is a decision
+    # about the chains rather than about the harvester: store discovery reads
+    # OpenStreetMap and never touches a storefront, so "the service exists and
+    # finds shops" and "the service reads a supermarket's prices" stay separable,
+    # which is the whole point of section 8.1. Turning one on in a cluster is its
     # own call to make when there is a reason to make it, and the double fetch
     # rule in that section is the first thing to settle when it comes up: two
     # clusters walking the same assortment is twice the requests for one copy of
     # the answer. Runs happen against the local compose stack until then.
-    mercadonaEnabled: false
 
     # An HONEST User-Agent naming the app and a contact address, and specifically
     # not the Chrome impersonation the public reference implementations use. Set
