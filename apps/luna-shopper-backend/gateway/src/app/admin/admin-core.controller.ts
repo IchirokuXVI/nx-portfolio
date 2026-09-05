@@ -61,6 +61,7 @@ import { AdminJwtGuard } from './admin-jwt.guard';
 import type { CurrentAdmin } from './admin-jwt.strategy';
 import { AdminUserNamesService } from './admin-user-names.service';
 import { ActingAdmin } from './current-admin.decorator';
+import { referenceFilter } from './reference-none';
 
 /**
  * Households, for the back office (plan 0074).
@@ -119,9 +120,15 @@ export class AdminZonesController {
     @ActingAdmin() admin: CurrentAdmin,
     @Query() query: ListAdminZonesQueryDto
   ): Promise<AdminZoneRowPage> {
+    // `ownerUserId=none` is the zones nobody owns (admin plan 0012, section
+    // 3). Core knows that question as `withoutOwner`, and this is where the
+    // literal becomes the flag.
+    const owner = referenceFilter(query.ownerUserId);
     const page = await this.nats.send<AdminZonePage>(ADMIN_ZONE_PATTERNS.list, {
       ...adminCredential(admin),
       targetUserId: query.userId,
+      ownerUserId: owner.id,
+      withoutOwner: owner.none,
       createdAfter: query.createdAfter,
       createdBefore: query.createdBefore,
       cursor: query.cursor,

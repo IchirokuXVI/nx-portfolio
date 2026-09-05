@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import {
   compositeIdOf,
+  isReferenceNone,
   type ResourceGateway,
   type ResourcePage,
   type ResourceQuery,
@@ -196,6 +197,12 @@ function matches(
   return Object.entries(filters).every(([param, value]) => {
     if (value === '') {
       return true;
+    }
+    // "None" on a column the row carries is the rows where that column is
+    // empty (plan 0012, section 2), which is what the gateway answers for the
+    // same literal. A parameter that is not a column keeps the substring rule.
+    if (isReferenceNone(value) && param in row) {
+      return row[param] === null || row[param] === undefined;
     }
     const direct = row[param];
     if (direct !== undefined) {

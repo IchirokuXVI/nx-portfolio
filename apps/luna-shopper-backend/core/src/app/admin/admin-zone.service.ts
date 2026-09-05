@@ -128,6 +128,16 @@ export class AdminZoneService {
         { uid: req.targetUserId }
       );
     }
+    if (req.ownerUserId) {
+      qb.andWhere('z."ownerUserId" = :owner', { owner: req.ownerUserId });
+    }
+    if (req.withoutOwner) {
+      // Admin plan 0012, section 3: what an owner's deletion leaves behind.
+      // Applied beside the owner filter rather than instead of it, so asking
+      // for both answers with nothing, which is what the two clauses together
+      // mean.
+      qb.andWhere('z."ownerUserId" IS NULL');
+    }
     if (req.createdAfter) {
       qb.andWhere('z."createdAt" >= :after', { after: req.createdAfter });
     }

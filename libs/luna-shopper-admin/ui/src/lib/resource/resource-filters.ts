@@ -92,6 +92,7 @@ export interface FilterChange {
                 "
                 [controlId]="controlId(filter.param)"
                 [lookup]="lookup()"
+                [none]="offersNone(filter)"
                 [nullable]="true"
                 [resource]="resourceOf(filter)"
                 [value]="valueOf(filter.param)"
@@ -193,6 +194,17 @@ export class ResourceFilters {
   /** The resource a reference filter points at, for a template that lost the narrowing. */
   resourceOf(filter: FilterDescriptor): string {
     return filter.kind === 'reference' ? filter.resource : '';
+  }
+
+  /**
+   * Whether a reference filter may ask for the rows that point at nothing.
+   *
+   * The descriptor says so per filter (plan 0012, section 2), because the
+   * question only has an answer over a nullable column and only once the
+   * gateway route accepts the literal that asks it.
+   */
+  offersNone(filter: FilterDescriptor): boolean {
+    return filter.kind === 'reference' && filter.nullable === true;
   }
 
   /**

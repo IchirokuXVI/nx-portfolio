@@ -25,10 +25,14 @@ export type Item = Wire.CatalogItemView;
  * price the catalog from somewhere arbitrary. What a product costs is the price
  * screen, which lists prices as prices and says which scope each belongs to.
  *
- * `withoutProductGroup` is the filter with no user facing counterpart. An
- * ungrouped product is invisible to every "show me milk" read, so this is how
- * the ones curation has not reached are found, and it is the reason an operator
- * opens this screen rather than the shopper's search.
+ * **"None" on the group filter is the filter with no user facing counterpart**
+ * (plan 0012, section 2). An ungrouped product is invisible to every "show me
+ * milk" read, so this is how the ones curation has not reached are found, and
+ * it is the reason an operator opens this screen rather than the shopper's
+ * search. It used to be a boolean filter of its own, `withoutProductGroup`,
+ * beside the group picker; it is now a choice inside the picker, sent as the
+ * literal `none` on `productGroupId`, which the gateway turns back into the
+ * flag catalog knows.
  *
  * `productGroupId` being null is the **resting state** of a freshly harvested
  * product rather than a missing value, so the field is nullable and nothing
@@ -142,14 +146,9 @@ export const ITEMS = defineResource<Item>({
       param: 'productGroupId',
       label: 'catalog.items.filter.productGroupId',
       resource: 'product-groups',
-    },
-    {
-      // Set beside `productGroupId` this answers with nothing, because the two
-      // together are a contradiction. The gateway says so and does not refuse
-      // it, so neither does this.
-      kind: 'boolean',
-      param: 'withoutProductGroup',
-      label: 'catalog.items.filter.withoutProductGroup',
+      // The column is null on every freshly harvested product, so "none" is
+      // the question this screen is most often opened to ask.
+      nullable: true,
     },
   ],
 

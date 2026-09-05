@@ -96,7 +96,8 @@
       "resolving": "Looking it up…",
       "missing": "This points at {{id}}, which no longer exists.",
       "change": "Change",
-      "clear": "Clear"
+      "clear": "Clear",
+      "none": "None"
     },
     "form": {
       "create": "New {{name}}",
@@ -240,8 +241,7 @@
       "filter": {
         "query": "Name or barcode contains",
         "category": "Category",
-        "productGroupId": "Product group",
-        "withoutProductGroup": "Belongs to no group"
+        "productGroupId": "Product group"
       }
     },
     "productGroups": {
@@ -889,6 +889,7 @@
       },
       "filter": {
         "userId": "Zones this person is in",
+        "ownerUserId": "Owned by",
         "createdAfter": "Created on or after",
         "createdBefore": "Created on or before"
       },

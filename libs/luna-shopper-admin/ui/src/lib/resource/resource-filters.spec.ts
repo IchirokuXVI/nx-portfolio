@@ -35,6 +35,14 @@ const OWNER: FilterDescriptor = {
   resource: 'users',
 };
 
+const GROUP: FilterDescriptor = {
+  kind: 'reference',
+  param: 'productGroupId',
+  label: 'filter.group',
+  resource: 'product-groups',
+  nullable: true,
+};
+
 @Component({
   selector: 'lib-test-host',
   imports: [ResourceFilters],
@@ -171,5 +179,21 @@ describe('a reference filter', () => {
     );
 
     expect(labels).toContain('resource.reference.clear');
+  });
+
+  /**
+   * Plan 0012, section 2: the descriptor decides, per filter, whether "none" is
+   * a question with an answer. The picker is told and told nothing else.
+   */
+  it('offers none only where the descriptor says the column may be empty', () => {
+    const fixture = host([OWNER, GROUP]);
+    const pickers = fixture.debugElement.queryAll(
+      (node) => node.name === 'lib-reference-picker'
+    );
+
+    expect(pickers.map((picker) => picker.componentInstance.none())).toEqual([
+      false,
+      true,
+    ]);
   });
 });

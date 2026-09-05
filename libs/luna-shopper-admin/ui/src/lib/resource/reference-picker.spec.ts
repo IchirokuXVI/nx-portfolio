@@ -1,5 +1,6 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import { REFERENCE_NONE } from '@portfolio/luna-shopper-admin/models';
 import type { ReferenceLookup, ReferenceOption } from './reference-lookup';
 import { ReferencePicker } from './reference-picker';
 
@@ -38,7 +39,7 @@ async function settle(fixture: ComponentFixture<ReferencePicker>) {
 
 async function render(
   value: string,
-  options: { nullable?: boolean; lookup?: ReferenceLookup } = {}
+  options: { nullable?: boolean; none?: boolean; lookup?: ReferenceLookup } = {}
 ) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -51,10 +52,18 @@ async function render(
   fixture.componentRef.setInput('value', value);
   fixture.componentRef.setInput('lookup', options.lookup ?? lookupOf());
   fixture.componentRef.setInput('nullable', options.nullable ?? false);
+  fixture.componentRef.setInput('none', options.none ?? false);
   fixture.detectChanges();
   await settle(fixture);
 
   return fixture;
+}
+
+/** The "none" choice in the list, if it is being offered. */
+function noneButton(
+  fixture: ComponentFixture<ReferencePicker>
+): HTMLButtonElement | null {
+  return fixture.nativeElement.querySelector('li button.none');
 }
 
 describe('ReferencePicker with a value', () => {
@@ -160,6 +169,97 @@ describe('ReferencePicker with no value', () => {
     expect(fixture.componentInstance.options()).toEqual([]);
     expect(fixture.nativeElement.textContent).toContain(
       'resource.reference.noResults'
+    );
+  });
+});
+
+/**
+ * The rows that point at nothing (plan 0012, section 2).
+ *
+ * A filter over a nullable column can ask for them, and the way to ask is a
+ * choice in the same list as the rows, offered while the search box is blank.
+ */
+describe('ReferencePicker offering none', () => {
+  it('does not offer it unless asked to', async () => {
+    const fixture = await render('');
+    fixture.componentInstance.startChanging();
+    await settle(fixture);
+
+    expect(noneButton(fixture)).toBeNull();
+  });
+
+  it('lists it first, before anything is typed', async () => {
+    const fixture = await render('', { none: true });
+    fixture.componentInstance.startChanging();
+    await settle(fixture);
+
+    const buttons = [...fixture.nativeElement.querySelectorAll('li button')];
+    expect(buttons[0]?.classList.contains('none')).toBe(true);
+    expect(buttons).toHaveLength(3);
+  });
+
+  /**
+   * A typed word is a search for a row by name, and the absence of a row has
+   * no name to match. Under a term, "none" would read as "nothing matched".
+   */
+  it('withdraws it once something is typed', async () => {
+    const fixture = await render('', { none: true });
+    fixture.componentInstance.startChanging();
+    await settle(fixture);
+
+    fixture.componentInstance.term.set('mad');
+    fixture.detectChanges();
+
+    expect(noneButton(fixture)).toBeNull();
+  });
+
+  it('still offers it when the search itself found nothing', async () => {
+    const fixture = await render('', {
+      none: true,
+      lookup: lookupOf({ search: async () => [] }),
+    });
+    fixture.componentInstance.startChanging();
+    await settle(fixture);
+
+    expect(noneButton(fixture)).not.toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'resource.reference.noResults'
+    );
+  });
+
+  it('emits the none literal when it is chosen', async () => {
+    const fixture = await render('', { none: true });
+    const emitted: string[] = [];
+    fixture.componentInstance.valueChange.subscribe((id) => emitted.push(id));
+    fixture.componentInstance.startChanging();
+    await settle(fixture);
+
+    noneButton(fixture)?.click();
+
+    expect(emitted).toEqual([REFERENCE_NONE]);
+  });
+
+  /** There is nothing to look up, so nothing is looked up and nothing is missing. */
+  it('draws a held none by name without resolving it', async () => {
+    const resolved: string[] = [];
+    const fixture = await render(REFERENCE_NONE, {
+      none: true,
+      nullable: true,
+      lookup: lookupOf({
+        resolve: async (_resource, id) => {
+          resolved.push(id);
+          return null;
+        },
+      }),
+    });
+
+    expect(resolved).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.name')?.textContent).toContain(
+      'resource.reference.none'
+    );
+    expect(fixture.nativeElement.querySelector('.missing')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain(
+      'resource.reference.clear'
     );
   });
 });

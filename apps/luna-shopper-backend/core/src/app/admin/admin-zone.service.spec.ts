@@ -123,6 +123,36 @@ describe('AdminZoneService.list', () => {
     expect(filter?.sql).not.toContain('m.status');
   });
 
+  /** Admin plan 0012, section 3: the owner alone, narrower than `targetUserId`. */
+  it('filters on the owner alone when asked for the owner', async () => {
+    const { service, qb } = makeService({ zones: [] });
+
+    await service.list({ ...CREDENTIAL, ownerUserId: 'u-owner' });
+
+    const filter = qb.clauses.find((c) => c.params?.owner === 'u-owner');
+    expect(filter?.sql).toBe('z."ownerUserId" = :owner');
+    expect(filter?.sql).not.toContain('zone_memberships');
+  });
+
+  /** The zones an owner's deletion leaves behind, which is the orphaned row. */
+  it('reaches the zones nobody owns', async () => {
+    const { service, qb } = makeService({ zones: [] });
+
+    await service.list({ ...CREDENTIAL, withoutOwner: true });
+
+    expect(qb.clauses.map((c) => c.sql)).toContain('z."ownerUserId" IS NULL');
+  });
+
+  it('treats an unset flag as no predicate at all', async () => {
+    const { service, qb } = makeService({ zones: [] });
+
+    await service.list({ ...CREDENTIAL, withoutOwner: false });
+
+    expect(qb.clauses.map((c) => c.sql)).not.toContain(
+      'z."ownerUserId" IS NULL'
+    );
+  });
+
   it('filters on nothing at all when no user is named', async () => {
     const { service, qb } = makeService({ zones: [] });
 
@@ -200,11 +230,7 @@ describe('AdminZoneService named actions delegate rather than write', () => {
       membershipId: 'm1',
     });
 
-    expect(transferOwnershipAsOperator).toHaveBeenCalledWith(
-      'z1',
-      'm1',
-      'a1'
-    );
+    expect(transferOwnershipAsOperator).toHaveBeenCalledWith('z1', 'm1', 'a1');
   });
 
   it('deletes through the reaper, which is where deleting a zone is defined', async () => {

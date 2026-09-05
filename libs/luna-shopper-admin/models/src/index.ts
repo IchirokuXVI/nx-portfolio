@@ -13,6 +13,7 @@ export * from './lib/reachability-policy';
 export * from './lib/resource/composite-id';
 export * from './lib/resource/localized-text';
 export * from './lib/resource/money';
+export * from './lib/resource/reference-none';
 export * from './lib/resource/resource-descriptor';
 export * from './lib/resource/resource-draft';
 export * from './lib/resource/resource-field';

@@ -1,5 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import type { ResourceRow } from '@portfolio/luna-shopper-admin/models';
+import {
+  REFERENCE_NONE,
+  type ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
 import { RESOURCE_GATEWAYS } from './resource-gateways';
 import { ResourceMemoryGateways } from './resource-memory';
 
@@ -99,6 +102,31 @@ describe('ResourceMemoryGateways', () => {
 
     const none = await gateway.list({ filters: { name: 'zzz' } });
     expect(none.items).toEqual([]);
+  });
+
+  /**
+   * Plan 0012, section 2: the literal the gateway reads as "the rows whose
+   * column is empty" means the same thing here, so a screen filtered to none
+   * can be driven without a backend. A parameter that is not a column keeps
+   * the substring rule, so a search box can still be typed "none" into.
+   */
+  it('answers none with the rows whose column is empty', async () => {
+    const gateway = gateways.for({
+      path: '/v1/admin/catalog/items',
+      seed: [
+        { id: 'a', name: 'Milk', productGroupId: 'g1' },
+        { id: 'b', name: 'Bread', productGroupId: null },
+        { id: 'c', name: 'none of the above', productGroupId: 'g2' },
+      ],
+    });
+
+    const orphans = await gateway.list({
+      filters: { productGroupId: REFERENCE_NONE },
+    });
+    expect(orphans.items.map((row) => row['id'])).toEqual(['b']);
+
+    const typed = await gateway.list({ filters: { query: REFERENCE_NONE } });
+    expect(typed.items.map((row) => row['id'])).toEqual(['c']);
   });
 
   /**
