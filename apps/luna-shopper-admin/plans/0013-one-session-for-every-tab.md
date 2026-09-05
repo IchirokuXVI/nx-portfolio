@@ -1,3 +1,5 @@
+> **PR:** [#232](https://github.com/IchirokuXVI/nx-portfolio/pull/232)
+
 # 0013 One session for every tab
 
 A back office is used by opening things in new tabs. Plan `0002` put the token in
