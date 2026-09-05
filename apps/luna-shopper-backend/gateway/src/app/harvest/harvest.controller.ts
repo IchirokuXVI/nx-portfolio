@@ -13,10 +13,11 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
+  HARVEST_SCHEMA_IDS,
   HarvestRunMode,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
@@ -41,7 +42,11 @@ import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
 import { ActingAdmin } from '../admin/current-admin.decorator';
-import { ApiContractResponse, ApiProblemResponses } from '../docs';
+import {
+  ApiComposedResponse,
+  ApiContractResponse,
+  ApiProblemResponses,
+} from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
   AcceptSourceEntryDto,
@@ -199,10 +204,9 @@ export class AdminHarvestRunsController {
    */
   @Get(':id/export')
   @Header('content-type', 'application/json; charset=utf-8')
-  @ApiOkResponse({
+  @ApiComposedResponse(HARVEST_SCHEMA_IDS.harvestDocument, {
     description:
       'The run as a HarvestDocument, offered as a download. Every row the run was the last to observe, with that run’s price for that run’s scope and none of the decisions a person made, which mean nothing on another cluster.',
-    schema: { type: 'object', additionalProperties: true },
   })
   @ApiProblemResponses({ body: true })
   async exportRun(
