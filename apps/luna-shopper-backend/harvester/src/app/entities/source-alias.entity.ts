@@ -91,10 +91,13 @@ export class SourceAlias extends BaseEntity {
   /**
    * `NAME_SIZE` for a fuzzy proposal, `MANUAL` for one a person accepted.
    *
-   * No database default, and that is the migration's constraint rather than a
-   * preference: `NAME_SIZE` is added to the enum in the same transaction that
-   * creates this table, and Postgres refuses to use a new label before its
-   * `ALTER TYPE` commits. Every writer states it.
+   * No database default, because the migration cannot safely give it one:
+   * `LEAFLET_IMPORT` and `NAME_SIZE` are added to their types in the same
+   * transaction that creates this table, and Postgres refuses to *use* a label
+   * before its `ALTER TYPE` commits. Plan 0084's migration happens to add
+   * `NAME_SIZE` one migration earlier, but relying on that would make this
+   * table's shape depend on the order two unrelated plans happened to land in.
+   * Every writer states it, which they would have to anyway.
    */
   @Column({
     type: 'enum',
