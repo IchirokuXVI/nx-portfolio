@@ -11,8 +11,12 @@ import { Logger } from 'nestjs-pino';
 import { LessThan, Repository } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import type { CoreConfig } from '../config/app-config';
-import { Zone } from '../entities';
-import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { Zone, ZoneMembership } from '../entities';
+import {
+  CoreEventsPublisher,
+  type EventAudience,
+} from '../events/core-events.publisher';
+import { zoneDeletionAudience } from '../zones/zone-deletion-audience';
 
 /**
  * Zone reaper (plan 0011, section 3). Deletes zones that have been
@@ -31,6 +35,10 @@ export class ZoneReaperService
 
   constructor(
     @InjectRepository(Zone) private readonly zones: Repository<Zone>,
+    // Read, never written: who was still waiting to join is who the deletion
+    // must be addressed to by name (see `zoneDeletionAudience`).
+    @InjectRepository(ZoneMembership)
+    private readonly memberships: Repository<ZoneMembership>,
     private readonly events: CoreEventsPublisher,
     private readonly logger: Logger,
     // Only the operator path writes to it. A scheduled run has no actor to
@@ -117,8 +125,9 @@ export class ZoneReaperService
    * rather than an optional argument for exactly that reason.
    */
   async deleteZone(zoneId: string): Promise<{ id: string }> {
+    const audience = await zoneDeletionAudience(this.memberships, zoneId);
     await this.zones.delete({ id: zoneId });
-    return this.announceDeletion(zoneId);
+    return this.announceDeletion(zoneId, audience);
   }
 
   /**
@@ -146,18 +155,25 @@ export class ZoneReaperService
     if (!zone) {
       throw new NotFoundException('Zone not found');
     }
+    const audience = await zoneDeletionAudience(this.memberships, zoneId);
     await this.audit.write(actorId, (tx) => tx.delete(Zone, zone));
-    return this.announceDeletion(zoneId);
+    return this.announceDeletion(zoneId, audience);
   }
 
   /**
    * What a committed deletion tells everybody holding the zone.
    *
    * After the write on both paths, since an event for a transaction that then
-   * rolls back is a lie every open client acts on.
+   * rolls back is a lie every open client acts on. The audience, on the other
+   * hand, is read **before** the write: the memberships that name the pending
+   * applicants cascade with the zone, and an applicant is in no room that would
+   * otherwise carry the news.
    */
-  private announceDeletion(zoneId: string): { id: string } {
-    this.events.emit(RealtimeEvent.ZoneDeleted, zoneId, { id: zoneId });
+  private announceDeletion(
+    zoneId: string,
+    audience: EventAudience
+  ): { id: string } {
+    this.events.emitTo(RealtimeEvent.ZoneDeleted, audience, { id: zoneId });
     return { id: zoneId };
   }
 }

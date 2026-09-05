@@ -47,6 +47,7 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { generateJoinCode } from './join-code';
 import { ZoneAuthzService } from './zone-authz.service';
 import { ZoneCountsService } from './zone-counts.service';
+import { zoneDeletionAudience } from './zone-deletion-audience';
 import {
   readZoneCounts,
   readZoneListsPreview,
@@ -341,11 +342,19 @@ export class ZoneService {
     return zone;
   }
 
-  /** Delete the zone (plan 0006, section 4): owner only. */
+  /**
+   * Delete the zone (plan 0006, section 4): owner only.
+   *
+   * The audience is read before the row goes, because the memberships that name
+   * it cascade with the zone: the zone room for the members, and the applicants
+   * by name, since a PENDING membership holds no room (see
+   * {@link zoneDeletionAudience}).
+   */
   async delete(req: ZoneIdRequest): Promise<{ id: string }> {
     await this.authz.requireRole(req.zoneId, req.userId, [ZoneRole.OWNER]);
+    const audience = await zoneDeletionAudience(this.memberships, req.zoneId);
     await this.zones.delete({ id: req.zoneId });
-    this.events.emit(RealtimeEvent.ZoneDeleted, req.zoneId, { id: req.zoneId });
+    this.events.emitTo(RealtimeEvent.ZoneDeleted, audience, { id: req.zoneId });
     return { id: req.zoneId };
   }
 
