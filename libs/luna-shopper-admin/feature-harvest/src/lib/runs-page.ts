@@ -473,7 +473,8 @@ export class RunsPage {
    */
   readonly needsScope = computed(
     () =>
-      this.mode() === 'CATALOG_DISCOVERY' && this.adapterKey() === SCOPED_ADAPTER
+      this.mode() === 'CATALOG_DISCOVERY' &&
+      this.adapterKey() === SCOPED_ADAPTER
   );
 
   /** The chain the scope picker reads within, which it cannot read without. */
@@ -490,7 +491,9 @@ export class RunsPage {
    * rather than pressed and answered with a 400 about a field that was on
    * screen, empty, the whole time.
    */
-  readonly ready = computed(() => !this.needsScope() || this.priceScopeId() !== '');
+  readonly ready = computed(
+    () => !this.needsScope() || this.priceScopeId() !== ''
+  );
 
   /**
    * Where a document is dropped.
@@ -638,7 +641,19 @@ export class RunsPage {
     }
   }
 
+  /**
+   * Start it, unless the form already knows the spawn would refuse.
+   *
+   * The guard is here and not only on the disabled button, because the button is
+   * a hint and this is the rule: a Mercadona walk with no scope is a 400 the
+   * screen can see coming, and sending it anyway would put a validation failure
+   * about a field that was on screen and empty in front of the operator.
+   */
   async start(): Promise<void> {
+    if (!this.ready()) {
+      return;
+    }
+
     this.starting.set(true);
     this._spawnError.set(null);
 

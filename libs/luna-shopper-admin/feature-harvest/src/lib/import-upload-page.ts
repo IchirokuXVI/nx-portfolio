@@ -846,7 +846,12 @@ export class ImportUploadPage {
   async submit(): Promise<void> {
     const read = this.read();
     const sourceKind = this.sourceKind();
-    if (read === null || sourceKind === '' || !this.ready() || this.importing()) {
+    if (
+      read === null ||
+      sourceKind === '' ||
+      !this.ready() ||
+      this.importing()
+    ) {
       return;
     }
 

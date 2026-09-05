@@ -1,7 +1,5 @@
-import { AliasesQueuePage } from './aliases-queue-page';
 import { EntriesQueuePage } from './entries-queue-page';
-import { ItemRefsQueuePage } from './item-refs-queue-page';
-import { LeafletUploadPage } from './leaflet-upload-page';
+import { ImportUploadPage } from './import-upload-page';
 import { PlacesQueuePage } from './places-queue-page';
 import { HARVEST_LINKS, HARVEST_SEGMENT, harvestRoutes } from './routes';
 import { RunPage } from './run-page';
@@ -25,26 +23,34 @@ describe('harvestRoutes', () => {
       RunPage,
       PlacesQueuePage,
       EntriesQueuePage,
-      ItemRefsQueuePage,
-      LeafletUploadPage,
-      AliasesQueuePage,
+      ImportUploadPage,
       ShopsQueuePage,
       SourcesPage,
     ]);
   });
 
   /**
-   * The two halves of a leaflet, on two screens (admin plan 0010, section 7).
+   * The one queue (admin plan 0014, section 1).
    *
-   * A file drop and a decision queue are different acts with different rhythms,
-   * and the plan's section 4 is the argument for the second being its own page
-   * rather than a fourth shape on an existing queue.
+   * Backend plan `0086` folded `item_source_refs` and `source_aliases` into
+   * `source_catalog_entries`, so the three screens over those three tables are
+   * one. Asserted as an absence as well as a presence, because a route left
+   * behind would be a screen calling routes the gateway no longer has.
    */
-  it('gives a leaflet an upload and a queue', () => {
+  it('has one product queue and no route to the two it replaced', () => {
     const paths = pathsOf();
 
-    expect(paths).toContain('leaflets/upload');
-    expect(paths).toContain('leaflets/queue');
+    expect(paths).toContain('entries');
+    expect(paths).not.toContain('item-refs');
+    expect(paths).not.toContain('leaflets/queue');
+  });
+
+  /** The upload is an import, and not a leaflet tool (section 2). */
+  it('takes a file at the import route and not at a leaflet one', () => {
+    const paths = pathsOf();
+
+    expect(paths).toContain('imports/upload');
+    expect(paths).not.toContain('leaflets/upload');
   });
 
   /**
@@ -112,6 +118,17 @@ describe('HARVEST_LINKS', () => {
     expect(screens.map((path) => `/${HARVEST_SEGMENT}/${path}`).sort()).toEqual(
       [...linked].sort()
     );
+  });
+
+  /** One entry for the queue and one for the import, and nothing for the two gone. */
+  it('offers one queue and one import in the navigation', () => {
+    const labels = HARVEST_LINKS.map((link) => link.label);
+
+    expect(labels).toContain('harvest.nav.entries');
+    expect(labels).toContain('harvest.nav.import');
+    expect(labels).not.toContain('harvest.nav.itemRefs');
+    expect(labels).not.toContain('harvest.nav.leafletQueue');
+    expect(labels).not.toContain('harvest.nav.leafletUpload');
   });
 
   it('gives every link a translation key rather than words', () => {

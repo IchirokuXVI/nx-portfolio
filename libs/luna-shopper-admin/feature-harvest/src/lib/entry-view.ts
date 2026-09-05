@@ -214,7 +214,11 @@ function readPrice(
 
   const currency = asText(price['currency']) || null;
   const label = asText(price['unitPriceLabel']);
-  const unit = formatCurrencyAmount(asNumber(price['unitPrice']), currency, locale);
+  const unit = formatCurrencyAmount(
+    asNumber(price['unitPrice']),
+    currency,
+    locale
+  );
   const from = asText(price['validFrom']);
   const until = asText(price['validUntil']);
 

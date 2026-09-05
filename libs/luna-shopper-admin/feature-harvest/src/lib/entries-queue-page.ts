@@ -140,11 +140,7 @@ const SCOPE_PAGE = 100;
       <section class="filters">
         <label>
           <span>{{ 'harvest.entries.filter.status' | rokuT }}</span>
-          <select
-            (ngModelChange)="reload()"
-            [(ngModel)]="status"
-            name="status"
-          >
+          <select (ngModelChange)="reload()" [(ngModel)]="status" name="status">
             <option value="">
               {{ 'harvest.entries.filter.queued' | rokuT }}
             </option>
@@ -178,7 +174,7 @@ const SCOPE_PAGE = 100;
       <lib-queue-frame
         (confirm)="primary()"
         (reject)="rejecting.set(true)"
-        (skip)="queue!.skip()"
+        (skip)="skip()"
         [busy]="queue!.busy()"
         [confirmKey]="confirmKey()"
         [decided]="queue!.decided()"
@@ -272,7 +268,9 @@ const SCOPE_PAGE = 100;
                 }
               }
               @default {
-                <p class="hint">{{ 'harvest.entries.proposal.none' | rokuT }}</p>
+                <p class="hint">
+                  {{ 'harvest.entries.proposal.none' | rokuT }}
+                </p>
               }
             }
             @if (entry.matchedBy; as matchedBy) {
@@ -390,8 +388,8 @@ const SCOPE_PAGE = 100;
         <lib-confirm-dialog
           (confirm)="reject()"
           (dismiss)="rejecting.set(false)"
-          [busy]="queue!.busy()"
           [bodyKey]="'harvest.entries.rejectConfirm.body'"
+          [busy]="queue!.busy()"
           [confirmKey]="'harvest.entries.reject'"
           [headingKey]="'harvest.entries.rejectConfirm.heading'"
         />
@@ -935,6 +933,19 @@ export class EntriesQueuePage {
       });
   }
 
+  /**
+   * Put this row at the back without deciding it, and re-point the controls.
+   *
+   * The queue's own `skip` moves the row and knows nothing about the form in
+   * front of it, so calling it directly would leave the picker holding the
+   * skipped row's product. That is exactly how a name gets bound to the wrong
+   * product, which is this queue's whole hazard.
+   */
+  skip(): void {
+    this.queue?.skip();
+    this._syncSubject();
+  }
+
   /** Move the queue to the row the ladder proposed, without deciding this one. */
   openSibling(): void {
     const queue = this.queue;
@@ -1013,7 +1024,8 @@ export class EntriesQueuePage {
     this.nameEn.set('');
     this.brand.set(row?.brand ?? '');
     this.ean.set(row?.ean ?? '');
-    const size = raw === null || raw.unitSize === null ? '' : String(raw.unitSize);
+    const size =
+      raw === null || raw.unitSize === null ? '' : String(raw.unitSize);
     this.unitSize.set(size);
     this._sizeAsRead.set(size);
     this.category.set('');
@@ -1027,7 +1039,9 @@ export class EntriesQueuePage {
         limit: SCOPE_PAGE,
       });
       this._scopeNames.set(
-        new Map(page.items.map((scope) => [scope.id, PRICE_SCOPES.title(scope)]))
+        new Map(
+          page.items.map((scope) => [scope.id, PRICE_SCOPES.title(scope)])
+        )
       );
     } catch {
       // A price line falls back to its scope id, which is worse to read and is

@@ -689,7 +689,6 @@ export class HarvestMemory implements HarvestServiceI {
     place.supermarketLocationId = supermarketLocationId;
     return { ...place };
   }
-
 }
 
 /**

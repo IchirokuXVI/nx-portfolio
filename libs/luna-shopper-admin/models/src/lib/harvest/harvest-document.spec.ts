@@ -182,8 +182,9 @@ describe('parseHarvestDocument', () => {
 
   /** `unit` stands in for a missing `label`, which is what the schema says. */
   it('falls back to the size unit when there is no label', () => {
-    const [product] = read({ products: [{ name: 'Pan', size: { unit: 'kg' } }] })
-      .products;
+    const [product] = read({
+      products: [{ name: 'Pan', size: { unit: 'kg' } }],
+    }).products;
 
     expect(product.size).toBe('kg');
   });
@@ -229,14 +230,15 @@ describe('harvestFailures', () => {
   });
 
   it('names the section for a failure outside the products', () => {
-    expect(harvestFailures({ '/schema_version': ['unknown version 4'] }, []))
-      .toEqual([
-        {
-          productId: '',
-          section: 'schema_version',
-          messages: ['unknown version 4'],
-        },
-      ]);
+    expect(
+      harvestFailures({ '/schema_version': ['unknown version 4'] }, [])
+    ).toEqual([
+      {
+        productId: '',
+        section: 'schema_version',
+        messages: ['unknown version 4'],
+      },
+    ]);
   });
 });
 

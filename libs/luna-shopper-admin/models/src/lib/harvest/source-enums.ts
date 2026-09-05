@@ -46,13 +46,14 @@ export const OFFICIAL_SOURCE_KINDS: readonly OfficialSourceKind[] = [
  * of the same product, and a row whose kind this app does not recognise is drawn
  * with no badge rather than with a badge claiming the wrong one.
  */
-export function toOfficialSourceKind(value: unknown): OfficialSourceKind | null {
+export function toOfficialSourceKind(
+  value: unknown
+): OfficialSourceKind | null {
   return typeof value === 'string' &&
     (OFFICIAL_SOURCE_KINDS as readonly string[]).includes(value)
     ? (value as OfficialSourceKind)
     : null;
 }
-
 
 /**
  * What a row is waiting for, or what somebody decided about it (backend plan

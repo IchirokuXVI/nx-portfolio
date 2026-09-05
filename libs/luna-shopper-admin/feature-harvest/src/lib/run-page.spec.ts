@@ -9,6 +9,7 @@ import {
   ServerReachability,
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { HarvestRun } from '@portfolio/luna-shopper-admin/models';
 import { RunPage } from './run-page';
 
@@ -66,10 +67,10 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
   };
 }
 
-/** A leaflet import that finished, with one warning of each shape. */
-function leafletRun(over: Partial<HarvestRun> = {}): HarvestRun {
+/** A file import that finished, with one warning of each shape. */
+function importRun(over: Partial<HarvestRun> = {}): HarvestRun {
   return run({
-    mode: 'LEAFLET_IMPORT',
+    mode: 'FILE_IMPORT',
     status: 'COMPLETED',
     supermarketId: 'sm_deza',
     totalPlanned: 48,
@@ -83,14 +84,14 @@ function leafletRun(over: Partial<HarvestRun> = {}): HarvestRun {
     documentSha256: 'f62fa7ac367008e1',
     warnings: [
       {
-        code: 'LOYALTY_REQUIRED',
+        code: 'DUPLICATE_KEY',
         offerId: 'p36-o01',
         page: 36,
         name: 'Champu Elvive',
-        message: 'Skipped: the price is for loyalty card holders.',
+        message: 'Two products share one key. The second won.',
       },
       {
-        // The extractor's own lost tile, carried through, so what it lost and
+        // The producer's own lost tile, carried through, so what it lost and
         // what the import dropped read in one table.
         code: 'EXTRACTOR',
         offerId: null,
@@ -103,6 +104,9 @@ function leafletRun(over: Partial<HarvestRun> = {}): HarvestRun {
   });
 }
 
+/** What the last export answered with, so a spec can assert on the file. */
+let exported: Readonly<Record<string, unknown>> = {};
+
 async function render(
   answer: HarvestRun,
   reverted?: HarvestRun
@@ -111,6 +115,7 @@ async function render(
     readRun: async () => answer,
     abortRun: async () => answer,
     revertRun: async () => reverted ?? answer,
+    exportRun: async () => exported,
   } as unknown as HarvestServiceI;
 
   TestBed.resetTestingModule();
@@ -131,6 +136,19 @@ async function render(
         },
       },
       DeploymentStore,
+      {
+        // The directory, so the export's file name reads as words rather than
+        // as three uuids. `resolve` is the only method this screen asks for.
+        provide: ResourceReferences,
+        useValue: {
+          resolve: async (resource: string, id: string) =>
+            id === 'sm_deza'
+              ? { id, title: 'Deza' }
+              : id === 'scope-national'
+                ? { id, title: 'NATIONAL' }
+                : null,
+        },
+      },
       {
         provide: ActivatedRoute,
         useValue: { snapshot: { paramMap: new Map([['id', 'run-1']]) } },
@@ -254,7 +272,7 @@ describe('RunPage, arriving mid run', () => {
    * reporting six of those as failures would report a working import as broken.
    */
   it('counts what a rule dropped separately from what failed', async () => {
-    const fixture = await render(leafletRun());
+    const fixture = await render(importRun());
 
     expect(text(fixture)).toContain('harvest.run.counter.skipped');
     expect(fixture.componentInstance.watch.run()?.skipped).toBe(6);
@@ -274,27 +292,27 @@ describe('RunPage, arriving mid run', () => {
 });
 
 /**
- * The leaflet half of the run screen (admin plan 0010, sections 5 and 7).
+ * The file import half of the run screen (admin plan 0010, sections 5 and 7).
  *
  * Everything here is drawn on the run's mode alone, so a catalog discovery
  * carries none of it. That guard is the test: a crawl's warnings list is empty,
  * so without it every catalog run anybody opened would show an empty table and
  * a link to a queue that has nothing to do with it.
  */
-describe('RunPage, for a leaflet import', () => {
-  it('lists the warnings, by offer and code', async () => {
-    const fixture = await render(leafletRun());
+describe('RunPage, for a file import', () => {
+  it('lists the warnings, by product and code', async () => {
+    const fixture = await render(importRun());
     const page = fixture.componentInstance;
 
-    expect(page.leaflet()).toBe(true);
+    expect(page.fileImport()).toBe(true);
     expect(page.warnings()).toEqual([
       {
         key: '0',
-        code: 'LOYALTY_REQUIRED',
+        code: 'DUPLICATE_KEY',
         offerId: 'p36-o01',
         page: '36',
         name: 'Champu Elvive',
-        message: 'Skipped: the price is for loyalty card holders.',
+        message: 'Two products share one key. The second won.',
       },
       {
         key: '1',
@@ -305,7 +323,7 @@ describe('RunPage, for a leaflet import', () => {
         message: 'tile has no readable price',
       },
     ]);
-    expect(text(fixture)).toContain('harvest.warning.LOYALTY_REQUIRED');
+    expect(text(fixture)).toContain('harvest.warning.DUPLICATE_KEY');
     expect(text(fixture)).toContain('harvest.warning.EXTRACTOR');
     page.watch.stop();
   });
@@ -316,12 +334,13 @@ describe('RunPage, for a leaflet import', () => {
    * the storefront no longer stocks.
    */
   it('links to the queue this run filled, for this run chain', async () => {
-    const fixture = await render(leafletRun());
+    const fixture = await render(importRun());
     const page = fixture.componentInstance;
 
     expect(page.queued()).toBe(5);
+    // The one queue, not the leaflet one it replaced (admin plan 0014).
     expect(page.queueLink()).toEqual({
-      path: ['/', 'harvest', 'leaflets', 'queue'],
+      path: ['/', 'harvest', 'entries'],
       params: { supermarketId: 'sm_deza' },
     });
     expect(text(fixture)).toContain('harvest.run.queue.open');
@@ -332,7 +351,7 @@ describe('RunPage, for a leaflet import', () => {
     const fixture = await render(run());
     const page = fixture.componentInstance;
 
-    expect(page.leaflet()).toBe(false);
+    expect(page.fileImport()).toBe(false);
     expect(page.warnings()).toEqual([]);
     expect(page.queued()).toBe(0);
     expect(text(fixture)).not.toContain('harvest.run.warnings.heading');
@@ -368,7 +387,7 @@ describe('RunPage, reverting a run', () => {
     fixture.componentInstance.watch.stop();
   });
 
-  it('offers nothing on a store discovery run, which wrote no price', async () => {
+  it('offers no revert on a store discovery run, which wrote no price', async () => {
     const fixture = await render(
       run({ mode: 'STORE_DISCOVERY', status: 'COMPLETED' })
     );
@@ -398,7 +417,7 @@ describe('RunPage, reverting a run', () => {
   it('names the queue as well, for the one mode that fills it', async () => {
     const fixture = await render(
       run({
-        mode: 'LEAFLET_IMPORT',
+        mode: 'FILE_IMPORT',
         status: 'COMPLETED',
         created: 41,
         notFound: 6,
@@ -406,7 +425,7 @@ describe('RunPage, reverting a run', () => {
     );
     const page = fixture.componentInstance;
 
-    expect(page.confirmBodyKey()).toBe('harvest.run.revert.confirmLeaflet');
+    expect(page.confirmBodyKey()).toBe('harvest.run.revert.confirmImport');
     expect(page.confirmCounts()).toEqual({ prices: 41, queued: 6 });
     page.watch.stop();
   });
@@ -447,6 +466,96 @@ describe('RunPage, reverting a run', () => {
     expect(text(fixture)).toContain('214');
     // And the control is gone, because there is nothing left to take back.
     expect(page.watch.canRevert()).toBe(false);
+    page.watch.stop();
+  });
+});
+
+/**
+ * Carrying a run's rows to another cluster (admin plan 0014, section 2).
+ *
+ * The whole reason this control exists is the arrangement backend plan 0086
+ * section 6.2 describes: a walk runs on the machine that has room for 4,383
+ * requests, and its result is uploaded to a cluster that is not allowed to
+ * crawl. So it is offered on the two modes that hold rows and on nothing else,
+ * and it is **not** gated by whether this deployment may start runs.
+ */
+describe('RunPage, exporting a run', () => {
+  it('offers the export on a finished walk', async () => {
+    const fixture = await render(run({ status: 'COMPLETED' }));
+
+    expect(fixture.componentInstance.canExport()).toBe(true);
+    expect(text(fixture)).toContain('harvest.run.export.action');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('offers the export on a finished import', async () => {
+    const fixture = await render(importRun());
+
+    expect(fixture.componentInstance.canExport()).toBe(true);
+    fixture.componentInstance.watch.stop();
+  });
+
+  /** Half written rows are not a document anybody should carry anywhere. */
+  it('offers nothing on a run still going', async () => {
+    const fixture = await render(run());
+
+    expect(fixture.componentInstance.canExport()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.run.export.action');
+    fixture.componentInstance.watch.stop();
+  });
+
+  /** A store discovery found shops. There are no products in it to export. */
+  it('offers nothing on a store discovery', async () => {
+    const fixture = await render(
+      run({ mode: 'STORE_DISCOVERY', status: 'COMPLETED' })
+    );
+
+    expect(fixture.componentInstance.canExport()).toBe(false);
+    fixture.componentInstance.watch.stop();
+  });
+
+  /**
+   * The name is the chain, the scope and the day, and the scope comes off the
+   * document rather than off the run, because the run does not carry one.
+   */
+  it('names the file after the chain, the scope and the day', async () => {
+    exported = { hints: { price_scope_id: 'scope-national' } };
+    const fixture = await render(
+      importRun({ finishedAt: '2026-09-05T07:20:09.000Z' })
+    );
+    const page = fixture.componentInstance;
+
+    await expect(page.exportName(exported)).resolves.toBe(
+      'harvest-deza-national-2026-09-05.json'
+    );
+    page.watch.stop();
+  });
+
+  /** A uuid is still a name somebody can find, and it is the honest fallback. */
+  it('falls back to the ids the directory could not answer for', async () => {
+    exported = { hints: { price_scope_id: 'scope-gone' } };
+    const fixture = await render(
+      importRun({
+        supermarketId: 'sm_unknown',
+        finishedAt: '2026-09-05T07:20:09.000Z',
+      })
+    );
+    const page = fixture.componentInstance;
+
+    await expect(page.exportName(exported)).resolves.toBe(
+      'harvest-sm-unknown-scope-gone-2026-09-05.json'
+    );
+    page.watch.stop();
+  });
+
+  it('asks the gateway for the document when the button is pressed', async () => {
+    exported = { schema_version: 1, products: [] };
+    const fixture = await render(importRun());
+    const page = fixture.componentInstance;
+
+    await page.exportRun();
+
+    expect(page.exportFailed()).toBe(false);
     page.watch.stop();
   });
 });
