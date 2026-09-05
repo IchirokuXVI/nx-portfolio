@@ -45,13 +45,22 @@ async function render(options: Options = {}) {
   return { fixture, auth, router, notice: TestBed.inject(AccountNotice) };
 }
 
+/**
+ * Fill the form the way somebody who typed it correctly would.
+ *
+ * The confirmation defaults to the password, because that is the ordinary case and no
+ * test about registering should have to restate it. The mismatch tests pass the two
+ * separately, which is the whole of what they are about.
+ */
 function fill(
   fixture: ComponentFixture<RegisterPage>,
   email: string,
-  password: string
+  password: string,
+  confirmPassword: string = password
 ): void {
   fixture.componentInstance.email.set(email);
   fixture.componentInstance.password.set(password);
+  fixture.componentInstance.confirmPassword.set(confirmPassword);
   fixture.detectChanges();
 }
 
@@ -67,18 +76,41 @@ function query(fixture: ComponentFixture<RegisterPage>, selector: string) {
 
 describe('RegisterPage', () => {
   describe('the form', () => {
-    it('asks for two fields and only two', async () => {
+    it('asks for three fields and only three', async () => {
       // No display name: the backend generates a username regardless of what is sent,
-      // and nothing in the app renders a display name. No confirm password and no
-      // strength meter either; neither is backed by anything the server checks.
+      // and nothing in the app renders a display name. No strength meter either,
+      // because nothing the server checks is behind one. The confirmation is the one
+      // check that exists nowhere else: the server sees a single string and cannot
+      // know it was mistyped.
       const { fixture } = await render();
 
       const inputs = (fixture.nativeElement as HTMLElement).querySelectorAll(
         'input'
       );
-      expect(inputs).toHaveLength(2);
+      expect(inputs).toHaveLength(3);
       expect(query(fixture, 'input[type="email"]')).not.toBeNull();
-      expect(query(fixture, 'input[type="password"]')).not.toBeNull();
+      expect(query(fixture, '#register-password')).not.toBeNull();
+      expect(query(fixture, '#register-confirm-password')).not.toBeNull();
+    });
+
+    it('states the password rule once, under the first box', async () => {
+      // Repeating it under the confirmation would read as a second, different
+      // requirement rather than the same one restated.
+      const { fixture } = await render();
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.password-rule'
+        )
+      ).toHaveLength(1);
+    });
+
+    it('will not submit until the confirmation has something in it', async () => {
+      const { fixture } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', '');
+
+      expect(fixture.componentInstance.canSubmit()).toBe(false);
     });
 
     it('states the password minimum before it is broken', async () => {
@@ -130,6 +162,80 @@ describe('RegisterPage', () => {
         kind: 'registered',
         email: 'marta@example.com',
       });
+    });
+  });
+
+  /**
+   * The one check on a password anywhere in this product.
+   *
+   * The server sees a single string and cannot know it was mistyped, and a typo
+   * produces an account whose password is not the one its owner believes they chose.
+   * Signing in then fails with the deliberately incurious "that email and password do
+   * not match", and the reset flow this app cannot reach yet is what would be needed
+   * to recover it.
+   */
+  describe('when the two passwords differ', () => {
+    it('never sends the request', async () => {
+      const { fixture, auth, router } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password124');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(auth.calls).toEqual([]);
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('says which of the two boxes to look at', async () => {
+      const { fixture } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password124');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.error()).toEqual({
+        key: 'auth.error.passwordMismatch',
+        placement: 'password',
+      });
+    });
+
+    it('puts the cursor in the confirmation, not in the password', async () => {
+      // The first box holds what is being confirmed, so sending somebody back to it
+      // invites them to change the wrong one.
+      const { fixture } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password124');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(document.activeElement?.id).toBe('register-confirm-password');
+    });
+
+    it('compares exactly, since a space is a character somebody may have meant', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password123 ');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(auth.calls).toEqual([]);
+    });
+
+    it('goes through once the two agree', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password124');
+      submit(fixture);
+      await fixture.whenStable();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password123');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(auth.calls).toEqual([
+        { method: 'register', email: 'marta@example.com' },
+      ]);
+      expect(fixture.componentInstance.error()).toBeNull();
     });
   });
 

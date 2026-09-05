@@ -539,11 +539,16 @@ describe('AppShellRoutes', () => {
       expect(account?.canMatch).toBeUndefined();
     });
 
-    it('offers the rename and the delete confirm as sheets over it', () => {
+    it('offers the rename, the confirm email and the delete confirm as sheets', () => {
       // Rule E1: children, so the screen underneath keeps its scroll and Android's
       // back button dismisses them.
+      //
+      // `sheet/email` and not `sheet/confirm/email`: `confirm/` addresses the two
+      // **typed** confirmations, and asking for another confirmation email confirms
+      // nothing and destroys nothing.
       expect(account?.children?.map((route) => route.path)).toEqual([
         'sheet/name',
+        'sheet/email',
         'sheet/confirm/delete',
       ]);
     });
@@ -852,12 +857,12 @@ describe('the sheets and their exit animation', () => {
   const sheets = all.filter(({ route }) => isSheet(route));
 
   it('addresses every sheet in the table, so none has quietly been lost', () => {
-    // Twenty eight entries rather than twenty two sheets: the entry pair, Get
+    // Twenty nine entries rather than twenty three sheets: the entry pair, Get
     // shopping list and the three confirms are each declared over more than one page,
     // because a sheet has to cover the page it was opened from. A count rather than a
     // list of paths: it fails when a sheet is deleted or stops being addressed as
     // one, and needs no edit here when a page gains a sheet it already had elsewhere.
-    expect(sheets).toHaveLength(28);
+    expect(sheets).toHaveLength(29);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

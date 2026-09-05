@@ -59,9 +59,10 @@ describe('ResendSentence', () => {
   /**
    * **Rule C3, and the acceptance criterion it is written for.**
    *
-   * The `verifyResend` bucket is three per ten minutes, so the fourth ask in a window
-   * waits far longer than a minute. A hardcoded sixty would count down to zero, invite
-   * the tap, and fail again, which is worse than not offering the action at all.
+   * How long is left is the server's to say and never a screen's to assume. The wait
+   * below is far longer than any bucket in the product, which is the point: whatever
+   * number comes back is what is drawn. A hardcoded sixty would count down to zero,
+   * invite the tap, and fail again, which is worse than not offering the action at all.
    */
   it('counts a refusal down from the servers number, not from 60', async () => {
     const fixture = await render();

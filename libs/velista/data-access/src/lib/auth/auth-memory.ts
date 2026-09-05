@@ -14,8 +14,8 @@ interface StoredAccount {
   readonly password: string;
 }
 
-/** The wait a refused resend reports. Deliberately far longer than a minute. */
-const REFUSED_WAIT_SECONDS = 451;
+/** The wait a refused resend reports. Under a minute, because that bucket is per minute. */
+const REFUSED_WAIT_SECONDS = 43;
 
 /** The wait a successful resend reports, matching the mock's `0:52`. */
 const SENT_WAIT_SECONDS = 52;
@@ -118,9 +118,9 @@ export class AuthMemory implements AuthServiceI {
   async resendVerification(): Promise<ResendOutcome> {
     this._resendCount += 1;
 
-    // Three per ten minutes, matching `THROTTLE_LIMITS.verifyResend`, so the refused
-    // state is reachable and arrives with a wait far longer than a minute.
-    return this._resendCount > 3
+    // One per minute, matching `THROTTLE_LIMITS.verifyResend`, so the second ask in a
+    // sitting is refused and the refused sentence is reachable.
+    return this._resendCount > 1
       ? { state: 'refused', waitSeconds: REFUSED_WAIT_SECONDS }
       : { state: 'sent', waitSeconds: SENT_WAIT_SECONDS };
   }
@@ -133,8 +133,8 @@ export class AuthMemory implements AuthServiceI {
    * design of the endpoint (plan 0015, section 5.6) and a fake that answered
    * differently would let a screen grow copy the real service can never justify.
    *
-   * One per minute rather than three per ten, matching `THROTTLE_LIMITS.passwordReset`,
-   * so the second ask in a sitting is refused and the refused sentence is reachable.
+   * One per minute, matching `THROTTLE_LIMITS.passwordReset`, so the second ask in a
+   * sitting is refused and the refused sentence is reachable.
    */
   async forgotPassword(email: string): Promise<ResendOutcome> {
     this.forgotPasswordAsks.push(normalize(email));

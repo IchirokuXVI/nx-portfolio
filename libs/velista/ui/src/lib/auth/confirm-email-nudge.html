@@ -3,15 +3,19 @@
 
   <div class="text">
     <h2 class="title">{{ 'auth.nudge.title' | rokuT }}</h2>
-    <p class="body">{{ 'auth.nudge.body' | rokuT: { email: email() } }}</p>
+    <!--
+      Two bodies, because the card is drawn at two different moments and only one of
+      them may claim an email was just sent. See `occasion` on the component.
+    -->
+    <p class="body">{{ bodyKey() | rokuT: { email: email() } }}</p>
 
     @if (resendOffered()) {
       <lib-resend-sentence
         (resend)="resend.emit()"
+        [promptKey]="promptKey()"
         [state]="resendState()"
         [waitSeconds]="resendWaitSeconds()"
         class="resend"
-        promptKey="auth.resend.prompt"
       />
     }
   </div>

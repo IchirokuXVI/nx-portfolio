@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
 } from '@angular/core';
@@ -9,7 +10,16 @@ import { CloseIcon, MailIcon } from '../icons/icons';
 import { ResendSentence, type ResendState } from './resend-sentence';
 
 /**
- * The card on the dashboard that asks somebody to confirm the address they just gave.
+ * The card on the dashboard that asks somebody to confirm their address.
+ *
+ * **It is drawn for as long as the address is unconfirmed, not once.** It used to be
+ * fed only by `AccountNotice`, which the register screen sets for exactly one
+ * navigation and the dashboard clears on destroy, so the card existed for a single
+ * visit and then never again: signing in on another day, reloading, or simply leaving
+ * the dashboard and coming back all lost it while the address stayed unconfirmed. The
+ * dashboard now reads the profile as well and keeps drawing this until the account
+ * says the address is confirmed. `occasion` is what keeps the copy honest across the
+ * two.
  *
  * **Dismissible, and never a wall.** `register()` issues tokens as its last act and
  * sends the confirmation email outside the transaction, with a comment saying delivery
@@ -34,16 +44,43 @@ import { ResendSentence, type ResendState } from './resend-sentence';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ConfirmEmailNudge {
-  /** The address the person just typed, which the body names back at them. */
+  /** The address the card names back at them. */
   readonly email = input.required<string>();
 
   /**
-   * Whether to offer another send at all.
+   * Which of the two moments this is, which decides what the body may claim.
    *
-   * False until the section 5.8 endpoint lands, and the card is the screen plan 0009
-   * would have shipped anyway without its last sentence.
+   * `justRegistered` follows the form by one navigation, so it can say a link was
+   * sent. `unconfirmed` is the standing case: the dashboard found an address the
+   * account has never confirmed, and the last email may have gone out days ago or
+   * never have arrived at all. Saying "we sent a link" there would be a claim about an
+   * event this card has no knowledge of, so it does not make one.
    */
+  readonly occasion = input<'justRegistered' | 'unconfirmed'>('justRegistered');
+
+  /** Whether to offer another send at all. See `VERIFY_RESEND_AVAILABLE`. */
   readonly resendOffered = input(false);
+
+  readonly bodyKey = computed(() =>
+    this.occasion() === 'justRegistered'
+      ? 'auth.nudge.body'
+      : 'auth.nudge.bodyStanding'
+  );
+
+  /**
+   * Which question introduces the resend.
+   *
+   * "Did not get it?" only makes sense beside a body that just said one was sent. The
+   * standing card asks whether the person still wants to confirm at all, which is the
+   * same question the expired link screen asks and the same copy.
+   */
+  readonly promptKey = computed<
+    'auth.resend.prompt' | 'auth.resend.promptExpired'
+  >(() =>
+    this.occasion() === 'justRegistered'
+      ? 'auth.resend.prompt'
+      : 'auth.resend.promptExpired'
+  );
 
   readonly resendState = input<ResendState>('ready');
   readonly resendWaitSeconds = input<number | null>(null);

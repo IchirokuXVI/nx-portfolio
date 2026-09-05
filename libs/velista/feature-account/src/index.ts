@@ -2,6 +2,7 @@ export * from './lib/account-error-copy';
 export * from './lib/account-page/account-page';
 export * from './lib/attribution-note/attribution-note';
 export * from './lib/chain-preference-list/chain-preference-list';
+export * from './lib/confirm-email-sheet/confirm-email-sheet';
 export * from './lib/delete-account-sheet/delete-account-sheet';
 export * from './lib/delete-profile-sheet/delete-profile-sheet';
 export * from './lib/franchise-buttons/franchise-buttons';

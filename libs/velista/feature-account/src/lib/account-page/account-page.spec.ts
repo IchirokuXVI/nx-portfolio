@@ -246,6 +246,41 @@ describe('AccountPage', () => {
       expect(text(fixture)).toContain('account.email.unconfirmed');
     });
 
+    /**
+     * The one place this screen renders the same fact two ways.
+     *
+     * `0015` drew both states as statements, on the grounds that there is no screen
+     * behind an email address because it cannot be changed anywhere in this product.
+     * That holds for a confirmed address. It never held for the other one, which was
+     * the only actionable state on this screen with no action: somebody whose
+     * confirmation email never arrived read "Not confirmed" on their own account page
+     * with nothing to press, while the resend endpoint sat there unused.
+     */
+    describe('the unconfirmed address', () => {
+      it('is a button, and leads to the sheet that can send another', async () => {
+        const { fixture, router } = await render({ emailVerified: false });
+
+        const row = rowWith(fixture, 'account.email.unconfirmed');
+        expect(row?.querySelector('button')).not.toBeNull();
+
+        (row?.querySelector('button') as HTMLElement).click();
+
+        expect(router.navigate).toHaveBeenCalledWith(
+          ['sheet', 'email'],
+          expect.anything()
+        );
+      });
+
+      it('leaves a confirmed address a statement, with no tab stop', async () => {
+        // A focusable element with an accessible name that does nothing is the defect
+        // `AccountRow` derives `hasAction` to prevent.
+        const { fixture } = await render();
+
+        const row = rowWith(fixture, 'account.email.confirmed');
+        expect(row?.querySelector('button')).toBeNull();
+      });
+    });
+
     it('offers sign out', async () => {
       const { fixture } = await render();
 

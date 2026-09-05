@@ -32,6 +32,23 @@
       fieldId="register-password"
     />
 
+    <!-- The only check on a password anywhere in this product: the server sees one
+         string and cannot know it was mistyped. No rule sentence under it, because
+         the rule it has to meet is stated once above and repeating it would read as
+         a second, different requirement. -->
+    <lib-password-field
+      [(value)]="confirmPassword"
+      [describedBy]="error()?.placement === 'email' ? null : errorId"
+      [hideLabel]="'auth.field.hidePassword' | rokuT"
+      [invalid]="error() !== null && error()?.placement !== 'email'"
+      [label]="'auth.field.confirmPassword' | rokuT"
+      [placeholder]="'auth.field.confirmPasswordPlaceholder' | rokuT"
+      [readOnly]="submitting()"
+      [showLabel]="'auth.field.showPassword' | rokuT"
+      autocomplete="new-password"
+      fieldId="register-confirm-password"
+    />
+
     @if (error(); as rejection) {
       <!-- A `conflict` offers a route rather than only a refusal, and the route
            carries the typed address with it. -->

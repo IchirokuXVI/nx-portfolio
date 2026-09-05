@@ -45,7 +45,8 @@ export interface AuthServiceI {
    *
    * Bearer authenticated, because the server takes the address off the caller's
    * account rather than from a body: there is nothing here for an anonymous visitor
-   * to send. See {@link VERIFY_RESEND_AVAILABLE} for why nothing calls this yet.
+   * to send. Called by the dashboard nudge, the expired link screen and the account
+   * screen's confirm sheet, all of them behind {@link VERIFY_RESEND_AVAILABLE}.
    */
   resendVerification(): Promise<ResendOutcome>;
 
@@ -88,11 +89,12 @@ export interface VerifiedEmail {
  * their sentence. Both carry the server's own number.
  *
  * `waitSeconds` is nullable in both, and rule C3 is why: the client renders whatever
- * wait it was told about and **never a hardcoded sixty**. The resend bucket is three
- * per ten minutes, so the fourth ask in a window waits far longer than a minute; a
- * countdown from an invented number would reach zero, invite the tap, and fail again.
- * A `null` means the server named no wait, and the sentence falls back to copy that
- * promises no particular moment.
+ * wait it was told about and **never a hardcoded number**. The resend bucket is
+ * `THROTTLE_LIMITS.verifyResend`, one per minute, and it is the server's business how
+ * long is left rather than something a screen may assume; a countdown from an invented
+ * number would reach zero, invite the tap, and fail again. A `null` means the server
+ * named no wait, and the sentence falls back to copy that promises no particular
+ * moment.
  */
 export type ResendOutcome =
   | { readonly state: 'sent'; readonly waitSeconds: number | null }
@@ -100,25 +102,27 @@ export type ResendOutcome =
   | { readonly state: 'failed'; readonly error: unknown };
 
 /**
- * Whether the gateway serves the resend endpoint yet.
+ * Whether the gateway serves the resend endpoint.
  *
- * Plan 0009 section 5.8 lists two backend changes it is written against, and this is
- * the first of them. Until it lands the resend sentence is **not rendered anywhere**:
- * not in the dashboard nudge, not on the expired link screen, and not on the account
- * screen's unconfirmed email row. Everything else on those screens works, which is what
- * makes this a flag rather than a blocker.
+ * **True since 2026-09-05, and the endpoint it guards has existed for longer than
+ * that.** Plan 0009 section 5.8 wrote this flag against two backend changes it was
+ * ahead of; luna-shopper plan 0021 shipped the first of them as
+ * `POST /v1/auth/resend-verification`, and nothing turned the flag over afterwards. So
+ * every resend control in the app stayed unrendered against a route that answers: the
+ * dashboard nudge's sentence, the expired link screen's, and the account screen's
+ * unconfirmed email row. Somebody whose confirmation email never arrived had no way to
+ * ask for another one anywhere in the product.
  *
- * The path this guards was wrong until plan 0015 went looking for it: the client asked
- * for `/v1/auth/verify-resend` and the gateway has always served
- * `/v1/auth/resend-verification`, so flipping the flag would have produced a 404 on a
- * route that exists. Corrected in `AuthApi`; the flag itself is 0009's to turn.
+ * The path was wrong as well until plan 0015 went looking for it: the client asked for
+ * `/v1/auth/verify-resend`, which the gateway has never served, so turning the flag
+ * over before that fix would have produced a 404 on a route that exists. Both halves
+ * agree now, and `auth-api.spec.ts` asserts the path.
  *
  * A constant rather than a runtime probe on purpose. There is nothing to discover at
  * runtime that is not already known at build time, and a probe would spend a request
- * per page load learning something a one line edit says better. Flipping it to `true`
- * is the whole of the frontend work when the endpoint ships.
+ * per page load learning something a one line edit says better.
  */
-export const VERIFY_RESEND_AVAILABLE = false;
+export const VERIFY_RESEND_AVAILABLE = true;
 
 /**
  * Inject this, typed as the interface, never a concrete class.
