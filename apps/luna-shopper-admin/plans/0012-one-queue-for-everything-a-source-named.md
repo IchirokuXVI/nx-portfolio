@@ -32,10 +32,12 @@ Each row shows what the source said and what the ladder proposed:
 - **A source kind badge**: API, web or leaflet. It is the one thing that tells a Mercadona product
   from a Mercadona leaflet tile of the same product, and the two are two rows on purpose.
 - **The prices, one per scope**, from the row's `prices` array: the scope's name, the price and
-  unit price, the leaflet window when it has one, and the page and raw text out of `details` for
-  a leaflet price. Two regional leaflets show as two lines. A row with no price says so rather
-  than showing a blank, because for a DEZA row that is the truth and for a leaflet row it is the
-  conditional promotion rule of backend `0081` section 6.2.
+  unit price, and the window when it has one. Two regional leaflets show as two lines. A row with
+  no price says so rather than showing a blank, because for a DEZA row that is the truth and for
+  a leaflet row it means the producer found no price a shopper pays for one unit.
+- **The row's `extra`**, rendered as it is: a leaflet's page, raw text and promotion, a chain's
+  points, whatever the producer put there. It is what lets a person decide a row the import could
+  not, so it is shown in full and folded by default.
 - The proposal, when the ladder made one: the catalog item under `itemId`, resolved through the
   directory as the alias queue resolves its candidate today, or the sibling row under
   `candidateEntryId` with its own name and kind. `confidence` and `matchedBy` beside it.
@@ -96,9 +98,10 @@ the operator already set is never overwritten, whatever the file says.
   the id, and the input left for the operator.
 - No notice when the file carries no hints at all, which is what a hand written file looks like.
 
-The validity fields stay and are shown when the document carries a `validity`, with the override
-`0010` section 2 gives them. Validation feedback names the product as `0010` section 2.1 named
-the offer. The success state links to `harvest/entries` with the chain preselected, where the rows
+The validity fields are shown when the document carries a `validity`, prefilled from it, with the
+override `0010` section 2 gives them, and hidden otherwise. Validation feedback names the product
+by its `id` or its position, as `0010` section 2.1 named the offer, and the field the schema
+refused. The success state links to `harvest/entries` with the chain preselected, where the rows
 now are.
 
 The run page gains an **Export** action on a finished `CATALOG_DISCOVERY` or `FILE_IMPORT`,
