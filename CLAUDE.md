@@ -299,10 +299,29 @@ Two rules that are easy to break by accident:
   and never touches `printedName`, so renaming the product does not stop the
   next leaflet resolving.
 
-`@portfolio/luna-shopper/mercadona` and `@portfolio/luna-shopper/osm-places` are
-framework free by hard constraint: no TypeORM, no Nest, no database, and every
-test runs against checked in fixtures with no network. Refresh those fixtures
-with each library's `capture-fixtures` target, never by hand.
+**One mode, two adapters** (plan 0085). `CATALOG_DISCOVERY` now runs against
+either `mercadona-api` or `deza-web`, and the run picks between them on
+`supermarket_sources.adapterKey` rather than on the mode: a walk of a chain's
+whole assortment is a catalog discovery whether the chain answers JSON or renders
+a page. `CatalogDiscoveryRunner` is the dispatcher and holds no fetching of its
+own. Two things the DEZA half is built around and neither is a detail:
+
+- **It writes no price, ever.** The site prints none. The blank `wpdz-precio-ok`
+  elements in its markup are the storefront's own hidden pricing, and a parser
+  that read them would write zeros. What a run produces is candidate products and
+  per shop availability, positive **and** negative: the popup names the shops
+  that carry a product, so a shop it did not name does not stock it.
+- **Completeness cannot be proven against it.** Every query answers at most 300
+  rows however it is filtered, so a capped section is split by search term until
+  a pass adds nothing new or a budget of 25 queries runs out. The honest artifact
+  is `harvest_runs.report`, which names every section the budget could not
+  finish. Do not add a number that claims otherwise.
+
+`@portfolio/luna-shopper/mercadona`, `@portfolio/luna-shopper/deza` and
+`@portfolio/luna-shopper/osm-places` are framework free by hard constraint: no
+TypeORM, no Nest, no database, and every test runs against checked in fixtures
+with no network. Refresh those fixtures with each library's `capture-fixtures`
+target, never by hand.
 
 - **The committed OpenAPI document must always be current.** Any change to a gateway route, a
   request or response DTO, an error code, or a contract schema in `libs/luna-shopper/contracts`

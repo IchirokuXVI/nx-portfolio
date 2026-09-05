@@ -25,8 +25,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * error. Both plans state it because neither depends on the other having
  * landed: a checkout with only one of them still gets a usable type.
  */
-export class LeafletImport1756600000000 implements MigrationInterface {
-  name = 'LeafletImport1756600000000';
+export class LeafletImport1756700000000 implements MigrationInterface {
+  name = 'LeafletImport1756700000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     // 1. The two new labels. `IF NOT EXISTS` so a partially applied migration

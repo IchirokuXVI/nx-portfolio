@@ -105,8 +105,21 @@ export const SUPERMARKET_SOURCE_PATTERNS = {
   setEnabled: 'supermarketSource.setEnabled',
 } as const;
 
-/** The adapter keys the harvester knows how to run (plan 0038, section 4.2). */
-export const ADAPTER_KEYS = ['mercadona-api', 'osm-places', 'manual'] as const;
+/**
+ * The adapter keys the harvester knows how to run (plan 0038, section 4.2).
+ *
+ * `deza-web` is the second storefront and the first whose only claim is per shop
+ * availability (plan 0085). It shares `CATALOG_DISCOVERY` with `mercadona-api`,
+ * because a walk of a chain's whole assortment is a catalog discovery whatever
+ * the source looks like, so this field is what the runner selects its client
+ * from rather than the mode.
+ */
+export const ADAPTER_KEYS = [
+  'mercadona-api',
+  'deza-web',
+  'osm-places',
+  'manual',
+] as const;
 export type AdapterKey = (typeof ADAPTER_KEYS)[number];
 
 // --- Views -----------------------------------------------------------------
@@ -182,6 +195,23 @@ export interface HarvestRunView {
   documentSha256: string | null;
   abortRequestedAt: string | null;
   error: string | null;
+  /**
+   * What the run has to say about itself beyond its counters, empty when it has
+   * nothing (plan 0085, section 3).
+   *
+   * It exists because **completeness cannot be proven against every source**. A
+   * DEZA query returns at most 300 rows however it is filtered, so a run splits
+   * a capped section by search term until a pass adds nothing new or a budget
+   * runs out, and the honest artifact is then the list of sections it could not
+   * finish rather than a number. The same bag carries the availability rows a
+   * person had typed, which plan 0084 section 3 declines to overwrite and
+   * requires the run to report instead.
+   *
+   * Deliberately free form. It is a summary for a person reading a finished run,
+   * not a structure anything decides on, and pinning a schema to it would make
+   * every new kind of remark a contract change.
+   */
+  report: Record<string, unknown>;
   correlationId: string | null;
   requestedByUserId: string | null;
 }

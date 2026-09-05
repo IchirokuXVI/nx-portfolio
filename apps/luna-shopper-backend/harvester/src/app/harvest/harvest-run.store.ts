@@ -232,6 +232,28 @@ export class HarvestRunStore {
     );
   }
 
+  /**
+   * Replace the run's remarks about itself (plan 0085, section 3).
+   *
+   * A whole-value write rather than a merge, because the one caller holds the
+   * whole report in memory and writes it once, at the end of the run: the thing
+   * it says is "these sections were not finished", and half of that list said
+   * twice is worse than the list said once.
+   */
+  async setReport(
+    runId: string,
+    report: Record<string, unknown>
+  ): Promise<void> {
+    // Load and save rather than `update`, the same way `requestAbort` does.
+    // TypeORM's partial entity type cannot express "replace this whole jsonb
+    // bag", and the alternatives are a deep import or a cast that would silence
+    // the check for every other column in the statement too.
+    const row = await this.load(runId);
+    row.report = report;
+    row.heartbeatAt = new Date();
+    await this.runs.save(row);
+  }
+
   async setTotalPlanned(runId: string, total: number): Promise<void> {
     await this.runs.update(
       { id: runId },

@@ -103,6 +103,9 @@ export class HarvestMemory implements HarvestServiceI {
       documentSha256: null,
       abortRequestedAt: null,
       error: null,
+      // A run says nothing beyond its counters until it has finished and has
+      // something to say (backend plan 0085).
+      report: {},
       correlationId: null,
       // The audit trail attributes a run's writes to the service and not to the
       // operator who started it (plan 0006, section 6; backend plan 0075).

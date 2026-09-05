@@ -7,12 +7,14 @@ import type { HarvesterConfig } from '../config/app-config';
 import { HARVESTER_ENTITIES } from '../entities';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
+import { DezaCatalogRunner } from './deza-catalog.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
 import { HarvestController } from './harvest.controller';
 import { ItemSourceRefService } from './item-source-ref.service';
 import { LeafletImportRunner } from './leaflet-import.runner';
+import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
@@ -61,9 +63,12 @@ import { SupermarketSourceService } from './supermarket-source.service';
     HarvestRunStore,
     SupermarketSourceService,
     StoreDiscoveryRunner,
+    MercadonaCatalogRunner,
+    DezaCatalogRunner,
     CatalogDiscoveryRunner,
     RefreshRunner,
-    // The fourth runner, and the only one that fetches nothing (plan 0081).
+    // The one runner that fetches nothing at all (plan 0081): its input is an
+    // uploaded document rather than a storefront.
     LeafletImportRunner,
     RunExecutor,
     HarvestRunService,

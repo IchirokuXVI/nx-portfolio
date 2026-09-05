@@ -19,6 +19,7 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
 /** Fixed, so that a spec asserting on a row can name it. */
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
 const CARREFOUR = '22222222-2222-4222-8222-222222222222';
+const DEZA = '33333333-3333-4333-8333-333333333333';
 
 const NOW = '2026-09-03T10:00:00.000Z';
 
@@ -48,6 +49,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     documentSha256: null,
     abortRequestedAt: null,
     error: null,
+    report: {},
     correlationId: 'seed-correlation-1',
     requestedByUserId: null,
   },
@@ -81,6 +83,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     documentSha256: null,
     abortRequestedAt: null,
     error: 'The storefront stopped answering after 41 requests (ECONNRESET).',
+    report: {},
     correlationId: 'seed-correlation-2',
     requestedByUserId: null,
   },
@@ -109,6 +112,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     documentSha256: null,
     abortRequestedAt: '2026-09-01T08:13:52.000Z',
     error: null,
+    report: {},
     correlationId: 'seed-correlation-3',
     requestedByUserId: null,
   },
@@ -385,6 +389,22 @@ export const SUPERMARKET_SOURCE_SEED: readonly Wire.HarvestSupermarketSourceView
       lastRunAt: '2026-09-03T09:42:04.000Z',
       lastSuccessAt: '2026-08-30T22:11:00.000Z',
       consecutiveFailures: 1,
+    },
+    {
+      // The second storefront (backend plan 0085), off like every other source
+      // row until somebody turns it on. It carries no `postalCode`: DEZA prices
+      // nothing and scopes nothing, and what a run of it produces is candidate
+      // products and per shop availability.
+      id: 'source-deza',
+      supermarketId: DEZA,
+      adapterKey: 'deza-web',
+      enabled: false,
+      config: {},
+      workers: 4,
+      maxRequestsPerSecond: 4,
+      lastRunAt: null,
+      lastSuccessAt: null,
+      consecutiveFailures: 0,
     },
     {
       id: 'source-carrefour',

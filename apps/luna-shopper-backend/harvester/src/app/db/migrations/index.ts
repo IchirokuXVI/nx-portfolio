@@ -2,7 +2,8 @@ import { InitialHarvesterSchema1756200000000 } from './1756200000000-InitialHarv
 import { DiscoveredPlaceCountry1756300000000 } from './1756300000000-DiscoveredPlaceCountry';
 import { PostalCodeDiscoveryRequests1756400000000 } from './1756400000000-PostalCodeDiscoveryRequests';
 import { SourceLocations1756500000000 } from './1756500000000-SourceLocations';
-import { LeafletImport1756600000000 } from './1756600000000-LeafletImport';
+import { HarvestRunReport1756600000000 } from './1756600000000-HarvestRunReport';
+import { LeafletImport1756700000000 } from './1756700000000-LeafletImport';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -17,5 +18,6 @@ export const HARVESTER_MIGRATIONS = [
   DiscoveredPlaceCountry1756300000000,
   PostalCodeDiscoveryRequests1756400000000,
   SourceLocations1756500000000,
-  LeafletImport1756600000000,
+  HarvestRunReport1756600000000,
+  LeafletImport1756700000000,
 ];
