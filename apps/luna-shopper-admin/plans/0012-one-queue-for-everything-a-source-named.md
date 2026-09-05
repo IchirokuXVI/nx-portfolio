@@ -1,8 +1,8 @@
 # 0012 One queue for everything a source named
 
 Backend plan `0086` folds `item_source_refs` and `source_aliases` into `source_catalog_entries`,
-turns the leaflet upload into a file import that also takes the harvester's own export, and
-deletes the owner facing `REFRESH` run mode. The back office has three queue screens over those
+turns the leaflet upload into a file import with one schema that the harvester's own export also
+uses, and deletes the owner facing `REFRESH` run mode. The back office has three queue screens over those
 tables today: `harvest/entries` for products a walk found and nothing matched, `harvest/item-refs`
 for the fuzzy matches a walk proposed, and `harvest/leaflets/queue` for the printed names a
 leaflet queued. After `0086` they list one table with one status column, so they are one screen.
@@ -66,13 +66,40 @@ sentence says why.
 ## 2. The import and the export
 
 `harvest/leaflets/upload` becomes `harvest/imports/upload`, titled as an import rather than a
-leaflet, and the navigation entry with it. The page reads the document's `kind` before anything
-else and shows which of the two it is holding: a leaflet, with the validity fields and the chain
-hint `0010` section 2 gives it, or a harvest export, with the `exported` block shown as where and
-when it came from and the `source_kind` it will stamp. The chain and the scope are chosen by the
-operator for both, and the hints in the file are never a lookup. Validation feedback names the
-offer or the observation as `0010` section 2.1 does. Its success state links to `harvest/entries`
-with the chain preselected, where the rows now are.
+leaflet, and the navigation entry with it. There is one file schema, `HarvestDocument` (backend
+`0086` section 6), so the page has one shape whatever produced the file.
+
+Three inputs beside the file, all required to start the run:
+
+- **The chain**, from the directory, as today.
+- **The price scope**, from the chain's scopes, defaulting to the national one as today.
+- **The source kind**: leaflet, API or web, which is `PriceSourceKind` restricted to the three
+  official ones. It is what the rows and the prices are stamped with and what `0080`'s policies
+  rank, so the operator picks it consciously: a Mercadona export imported here is an API price,
+  not a leaflet price, because the upload is not what observed it.
+
+**The file preloads the inputs the operator has not set.** A document optionally carries
+`chain_id`, `price_scope_id` and `source_kind` as hints. When a file is chosen, each hint fills
+its input **only if that input is still empty**, and the chain or scope hint only if the id
+exists in this deployment's directory, since ids do not survive an environment change. An input
+the operator already set is never overwritten, whatever the file says.
+
+**A message says what happened, every time a file is chosen**, as one notice above the inputs:
+
+- "Chain, scope and source kind were set from the file" naming each value it set, when all three
+  came from the file.
+- "The file names a chain, a scope and a source kind, but your choices were kept" when the
+  operator had set them first, naming the values the file carried beside the ones kept, so a
+  disagreement is visible before the run starts.
+- The mixed sentence when some were set and some kept, listing both.
+- "The file names a chain this deployment does not have" when a hint resolves to nothing, with
+  the id, and the input left for the operator.
+- No notice when the file carries no hints at all, which is what a hand written file looks like.
+
+The validity fields stay and are shown when the document carries a `validity`, with the override
+`0010` section 2 gives them. Validation feedback names the product as `0010` section 2.1 named
+the offer. The success state links to `harvest/entries` with the chain preselected, where the rows
+now are.
 
 The run page gains an **Export** action on a finished `CATALOG_DISCOVERY` or `FILE_IMPORT`,
 which is `GET /v1/admin/harvest/runs/:id/export` as a file download named after the chain, the
@@ -106,8 +133,9 @@ already reads a leaflet run's counters, because a walk writes prices now.
 takes the status and source kind filters. `ref-view.ts`, `ref-view.spec.ts`, `alias-view.ts` and
 `queued-aliases.ts` go, and `entry-view.ts` takes their place: one view model with its prices,
 mapped from the generated `SourceCatalogEntry` wire type through the same `unknown` mapping every
-other model uses (rule D4). The source kind and the document kind are enums of this app's own, as
-every other enum is.
+other model uses (rule D4). The source kind is an enum of this app's own, as every other enum is,
+and the upload reads the three hints out of the file through the same `unknown` mapping before it
+trusts any of them.
 
 The wire types are regenerated from backend `0086`'s document and committed with it.
 
@@ -120,8 +148,12 @@ The wire types are regenerated from backend `0086`'s document and committed with
 - Accept with a proposal sends the proposed `itemId`. Accept with a sibling proposal opens the
   sibling. Create sends only the changed fields. Reject asks first.
 - The confirmation sentence for `pricesWritten` of 2, of 1 and of 0.
-- `import-upload.spec.ts`: a leaflet document shows the validity fields, an export document shows
-  its origin and kind, and both need a chain and a scope. The success state links to the queue.
+- `import-upload.spec.ts`: the three inputs are required. A file with hints fills the empty
+  inputs and says so. A file chosen after the operator set the inputs changes none of them and
+  says the choices were kept, naming what the file carried. A mixed case lists both. A chain hint
+  the directory does not know leaves the input empty and names the id. A file with no hints shows
+  no notice. The validity fields appear only for a document that carries a validity. The success
+  state links to the queue.
 - `run-page.spec.ts`: the export action on a finished walk and a finished import, absent on a
   running one and on a store discovery, and the download name.
 - `routes.spec.ts`: `item-refs` and `leaflets/queue` are gone and the navigation has one queue
@@ -136,7 +168,8 @@ The wire types are regenerated from backend `0086`'s document and committed with
   kind, with the kind and every scope's price visible per row, and offers accept, create and
   reject on each.
 - The item refs and leaflet queue routes, pages, views and translations do not exist.
-- The upload takes both document kinds and says which it holds. A finished walk or import can be
-  exported from its run page.
+- The upload takes one schema, asks for the chain, the scope and the source kind, preloads only
+  the empty ones from the file, and says every time whether the file set them or the operator's
+  choices were kept. A finished walk or import can be exported from its run page.
 - The run form cannot name `REFRESH`, and a Mercadona walk cannot be started without a scope.
 - `wire-types.ts` is regenerated and `npx nx affected -t lint test build` is green.

@@ -104,12 +104,16 @@ in batches with the run's id and kind, and answers an outcome per observation.
 `mercadona-catalog.runner.ts`, `deza-catalog.runner.ts` and the import runner keep only their
 first step.
 
-**D6. The upload is a file import, not a leaflet tool.** `LEAFLET_IMPORT` becomes `FILE_IMPORT`.
-A document is either a leaflet, the extractor's output under the schema `0081` fixed, or a
-**harvest export**, the harvester's own list of observations. A run can be exported and the
-export imported elsewhere, which is how a walk that ran on a developer's machine reaches a cluster
-that is not allowed to crawl, and how a chain with no adapter at all, El Jamon today, gets rows
-that look exactly like a walk's.
+**D6. The upload is a file import, not a leaflet tool, and there is one file schema.**
+`LEAFLET_IMPORT` becomes `FILE_IMPORT`. Every file is a `HarvestDocument`: a list of products as
+a source described them, whoever produced it. The leaflet extractor produces one, the harvester's
+own export is one, a person typing a chain's prices produces one, and any future producer has to.
+There is no `kind` field and no second schema, because the import does the same thing with every
+file: the rules of `0081` section 6 run per product and decide nothing on a product that carries
+no promotion, loyalty or basis, so a walk's export passes through them untouched. A run can be
+exported and the export imported elsewhere, which is how a walk that ran on a developer's machine
+reaches a cluster that is not allowed to crawl, and how a chain with no adapter at all, El Jamon
+today, gets rows that look exactly like a walk's.
 
 **D7. One queue, and accepting writes the prices the row holds.** A row in `CANDIDATE` or
 `UNRESOLVED` is the queue, for every chain and every source kind. Accepting, creating or
@@ -293,56 +297,87 @@ stated in section 8.
 exactly as `0085` section 9 steps 5 and 6, using the `itemId` each outcome answered. Unchanged in
 what it writes.
 
-**File import.** The reader of section 6 turns the document into observations. For a leaflet the
-three rules of `0081` section 6 stay where they are and decide each offer's price. A loyalty
-gated tile produces no observation at all, as section 6.3 already says. A conditional tile with no
-single unit price produces an observation with no price: a new key lands in the queue through rung
-5, a known one is touched and writes nothing, which is what the old `queue` decision did in two
-branches. Two offers with one key in one document both produce observations with no price. The
-document's own extractor warnings are carried through as they are. Then the import runner reads
+**File import.** The reader of section 6 turns the document's products into observations, and
+the three rules of `0081` section 6 run on every one of them, staying where they are. They read
+the optional blocks a product carries and decide nothing when it carries none. A loyalty gated
+product produces no observation at all, as section 6.3 already says. A conditional promotion with
+no single unit price produces an observation with no price: a new key lands in the queue through
+rung 5, a known one is touched and writes nothing, which is what the old `queue` decision did in
+two branches. A per kilogram basis writes the unit price and no till price. Two products with one
+key in one document both produce observations with no price. A product with a plain price and no
+blocks, which is every product of an export, produces an observation with that price. The
+document's own producer warnings are carried through as they are. Then the import runner reads
 the outcomes and records a warning per observation, with the codes that exist today:
 `REJECTED_ALIAS` for a rejected row, `ALREADY_QUEUED` for a queued one, `CANDIDATE_MATCH` and
 `NO_MATCH` for a new one. A file has hundreds of rows and a person reads that list. A walk has
 4,232 products and nobody does, so the Mercadona runner records counters only. An import asserts
 nothing about availability: a file says what is in it, not what is not.
 
-A leaflet observation's `validFrom` and `validUntil` are the instants the spawn resolved and
-stored on the run, as today.
+An observation's `validFrom` and `validUntil` are the instants the spawn resolved from the
+document's `validity` and the admin's override and stored on the run, as today, and null when the
+document states no validity, which is what a storefront price has.
 
 ## 6. The file, in and out
 
-**In.** `harvest.spawn` in mode `FILE_IMPORT` takes a document, a chain and a scope, as the
-leaflet spawn does today, and the document is one of two kinds, told apart by its `kind` field:
-
-- `leaflet`: the schema `0081` section 4 fixed, unchanged. The reader runs the leaflet rules.
-- `harvest-export`: the harvester's own format, below. The reader validates it against its own
-  versioned schema in `contracts` and passes the observations through as they are.
+**The schema.** `HarvestDocument` is the leaflet schema of `0081` section 4 under its real
+name, widened so that a product can carry what a storefront answers and a leaflet never prints.
+It stays that schema rather than a new one so the extractor in `tmp/leaflet`, its prompts and the
+three committed El Jamon outputs keep validating: every field added is optional, and every field
+a leaflet needed stays where it was. Versioned in `contracts` as today, `sha256` still required.
 
 ```json
 {
-  "kind": "harvest-export",
-  "schema_version": 1,
-  "source": { "file": "mercadona-4661-2026-09-04.json", "sha256": "…" },
-  "exported": { "at": "2026-09-04T18:02:11Z", "runId": "…", "chainId": "…", "scopeId": "…" },
+  "schema_version": 2,
+  "source": { "file": "mercadona-4661-2026-09-04.json", "sha256": "…", "producer": "harvester export" },
+  "chain_id": "…",
+  "price_scope_id": "…",
   "source_kind": "OFFICIAL_API",
-  "observations": [ { "externalId": "4241", "name": "…", "ean": "…", "price": { "…": "…" } } ]
+  "validity": { "starts_on": "2026-09-10", "ends_on": "2026-09-23" },
+  "products": [
+    {
+      "id": "p-0001",
+      "external_id": "4241",
+      "product": { "name": "…", "brand": "…", "ean": "…", "format": { "raw": "1 L", "quantity": 1, "unit": "l" } },
+      "pricing": { "price": { "amount": 1.19, "currency": "EUR" }, "unit_price": { "…": "…" }, "basis": "unit" },
+      "category_path": ["…"],
+      "url": "…",
+      "observed_at": "2026-09-04T18:02:11Z",
+      "promotion": null,
+      "loyalty": null,
+      "page": 3,
+      "raw_text": ["…"],
+      "confidence": 0.92
+    }
+  ],
+  "warnings": []
 }
 ```
 
-`source_kind` is the kind the rows and the prices are stamped with. A re-imported Mercadona walk
-stamps `OFFICIAL_API`, because that is what observed the price, not the upload. `exported` is a
-hint the upload screen shows and never a lookup key: ids do not survive an environment change, and
-the admin names the chain and the scope at the upload, as for a leaflet. The digest index of
-`0081` section 7 applies to both kinds.
+What changed against `0081`'s shape, and nothing else: `offers` is `products`, because not every
+product is on offer. `external_id`, `product.ean`, `category_path`, `url` and `observed_at` are
+new and optional, and a product with no `external_id` is keyed on its name and format (D2), which
+is what every leaflet product is. `validity`, `pages` and `source` per product are optional, since
+a storefront price has no window and no page. `chain_id`, `price_scope_id` and `source_kind` at
+the top are **hints**: the upload screen preloads its inputs from them when the admin has not
+already chosen, and the admin's choice at the upload is what the run is spawned with. They are
+never a lookup key inside the harvester, because ids do not survive an environment change.
+`promotion`, `loyalty` and `pricing.basis` keep their meaning and their rules, and are simply
+absent on a product nobody printed a promotion for.
 
-**Out.** `harvest.export(runId)` answers a `harvest-export` document holding every row of the
-run's chain whose `lastRunId` is that run, with that run's price for that run's scope. The source
-group only: a decision is per environment and an `itemId` means nothing on another cluster, while
-an EAN carries and resolves there through rung 2. It is offered on a finished
-`CATALOG_DISCOVERY` or `FILE_IMPORT`, and it is a read, so it is not gated by
-`HARVEST_ENABLED`: exporting from a machine that crawled to a cluster that cannot is the point.
-A later run of the same chain moves rows out of that set as it observes them again, which the
-admin plan says on the button.
+**In.** `harvest.spawn` in mode `FILE_IMPORT` takes the document, the chain, the scope and the
+source kind, and validates the document once more in the harvester, as the leaflet spawn does
+today. `source_kind` is what the rows and the prices are stamped with. A re-imported Mercadona
+walk stamps `OFFICIAL_API`, because that is what observed the price, not the upload. The digest
+index of `0081` section 7 applies to every file.
+
+**Out.** `harvest.export(runId)` answers a `HarvestDocument` holding every row of the run's
+chain whose `lastRunId` is that run, with that run's price for that run's scope, `source_kind`
+set to the run's, and the three hints filled in. The source group only: a decision is per
+environment and an `itemId` means nothing on another cluster, while an EAN carries and resolves
+there through rung 2. It is offered on a finished `CATALOG_DISCOVERY` or `FILE_IMPORT`, and it
+is a read, so it is not gated by `HARVEST_ENABLED`: exporting from a machine that crawled to a
+cluster that cannot is the point. A later run of the same chain moves rows out of that set as it
+observes them again, which the admin plan says on the button.
 
 The round trip is what makes the cluster switch of `0083` and k8s `0008` livable: a walk runs on
 the compose stack where there is room for 4,383 requests, the export is uploaded to production,
@@ -410,8 +445,9 @@ The spawn's validation for `CATALOG_DISCOVERY` reads the source's `adapterKey`, 
 loads to refuse a disabled chain. `mercadona-api` requires `priceScopeId`, with the same sentence
 a refresh used: the scope to write the prices for. `deza-web` accepts one and ignores it, because
 the site prints no price and a required field that does nothing is a lie in a form.
-`FILE_IMPORT` needs a chain, a scope and a document, as the leaflet spawn does, and still no
-`SupermarketSource`.
+`FILE_IMPORT` needs a chain, a scope, a source kind and a document, as the leaflet spawn does
+minus the kind it assumed, and still no `SupermarketSource`. The source kind must be an official
+one: no upload may write a user kind, which is the rule `catalog.addPrices` already enforces.
 
 ## 10. The surface
 
@@ -438,7 +474,8 @@ handful of scopes.
 
 Gateway, under `admin/harvest/entries`: `GET`, `POST :id/accept`, `POST :id/item`,
 `POST :id/reject`. `admin/harvest/leaflets` becomes `admin/harvest/imports` and keeps its one
-`POST` and its 350 KB body limit, now for either document kind. `admin/harvest/runs/:id/export`
+`POST` and its body limit, raised from 350 KB to what a 4,232 product export needs, measured
+from a real one and stated in the DTO's own comment. `admin/harvest/runs/:id/export`
 is a `GET` answering the document as a download. The `admin/harvest/aliases` and
 `admin/harvest/item-refs` controllers are deleted.
 
@@ -449,8 +486,9 @@ becomes `SourceEntryAcceptResult` with the same three fields: the row, `pricesWr
 item created or null. `AcceptSourceAliasRequest` and `CreateItemFromSourceAliasRequest` become
 `AcceptSourceEntryRequest` and `CreateItemFromSourceEntryRequest`, the latter taking the same
 optional overrides the alias one did, with every field optional because the row already holds a
-default for each. `LeafletDocument` stays as it is and `HarvestExportDocument` arrives beside it,
-under the same `schemas/` directory and the same versioning rule.
+default for each. `LeafletDocument` becomes `HarvestDocument` in the same `schemas/` directory
+under the same versioning rule, at version 2, and the `leaflet-schema.spec.ts` fixtures move to
+it unchanged apart from the rename of `offers`.
 
 `openapi.json` and `wire-types.ts` are regenerated, and the wire types spec is what proves it.
 
@@ -509,10 +547,14 @@ Unit, no database:
   rest; availability is negative only for a walk that finished; an aborted walk writes what it
   fetched and asserts no absence.
 - `file-import.runner.spec.ts`: a leaflet document goes through the three rules and produces
-  observations with the right price or none, a loyalty tile produces no observation, a duplicate
-  key produces two with no price, and the warnings per offer are the ones the outcomes imply. A
-  `harvest-export` document passes through unchanged and stamps its own `source_kind`. The
-  existing El Jamon fixtures serve, and one export fixture is captured from a slot's walk.
+  observations with the right price or none, a loyalty product produces no observation, a
+  duplicate key produces two with no price, and the warnings per product are the ones the outcomes
+  imply. An exported walk, which carries no promotion, loyalty or basis, goes through the same
+  rules and comes out with every price intact. The existing El Jamon fixtures serve, renamed to
+  the new schema, and one export fixture is captured from a slot's walk.
+- `harvest-document.spec.ts`: the three El Jamon outputs and the export fixture validate against
+  version 2, and a document with a `kind` field or a `source_kind` outside the official ones is
+  refused.
 - `harvest-export.spec.ts`: an export of a run holds the rows it observed and their prices for its
   scope, and no decision. Importing an export into an empty chain reproduces the rows.
 - `deza-catalog.runner.spec.ts`: unchanged in what it asserts, moved onto the ingest.
@@ -559,7 +601,8 @@ green. Build, not only test: the backend services type check in the build and no
 - A finished walk exports a `harvest-export` document, and importing it into a chain with no rows
   reproduces the walk's rows, prices and ladder outcomes, stamped `OFFICIAL_API`.
 - `HarvestRunMode.REFRESH` and `LEAFLET_IMPORT` do not exist anywhere in the workspace, including
-  `openapi.json`. `FILE_IMPORT` accepts both document kinds.
+  `openapi.json`. `FILE_IMPORT` accepts one schema, `HarvestDocument`, and the leaflet extractor's
+  committed outputs validate against it.
 - Accepting a queued row writes every still valid scope price the row holds, each with the run
   that observed it, for a walk and a leaflet alike. A fuzzy match never writes a price. A rejected
   row is never asked about again. `name` is never rewritten by a decision.
