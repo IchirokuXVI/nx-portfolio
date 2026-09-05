@@ -443,9 +443,7 @@
       "PACK": "Pack"
     },
     "warning": {
-      "LOYALTY_REQUIRED": "Loyalty card only",
-      "CONDITIONAL_PRICE": "Price needs a quantity",
-      "DUPLICATE_KEY": "Two offers, one name",
+      "DUPLICATE_KEY": "Two products, one key",
       "REJECTED_ALIAS": "Rejected earlier",
       "CANDIDATE_MATCH": "A product was proposed",
       "NO_MATCH": "Nothing matched",

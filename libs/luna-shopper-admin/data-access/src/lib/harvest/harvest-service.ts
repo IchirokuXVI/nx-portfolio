@@ -209,59 +209,25 @@ export interface EntryQuery extends PageQuery {
 }
 
 /**
- * The three shapes backend plan `0086` adds to the gateway, mirrored here.
+ * The four shapes backend plan `0086` adds to the gateway, under this app's own
+ * names.
  *
- * Written by hand rather than read out of `Wire`, and only until that plan's
- * `openapi.json` and `wire-types.ts` are regenerated. Plan 0004 section 2's
- * exception says the generated shapes are this app's parameters and answers, so
- * these are swapped for `Wire.AcceptSourceEntryDto`,
- * `Wire.CreateItemFromSourceEntryDto`, `Wire.HarvestSourceEntryAcceptResult` and
- * `Wire.ImportHarvestDocumentDto` the moment the generator has written them.
- * They are structural, so the swap is this block and nothing else.
- */
-export interface AcceptSourceEntryInput {
-  readonly itemId: string;
-}
-
-/**
- * What an operator changed about the product a row is about to become.
+ * Aliases of the generated types rather than copies of them, which is plan 0004
+ * section 2's exception in force: the OpenAPI document describes these, so the
+ * generated shapes are this app's parameters and answers and a stale one is a
+ * red test rather than a silent drift. The names are here so that a call site
+ * says what it is sending rather than which gateway class the generator happened
+ * to name it after.
  *
- * **Every field optional**, which is the design rather than laxity: the row
- * already holds a default for each, the backend fills in what is absent, and the
- * screen sends only what was changed. An empty object is a legitimate create.
+ * `CreateItemFromEntryDto` has **every field optional**, which is the design
+ * rather than laxity: the row already holds a default for each, the backend
+ * fills in what is absent, and the screen sends only what was changed. An empty
+ * object is a legitimate create.
  */
-export interface CreateItemFromSourceEntryInput {
-  readonly name?: { readonly es?: string; readonly en?: string };
-  readonly brand?: string | null;
-  readonly ean?: string | null;
-  readonly unitSize?: number | null;
-  readonly category?: Wire.EnumsItemCategory;
-  readonly defaultUnit?: Wire.EnumsUnitOfMeasure;
-}
-
-export interface SourceEntryAcceptResult {
-  readonly entry: Wire.HarvestSourceCatalogEntryView;
-  /** How many `item_prices` rows the accept wrote. The confirmation names it. */
-  readonly pricesWritten: number;
-  /** The item this created, or null when it bound one the catalog already held. */
-  readonly createdItem: Wire.CatalogItemView | null;
-}
-
-/** What `POST /v1/admin/harvest/imports` takes (backend plan 0086, section 6.2). */
-export interface ImportHarvestDocumentInput {
-  readonly supermarketId: string;
-  readonly priceScopeId: string;
-  /**
-   * What the rows and the prices are stamped with.
-   *
-   * The operator picks it consciously: a Mercadona export imported here is an
-   * API price, not a leaflet price, because the upload is not what observed it.
-   */
-  readonly sourceKind: OfficialSourceKind;
-  readonly validFrom?: string;
-  readonly validUntil?: string;
-  readonly document: Readonly<Record<string, unknown>>;
-}
+export type AcceptSourceEntryInput = Wire.AcceptSourceEntryDto;
+export type CreateItemFromSourceEntryInput = Wire.CreateItemFromEntryDto;
+export type SourceEntryAcceptResult = Wire.HarvestSourceEntryAcceptResult;
+export type ImportHarvestDocumentInput = Wire.ImportHarvestDocumentDto;
 
 /**
  * The shops one source names (backend plan 0084, section 7).
