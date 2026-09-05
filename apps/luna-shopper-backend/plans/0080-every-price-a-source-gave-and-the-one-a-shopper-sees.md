@@ -1,3 +1,5 @@
+> **PR:** [#216](https://github.com/IchirokuXVI/nx-portfolio/pull/216)
+
 # 0080 Every price a source gave, and the one a shopper sees
 
 `SupermarketItem` holds one price per product per scope. One source wins by overwriting. There
