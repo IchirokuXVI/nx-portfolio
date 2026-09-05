@@ -59,16 +59,18 @@ part of the render and would trip that very check.
   MAIL_FROM: {{ $cfg.mailFrom | quote }}
   MAIL_VERIFY_BASE_URL: {{ $cfg.mailVerifyBaseUrl | quote }}
   MAIL_RESET_BASE_URL: {{ $cfg.mailResetBaseUrl | quote }}
-  # Comma-separated uuids of SERVICES allowed to write the catalog with no token
-  # (plan 0072, section 4). The harvester's actor id is the only member, and it is
-  # rendered from that one value below rather than restated, so the two cannot
-  # disagree. Empty when the harvester is switched off, which is both clusters.
+  # SERVICE_ACTOR_IDS and HARVESTER_ACTOR_ID ARE NOT HERE (plan 0081, section
+  # 11). They are the same uuid, naming the one SERVICE allowed to write the
+  # catalog with no token (plan 0072, section 4), and `provision-release.sh`
+  # generates it once per cluster into the per environment Secret: this
+  # ConfigMap belongs to the chart, and a helm upgrade would overwrite anything
+  # written into it.
   #
-  # This replaced `PLATFORM_ADMIN_USER_IDS`, and it is not the same list under a
-  # new name: an admin is now proved by a signature and cannot be granted from a
-  # ConfigMap at all. What is left here names machines, which is why a plain uuid
-  # is still enough.
-  SERVICE_ACTOR_IDS: {{ $harvest.actorId | default "" | quote }}
+  # That list replaced `PLATFORM_ADMIN_USER_IDS` and is not the same list under
+  # a new name: an admin is now proved by a signature and cannot be granted from
+  # a ConfigMap at all. What is left names machines, which is why a plain uuid
+  # is still enough and why moving it into a Secret is storage rather than
+  # secrecy.
   # The oldest velista build the gateway serves (velista plan 0034). Empty is the
   # resting value and switches it off entirely: no floor advertised, nobody refused.
   MIN_CLIENT_VERSION: {{ $cfg.minClientVersion | default "" | quote }}
@@ -102,6 +104,17 @@ part of the render and would trip that very check.
   # for. The comment is already stored and playable; this only stops a hung
   # provider holding a task behind a request that was answered.
   VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: {{ $cfg.voiceCommentTranscribeTimeoutMs | default 45000 | quote }}
+  # --- The leaflet upload (plan 0081, section 7) -----------------------------
+  #
+  # The one route on this gateway with a body limit of its own. Nest's JSON
+  # parser defaults to 100 KB and this gateway configured none, so every real
+  # leaflet (337 KB and 349 KB for the two committed extractions) was refused
+  # with a bare 413 before the route existed. The app is now created with no
+  # built in parser and mounts this path's own ahead of the default one.
+  #
+  # Gateway only. NATS carries 8 MB, so the broker needs nothing, and the
+  # harvester reads the document off a message rather than off a request.
+  LEAFLET_MAX_BYTES: {{ $cfg.leafletMaxBytes | default 2097152 | quote }}
   # --- The harvester (plan 0038) --------------------------------------------
   #
   # Rendered unconditionally, even with `harvester.enabled` false and no harvester
@@ -114,7 +127,11 @@ part of the render and would trip that very check.
   # false. There is no third: which chains may be fetched is a row per chain in
   # the harvester's own database, off by default, written from the back office
   # (plan 0083), so adding a chain never touches this file.
-  HARVESTER_ACTOR_ID: {{ $harvest.actorId | default "" | quote }}
+  #
+  # HARVESTER_ACTOR_ID is not here either, for the reason SERVICE_ACTOR_IDS is
+  # not (plan 0081, section 11): it is the same uuid, `provision-release.sh`
+  # generates it once per cluster, and the Secret is the only per environment
+  # store that script owns.
   HARVEST_ENABLED: {{ $harvest.harvestEnabled | default false | quote }}
   # An honest User-Agent naming the app and a contact address, never a browser
   # impersonation.

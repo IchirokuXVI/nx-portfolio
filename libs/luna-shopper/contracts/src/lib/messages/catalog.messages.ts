@@ -617,6 +617,28 @@ export type ItemPriceOverrides = Partial<
 >;
 
 /**
+ * What a leaflet printed beside a price, stored verbatim and read by nothing
+ * except the admin price history (plan 0081, section 6.4).
+ *
+ * It sits on its own table keyed by the price row rather than on `item_prices`
+ * itself: that table is read on every recompute, and a jsonb blob on every row
+ * is weight the hot path would pay for nothing.
+ *
+ * `promotion` and `loyalty` are the extractor objects exactly as they arrived.
+ * The importer reads `promotion.type` to decide which number is the price
+ * (section 6.2), and nothing reads either again.
+ */
+export interface ItemPriceDetails {
+  /** The leaflet tile id, so a row can be found in the stored document. */
+  offerId: string | null;
+  page: number | null;
+  /** Every text fragment the extractor assigned to the tile. */
+  rawText: string[];
+  promotion: Record<string, unknown> | null;
+  loyalty: Record<string, unknown> | null;
+}
+
+/**
  * One price a source gave (plan 0080, section 2).
  *
  * A row is an interval, not an event: `observedAt` is the first time this source
@@ -649,6 +671,11 @@ export interface ItemPriceView {
   overrides: ItemPriceOverrides | null;
   /** `ADMIN` rows only: `observedAt` plus seven days. */
   protectedUntil: string | null;
+  /**
+   * What a leaflet printed beside this price (plan 0081, section 6.4). Present
+   * only on the history read, and null for every row no leaflet wrote.
+   */
+  details: ItemPriceDetails | null;
 }
 
 /** One row of `price_policies` (plan 0080, section 3). Lower priority wins. */
@@ -1071,6 +1098,14 @@ export interface ItemPriceValues {
   observedAt?: string | null;
   validFrom?: string | null;
   validUntil?: string | null;
+  /**
+   * The leaflet tile behind this price (plan 0081, section 6.4). Stored on
+   * `item_price_details`, keyed by the row this write inserts, and read by
+   * nothing but the admin price history. Ignored when the write confirms an
+   * existing row rather than inserting one: the details belong to a row, and a
+   * confirmation writes no row.
+   */
+  details?: ItemPriceDetails | null;
 }
 
 /**

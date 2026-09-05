@@ -27,6 +27,7 @@ import {
   array,
   boolean,
   enumOf,
+  freeObject,
   integer,
   JsonSchema,
   nonEmptyString,
@@ -95,6 +96,7 @@ export const CATALOG_SCHEMA_IDS = {
   // Plan 0080: every price a source gave, and the policy that picks one.
   itemPriceOverride: schemaId('catalog/ItemPriceOverride'),
   itemPriceOverrides: schemaId('catalog/ItemPriceOverrides'),
+  itemPriceDetails: schemaId('catalog/ItemPriceDetails'),
   itemPriceView: schemaId('catalog/ItemPriceView'),
   itemPricePage: schemaId('catalog/ItemPricePage'),
   pricePolicyView: schemaId('catalog/PricePolicyView'),
@@ -179,6 +181,7 @@ export const CATALOG_SCHEMA_IDS = {
 } as const;
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
+const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
 /** A kind, or null for a materialized row no price row stands behind (plan 0080). */
 const nullableSourceKind = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
@@ -433,6 +436,23 @@ const itemPriceOverrides: JsonSchema = {
   type: 'object',
   additionalProperties: ref(CATALOG_SCHEMA_IDS.itemPriceOverride),
 };
+/**
+ * What a leaflet printed beside a price (plan 0081, section 6.4). Stored
+ * verbatim on its own table and read by nothing but the admin price history;
+ * `promotion` and `loyalty` are the extractor objects exactly as they arrived,
+ * so neither is described field by field here.
+ */
+const itemPriceDetails = object(
+  CATALOG_SCHEMA_IDS.itemPriceDetails,
+  {
+    offerId: nullableString(),
+    page: integerOrNull(),
+    rawText: array(string()),
+    promotion: { anyOf: [freeObject(), { type: 'null' }] },
+    loyalty: { anyOf: [freeObject(), { type: 'null' }] },
+  },
+  ['offerId', 'page', 'rawText', 'promotion', 'loyalty']
+);
 const itemPriceView = object(
   CATALOG_SCHEMA_IDS.itemPriceView,
   {
@@ -454,6 +474,9 @@ const itemPriceView = object(
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceOverrides), { type: 'null' }],
     },
     protectedUntil: nullableString(),
+    details: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceDetails), { type: 'null' }],
+    },
   },
   [
     'id',
@@ -472,6 +495,7 @@ const itemPriceView = object(
     'lastObservedRunId',
     'overrides',
     'protectedUntil',
+    'details',
   ]
 );
 const itemPricePage = paginated(
@@ -811,6 +835,12 @@ const itemPriceValues = {
   observedAt: nullableString(),
   validFrom: nullableString(),
   validUntil: nullableString(),
+  // The leaflet tile behind the row, when a leaflet import is writing it (plan
+  // 0081, section 6.4). Kept off `item_prices` itself: that table is read on
+  // every recompute.
+  details: {
+    anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceDetails), { type: 'null' }],
+  },
 };
 
 const addItemPriceRequest = object(
@@ -1439,6 +1469,7 @@ export const catalogSchemas: JsonSchema[] = [
   findItemByEanResult,
   itemPriceOverride,
   itemPriceOverrides,
+  itemPriceDetails,
   itemPriceView,
   itemPricePage,
   pricePolicyView,

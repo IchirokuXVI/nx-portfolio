@@ -2,6 +2,7 @@ import {
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from './base.entity';
@@ -56,9 +57,24 @@ export class HarvestRun extends BaseEntity {
   })
   status!: HarvestRunStatus;
 
-  /** The run's own input, kept so a re-run can repeat it exactly. */
+  /**
+   * The run's own input, kept so a re-run can repeat it exactly.
+   *
+   * For a LEAFLET_IMPORT this is **the uploaded document** (plan 0081, section
+   * 7). A full leaflet is 260 to 350 KB, which Postgres stores out of line and
+   * nothing reads on a hot path; plan 0082 reads it to revert, and accepting a
+   * queued alias reads it to write the price the alias was waiting for.
+   */
   @Column({ type: 'jsonb', default: () => `'{}'::jsonb` })
   input!: Record<string, unknown>;
+
+  /**
+   * The digest of that document, from `source.sha256`, null for every other
+   * mode. A partial unique index on (`supermarketId`, this) refuses a second
+   * upload of the same file for the same chain until the first run is reverted.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  documentSha256!: string | null;
 
   @Column({ type: 'timestamptz', default: () => 'now()' })
   requestedAt!: Date;
@@ -94,6 +110,14 @@ export class HarvestRun extends BaseEntity {
   notFound!: number;
 
   /**
+   * Offers a rule dropped or sent to the queue (plan 0081, section 7). Backlog
+   * 0001 listed this counter and plan 0038 dropped it because nothing skipped
+   * anything; a leaflet import does.
+   */
+  @Column({ type: 'integer', default: 0 })
+  skipped!: number;
+
+  /**
    * A failing work item does not fail the run: it is counted here and logged
    * with its external id and URL, and the worker takes the next item. A run fails
    * only when the source is unusable or this crosses a configured fraction of
@@ -107,6 +131,16 @@ export class HarvestRun extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   stageLabel!: string | null;
+
+  /**
+   * Every decision the run made that was not a write, with the offer it was
+   * about (plan 0081, section 7), so the run page reads as a list of them
+   * rather than as counters that lost their reasons. The extractor's own
+   * warnings are carried in here too, so the admin sees what the extractor
+   * lost beside what the import skipped.
+   */
+  @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
+  warnings!: HarvestRunWarning[];
 
   /**
    * Set by `harvest.abort`. The run cancels the in flight request through its
@@ -125,4 +159,16 @@ export class HarvestRun extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   requestedByUserId!: string | null;
+
+  /**
+   * When this run's writes were taken back. **Nullable and unwritten here**:
+   * plan 0082 owns the operation that fills it.
+   *
+   * It exists in this plan because the dedupe index has to name it (section 7):
+   * a reverted run must not block a corrected upload of the same document, and
+   * rebuilding a unique index on this table later is worse than one column the
+   * next plan fills.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  revertedAt!: Date | null;
 }

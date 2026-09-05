@@ -5,7 +5,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { EntityManager } from 'typeorm';
-import { ItemPrice, PriceScope } from '../entities';
+import { ItemPrice, ItemPriceDetailsRow, PriceScope } from '../entities';
 import {
   ADMIN_PROTECTION_DAYS,
   AUTOMATED_KINDS,
@@ -90,6 +90,11 @@ export async function writeItemPrices(
 
   const toInsert: ItemPrice[] = [];
   const toConfirm: ItemPrice[] = [];
+  /** The detail row each insert carries, by the price row it belongs to. */
+  const detailsFor = new Map<
+    ItemPrice,
+    NonNullable<ItemPriceBatchEntry['details']>
+  >();
   for (const entry of write.entries) {
     const values = normalize(entry, write.now);
     const held = currentByItem.get(entry.itemId);
@@ -128,6 +133,12 @@ export async function writeItemPrices(
       );
     }
     toInsert.push(row);
+    // The leaflet tile behind this number, when a leaflet import is writing
+    // (plan 0081, section 6.4). It belongs to the row, so a confirmation
+    // carries none: nothing new was said and no row was inserted.
+    if (entry.details) {
+      detailsFor.set(row, entry.details);
+    }
     // A second entry for the same item in one batch compares against the
     // first, as it would against a committed row.
     currentByItem.set(entry.itemId, row);
@@ -140,6 +151,23 @@ export async function writeItemPrices(
   }
   if (toConfirm.length > 0) {
     await manager.save(ItemPrice, toConfirm, { chunk: 200 });
+  }
+  if (detailsFor.size > 0) {
+    // After the prices, because the row is keyed by the id the save assigned.
+    await manager.save(
+      ItemPriceDetailsRow,
+      [...detailsFor].map(([row, details]) =>
+        manager.create(ItemPriceDetailsRow, {
+          itemPriceId: row.id,
+          offerId: details.offerId ?? null,
+          page: details.page ?? null,
+          rawText: details.rawText ?? null,
+          promotion: details.promotion ?? null,
+          loyalty: details.loyalty ?? null,
+        })
+      ),
+      { chunk: 200 }
+    );
   }
   outcome.inserted = toInsert;
   outcome.confirmed = toConfirm;

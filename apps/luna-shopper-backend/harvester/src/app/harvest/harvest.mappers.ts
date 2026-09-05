@@ -3,7 +3,9 @@ import type {
   DiscoveredPlaceView,
   HarvestRunView,
   ItemSourceRefView,
+  LeafletOffer,
   PostalCodeDiscoveryRequestView,
+  SourceAliasView,
   SourceCatalogEntryView,
   SourceLocationView,
   SupermarketSourceView,
@@ -13,6 +15,7 @@ import type {
   HarvestRun,
   ItemSourceRef,
   PostalCodeDiscoveryRequest,
+  SourceAlias,
   SourceCatalogEntry,
   SourceLocation,
   SupermarketSource,
@@ -66,13 +69,63 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     updated: row.updated,
     unchanged: row.unchanged,
     notFound: row.notFound,
+    skipped: row.skipped,
     failed: row.failed,
     stage: row.stage,
     stageLabel: row.stageLabel,
+    // Every decision the run made that was not a write (plan 0081, section 7).
+    // Defaulted rather than trusted: a run created before that column existed
+    // reads back as null through an older row cache.
+    warnings: row.warnings ?? [],
+    documentSha256: row.documentSha256 ?? null,
     abortRequestedAt: iso(row.abortRequestedAt),
     error: row.error,
     correlationId: row.correlationId,
     requestedByUserId: row.requestedByUserId,
+  };
+}
+
+/**
+ * One printed name a chain used (plan 0081, section 2), with the offer it is
+ * waiting on where the caller loaded it.
+ *
+ * The offer is **not** stored on the row. It belongs to the document the run
+ * kept, and copying its price here would be a second copy to go stale the first
+ * time a later leaflet prints the same string at a different number. The queue
+ * reads it back from the run instead, one document per page.
+ */
+export function toSourceAliasView(
+  row: SourceAlias,
+  offer?: LeafletOffer
+): SourceAliasView {
+  const unitPrice = offer?.pricing?.unit_price;
+  return {
+    id: row.id,
+    supermarketId: row.supermarketId,
+    aliasKey: row.aliasKey,
+    printedName: row.printedName,
+    printedFormat: row.printedFormat,
+    printedBrand: row.printedBrand,
+    itemId: row.itemId,
+    candidateItemId: row.candidateItemId,
+    candidateEntryId: row.candidateEntryId,
+    status: row.status,
+    matchedBy: row.matchedBy,
+    confidence: Number(row.confidence),
+    timesSeen: row.timesSeen,
+    firstSeenAt: row.firstSeenAt.toISOString(),
+    lastSeenAt: row.lastSeenAt.toISOString(),
+    firstRunId: row.firstRunId,
+    lastRunId: row.lastRunId,
+    offerPrice: offer?.pricing?.price?.amount ?? null,
+    offerCurrency: offer?.pricing?.price?.currency ?? null,
+    offerUnitPrice:
+      typeof unitPrice?.amount === 'number' ? unitPrice.amount : null,
+    offerUnitPriceLabel: unitPrice?.per ?? null,
+    offerPage: offer?.page ?? null,
+    offerRawText: offer?.raw_text ?? [],
+    offerConfidence:
+      typeof offer?.confidence === 'number' ? offer.confidence : null,
   };
 }
 

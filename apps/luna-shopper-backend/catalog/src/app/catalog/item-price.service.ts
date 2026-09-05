@@ -157,6 +157,10 @@ export class ItemPriceService {
       .createQueryBuilder('p')
       .where('p."itemId" = :itemId', { itemId: req.itemId })
       .andWhere('p."priceScopeId" = :scopeId', { scopeId: req.priceScopeId })
+      // The one read that wants what a leaflet printed beside the number
+      // (plan 0081, section 6.4). Left joined here and nowhere else: the
+      // recompute reads this table on every write and must not pay for it.
+      .leftJoinAndSelect('p.details', 'details')
       .orderBy('p.observedAt', 'DESC')
       .addOrderBy('p.id', 'DESC')
       .take(limit + 1);

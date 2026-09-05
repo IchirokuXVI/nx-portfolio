@@ -52,6 +52,27 @@ export const APP_BASE_URL_LOCALE_PLACEHOLDER = '{locale}';
 export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
 
 /**
+ * 2 MB, the default cap on an uploaded leaflet (plan 0081, section 7).
+ *
+ * The arithmetic it belongs to: the two full El Jamon extractions are 337 KB
+ * and 349 KB, a full leaflet read by a model is about 260 KB, and NATS carries
+ * 8 MB, so the broker needs nothing. What the route needs is a limit at all:
+ * Nest's JSON body parser defaults to 100 KB and this gateway configured none,
+ * so **every real leaflet was refused with a bare 413** until this existed.
+ */
+export const DEFAULT_LEAFLET_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * 100 KB, the cap on every other JSON body, which is Express's own default
+ * stated rather than inherited.
+ *
+ * Since the app is created with `bodyParser: false` so the leaflet route can
+ * have its own limit, the default parser is mounted by hand, and a default that
+ * is not written down is one nobody can find when a body is refused.
+ */
+export const DEFAULT_JSON_MAX_BYTES = 100 * 1024;
+
+/**
  * An absolute http(s) URL that may carry {@link APP_BASE_URL_LOCALE_PLACEHOLDER}.
  *
  * `Joi.string().uri()` cannot be used directly: braces are not valid URI
@@ -206,6 +227,20 @@ export const gatewayValidationSchema = Joi.object({
     .min(1000)
     .default(45000),
 
+  /**
+   * The byte cap on an uploaded leaflet (plan 0081, section 7).
+   *
+   * Its own number rather than a share of the audio caps above, for the reason
+   * they are separate from each other: three routes with three audiences, and
+   * tuning one should not move the others. The floor is 64 KB because a leaflet
+   * smaller than that is not one, and validated by Joi like every other number
+   * so a typo fails the process at boot.
+   */
+  LEAFLET_MAX_BYTES: Joi.number()
+    .integer()
+    .min(64 * 1024)
+    .default(DEFAULT_LEAFLET_MAX_BYTES),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -255,6 +290,8 @@ export interface GatewayConfig {
   minClientVersion: string;
   /** The byte cap the voice route's multipart interceptor enforces (plan 0041). */
   assistantAudioMaxBytes: number;
+  /** The byte cap the leaflet upload route's own JSON parser holds (plan 0081). */
+  leafletMaxBytes: number;
   /** The voice comment route's own caps (plan 0045). */
   voiceComment: {
     maxBytes: number;
@@ -322,6 +359,9 @@ export const gatewayConfiguration = registerAs(
     minClientVersion: process.env.MIN_CLIENT_VERSION ?? '',
     assistantAudioMaxBytes: Number(
       process.env.ASSISTANT_AUDIO_MAX_BYTES ?? DEFAULT_AUDIO_MAX_BYTES
+    ),
+    leafletMaxBytes: Number(
+      process.env.LEAFLET_MAX_BYTES ?? DEFAULT_LEAFLET_MAX_BYTES
     ),
     voiceComment: {
       maxBytes: Number(

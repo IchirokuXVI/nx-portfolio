@@ -17,6 +17,7 @@ import {
   domainEventContracts,
   realtimeEventSchemas,
 } from './events/realtime.schemas';
+import { leafletSchemas } from './leaflet';
 import {
   accountMessageContracts,
   accountSchemas,
@@ -124,6 +125,11 @@ export const allSchemas: JsonSchema[] = [
   ...realtimeEventSchemas,
   ...postalCodeEventSchemas,
   ...catalogEventSchemas,
+  // The uploaded leaflet contract (plan 0081, section 4). Not a message payload:
+  // it is a document an admin uploads, validated by the gateway before it
+  // crosses the broker and by the harvester again at run start. It rides in the
+  // same Ajv instance so `validateSchema` finds it by its own `$id`.
+  ...leafletSchemas,
 ];
 
 export const messageSubjects = Object.keys(messageContracts);

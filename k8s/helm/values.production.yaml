@@ -181,6 +181,17 @@ lunaShopperBackend:
   # note beside `backupSchedule` in values.yaml.
   harvester:
     enabled: true
+    # The second switch, on since plan 0081 section 11: an admin uploading a
+    # leaflet is a run, and a pod that exists and refuses every spawn cannot
+    # import one. Which chains may be fetched is a row per chain in the
+    # harvester's own database (plan 0083), every one of them off, and an
+    # upload touches no storefront at all.
+    #
+    # The actor id is no longer a values field: `provision-release.sh` generates
+    # it into the per environment Secret and both catalog and the harvester read
+    # it from there. Run `--check --env production` before the first deploy that
+    # carries this, which is what asserts the key is actually in the cluster.
+    harvestEnabled: true
 
   # The reference catalog, off (plan 0067), and this is a deliberate difference
   # from staging rather than an oversight.

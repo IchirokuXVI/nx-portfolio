@@ -25,6 +25,7 @@ import {
   HARVEST_PATTERNS,
   ITEM_SOURCE_REF_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
+  SOURCE_ALIAS_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
 } from '../lib/messages/harvest.messages';
@@ -88,6 +89,7 @@ describe('contract schemas', () => {
       ...Object.values(DISCOVERED_PLACE_PATTERNS),
       ...Object.values(ITEM_SOURCE_REF_PATTERNS),
       ...Object.values(SOURCE_ENTRY_PATTERNS),
+      ...Object.values(SOURCE_ALIAS_PATTERNS),
       ...Object.values(SUPERMARKET_SOURCE_PATTERNS),
       ...Object.values(POSTAL_CODE_DISCOVERY_PATTERNS),
       ...Object.values(STATS_PATTERNS),
@@ -782,9 +784,15 @@ describe('contract schemas', () => {
           updated: 0,
           unchanged: 0,
           notFound: 0,
+          // Nothing a store discovery run does is skipped by a rule, and it
+          // reads no document: both fields are stated rather than left out
+          // (plan 0081, section 7).
+          skipped: 0,
           failed: 0,
           stage: 'OVERPASS',
           stageLabel: 'Querying OpenStreetMap',
+          warnings: [],
+          documentSha256: null,
           abortRequestedAt: null,
           error: null,
           correlationId: 'c',
@@ -856,6 +864,9 @@ describe('contract schemas', () => {
           lastObservedRunId: null,
           overrides: { OFFICIAL_API: { price: 1.19, unitPrice: null } },
           protectedUntil: '2026-09-12T10:00:00.000Z',
+          // No leaflet wrote this row, so it has no tile behind it (plan 0081,
+          // section 6.4).
+          details: null,
         }).valid
       ).toBe(true);
     });

@@ -320,8 +320,10 @@ lunaShopperBackend:
     # There is deliberately no admin list here any more (plan 0072). Writing the
     # catalog is proved by a signature the service verifies for itself, so an
     # admin is created with one database write and no restart, and no value in
-    # this file can grant the role. What services may write catalog is rendered
-    # into `SERVICE_ACTOR_IDS` from `harvester.actorId` below.
+    # this file can grant the role. What services may write catalog is
+    # `SERVICE_ACTOR_IDS`, which comes from the per environment Secret that
+    # `provision-release.sh` writes rather than from this file (plan 0081,
+    # section 11).
     # The oldest velista build this deployment will serve (velista plan 0034).
     #
     # Empty switches the mechanism off, which is how both clusters run: the gateway
@@ -398,16 +400,21 @@ lunaShopperBackend:
   harvester:
     enabled: false
 
-    # The uuid the harvester writes to catalog as (backlog 0001, section 4.1;
-    # plan 0072, section 4). It is the single source for catalog's
-    # `SERVICE_ACTOR_IDS`, rendered from this value in the ConfigMap rather than
-    # restated beside it, so the pair cannot drift.
+    # THE ACTOR ID IS NOT HERE ANY MORE (plan 0081, section 11).
     #
-    # It used to have to appear in `config.platformAdminUserIds` too, which made
-    # the harvester an admin. It is a service, and catalog now has a separate door
-    # for services. Empty means the harvester cannot write anything, which is the
-    # safe default and exactly what it should do when nobody has set it up.
-    actorId: ''
+    # The uuid the harvester writes to catalog as (backlog 0001, section 4.1;
+    # plan 0072, section 4) is generated once per cluster by
+    # `provision-release.sh` and kept in the per environment Secret, and both
+    # `HARVESTER_ACTOR_ID` and catalog's `SERVICE_ACTOR_IDS` are read from that
+    # one key, so the pair still cannot drift.
+    #
+    # A uuid is not a secret, and it was a ConfigMap value for exactly that
+    # reason. What moved it is that it has to EXIST in both clusters now: an
+    # import writes prices, `CatalogClient.actor()` throws without an id, and
+    # the Secret is the only per cluster store the provisioning script owns. The
+    # chart owns the ConfigMap and would overwrite anything written there.
+    # `--check` then asserts the key exists before a deploy, which a values file
+    # somebody forgot to edit could never do.
 
     # Whether the pod may start a run at all. Separate from `enabled` on purpose:
     # bringing the service up and letting it fetch from a third party are two

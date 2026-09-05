@@ -9,6 +9,13 @@
 // does not contradict rule D4, is admin plan 0004, section 2.
 
 /**
+ * `AcceptSourceAliasDto` in the gateway's OpenAPI document.
+ */
+export type AcceptSourceAliasDto = {
+  itemId: string;
+};
+
+/**
  * `AddCommentDto` in the gateway's OpenAPI document.
  */
 export type AddCommentDto = {
@@ -181,6 +188,30 @@ export type CreateItemDto = {
 };
 
 /**
+ * `CreateItemFromAliasDto` in the gateway's OpenAPI document.
+ */
+export type CreateItemFromAliasDto = {
+  name: LocalizedNameDto;
+  brand?: string | null;
+  ean?: string | null;
+  unitSize?: number | null;
+  category:
+    | 'PRODUCE'
+    | 'DAIRY'
+    | 'BAKERY'
+    | 'MEAT'
+    | 'SEAFOOD'
+    | 'FROZEN'
+    | 'BEVERAGES'
+    | 'SNACKS'
+    | 'PANTRY'
+    | 'HOUSEHOLD'
+    | 'PERSONAL_CARE'
+    | 'OTHER';
+  defaultUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
+};
+
+/**
  * `CreateItemFromEntryDto` in the gateway's OpenAPI document.
  */
 export type CreateItemFromEntryDto = {
@@ -314,6 +345,19 @@ export type ImportDiscoveredPlaceDto = {
 };
 
 /**
+ * `ImportLeafletDto` in the gateway's OpenAPI document.
+ */
+export type ImportLeafletDto = {
+  supermarketId: string;
+  priceScopeId: string;
+  validFrom?: string;
+  validUntil?: string;
+  document: {
+    [key: string]: unknown;
+  };
+};
+
+/**
  * `JoinGeneratedListDto` in the gateway's OpenAPI document.
  */
 export type JoinGeneratedListDto = {
@@ -334,6 +378,14 @@ export type JoinZoneDto = {
 export type ListAccessEntryDto = {
   membershipId: string;
   permissions: ('READ' | 'WRITE' | 'DECIDE' | 'MANAGE')[];
+};
+
+/**
+ * `LocalizedNameDto` in the gateway's OpenAPI document.
+ */
+export type LocalizedNameDto = {
+  es?: string;
+  en?: string;
 };
 
 /**
@@ -641,7 +693,7 @@ export type SettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
  * `SpawnHarvestRunDto` in the gateway's OpenAPI document.
  */
 export type SpawnHarvestRunDto = {
-  mode: 'STORE_DISCOVERY' | 'CATALOG_DISCOVERY' | 'REFRESH';
+  mode: 'STORE_DISCOVERY' | 'CATALOG_DISCOVERY' | 'REFRESH' | 'LEAFLET_IMPORT';
   supermarketId?: string;
   priceScopeId?: string;
   postalCode?: string;
@@ -1318,6 +1370,25 @@ export type CatalogItemPage = {
 };
 
 /**
+ * `catalog.ItemPriceDetails` in the gateway's OpenAPI document.
+ */
+export type CatalogItemPriceDetails = {
+  offerId: string | null;
+  page: number | null;
+  rawText: string[];
+  promotion:
+    | {
+        [key: string]: unknown;
+      }
+    | unknown;
+  loyalty:
+    | {
+        [key: string]: unknown;
+      }
+    | unknown;
+};
+
+/**
  * `catalog.ItemPriceOverride` in the gateway's OpenAPI document.
  */
 export type CatalogItemPriceOverride = {
@@ -1362,6 +1433,7 @@ export type CatalogItemPriceView = {
   lastObservedRunId: string | null;
   overrides: CatalogItemPriceOverrides | unknown;
   protectedUntil: string | null;
+  details: CatalogItemPriceDetails | unknown;
 };
 
 /**
@@ -1734,7 +1806,8 @@ export type EnumsGenerationScope = 'ALL' | 'SELECTED';
 export type EnumsHarvestRunMode =
   | 'STORE_DISCOVERY'
   | 'CATALOG_DISCOVERY'
-  | 'REFRESH';
+  | 'REFRESH'
+  | 'LEAFLET_IMPORT';
 
 /**
  * `enums.HarvestRunStatus` in the gateway's OpenAPI document.
@@ -1751,6 +1824,19 @@ export type EnumsHarvestRunStatus =
  * `enums.HarvestRunTrigger` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestRunTrigger = 'MANUAL' | 'SCHEDULED' | 'SYSTEM';
+
+/**
+ * `enums.HarvestWarningCode` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestWarningCode =
+  | 'LOYALTY_REQUIRED'
+  | 'CONDITIONAL_PRICE'
+  | 'DUPLICATE_KEY'
+  | 'REJECTED_ALIAS'
+  | 'CANDIDATE_MATCH'
+  | 'NO_MATCH'
+  | 'ALREADY_QUEUED'
+  | 'EXTRACTOR';
 
 /**
  * `enums.ItemCategory` in the gateway's OpenAPI document.
@@ -1872,6 +1958,15 @@ export type EnumsProfilePostalCodeSource = 'TYPED' | 'DEVICE' | 'NEARBY';
  * `enums.SettlementOutcome` in the gateway's OpenAPI document.
  */
 export type EnumsSettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
+
+/**
+ * `enums.SourceAliasStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsSourceAliasStatus =
+  | 'ACTIVE'
+  | 'CANDIDATE'
+  | 'UNRESOLVED'
+  | 'REJECTED';
 
 /**
  * `enums.SourceLocationStatus` in the gateway's OpenAPI document.
@@ -2313,13 +2408,27 @@ export type HarvestHarvestRunView = {
   updated: number;
   unchanged: number;
   notFound: number;
+  skipped: number;
   failed: number;
   stage: string | null;
   stageLabel: string | null;
+  warnings: HarvestHarvestRunWarning[];
+  documentSha256: string | null;
   abortRequestedAt: string | null;
   error: string | null;
   correlationId: string | null;
   requestedByUserId: string | null;
+};
+
+/**
+ * `harvest.HarvestRunWarning` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunWarning = {
+  code: EnumsHarvestWarningCode;
+  offerId: string | null;
+  page: number | null;
+  name: string | null;
+  message: string;
 };
 
 /**
@@ -2346,6 +2455,55 @@ export type HarvestItemSourceRefView = {
   confidence: number;
   lastResolvedAt: string | null;
   lastSeenAt: string | null;
+};
+
+/**
+ * `harvest.SourceAliasAcceptResult` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceAliasAcceptResult = {
+  alias: HarvestSourceAliasView;
+  pricesWritten: number;
+  item: CatalogItemView | unknown;
+};
+
+/**
+ * `harvest.SourceAliasPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestSourceAliasPage = {
+  items: HarvestSourceAliasView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.SourceAliasView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceAliasView = {
+  id: string;
+  supermarketId: string;
+  aliasKey: string;
+  printedName: string;
+  printedFormat: string | null;
+  printedBrand: string | null;
+  itemId: string | null;
+  candidateItemId: string | null;
+  candidateEntryId: string | null;
+  status: EnumsSourceAliasStatus;
+  matchedBy: EnumsItemSourceMatch;
+  confidence: number;
+  timesSeen: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  firstRunId: string | null;
+  lastRunId: string | null;
+  offerPrice: number | null;
+  offerCurrency: string | null;
+  offerUnitPrice: number | null;
+  offerUnitPriceLabel: string | null;
+  offerPage: number | null;
+  offerRawText: string[];
+  offerConfidence: number | null;
 };
 
 /**

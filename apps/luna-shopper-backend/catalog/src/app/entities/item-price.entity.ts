@@ -2,8 +2,16 @@ import {
   PriceSourceKind,
   type ItemPriceOverrides,
 } from '@portfolio/luna-shopper/contracts';
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  OneToOne,
+} from 'typeorm';
 import { BaseEntity } from './base.entity';
+import { ItemPriceDetailsRow } from './item-price-details.entity';
 import { Item } from './item.entity';
 import { PriceScope } from './price-scope.entity';
 
@@ -112,4 +120,15 @@ export class ItemPrice extends BaseEntity {
   /** `ADMIN` rows only: `observedAt` plus seven days. */
   @Column({ type: 'timestamptz', nullable: true })
   protectedUntil!: Date | null;
+
+  /**
+   * What a leaflet printed beside this number (plan 0081, section 6.4).
+   *
+   * A separate table and **never eager**: this row is read on every recompute
+   * of the effective price, and the details are read only by the admin's price
+   * history. Undefined here means the relation was not loaded, which every
+   * caller but that one leaves alone.
+   */
+  @OneToOne(() => ItemPriceDetailsRow, (details) => details.itemPrice)
+  details?: ItemPriceDetailsRow | null;
 }

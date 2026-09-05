@@ -25,8 +25,14 @@ import {
   getRequestContext,
 } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
-import { ActiveRunExistsError, HarvestRunStore } from './harvest-run.store';
+import {
+  ActiveRunExistsError,
+  DocumentAlreadyImportedError,
+  HarvestRunStore,
+} from './harvest-run.store';
 import { toHarvestRunView } from './harvest.mappers';
+import { readLeafletDocument } from './leaflet-document.reader';
+import { resolveLeafletWindow } from './leaflet-validity';
 import { PlatformAdminService } from './platform-admin.service';
 import { RunExecutor } from './run-executor.service';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -96,17 +102,24 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const { supermarketId, priceScopeId, payload } = this.validate(req);
+    const { supermarketId, priceScopeId, payload, documentSha256 } =
+      this.validate(req);
     const source = supermarketId
       ? await this.sources.findBySupermarket(supermarketId)
       : null;
-    if (supermarketId && !source) {
+    // A LEAFLET_IMPORT needs no source and must not be refused for wanting one
+    // (plan 0081, section 1). `SupermarketSource` is fetching configuration, an
+    // upload fetches nothing, and a chain that publishes only leaflets has no
+    // row at all. The run still carries `sourceId: null` where the chain does
+    // have one, because no source was used.
+    const needsSource = req.mode !== HarvestRunMode.LEAFLET_IMPORT;
+    if (needsSource && supermarketId && !source) {
       throw new ValidationException(
         'That supermarket has no configured source. Create one with ' +
           'supermarketSource.upsert before starting a run.'
       );
     }
-    if (source && !source.enabled) {
+    if (needsSource && source && !source.enabled) {
       throw new ValidationException(
         'That source is disabled. Enable it with supermarketSource.setEnabled.'
       );
@@ -117,11 +130,12 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         mode: req.mode,
         trigger: HarvestRunTrigger.MANUAL,
         supermarketId,
-        sourceId: source?.id ?? null,
+        sourceId: needsSource ? (source?.id ?? null) : null,
         priceScopeId,
         requestedByUserId: req.userId,
         correlationId: getRequestContext()?.correlationId ?? null,
         payload,
+        documentSha256,
       });
       // The reaper compares heartbeats, so a run gets one the moment it exists
       // rather than when it starts working: a process that dies in between would
@@ -130,6 +144,17 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       this.executor.start(run.id);
       return toHarvestRunView(run);
     } catch (error) {
+      if (error instanceof DocumentAlreadyImportedError) {
+        // A different sentence from the one below, because the next step is
+        // different: this file is already imported, and importing it again
+        // means reverting that run first (plan 0081, section 7).
+        throw new ConflictException(
+          error.existingRunId
+            ? `That document has already been imported for this chain by run ` +
+                `${error.existingRunId}. Revert that run to import it again.`
+            : 'That document has already been imported for this chain'
+        );
+      }
       if (error instanceof ActiveRunExistsError) {
         // A 409 carrying the active run's id, so the caller can watch that one
         // instead of guessing (section 7).
@@ -231,7 +256,11 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     supermarketId: string | null;
     priceScopeId: string | null;
     payload: Record<string, unknown>;
+    documentSha256: string | null;
   } {
+    if (req.mode === HarvestRunMode.LEAFLET_IMPORT) {
+      return this.validateLeaflet(req);
+    }
     if (req.mode === HarvestRunMode.STORE_DISCOVERY) {
       if (!req.postalCode) {
         throw new ValidationException(
@@ -241,6 +270,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       return {
         supermarketId: null,
         priceScopeId: null,
+        documentSha256: null,
         payload: {
           postalCode: req.postalCode,
           country: req.country ?? 'es',
@@ -264,9 +294,71 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     return {
       supermarketId: req.supermarketId,
       priceScopeId: req.priceScopeId ?? null,
+      documentSha256: null,
       payload: {
         supermarketId: req.supermarketId,
         priceScopeId: req.priceScopeId ?? null,
+      },
+    };
+  }
+
+  /**
+   * A leaflet import needs a chain, a scope and a document (plan 0081, section
+   * 1), and its validity has to resolve before the run exists.
+   *
+   * The document is validated **here**, in the harvester, because the harvester
+   * owns the schema version and a broker message is not a trusted input: the
+   * gateway's own validation is the first of the two the plan asks for, not the
+   * only one.
+   *
+   * The window is resolved here too, so a run with a null bound is refused
+   * before it is inserted rather than failing eighteen offers in, and so the
+   * instants are stored on the run for an alias accept to write with later
+   * (section 3).
+   */
+  private validateLeaflet(req: SpawnHarvestRunRequest): {
+    supermarketId: string | null;
+    priceScopeId: string | null;
+    payload: Record<string, unknown>;
+    documentSha256: string | null;
+  } {
+    if (!req.supermarketId) {
+      throw new ValidationException(
+        'A leaflet import needs the chain the leaflet is from. `chain_id` in ' +
+          'the document is a hint the upload screen shows, never a lookup key.'
+      );
+    }
+    if (!req.priceScopeId) {
+      throw new ValidationException(
+        'A leaflet import needs the price scope to write the prices for. Most ' +
+          'leaflets are nationwide, so that is usually the chain NATIONAL scope.'
+      );
+    }
+    if (!req.document) {
+      throw new ValidationException('A leaflet import needs a document.');
+    }
+
+    const document = readLeafletDocument(req.document);
+    const window = resolveLeafletWindow({
+      documentStartsOn: document.validity.starts_on,
+      documentEndsOn: document.validity.ends_on,
+      overrideFrom: req.validFrom,
+      overrideUntil: req.validUntil,
+    });
+
+    return {
+      supermarketId: req.supermarketId,
+      priceScopeId: req.priceScopeId,
+      documentSha256: document.source.sha256,
+      payload: {
+        supermarketId: req.supermarketId,
+        priceScopeId: req.priceScopeId,
+        // The resolved instants, not the local days: the runner writes them
+        // onto every price row and an accept reads them back to decide whether
+        // this import is still open.
+        validFrom: window.validFrom.toISOString(),
+        validUntil: window.validUntil.toISOString(),
+        document,
       },
     };
   }

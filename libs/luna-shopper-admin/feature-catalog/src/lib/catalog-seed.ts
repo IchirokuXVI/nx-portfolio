@@ -304,6 +304,7 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     lastObservedRunId: null,
     overrides: { OFFICIAL_API: { price: 8.9, unitPrice: 8.9 } },
     protectedUntil: '2026-09-10T09:40:00.000Z',
+    details: null,
   },
   {
     id: 'ip_oil_4661_api',
@@ -322,6 +323,7 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     lastObservedRunId: 'run_2026_09_05',
     overrides: null,
     protectedUntil: null,
+    details: null,
   },
   {
     id: 'ip_milk_4661_api',
@@ -340,6 +342,7 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     lastObservedRunId: 'run_2026_08_20',
     overrides: null,
     protectedUntil: null,
+    details: null,
   },
   {
     id: 'ip_milk_consum_admin',
@@ -359,6 +362,7 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     // Nothing automated prices Consum, so there was nothing to override.
     overrides: {},
     protectedUntil: '2026-09-04T18:05:00.000Z',
+    details: null,
   },
 ];
 

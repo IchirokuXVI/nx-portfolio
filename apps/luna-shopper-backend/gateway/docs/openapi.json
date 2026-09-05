@@ -17489,7 +17489,8 @@
               "enum": [
                 "STORE_DISCOVERY",
                 "CATALOG_DISCOVERY",
-                "REFRESH"
+                "REFRESH",
+                "LEAFLET_IMPORT"
               ]
             }
           },
@@ -17687,6 +17688,526 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/harvest.HarvestRunView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/leaflets": {
+      "post": {
+        "operationId": "AdminHarvestLeafletsController_importLeaflet_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportLeafletDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `harvest.spawn` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestRunView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/supermarkets/{supermarketId}/aliases": {
+      "get": {
+        "operationId": "AdminHarvestAliasesController_list_v1",
+        "parameters": [
+          {
+            "name": "supermarketId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Absent lists CANDIDATE and UNRESOLVED, which is the queue: the rows waiting for a person.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "CANDIDATE",
+                "UNRESOLVED",
+                "REJECTED"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `sourceAlias.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceAliasPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/aliases/{id}/accept": {
+      "post": {
+        "operationId": "AdminHarvestAliasDecisionsController_accept_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptSourceAliasDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `sourceAlias.accept` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceAliasAcceptResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/aliases/{id}/item": {
+      "post": {
+        "operationId": "AdminHarvestAliasDecisionsController_createItem_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItemFromAliasDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `sourceAlias.createItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceAliasAcceptResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/aliases/{id}/reject": {
+      "post": {
+        "operationId": "AdminHarvestAliasDecisionsController_reject_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `sourceAlias.reject` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SourceAliasView"
                 }
               }
             }
@@ -19337,7 +19858,8 @@
               "enum": [
                 "STORE_DISCOVERY",
                 "CATALOG_DISCOVERY",
-                "REFRESH"
+                "REFRESH",
+                "LEAFLET_IMPORT"
               ]
             }
           },
@@ -21908,7 +22430,8 @@
             "enum": [
               "STORE_DISCOVERY",
               "CATALOG_DISCOVERY",
-              "REFRESH"
+              "REFRESH",
+              "LEAFLET_IMPORT"
             ]
           },
           "supermarketId": {
@@ -21948,6 +22471,121 @@
         },
         "required": [
           "mode"
+        ]
+      },
+      "ImportLeafletDto": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chain this leaflet is from. The document `retailer.chain_id` is a hint the upload screen shows beside this picker and is never a lookup key: two extractors spell one chain two ways."
+          },
+          "priceScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The scope the prices are written for. Most leaflets are nationwide, so usually the chain NATIONAL scope, which then reaches every scope of that chain."
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date",
+            "description": "Override the document `validity.starts_on`, as a local day in Spain. Required when the document states none: the backend refuses a run with a null bound."
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date",
+            "description": "Override the document `validity.ends_on`, as a local day in Spain. Inclusive: a leaflet valid to the 23rd is valid through the whole of the 23rd."
+          },
+          "document": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The leaflet, as `tmp/leaflet` produced it. Validated against the versioned import schema this backend can read; a document that fails is answered 400 with every failure named by its JSON path and its offer id."
+          }
+        },
+        "required": [
+          "supermarketId",
+          "priceScopeId",
+          "document"
+        ]
+      },
+      "AcceptSourceAliasDto": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "itemId"
+        ]
+      },
+      "LocalizedNameDto": {
+        "type": "object",
+        "properties": {
+          "es": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "en": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "CreateItemFromAliasDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/LocalizedNameDto"
+          },
+          "brand": {
+            "type": "string",
+            "maxLength": 120,
+            "nullable": true
+          },
+          "ean": {
+            "type": "string",
+            "maxLength": 32,
+            "nullable": true
+          },
+          "unitSize": {
+            "type": "number",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "PRODUCE",
+              "DAIRY",
+              "BAKERY",
+              "MEAT",
+              "SEAFOOD",
+              "FROZEN",
+              "BEVERAGES",
+              "SNACKS",
+              "PANTRY",
+              "HOUSEHOLD",
+              "PERSONAL_CARE",
+              "OTHER"
+            ]
+          },
+          "defaultUnit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "KILOGRAM",
+              "MILLILITER",
+              "LITER",
+              "PACK"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "defaultUnit"
         ]
       },
       "ImportDiscoveredPlaceDto": {
@@ -23434,6 +24072,59 @@
           }
         }
       },
+      "catalog.ItemPriceDetails": {
+        "type": "object",
+        "properties": {
+          "offerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "rawText": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "promotion": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "loyalty": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "offerId",
+          "page",
+          "rawText",
+          "promotion",
+          "loyalty"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ItemPriceOverride": {
         "type": "object",
         "properties": {
@@ -23574,6 +24265,16 @@
               "string",
               "null"
             ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ItemPriceDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -23592,7 +24293,8 @@
           "sourceRunId",
           "lastObservedRunId",
           "overrides",
-          "protectedUntil"
+          "protectedUntil",
+          "details"
         ],
         "additionalProperties": false
       },
@@ -24650,7 +25352,8 @@
         "enum": [
           "STORE_DISCOVERY",
           "CATALOG_DISCOVERY",
-          "REFRESH"
+          "REFRESH",
+          "LEAFLET_IMPORT"
         ]
       },
       "enums.HarvestRunStatus": {
@@ -24670,6 +25373,19 @@
           "MANUAL",
           "SCHEDULED",
           "SYSTEM"
+        ]
+      },
+      "enums.HarvestWarningCode": {
+        "type": "string",
+        "enum": [
+          "LOYALTY_REQUIRED",
+          "CONDITIONAL_PRICE",
+          "DUPLICATE_KEY",
+          "REJECTED_ALIAS",
+          "CANDIDATE_MATCH",
+          "NO_MATCH",
+          "ALREADY_QUEUED",
+          "EXTRACTOR"
         ]
       },
       "enums.ItemCategory": {
@@ -24809,6 +25525,15 @@
         "enum": [
           "BOUGHT",
           "NOT_AVAILABLE"
+        ]
+      },
+      "enums.SourceAliasStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "CANDIDATE",
+          "UNRESOLVED",
+          "REJECTED"
         ]
       },
       "enums.SourceLocationStatus": {
@@ -26228,6 +26953,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "skipped": {
+            "type": "integer",
+            "minimum": 0
+          },
           "failed": {
             "type": "integer",
             "minimum": 0
@@ -26239,6 +26968,18 @@
             ]
           },
           "stageLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.HarvestRunWarning"
+            }
+          },
+          "documentSha256": {
             "type": [
               "string",
               "null"
@@ -26286,13 +27027,53 @@
           "updated",
           "unchanged",
           "notFound",
+          "skipped",
           "failed",
           "stage",
           "stageLabel",
+          "warnings",
+          "documentSha256",
           "abortRequestedAt",
           "error",
           "correlationId",
           "requestedByUserId"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.HarvestRunWarning": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/enums.HarvestWarningCode"
+          },
+          "offerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "offerId",
+          "page",
+          "name",
+          "message"
         ],
         "additionalProperties": false
       },
@@ -26379,6 +27160,211 @@
           "confidence",
           "lastResolvedAt",
           "lastSeenAt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SourceAliasAcceptResult": {
+        "type": "object",
+        "properties": {
+          "alias": {
+            "$ref": "#/components/schemas/harvest.SourceAliasView"
+          },
+          "pricesWritten": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "item": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ItemView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "alias",
+          "pricesWritten",
+          "item"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SourceAliasPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceAliasView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "harvest.SourceAliasView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "aliasKey": {
+            "type": "string"
+          },
+          "printedName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "printedFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "printedBrand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "candidateItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "candidateEntryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.SourceAliasStatus"
+          },
+          "matchedBy": {
+            "$ref": "#/components/schemas/enums.ItemSourceMatch"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "timesSeen": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "firstRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "offerPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "offerCurrency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "offerUnitPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "offerUnitPriceLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "offerPage": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "offerRawText": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "offerConfidence": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "aliasKey",
+          "printedName",
+          "printedFormat",
+          "printedBrand",
+          "itemId",
+          "candidateItemId",
+          "candidateEntryId",
+          "status",
+          "matchedBy",
+          "confidence",
+          "timesSeen",
+          "firstSeenAt",
+          "lastSeenAt",
+          "firstRunId",
+          "lastRunId",
+          "offerPrice",
+          "offerCurrency",
+          "offerUnitPrice",
+          "offerUnitPriceLabel",
+          "offerPage",
+          "offerRawText",
+          "offerConfidence"
         ],
         "additionalProperties": false
       },
