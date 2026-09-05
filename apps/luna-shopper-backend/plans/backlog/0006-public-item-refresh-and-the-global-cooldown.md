@@ -15,8 +15,15 @@ stack yet.** Section 2 explains why the obvious substitutes do not work, and sec
 Redis free design that was written before the decision to wait, so that picking this up later is a
 build rather than a redesign.
 
-Plan 0038 still builds the owner facing refresh (`REFRESH` run mode, platform admin gated). What is
+Plan 0038 built the owner facing refresh (`REFRESH` run mode, platform admin gated). What is
 deferred is only the **public, uncapped-audience, globally-capped** version.
+
+**Plan 0086 deleted the `REFRESH` run mode.** A catalog walk writes the prices it fetches, so a
+second fetch of the same products had nothing left to do. This plan was written as a caller and a
+gate in front of a run mode that already existed, and that is no longer true. When it is picked up,
+the per item fetch is a small runner of its own over `SourceIngest`: one observation for the one
+product asked about, through the same ladder and the same price write every other run uses.
+Nothing in plan 0086 stands in its way, and nothing in it is built there.
 
 ## 1. What the feature is
 
