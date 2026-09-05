@@ -1,0 +1,184 @@
+You are reading ONE page of a Spanish supermarket promotional leaflet (folleto)
+from the chain Deza.
+
+Return ONLY a JSON array of the product offers advertised on this page.
+No prose, no explanation, no markdown code fence. Just the array.
+
+The array elements are rows that will be imported into a product catalog, so
+every element MUST have exactly these keys:
+
+{
+  "name": "product description as printed, without the price",
+  "brand": "manufacturer brand, or null",
+  "unitSize": 0.0,
+  "sizeFormat": "kg" | "g" | "l" | "ml" | "ud" | "m" | null,
+  "price": 0.00,
+  "unitPrice": 0.00,
+  "unitPriceLabel": "the badge footer text, verbatim, or null",
+  "category": "PRODUCE",
+  "categoryPath": ["DEPARTMENT HEADING AS PRINTED"],
+  "leaflet": {
+    "format": "the pack as printed, or null",
+    "basis": "unit" | "pack" | "kg" | "l",
+    "wasPrice": 0.00,
+    "loyalty": false,
+    "promotion": null
+  }
+}
+
+"category" MUST be one of exactly these values, and nothing else:
+PRODUCE, DAIRY, BAKERY, MEAT, SEAFOOD, FROZEN, BEVERAGES, SNACKS, PANTRY,
+HOUSEHOLD, PERSONAL_CARE, OTHER.
+Choose the one that fits the product itself. Cleaning products, laundry,
+kitchen roll, foil and pet food are HOUSEHOLD. Shampoo, soap, razors, nappies
+and toothpaste are PERSONAL_CARE. Wine, beer, water, juice and soft drinks are
+BEVERAGES. Crisps, biscuits, sweets and chocolate are SNACKS. Tinned food,
+pasta, rice, oil, sauces, coffee and sugar are PANTRY. Use OTHER only when
+none of the twelve fits.
+
+"leaflet.promotion" is either null or an object:
+
+{
+  "type": "price_drop" | "second_unit_discount" | "multibuy_unit_price"
+        | "multibuy_total" | "n_for_m" | "buy_n_get_free" | "pack_bonus",
+  "requiredQuantity": 0,
+  "effectiveUnitPrice": 0.00,
+  "totalPrice": 0.00,
+  "singleUnitPrice": 0.00
+}
+
+HOW THIS LEAFLET IS LAID OUT
+
+The page is tall and narrow. It holds four to six product tiles stacked
+vertically, sometimes two side by side. Each tile has an orange shield badge
+carrying the price, a product name in dark text beside or below the badge, and
+one product photograph.
+
+Rules, in order of importance:
+
+1. THE DECIMAL SEPARATOR IS AN APOSTROPHE. This leaflet prints prices as
+   0'79, 12'95, 1'45 and 10'70. Read the apostrophe as a decimal point:
+   0.79, 12.95, 1.45, 10.70. A comma in this leaflet is almost always part of
+   a pack size, such as 1,5 L. Never read 1'45 as 145.
+
+2. THE ORANGE BADGE HOLDS THE PRICE, AND ITS FOOTER IS ONE OF TWO THINGS.
+   The large number inside the shield is always "price". The small line in the
+   white footer strip under it is either:
+     a) The BASIS of that price, written as a currency label with no number:
+        "EUR/Ud", "EUR/KILO", "EUR/UNIDAD". Then set "leaflet.basis" and leave
+        "unitPrice" null. "EUR/KILO" means basis "kg".
+     b) A DERIVED UNIT PRICE, written as a word plus a number:
+        "LITRO 1'18", "KILO 3'61", "UNIDAD 0'48", "METRO 0'03",
+        "LAVADO 0'23", "100 ml 3'63".
+        Then put that number in "unitPrice" and set "leaflet.basis" to "unit"
+        unless the tile says otherwise.
+   In BOTH cases copy the footer text verbatim into "unitPriceLabel", keeping
+   the apostrophe exactly as printed: "EUR/KILO", "LITRO 1'18".
+   A footer with a number is never the product price.
+
+3. "leaflet.basis" SAYS WHAT THE PRICE BUYS. Decide it in this order, and stop
+   at the first line that matches:
+     - The badge footer reads "EUR/KILO", or the tile's only size word is
+       "kilo"                                            -> "kg"
+     - The badge footer reads "EUR/L" or the price is per litre
+                                                         -> "l"
+     - The format names a tray, a multipack or several items sold together:
+       "Bandeja de 4 ud", "Bandeja de 1 kg", "2x1,5 L", "6x25 cl", "Pack-6",
+       "3 ud"                                            -> "pack"
+     - Anything else, including a single bottle, jar or packet
+                                                         -> "unit"
+   A tray whose size happens to be 1 kg is still "pack", because the price buys
+   that one tray. Only a price genuinely quoted per kilo is "kg".
+
+4. "unitSize" AND "sizeFormat" ARE THE SIZE AS A NUMBER AND ITS OWN TOKEN.
+   Read them from the size the leaflet prints, and keep the leaflet's own unit
+   rather than converting it:
+     "750 ml."      -> unitSize 750,  sizeFormat "ml"
+     "lata 33 cl."  -> unitSize 330,  sizeFormat "ml"
+     "1,5 L"        -> unitSize 1.5,  sizeFormat "l"
+     "400 g."       -> unitSize 400,  sizeFormat "g"
+     "kilo"         -> unitSize 1,    sizeFormat "kg"
+     "Pack-6"       -> unitSize 6,    sizeFormat "ud"
+     "2x1,5 L"      -> unitSize 3,    sizeFormat "l"
+     "6x25 cl"      -> unitSize 1500, sizeFormat "ml"
+     "44 lavados"   -> unitSize 44,   sizeFormat "ud"
+     "metro"        -> unitSize 1,    sizeFormat "m"
+   Centilitres are the one conversion you make: 1 cl is 10 ml. A multipack
+   states its TOTAL content, so two bottles of 1.5 L are 3 L.
+   When the page prints no size at all, set both to null. Never guess a size
+   from the photograph.
+
+5. "price" is always the price of ONE unit as the tile advertises it. When a
+   tile prints a promotion, that is the promotional price per unit, not the
+   price of buying one unit outside the offer. For "2 UNIDADES POR 1 EUR",
+   "price" is 0.50 and "totalPrice" is 1.00.
+
+6. A PACK SIZE IS NOT A PROMOTION. This is the most common trap in this
+   leaflet. "2x1,5 L" means a pack of two 1.5 litre bottles. It is NOT a
+   "2 X 1" offer. The same holds for "6x25 cl", "2x1 L" and "3x330 ml".
+   Those strings belong in "leaflet.format", and "promotion" stays null.
+   Only wording that names a saving is a promotion.
+
+7. TEXT PRINTED ON THE PACKAGING IS NOT A DEZA PROMOTION. Flashes such as
+   "+50% GRATIS", "28+16", "23+12" or "25+25 GRATIS" that sit on the product
+   photograph belong to the manufacturer's pack, not to this leaflet's offer.
+   The leaflet already counts them in the size it states, for example
+   "44 lavados" for a 28+16 pack. Leave "promotion" null and put the size the
+   leaflet states in "leaflet.format". A promotion is only what the leaflet
+   itself prints in its own text, outside the photograph.
+
+8. This leaflet rarely prints promotions at all. Most tiles are a plain price
+   with no offer. When a tile shows only a price and a name, set "promotion"
+   to null and "wasPrice" to null. Do not invent an offer.
+
+9. Promotion wording maps like this:
+   - "ANTES" and a struck-through price  -> "price_drop", old price in wasPrice
+   - "+50% GRATIS", "25+25 GRATIS",
+     "28+16", "23+12", "Pack-3+1 GRATIS"  -> "pack_bonus"
+   - "2 X 1" or "3 X 2" naming a saving   -> "n_for_m"
+   - "LLEVANDO 3, GRATIS 1"               -> "buy_n_get_free"
+   - "2 unidades por 1,18"                -> "multibuy_total"
+   - "COMPRANDO 12 UNIDADES"              -> "multibuy_unit_price"
+   Text such as "AHORA MAS BARATO" or "AHORRO" with no old price and no
+   quantity is a slogan, not a promotion. Leave "promotion" null.
+   On a second unit offer, read the printed single unit price. Do not divide
+   the total by two.
+
+10. A number labelled "el litro le sale a", "el kilo le sale a" or
+    "100 ml le sale a" is a UNIT price, not the product price. Record it in
+    "unitPrice" and never convert it.
+
+11. "categoryPath" IS THE DEPARTMENT HEADING BANNER AT THE TOP OF THE PAGE,
+    copied as printed, for example ["CARNICERIA"], ["DROGUERIA"],
+    ["CHARCUTERIA"]. Give every product on the page the same path. When the
+    page carries no heading, use an empty array.
+
+12. Ignore the "INDICE" link, store adverts, app promotions, social media
+    icons, web addresses and legal small print. Only include products that
+    carry a price. Text printed on the product packaging in the photograph is
+    not the product name; use the caption set in the leaflet's own dark text.
+
+13. "loyalty" is always false in this leaflet. Deza prints no loyalty card
+    badge. Set it to false on every offer.
+
+14. Use null for anything the page does not state. Do not invent values and do
+    not compute a value the page does not print. Never divide one printed
+    number by another to produce a price.
+
+WHY THREE OF THESE FIELDS MATTER MORE THAN THE REST
+
+The reading is turned into a HarvestDocument (backend plan 0086, section 6.1)
+by tools/build-deza-document.mjs, which calls tools/to-harvest-document.mjs.
+That script decides which number on a tile a shopper actually pays for one unit,
+and it reads exactly three things to decide:
+
+- "leaflet.loyalty". True means the tile states no price at all, because a card
+  price is not the price a non member pays.
+- "leaflet.promotion.type" and "leaflet.promotion.singleUnitPrice". For a second
+  unit, a multibuy or a buy N get one free, the big number is not what one unit
+  costs. The single unit price is, and without it the tile states no price.
+- "leaflet.basis". A "kg" or "l" basis is a price per weight or volume, so it
+  becomes a unit price and the product gets no till price.
+
+Get those three right even when you are unsure about the rest. A wrong price is
+worse than a missing one.

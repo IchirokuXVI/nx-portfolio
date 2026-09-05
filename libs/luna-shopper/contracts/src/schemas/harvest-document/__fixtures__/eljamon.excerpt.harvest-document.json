@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "sha256": "f62fa7ac367008e1dd00871292e9b6be1b5d1c8cca840c40a6541cec3a58f2ea",
+  "producer": {
+    "name": "leaflet-extractor, El Jamon 60 Aniversario, eljamon_del_27_de_agosto_al_23_de_septiembre_de_2026.pdf, 40 pages, vision via claude opus 5 reading the rendered pages at 200 dpi",
+    "version": "1.0.0",
+    "produced_at": "2026-09-04T11:03:22Z"
+  },
+  "hints": {
+    "source_kind": "OFFICIAL_LEAFLET"
+  },
+  "validity": {
+    "from": "2026-08-27",
+    "until": "2026-09-23"
+  },
+  "products": [
+    {
+      "id": "p01-o01",
+      "name": "Aceite de Oliva Virgen Serie Oro Coosur",
+      "brand": "Coosur",
+      "size": {
+        "label": "Garrafa 5 litros",
+        "quantity": 5,
+        "unit": "l"
+      },
+      "price": {
+        "amount": 19.95,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "amount": 3.99,
+        "label": "l",
+        "currency": "EUR"
+      },
+      "extra": {
+        "page": 1,
+        "section": "cover",
+        "page_has_text_layer": false,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 19.95,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 21.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 9.1,
+        "printed_unit_price": {
+          "amount": 3.99,
+          "currency": "EUR",
+          "per": "l"
+        },
+        "format": {
+          "container": "garrafa"
+        },
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 21,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p01-o02",
+      "name": "Pizzas Refrigeradas Campofrio",
+      "brand": "Campofrio",
+      "size": {
+        "label": "360 - 410 g",
+        "quantity": 410,
+        "unit": "g"
+      },
+      "price": {
+        "amount": 2.59,
+        "currency": "EUR"
+      },
+      "extra": {
+        "page": 1,
+        "section": "cover",
+        "page_has_text_layer": false,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 2.59,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 2.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 12.2,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 2,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p02-o01",
+      "name": "Solomillo de Cerdo Blanco",
+      "size": {
+        "label": "Kilo",
+        "unit": "kg"
+      },
+      "unit_price": {
+        "amount": 7.95,
+        "label": "kg",
+        "currency": "EUR"
+      },
+      "category_path": [
+        "CARNICERIA"
+      ],
+      "extra": {
+        "page": 2,
+        "section": "carniceria",
+        "section_printed": "CARNICERIA",
+        "page_has_text_layer": false,
+        "basis": "kg",
+        "headline_price": {
+          "amount": 7.95,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 9.95,
+          "currency": "EUR"
+        },
+        "discount_pct": 20.1,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 9,95"
+        },
+        "loyalty": {
+          "required": false,
+          "program": null
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    },
+    {
+      "id": "p05-o01",
+      "name": "Cerveza con Alcohol Estrella del Sur",
+      "brand": "Estrella del Sur",
+      "size": {
+        "label": "1 L.",
+        "quantity": 1,
+        "unit": "l"
+      },
+      "category_path": [
+        "bebidas"
+      ],
+      "extra": {
+        "page": 5,
+        "section": "bebidas",
+        "page_has_text_layer": true,
+        "basis": "unit",
+        "headline_price": {
+          "amount": 1.05,
+          "currency": "EUR"
+        },
+        "was_price": {
+          "amount": 1.18,
+          "currency": "EUR"
+        },
+        "discount_pct": 11,
+        "promotion": {
+          "type": "price_drop",
+          "raw_text": "ANTES 1,18"
+        },
+        "loyalty": {
+          "required": true,
+          "program": "descuentos ifamilia"
+        },
+        "read_by": "vision",
+        "confidence": 0.97
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "message": "p05-o01 (Cerveza con Alcohol Estrella del Sur) needs the chain's loyalty card (descuentos ifamilia), so it states no price: a card price is not the price a non member pays.",
+      "product_id": "p05-o01",
+      "extra": {
+        "page": 5
+      }
+    }
+  ]
+}
