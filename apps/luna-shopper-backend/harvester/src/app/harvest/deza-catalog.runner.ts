@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
 import {
   PriceSourceKind,
   SourceLocationStatus,
@@ -13,28 +12,28 @@ import {
   type DezaQuery,
   type DezaSection,
 } from '@portfolio/luna-shopper/deza';
-import { createHash } from 'node:crypto';
-import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import {
-  ItemSourceRef,
-  SourceCatalogEntry,
-  SupermarketSource,
-} from '../entities';
+import type { SupermarketSource } from '../entities';
 import { runWorkerPool } from '../runner/worker-pool';
 import { CatalogClient } from './catalog-client.service';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
-import { ItemMatchIndex, normalizeName } from './matching';
+import { entryKey, normalizeName } from './matching';
 import type { RunContext } from './run-context';
+import { SourceIngest, type SourceObservation } from './source-ingest';
 import {
   SourceLocationService,
   type ObservedShop,
 } from './source-location.service';
-import {
-  loadCatalogItems,
-  refreshItemSourceRef,
-  upsertSourceEntry,
-} from './source-snapshot';
+
+/**
+ * The identity of a DEZA product, which is the identity of any product from a
+ * source with no id of its own (plan 0085, section 6; plan 0086, D2).
+ *
+ * Re-exported here because this is where it was born and where its reasoning is
+ * written down. It lives in `matching.ts` now, because a file import keys a
+ * nameless product exactly the same way and rung 4 reads the unhashed half.
+ */
+export { entryKey } from './matching';
 
 /**
  * `CATALOG_DISCOVERY` against the `deza-web` adapter (plan 0085).
@@ -47,12 +46,12 @@ import {
  *
  * 1. Read the section tree.
  * 2. Enumerate, section by section, under the ceiling rules and the budget.
- * 3. Upsert `source_catalog_entries` with name, size, brand, section path and
- *    `lastSeenAt`.
- * 4. Match against catalog items through `ItemMatchIndex` and refresh
- *    `item_source_refs`. **The EAN rung never fires here**, because the site has
- *    no EAN, so every automatic match is a `CANDIDATE` and none of them writes
- *    anything a shopper reads.
+ * 3. Hand every product to {@link SourceIngest} as an observation with no price,
+ *    which upserts `source_catalog_entries` and runs the one ladder over it.
+ *    **The EAN rung never fires here**, because the site has no EAN, so every
+ *    automatic match is a `CANDIDATE` and none of them writes anything a shopper
+ *    reads.
+ * 4. Read back which catalog item each product resolved to, from the outcomes.
  * 5. Resolve the shop codes through `source_locations` (plan 0084, section 6),
  *    skipping the unmapped.
  * 6. Call `supermarketLocationItem.setAvailability` once per resolved shop, with
@@ -66,10 +65,7 @@ export class DezaCatalogRunner implements CatalogRunner {
   private readonly logger = new Logger(DezaCatalogRunner.name);
 
   constructor(
-    @InjectRepository(SourceCatalogEntry)
-    private readonly entries: Repository<SourceCatalogEntry>,
-    @InjectRepository(ItemSourceRef)
-    private readonly refs: Repository<ItemSourceRef>,
+    private readonly ingest: SourceIngest,
     private readonly catalog: CatalogClient,
     private readonly shops: SourceLocationService,
     private readonly config: ConfigService
@@ -210,7 +206,7 @@ export class DezaCatalogRunner implements CatalogRunner {
   }
 
   /**
-   * Steps 3 and 4: the snapshot rows and the refs, answering which catalog item
+   * Steps 3 and 4: the rows and the ladder, answering which catalog item
    * each product resolved to.
    *
    * A product that resolved to nothing is a candidate for the review queue and
@@ -223,61 +219,45 @@ export class DezaCatalogRunner implements CatalogRunner {
     input: CatalogDiscoveryInput,
     crawl: Crawl
   ): Promise<Map<string, string>> {
-    const index = new ItemMatchIndex(await loadCatalogItems(this.catalog));
-    const existingRefs = await this.refs.find({
-      where: { supermarketId: input.supermarketId },
-    });
-    const refByExternalId = new Map(
-      existingRefs.map((ref) => [ref.externalId, ref])
-    );
-    const seenAt = new Date();
-    const itemIdByKey = new Map<string, string>();
-
-    for (const [externalId, product] of crawl.products) {
-      const outcome = await upsertSourceEntry(
-        this.entries,
-        input.supermarketId,
-        {
-          externalId,
-          name: product.name,
-          brand: product.brand,
-          // The site states neither, and a field invented here is a field that
-          // joins two different products in the one place chains meet.
-          ean: null,
-          unitSize: null,
-          sizeFormat: product.sizeFormat,
-          price: null,
-          unitPrice: null,
-          unitPriceLabel: null,
-          categoryPath: product.categoryPath,
-          // There is no per product URL on this site; the listing is the page.
-          url: null,
-          lastSeenAt: seenAt,
-        }
-      );
-
-      const itemId = await refreshItemSourceRef(this.refs, {
-        supermarketId: input.supermarketId,
+    const observedAt = new Date();
+    const observations: SourceObservation[] = [...crawl.products].map(
+      ([externalId, product]) => ({
         externalId,
-        externalUrl: null,
-        candidate: {
-          externalId,
-          name: product.name,
-          brand: product.brand,
-          ean: null,
-          unitSize: null,
-        },
-        index,
-        refByExternalId,
-        seenAt,
-      });
-      if (itemId) {
-        itemIdByKey.set(externalId, itemId);
+        name: product.name,
+        brand: product.brand,
+        // The site states neither, and a field invented here is a field that
+        // joins two different products in the one place chains meet.
+        ean: null,
+        unitSize: null,
+        sizeFormat: product.sizeFormat,
+        categoryPath: product.categoryPath,
+        // There is no per product URL on this site; the listing is the page.
+        url: null,
+        observedAt,
+        extra: null,
+        // **It writes no price, ever.** The site prints none, and the blank
+        // price elements in its markup are the storefront's own hidden pricing,
+        // which a parser reading them would write as zeros.
+        price: null,
+      })
+    );
+
+    const { outcomes } = await this.ingest.ingest(context, {
+      supermarketId: input.supermarketId,
+      // A scope is accepted and ignored (plan 0086, section 9): there is no
+      // price to write it for, and a required field that does nothing is a lie
+      // in a form.
+      priceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations,
+    });
+
+    const itemIdByKey = new Map<string, string>();
+    for (const outcome of outcomes) {
+      if (outcome.itemId) {
+        itemIdByKey.set(outcome.entry.externalId, outcome.itemId);
       }
-
-      await context.report({ processed: 1, ...outcome });
     }
-
     return itemIdByKey;
   }
 
@@ -368,7 +348,7 @@ export class DezaCatalogRunner implements CatalogRunner {
    * code was in that product's popup.
    *
    * Two source products can resolve to one catalog item, through two
-   * `item_source_refs` rows an operator confirmed. When they disagree the shop
+   * rows an operator accepted. When they disagree the shop
    * **carries** it: stocking either one is stocking the item, and the false
    * would be a claim the source never made.
    */
@@ -581,25 +561,6 @@ function mostFrequentUnused(
 
 function describeQuery(terms: string[]): string {
   return terms.length === 0 ? '(the whole section)' : terms.join(' ');
-}
-
-/**
- * The identity of a DEZA product (plan 0085, section 6).
- *
- * `SourceCatalogEntry` is unique on (`supermarketId`, `externalId`) and DEZA
- * supplies no id, so this is a hash of the normalized name and the normalized
- * size: the same key shape plan 0081 section 2.1 uses for a leaflet alias, which
- * is what lets the two meet.
- *
- * **The consequence, stated because it is real: a reworded description is a new
- * candidate and orphans the old one.** There is no id to notice that they are
- * the same product. The previous entry stops being seen and ages out on
- * `lastSeenAt`, and an operator who had already accepted it sees a new candidate
- * for a product the catalog holds, which the fuzzy rung proposes a match for.
- */
-export function entryKey(name: string, sizeFormat: string | null): string {
-  const key = `${normalizeName(name)}|${normalizeName(sizeFormat ?? '')}`;
-  return createHash('sha1').update(key).digest('hex');
 }
 
 function* chunked<T>(items: T[], size: number): Iterable<T[]> {

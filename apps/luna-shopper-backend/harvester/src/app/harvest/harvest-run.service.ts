@@ -9,6 +9,7 @@ import {
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  PriceSourceKind,
   type HarvestRunIdRequest,
   type HarvestRunPage,
   type HarvestRunView,
@@ -25,18 +26,19 @@ import {
   getRequestContext,
 } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
+import type { SupermarketSource } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import {
   ActiveRunExistsError,
   DocumentAlreadyImportedError,
   HarvestRunStore,
 } from './harvest-run.store';
+import { readHarvestDocument } from './harvest-document.reader';
 import { toHarvestRunView } from './harvest.mappers';
-import { readLeafletDocument } from './leaflet-document.reader';
-import { resolveLeafletWindow } from './leaflet-validity';
+import { resolveImportWindow } from './import-window';
 import { PlatformAdminService } from './platform-admin.service';
 import { RunExecutor } from './run-executor.service';
-import { SourceAliasService } from './source-alias.service';
+import { SourceEntryRevert } from './source-entry-revert.service';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface RunCursor {
@@ -53,9 +55,24 @@ interface RunCursor {
  * when none did.
  */
 const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
-  HarvestRunMode.LEAFLET_IMPORT,
-  HarvestRunMode.REFRESH,
+  HarvestRunMode.FILE_IMPORT,
+  // It writes them now (plan 0086, D4). A walk fetched a price for every one of
+  // 4,232 products and threw it away, which is what the deleted REFRESH mode
+  // existed to fetch again.
   HarvestRunMode.CATALOG_DISCOVERY,
+];
+
+/**
+ * The kinds an upload may be stamped with (plan 0086, section 9).
+ *
+ * No file may write a user kind, which is the rule `catalog.addPrices` already
+ * enforces on its side. Checking it here too means the refusal names the field
+ * on the form the person filled in rather than arriving from another service.
+ */
+const OFFICIAL_KINDS: readonly PriceSourceKind[] = [
+  PriceSourceKind.OFFICIAL_API,
+  PriceSourceKind.OFFICIAL_WEB,
+  PriceSourceKind.OFFICIAL_LEAFLET,
 ];
 
 /** The statuses a run never leaves, and the only ones a revert is offered on. */
@@ -85,7 +102,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     private readonly store: HarvestRunStore,
     private readonly executor: RunExecutor,
     private readonly sources: SupermarketSourceService,
-    private readonly aliases: SourceAliasService,
+    private readonly rows: SourceEntryRevert,
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService
@@ -128,17 +145,20 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const { supermarketId, priceScopeId, payload, documentSha256 } =
-      this.validate(req);
-    const source = supermarketId
-      ? await this.sources.findBySupermarket(supermarketId)
+    // The source is loaded **before** the validation rather than after it,
+    // because `CATALOG_DISCOVERY` decides whether a price scope is required by
+    // reading this row's `adapterKey` (plan 0086, section 9).
+    const source = req.supermarketId
+      ? await this.sources.findBySupermarket(req.supermarketId)
       : null;
-    // A LEAFLET_IMPORT needs no source and must not be refused for wanting one
+    // A FILE_IMPORT needs no source and must not be refused for wanting one
     // (plan 0081, section 1). `SupermarketSource` is fetching configuration, an
-    // upload fetches nothing, and a chain that publishes only leaflets has no
-    // row at all. The run still carries `sourceId: null` where the chain does
-    // have one, because no source was used.
-    const needsSource = req.mode !== HarvestRunMode.LEAFLET_IMPORT;
+    // upload fetches nothing, and a chain with no adapter at all still gets rows
+    // that look exactly like a walk's. The run still carries `sourceId: null`
+    // where the chain does have one, because no source was used.
+    const needsSource = req.mode !== HarvestRunMode.FILE_IMPORT;
+    const { supermarketId, priceScopeId, payload, documentSha256 } =
+      this.validate(req, source);
     if (needsSource && supermarketId && !source) {
       throw new ValidationException(
         'That supermarket has no configured source. Create one with ' +
@@ -258,7 +278,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     }
 
     const prices = await this.catalog.deletePricesByRun(run.id);
-    const aliases = await this.aliases.deleteUndecidedFrom(run.id);
+    const rows = await this.rows.revert(run.id);
     const reverted = await this.store.markReverted(
       run.id,
       userId,
@@ -268,7 +288,8 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `Reverted run ${run.id}: ${prices.deleted} price row(s) deleted, ` +
         `${prices.reset} confirmation(s) withdrawn, ${prices.recomputed} key(s) ` +
-        `recomputed, ${aliases} undecided alias(es) removed.`
+        `recomputed, ${rows.prices} price observation(s) and ${rows.entries} ` +
+        'undecided row(s) removed.'
     );
     return toHarvestRunView(reverted);
   }
@@ -350,18 +371,21 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Which fields a mode actually needs, checked once here rather than in three
-   * runners. A STORE_DISCOVERY belongs to a postal code and a radius; the other
-   * two belong to a chain and a scope.
+   * Which fields a mode actually needs, checked once here rather than in each
+   * runner. A STORE_DISCOVERY belongs to a postal code and a radius; the other
+   * two belong to a chain and a scope, and only one of them insists on the scope.
    */
-  private validate(req: SpawnHarvestRunRequest): {
+  private validate(
+    req: SpawnHarvestRunRequest,
+    source: SupermarketSource | null
+  ): {
     supermarketId: string | null;
     priceScopeId: string | null;
     payload: Record<string, unknown>;
     documentSha256: string | null;
   } {
-    if (req.mode === HarvestRunMode.LEAFLET_IMPORT) {
-      return this.validateLeaflet(req);
+    if (req.mode === HarvestRunMode.FILE_IMPORT) {
+      return this.validateFileImport(req);
     }
     if (req.mode === HarvestRunMode.STORE_DISCOVERY) {
       if (!req.postalCode) {
@@ -385,12 +409,26 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
+    if (req.mode !== HarvestRunMode.CATALOG_DISCOVERY) {
+      // Every mode the enum holds is handled above. Reaching here means a
+      // caller named one that does not exist, `REFRESH` being the one this plan
+      // deleted, and a refusal that names it is better than a run that starts
+      // and dispatches to nothing.
+      throw new ValidationException(
+        `${String(req.mode)} is not a run mode this backend knows.`
+      );
+    }
     if (!req.supermarketId) {
       throw new ValidationException(`A ${req.mode} run needs a supermarketId.`);
     }
-    if (req.mode === HarvestRunMode.REFRESH && !req.priceScopeId) {
+    // `mercadona-api` fetches a price for every product it walks and needs
+    // somewhere to write them (plan 0086, section 9). `deza-web` accepts a scope
+    // and ignores it, because the site prints no price and a required field that
+    // does nothing is a lie in a form.
+    if (source?.adapterKey === 'mercadona-api' && !req.priceScopeId) {
       throw new ValidationException(
-        'A refresh run needs the price scope to write the prices for.'
+        "This chain's walk fetches a price for every product, so it needs the " +
+          'price scope to write the prices for.'
       );
     }
     return {
@@ -405,20 +443,26 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * A leaflet import needs a chain, a scope and a document (plan 0081, section
-   * 1), and its validity has to resolve before the run exists.
+   * A file import needs a chain, a scope, a source kind and a document (plan
+   * 0086, section 9), and its validity has to resolve before the run exists.
+   *
+   * `source_kind` is what the rows and the prices are stamped with, and it is
+   * the caller's rather than the upload's: a re-imported Mercadona walk stamps
+   * `OFFICIAL_API`, because that is what observed the price. It must be an
+   * official kind, since no upload may write a user kind.
    *
    * The document is validated **here**, in the harvester, because the harvester
    * owns the schema version and a broker message is not a trusted input: the
    * gateway's own validation is the first of the two the plan asks for, not the
    * only one.
    *
-   * The window is resolved here too, so a run with a null bound is refused
-   * before it is inserted rather than failing eighteen offers in, and so the
-   * instants are stored on the run for an alias accept to write with later
-   * (section 3).
+   * The window is resolved here too, so a half stated one is refused before the
+   * run is inserted rather than failing eighteen products in, and so the instants
+   * are stored on the run for the runner to write with. A document that states
+   * none at all resolves to none, which is what a walk's export is: a storefront
+   * price has no window.
    */
-  private validateLeaflet(req: SpawnHarvestRunRequest): {
+  private validateFileImport(req: SpawnHarvestRunRequest): {
     supermarketId: string | null;
     priceScopeId: string | null;
     payload: Record<string, unknown>;
@@ -426,24 +470,36 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
   } {
     if (!req.supermarketId) {
       throw new ValidationException(
-        'A leaflet import needs the chain the leaflet is from. `chain_id` in ' +
-          'the document is a hint the upload screen shows, never a lookup key.'
+        'A file import needs the chain the file is about. `chain_id` in the ' +
+          'document is a hint the upload screen shows, never a lookup key.'
       );
     }
     if (!req.priceScopeId) {
       throw new ValidationException(
-        'A leaflet import needs the price scope to write the prices for. Most ' +
-          'leaflets are nationwide, so that is usually the chain NATIONAL scope.'
+        'A file import needs the price scope to write the prices for. Most ' +
+          'files are nationwide, so that is usually the chain NATIONAL scope.'
+      );
+    }
+    if (!req.sourceKind) {
+      throw new ValidationException(
+        'A file import needs the source kind the prices are stamped with: what ' +
+          'observed them, not what uploaded them.'
+      );
+    }
+    if (!OFFICIAL_KINDS.includes(req.sourceKind)) {
+      throw new ValidationException(
+        `An upload may be stamped ${OFFICIAL_KINDS.join(', ')} and nothing ` +
+          'else. A user kind is a price a person reported, and no file is that.'
       );
     }
     if (!req.document) {
-      throw new ValidationException('A leaflet import needs a document.');
+      throw new ValidationException('A file import needs a document.');
     }
 
-    const document = readLeafletDocument(req.document);
-    const window = resolveLeafletWindow({
-      documentStartsOn: document.validity.starts_on,
-      documentEndsOn: document.validity.ends_on,
+    const document = readHarvestDocument(req.document);
+    const window = resolveImportWindow({
+      documentFrom: document.validity?.from ?? null,
+      documentUntil: document.validity?.until ?? null,
       overrideFrom: req.validFrom,
       overrideUntil: req.validUntil,
     });
@@ -451,15 +507,20 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     return {
       supermarketId: req.supermarketId,
       priceScopeId: req.priceScopeId,
-      documentSha256: document.source.sha256,
+      documentSha256: document.sha256,
       payload: {
         supermarketId: req.supermarketId,
         priceScopeId: req.priceScopeId,
-        // The resolved instants, not the local days: the runner writes them
-        // onto every price row and an accept reads them back to decide whether
-        // this import is still open.
-        validFrom: window.validFrom.toISOString(),
-        validUntil: window.validUntil.toISOString(),
+        sourceKind: req.sourceKind,
+        // The resolved instants, not the local days: the runner writes them onto
+        // every price row. Absent when the document states no window, which is
+        // what a walk's export is.
+        ...(window
+          ? {
+              validFrom: window.validFrom.toISOString(),
+              validUntil: window.validUntil.toISOString(),
+            }
+          : {}),
         document,
       },
     };

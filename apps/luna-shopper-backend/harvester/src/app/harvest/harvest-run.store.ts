@@ -22,7 +22,7 @@ export class ActiveRunExistsError extends Error {
 
 /**
  * Raised when the per document index refuses a second import of one file for
- * one chain (plan 0081, section 7).
+ * one chain (plan 0081, section 7, which plan 0086 applies to every file).
  *
  * A different error from the one above because the caller's next step is
  * different: an active run is something to wait for, and an already imported
@@ -44,7 +44,7 @@ export class DocumentAlreadyImportedError extends Error {
  * progress, and this one says the file has already been imported. Anything that
  * is not this one is the former.
  */
-const LEAFLET_DOCUMENT_INDEX = 'uq_harvest_run_leaflet_document';
+const DOCUMENT_INDEX = 'uq_harvest_run_leaflet_document';
 
 export interface RunCounters {
   processed?: number;
@@ -52,7 +52,7 @@ export interface RunCounters {
   updated?: number;
   unchanged?: number;
   notFound?: number;
-  /** Offers a rule dropped or sent to the queue (plan 0081, section 7). */
+  /** Products a run sent to the queue rather than priced (plan 0081, 7). */
   skipped?: number;
   failed?: number;
 }
@@ -102,7 +102,7 @@ export class HarvestRunStore {
     requestedByUserId: string | null;
     correlationId: string | null;
     payload: Record<string, unknown>;
-    /** A leaflet import's document digest, and null for every other mode. */
+    /** A file import's document digest, and null for every other mode. */
     documentSha256?: string | null;
   }): Promise<HarvestRun> {
     try {
@@ -124,7 +124,7 @@ export class HarvestRunStore {
     } catch (error) {
       // Two indexes guard this insert and they mean two different things, so
       // the caller is told which one refused (plan 0081, section 7).
-      if (violates(error, LEAFLET_DOCUMENT_INDEX)) {
+      if (violates(error, DOCUMENT_INDEX)) {
         const existing = await this.findByDocument(
           input.supermarketId,
           input.documentSha256 ?? null
