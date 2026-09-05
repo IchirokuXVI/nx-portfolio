@@ -37,6 +37,28 @@ export type AddGeneratedListParticipantLineDto = {
 };
 
 /**
+ * `AddItemPriceDto` in the gateway's OpenAPI document.
+ */
+export type AddItemPriceDto = {
+  itemId: string;
+  priceScopeId: string;
+  sourceKind?:
+    | 'OFFICIAL_API'
+    | 'OFFICIAL_WEB'
+    | 'OFFICIAL_LEAFLET'
+    | 'ADMIN'
+    | 'USER_RECEIPT'
+    | 'USER_REPORTED';
+  price?: number | null;
+  currency?: string | null;
+  unitPrice?: number | null;
+  unitPriceLabel?: string | null;
+  observedAt?: string | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
+};
+
+/**
  * `AddLineDto` in the gateway's OpenAPI document.
  */
 export type AddLineDto = {
@@ -103,6 +125,14 @@ export type AssistantTurnDto = {
   message: string;
   transcript: AssistantMessageDto[];
   scope?: TurnScopeDto;
+};
+
+/**
+ * `AvailabilityEntryDto` in the gateway's OpenAPI document.
+ */
+export type AvailabilityEntryDto = {
+  itemId: string;
+  available: boolean;
 };
 
 /**
@@ -550,6 +580,14 @@ export type SetSourceEnabledDto = {
 };
 
 /**
+ * `SetSupermarketItemAvailabilityDto` in the gateway's OpenAPI document.
+ */
+export type SetSupermarketItemAvailabilityDto = {
+  priceScopeId: string;
+  entries: AvailabilityEntryDto[];
+};
+
+/**
  * `SettleGeneratedListLineDto` in the gateway's OpenAPI document.
  */
 export type SettleGeneratedListLineDto = {
@@ -705,6 +743,15 @@ export type UpdateListDto = {
 };
 
 /**
+ * `UpdatePricePolicyDto` in the gateway's OpenAPI document.
+ */
+export type UpdatePricePolicyDto = {
+  priority?: number;
+  maxAgeDays?: number | null;
+  enabled?: boolean;
+};
+
+/**
  * `UpdatePriceScopeDto` in the gateway's OpenAPI document.
  */
 export type UpdatePriceScopeDto = {
@@ -792,19 +839,6 @@ export type UpgradeDto = {
   email: string;
   password: string;
   displayName?: string;
-};
-
-/**
- * `UpsertSupermarketItemDto` in the gateway's OpenAPI document.
- */
-export type UpsertSupermarketItemDto = {
-  itemId: string;
-  priceScopeId: string;
-  price?: number | null;
-  currency?: string | null;
-  unitPrice?: number | null;
-  unitPriceLabel?: string | null;
-  available?: boolean;
 };
 
 /**
@@ -1243,8 +1277,9 @@ export type CatalogItemOfferView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  priceObservedAt: string | null;
-  priceSourceKind: EnumsPriceSourceKind;
+  observedAt: string | null;
+  sourceKind: EnumsPriceSourceKind | unknown;
+  stale: boolean;
 };
 
 /**
@@ -1255,6 +1290,53 @@ export type CatalogItemOfferView = {
 export type CatalogItemPage = {
   items: CatalogItemView[];
   nextCursor: string | null;
+};
+
+/**
+ * `catalog.ItemPriceOverride` in the gateway's OpenAPI document.
+ */
+export type CatalogItemPriceOverride = {
+  price: number | null;
+  unitPrice: number | null;
+};
+
+/**
+ * `catalog.ItemPriceOverrides` in the gateway's OpenAPI document.
+ */
+export type CatalogItemPriceOverrides = {
+  [key: string]: CatalogItemPriceOverride;
+};
+
+/**
+ * `catalog.ItemPricePage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogItemPricePage = {
+  items: CatalogItemPriceView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.ItemPriceView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemPriceView = {
+  id: string;
+  itemId: string;
+  priceScopeId: string;
+  sourceKind: EnumsPriceSourceKind;
+  price: number | null;
+  currency: string | null;
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  observedAt: string;
+  lastObservedAt: string;
+  validFrom: string | null;
+  validUntil: string | null;
+  sourceRunId: string | null;
+  lastObservedRunId: string | null;
+  overrides: CatalogItemPriceOverrides | unknown;
+  protectedUntil: string | null;
 };
 
 /**
@@ -1296,6 +1378,23 @@ export type CatalogLocalizedText = {
 export type CatalogPostalCodeCoverageView = {
   postalCode: string;
   served: boolean;
+};
+
+/**
+ * `catalog.PricePolicyListView` in the gateway's OpenAPI document.
+ */
+export type CatalogPricePolicyListView = {
+  items: CatalogPricePolicyView[];
+};
+
+/**
+ * `catalog.PricePolicyView` in the gateway's OpenAPI document.
+ */
+export type CatalogPricePolicyView = {
+  sourceKind: EnumsPriceSourceKind;
+  priority: number;
+  maxAgeDays: number | null;
+  enabled: boolean;
 };
 
 /**
@@ -1372,6 +1471,13 @@ export type CatalogResolvedScopeView = {
 };
 
 /**
+ * `catalog.SetSupermarketItemAvailabilityResult` in the gateway's OpenAPI document.
+ */
+export type CatalogSetSupermarketItemAvailabilityResult = {
+  updated: number;
+};
+
+/**
  * `catalog.ShopChainSummariesView` in the gateway's OpenAPI document.
  */
 export type CatalogShopChainSummariesView = {
@@ -1432,8 +1538,11 @@ export type CatalogSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  priceObservedAt: string | null;
-  priceSourceKind: EnumsPriceSourceKind;
+  observedAt: string | null;
+  sourceKind: EnumsPriceSourceKind | unknown;
+  stale: boolean;
+  validUntil: string | null;
+  itemPriceId: string | null;
   available: boolean;
 };
 

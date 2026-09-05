@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { MessagingModule } from '../messaging/messaging.module';
 import {
+  AdminCatalogItemPricesController,
   AdminCatalogItemsController,
   AdminCatalogLocationItemsController,
   AdminCatalogLocationsController,
+  AdminCatalogPricePoliciesController,
   AdminCatalogPriceScopesController,
   AdminCatalogProductGroupsController,
   AdminCatalogSupermarketItemsController,
@@ -58,6 +60,9 @@ import { ScopeResolutionService } from './scope-resolution.service';
     AdminCatalogItemsController,
     AdminCatalogProductGroupsController,
     AdminCatalogSupermarketItemsController,
+    // Plan 0080: the rows a source gave, and the policy that picks one.
+    AdminCatalogItemPricesController,
+    AdminCatalogPricePoliciesController,
     AdminCatalogPriceScopesController,
     AdminCatalogLocationItemsController,
   ],

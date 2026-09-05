@@ -1,6 +1,8 @@
 import { CatalogAudit } from './catalog-audit.entity';
+import { ItemPrice } from './item-price.entity';
 import { Item } from './item.entity';
 import { PostalCodePoint } from './postal-code-point.entity';
+import { PricePolicy } from './price-policy.entity';
 import { PriceScope } from './price-scope.entity';
 import { ProductGroup } from './product-group.entity';
 import { SupermarketItem } from './supermarket-item.entity';
@@ -14,8 +16,10 @@ export {
   AuditActorKind,
   CatalogAudit,
 } from './catalog-audit.entity';
+export { ItemPrice } from './item-price.entity';
 export { Item } from './item.entity';
 export { PostalCodePoint } from './postal-code-point.entity';
+export { PricePolicy } from './price-policy.entity';
 export { PriceScope } from './price-scope.entity';
 export { ProductGroup } from './product-group.entity';
 export { SupermarketItem } from './supermarket-item.entity';
@@ -31,6 +35,10 @@ export const CATALOG_ENTITIES = [
   // Groups come before items: an item may point at one (plan 0048, section 1).
   ProductGroup,
   Item,
+  // Every price a source gave, and the policy that picks one (plan 0080). The
+  // materialized row below them is derived from both.
+  ItemPrice,
+  PricePolicy,
   SupermarketItem,
   SupermarketLocationItem,
   // Reference data, loaded by a migration and never written by a service

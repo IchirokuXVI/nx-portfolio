@@ -5,18 +5,24 @@ import { Item } from './item.entity';
 import { PriceScope } from './price-scope.entity';
 
 /**
- * The price of one {@link Item} within one {@link PriceScope} (plan 0038, section
- * 5.2). It was keyed on the store until the scope arrived; re-keying it is what
- * stopped Mercadona writing twelve identical rows for one city.
+ * The price a shopper sees for one {@link Item} within one {@link PriceScope}
+ * (plan 0038, section 5.2, sharpened by plan 0080, section 7). It was keyed on
+ * the store until the scope arrived; re-keying it is what stopped Mercadona
+ * writing twelve identical rows for one city.
  *
  * What is genuinely per store (where the product sits in the aisle, and whether
- * someone checked this specific shop) lives on
- * {@link SupermarketLocationItem} instead. A warehouse cannot answer either.
+ * someone checked this specific shop) lives on {@link SupermarketLocationItem}
+ * instead. A warehouse cannot answer either.
  *
- * **This is still not `ItemPrice`.** One price row per item per scope, one source
- * wins by overwriting, no history and no policy. What the provenance columns buy
- * is the ability to answer "where did this number come from and when", which is
- * the precondition for backlog 0001's multi source model rather than a piece of it.
+ * **Since plan 0080 this row is derived.** Every price a source gave is a row
+ * in `item_prices`; this is the one section 4 chose among them, written by
+ * `EffectivePriceService.recompute` inside the transaction of the write that
+ * made it necessary, and kept current by a sweep over `nextBoundaryAt`. Search
+ * sorts by price at scale and cannot resolve six rows per product per query,
+ * so the columns keep their names and their meaning as "the price a shopper
+ * sees". Nothing writes a price here directly any more. `available` is the one
+ * column still written by hand, because it is a fact about stock and not about
+ * price.
  */
 @Entity({ name: 'supermarket_items' })
 @Index('uq_supermarket_item_scope', ['itemId', 'priceScopeId'], {
@@ -68,21 +74,21 @@ export class SupermarketItem extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   unitPriceLabel!: string | null;
 
-  /** Without it a price has no age. */
+  /** The effective row's `lastObservedAt`. Without it a price has no age. */
   @Column({ type: 'timestamptz', nullable: true })
   priceObservedAt!: Date | null;
 
   /**
-   * Where the number came from. It earns its place concretely: the first import
-   * writes over rows a human may have typed in, and without this the import
-   * cannot tell which rows are safe to overwrite. Section 6.5 is the rule.
+   * The effective row's kind, or null when no row prices this key at all,
+   * which is a row that only says whether the scope carries the product.
    */
   @Column({
     type: 'enum',
     enum: PriceSourceKind,
-    default: PriceSourceKind.ADMIN,
+    enumName: 'price_source_kind',
+    nullable: true,
   })
-  priceSourceKind!: PriceSourceKind;
+  priceSourceKind!: PriceSourceKind | null;
 
   /**
    * Whether the scope carries this product at all. Scope wide rather than per
@@ -92,4 +98,29 @@ export class SupermarketItem extends BaseEntity {
    */
   @Column({ type: 'boolean', default: true })
   available!: boolean;
+
+  /** The `item_prices` row section 4 chose. Null when there is no row at all. */
+  @Column({ type: 'uuid', nullable: true })
+  itemPriceId!: string | null;
+
+  /**
+   * Nothing eligible priced this key, so the newest row of any kind is shown
+   * and flagged (plan 0080, section 5). A number with a date beats a blank.
+   */
+  @Column({ type: 'boolean', default: false })
+  stale!: boolean;
+
+  /** The effective row's window end, so a client can say "until Sunday". */
+  @Column({ type: 'timestamptz', nullable: true })
+  validUntil!: Date | null;
+
+  /**
+   * The earliest instant at which the answer changes with no write: a
+   * `validFrom` still ahead, a `validUntil` not yet reached, an `ADMIN` row's
+   * `protectedUntil`, or `lastObservedAt + maxAgeDays` for a kind with a max
+   * age. The sweep recomputes rows whose boundary is in the past. Null for the
+   * great majority of rows, which a partial index leaves unscanned.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  nextBoundaryAt!: Date | null;
 }

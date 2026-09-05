@@ -402,6 +402,15 @@ export interface ProductOffer {
   readonly observedAt: Date | null;
   readonly sourceKind: PriceSourceKind;
   /**
+   * Shown because nothing better exists, not because it is current (backend
+   * plan 0080, section 5). Nothing eligible priced the product, so the server
+   * chose the newest thing anybody said and said so. Drawn as the server sent
+   * it: only the server knows which kinds have a maximum age, so a client that
+   * inferred staleness from the date would disagree with it on the first
+   * product whose kind has none.
+   */
+  readonly stale: boolean;
+  /**
    * The scope that quoted this price. Opaque.
    *
    * The basket resolves it against `BasketView.scopes` to name a chain and a

@@ -89,8 +89,9 @@ const offer = (itemId: string, priceScopeId: string, price: number) => ({
   currency: 'EUR',
   unitPrice: price,
   unitPriceLabel: 'EUR/L',
-  priceObservedAt: '2026-09-01T06:00:00.000Z',
-  priceSourceKind: PriceSourceKind.OFFICIAL_WEB,
+  observedAt: '2026-09-01T06:00:00.000Z',
+  sourceKind: PriceSourceKind.OFFICIAL_WEB,
+  stale: false,
 });
 
 /** A Mercadona shop in the scope every offer below comes from. */

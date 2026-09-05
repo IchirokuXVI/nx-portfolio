@@ -509,12 +509,15 @@ export function toProductOffer(raw: unknown): ProductOffer | null {
     currency: nullableStr(raw['currency']),
     unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
     unitPriceLabel: nullableStr(raw['unitPriceLabel']),
-    observedAt: date(raw['priceObservedAt']),
+    observedAt: date(raw['observedAt']),
     sourceKind: oneOf(
-      raw['priceSourceKind'],
+      raw['sourceKind'],
       PRICE_SOURCE_KINDS,
       PRICE_SOURCE_KIND_FALLBACK
     ),
+    // Absent reads as fresh: a server that does not send the flag has not
+    // judged the price stale, and a missing boolean must not become a badge.
+    stale: raw['stale'] === true,
     priceScopeId,
   };
 }

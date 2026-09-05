@@ -7,6 +7,7 @@ import {
   ITEM_LOOKUP_LIMITS,
   ItemCategory,
   PriceScopeKind,
+  PriceSourceKind,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
@@ -15,8 +16,10 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -24,6 +27,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -410,9 +414,17 @@ export class UpdatePriceScopeDto {
   label?: LocalizedTextDto | null;
 }
 
-// --- Supermarket items (per SCOPE price, since plan 0038) ------------------
+// --- Item prices: every price a source gave (plan 0080) ---------------------
 
-export class UpsertSupermarketItemDto {
+/**
+ * One price row, typed in by an operator.
+ *
+ * No `overrides` and no `protectedUntil`: an `ADMIN` row's override snapshot is
+ * computed by catalog at the instant of the insert (plan 0080, section 4.2),
+ * and a caller supplied one is refused. No `sourceRunId` either: a person is
+ * not a run.
+ */
+export class AddItemPriceDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   itemId!: string;
@@ -424,6 +436,15 @@ export class UpsertSupermarketItemDto {
   })
   @IsUUID()
   priceScopeId!: string;
+
+  @ApiPropertyOptional({
+    enum: PriceSourceKind,
+    description:
+      'Defaults to ADMIN, which is what a person typing through the back office means. The two user kinds are refused until backlog 0008 opens them.',
+  })
+  @IsOptional()
+  @IsEnum(PriceSourceKind)
+  sourceKind?: PriceSourceKind;
 
   @ApiPropertyOptional({ nullable: true, minimum: 0 })
   @IsOptional()
@@ -459,10 +480,98 @@ export class UpsertSupermarketItemDto {
   @MaxLength(32)
   unitPriceLabel?: string | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    format: 'date-time',
+    description: 'When the price was observed. Defaults to now.',
+  })
+  @IsOptional()
+  @IsDateString()
+  observedAt?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    format: 'date-time',
+    description: 'The row applies from here. Absent means from `observedAt`.',
+  })
+  @IsOptional()
+  @IsDateString()
+  validFrom?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    format: 'date-time',
+    description:
+      'Exclusive. Absent means until superseded. The owner’s field, for a price known to be temporary.',
+  })
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string | null;
+}
+
+/** The history of one (item, scope), newest first (plan 0080, section 9). */
+export class ListItemPricesQueryDto extends PageQueryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  itemId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  priceScopeId!: string;
+}
+
+/** Whether a scope carries one product. */
+export class AvailabilityEntryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  itemId!: string;
+
+  @ApiProperty()
+  @IsBoolean()
+  available!: boolean;
+}
+
+/**
+ * Whether a scope carries each of these products (plan 0080, section 9). A
+ * fact about stock and not about price, which is why it is the one write left
+ * on the materialized row.
+ */
+export class SetSupermarketItemAvailabilityDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  priceScopeId!: string;
+
+  @ApiProperty({ type: [AvailabilityEntryDto] })
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => AvailabilityEntryDto)
+  entries!: AvailabilityEntryDto[];
+}
+
+/** One policy row's editable half (plan 0080, section 3). */
+export class UpdatePricePolicyDto {
+  @ApiPropertyOptional({ description: 'Lower wins.' })
+  @IsOptional()
+  @IsInt()
+  priority?: number;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    minimum: 1,
+    description:
+      'How old a row of this kind may be before it stops being eligible. Null means it never ages out.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  maxAgeDays?: number | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
-  available?: boolean;
+  enabled?: boolean;
 }
 
 // --- The per store half (plan 0038, section 5.2) ---------------------------

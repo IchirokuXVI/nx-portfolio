@@ -650,8 +650,9 @@ describe('contract schemas', () => {
                 currency: 'EUR',
                 unitPrice: 1.15,
                 unitPriceLabel: 'L',
-                priceObservedAt: '2026-08-30T10:00:00.000Z',
-                priceSourceKind: 'OFFICIAL_API',
+                observedAt: '2026-08-30T10:00:00.000Z',
+                sourceKind: 'OFFICIAL_API',
+                stale: false,
               },
             },
           ],
@@ -792,12 +793,13 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('supermarketItem.upsertBatch reports what it refused to overwrite (plan 0038, section 6.5)', () => {
+    it('itemPrice.addBatch writes one kind for one scope with its run (plan 0080, section 9)', () => {
       expect(
-        validateMessageRequest('supermarketItem.upsertBatch', {
+        validateMessageRequest('itemPrice.addBatch', {
           userId: 'owner',
           priceScopeId: 'scope-1',
-          priceSourceKind: 'OFFICIAL_API',
+          sourceKind: 'OFFICIAL_API',
+          sourceRunId: 'run-1',
           entries: [
             {
               itemId: 'i',
@@ -807,25 +809,73 @@ describe('contract schemas', () => {
               // The source's own label, verbatim. It reads "100 ml" on a per
               // litre number, which is why it is text and not a unit.
               unitPriceLabel: '100 ml',
-              available: true,
-              priceObservedAt: '2026-08-30T10:00:00.000Z',
+              observedAt: '2026-08-30T10:00:00.000Z',
             },
           ],
         }).valid
       ).toBe(true);
       expect(
-        validateMessageResponse('supermarketItem.upsertBatch', {
-          created: 0,
-          updated: 0,
-          unchanged: 0,
-          skipped: [
-            {
-              itemId: 'i',
-              storedPrice: 1.75,
-              storedSourceKind: 'ADMIN',
-              fetchedPrice: 1.8,
-            },
-          ],
+        validateMessageResponse('itemPrice.addBatch', {
+          inserted: 1,
+          confirmed: 0,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('itemPrice.add refuses a caller supplied override snapshot (plan 0080, section 4.2)', () => {
+      const request = {
+        userId: 'owner',
+        itemId: 'i',
+        priceScopeId: 'scope-1',
+        sourceKind: 'ADMIN',
+        price: 1.29,
+        currency: 'EUR',
+      };
+      expect(validateMessageRequest('itemPrice.add', request).valid).toBe(true);
+      expect(
+        validateMessageRequest('itemPrice.add', {
+          ...request,
+          overrides: { OFFICIAL_API: { price: 1.19, unitPrice: null } },
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('itemPrice.add', {
+          id: 'p1',
+          itemId: 'i',
+          priceScopeId: 'scope-1',
+          sourceKind: 'ADMIN',
+          price: 1.29,
+          currency: 'EUR',
+          unitPrice: null,
+          unitPriceLabel: null,
+          observedAt: '2026-09-05T10:00:00.000Z',
+          lastObservedAt: '2026-09-05T10:00:00.000Z',
+          validFrom: null,
+          validUntil: null,
+          sourceRunId: null,
+          lastObservedRunId: null,
+          overrides: { OFFICIAL_API: { price: 1.19, unitPrice: null } },
+          protectedUntil: '2026-09-12T10:00:00.000Z',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('supermarketItem.get answers the materialized row with its flag (plan 0080, section 7)', () => {
+      expect(
+        validateMessageResponse('supermarketItem.get', {
+          id: 'si',
+          itemId: 'i',
+          priceScopeId: 'scope-1',
+          price: 1.19,
+          currency: 'EUR',
+          unitPrice: null,
+          unitPriceLabel: null,
+          observedAt: '2026-08-30T10:00:00.000Z',
+          sourceKind: 'OFFICIAL_API',
+          stale: true,
+          validUntil: null,
+          itemPriceId: 'p1',
+          available: true,
         }).valid
       ).toBe(true);
     });

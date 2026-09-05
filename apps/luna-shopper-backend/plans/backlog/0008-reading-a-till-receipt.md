@@ -50,10 +50,14 @@ nothing that is not already built. The catalog half cannot start until backlog `
 Eight reasons, roughly in order of how much they would cost to fix.
 
 **3.1 The catalog half has no table to write into.** `ItemPrice`, `PricePolicy` and
-`PriceSubmission` are all designed in backlog `0001` sections 2.3, 2.4 and 2.6 and none of them
-exists. `SupermarketItem` still carries a single `price` column with a `priceSourceKind` beside
-it, which is explicitly "not `ItemPrice`". Nothing in this plan's catalog half can be built until
-that one is. This alone is enough to park it.
+`PriceSubmission` are all designed in backlog `0001` sections 2.3, 2.4 and 2.6. Plan `0080`
+built the first two as `item_prices` and `price_policies`; `PriceSubmission` and the
+aggregation rule of section 2.6 stay here, and the two user kinds are ordinary rows any
+authorized writer inserts. **Plan `0080` gave `USER_RECEIPT` and `USER_REPORTED` no
+`maxAgeDays`**, because their only writer today is a curated seed checked against the receipts'
+own totals, and a number that guards against nothing only does harm. This plan sets both, in the
+same change that opens the kinds to the public: the fourteen and seven days of backlog `0001`
+were designed to age out crowd noise, and this is where the crowd arrives.
 
 **3.2 Product identity is the weak half, and it is the half the feature is about.** On the 64 line
 ticket 5 the two models agreed on 63 of 64 line totals (98%) and on only 54 of 64 normalized

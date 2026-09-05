@@ -11,9 +11,11 @@ import {
   AdminHarvestSourcesController,
 } from '../harvest/harvest.controller';
 import {
+  AdminCatalogItemPricesController,
   AdminCatalogItemsController,
   AdminCatalogLocationItemsController,
   AdminCatalogLocationsController,
+  AdminCatalogPricePoliciesController,
   AdminCatalogPriceScopesController,
   AdminCatalogProductGroupsController,
   AdminCatalogSupermarketItemsController,
@@ -96,15 +98,24 @@ const MOVED: ReadonlyArray<readonly [string, string, string]> = [
     '/v1/catalog/product-groups/{id}',
     '/v1/admin/catalog/product-groups/{id}',
   ],
-  [
-    'put',
-    '/v2/catalog/supermarket-items',
-    '/v2/admin/catalog/supermarket-items',
-  ],
+  // The price writes of plan 0073's table moved to `item-prices` under plan
+  // 0080: a price is inserted and removed, never upserted, and the materialized
+  // row keeps one write, availability. The old paths are asserted gone below.
+  ['post', '/v1/catalog/item-prices', '/v1/admin/catalog/item-prices'],
   [
     'delete',
-    '/v2/catalog/supermarket-items/{id}',
-    '/v2/admin/catalog/supermarket-items/{id}',
+    '/v1/catalog/item-prices/{id}',
+    '/v1/admin/catalog/item-prices/{id}',
+  ],
+  [
+    'put',
+    '/v3/catalog/supermarket-items/availability',
+    '/v3/admin/catalog/supermarket-items/availability',
+  ],
+  [
+    'patch',
+    '/v1/catalog/price-policies/{sourceKind}',
+    '/v1/admin/catalog/price-policies/{sourceKind}',
   ],
   ['post', '/v1/catalog/price-scopes', '/v1/admin/catalog/price-scopes'],
   [
@@ -138,7 +149,7 @@ const STAYED: ReadonlyArray<readonly [string, string]> = [
   ['get', '/v1/catalog/product-groups/{id}/items'],
   ['get', '/v1/catalog/suggest'],
   ['get', '/v1/catalog/scope'],
-  ['get', '/v2/catalog/supermarket-items'],
+  ['get', '/v3/catalog/supermarket-items'],
   ['get', '/v1/catalog/price-scopes'],
   ['get', '/v1/catalog/price-scopes/{id}/offers'],
   ['get', '/v1/catalog/location-items'],
@@ -150,6 +161,8 @@ const ADMIN_CONTROLLERS = [
   AdminCatalogItemsController,
   AdminCatalogProductGroupsController,
   AdminCatalogSupermarketItemsController,
+  AdminCatalogItemPricesController,
+  AdminCatalogPricePoliciesController,
   AdminCatalogPriceScopesController,
   AdminCatalogLocationItemsController,
   AdminHarvestRunsController,
@@ -196,6 +209,22 @@ describe('the admin API is its own namespace', () => {
     it('POST /v1/catalog/items/lookup is a read and did not move', () => {
       expect(has('post', '/v1/catalog/items/lookup')).toBe(true);
       expect(has('post', '/v1/admin/catalog/items/lookup')).toBe(false);
+    });
+
+    /**
+     * Plan 0080 retired the price upsert and the effective row's delete with
+     * the overwriting they implemented, and moved the supermarket items
+     * controllers to v3. Nothing answers at the old version.
+     */
+    it('leaves nothing at v2 supermarket-items, and no price upsert anywhere', () => {
+      expect(has('get', '/v2/catalog/supermarket-items')).toBe(false);
+      expect(has('get', '/v2/admin/catalog/supermarket-items')).toBe(false);
+      expect(has('put', '/v3/admin/catalog/supermarket-items')).toBe(false);
+      expect(has('delete', '/v3/admin/catalog/supermarket-items/{id}')).toBe(
+        false
+      );
+      expect(has('get', '/v1/admin/catalog/item-prices')).toBe(true);
+      expect(has('get', '/v1/admin/catalog/price-policies')).toBe(true);
     });
 
     it('leaves no other write outside the namespace', () => {

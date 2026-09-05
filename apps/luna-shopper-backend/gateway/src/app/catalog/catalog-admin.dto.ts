@@ -119,10 +119,23 @@ export class AdminListSupermarketItemsQueryDto extends CatalogListQueryDto {
   @IsUUID()
   priceScopeId?: string;
 
-  @ApiPropertyOptional({ enum: PriceSourceKind })
+  @ApiPropertyOptional({
+    enum: PriceSourceKind,
+    description:
+      'The effective row’s kind. ADMIN answers "what have I overridden".',
+  })
   @IsOptional()
   @IsEnum(PriceSourceKind)
-  priceSourceKind?: PriceSourceKind;
+  sourceKind?: PriceSourceKind;
+
+  @ApiPropertyOptional({
+    description:
+      'The rows shown on sufferance: nothing eligible prices them, so the newest row of any kind is shown and flagged (plan 0080, section 5).',
+  })
+  @IsOptional()
+  @Transform(asBoolean)
+  @IsBoolean()
+  stale?: boolean;
 
   @ApiPropertyOptional({
     description:

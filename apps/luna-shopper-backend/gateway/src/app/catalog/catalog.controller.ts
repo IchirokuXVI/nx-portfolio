@@ -691,20 +691,23 @@ export class CatalogScopeController {
 /**
  * Prices, keyed on a **price scope** since plan 0038 (section 5.2).
  *
- * **This controller is `v2`, and that is required rather than tidy.**
- * `SupermarketItemView` lost `supermarketLocationId` and `positionInStore`, which
- * is a breaking wire change, so it takes a version bump under plan 0004's per
- * controller versioning. Controllers version independently, so nothing else in
- * the catalog surface moved.
+ * **This controller is `v3`, and each bump was required rather than tidy.**
+ * `v2` was `SupermarketItemView` losing `supermarketLocationId` and
+ * `positionInStore` when the price moved to a scope. `v3` is plan 0080: the
+ * view's meaning changed from "the price" to "the price chosen among several",
+ * `priceObservedAt` and `priceSourceKind` became `observedAt` and `sourceKind`,
+ * and `stale`, `validUntil` and `itemPriceId` arrived. Renaming rather than
+ * adding is the point: a build from before the change reads two missing fields
+ * and shows no price, never a stale number as a fresh one. Controllers version
+ * independently, so nothing else in the catalog surface moved.
  *
- * Where the two fields went: the price now belongs to a scope, and what is
- * genuinely per store lives on {@link CatalogLocationItemsController}.
+ * What is genuinely per store lives on {@link CatalogLocationItemsController}.
  */
 @ApiTags('catalog')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @ApiProblemResponses({ auth: true, membership: true })
-@Controller({ path: 'catalog/supermarket-items', version: '2' })
+@Controller({ path: 'catalog/supermarket-items', version: '3' })
 export class CatalogSupermarketItemsController {
   constructor(private readonly nats: NatsClient) {}
 

@@ -39,9 +39,8 @@ async function run() {
     const r = await seedReferenceCatalog(dataSource);
     console.log(
       `[seed-reference] ${r.groups} group(s), ${r.stores} store(s), ` +
-        `${r.items} product(s) created, ${r.prices} price(s) written; ` +
-        `${r.adopted} product(s) already harvested and only grouped, ` +
-        `${r.preserved} hand-entered price(s) left alone`
+        `${r.items} product(s) created, ${r.prices} price row(s) inserted; ` +
+        `${r.adopted} product(s) already harvested and only grouped`
     );
   } finally {
     await dataSource.destroy();

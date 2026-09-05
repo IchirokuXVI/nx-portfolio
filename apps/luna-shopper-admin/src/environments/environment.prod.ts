@@ -21,9 +21,16 @@ declare const process: { env: Record<string, string | undefined> };
 export const environment: {
   production: boolean;
   api: AdminApiConfig;
+  /**
+   * Which build this is (backend plan 0080, section 11). CI sets it to the
+   * same string it passes as the image tag, so the version a back office
+   * reports is the version of the image serving it.
+   */
+  version: string;
 } = {
   production: true,
   api: {
     gatewayBaseUrl: process.env['LUNA_GATEWAY_URL'] as string,
   },
+  version: process.env['LUNA_ADMIN_APP_VERSION'] as string,
 };

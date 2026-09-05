@@ -1184,6 +1184,7 @@ describe('SettleSheet: a price and a place on every option', () => {
     unitPriceLabel: 'EUR/L',
     observedAt: new Date('2026-09-01T06:00:00.000Z'),
     sourceKind: 'OFFICIAL_WEB',
+    stale: false,
     priceScopeId: 'scope-a',
     ...overrides,
   });
@@ -1360,7 +1361,7 @@ describe('SettleSheet: a price and a place on every option', () => {
     expect(place).not.toContain('Cádiz');
   });
 
-  it('names the oldest price and says when one was typed in by hand', async () => {
+  it('names the oldest price and says when the server flagged one stale', async () => {
     const mixed = new Map([
       product(
         'i-hacendado',
@@ -1372,7 +1373,7 @@ describe('SettleSheet: a price and a place on every option', () => {
         'Central Lechera',
         offer(1.15, {
           observedAt: new Date('2026-08-20T06:00:00.000Z'),
-          sourceKind: 'ADMIN',
+          stale: true,
         })
       ),
       product('i-pascual', 'Pascual', offer(0.89)),
@@ -1387,8 +1388,36 @@ describe('SettleSheet: a price and a place on every option', () => {
     // The key and its argument rather than a sentence: the testing translator
     // does not interpolate, so the view model is what is asserted.
     const asOf = fixture.componentInstance['pricesAsOf']();
-    expect(asOf?.key).toBe('basket.product.asOfTyped');
+    expect(asOf?.key).toBe('basket.product.asOfStale');
     expect(asOf?.when).toContain('2026');
     expect(asOf?.when).toMatch(/Aug/);
+  });
+
+  /**
+   * Backend plan 0080, section 5: the flag comes from the server. A price a
+   * person typed in is not stale for being typed, and an old date is not stale
+   * for being old, because only the policy knows which kinds age out.
+   */
+  it('does not infer staleness from the kind or the date', async () => {
+    const typedAndOld = new Map([
+      product(
+        'i-central',
+        'Central Lechera',
+        offer(1.15, {
+          observedAt: new Date('2026-08-12T06:00:00.000Z'),
+          sourceKind: 'ADMIN',
+        })
+      ),
+    ]);
+
+    const { fixture } = await renderPane({
+      lines: [milkLine()],
+      products: typedAndOld,
+      scopes: scope([]),
+    });
+
+    expect(fixture.componentInstance['pricesAsOf']()?.key).toBe(
+      'basket.product.asOf'
+    );
   });
 });

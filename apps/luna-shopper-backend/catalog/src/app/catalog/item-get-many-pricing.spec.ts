@@ -140,7 +140,7 @@ describe('ItemService.getMany with scopes (plan 0066)', () => {
       priceScopeId: 'scope-a',
       price: 0.95,
       currency: 'EUR',
-      priceSourceKind: PriceSourceKind.OFFICIAL_WEB,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
     });
     expect(calls.scopeIds).toEqual(['scope-a', 'scope-b']);
     // Section 2.1: the shelf price decides, and the unit price only breaks a
