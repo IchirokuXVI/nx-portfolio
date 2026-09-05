@@ -64,7 +64,7 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'queso-mezcla-capicua',
-    name: { en: 'Mixed Milk Cheese', es: 'Queso mezcla Capicúa' },
+    name: { en: 'Mixed Milk Cheese', es: 'Queso mezcla' },
     group: 'semi-cured-cheese',
     category: DAIRY,
     defaultUnit: KILOGRAM,

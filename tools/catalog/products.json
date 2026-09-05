@@ -1,0 +1,945 @@
+{
+  "version": 1,
+  "products": [
+    {
+      "slug": "gel-bano-natural-honey",
+      "name": {
+        "en": "Shower Gel",
+        "es": "Gel de baño"
+      },
+      "brand": "Natural Honey",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 650,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p26-o01",
+          "printedName": "Gel de baño NATURAL HONEY 650 ml o urea 600 ml",
+          "price": 1.85
+        }
+      ]
+    },
+    {
+      "slug": "gel-bano-urea-natural-honey",
+      "name": {
+        "en": "Urea Shower Gel",
+        "es": "Gel de baño de urea"
+      },
+      "brand": "Natural Honey",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 600,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p26-o01",
+          "printedName": "Gel de baño NATURAL HONEY 650 ml o urea 600 ml",
+          "price": 1.85
+        }
+      ],
+      "notes": [
+        "The second half of one offer, at the same price. A different formula and a different size, so a different product."
+      ]
+    },
+    {
+      "slug": "agua-colonia-fresca-flor-de-naranjo",
+      "name": {
+        "en": "Fresh Cologne",
+        "es": "Agua de colonia fresca"
+      },
+      "brand": "Flor de Naranjo",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 750,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p26-o02",
+          "printedName": "Agua de colonia fresca FLOR DE NARANJO 750 ml",
+          "price": 2.75
+        }
+      ]
+    },
+    {
+      "slug": "champu-crowe",
+      "name": {
+        "en": "Shampoo",
+        "es": "Champú"
+      },
+      "brand": "Crowe",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 400,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p26-o03",
+          "printedName": "Champú CROWE 400 ml",
+          "price": 1.4
+        }
+      ]
+    },
+    {
+      "slug": "champu-johnsons",
+      "name": {
+        "en": "Shampoo",
+        "es": "Champú"
+      },
+      "brand": "Johnson's",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 500,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p26-o04",
+          "printedName": "Champú JOHNSON'S 500 ml",
+          "price": 1.85
+        }
+      ]
+    },
+    {
+      "slug": "mascarilla-capilar-fructis",
+      "name": {
+        "en": "Hair Mask",
+        "es": "Mascarilla capilar"
+      },
+      "brand": "Fructis",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 320,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p26-o05",
+          "printedName": "Mascarilla capilar FRUCTIS 320 ml",
+          "price": 3.75
+        }
+      ],
+      "notes": [
+        "Fructis and not Garnier: the line is the word printed largest on the bottle and the word a shopper types."
+      ]
+    },
+    {
+      "slug": "tinte-capilar-palette-intensive",
+      "name": {
+        "en": "Permanent Hair Dye, Intensive",
+        "es": "Tinte capilar Intensive"
+      },
+      "brand": "Palette",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "UNIT",
+      "unitSize": 1,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p26-o06",
+          "printedName": "Tinte capilar PALETTE INTENSIVE",
+          "price": 3.15
+        }
+      ],
+      "notes": [
+        "Intensive is the range and stays in the name, because Palette sells several."
+      ]
+    },
+    {
+      "slug": "locion-corporal-rosa-mosqueta",
+      "name": {
+        "en": "Rosehip Body Lotion",
+        "es": "Loción corporal de rosa mosqueta"
+      },
+      "brand": "Instituto Español",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 950,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o01",
+          "printedName": "Loción corporal INSTITUTO ESPAÑOL rosa mosqueta 950 ml",
+          "price": 4.45
+        },
+        {
+          "chain": "el-jamon",
+          "id": "p36-o08",
+          "printedName": "Loción Rosa Mosqueta Instituto Español, 950 ml.",
+          "price": 4.89
+        }
+      ],
+      "notes": [
+        "Same brand, same 950 ml bottle. The two chains print the words in a different order and nothing else differs."
+      ]
+    },
+    {
+      "slug": "desodorante-spray-dove",
+      "name": {
+        "en": "Deodorant Spray",
+        "es": "Desodorante en spray"
+      },
+      "brand": "Dove",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 200,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o02",
+          "printedName": "Desodorante DOVE ADVANCED CARE 200 ml",
+          "price": 2.85
+        },
+        {
+          "chain": "el-jamon",
+          "id": "p37-o06",
+          "printedName": "Desodorante Dove, 200 ml.",
+          "price": 3.15
+        }
+      ],
+      "notes": [
+        "Deza prints the Advanced Care line and El Jamón prints none, so the line is not in the name.",
+        "Same brand, same 200 ml spray. Deza printed the Advanced Care line and El Jamón printed none, which does not split a product."
+      ]
+    },
+    {
+      "slug": "enjuague-bucal-menta-centra-line-pharma",
+      "name": {
+        "en": "Mint Mouthwash",
+        "es": "Enjuague bucal de menta"
+      },
+      "brand": "Centra Line Pharma",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 500,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o03",
+          "printedName": "Enjuague bucal CENTRA LINE PHARMA menta o 0% 500 ml",
+          "price": 1.2
+        }
+      ]
+    },
+    {
+      "slug": "enjuague-bucal-cero-centra-line-pharma",
+      "name": {
+        "en": "Alcohol Free Mouthwash",
+        "es": "Enjuague bucal 0% sin alcohol"
+      },
+      "brand": "Centra Line Pharma",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 500,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o03",
+          "printedName": "Enjuague bucal CENTRA LINE PHARMA menta o 0% 500 ml",
+          "price": 1.2
+        }
+      ]
+    },
+    {
+      "slug": "dentifrico-bicarbonato-signal",
+      "name": {
+        "en": "Bicarbonate Toothpaste",
+        "es": "Dentífrico con bicarbonato"
+      },
+      "brand": "Signal",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 100,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o04",
+          "printedName": "Dentífrico SIGNAL 100 ml bicarbonato o anticaries",
+          "price": 1.45
+        }
+      ]
+    },
+    {
+      "slug": "dentifrico-anticaries-signal",
+      "name": {
+        "en": "Anticavity Toothpaste",
+        "es": "Dentífrico anticaries"
+      },
+      "brand": "Signal",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 100,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o04",
+          "printedName": "Dentífrico SIGNAL 100 ml bicarbonato o anticaries",
+          "price": 1.45
+        }
+      ]
+    },
+    {
+      "slug": "crema-hidratante-sorbete-garnier",
+      "name": {
+        "en": "Sorbet Moisturising Cream",
+        "es": "Crema hidratante sorbete"
+      },
+      "brand": "Garnier",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 85,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o05",
+          "printedName": "Crema sorbete hidratante GARNIER 85 ml",
+          "price": 4.75
+        }
+      ]
+    },
+    {
+      "slug": "mascarilla-facial-colageno-beauugreen",
+      "name": {
+        "en": "Collagen Sheet Face Mask",
+        "es": "Mascarilla facial de colágeno"
+      },
+      "brand": "Beauugreen",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "UNIT",
+      "unitSize": 1,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o06",
+          "printedName": "Mascarilla facial BEAUUGREEN colágeno, aloe o ginseng ud",
+          "price": 0.85
+        }
+      ]
+    },
+    {
+      "slug": "mascarilla-facial-aloe-beauugreen",
+      "name": {
+        "en": "Aloe Sheet Face Mask",
+        "es": "Mascarilla facial de aloe"
+      },
+      "brand": "Beauugreen",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "UNIT",
+      "unitSize": 1,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o06",
+          "printedName": "Mascarilla facial BEAUUGREEN colágeno, aloe o ginseng ud",
+          "price": 0.85
+        }
+      ]
+    },
+    {
+      "slug": "mascarilla-facial-ginseng-beauugreen",
+      "name": {
+        "en": "Ginseng Sheet Face Mask",
+        "es": "Mascarilla facial de ginseng"
+      },
+      "brand": "Beauugreen",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "UNIT",
+      "unitSize": 1,
+      "offers": [
+        {
+          "chain": "deza",
+          "id": "p27-o06",
+          "printedName": "Mascarilla facial BEAUUGREEN colágeno, aloe o ginseng ud",
+          "price": 0.85
+        }
+      ]
+    },
+    {
+      "slug": "champu-dream-long-elvive",
+      "name": {
+        "en": "Dream Long Shampoo",
+        "es": "Champú Dream Long"
+      },
+      "brand": "Elvive",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 380,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o01",
+          "printedName": "Champú Elvive, 380 ml.",
+          "price": 2.34
+        }
+      ],
+      "notes": [
+        "Elvive and not L'Oréal: the line is what the bottle prints largest and what a shopper types."
+      ]
+    },
+    {
+      "slug": "champu-total-repair-elvive",
+      "name": {
+        "en": "Total Repair 5 Shampoo",
+        "es": "Champú Total Repair 5"
+      },
+      "brand": "Elvive",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 380,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o01",
+          "printedName": "Champú Elvive, 380 ml.",
+          "price": 2.34
+        }
+      ]
+    },
+    {
+      "slug": "tinte-capilar-llongueras-advance",
+      "name": {
+        "en": "Permanent Hair Dye, Advance",
+        "es": "Tinte capilar Advance"
+      },
+      "brand": "Llongueras",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "UNIT",
+      "unitSize": 1,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o02",
+          "printedName": "Tinte Llongueras Advance, unidad",
+          "price": 3.34
+        }
+      ]
+    },
+    {
+      "slug": "champu-flex-revlon",
+      "name": {
+        "en": "Flex Shampoo",
+        "es": "Champú Flex"
+      },
+      "brand": "Revlon",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 650,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o03",
+          "printedName": "Champú o Acondicionador Revlon Flex, 650 ml.",
+          "price": 2.79
+        }
+      ]
+    },
+    {
+      "slug": "acondicionador-flex-revlon",
+      "name": {
+        "en": "Flex Conditioner",
+        "es": "Acondicionador Flex"
+      },
+      "brand": "Revlon",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 650,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o03",
+          "printedName": "Champú o Acondicionador Revlon Flex, 650 ml.",
+          "price": 2.79
+        }
+      ],
+      "notes": ["The other half of one offer. A conditioner is not a shampoo."]
+    },
+    {
+      "slug": "mascarilla-capilar-fortificante-ifa-unnia",
+      "name": {
+        "en": "Strengthening Hair Mask",
+        "es": "Mascarilla capilar fortificante"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 400,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o04",
+          "printedName": "Mascarilla Ifa Unnia, 400 ml.",
+          "price": 2.19
+        }
+      ]
+    },
+    {
+      "slug": "mascarilla-capilar-hidratacion-ifa-unnia",
+      "name": {
+        "en": "Moisturising Hair Mask",
+        "es": "Mascarilla capilar de hidratación"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 400,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o04",
+          "printedName": "Mascarilla Ifa Unnia, 400 ml.",
+          "price": 2.19
+        }
+      ]
+    },
+    {
+      "slug": "mascarilla-capilar-nutre-repara-ifa-unnia",
+      "name": {
+        "en": "Nourish and Repair Hair Mask",
+        "es": "Mascarilla capilar nutre y repara"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 400,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o04",
+          "printedName": "Mascarilla Ifa Unnia, 400 ml.",
+          "price": 2.19
+        }
+      ]
+    },
+    {
+      "slug": "champu-syoss",
+      "name": {
+        "en": "Shampoo",
+        "es": "Champú"
+      },
+      "brand": "Syoss",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 440,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o05",
+          "printedName": "Champú Syoss, 440 ml.",
+          "price": 3.59
+        }
+      ]
+    },
+    {
+      "slug": "mascarilla-capilar-elvive",
+      "name": {
+        "en": "Hair Mask",
+        "es": "Mascarilla capilar"
+      },
+      "brand": "Elvive",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 310,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o06",
+          "printedName": "Mascarilla Elvive, 310 ml.",
+          "price": 2.2
+        }
+      ],
+      "notes": [
+        "The receipt catalog holds an Elvive hair mask from SuperCash, Hidra Hialurónico at 4.10 euros, with no size recorded. Same brand and product type. It merges the moment either side records a size that agrees."
+      ]
+    },
+    {
+      "slug": "crema-corporal-hidratante-nivea",
+      "name": {
+        "en": "Moisturising Body Cream",
+        "es": "Crema corporal hidratante"
+      },
+      "brand": "Nivea",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 250,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p36-o07",
+          "printedName": "Crema Corporal Hidratante Nivea, 250 ml.",
+          "price": 3.99
+        }
+      ]
+    },
+    {
+      "slug": "gel-bano-zero-sanex",
+      "name": {
+        "en": "Zero% Shower Gel",
+        "es": "Gel de baño Zero%"
+      },
+      "brand": "Sanex",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 600,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o01",
+          "printedName": "Gel Sanex 600 ml.",
+          "price": 2.49
+        }
+      ]
+    },
+    {
+      "slug": "gel-bano-cuidado-experto-sanex",
+      "name": {
+        "en": "Expert Care Shower Gel",
+        "es": "Gel de baño Cuidado Experto"
+      },
+      "brand": "Sanex",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 600,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o01",
+          "printedName": "Gel Sanex 600 ml.",
+          "price": 2.49
+        }
+      ]
+    },
+    {
+      "slug": "crema-facial-dia-q10-ifa-unnia",
+      "name": {
+        "en": "Q10 Day Face Cream",
+        "es": "Crema facial de día Q10"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 50,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o02",
+          "printedName": "Crema Facial Dia o Noche Q10 Ifa Unnia, 50 ml.",
+          "price": 2.89
+        }
+      ]
+    },
+    {
+      "slug": "crema-facial-noche-q10-ifa-unnia",
+      "name": {
+        "en": "Q10 Night Face Cream",
+        "es": "Crema facial de noche Q10"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 50,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o02",
+          "printedName": "Crema Facial Dia o Noche Q10 Ifa Unnia, 50 ml.",
+          "price": 2.89
+        }
+      ]
+    },
+    {
+      "slug": "maquinilla-afeitar-mujer-ifa-unnia",
+      "name": {
+        "en": "Women's Twin Blade Razors",
+        "es": "Maquinilla de afeitar de mujer de dos hojas"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "PACK",
+      "unitSize": 10,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o03",
+          "printedName": "Maquinilla Mujer 2 Hojas Ifa Unnia, 10 uds.",
+          "price": 1.85
+        }
+      ]
+    },
+    {
+      "slug": "cera-fria-facial-ifa-unnia",
+      "name": {
+        "en": "Cold Wax Face Strips",
+        "es": "Bandas de cera fría facial"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "PACK",
+      "unitSize": 16,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o04",
+          "printedName": "Cera Fria Banda Facial Ifa Unnia, 16 uds.",
+          "price": 0.95
+        }
+      ]
+    },
+    {
+      "slug": "desodorante-roll-on-dove",
+      "name": {
+        "en": "Roll On Deodorant",
+        "es": "Desodorante roll-on"
+      },
+      "brand": "Dove",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 50,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o05",
+          "printedName": "Desodorante Roll-On Dove, 50 ml.",
+          "price": 1.32
+        }
+      ],
+      "notes": [
+        "Same brand as the 200 ml spray this catalog already holds, at a different format, so a different product."
+      ]
+    },
+    {
+      "slug": "desodorante-spray-chic-attraction-ifa-unnia",
+      "name": {
+        "en": "Chic Attraction Deodorant Spray",
+        "es": "Desodorante en spray Chic Attraction"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 150,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o07",
+          "printedName": "Desodorante Ifa Unnia spray 150 ml.",
+          "price": 1.39
+        }
+      ]
+    },
+    {
+      "slug": "desodorante-spray-chocolate-temptation-ifa-unnia",
+      "name": {
+        "en": "Chocolate Temptation Deodorant Spray",
+        "es": "Desodorante en spray Chocolate Temptation"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 150,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o07",
+          "printedName": "Desodorante Ifa Unnia spray 150 ml.",
+          "price": 1.39
+        }
+      ]
+    },
+    {
+      "slug": "desodorante-spray-sport-protection-ifa-unnia",
+      "name": {
+        "en": "Sport Protection Deodorant Spray",
+        "es": "Desodorante en spray Sport Protection"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 150,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o07",
+          "printedName": "Desodorante Ifa Unnia spray 150 ml.",
+          "price": 1.39
+        }
+      ]
+    },
+    {
+      "slug": "gel-bano-classic-ifa-unnia",
+      "name": {
+        "en": "Classic Shower Gel",
+        "es": "Gel de baño Classic"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 750,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p37-o08",
+          "printedName": "Gel Classic Ifa Unnia, 750 ml.",
+          "price": 1.25
+        }
+      ]
+    },
+    {
+      "slug": "compresas-noche-alas-ifa-unnia",
+      "name": {
+        "en": "Night Sanitary Towels with Wings",
+        "es": "Compresas de noche con alas"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "PACK",
+      "unitSize": 10,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p38-o01",
+          "printedName": "Compresas Noche con Alas Ifa Unnia, 10 uds.",
+          "price": 1.05
+        }
+      ],
+      "notes": [
+        "Night, regular and super are three products, not one in three pack sizes. The absorbency is what the shopper picks."
+      ]
+    },
+    {
+      "slug": "compresas-normal-alas-ifa-unnia",
+      "name": {
+        "en": "Regular Sanitary Towels with Wings",
+        "es": "Compresas normales con alas"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "PACK",
+      "unitSize": 14,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p38-o02",
+          "printedName": "Compresas Normal con Alas Ifa Unnia, 14 uds.",
+          "price": 1.19
+        }
+      ]
+    },
+    {
+      "slug": "compresas-super-alas-ifa-unnia",
+      "name": {
+        "en": "Super Sanitary Towels with Wings",
+        "es": "Compresas super con alas"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "PACK",
+      "unitSize": 12,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p38-o05",
+          "printedName": "Compresas Super con Alas Ifa Unnia, 12 uds.",
+          "price": 0.85
+        }
+      ]
+    },
+    {
+      "slug": "agua-micelar-ifa-unnia",
+      "name": {
+        "en": "Micellar Water",
+        "es": "Agua micelar"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 400,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p38-o03",
+          "printedName": "Agua Micelar Ifa Unnia, 400 ml.",
+          "price": 2.55
+        }
+      ]
+    },
+    {
+      "slug": "enjuague-bucal-total-listerine",
+      "name": {
+        "en": "Total Mouthwash",
+        "es": "Enjuague bucal Total"
+      },
+      "brand": "Listerine",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 500,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p38-o04",
+          "printedName": "Enjuague Listerine Total, 500 ml.",
+          "price": 4.5
+        }
+      ],
+      "notes": [
+        "Total is the range and stays in the name, because Listerine sells several."
+      ]
+    },
+    {
+      "slug": "discos-desmaquillantes-ifa-unnia",
+      "name": {
+        "en": "Round Cotton Pads",
+        "es": "Discos desmaquillantes de algodón"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "PACK",
+      "unitSize": 120,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p38-o06",
+          "printedName": "Discos Desmaquilladores Algodon Redondo Ifa Unnia, 120 uds.",
+          "price": 0.79
+        }
+      ],
+      "notes": [
+        "The receipt catalog holds Deliplus cotton pads from Mercadona. A different own label, so a different product."
+      ]
+    },
+    {
+      "slug": "crema-dental-frescor-diario-parodontax",
+      "name": {
+        "en": "Daily Fresh Toothpaste",
+        "es": "Crema dental frescor diario"
+      },
+      "brand": "Parodontax",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "MILLILITER",
+      "unitSize": 75,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p38-o07",
+          "printedName": "Crema Dental Frescor Diario Parodontax, 75 ml.",
+          "price": 2.35
+        }
+      ]
+    },
+    {
+      "slug": "esponja-bano-suave-ifa-unnia",
+      "name": {
+        "en": "Soft Bath Sponge",
+        "es": "Esponja de baño suave"
+      },
+      "brand": "Ifa Unnia",
+      "category": "PERSONAL_CARE",
+      "defaultUnit": "PACK",
+      "unitSize": 2,
+      "offers": [
+        {
+          "chain": "el-jamon",
+          "id": "p38-o08",
+          "printedName": "Esponja Bano Suave Ifa Unnia, Pack-2",
+          "price": 0.75
+        }
+      ]
+    }
+  ]
+}

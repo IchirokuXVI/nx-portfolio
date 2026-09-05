@@ -258,7 +258,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
     group: 'salami',
     category: MEAT,
     defaultUnit: KILOGRAM,
-    brand: 'El Pozo',
+    brand: 'ElPozo',
     receipt: 'SALAMI MONTAÑES',
     price: 1.85,
     observedAt: '2026-08-27',
