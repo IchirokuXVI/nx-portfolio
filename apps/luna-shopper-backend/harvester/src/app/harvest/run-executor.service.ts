@@ -3,19 +3,19 @@ import { ConfigService } from '@nestjs/config';
 import {
   HarvestRunMode,
   HarvestRunStatus,
+  PriceSourceKind,
 } from '@portfolio/luna-shopper/contracts';
 import type { HarvesterConfig } from '../config/app-config';
 import { TokenBucket } from '../runner/token-bucket';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
+import { FileImportRunner } from './file-import.runner';
 import { HarvestRunStore } from './harvest-run.store';
-import { LeafletImportRunner } from './leaflet-import.runner';
-import { RefreshRunner } from './refresh.runner';
 import { RunContext } from './run-context';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 /**
- * Dispatches a run to its runner, and owns everything the three have in common:
+ * Dispatches a run to its runner, and owns everything they have in common:
  * the shared token bucket, the abort signal, and the finalizer.
  *
  * **The finalizer is the interesting part** (plan 0038, section 6.6). Abort is
@@ -37,8 +37,7 @@ export class RunExecutor implements OnApplicationShutdown {
     private readonly sources: SupermarketSourceService,
     private readonly storeDiscovery: StoreDiscoveryRunner,
     private readonly catalogDiscovery: CatalogDiscoveryRunner,
-    private readonly refresh: RefreshRunner,
-    private readonly leafletImport: LeafletImportRunner,
+    private readonly fileImport: FileImportRunner,
     private readonly config: ConfigService
   ) {}
 
@@ -130,24 +129,17 @@ export class RunExecutor implements OnApplicationShutdown {
             requireSource(source)
           );
           break;
-        case HarvestRunMode.REFRESH:
-          await this.refresh.run(
-            context,
-            {
-              supermarketId: run.supermarketId as string,
-              priceScopeId: run.priceScopeId as string,
-            },
-            requireSource(source)
-          );
-          break;
         // `requireSource` is deliberately not called (plan 0081, section 1).
         // A `SupermarketSource` is fetching configuration and an upload fetches
-        // nothing, so a chain that publishes only leaflets runs with no source
-        // row at all.
-        case HarvestRunMode.LEAFLET_IMPORT:
-          await this.leafletImport.run(context, {
+        // nothing, so a chain with no adapter at all still gets rows that look
+        // exactly like a walk's (plan 0086, D6).
+        case HarvestRunMode.FILE_IMPORT:
+          await this.fileImport.run(context, {
             supermarketId: run.supermarketId as string,
             priceScopeId: run.priceScopeId as string,
+            // What observed the price, not what uploaded it: a re-imported
+            // Mercadona walk stamps OFFICIAL_API (plan 0086, section 6.2).
+            sourceKind: run.input['sourceKind'] as PriceSourceKind,
           });
           break;
       }

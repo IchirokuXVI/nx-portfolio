@@ -1,31 +1,37 @@
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 
 /**
- * A leaflet's dates are **local days in Spain** (plan 0081, section 5).
+ * A validity window stated as **local days in Spain** (plan 0081, section 5,
+ * carried into plan 0086 section 5's last paragraph).
  *
- * - `validFrom` is `starts_on` at 00:00 `Europe/Madrid`.
- * - `validUntil` is the day *after* `ends_on` at 00:00 `Europe/Madrid`, and it
- *   is exclusive: a leaflet valid "to 23 September" is valid through the whole
- *   of the 23rd.
+ * - `validFrom` is the `from` day at 00:00 `Europe/Madrid`.
+ * - `validUntil` is the day *after* the `until` day at 00:00 `Europe/Madrid`, and
+ *   it is exclusive: a window stated "to 23 September" covers the whole of the
+ *   23rd.
  *
  * No other code in this backend names a timezone, and this one has to, because
- * Spain moves its clocks: a leaflet spanning the last Sunday of October is one
+ * Spain moves its clocks: a window spanning the last Sunday of October is one
  * hour longer in UTC than the same span in July, and a fixed `+02:00` would end
  * it an hour early or late. `Intl.DateTimeFormat` with `timeZone: 'Europe/Madrid'`
  * is what makes the arithmetic follow the rule rather than a guess about it.
  *
- * **The admin's override is required when either bound is null**, and offered
- * always. A run with a null bound is refused at spawn rather than written with
- * an open window nobody chose.
+ * **A window is optional now, and it was not before.** A leaflet import refused a
+ * document with no dates, because a leaflet price that never expires outranks
+ * the crawl for ever. A file import takes any producer's document, including the
+ * harvester's own export of a walk, and a storefront price has no window at all:
+ * absent means null, which is exactly what a walk writes. What is still refused
+ * is **half** a window, for the old reason: a start with no end never expires,
+ * and an end with no start applies now, which is what a document published three
+ * days early does not mean.
  */
 
 /** The Spanish civil timezone, named once. */
-export const LEAFLET_TIMEZONE = 'Europe/Madrid';
+export const IMPORT_TIMEZONE = 'Europe/Madrid';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-export interface LeafletWindow {
+export interface ImportWindow {
   validFrom: Date;
   /** Exclusive. */
   validUntil: Date;
@@ -43,7 +49,7 @@ export interface LeafletWindow {
  */
 export function localMidnightUtc(
   day: string,
-  timeZone: string = LEAFLET_TIMEZONE
+  timeZone: string = IMPORT_TIMEZONE
 ): Date {
   if (!DATE_PATTERN.test(day)) {
     throw new ValidationException(`${day} is not a YYYY-MM-DD date`, {
@@ -97,37 +103,40 @@ function offsetMillis(instant: number, timeZone: string): number {
 }
 
 /**
- * The window a run writes its prices with (section 5).
+ * The window a run writes its prices with, or null when nobody stated one.
  *
- * The admin's values win where he gave them, the document's are used where he
- * did not, and a bound that is null in both is refused: a price row with no
- * start is one that applies now, which is exactly what a leaflet published three
- * days early does not mean.
+ * The admin's values win where he gave them and the document's are used where he
+ * did not, which is the rule the leaflet spawn had. What changed is the answer
+ * when neither states anything: null, a price with no window, which is what a
+ * storefront price is.
  */
-export function resolveLeafletWindow(input: {
-  documentStartsOn: string | null;
-  documentEndsOn: string | null;
+export function resolveImportWindow(input: {
+  documentFrom: string | null;
+  documentUntil: string | null;
   overrideFrom?: string | null;
   overrideUntil?: string | null;
   timeZone?: string;
-}): LeafletWindow {
-  const timeZone = input.timeZone ?? LEAFLET_TIMEZONE;
-  const startDay = firstOf(input.overrideFrom, input.documentStartsOn);
-  const endDay = firstOf(input.overrideUntil, input.documentEndsOn);
+}): ImportWindow | null {
+  const timeZone = input.timeZone ?? IMPORT_TIMEZONE;
+  const startDay = firstOf(input.overrideFrom, input.documentFrom);
+  const endDay = firstOf(input.overrideUntil, input.documentUntil);
 
+  if (!startDay && !endDay) {
+    return null;
+  }
   if (!startDay) {
     throw new ValidationException(
-      'This leaflet states no start date, so give one: a price row with no ' +
-        'start applies now, and a leaflet published before its prices do is ' +
-        'exactly the case that is not.',
-      { details: { validFrom: 'required when the document states none' } }
+      'This document states an end date and no start date, so give one: a ' +
+        'price row with no start applies now, and a document published before ' +
+        'its prices do is exactly the case that is not.',
+      { details: { validFrom: 'required when a validUntil is given' } }
     );
   }
   if (!endDay) {
     throw new ValidationException(
-      'This leaflet states no end date, so give one: a leaflet price that ' +
-        'never expires outranks the crawl for ever.',
-      { details: { validUntil: 'required when the document states none' } }
+      'This document states a start date and no end date, so give one: a ' +
+        'price that never expires outranks the crawl for ever.',
+      { details: { validUntil: 'required when a validFrom is given' } }
     );
   }
 
@@ -139,7 +148,7 @@ export function resolveLeafletWindow(input: {
 
   if (validUntil.getTime() <= validFrom.getTime()) {
     throw new ValidationException(
-      `That leaflet ends (${endDay}) before it starts (${startDay}).`,
+      `That window ends (${endDay}) before it starts (${startDay}).`,
       { details: { validUntil: 'must be on or after validFrom' } }
     );
   }

@@ -1,11 +1,19 @@
 import {
   ItemCategory,
   ItemSourceMatch,
-  ItemSourceRefStatus,
+  SourceEntryStatus,
   UnitOfMeasure,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
-import { ItemMatchIndex, normalizeName } from './matching';
+import { createHash } from 'node:crypto';
+import type { SourceCatalogEntry } from '../entities';
+import {
+  entryKey,
+  entryNameKey,
+  ItemMatchIndex,
+  normalizeName,
+  SiblingEntryIndex,
+} from './matching';
 
 function item(overrides: Partial<ItemView> = {}): ItemView {
   return {
@@ -22,12 +30,11 @@ function item(overrides: Partial<ItemView> = {}): ItemView {
   };
 }
 
-describe('the matching ladder (plan 0038, section 6.2)', () => {
+describe('the catalog item index, rungs 2 and 3 (plan 0086, section 4)', () => {
   it('matches on EAN and calls it ACTIVE: the only cross chain identifier', () => {
     const index = new ItemMatchIndex([item({ ean: '8480000135636' })]);
     expect(
       index.match({
-        externalId: '4241',
         name: 'Something else entirely',
         brand: null,
         ean: '8480000135636',
@@ -36,7 +43,7 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
     ).toEqual({
       itemId: 'item-1',
       matchedBy: ItemSourceMatch.EAN,
-      status: ItemSourceRefStatus.ACTIVE,
+      status: SourceEntryStatus.ACTIVE,
       confidence: 1,
     });
   });
@@ -46,7 +53,6 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
     // shop on, so this rung never writes a price until the owner confirms it.
     const index = new ItemMatchIndex([item()]);
     const match = index.match({
-      externalId: '4241',
       name: 'Aceite de oliva',
       brand: 'Hacendado',
       ean: null,
@@ -55,7 +61,7 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
     expect(match).toMatchObject({
       itemId: 'item-1',
       matchedBy: ItemSourceMatch.NAME_BRAND_SIZE,
-      status: ItemSourceRefStatus.CANDIDATE,
+      status: SourceEntryStatus.CANDIDATE,
     });
     expect(match?.confidence).toBeLessThan(1);
   });
@@ -67,7 +73,6 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
     ]);
     expect(
       index.match({
-        externalId: '4241',
         name: 'Aceite de oliva',
         brand: 'Hacendado',
         ean: '8480000135636',
@@ -81,7 +86,6 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
     const index = new ItemMatchIndex([item({ id: 'a' }), item({ id: 'b' })]);
     expect(
       index.match({
-        externalId: '4241',
         name: 'Aceite de oliva',
         brand: 'Hacendado',
         ean: null,
@@ -94,7 +98,6 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
     const index = new ItemMatchIndex([item({ unitSize: 1 })]);
     expect(
       index.match({
-        externalId: '4241',
         name: 'Aceite de oliva',
         brand: 'Hacendado',
         ean: null,
@@ -113,7 +116,6 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
 
     expect(
       index.match({
-        externalId: '4241',
         name: 'Olive Oil',
         brand: 'Hacendado',
         ean: null,
@@ -122,7 +124,7 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
     ).toEqual({
       itemId: 'item-1',
       matchedBy: ItemSourceMatch.NAME_BRAND_SIZE,
-      status: ItemSourceRefStatus.CANDIDATE,
+      status: SourceEntryStatus.CANDIDATE,
       confidence: 0.6,
     });
   });
@@ -131,13 +133,97 @@ describe('the matching ladder (plan 0038, section 6.2)', () => {
     const index = new ItemMatchIndex([item()]);
     expect(
       index.match({
-        externalId: '99999',
         name: 'Papel de cocina',
         brand: 'Bosque Verde',
         ean: null,
         unitSize: 2,
       })
     ).toBeNull();
+  });
+});
+
+/**
+ * Rung 4: the chain's own rows (plan 0086, section 4).
+ *
+ * The rung the one table exists for. A leaflet's printed name and a walk's
+ * product id are two observations of one product, and this is what proposes the
+ * second to the first without either of them stopping being its own row.
+ */
+describe('the sibling row index, rung 4', () => {
+  const row = (over: Partial<SourceCatalogEntry>): SourceCatalogEntry =>
+    ({
+      id: 'row-1',
+      name: 'Leche entera',
+      sizeFormat: '1 L',
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+      ...over,
+    }) as SourceCatalogEntry;
+
+  it("proposes an ACTIVE sibling's item, whatever source kind wrote it", () => {
+    const index = new SiblingEntryIndex([
+      row({ status: SourceEntryStatus.ACTIVE, itemId: 'item-1' }),
+    ]);
+
+    // Normalized on both sides, so the chain's own casing does not decide it.
+    expect(index.match('LECHE ENTERA', '1 l')).toEqual({
+      itemId: 'item-1',
+      entryId: null,
+    });
+  });
+
+  it('proposes the sibling itself when the sibling has no item yet', () => {
+    // The admin creates the item from whichever row carries the EAN, and both
+    // resolve to it afterwards.
+    const index = new SiblingEntryIndex([row({ id: 'walk-row' })]);
+
+    expect(index.match('Leche entera', '1 L')).toEqual({
+      itemId: null,
+      entryId: 'walk-row',
+    });
+  });
+
+  it('proposes nothing for a REJECTED sibling', () => {
+    // The owner said that string is not a product he tracks, and a run does not
+    // get to reopen the decision through a neighbour.
+    const index = new SiblingEntryIndex([
+      row({ status: SourceEntryStatus.REJECTED }),
+    ]);
+
+    expect(index.match('Leche entera', '1 L')).toBeNull();
+  });
+
+  it('proposes nothing when two siblings disagree about the item', () => {
+    const index = new SiblingEntryIndex([
+      row({ id: 'a', status: SourceEntryStatus.ACTIVE, itemId: 'item-1' }),
+      row({ id: 'b', status: SourceEntryStatus.ACTIVE, itemId: 'item-2' }),
+    ]);
+
+    expect(index.match('Leche entera', '1 L')).toBeNull();
+  });
+
+  it('counts a row this run created as a sibling from the moment it exists', () => {
+    const index = new SiblingEntryIndex([]);
+    expect(index.match('Leche entera', '1 L')).toBeNull();
+
+    index.add(row({ status: SourceEntryStatus.ACTIVE, itemId: 'item-1' }));
+    expect(index.match('Leche entera', '1 L')).toEqual({
+      itemId: 'item-1',
+      entryId: null,
+    });
+  });
+
+  it('is keyed on exactly what a nameless product hashes to', () => {
+    // The two halves of D2: a source with no id is keyed on this string, hashed,
+    // and rung 4 looks a sibling up by the string itself. A DEZA listing and a
+    // DEZA leaflet printing the same name and size therefore meet on one row
+    // through rung 1 rather than through this rung at all.
+    expect(entryKey('Leche entera', '1 L')).toBe(
+      createHash('sha1').update(entryNameKey('Leche entera', '1 L')).digest('hex')
+    );
+    expect(entryNameKey('LECHE  entera', '1 l')).toBe(
+      entryNameKey('Leche entera', '1 L')
+    );
   });
 });
 
