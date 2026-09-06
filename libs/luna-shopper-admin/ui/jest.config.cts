@@ -12,11 +12,12 @@ module.exports = {
       },
     ],
   },
-  // d3's arithmetic modules ship ES modules and nothing else: their `main` is
-  // `src/index.js`, so jest loads the source and stops at the first `export`.
-  // They are named here rather than mapped to a UMD build, because the mapping
-  // would reach the app bundle too, and tree shaking is the reason these three
-  // were taken instead of `d3` itself.
+  // d3's arithmetic modules ship ES modules and nothing else, so their `main` is
+  // the source and jest stops at the first `export`. Every project that reaches
+  // `@portfolio/luna-shopper-admin/ui` reaches them through it, so this line is
+  // the same in every config here (admin plan 0015, section 1). Mapping them to
+  // their UMD builds instead would reach the app bundle too, and tree shaking is
+  // the reason those three were taken rather than `d3` itself.
   transformIgnorePatterns: ['node_modules/(?!(?:.*\\.mjs$|d3-|internmap))'],
   snapshotSerializers: [
     'jest-preset-angular/build/serializers/no-ng-attributes',
