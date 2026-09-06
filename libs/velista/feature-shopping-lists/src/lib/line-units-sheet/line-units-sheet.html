@@ -6,7 +6,7 @@
   <h2 class="title" id="line-units-title">{{ title() }}</h2>
 
   <!--
-    The single most important line of copy on this screen (section 5).
+    The single most important line of copy on this screen (section 4.4).
 
     Permanent, and neither a warning nor a colour. The identical control one screen up
     means "bought", so the sheet says in words what it is not, and the reels below it
@@ -51,15 +51,30 @@
     @case ('loaded') {
       @if (empty()) {
         <!--
-          Reachable by URL even though the settle sheet draws no way in for a line with
-          nothing to show. A sheet that drew an empty list would read as a failure.
+          A reader with no list at all they and the owner can both write. Rare, and
+          drawn as a sentence because a sheet with three empty sections would read as
+          a failure.
         -->
         <p class="hint">{{ 'basket.units.empty' | rokuT }}</p>
       }
 
-      @if (rows().length > 0) {
+      <!--
+        The lists that asked for some of this (section 4.2). Two columns, named once
+        above them rather than on every row: what each list asked for through this
+        basket, and what this basket has already bought for it.
+      -->
+      @if (asked().length > 0) {
+        <p aria-hidden="true" class="columns">
+          <span class="columns-asked">
+            {{ 'basket.units.askedFor' | rokuT }}
+          </span>
+          <span class="columns-bought">{{
+            'basket.units.bought' | rokuT
+          }}</span>
+        </p>
+
         <ul [attr.aria-label]="'basket.units.lists' | rokuT" class="rows">
-          @for (row of rows(); track row.key) {
+          @for (row of asked(); track row.key) {
             <ng-container
               [ngTemplateOutlet]="unitsRow"
               [ngTemplateOutletContext]="{ $implicit: row }"
@@ -69,25 +84,30 @@
       }
 
       <!--
-        The lists that are not in, closed by default (section 4.3).
+        The lists that asked for nothing, closed by default (section 4.3).
 
-        A real disclosure with its count in its accessible name, because the common case
-        is a line that is exactly what it looks like and an expanded section of lists
-        nobody is thinking about is four rows of noise over a trolley.
+        A real disclosure with its count in its accessible name, because the common
+        case is a line that is exactly what it looks like, and for a reader in many
+        zones the closed run is every list they can write.
       -->
-      @if (others().length > 0) {
+      @if (rest().length > 0) {
         <button
-          (click)="toggleOthers()"
-          [attr.aria-expanded]="othersOpen()"
+          (click)="toggleRest()"
+          [attr.aria-expanded]="restOpen()"
           class="disclosure"
           type="button"
         >
-          {{ 'basket.units.others' | rokuT: { count: others().length } }}
+          {{ 'basket.units.more' | rokuT: { count: rest().length } }}
         </button>
 
-        @if (othersOpen()) {
-          <ul class="rows others">
-            @for (row of others(); track row.key) {
+        @if (restOpen()) {
+          <!--
+            One run of rows and no second heading inside it: they are one answer to
+            the reader, and the difference between a list holding this line and a
+            list holding none is a fact about the write rather than about the screen.
+          -->
+          <ul class="rows rest">
+            @for (row of rest(); track row.key) {
               <ng-container
                 [ngTemplateOutlet]="unitsRow"
                 [ngTemplateOutletContext]="{ $implicit: row }"
@@ -105,11 +125,12 @@
 </lib-sheet-shell>
 
 <!--
-  One row, drawn the same whether the list is already in or could be.
+  One row, drawn the same whichever collection the list came from.
 
-  A template rather than two copies of thirty lines: the two collections differ in what
-  a row starts at and in what may stop it, and both of those are already decided in the
-  view model. A reader is not meant to be able to tell the markup apart either.
+  A template rather than three copies of forty lines: the collections differ in what a
+  row starts at, what its caption says and what raising it does, and all of those are
+  already decided in the view model. A reader is not meant to be able to tell the
+  markup apart either.
 -->
 <ng-template #unitsRow let-row>
   <li class="row">
@@ -122,15 +143,18 @@
       }
 
       <!--
-        What the list itself asks for now, when it differs from what it put in. The
-        basket is a snapshot and this is the one screen where the snapshot and the live
-        list are both in front of somebody: showing what was taken without showing what
-        is wanted is how a number that looks right gets set (section 4.2).
+        What the list's own line says: what it asks for on its own before anybody
+        raises it, or what it asks for now when that has drifted from what it asked
+        for here. The basket is a snapshot and this is the one screen where the
+        snapshot and the live list are both in front of somebody.
       -->
-      @if (row.listQuantity !== row.contributed) {
-        <span class="row-wants">
-          {{ 'basket.units.listWants' | rokuT: { count: row.listQuantity } }}
-        </span>
+      @if (row.listCaption; as caption) {
+        <span class="row-wants">{{ caption.key | rokuT: caption.values }}</span>
+      }
+
+      <!-- The household has not agreed to the line yet (section 4.2). -->
+      @if (row.pending) {
+        <span class="row-wants">{{ 'basket.units.pending' | rokuT }}</span>
       }
 
       <!--
@@ -147,16 +171,17 @@
 
       <!--
         Why there is no control, in the row's own words and never by colour or position
-        alone (section 7). The fact stays and the control goes, which is `0030` intact.
+        alone (section 8). The fact stays and the control goes, which is `0030` intact.
       -->
       @if (row.reason) {
         <span class="row-reason">{{ row.reason | rokuT }}</span>
       }
 
       <!--
-        What the last write on this row came to. On the row rather than on the sheet,
-        because one write per row means the row that failed is the row that can say so
-        (section 6).
+        What the last write on this row came to: a refusal, or the one thing a
+        successful write has to say in words (section 6). On the row rather than on
+        the sheet, because one write per row means the row that failed is the row that
+        can say so.
       -->
       @if (row.notice; as notice) {
         <span aria-live="polite" class="row-notice" role="status">
@@ -168,8 +193,8 @@
     @if (row.reason === null) {
       <!--
         No caption on the drag, unlike the row's reel one screen up, and the absence is
-        deliberate (section 5): the gesture that narrates a purchase and the gesture that
-        does not are told apart by whether they narrate one.
+        deliberate (section 4.4): the gesture that narrates a purchase and the gesture
+        that does not are told apart by whether they narrate one.
       -->
       <lib-quantity-reel
         (committedTo)="commit(row, $event)"
@@ -180,12 +205,23 @@
         [readonly]="busy().has(row.key)"
         [value]="row.shown"
       />
-    } @else if (row.contributed > 0) {
+    } @else {
       <!--
-        The numbers stay. A row nobody may move still says what this list put in, which
-        is the information half of the rule the missing reel is the control half of.
+        The numbers stay. A row nobody may move still says what this list asked for,
+        which is the information half of the rule the missing reel is the control half
+        of.
       -->
       <span class="row-number">{{ row.contributed }}</span>
     }
+
+    <!--
+      What this basket has already bought for this list. Read only everywhere and from
+      every collection: nothing on this sheet buys anything, and this column never
+      moves from it (section 4.2).
+    -->
+    <span class="row-bought">
+      <span class="visually-hidden">{{ 'basket.units.bought' | rokuT }}</span>
+      {{ row.settledHere }}
+    </span>
   </li>
 </ng-template>

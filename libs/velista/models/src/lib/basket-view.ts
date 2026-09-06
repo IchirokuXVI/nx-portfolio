@@ -2,6 +2,7 @@ import type { ProductOffer } from './domain';
 import type {
   BasketLineKind,
   BasketOriginUnavailableReason,
+  LineApprovalStatus,
   ParticipantKind,
   SettlementOutcome,
 } from './enums';
@@ -309,6 +310,23 @@ export interface BasketLineOriginDetail {
   settledHere: number;
   /** Whether the basket owner still holds `WRITE` on the list. */
   writable: boolean;
+  /**
+   * Whether the run drew from this list (backend `0092`, section 3).
+   *
+   * The same fact on every collection of {@link BasketLineOrigins}, and the sheet
+   * sorts on it: the lists the basket came from are the ones somebody in an aisle
+   * almost always means, and the server sorts nothing.
+   */
+  fromRun: boolean;
+  /**
+   * The zone line's own approval, so the row can say the household has not agreed
+   * yet (backend `0092`, section 3).
+   *
+   * A line created by raising a list starts under that list's ordinary approval
+   * rule, and an adopted pending line was already waiting before this basket found
+   * it. Both are the same sentence to whoever raised the row.
+   */
+  approvalStatus: LineApprovalStatus;
 }
 
 /**
@@ -337,13 +355,47 @@ export interface BasketOriginCandidate {
   matchedOnText: boolean;
   /** Null when it can be adopted, which is the ordinary case. */
   unavailable: BasketOriginUnavailableReason | null;
+  /** Whether the run drew from this list (backend `0092`, section 3). */
+  fromRun: boolean;
 }
 
-/** What `GET .../lines/:lineId/origins` answers: what is on, and what could be. */
+/**
+ * A list this reader may write that holds no matching line at all (backend `0092`,
+ * section 3; `ListRef` on the wire).
+ *
+ * The third collection, and the one that replaced the send sheet's picker (velista
+ * `0068`). Raising one of these from zero **creates** the line on that list through
+ * the ordinary add, so a row here is a list this basket has never touched and could
+ * send this line to.
+ *
+ * It carries no quantity because there is nothing to carry one: the list asks for
+ * none of this, and every row stands at zero until somebody moves it.
+ */
+export interface BasketListRef {
+  listId: string;
+  zoneId: string;
+  /** Null under {@link BasketLineOriginDetail.listName}'s rule: never invented. */
+  listName: string | null;
+  zoneName: string | null;
+  /** Whether the run drew from this list, which is what the sheet draws first. */
+  fromRun: boolean;
+}
+
+/**
+ * What `GET .../lines/:lineId/origins` answers: every list this reader may write,
+ * in three collections (backend `0092`, section 3).
+ *
+ * They partition those lists: a list is an origin, or it holds a matching line and
+ * is a candidate, or it holds nothing matching and is an other. Each one is a row
+ * with a number on the units sheet, and the number is what that list asked for
+ * through this basket.
+ */
 export interface BasketLineOrigins {
   lineId: string;
   origins: readonly BasketLineOriginDetail[];
   candidates: readonly BasketOriginCandidate[];
+  /** Lists holding no matching line. Raising one creates the line there. */
+  others: readonly BasketListRef[];
 }
 
 /**
@@ -373,8 +425,15 @@ export interface BasketOutstandingRequest {
  */
 export interface BasketOriginQuantityRequest {
   listId: string;
-  /** The zone line: an existing origin of this basket line, or one being adopted. */
-  lineId: string;
+  /**
+   * The zone line: an existing origin of this basket line, or one being adopted.
+   *
+   * **Absent for a list holding no matching line** (backend `0092`, section 4.2).
+   * The write then creates the line through the ordinary add, which is what raising
+   * a row of {@link BasketLineOrigins.others} from zero means. There is nothing for
+   * the sheet to name, because the line does not exist yet.
+   */
+  lineId?: string;
   /** What this list should contribute. Zero takes the list off the line. */
   quantity: number;
   from: number;
@@ -387,44 +446,6 @@ export interface BasketOriginQuantityResult {
   origin: BasketLineOriginDetail | null;
   /** The zone line's own quantity after the write. */
   listQuantity: number;
-}
-
-/**
- * One list this line could be sent to (velista `0056`; `LineTarget` on the wire).
- *
- * Every list both the reader and the basket's owner can write, because the owner's
- * access is what authorizes every later settle against it.
- */
-export interface BasketLineTarget {
-  listId: string;
-  zoneId: string;
-  listName: string | null;
-  zoneName: string | null;
-  /**
-   * Whether the run drew from this list, which is what the picker draws first.
-   *
-   * Somebody adding bread in an aisle almost always means the list the basket came
-   * from, and ordering by it is the difference between a picker and a form.
-   */
-  fromRun: boolean;
-}
-
-/** What sending a line to a list did. */
-export interface BasketBindResult {
-  line: BasketLine;
-  listId: string;
-  zoneId: string;
-  /** The zone line the bind created, which is a real line on somebody's list. */
-  createdLineId: string;
-  /** What that line asks for: the outstanding amount, which may be zero. */
-  quantity: number;
-  /**
-   * True when the list does not accept lines automatically and this one is waiting.
-   *
-   * The one thing the row has to say afterwards, because a line waiting for approval
-   * is not yet on the household's list in the way the person who sent it expects.
-   */
-  pendingApproval: boolean;
 }
 
 /** How far this line has got, which is what the row's indicator draws. */

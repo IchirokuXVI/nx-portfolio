@@ -9,10 +9,8 @@ import {
   basketTakesLines,
   outstanding,
   type BasketAddLineRequest,
-  type BasketBindResult,
   type BasketLine,
   type BasketLineOrigins,
-  type BasketLineTarget,
   type BasketLoad,
   type BasketOriginQuantityRequest,
   type BasketOriginQuantityResult,
@@ -23,6 +21,7 @@ import {
   type BasketShareLink,
   type BasketView,
   type CatalogSuggestion,
+  type LineApprovalStatus,
 } from '@portfolio/velista/models';
 import { GatewayError, hasResponse } from '../errors';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
@@ -361,12 +360,13 @@ export class BasketStore {
   });
 
   /**
-   * Lines whose bound zone line is waiting for its list to approve it.
+   * Lines whose newly raised zone line is waiting for its list to approve it.
    *
    * **A stopgap for a backend gap, and session local.** `GeneratedListLineOriginView`
-   * carries no approval state, so after a reload the row cannot say a bound line is
+   * carries no approval state, so after a reload the row cannot say a raised line is
    * waiting (velista `0056`, section 5.1). What this holds is what *this* session's
-   * own bind was told, which is exactly the case where somebody is standing there
+   * own write was told, through the origin the units sheet's write answers with
+   * (velista `0068`), which is exactly the case where somebody is standing there
    * waiting to be told something, and is honestly empty everywhere else rather than
    * guessing. When the view carries the state the row reads the line instead and this
    * goes.
@@ -726,8 +726,10 @@ export class BasketStore {
 
     try {
       const answer = await this._service.getLineOrigins(id, lineId);
+      // All three collections, because the row caption has to name a list this
+      // basket has never touched the moment somebody raises one of them.
       this.rememberListNames(
-        namesOf([...answer.origins, ...answer.candidates])
+        namesOf([...answer.origins, ...answer.candidates, ...answer.others])
       );
       return answer;
     } catch (error) {
@@ -745,6 +747,11 @@ export class BasketStore {
    *
    * The origin that comes back is remembered by name, because an **adopted** list is
    * exactly the one the basket read does not name.
+   *
+   * It is also what records the line as waiting: a raise creates or adopts a zone
+   * line under that list's own approval rule, and the answered origin's
+   * `approvalStatus` is the only thing that says so (velista `0068`, section 1). See
+   * {@link pendingTargets} for why the row cannot read it off the line.
    */
   async setOriginQuantity(
     lineId: string,
@@ -755,59 +762,25 @@ export class BasketStore {
       this.apply(result.line);
       if (result.origin !== null) {
         this.rememberListNames(namesOf([result.origin]));
+        this._recordApproval(lineId, result.origin.approvalStatus);
       }
       return result;
     });
   }
 
   /**
-   * The lists this line could be sent to (velista `0056`).
+   * Remember that a line's newly raised list has not agreed to it yet.
    *
-   * A read, like {@link loadLineOrigins}, and every target is remembered by name for
-   * the same reason: the list somebody sends a line to is very often not one the run
-   * drew from, so the basket read cannot name it and the row would caption an origin
-   * with nothing after it.
+   * One way only: a second list that accepts the line straight away does not clear
+   * the caption the first one earned, because both origins are real and one of them
+   * is still waiting. A fresh basket read is what forgets it, which is
+   * {@link pendingTargets}' session local rule intact.
    */
-  async loadLineTargets(
-    lineId: string
-  ): Promise<readonly BasketLineTarget[] | null> {
-    const id = this._id;
-    if (id === null) {
-      return null;
+  private _recordApproval(lineId: string, status: LineApprovalStatus): void {
+    if (status !== 'PENDING') {
+      return;
     }
-
-    try {
-      const targets = await this._service.getLineTargets(id, lineId);
-      this.rememberListNames(namesOf(targets));
-      return targets;
-    } catch (error) {
-      this._fail(id, error);
-      return null;
-    }
-  }
-
-  /**
-   * Send a line to a shopping list (velista `0056`).
-   *
-   * Through {@link _write}, and the answer's line is folded in, which is what turns
-   * the send control off: a bound line has a `targetListId` and cannot be sent twice.
-   *
-   * `pendingApproval` is recorded in {@link pendingTargets} rather than read off the
-   * line afterwards, because no field of the line carries it. See that signal for
-   * what that costs and when it can go.
-   */
-  async bindLine(
-    lineId: string,
-    listId: string
-  ): Promise<BasketBindResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.bindLine(id, lineId, listId);
-      this.apply(result.line);
-      if (result.pendingApproval) {
-        this._pendingTargets.update((held) => new Set(held).add(lineId));
-      }
-      return result;
-    });
+    this._pendingTargets.update((held) => new Set(held).add(lineId));
   }
 
   /**

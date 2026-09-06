@@ -18,7 +18,6 @@ export * from './lib/basket-page/basket-page';
 export * from './lib/basket-paths';
 export * from './lib/finish-sheet/finish-sheet';
 export * from './lib/join-page/join-page';
-export * from './lib/line-list-sheet/line-list-sheet';
 export * from './lib/line-units-sheet/line-units-sheet';
 export * from './lib/people-sheet/people-sheet';
 export * from './lib/settle-sheet/settle-sheet';

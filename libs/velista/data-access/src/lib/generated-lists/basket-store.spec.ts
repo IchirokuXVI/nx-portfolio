@@ -120,8 +120,6 @@ function build(
     getLineOrigins: (id, lineId) => memory.getLineOrigins(id, lineId),
     setOriginQuantity: (id, lineId, body) =>
       memory.setOriginQuantity(id, lineId, body),
-    getLineTargets: () => memory.getLineTargets(),
-    bindLine: (id, lineId, listId) => memory.bindLine(id, lineId, listId),
     addLine: (id, body) => memory.addLine(id, body),
     suggest: (id, query) => memory.suggest(id, query),
     listParticipants: () => memory.listParticipants(),
@@ -1100,13 +1098,17 @@ describe('BasketStore', () => {
       expect(store.listNames().get('list-weekly')).toBe(served);
     });
 
-    it('learns the lists a line could be sent to as well', async () => {
+    it('learns the lists holding none of it as well', async () => {
+      // The third collection is the one the send sheet's picker used to read, and
+      // it is exactly the set the basket cannot name: raising one of them puts a
+      // household on the line that the run never drew from.
       const { store } = build();
       await store.open('basket-saturday');
+      const added = await store.addLine({ content: 'Foil' });
 
-      const targets = await store.loadLineTargets('line-milk');
+      const answer = await store.loadLineOrigins(added?.id ?? '');
 
-      expect(targets?.length).toBeGreaterThan(2);
+      expect(answer?.others.length).toBeGreaterThan(2);
       expect(store.listNames().get('list-shared')).toBe(
         'Shared shelf · Housemates'
       );
@@ -1119,7 +1121,11 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
       await store.loadLineOrigins('line-milk');
       const added = await store.addLine({ content: 'Foil' });
-      await store.bindLine(added?.id ?? '', 'list-groceries');
+      await store.setOriginQuantity(added?.id ?? '', {
+        listId: 'list-groceries',
+        quantity: 1,
+        from: 0,
+      });
 
       expect(store.pendingTargets().size).toBe(1);
       expect(store.listNames().size).toBeGreaterThan(0);
@@ -1131,20 +1137,23 @@ describe('BasketStore', () => {
     });
   });
 
-  describe('sending a line to a list', () => {
-    it('binds an added line and remembers that it is waiting', async () => {
+  describe('raising a list that was asking for none', () => {
+    it('remembers that the line it created is waiting to be agreed to', async () => {
+      // Read off the answered origin's approval and nowhere else: no field of the
+      // line carries it, so this is the only moment anything can say so, and it is
+      // the moment somebody is standing there waiting to be told.
       const { store } = build();
       await store.open('basket-saturday');
       const added = await store.addLine({ content: 'Foil' });
 
-      const result = await store.bindLine(added?.id ?? '', 'list-groceries');
+      const result = await store.setOriginQuantity(added?.id ?? '', {
+        listId: 'list-groceries',
+        quantity: 1,
+        from: 0,
+      });
 
-      expect(result?.pendingApproval).toBe(true);
+      expect(result?.origin?.approvalStatus).toBe('PENDING');
       expect(store.pendingTargets().has(added?.id ?? '')).toBe(true);
-      // The line itself is folded in, which is what turns the send control off: a
-      // bound line cannot be sent twice.
-      const after = store.lines().find((row) => row.id === added?.id);
-      expect(after?.targetListId).toBe('list-groceries');
     });
 
     it('says nothing is waiting for a list that accepts on its own', async () => {
@@ -1152,22 +1161,53 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
       const added = await store.addLine({ content: 'Foil' });
 
-      const result = await store.bindLine(added?.id ?? '', 'list-weekly');
+      const result = await store.setOriginQuantity(added?.id ?? '', {
+        listId: 'list-weekly',
+        quantity: 1,
+        from: 0,
+      });
 
-      expect(result?.pendingApproval).toBe(false);
+      expect(result?.origin?.approvalStatus).toBe('APPROVED');
       expect(store.pendingTargets().size).toBe(0);
     });
 
-    it('refuses a line the run composed, and says which refusal it was', async () => {
+    it('folds the line back in, so the basket carries the new origin', async () => {
       const { store } = build();
       await store.open('basket-saturday');
+      const added = await store.addLine({ content: 'Foil', quantity: 2 });
 
-      const result = await store.bindLine('line-milk', 'list-weekly');
+      await store.setOriginQuantity(added?.id ?? '', {
+        listId: 'list-weekly',
+        quantity: 2,
+        from: 0,
+      });
+
+      const after = store.lines().find((row) => row.id === added?.id);
+      expect(after?.origins?.map((origin) => origin.listId)).toEqual([
+        'list-weekly',
+      ]);
+    });
+
+    it('refuses a second raise of the same list, and says which refusal it was', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+      const added = await store.addLine({ content: 'Foil' });
+      await store.setOriginQuantity(added?.id ?? '', {
+        listId: 'list-weekly',
+        quantity: 1,
+        from: 0,
+      });
+
+      const result = await store.setOriginQuantity(added?.id ?? '', {
+        listId: 'list-weekly',
+        quantity: 1,
+        from: 0,
+      });
 
       expect(result).toBeNull();
-      // Its own code, so the sheet can say "only a line added here can be sent"
+      // Its own code, so the sheet can say "this list already has it, read again"
       // rather than "that did not save".
-      expect((store.error() as GatewayError).code).toBe('validation_failed');
+      expect((store.error() as GatewayError).code).toBe('stale_quantity');
     });
   });
 });

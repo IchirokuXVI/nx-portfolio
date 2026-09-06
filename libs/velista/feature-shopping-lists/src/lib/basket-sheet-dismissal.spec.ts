@@ -19,7 +19,6 @@ import {
 import { SheetShell } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { FinishSheet } from './finish-sheet/finish-sheet';
-import { LineListSheet } from './line-list-sheet/line-list-sheet';
 import { LineUnitsSheet } from './line-units-sheet/line-units-sheet';
 import { PeopleSheet } from './people-sheet/people-sheet';
 import { SettleSheet } from './settle-sheet/settle-sheet';
@@ -57,13 +56,17 @@ const SHEETS: readonly {
 ];
 
 /**
- * The two sheets a line's settle sheet leads on to, and the URL they go back to.
+ * The sheet a line's settle sheet leads on to, and the URL it goes back to.
  *
- * A second table rather than two more rows in the first, because they close onto a
- * **different** screen and that is the whole point of them: they are reached from
- * the settle sheet, so leaving one onto the basket would take somebody two screens
- * back from one gesture. Everything else about the rule is the same, which is why
- * the assertions below read almost identically.
+ * A second table rather than one more row in the first, because it closes onto a
+ * **different** screen and that is the whole point of it: it is reached from the
+ * settle sheet, so leaving it onto the basket would take somebody two screens back
+ * from one gesture. Everything else about the rule is the same, which is why the
+ * assertions below read almost identically.
+ *
+ * It is a table of one since velista `0068` folded the send sheet into it, and it
+ * stays a table: what it asserts is a rule about sheets over sheets rather than a
+ * fact about this one.
  */
 const LINE_SHEETS: readonly {
   readonly name: string;
@@ -74,11 +77,6 @@ const LINE_SHEETS: readonly {
     name: 'LineUnitsSheet',
     component: LineUnitsSheet,
     path: 'lines/:lineId/units',
-  },
-  {
-    name: 'LineListSheet',
-    component: LineListSheet,
-    path: 'lines/:lineId/list',
   },
 ];
 

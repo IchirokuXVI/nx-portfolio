@@ -314,22 +314,31 @@ export type BasketLineKind = (typeof BASKET_LINE_KINDS)[number];
 
 /**
  * Why a list holding the same thing cannot be taken onto a basket line (backend
- * `0057`, section 4.3).
+ * `0057` section 4.3, as `0092` section 3.2 revised it).
  *
- * `CLAIMED` is a line another basket is already carrying, `NOT_APPROVED` is one
- * still waiting for its list to accept it, and `SETTLED` is one that has already
- * been bought. Three reasons rather than one flag, because the sheet says which:
- * "somebody else is shopping this" and "this was already bought" send a person to
- * two different places.
+ * `CLAIMED` is a line another basket is already carrying, and `REJECTED` is one the
+ * household said no to. Two reasons rather than one flag, because the sheet says
+ * which: "somebody else is shopping this" and "that house does not want it" send a
+ * person to two different places.
  *
- * There is no fallback and there is no member for "it is fine", which is what the
- * wire omitting the field means. Null is the adoptable case, and it is a real value
- * here rather than a missing one.
+ * **`NOT_APPROVED` and `SETTLED` are gone.** Backend `0092` made a pending line and
+ * a line at zero adoptable, so neither is answered any more and neither is drawn
+ * (velista `0068`, section 4.3). A build reading one off an older backend gets
+ * {@link BASKET_ORIGIN_UNAVAILABLE_REASONS}' catch-all instead of a caption that is
+ * no longer true.
+ *
+ * `UNAVAILABLE` is this model's own, and the wire never carries it: it is where the
+ * mapper puts a reason it does not recognise, so an unreadable refusal costs the row
+ * its reel rather than drawing one the server refuses (velista `0068`, section 7).
+ *
+ * There is no member for "it is fine", which is what the wire omitting the field
+ * means. Null is the adoptable case, and it is a real value here rather than a
+ * missing one.
  */
 export const BASKET_ORIGIN_UNAVAILABLE_REASONS = [
   'CLAIMED',
-  'NOT_APPROVED',
-  'SETTLED',
+  'REJECTED',
+  'UNAVAILABLE',
 ] as const;
 export type BasketOriginUnavailableReason =
   (typeof BASKET_ORIGIN_UNAVAILABLE_REASONS)[number];

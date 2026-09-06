@@ -131,9 +131,10 @@ describe('BasketMemory: the lists on a line', () => {
   });
 
   it('offers the three kinds of candidate, so a sheet cannot draw them all alike', async () => {
-    // One adoptable, one another basket is carrying, one waiting for its own list.
+    // One adoptable, one another basket is carrying, one the household said no to.
     // A fake with only the first would let a screen ship that draws every candidate
-    // as a button.
+    // as a reel. `NOT_APPROVED` and `SETTLED` are not among them: backend `0092`
+    // section 3.2 made both adoptable and neither is answered any more.
     const memory = new BasketMemory();
 
     const answer = await memory.getLineOrigins(ID, 'line-milk');
@@ -141,8 +142,26 @@ describe('BasketMemory: the lists on a line', () => {
     expect(answer.candidates.map((row) => row.unavailable)).toEqual([
       null,
       'CLAIMED',
-      'NOT_APPROVED',
+      'REJECTED',
     ]);
+  });
+
+  it('puts every list in exactly one of the three collections', async () => {
+    // The partition backend `0092` states: a list is an origin, or it holds a
+    // matching line, or it holds none and raising it creates one. Milk reaches all
+    // five lists this fake knows, so its third collection is empty and that is the
+    // partition rather than a gap.
+    const memory = new BasketMemory();
+
+    const answer = await memory.getLineOrigins(ID, 'line-milk');
+
+    const seen = [
+      ...answer.origins.map((row) => row.listId),
+      ...answer.candidates.map((row) => row.listId),
+      ...answer.others.map((row) => row.listId),
+    ];
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(answer.others).toEqual([]);
   });
 
   it('carries a floor on the line that has already had some bought', async () => {
@@ -154,9 +173,10 @@ describe('BasketMemory: the lists on a line', () => {
     expect(answer.origins[0].settledHere).toBe(2);
   });
 
-  it('answers empty on both sides for a line somebody typed here', async () => {
-    // Not a redaction and not missing data: nobody's list asked for it, and the run
-    // never looked.
+  it('answers every list for a line somebody typed here', async () => {
+    // The case velista `0068` exists for. Nobody's list asked for it and the run
+    // never looked, so the first two collections are empty and honestly so; the
+    // third is every list, because that line is the one most worth putting on one.
     const memory = new BasketMemory();
     const added = await memory.addLine(ID, { content: 'Foil' });
 
@@ -164,6 +184,8 @@ describe('BasketMemory: the lists on a line', () => {
 
     expect(answer.origins).toEqual([]);
     expect(answer.candidates).toEqual([]);
+    expect(answer.others).toHaveLength(5);
+    expect(answer.others.filter((row) => row.fromRun)).toHaveLength(2);
   });
 });
 
@@ -271,68 +293,126 @@ describe('BasketMemory: what one list asked for', () => {
   });
 });
 
-describe('BasketMemory: sending a line to a list', () => {
-  it('offers the run’s own sources marked, and more beside them', async () => {
+describe('BasketMemory: raising a list that was asking for none', () => {
+  it('takes over the demand a candidate already has before it adds any', async () => {
+    // Backend `0092` section 4.1. The office kitchen asks for two on its own, so a
+    // basket asking it for two is taking those two over rather than pushing it to
+    // four. `0057` moved it by the whole contribution, and adopting at one pushed a
+    // list that already wanted one to two.
     const memory = new BasketMemory();
 
-    const targets = await memory.getLineTargets(ID, 'line-milk');
+    const result = await memory.setOriginQuantity(ID, 'line-milk', {
+      listId: 'list-office',
+      lineId: 'zl-office-milk',
+      quantity: 2,
+      from: 0,
+    });
 
-    expect(targets.filter((target) => target.fromRun)).toHaveLength(2);
-    expect(targets.filter((target) => !target.fromRun).length).toBeGreaterThan(
-      1
-    );
-    expect(targets.every((target) => target.listName !== null)).toBe(true);
+    expect(result.origin?.contributed).toBe(2);
+    expect(result.listQuantity).toBe(2);
+    // The basket still buys all of it, which is the half that does move.
+    expect(result.line.quantity).toBe(5);
   });
 
-  it('refuses the picker to a guest', async () => {
+  it('moves a candidate’s own line only by what is above what it asked for', async () => {
     const memory = new BasketMemory();
-    memory.me = { ...memory.me, kind: 'GUEST' };
 
-    expect(await refusal(() => memory.getLineTargets(ID, 'line-milk'))).toBe(
-      'forbidden'
-    );
+    const result = await memory.setOriginQuantity(ID, 'line-milk', {
+      listId: 'list-office',
+      lineId: 'zl-office-milk',
+      quantity: 3,
+      from: 0,
+    });
+
+    expect(result.listQuantity).toBe(3);
   });
 
-  it('binds an added line and keeps who put it there', async () => {
+  it('creates the line on a list holding none, with no zone line named', async () => {
+    // What raising a row of `others` means, and the whole of what replaced the send
+    // sheet: there is nothing for the client to name, because the line does not
+    // exist yet.
     const memory = new BasketMemory();
     const added = await memory.addLine(ID, { content: 'Foil', quantity: 2 });
 
-    const result = await memory.bindLine(ID, added.id, 'list-weekly');
+    const result = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-weekly',
+      quantity: 2,
+      from: 0,
+    });
 
-    expect(result.line.targetListId).toBe('list-weekly');
-    expect(result.quantity).toBe(2);
-    expect(result.pendingApproval).toBe(false);
-    expect(result.createdLineId).not.toBe('');
-    // Written once, at the add. Sending the line somewhere does not make somebody
-    // else the person who put it there.
+    expect(result.origin?.listId).toBe('list-weekly');
+    expect(result.origin?.lineId).not.toBe('');
+    expect(result.origin?.approvalStatus).toBe('APPROVED');
+    expect(result.listQuantity).toBe(2);
+    // Written once, at the add. Putting the line on a list does not make somebody
+    // else the person who typed it.
     expect(result.line.createdBy).toBe(added.createdBy);
   });
 
-  it('says a line is waiting where the list does not accept on its own', async () => {
+  it('says a created line is waiting where the list does not accept on its own', async () => {
     const memory = new BasketMemory();
     const added = await memory.addLine(ID, { content: 'Foil' });
 
-    const result = await memory.bindLine(ID, added.id, 'list-groceries');
+    const result = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-groceries',
+      quantity: 1,
+      from: 0,
+    });
 
-    expect(result.pendingApproval).toBe(true);
+    expect(result.origin?.approvalStatus).toBe('PENDING');
   });
 
-  it('refuses a line the run composed, as a validation failure', async () => {
-    const memory = new BasketMemory();
-
-    expect(
-      await refusal(() => memory.bindLine(ID, 'line-milk', 'list-weekly'))
-    ).toBe('validation_failed');
-  });
-
-  it('refuses a second bind, as a conflict', async () => {
+  it('answers the line the add landed on, which is not always a new one', async () => {
+    // The name fold (backend `0092`, section 4.2): after `0091` the add answers the
+    // line it landed on, and it can be one the candidate read never offered. The
+    // sheet has to keep the answered id rather than the one it asked for.
     const memory = new BasketMemory();
     const added = await memory.addLine(ID, { content: 'Foil' });
-    await memory.bindLine(ID, added.id, 'list-weekly');
+
+    const result = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-cabin',
+      quantity: 1,
+      from: 0,
+    });
+
+    expect(result.origin?.lineId).toBe('zl-cabin-existing');
+  });
+
+  it('costs nothing when a reel is let go where it started', async () => {
+    // Zero with no origin is a no op that answers success: the write never creates
+    // a zone line for none of something.
+    const memory = new BasketMemory();
+    const added = await memory.addLine(ID, { content: 'Foil', quantity: 2 });
+
+    const result = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-weekly',
+      quantity: 0,
+      from: 0,
+    });
+
+    expect(result.origin).toBeNull();
+    expect(result.line.origins).toEqual([]);
+    expect(result.line.quantity).toBe(2);
+  });
+
+  it('refuses a raise on a list this basket has already put the line on', async () => {
+    const memory = new BasketMemory();
+    const added = await memory.addLine(ID, { content: 'Foil' });
+    await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-weekly',
+      quantity: 1,
+      from: 0,
+    });
 
     expect(
-      await refusal(() => memory.bindLine(ID, added.id, 'list-office'))
-    ).toBe('conflict');
+      await refusal(() =>
+        memory.setOriginQuantity(ID, added.id, {
+          listId: 'list-weekly',
+          quantity: 1,
+          from: 0,
+        })
+      )
+    ).toBe('stale_quantity');
   });
 
   it('refuses a basket whose trip is over', async () => {
@@ -341,8 +421,29 @@ describe('BasketMemory: sending a line to a list', () => {
     memory.status = 'COMPLETED';
 
     expect(
-      await refusal(() => memory.bindLine(ID, added.id, 'list-weekly'))
+      await refusal(() =>
+        memory.setOriginQuantity(ID, added.id, {
+          listId: 'list-weekly',
+          quantity: 1,
+          from: 0,
+        })
+      )
     ).toBe('generated_list_finished');
+  });
+
+  it('refuses the write to a guest', async () => {
+    const memory = new BasketMemory();
+    memory.me = { ...memory.me, kind: 'GUEST' };
+
+    expect(
+      await refusal(() =>
+        memory.setOriginQuantity(ID, 'line-milk', {
+          listId: 'list-cabin',
+          quantity: 1,
+          from: 0,
+        })
+      )
+    ).toBe('forbidden');
   });
 });
 

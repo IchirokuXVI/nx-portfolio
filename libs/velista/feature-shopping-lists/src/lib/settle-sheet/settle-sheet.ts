@@ -549,16 +549,19 @@ export class SettleSheet {
   protected readonly title = computed(() => this.line()?.content ?? '');
 
   /**
-   * Whether to offer the units sheet (velista `0055`, section 2).
+   * Whether to offer the units sheet (velista `0055` section 2, widened by `0068`).
    *
    * The reader must hold an account and pass the all or nothing rule, which is
    * {@link canReadHistory}'s pair of conditions and for the same reason: the read
    * behind it names households, and the server refuses the whole of it to anybody
    * else rather than redacting it.
    *
-   * The line must also have something to show. An `ADDED` line with no origins came
-   * from nowhere and is on nobody's list, so the sheet would open on two empty
-   * sections; once it has been sent somewhere it has an origin, and then it does.
+   * **Every line, added or derived, with lists or without.** It used to be hidden for
+   * an `ADDED` line with no origins, because the sheet would have opened on two empty
+   * sections, and a second sheet sent that line to one list. Backend `0092` made
+   * every list a row at zero, so that line is now exactly the one this sheet is most
+   * worth opening for: somebody who added batteries and wants three for the flat and
+   * two for their parents.
    *
    * A control you may not use is not drawn (`0030`), so this decides whether the way
    * in exists rather than whether it is disabled.
@@ -572,32 +575,7 @@ export class SettleSheet {
       !this.basketFinished() &&
       this._store.seesZoneData() &&
       this._store.me()?.kind !== 'GUEST' &&
-      line !== null &&
-      !(line.kind === 'ADDED' && (line.origins?.length ?? 0) === 0)
-    );
-  });
-
-  /**
-   * Whether to offer the send sheet (velista `0056`, section 2).
-   *
-   * The same reader as above, and a line that is **`ADDED` and sent nowhere yet**. A
-   * `DERIVED` line already has the lists it came from and there is nothing to send;
-   * a bound one has already gone, and the server refuses a second bind.
-   *
-   * `targetListId === null` and not a falsy check, deliberately: the field is
-   * **absent** for a reader who may not see it, and absent must not read as "sent
-   * nowhere" or the control would be drawn for exactly the person who may not use it.
-   */
-  protected readonly canSendToList = computed(() => {
-    const line = this.line();
-    return (
-      // Absent on a finished trip, for {@link canEditUnits}'s reason.
-      !this.basketFinished() &&
-      this._store.seesZoneData() &&
-      this._store.me()?.kind !== 'GUEST' &&
-      line !== null &&
-      line.kind === 'ADDED' &&
-      line.targetListId === null
+      line !== null
     );
   });
 
@@ -610,13 +588,6 @@ export class SettleSheet {
    */
   protected openUnits(): void {
     void this._router.navigate(sheetSegments('lines', this._lineId, 'units'), {
-      relativeTo: this._route.parent,
-    });
-  }
-
-  /** Open the send sheet over this one. See {@link openUnits} for the relativity. */
-  protected openSendToList(): void {
-    void this._router.navigate(sheetSegments('lines', this._lineId, 'list'), {
       relativeTo: this._route.parent,
     });
   }

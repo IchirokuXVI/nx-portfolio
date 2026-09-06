@@ -11,6 +11,7 @@ import type {
   BasketLine,
   BasketLineOriginDetail,
   BasketLineOrigins,
+  BasketListRef,
   BasketOriginCandidate,
   BasketOriginQuantityRequest,
   BasketOriginQuantityResult,
@@ -79,6 +80,8 @@ function origin(
     listQuantity: 2,
     settledHere: 0,
     writable: true,
+    fromRun: true,
+    approvalStatus: 'APPROVED',
     ...overrides,
   };
 }
@@ -96,15 +99,29 @@ function candidate(
     content: 'Milk',
     matchedOnText: false,
     unavailable: null,
+    fromRun: false,
+    ...overrides,
+  };
+}
+
+/** A list holding no such line, which raising creates one on (backend `0092`). */
+function other(overrides: Partial<BasketListRef> = {}): BasketListRef {
+  return {
+    listId: 'l4',
+    zoneId: 'z4',
+    listName: 'Cabin trip',
+    zoneName: 'Weekend away',
+    fromRun: false,
     ...overrides,
   };
 }
 
 function answer(
   origins: readonly BasketLineOriginDetail[],
-  candidates: readonly BasketOriginCandidate[] = []
+  candidates: readonly BasketOriginCandidate[] = [],
+  others: readonly BasketListRef[] = []
 ): BasketLineOrigins {
-  return { lineId: LINE_ID, origins, candidates };
+  return { lineId: LINE_ID, origins, candidates, others };
 }
 
 interface World {
@@ -188,8 +205,6 @@ function storeDouble(world: World) {
     reopen: jest.fn().mockResolvedValue(null),
     setPick: jest.fn().mockResolvedValue(null),
     setOutstanding: jest.fn().mockResolvedValue(null),
-    loadLineTargets: jest.fn().mockResolvedValue(null),
-    bindLine: jest.fn().mockResolvedValue(null),
     rememberListNames: jest.fn(),
     apply: jest.fn(),
     loadShareLink: jest.fn().mockResolvedValue(undefined),
@@ -293,7 +308,7 @@ async function release(fixture: Sheet, index: number, to: number) {
 }
 
 /** Open the section of lists that are not in the line. */
-async function openOthers(fixture: Sheet) {
+async function openRest(fixture: Sheet) {
   (fixture.nativeElement as HTMLElement)
     .querySelector<HTMLButtonElement>('.disclosure')
     ?.click();
@@ -329,7 +344,7 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
         ],
       });
 
-      const rows = fixture.componentInstance['rows']();
+      const rows = fixture.componentInstance['asked']();
       expect(rows.map((row) => row.label)).toEqual([
         'Weekly shop',
         'Groceries',
@@ -369,7 +384,7 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
       });
 
       expect(
-        fixture.componentInstance['rows']().map((row) => row.zoneName)
+        fixture.componentInstance['asked']().map((row) => row.zoneName)
       ).toEqual(['Flat 3B', 'Parents', null]);
     });
 
@@ -435,19 +450,52 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
     });
   });
 
-  describe('the lists that are not in', () => {
+  describe('the lists that asked for nothing', () => {
     it('is closed until somebody opens it', async () => {
       const { fixture } = await render({
         reads: [answer([origin()], [candidate()])],
       });
 
-      expect(fixture.componentInstance['othersOpen']()).toBe(false);
+      expect(fixture.componentInstance['restOpen']()).toBe(false);
       expect(reels(fixture)).toHaveLength(1);
 
-      await openOthers(fixture);
+      await openRest(fixture);
 
-      expect(fixture.componentInstance['othersOpen']()).toBe(true);
+      expect(fixture.componentInstance['restOpen']()).toBe(true);
       expect(reels(fixture)).toHaveLength(2);
+    });
+
+    /**
+     * Section 4.3: the lists holding this line at zero, then the lists holding no such
+     * line, in that order and with no heading between them. An origin at zero asked for
+     * nothing, which is the same answer as a list that never did.
+     */
+    it('puts the zero origins and the candidates before the rest', async () => {
+      const { fixture } = await render({
+        reads: [
+          answer(
+            [
+              origin(),
+              origin({
+                originId: 'o0',
+                listId: 'l0',
+                lineId: 'zl0',
+                listName: 'Emptied',
+                contributed: 0,
+              }),
+            ],
+            [candidate()],
+            [other()]
+          ),
+        ],
+      });
+
+      expect(
+        fixture.componentInstance['asked']().map((row) => row.label)
+      ).toEqual(['Weekly shop']);
+      expect(
+        fixture.componentInstance['rest']().map((row) => row.label)
+      ).toEqual(['Emptied', 'Office', 'Cabin trip']);
     });
 
     /**
@@ -455,28 +503,31 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
      * reason and no control: `0030` keeps the control absent, and the fact is one about
      * a list this reader is entitled to.
      */
-    it('explains a candidate that cannot be adopted, and gives it no reel', async () => {
+    it('explains a candidate that cannot be taken, and gives it no reel', async () => {
+      // Two reasons where `0055` drew three: backend `0092` section 3.2 made a pending
+      // line and a line at zero adoptable, so neither is answered any more. A reason
+      // this build cannot read arrives as `UNAVAILABLE` and says only that.
       const { fixture } = await render({
         reads: [
           answer(
             [origin()],
             [
               candidate({ lineId: 'zl-a', unavailable: 'CLAIMED' }),
-              candidate({ lineId: 'zl-b', unavailable: 'NOT_APPROVED' }),
-              candidate({ lineId: 'zl-c', unavailable: 'SETTLED' }),
+              candidate({ lineId: 'zl-b', unavailable: 'REJECTED' }),
+              candidate({ lineId: 'zl-c', unavailable: 'UNAVAILABLE' }),
             ]
           ),
         ],
       });
 
-      await openOthers(fixture);
+      await openRest(fixture);
 
       expect(
-        fixture.componentInstance['others']().map((row) => row.reason)
+        fixture.componentInstance['rest']().map((row) => row.reason)
       ).toEqual([
         'basket.units.claimed',
-        'basket.units.notApproved',
-        'basket.units.settled',
+        'basket.units.rejected',
+        'basket.units.cannotTake',
       ]);
       // Only the origin's, since none of the three may be moved.
       expect(reels(fixture)).toHaveLength(1);
@@ -493,7 +544,7 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
         ],
       });
 
-      const [row] = fixture.componentInstance['others']();
+      const [row] = fixture.componentInstance['rest']();
       expect(row.matchedOnText).toBe('whole milk');
     });
   });
@@ -514,11 +565,14 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
       expect(writes).toEqual([
         { listId: 'l1', lineId: 'zl1', quantity: 4, from: 2 },
       ]);
-      expect(fixture.componentInstance['rows']()[0].contributed).toBe(4);
+      expect(fixture.componentInstance['asked']()[0].contributed).toBe(4);
     });
 
-    /** A candidate has put nothing in, so adopting it is a write from zero. */
-    it('adopts a candidate from zero, and moves it into the line', async () => {
+    /** A candidate has asked for nothing, so raising it is a write from zero. */
+    it('adopts a candidate from zero, and keeps the row where it is', async () => {
+      // Section 5: the row takes the answered numbers and stays put. Moving it up to
+      // the first group under somebody's thumb would take the control they are
+      // holding out from under them, and the next read is what re-groups.
       const adopted = origin({
         originId: 'o3',
         listId: 'l3',
@@ -534,16 +588,19 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
         write: { line: line(), origin: adopted, listQuantity: 6 },
       });
 
-      await openOthers(fixture);
+      await openRest(fixture);
       await release(fixture, 1, 2);
 
       expect(writes).toEqual([
         { listId: 'l3', lineId: 'zl3', quantity: 2, from: 0 },
       ]);
       expect(
-        fixture.componentInstance['rows']().map((row) => row.lineId)
-      ).toEqual(['zl1', 'zl3']);
-      expect(fixture.componentInstance['others']()).toHaveLength(0);
+        fixture.componentInstance['asked']().map((row) => row.label)
+      ).toEqual(['Weekly shop']);
+      const rest = fixture.componentInstance['rest']();
+      expect(rest.map((row) => row.label)).toEqual(['Office']);
+      expect(rest[0].contributed).toBe(2);
+      expect(rest[0].listQuantity).toBe(6);
     });
 
     /**
@@ -560,8 +617,8 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
       await release(fixture, 0, 0);
 
       expect(originReads).toHaveLength(2);
-      expect(fixture.componentInstance['rows']()).toHaveLength(0);
-      expect(fixture.componentInstance['others']()).toHaveLength(1);
+      expect(fixture.componentInstance['asked']()).toHaveLength(0);
+      expect(fixture.componentInstance['rest']()).toHaveLength(1);
     });
 
     it('does nothing when the gesture ended where it started', async () => {
@@ -593,7 +650,7 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
       await release(fixture, 0, 4);
 
       expect(originReads).toHaveLength(2);
-      expect(fixture.componentInstance['rows']()[0].notice).toEqual({
+      expect(fixture.componentInstance['asked']()[0].notice).toEqual({
         key: 'basket.error.staleLine',
         values: { count: 5 },
       });
@@ -612,7 +669,7 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
 
       await release(fixture, 0, 1);
 
-      const [row] = fixture.componentInstance['rows']();
+      const [row] = fixture.componentInstance['asked']();
       expect(row.notice).toEqual({
         key: 'basket.error.belowSettled',
         values: { count: 2 },
@@ -646,7 +703,7 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
 
       await release(fixture, 0, 4);
 
-      const [row] = fixture.componentInstance['rows']();
+      const [row] = fixture.componentInstance['asked']();
       expect(row.reason).toBe('basket.units.noAccess');
       expect(row.contributed).toBe(2);
       expect(reels(fixture)).toHaveLength(0);
@@ -661,10 +718,231 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
 
       await release(fixture, 0, 4);
 
-      expect(fixture.componentInstance['rows']()[0].notice).toEqual({
+      expect(fixture.componentInstance['asked']()[0].notice).toEqual({
         key: 'basket.error.failed',
         values: {},
       });
+    });
+  });
+
+  /**
+   * The third collection, which replaced the send sheet (velista `0068`).
+   *
+   * Raising one of these is what "send this line to that list" now means, and the
+   * whole of what makes it a different write is one absent field.
+   */
+  describe('a list that holds no such line', () => {
+    it('draws the entry for a line that is on nobody’s list, and counts every list', async () => {
+      // The line the sheet is most worth opening for: somebody who added batteries
+      // and wants three for the flat and two for their parents.
+      const { fixture } = await render({
+        line: line({ kind: 'ADDED', origins: [], quantity: 1 }),
+        reads: [
+          answer(
+            [],
+            [],
+            [other(), other({ listId: 'l5', listName: 'Weekly shop' })]
+          ),
+        ],
+      });
+
+      expect(fixture.componentInstance['asked']()).toHaveLength(0);
+      expect(fixture.componentInstance['rest']()).toHaveLength(2);
+      expect(fixture.componentInstance['empty']()).toBe(false);
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.disclosure')
+          ?.textContent
+      ).toContain('basket.units.more');
+    });
+
+    it('names no zone line, which is what makes the write create one', async () => {
+      // The server adds the line through the ordinary add and answers the id it
+      // landed on, which is not always the one a fresh add would have made.
+      const created = origin({
+        originId: 'o4',
+        listId: 'l4',
+        lineId: 'zl-created',
+        zoneId: 'z4',
+        listName: 'Cabin trip',
+        zoneName: 'Weekend away',
+        contributed: 2,
+        listQuantity: 2,
+        fromRun: false,
+      });
+      const { fixture } = await render({
+        line: line({ kind: 'ADDED', origins: [] }),
+        reads: [answer([], [], [other()])],
+        write: { line: line(), origin: created, listQuantity: 2 },
+      });
+
+      await openRest(fixture);
+      await release(fixture, 0, 2);
+
+      expect(writes).toEqual([{ listId: 'l4', quantity: 2, from: 0 }]);
+      const [row] = fixture.componentInstance['rest']();
+      expect(row.contributed).toBe(2);
+      // It became an origin and stayed where it was, carrying the line it was
+      // answered rather than the one it asked for.
+      expect(row.sourceLineId).toBe('zl-created');
+    });
+
+    it('says so when units bought before it arrived came home with it', async () => {
+      // Section 6. "The flat now knows about batteries and needs none" is a strange
+      // enough outcome that it is said in words on the answer that created the row.
+      const created = origin({
+        originId: 'o4',
+        listId: 'l4',
+        lineId: 'zl-created',
+        listName: 'Cabin trip',
+        contributed: 4,
+        listQuantity: 0,
+        settledHere: 4,
+        fromRun: false,
+      });
+      const { fixture } = await render({
+        line: line({ kind: 'ADDED', origins: [], settled: 4 }),
+        reads: [answer([], [], [other()])],
+        write: { line: line(), origin: created, listQuantity: 0 },
+      });
+
+      await openRest(fixture);
+      await release(fixture, 0, 4);
+
+      expect(fixture.componentInstance['rest']()[0].notice).toEqual({
+        key: 'basket.units.cameHome',
+        values: { name: 'Cabin trip', count: 4 },
+      });
+    });
+
+    it('says the list already has it when the raise lands on a line that is there', async () => {
+      // The stale case a create meets, and not the one an edit meets: nothing moved
+      // underneath the reader's arithmetic, so the sentence is about the list.
+      const { fixture } = await render({
+        line: line({ kind: 'ADDED', origins: [] }),
+        reads: [answer([], [], [other()])],
+        write: refusal('stale_quantity'),
+      });
+
+      await openRest(fixture);
+      await release(fixture, 0, 1);
+
+      expect(fixture.componentInstance['rest']()[0].notice).toEqual({
+        key: 'basket.units.alreadyHere',
+        values: {},
+      });
+      // And it read again, because the sheet was wrong about that list.
+      expect(originReads).toHaveLength(2);
+    });
+  });
+
+  describe('what a row says about the list behind it', () => {
+    it('says what a list asks for on its own before anybody raises it', async () => {
+      const { fixture } = await render({
+        reads: [answer([origin()], [candidate({ listQuantity: 5 })])],
+      });
+
+      await openRest(fixture);
+
+      expect(fixture.componentInstance['rest']()[0].listCaption).toEqual({
+        key: 'basket.units.listAsks',
+        values: { count: 5 },
+      });
+    });
+
+    it('says what a raised list asks for now, only once the two have drifted', async () => {
+      // Asked for minus bought is what the list should be asking for. A row where
+      // they agree says nothing, because there is nothing to reconcile.
+      const { fixture } = await render({
+        reads: [
+          answer([
+            origin({ contributed: 3, settledHere: 1, listQuantity: 2 }),
+            origin({
+              originId: 'o2',
+              listId: 'l2',
+              lineId: 'zl2',
+              listName: 'Groceries',
+              contributed: 3,
+              settledHere: 1,
+              listQuantity: 5,
+            }),
+          ]),
+        ],
+      });
+
+      const rows = fixture.componentInstance['asked']();
+      const agreeing = rows.find((row) => row.label === 'Weekly shop');
+      const drifted = rows.find((row) => row.label === 'Groceries');
+      expect(agreeing?.listCaption).toBeNull();
+      expect(drifted?.listCaption).toEqual({
+        key: 'basket.units.listNow',
+        values: { count: 5 },
+      });
+    });
+
+    it('says a list has not agreed to the line yet', async () => {
+      const { fixture } = await render({
+        reads: [answer([origin({ approvalStatus: 'PENDING' })])],
+      });
+
+      expect(fixture.componentInstance['asked']()[0].pending).toBe(true);
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+        'basket.units.pending'
+      );
+    });
+
+    it('draws what this basket bought for the list, on every row', async () => {
+      // Read only, from every collection: nothing on this sheet buys anything, and
+      // this column never moves from it.
+      const { fixture } = await render({
+        reads: [answer([origin({ settledHere: 2 })])],
+      });
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.row-bought')
+          ?.textContent
+      ).toContain('2');
+    });
+  });
+
+  describe('the order the rows come in', () => {
+    it('puts the run’s own lists first, then by zone and by list', async () => {
+      // The server sorts nothing and says so: the order is a fact about the person
+      // reading, and somebody in an aisle almost always means one of the lists the
+      // basket came from.
+      const { fixture } = await render({
+        reads: [
+          answer([
+            origin({
+              originId: 'oa',
+              listId: 'la',
+              lineId: 'zla',
+              listName: 'Shared shelf',
+              zoneName: 'Housemates',
+              fromRun: false,
+            }),
+            origin({
+              originId: 'ob',
+              listId: 'lb',
+              lineId: 'zlb',
+              listName: 'Groceries',
+              zoneName: 'Parents',
+              fromRun: true,
+            }),
+            origin({
+              originId: 'oc',
+              listId: 'lc',
+              lineId: 'zlc',
+              listName: 'Weekly shop',
+              zoneName: 'Flat 3B',
+              fromRun: true,
+            }),
+          ]),
+        ],
+      });
+
+      expect(
+        fixture.componentInstance['asked']().map((row) => row.label)
+      ).toEqual(['Weekly shop', 'Groceries', 'Shared shelf']);
     });
   });
 
@@ -679,7 +957,7 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
         reads: [answer([origin({ writable: false, contributed: 2 })])],
       });
 
-      expect(fixture.componentInstance['rows']()[0].reason).toBe(
+      expect(fixture.componentInstance['asked']()[0].reason).toBe(
         'basket.units.noAccess'
       );
       expect(reels(fixture)).toHaveLength(0);

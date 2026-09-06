@@ -10,7 +10,7 @@
   text-wrap: balance;
 }
 
-// The sentence that says this is not buying (section 5). Quiet copy, no colour and no
+// The sentence that says this is not buying (section 4.4). Quiet copy, no colour and no
 // icon: a warning treatment would make it read as a risk, and it is a fact about what
 // the controls below it mean.
 .not-buying {
@@ -87,6 +87,30 @@
 
 // --- The rows ---------------------------------------------------------------
 
+// The two columns, named once above the rows rather than on each of them. Hidden
+// from the accessibility tree, because each control below already carries its own
+// name and a screen reader reading a header row would hear the words twice.
+.columns {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--app-space-3);
+  margin: 0 0 var(--app-space-1);
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-text-muted);
+}
+
+.columns-asked {
+  min-inline-size: var(--app-quantity-width);
+  text-align: center;
+}
+
+.columns-bought {
+  min-inline-size: var(--app-quantity-width);
+  text-align: center;
+}
+
 .rows {
   display: flex;
   flex-direction: column;
@@ -98,7 +122,7 @@
 
 // The reel is the right hand end of every row and keeps its size at the smallest
 // supported width: the number is the control and the text beside it is not, so the
-// name truncates rather than the target shrinking (section 7).
+// name truncates rather than the target shrinking (section 8).
 .row {
   display: flex;
   align-items: center;
@@ -115,6 +139,7 @@
 
 .row-label {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--app-space-1);
   min-inline-size: 0;
@@ -168,7 +193,23 @@
   text-align: center;
 }
 
-// --- The lists that are not in ----------------------------------------------
+// What this basket has bought for the list. Quieter than the reel beside it, because
+// it is a thing to read and the reel is a thing to move, and nothing on this sheet
+// can change it.
+.row-bought {
+  flex: none;
+  min-inline-size: var(--app-quantity-width);
+  font-size: var(--app-text-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+  text-align: center;
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
+}
+
+// --- The lists that asked for nothing ---------------------------------------
 
 // A real disclosure, full width and with a 44px target, because it is the one control
 // on this sheet that is not a number.
@@ -192,7 +233,7 @@
 
 // Sunken, so the section reads as being behind the lists that are actually in the line
 // rather than as more of them.
-.others {
+.rest {
   padding: var(--app-space-2) var(--app-space-3);
   border-radius: var(--app-card-radius);
   background: var(--app-surface-sunken);
