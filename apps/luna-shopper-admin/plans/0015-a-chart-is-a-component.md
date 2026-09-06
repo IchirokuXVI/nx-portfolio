@@ -1,3 +1,5 @@
+> **PR:** [#240](https://github.com/IchirokuXVI/nx-portfolio/pull/240)
+
 # 0015 A chart is a component
 
 The dashboard (`0016`) draws numbers over time, and this app has nothing to draw them with. It has
