@@ -1,7 +1,7 @@
 /**
  * Read one Carrefour product page and report what it adds over the listing card.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/probe-product-page.ts <productPath>
+ * Run: npx tsx libs/luna-shopper/carrefour/tools/probe-product-page.ts <url> [--out f.json]
  *   npx tsx libs/luna-shopper/carrefour/tools/probe-product-page.ts \
  *     /supermercado/gazpacho-carrefour-sin-gluten-1-l/805505583/p
  *
@@ -120,8 +120,13 @@ async function main(): Promise<void> {
     const eans = [...new Set(JSON.stringify(state).match(/\b\d{13}\b/g) ?? [])];
     console.log(eans.length ? `  ${eans.slice(0, 20).join(', ')}` : '  none');
 
-    writeFileSync('product-state.json', JSON.stringify(state, null, 1), 'utf8');
-    console.log('\nwrote product-state.json');
+    // Only on request. Writing by default drops an untracked file into the repo root.
+    const outIndex = process.argv.indexOf('--out');
+    if (outIndex > 0) {
+      const outPath = process.argv[outIndex + 1];
+      writeFileSync(outPath, JSON.stringify(state, null, 1), 'utf8');
+      console.log(`\nwrote ${outPath}`);
+    }
   } finally {
     await browser.close();
   }
