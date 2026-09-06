@@ -19,6 +19,8 @@ import {
   type BasketSettleRequest,
   type BasketSettleResult,
   type BasketShareLink,
+  type BasketSplitRequest,
+  type BasketSplitResult,
   type BasketView,
   type CatalogSuggestion,
   type LineApprovalStatus,
@@ -37,6 +39,19 @@ import { BasketSocket } from './basket-socket';
  * on the same reasoning and the same order of delay.
  */
 const REFRESH_DEBOUNCE_MS = 1500;
+
+/**
+ * What the page's live region says about a split (velista `0069`, section 4).
+ *
+ * The two facts and not the sentence, because the sentence is an interpolated
+ * key and this library holds no translator: the page hands both to the pipe.
+ */
+export interface BasketSplitSaid {
+  /** The line's own words, which every row of the split shares. */
+  content: string;
+  /** How many rows the act left standing. Never less than two. */
+  rows: number;
+}
 
 /**
  * The names on a batch of origins, candidates or targets, keyed by list id.
@@ -122,6 +137,8 @@ export class BasketStore {
   private readonly _busyLines = signal<ReadonlySet<string>>(new Set());
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
   private readonly _lastAdded = signal<BasketLine | null>(null);
+  /** See {@link lastSplit}. Cleared by an add, and cleared with the basket. */
+  private readonly _lastSplit = signal<BasketSplitSaid | null>(null);
   /** Whether an add is in flight, so the composer's button can wait on it. */
   private readonly _adding = signal(false);
   /** See {@link pendingTargets}. Session local, and cleared with the basket. */
@@ -330,6 +347,19 @@ export class BasketStore {
   readonly lastAdded = this._lastAdded.asReadonly();
 
   /**
+   * The most recent split, for the same live region (velista `0069`, section 4).
+   *
+   * The **same** region as {@link lastAdded} rather than one of its own, which is
+   * why the two clear each other: there is one thing to say about this basket at
+   * a time, and a second region would talk over the first while somebody is
+   * standing in an aisle. Whichever happened last is the one that is set.
+   *
+   * Null when a split left one row, which is a sibling folded back into the row
+   * it came from. Nothing was split, so nothing is announced.
+   */
+  readonly lastSplit = this._lastSplit.asReadonly();
+
+  /**
    * Whether this reader may see zone data, as the **server** decided on the last
    * read (backend `0051`, section 5.2).
    *
@@ -464,6 +494,7 @@ export class BasketStore {
     this._present.set([]);
     this._busyLines.set(new Set());
     this._lastAdded.set(null);
+    this._lastSplit.set(null);
     this._adding.set(false);
     // Both stopgaps are about **this** basket and this session, so they go with it.
     // Carrying either into the next basket would caption its rows with a household
@@ -539,16 +570,67 @@ export class BasketStore {
   }
 
   /**
-   * Swap a line's pick to another of its options.
+   * Give units of a line to other products, which splits it (velista `0069`).
    *
    * Available to everybody, guests included: the options are catalog products and
-   * never zone data (backend `0051`, section 6.1).
+   * never zone data (backend `0051`, section 6.1). It replaces `setPick`, which
+   * this store carried until velista `0069`: moving every outstanding unit to one
+   * other product is this call with one share.
+   *
+   * ## The order the four collections are applied in
+   *
+   * Merged rows first, then created ones, then the original, then the removals.
+   * The first three are all merges by id and could be in any order; the removals
+   * are last **on purpose**, because a row that a merge folded away is a row the
+   * survivor has just been raised for, and dropping it first would take the units
+   * off the screen for a frame before the row that now holds them was redrawn.
+   *
+   * The caller is answered the whole result rather than the line, because the
+   * sheet has to know whether its **own** row is among the removals: a sheet about
+   * a line that is gone dismisses itself, and it cannot read that from a line.
    */
-  async setPick(lineId: string, itemId: string): Promise<BasketLine | null> {
+  async splitLine(
+    lineId: string,
+    body: BasketSplitRequest
+  ): Promise<BasketSplitResult | null> {
     return this._write(lineId, async (id) => {
-      const line = await this._service.setPick(id, lineId, itemId);
-      this.apply(line);
-      return line;
+      const result = await this._service.splitLine(id, lineId, body);
+
+      for (const row of result.merged) {
+        this.apply(row);
+      }
+      for (const row of result.created) {
+        this._insert(row);
+      }
+      this.apply(result.line);
+      for (const gone of result.removed) {
+        this.drop(gone);
+      }
+
+      // One sentence for the whole act, rather than one per sibling: a polite
+      // region reads whatever the node last held, so three appends would say
+      // "added" three times and never say what happened (section 4).
+      //
+      // Counted as the rows this act left standing rather than as the length of
+      // any one collection, because the original appears in two of them: it is
+      // `line`, and when a share folded it away it is `line` **and** a member of
+      // `removed`. A set minus the removals is the only reading that is right in
+      // both directions, including the one that folds a sibling back and leaves
+      // one row, which says nothing because nothing was split.
+      const standing = new Set(
+        [...result.merged, ...result.created, result.line].map((row) => row.id)
+      );
+      for (const gone of result.removed) {
+        standing.delete(gone);
+      }
+      this._lastSplit.set(
+        standing.size > 1
+          ? { content: result.line.content, rows: standing.size }
+          : null
+      );
+      this._lastAdded.set(null);
+
+      return result;
     });
   }
 
@@ -612,7 +694,7 @@ export class BasketStore {
   }
 
   /**
-   * Put a line on the end of the basket, from wherever it came.
+   * Put a line in the basket, from wherever it came.
    *
    * **Idempotent by id**, which is not decoration: the add answers a line and the
    * basket's own room broadcasts the same one, so the person who typed it appends it
@@ -624,23 +706,71 @@ export class BasketStore {
    * that arrives second may know less than the copy already on screen.
    */
   append(line: BasketLine): void {
+    if (!this._insert(line)) {
+      return;
+    }
+    // Set only for a line that was genuinely new, so the announcement follows what
+    // changed on screen rather than what arrived on the wire. A split announces its
+    // own sentence, so the two clear each other: one region says whatever happened
+    // last (velista `0069`, section 4).
+    this._lastAdded.set(line);
+    this._lastSplit.set(null);
+  }
+
+  /**
+   * Put a line in the basket **at its own position**, or merge it if it is held.
+   *
+   * True when the line was genuinely new, which is what tells {@link append} it has
+   * something to announce.
+   *
+   * By position and not on the end, and that is what makes a split's siblings land
+   * under the row they came from (velista `0069`, section 4). The server gives each
+   * one the midpoint between the original and the next line, so ordering by that
+   * number puts them where the shopper is looking with no client rule about which
+   * row they belong to. For an ordinary add it is the same act as appending, since
+   * an added line takes a position past everything already held.
+   */
+  private _insert(line: BasketLine): boolean {
     const held = this._basket();
     if (held === null) {
-      // Nothing to append to. The read that is on its way carries this line, so
+      // Nothing to insert into. The read that is on its way carries this line, so
       // dropping it here costs nothing and inventing a basket around it would put a
       // one line screen in front of somebody for a moment.
-      return;
+      return false;
     }
 
     if (held.lines.some((row) => row.id === line.id)) {
       this.apply(line);
-      return;
+      return false;
     }
 
-    this._basket.set({ ...held, lines: [...held.lines, line] });
-    // Set only for a line that was genuinely new, so the announcement follows what
-    // changed on screen rather than what arrived on the wire.
-    this._lastAdded.set(line);
+    const at = held.lines.findIndex((row) => row.position > line.position);
+    const lines =
+      at === -1
+        ? [...held.lines, line]
+        : [...held.lines.slice(0, at), line, ...held.lines.slice(at)];
+    this._basket.set({ ...held, lines });
+    return true;
+  }
+
+  /**
+   * Take a line off the basket, by id.
+   *
+   * The one way a row leaves this store without a refetch, and it exists because a
+   * split can fold one away: moving every unit of a sibling back to the product that
+   * already has a row leaves the sibling holding nothing, so the server deletes it
+   * and names it in `removed` (backend `0094`, section 5).
+   *
+   * Silent for an id the basket does not hold, which is the ordinary case rather
+   * than an error: the answer names every row that went, and a second phone may
+   * already have refetched without it.
+   */
+  drop(lineId: string): void {
+    this._basket.update((basket) =>
+      basket === null
+        ? basket
+        : { ...basket, lines: basket.lines.filter((row) => row.id !== lineId) }
+    );
   }
 
   /**

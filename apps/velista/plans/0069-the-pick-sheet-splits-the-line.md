@@ -1,3 +1,5 @@
+> **PR:** [#261](https://github.com/IchirokuXVI/nx-portfolio/pull/261)
+
 # 0069: the pick sheet splits the line
 
 > The product pane of the settle sheet lists a line's options and lets the shopper tap one.

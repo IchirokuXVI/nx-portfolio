@@ -204,7 +204,7 @@ function storeDouble(world: World) {
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
     reopen: jest.fn().mockResolvedValue(null),
-    setPick: jest.fn().mockResolvedValue(null),
+    splitLine: jest.fn().mockResolvedValue(null),
     setOutstanding: jest.fn().mockResolvedValue(null),
     rememberListNames: jest.fn(),
     apply: jest.fn(),

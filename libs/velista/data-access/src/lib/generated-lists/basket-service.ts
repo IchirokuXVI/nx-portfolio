@@ -13,6 +13,8 @@ import type {
   BasketSettleRequest,
   BasketSettleResult,
   BasketShareLink,
+  BasketSplitRequest,
+  BasketSplitResult,
   BasketView,
   CatalogSuggestion,
 } from '@portfolio/velista/models';
@@ -122,16 +124,23 @@ export interface BasketServiceI {
   reopen(generatedListId: string, lineId: string): Promise<BasketSettleResult>;
 
   /**
-   * Swap a line's pick (`POST .../lines/:lineId/pick`).
+   * Give units of a line to other products (`POST .../lines/:lineId/products`),
+   * which splits it (velista `0069`; backend `0094`).
    *
    * **Anybody may, guests included.** The options are catalog products and never
-   * zone data, and the person at the shelf is exactly who wants another brand.
+   * zone data, and the person at the shelf is exactly who took three of one milk
+   * and two of another.
+   *
+   * It replaces `setPick`, which this interface carried until velista `0069`.
+   * Moving every outstanding unit to one other product is this call with one
+   * share, and a second route would be a second rule about which product a
+   * settlement records.
    */
-  setPick(
+  splitLine(
     generatedListId: string,
     lineId: string,
-    itemId: string
-  ): Promise<BasketLine>;
+    body: BasketSplitRequest
+  ): Promise<BasketSplitResult>;
 
   /**
    * Put a line in the basket (`POST .../basket/lines`), velista `0053`.

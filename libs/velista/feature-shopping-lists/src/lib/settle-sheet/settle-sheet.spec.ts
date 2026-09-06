@@ -18,6 +18,7 @@ import type {
   BasketPriceScope,
   BasketProduct,
   BasketSettleResult,
+  BasketSplitResult,
   BasketView,
   LineSettlement,
   Page,
@@ -170,7 +171,7 @@ function storeDouble(world: World) {
   return {
     basket,
     state: signal('ready'),
-    error: signal(null),
+    error: signal<unknown>(null),
     shareLink: signal(null),
     busyLines: signal(new Set<string>()),
     lines,
@@ -189,7 +190,17 @@ function storeDouble(world: World) {
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
     reopen: jest.fn().mockResolvedValue(null),
-    setPick: jest.fn().mockResolvedValue(null),
+    // Answers what a split that changed nothing answers, so a spec that only
+    // presses the button gets a success rather than a refusal. The ones that
+    // care about the four collections override it.
+    splitLine: jest.fn(
+      async (lineId: string): Promise<BasketSplitResult> => ({
+        line: lines().find((row) => row.id === lineId) ?? line(),
+        created: [],
+        merged: [],
+        removed: [],
+      })
+    ),
     setOutstanding: jest.fn().mockResolvedValue(null),
     loadLineOrigins: jest.fn().mockResolvedValue(null),
     setOriginQuantity: jest.fn().mockResolvedValue(null),
@@ -295,6 +306,18 @@ async function render(world: World = {}) {
 
 const text = (fixture: ComponentFixture<SettleSheet>) =>
   (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+/**
+ * Every URL the sheet has dismissed to, in order.
+ *
+ * Read off `SheetNavigation`'s double rather than off the router: dismissing is a
+ * pop when the sheet was opened over a page and a replace when it was not, and
+ * which of the two happened is that class's business rather than this sheet's.
+ */
+const dismissedTo = (): string[] =>
+  (
+    TestBed.inject(SheetNavigation).dismiss as unknown as jest.Mock
+  ).mock.calls.map(([url]) => url as string);
 
 /** Open the history pane the way the control on the settle pane does. */
 async function openHistory(fixture: ComponentFixture<SettleSheet>) {
@@ -1246,8 +1269,11 @@ describe('SettleSheet: a price and a place on every option', () => {
     expect(
       drawn.map((row) => row.querySelector('.option-name')?.textContent?.trim())
     ).toEqual(['Hacendado', 'Central Lechera', 'Pascual']);
+    // The line's own product is the row that keeps the balance since velista
+    // `0069`, which is where the "chosen" mark went: it is not a default to be
+    // swapped any more, it is where the units nobody moved stay.
     expect(
-      drawn.map((row) => row.querySelector('.option-chosen') !== null)
+      drawn.map((row) => row.querySelector('.option-rest') !== null)
     ).toEqual([true, false, false]);
     expect(
       drawn.map((row) => row.querySelector('.option-cheapest') !== null)
@@ -1407,5 +1433,260 @@ describe('SettleSheet: a price and a place on every option', () => {
     expect(fixture.componentInstance['pricesAsOf']()?.key).toBe(
       'basket.product.asOf'
     );
+  });
+});
+
+/**
+ * The product pane as a split (velista `0069`).
+ *
+ * The pane used to be a radio group: one tap chose one product for the whole
+ * line, so a shopper holding three skimmed and two whole recorded the other two
+ * as the wrong milk. It is one stepper per product now, the line's own product
+ * keeps the balance, and one commit sends the lot.
+ *
+ * Assertions are on the component's own view model where the question is
+ * arithmetic, and on the rendered pane where the question is what a person can
+ * reach. The rendered ones matter most here: the whole rule the pane enforces is
+ * that a control cannot ask for more than there is.
+ */
+describe('SettleSheet: the pick sheet splits the line', () => {
+  const product = (id: string, name: string): [string, BasketProduct] => [
+    id,
+    {
+      id,
+      name: { en: name, es: name },
+      brand: null,
+      size: 1,
+      unit: 'LITER',
+      offer: null,
+    },
+  ];
+
+  const products = (): ReadonlyMap<string, BasketProduct> =>
+    new Map([
+      product('i-skimmed', 'Milk, Skimmed'),
+      product('i-whole', 'Milk, Whole'),
+      product('i-lactose', 'Milk, Lactose free'),
+    ]);
+
+  /** Five units of skimmed, with two other milks on the shelf. */
+  const milkLine = (overrides: Partial<BasketLine> = {}) =>
+    line({
+      quantity: 5,
+      settled: 0,
+      pickId: 'i-skimmed',
+      optionIds: ['i-skimmed', 'i-whole', 'i-lactose'],
+      ...overrides,
+    });
+
+  async function renderPane(world: World = {}) {
+    const rendered = await render({
+      lines: [milkLine()],
+      products: products(),
+      ...world,
+    });
+    rendered.fixture.componentInstance['openPane']('product');
+    rendered.fixture.detectChanges();
+    return rendered;
+  }
+
+  const rows = (fixture: ComponentFixture<SettleSheet>) =>
+    Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '.option'
+      )
+    );
+
+  const fields = (fixture: ComponentFixture<SettleSheet>) =>
+    Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>(
+        '.share-field'
+      )
+    );
+
+  const balances = (fixture: ComponentFixture<SettleSheet>) =>
+    Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '.option-balance'
+      )
+    ).map((node) => node.textContent?.trim());
+
+  /** Move units onto one product, through the component as the field does. */
+  const put = (
+    fixture: ComponentFixture<SettleSheet>,
+    itemId: string,
+    quantity: number
+  ) => {
+    fixture.componentInstance['setShare'](itemId, quantity);
+    fixture.detectChanges();
+  };
+
+  it('draws a stepper on every product but the line’s own, which shows the balance', async () => {
+    const { fixture } = await renderPane();
+
+    // Three rows, two steppers: the row that keeps the balance has no control,
+    // because the balance is never typed.
+    expect(rows(fixture)).toHaveLength(3);
+    expect(fields(fixture)).toHaveLength(2);
+    expect(balances(fixture)).toEqual(['5']);
+    expect(
+      rows(fixture).map((row) => row.querySelector('.option-rest') !== null)
+    ).toEqual([true, false, false]);
+  });
+
+  it('takes the balance down as the steppers go up', async () => {
+    const { fixture } = await renderPane();
+
+    put(fixture, 'i-whole', 3);
+    expect(balances(fixture)).toEqual(['2']);
+
+    put(fixture, 'i-lactose', 2);
+    expect(balances(fixture)).toEqual(['0']);
+  });
+
+  it('caps a stepper at the balance plus its own value, so the balance never goes below zero', async () => {
+    const { fixture } = await renderPane();
+
+    put(fixture, 'i-whole', 3);
+    // Two left, so the other stepper's ceiling is two and its own value is zero.
+    expect(fields(fixture).map((field) => field.max)).toEqual(['5', '2']);
+
+    // Typed past the ceiling, which a keyboard can do whatever `max` says. The
+    // component clamps rather than trusting the control.
+    put(fixture, 'i-lactose', 9);
+    expect(fixture.componentInstance['balance']()).toBe(0);
+    expect(fields(fixture).map((field) => field.value)).toEqual(['3', '2']);
+  });
+
+  it('sends one share per stepper above zero, with the amount the pane opened with', async () => {
+    const { fixture, store } = await renderPane();
+
+    put(fixture, 'i-whole', 3);
+    put(fixture, 'i-lactose', 0);
+    await fixture.componentInstance['apply']();
+
+    expect(store.splitLine).toHaveBeenCalledWith(LINE_ID, {
+      from: 5,
+      // Nothing for the stepper at zero, and nothing for the line's own product,
+      // which is the balance.
+      shares: [{ itemId: 'i-whole', quantity: 3 }],
+    });
+  });
+
+  it('commits once, on the button, and not on a stepper move', async () => {
+    const { fixture, store } = await renderPane();
+
+    put(fixture, 'i-whole', 1);
+    put(fixture, 'i-whole', 2);
+    put(fixture, 'i-lactose', 1);
+
+    // Each tick is a fragment of one decision: a write per tick would draw and
+    // fold rows while the thumb is still moving.
+    expect(store.splitLine).not.toHaveBeenCalled();
+
+    await fixture.componentInstance['apply']();
+    expect(store.splitLine).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no commit until something has been moved', async () => {
+    const { fixture } = await renderPane();
+
+    const apply = () =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '.actions .primary'
+      );
+    expect(apply()?.disabled).toBe(true);
+
+    put(fixture, 'i-whole', 1);
+    expect(apply()?.disabled).toBe(false);
+  });
+
+  it('draws the balance at the top for a line that names no product', async () => {
+    const { fixture } = await renderPane({
+      lines: [milkLine({ pickId: null })],
+    });
+
+    // Four rows: the balance's own, then the three options, every one of which
+    // now carries a stepper because none of them is the line's own.
+    expect(rows(fixture)).toHaveLength(4);
+    expect(fields(fixture)).toHaveLength(3);
+    expect(rows(fixture)[0].classList).toContain('is-rest');
+    expect(balances(fixture)).toEqual(['5']);
+    expect((fixture.nativeElement as HTMLElement).innerHTML).toContain(
+      'basket.product.noneRest'
+    );
+  });
+
+  it('says what a split is not, under the button', async () => {
+    const { fixture } = await renderPane();
+
+    expect((fixture.nativeElement as HTMLElement).innerHTML).toContain(
+      'basket.product.notBought'
+    );
+  });
+
+  it('names the product on each stepper, for a reader who cannot see the row', async () => {
+    const { fixture } = await renderPane();
+
+    // One label per stepper rather than one live region per row (section 6).
+    expect(
+      fields(fixture).map((field) => field.getAttribute('aria-label'))
+    ).toEqual(['basket.product.units', 'basket.product.units']);
+    // The balance is one status region rather than a live region per stepper, so
+    // a screen reader hears it move once (section 6).
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.option-balance')
+        ?.getAttribute('role')
+    ).toBe('status');
+  });
+
+  it('dismisses to the basket once the split lands', async () => {
+    const { fixture } = await renderPane();
+
+    put(fixture, 'i-whole', 3);
+    await fixture.componentInstance['apply']();
+
+    // Either the split folded this row away or it did not, and the sheet goes
+    // both ways: there is no case to tell apart (section 3.1).
+    expect(dismissedTo()).toEqual([`/velista/en/shopping-lists/${BASKET_ID}`]);
+  });
+
+  it('reports a refused split and reloads its numbers', async () => {
+    const { fixture, store } = await renderPane();
+    (store.splitLine as jest.Mock).mockResolvedValueOnce(null);
+    store.error.set(
+      new GatewayError({
+        code: 'stale_quantity',
+        status: 409,
+        correlationId: 'c-1',
+        detail: 'moved',
+      })
+    );
+
+    put(fixture, 'i-whole', 3);
+    await fixture.componentInstance['apply']();
+    fixture.detectChanges();
+
+    // The store has already refetched, so the sentence names the amount as it
+    // now stands and the steppers go back to nothing.
+    expect(fixture.componentInstance['errorKey']()).toBe(
+      'basket.error.staleLine'
+    );
+    expect(fixture.componentInstance['balance']()).toBe(5);
+    expect(fields(fixture).map((field) => field.value)).toEqual(['0', '0']);
+  });
+
+  it('leaves when the line it is about disappears underneath it', async () => {
+    const { fixture, store } = await renderPane();
+    expect(dismissedTo()).toEqual([]);
+
+    // A second phone moved this row's last unit back onto a sibling, so the
+    // server folded it away and the socket said so. A sheet about nothing must
+    // not be what a back gesture lands on (`0031`).
+    store.lines.set([]);
+    fixture.detectChanges();
+
+    expect(dismissedTo()).toEqual([`/velista/en/shopping-lists/${BASKET_ID}`]);
   });
 });

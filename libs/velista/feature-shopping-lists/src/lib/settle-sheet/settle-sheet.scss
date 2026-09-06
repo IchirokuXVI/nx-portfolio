@@ -145,9 +145,10 @@
   list-style: none;
 }
 
+// A list item since velista 0069 rather than a button: the row is no longer one
+// tap that chooses a product, it holds a stepper of its own. Nothing about it is
+// clickable, so it takes no tap target and no pointer.
 .option {
-  @include shared.tap-target;
-
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -159,9 +160,10 @@
   background: var(--app-surface-raised);
   font-family: inherit;
   text-align: start;
-  cursor: pointer;
 
-  &[aria-current='true'] {
+  // The row that keeps the balance, marked with a border as well as the words
+  // beside its number, never with colour alone (section 7).
+  &.is-rest {
     border-color: var(--app-action-bg);
   }
 }
@@ -218,28 +220,84 @@
   color: var(--app-text-muted);
 }
 
-.option-marks {
-  display: flex;
-  gap: var(--app-space-2);
+// The row's last line: the cheapest mark on the leading edge, and the control
+// or the balance on the trailing one. Pushed apart rather than stacked, so the
+// steppers line up down the pane whether or not a row carries a mark.
+.option-foot {
+  justify-content: space-between;
+  align-items: center;
+  margin-block-start: var(--app-space-1);
 }
 
-// The chosen one is marked with a word as well as a border, never with colour
-// alone (section 7). The cheapest carries a second word beside it (velista
-// 0062, section 5.2); both can be on one row and often are not, which is the
-// case the mark exists for.
-.option-chosen,
+// The cheapest carries a word beside it (velista 0062, section 5.2), never a
+// colour alone (section 7). It sits on the same line as the stepper because
+// both are about the same row and a line of its own would double its height.
 .option-cheapest {
   font-size: var(--app-text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  color: var(--app-text-secondary);
 }
 
-.option-chosen {
+// What the line's own product keeps: the words and the number together, so the
+// number is never read on its own as a price.
+.option-rest {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-2);
+  margin-inline-start: auto;
+}
+
+.option-rest-label {
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--app-action-quiet-fg);
 }
 
-.option-cheapest {
-  color: var(--app-text-secondary);
+// The balance, which moves as the steppers move. Tabular numerals so it does
+// not jog sideways between 9 and 10 under a thumb that is still moving.
+.option-balance {
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+// One stepper per product (velista 0069, section 2). Minus, the number, plus:
+// three targets rather than a drag, because the amounts here are small and the
+// pane is read at a shelf with one hand.
+.share-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-1);
+  margin-inline-start: auto;
+}
+
+.share-step {
+  @include shared.tap-target;
+
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+// Typed as well as stepped, because somebody moving eight units should not tap
+// eight times. The clamp is in the component: a keyboard can type past `max`.
+.share-field {
+  @include shared.field;
+
+  inline-size: 4rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 // How old the prices are, once under the pane (section 5.4). A sentence and not

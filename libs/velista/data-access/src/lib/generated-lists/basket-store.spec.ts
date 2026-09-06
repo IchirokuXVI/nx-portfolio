@@ -114,7 +114,7 @@ function build(
     getBasket: () => memory.getBasket(),
     settle: (id, lineId, body) => memory.settle(id, lineId, body),
     reopen: (id, lineId) => memory.reopen(id, lineId),
-    setPick: (id, lineId, itemId) => memory.setPick(id, lineId, itemId),
+    splitLine: (id, lineId, body) => memory.splitLine(id, lineId, body),
     setOutstanding: (id, lineId, body) =>
       memory.setOutstanding(id, lineId, body),
     getLineOrigins: (id, lineId) => memory.getLineOrigins(id, lineId),
@@ -1208,6 +1208,230 @@ describe('BasketStore', () => {
       // Its own code, so the sheet can say "this list already has it, read again"
       // rather than "that did not save".
       expect((store.error() as GatewayError).code).toBe('stale_quantity');
+    });
+  });
+
+  /**
+   * Splitting a line across the products that were actually got (velista `0069`;
+   * backend `0094`).
+   *
+   * The fixture's milk line is three units of Hacendado with three options, which
+   * is the shape the whole plan is about: one row, several milks on the shelf, and
+   * a shopper holding two of one and one of another.
+   *
+   * Every assertion here is about **the store's four collections**, not about the
+   * pane. What the sheet draws is `settle-sheet.spec.ts`; what the fake writes is
+   * asserted through the store because that is the only reader of it.
+   */
+  describe('splitting a line by the products that were got', () => {
+    const MILK = 'line-milk';
+
+    /** The milk row as the store now holds it, or undefined once it is gone. */
+    const milk = (store: BasketStore) =>
+      store.lines().find((row) => row.id === MILK);
+
+    /** Every row named "Milk", in the order the store holds them. */
+    const milks = (store: BasketStore) =>
+      store.lines().filter((row) => row.content === 'Milk');
+
+    it('keeps the balance on the original and puts the sibling under it', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.splitLine(MILK, {
+        from: 3,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
+      });
+
+      expect(result?.created).toHaveLength(1);
+      expect(result?.created[0].quantity).toBe(1);
+      expect(result?.created[0].pickId).toBe('item-milk-pascual');
+      // The balance is never typed: it is what the share left behind.
+      expect(milk(store)?.quantity).toBe(2);
+      expect(milk(store)?.pickId).toBe('item-milk-hacendado');
+
+      // Directly under the original and not on the end of the basket, which is
+      // the whole of section 4: the position the server gave it is between the
+      // original and the line after it, and the store inserts on that number.
+      const order = store.lines().map((row) => row.id);
+      expect(order.indexOf(result?.created[0].id ?? '')).toBe(
+        order.indexOf(MILK) + 1
+      );
+    });
+
+    it('reassigns the original when every unit moved, keeping its id', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.splitLine(MILK, {
+        from: 3,
+        shares: [
+          { itemId: 'item-milk-pascual', quantity: 2 },
+          { itemId: 'item-milk-central', quantity: 1 },
+        ],
+      });
+
+      // The first share takes the original rather than deleting it, so its id,
+      // its position and who put it there all survive (backend `0094`, 2.2).
+      expect(result?.line.id).toBe(MILK);
+      expect(result?.line.pickId).toBe('item-milk-pascual');
+      expect(result?.line.quantity).toBe(2);
+      expect(result?.created).toHaveLength(1);
+      expect(result?.created[0].pickId).toBe('item-milk-central');
+      expect(result?.removed).toEqual([]);
+      expect(milks(store).map((row) => row.quantity)).toEqual([2, 1]);
+    });
+
+    it('raises the sibling that already has the product rather than making a twin', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+      await store.splitLine(MILK, {
+        from: 3,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
+      });
+
+      const again = await store.splitLine(MILK, {
+        from: 2,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
+      });
+
+      expect(again?.created).toEqual([]);
+      expect(again?.merged).toHaveLength(1);
+      expect(again?.merged[0].quantity).toBe(2);
+      // Still two rows: the sibling was raised, not duplicated.
+      expect(milks(store)).toHaveLength(2);
+      expect(milk(store)?.quantity).toBe(1);
+    });
+
+    it('folds the original away when its last unit moves back, and drops it from the basket', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+      await store.splitLine(MILK, {
+        from: 3,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 2 }],
+      });
+
+      const back = await store.splitLine(MILK, {
+        from: 1,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
+      });
+
+      expect(back?.removed).toEqual([MILK]);
+      // The answer is about the row the units went to, because the row it was
+      // asked of is gone.
+      expect(back?.line.pickId).toBe('item-milk-pascual');
+      expect(back?.line.quantity).toBe(3);
+      expect(milk(store)).toBeUndefined();
+      expect(milks(store)).toHaveLength(1);
+    });
+
+    it('says what happened once, and an add says its own thing instead', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      await store.splitLine(MILK, {
+        from: 3,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
+      });
+
+      // One sentence for the whole act rather than one per sibling, and the
+      // count is the rows the act left standing.
+      expect(store.lastSplit()).toEqual({ content: 'Milk', rows: 2 });
+      expect(store.lastAdded()).toBeNull();
+
+      await store.addLine({ content: 'Foil' });
+      // One region, so the two clear each other: whatever happened last is what
+      // it holds.
+      expect(store.lastSplit()).toBeNull();
+      expect(store.lastAdded()?.content).toBe('Foil');
+    });
+
+    it('says nothing for a split that folded a sibling back to one row', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+      await store.splitLine(MILK, {
+        from: 3,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 3 }],
+      });
+
+      await store.splitLine(store.lines()[0].id, {
+        from: 3,
+        shares: [{ itemId: 'item-milk-hacendado', quantity: 3 }],
+      });
+
+      // Nothing was split, so nothing is announced: "split into 1 rows" would be
+      // a sentence about an act that did not happen.
+      expect(store.lastSplit()).toBeNull();
+    });
+
+    it('refuses a stale `from` and writes nothing', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.splitLine(MILK, {
+        from: 2,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
+      });
+
+      expect(result).toBeNull();
+      expect((store.error() as GatewayError).code).toBe('stale_quantity');
+      expect(milk(store)?.quantity).toBe(3);
+      expect(milks(store)).toHaveLength(1);
+    });
+
+    it('refuses a product that is not an option, and the line’s own product', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      expect(
+        await store.splitLine(MILK, {
+          from: 3,
+          shares: [{ itemId: 'item-eggs', quantity: 1 }],
+        })
+      ).toBeNull();
+      expect((store.error() as GatewayError).code).toBe('validation_failed');
+
+      expect(
+        await store.splitLine(MILK, {
+          from: 3,
+          // The line's own product is the balance, and naming it twice says two
+          // things about one number.
+          shares: [{ itemId: 'item-milk-hacendado', quantity: 1 }],
+        })
+      ).toBeNull();
+      expect(milk(store)?.quantity).toBe(3);
+    });
+
+    it('refuses shares that sum to more than is outstanding', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.splitLine(MILK, {
+        from: 3,
+        shares: [
+          { itemId: 'item-milk-pascual', quantity: 2 },
+          { itemId: 'item-milk-central', quantity: 2 },
+        ],
+      });
+
+      expect(result).toBeNull();
+      expect(milks(store)).toHaveLength(1);
+    });
+
+    it('writes nothing at all for a pane whose steppers are all at zero', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.splitLine(MILK, {
+        from: 3,
+        shares: [{ itemId: 'item-milk-pascual', quantity: 0 }],
+      });
+
+      // Not an error: a gesture that said nothing is not a refusal.
+      expect(result?.created).toEqual([]);
+      expect(result?.removed).toEqual([]);
+      expect(milk(store)?.quantity).toBe(3);
+      expect(store.lastSplit()).toBeNull();
     });
   });
 });

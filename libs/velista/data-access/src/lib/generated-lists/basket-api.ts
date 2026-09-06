@@ -13,6 +13,8 @@ import type {
   BasketSettleRequest,
   BasketSettleResult,
   BasketShareLink,
+  BasketSplitRequest,
+  BasketSplitResult,
   BasketView,
   CatalogSuggestion,
 } from '@portfolio/velista/models';
@@ -28,6 +30,7 @@ import {
   toBasketSession,
   toBasketSettleResult,
   toBasketShareLink,
+  toBasketSplitResult,
   toBasketView,
 } from '../mapping/basket-mappers';
 import { toCatalogSuggestion } from '../mapping/mappers';
@@ -243,20 +246,36 @@ export class BasketApi implements BasketServiceI {
     );
   }
 
-  async setPick(
+  /**
+   * Give units of a line to other products, which splits the line.
+   *
+   * `…/products` and not `…/pick`, which this replaces: moving every outstanding
+   * unit to one other product is this write with one share, and two routes would
+   * be two rules about which product a settlement records.
+   *
+   * The shares are copied rather than passed through, because the caller's array
+   * is a signal's value on a live pane and this request is asynchronous.
+   */
+  async splitLine(
     generatedListId: string,
     lineId: string,
-    itemId: string
-  ): Promise<BasketLine> {
-    const body = await firstValueFrom(
+    body: BasketSplitRequest
+  ): Promise<BasketSplitResult> {
+    const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/pick`,
-        { itemId },
-        this._participantOptions(generatedListId, 'basket.setPick')
+        `${this._line(generatedListId, lineId)}/products`,
+        {
+          from: body.from,
+          shares: body.shares.map((share) => ({
+            itemId: share.itemId,
+            quantity: share.quantity,
+          })),
+        },
+        this._participantOptions(generatedListId, 'basket.splitLine')
       )
     );
 
-    return required(toBasketLine(body), 'basket.setPick');
+    return required(toBasketSplitResult(answer), 'basket.splitLine');
   }
 
   /**

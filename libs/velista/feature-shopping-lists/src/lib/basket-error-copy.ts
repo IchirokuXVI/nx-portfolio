@@ -31,8 +31,8 @@ export type BasketOperation =
   | 'basket.settle'
   /** Taking a finished line back to outstanding (section 6). */
   | 'basket.reopen'
-  /** Swapping the line's pick to another of its options. */
-  | 'basket.pick'
+  /** Giving units of a line to other products, which splits it (velista 0069). */
+  | 'basket.split'
   /** Minting the link, revoking it. */
   | 'basket.share'
   /** Removing somebody from the basket. */
@@ -148,10 +148,10 @@ export function basketErrorKey(
           // Neither control is drawn for anybody else, so this is the belt.
           return 'basket.error.ownerOnly';
         default:
-          // A refused read or a refused pick. Neither has a reading specific enough
-          // to be worth its own sentence: the options behind a pick are catalog data
-          // that everybody may swap, so a 403 on one is a server side surprise rather
-          // than something the reader did.
+          // A refused read or a refused split. Neither has a reading specific
+          // enough to be worth its own sentence: the options a split moves units
+          // between are catalog data that everybody may use, so a 403 on one is a
+          // server side surprise rather than something the reader did.
           return GENERIC;
       }
 

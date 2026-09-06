@@ -433,6 +433,24 @@ export interface BasketOutstandingRequest {
 }
 
 /**
+ * Giving units of a line to other products, which splits it (velista `0069`).
+ *
+ * The same `from` bargain as {@link BasketOutstandingRequest}: two phones
+ * splitting one line must not double it, so a mismatch answers `stale_quantity`
+ * and the pane redraws at the amount as it stands.
+ *
+ * There is no share for the line's **own** product, and that is the rule rather
+ * than an omission. The original keeps whatever the shares leave, so the balance
+ * is never typed and a stale request can only land somewhere honest.
+ */
+export interface BasketSplitRequest {
+  /** The outstanding amount the pane opened with. */
+  from: number;
+  /** Units for products other than the line's own. Zeroes are not sent. */
+  shares: readonly BasketShare[];
+}
+
+/**
  * Setting what one list contributes to a line (velista `0055`).
  *
  * The same `from` bargain as {@link BasketOutstandingRequest}, and for a sharper
@@ -667,6 +685,47 @@ export interface BasketSettleResult {
   skippedCount: number;
   /** Which ones, and why. Absent for a reader who does not pass the rule. */
   skipped?: readonly BasketSettleSkip[];
+}
+
+/**
+ * What one split did, in four collections a client reconciles by id (velista
+ * `0069`, section 3; backend `0094`, section 6).
+ *
+ * Four rather than one basket, because the screen redraws the rows it was told
+ * about and nothing else: a whole basket would take the scroll position with it,
+ * and any row a second shopper is editing.
+ *
+ * Nothing here decides **which** of the server's cases happened. A line whose
+ * every unit moved is reassigned rather than deleted, so the same id comes back
+ * on {@link line} with a new product, and a share for a product that already has
+ * a row raises that row into {@link merged}. Both are a merge by id to the store,
+ * which is the point: the client applies four lists and reads no rule out of
+ * them.
+ */
+export interface BasketSplitResult {
+  /** The line the split was asked of, or the row its units ended on. */
+  line: BasketLine;
+  /** One per product that had no row here yet, in position order. */
+  created: readonly BasketLine[];
+  /** The rows a share was given to rather than a new sibling. */
+  merged: readonly BasketLine[];
+  /**
+   * The ids of rows folded away, which is how moving every unit back off a
+   * sibling ends: it kept nothing, so it is gone.
+   */
+  removed: readonly string[];
+}
+
+/**
+ * One product of a split, and how many units go to it.
+ *
+ * Only for products **other than** the line's own: the line keeps the balance,
+ * and the balance is never typed. That is what makes a stale request land
+ * somewhere honest rather than doubling a line (backend `0094`, section 2).
+ */
+export interface BasketShare {
+  itemId: string;
+  quantity: number;
 }
 
 /**

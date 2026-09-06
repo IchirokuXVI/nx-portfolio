@@ -17,7 +17,10 @@ import {
   type BasketSession,
   type BasketSettleRequest,
   type BasketSettleResult,
+  type BasketShare,
   type BasketShareLink,
+  type BasketSplitRequest,
+  type BasketSplitResult,
   type BasketView,
   type CatalogSuggestion,
   type LineApprovalStatus,
@@ -29,6 +32,99 @@ import type { BasketServiceI } from './basket-service';
 
 /** The one link this fake knows. Anything else is dead, like most links are. */
 const LIVE_SECRET = '9f2k4tqvb1xz8mq7';
+
+/**
+ * The accents `normalizeContent` strips, as the range U+0300 to U+036F.
+ *
+ * Built from code points rather than written as a literal, because a literal
+ * would hold the combining marks themselves and they are invisible: a checkout,
+ * an editor or a patch that dropped one would leave a regular expression that
+ * still compiles and quietly matches the wrong thing.
+ */
+const COMBINING_MARKS = new RegExp(
+  `[${String.fromCharCode(0x0300)}-${String.fromCharCode(0x036f)}]`,
+  'g'
+);
+
+/**
+ * A line's words as the merge rule compares them, which is the server's
+ * `normalizeContent` (backend `0091`).
+ *
+ * Copied rather than imported, because the only home for it is a Nest service in
+ * core: importing it would put a backend edge into an Angular library. Four
+ * transformations and no cleverness, so the copy is cheap to keep honest.
+ */
+function normalizeContent(content: string): string {
+  return content
+    .normalize('NFD')
+    .replace(COMBINING_MARKS, '')
+    .toLocaleLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * When two lines of one basket are the same line (backend `0094`, section 5).
+ *
+ * > Two basket lines merge when their normalized content is equal and their
+ * > products are equal or one of them has none.
+ *
+ * A basket cannot merge by name alone, which is the whole reason this rule
+ * exists: a split makes siblings that share a name on purpose, and folding them
+ * together would put two products on a row that may hold one. The "or one of them
+ * has none" half is what makes a typed "Milk" land on the Milk that is already
+ * there, and what lets a group added line, which carries options and no pick, be
+ * the row a later choice lands on.
+ *
+ * `candidates` is every **other** line of the basket. The caller excludes the
+ * line being placed, which is what stops a share merging back into the row it
+ * came from.
+ */
+function findBasketMergeTarget(
+  candidates: readonly BasketLine[],
+  incoming: { content: string; pickId: string | null }
+): BasketLine | null {
+  const name = normalizeContent(incoming.content);
+  const matches = candidates
+    .filter((line) => normalizeContent(line.content) === name)
+    .filter(
+      (line) =>
+        line.pickId === incoming.pickId ||
+        line.pickId === null ||
+        incoming.pickId === null
+    )
+    // Earliest first, so case 3 below is a `[0]` rather than a second sort.
+    .sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : 1));
+
+  if (matches.length === 0) {
+    return null;
+  }
+  // 1. A line with the same product. An exact identity beats every fallback,
+  //    including a product free row that happens to sit above it.
+  const sameProduct = matches.find((line) => line.pickId === incoming.pickId);
+  if (sameProduct) {
+    return sameProduct;
+  }
+  // 2. The incoming names no product, so the row that names none is the honest
+  //    home for it: choosing one of the named rows would choose a product.
+  if (incoming.pickId === null) {
+    const noProduct = matches.find((line) => line.pickId === null);
+    if (noProduct) {
+      return noProduct;
+    }
+  }
+  // 3. Otherwise the earliest by position, which is the survivor rule asked one
+  //    step early.
+  return matches[0];
+}
+
+/** Two option lists as one, in the first's order, with no repeats. */
+function unionOf(
+  held: readonly string[],
+  incoming: readonly string[]
+): readonly string[] {
+  return [...new Set([...held, ...incoming])];
+}
 
 /** The basket every read here is about. */
 const BASKET_ID = 'basket-saturday';
@@ -312,9 +408,13 @@ const GUEST: BasketParticipant = {
  *   correctly against a fake that always sent them and leak on the real one.
  * - **A settle is cumulative and capped.** Settling twice finishes a line;
  *   settling more than is outstanding settles what is outstanding.
- * - **A pick must be one of the line's own options**, refused as a 400 otherwise,
- *   because that check is the only thing stopping this route repointing a line at
- *   any product in the catalog.
+ * - **A share must name one of the line's own options**, refused as a 400
+ *   otherwise, because that check is the only thing stopping this route
+ *   repointing a line at any product in the catalog.
+ * - **A split merges by content and product**, with the survivor and the tie
+ *   break of backend `0094` section 5. A fake that merged by name alone would
+ *   fold two siblings that share a name on purpose, and would pass a sheet the
+ *   server refuses.
  *
  * ## What it does not model
  *
@@ -348,6 +448,9 @@ export class BasketMemory implements BasketServiceI {
 
   /** How many lines have been typed into this basket, for their ids. */
   private _added = 0;
+
+  /** How many siblings a split has made here, for their ids. */
+  private _split = 0;
 
   /** How many lines this fake has created on a household's list, for their ids. */
   private _bound = 0;
@@ -960,11 +1063,28 @@ export class BasketMemory implements BasketServiceI {
     };
   }
 
-  async setPick(
+  /**
+   * Give units of a line to other products, which splits it (backend `0094`).
+   *
+   * ## Why this fake carries the whole rule and not a sketch of it
+   *
+   * The pane's specs and the e2e that shops walk this without a backend, and a
+   * fake that merged by name alone would pass a sheet the server refuses: a
+   * split makes siblings that **share a name on purpose**, so folding them
+   * together would put two products on a row that may hold one. So the merge
+   * rule of section 5 is here in full, tie break and survivor included.
+   *
+   * What is deliberately **not** here is the origin allocation of section 3.1.
+   * The units move and the origins do not, because a fake basket's origins are a
+   * fixture rather than a ledger and every screen this fake serves reads them for
+   * a caption. Splitting them would make the units sheet disagree with itself for
+   * no screen's benefit.
+   */
+  async splitLine(
     _generatedListId: string,
     lineId: string,
-    itemId: string
-  ): Promise<BasketLine> {
+    body: BasketSplitRequest
+  ): Promise<BasketSplitResult> {
     this._requireLive();
     const line = this._lines.find((row) => row.id === lineId);
     if (!line) {
@@ -975,24 +1095,240 @@ export class BasketMemory implements BasketServiceI {
         detail: 'Line not found',
       });
     }
-    if (!line.optionIds.includes(itemId)) {
-      // The check that stops a swap repointing a line at any product at all.
+
+    const outstanding = Math.max(0, line.quantity - line.settled);
+    if (body.from !== outstanding) {
+      // Two phones splitting one line must not double it, so the number the pane
+      // opened with has to be the number it still is (backend `0056`, section
+      // 3.2). The store refetches on this code and the pane says so beside it.
+      throw new GatewayError({
+        code: 'stale_quantity',
+        status: 409,
+        correlationId: 'memory',
+        detail: 'This line has changed since it was read',
+      });
+    }
+
+    const shares = this._checkShares(body.shares, line);
+    if (shares.length === 0) {
+      // Every stepper was at zero, which is what a pane sends when nothing was
+      // touched. Nothing is written, rather than an error for a gesture that said
+      // nothing.
+      return {
+        line: this._project(line),
+        created: [],
+        merged: [],
+        removed: [],
+      };
+    }
+
+    const asked = shares.reduce((sum, share) => sum + share.quantity, 0);
+    if (asked > outstanding) {
       throw new GatewayError({
         code: 'validation_failed',
         status: 400,
         correlationId: 'memory',
-        detail: 'That product is not one of this line’s options',
+        detail: 'That is more than this line still has to get',
       });
     }
 
-    const swapped: BasketLine = {
-      ...line,
-      pickId: itemId,
-      touchedBy: this.me.id,
-      touchedAt: new Date(),
+    return this._applySplit(line, shares, outstanding - asked);
+  }
+
+  /**
+   * Zeroes out, and the two refusals the pane must never be able to send.
+   *
+   * The line's own product is refused rather than ignored, because it is the
+   * balance: naming it as a share says two things about one number.
+   */
+  private _checkShares(
+    shares: readonly BasketShare[],
+    line: BasketLine
+  ): BasketShare[] {
+    const kept: BasketShare[] = [];
+    for (const share of shares) {
+      if (!Number.isInteger(share.quantity) || share.quantity < 0) {
+        throw new GatewayError({
+          code: 'validation_failed',
+          status: 400,
+          correlationId: 'memory',
+          detail: 'A quantity must be a whole number',
+        });
+      }
+      if (share.quantity === 0) {
+        continue;
+      }
+      if (share.itemId === line.pickId) {
+        throw new GatewayError({
+          code: 'validation_failed',
+          status: 400,
+          correlationId: 'memory',
+          detail: 'That product is the one this line already names',
+        });
+      }
+      if (!line.optionIds.includes(share.itemId)) {
+        // `resolvePick`'s rule, unchanged: a swap is only ever to an option, so
+        // this write cannot repoint a line at any product in the catalog.
+        throw new GatewayError({
+          code: 'validation_failed',
+          status: 400,
+          correlationId: 'memory',
+          detail: 'That product is not one of this line’s options',
+        });
+      }
+      kept.push({ itemId: share.itemId, quantity: share.quantity });
+    }
+    return kept;
+  }
+
+  /**
+   * The write itself: one sibling per product with no row yet, a raise for one
+   * that has, and the original keeping the balance.
+   *
+   * The order of the loop is the order of the shares, which is what makes the
+   * siblings sit under the original in the order the pane listed them: each one
+   * takes the midpoint between the last row placed and the line that follows.
+   */
+  private _applySplit(
+    line: BasketLine,
+    shares: readonly BasketShare[],
+    balance: number
+  ): BasketSplitResult {
+    const now = new Date();
+    // With nothing settled and nothing left over the original is **reassigned**
+    // rather than deleted (section 2.2), so its id, its position and its "who put
+    // this here" survive. Taken by the first share with nowhere better to go.
+    const emptied = balance === 0 && line.settled === 0;
+    let reassigned = false;
+
+    const created: BasketLine[] = [];
+    const merged: BasketLine[] = [];
+    // Every row a later share may land on. The original is not in it until it has
+    // been reassigned: before that it is the row being split, and a product free
+    // one would match the merge rule and take a share straight back.
+    let candidates = this._lines.filter((row) => row.id !== line.id);
+
+    let original = line;
+    const nextPosition = this._positionsAfter(line);
+
+    for (const share of shares) {
+      const target = findBasketMergeTarget(candidates, {
+        content: line.content,
+        pickId: share.itemId,
+      });
+
+      if (!target && emptied && !reassigned) {
+        reassigned = true;
+        original = {
+          ...original,
+          pickId: share.itemId,
+          quantity: share.quantity,
+          touchedBy: this.me.id,
+          touchedAt: now,
+        };
+        candidates = [...candidates, original];
+        continue;
+      }
+
+      if (target) {
+        const raised: BasketLine = {
+          ...target,
+          // A survivor with no product takes the incoming one, which is what
+          // makes a group added line the row a later choice lands on.
+          pickId: target.pickId ?? share.itemId,
+          quantity: target.quantity + share.quantity,
+          optionIds: unionOf(target.optionIds, line.optionIds),
+          touchedBy: this.me.id,
+          touchedAt: now,
+        };
+        candidates = candidates.map((row) =>
+          row.id === raised.id ? raised : row
+        );
+        this._lines = this._lines.map((row) =>
+          row.id === raised.id ? raised : row
+        );
+        const already = merged.findIndex((row) => row.id === raised.id);
+        if (already === -1) {
+          merged.push(raised);
+        } else {
+          merged[already] = raised;
+        }
+        continue;
+      }
+
+      const sibling: BasketLine = {
+        ...line,
+        id: `line-split-${(this._split += 1)}`,
+        pickId: share.itemId,
+        quantity: share.quantity,
+        settled: 0,
+        waitingSettled: 0,
+        position: nextPosition(),
+        // The original's, and not the actor's: the person who put milk here put
+        // this milk here (section 3).
+        createdBy: line.createdBy,
+        touchedBy: this.me.id,
+        touchedAt: now,
+        lastOutcome: null,
+        // Deliberately none. The units moved and this fake's origins did not; see
+        // the note on {@link splitLine}.
+        origins: [],
+      };
+      created.push(sibling);
+      candidates = [...candidates, sibling];
+    }
+
+    const removed: string[] = [];
+    if (emptied && !reassigned) {
+      // Every share found a row of its own, so the original kept nothing. It is
+      // folded away rather than left as a row of zero, which is how moving every
+      // unit back off a sibling ends.
+      removed.push(original.id);
+      this._lines = this._lines.filter((row) => row.id !== original.id);
+    } else if (!reassigned) {
+      original = {
+        ...original,
+        quantity: original.settled + balance,
+        touchedBy: this.me.id,
+        touchedAt: now,
+      };
+    }
+
+    if (removed.length === 0) {
+      this._lines = this._lines.map((row) =>
+        row.id === original.id ? original : row
+      );
+    }
+    this._lines = [...this._lines, ...created].sort(
+      (a, b) => a.position - b.position
+    );
+
+    const folded = removed.includes(original.id);
+    return {
+      // A folded original is gone, so the row this answer is about is the one its
+      // units went to. The client removes the old id and redraws that one.
+      line: this._project(
+        folded ? (merged[0] ?? created[0] ?? original) : original
+      ),
+      created: created.map((row) => this._project(row)),
+      merged: merged.map((row) => this._project(row)),
+      removed,
     };
-    this._lines = this._lines.map((row) => (row.id === lineId ? swapped : row));
-    return this._project(swapped);
+  }
+
+  /**
+   * Where each sibling goes: the midpoint between the last row placed and the
+   * line that follows the original, so they sit directly under it in share order
+   * and nothing else moves.
+   */
+  private _positionsAfter(line: BasketLine): () => number {
+    const after = this._lines.find((row) => row.position > line.position);
+    const ceiling = after ? after.position : line.position + 1;
+    let previous = line.position;
+    return () => {
+      previous = (previous + ceiling) / 2;
+      return previous;
+    };
   }
 
   /**

@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -241,6 +242,38 @@ export class SettleSheet {
     () => this._store.lines().find((row) => row.id === this._lineId) ?? null
   );
 
+  /**
+   * Whether this sheet has already left, so it leaves exactly once.
+   *
+   * A field and not a signal: nothing draws it, and an effect that wrote a signal
+   * it also reads would be a loop.
+   */
+  private _left = false;
+
+  constructor() {
+    // A sheet about a line that is gone dismisses itself (velista `0069`, section
+    // 3.1; `0031`). Moving every unit of a sibling back to the product that
+    // already has a row folds the sibling away, and the sheet over it is then
+    // about nothing: a back gesture would land on it, and the pane's controls
+    // would send writes for an id the server no longer holds. The same handling
+    // covers a removal that arrives over the socket, which is a second phone
+    // doing the same thing.
+    effect(() => {
+      // Only once the basket has actually been read. Before that every line is
+      // absent, and dismissing then would close the sheet somebody deep linked
+      // to before it ever drew.
+      if (
+        this._left ||
+        this._store.state() !== 'ready' ||
+        this.line() !== null
+      ) {
+        return;
+      }
+      this._left = true;
+      this.close();
+    });
+  }
+
   protected readonly outstanding = computed(() => {
     const line = this.line();
     return line === null ? 0 : outstanding(line);
@@ -436,6 +469,79 @@ export class SettleSheet {
   });
 
   /**
+   * What the outstanding amount was when the product pane was opened.
+   *
+   * The pane's whole arithmetic runs off this one number rather than off
+   * {@link outstanding}, and that is deliberate. It is what goes out as the
+   * write's `from`, so the balance a shopper reads and the amount the server
+   * checks are the same fact: a pane whose steppers were capped by a live number
+   * while `from` held an older one could show a legal move that the server then
+   * refuses. Somebody else moving the line underneath is exactly what the guard
+   * is for, and it answers `stale_quantity`, which reloads the pane.
+   */
+  private readonly _from = signal(0);
+
+  /** Units put against each product other than the line's own, by product id. */
+  private readonly _shares = signal<ReadonlyMap<string, number>>(new Map());
+
+  /**
+   * What the line's own product keeps: everything the steppers did not take.
+   *
+   * A computed and never a control, which is the rule the pane is built on. The
+   * balance is never typed, so the sum can never exceed what is outstanding and
+   * a stale request can only land somewhere honest (backend `0094`, section 2).
+   */
+  protected readonly balance = computed(() => {
+    const given = [...this._shares().values()].reduce((sum, n) => sum + n, 0);
+    return Math.max(0, this._from() - given);
+  });
+
+  /**
+   * The product pane's rows: every option, with what it has been given and how
+   * much more it may take.
+   *
+   * The ceiling is the balance **plus this row's own value**, which is what makes
+   * a stepper reversible: raising one lowers every other row's ceiling by the same
+   * amount, and lowering it gives the room back. The sum can never exceed the
+   * outstanding amount and the balance can never read below zero.
+   *
+   * Built on {@link options} rather than beside it, so the name, the price and
+   * the place a row draws are decided in exactly one place (velista `0062`).
+   */
+  protected readonly productRows = computed(() => {
+    const shares = this._shares();
+    const balance = this.balance();
+    return this.options().map((row) => {
+      const share = shares.get(row.id) ?? 0;
+      return { ...row, share, max: balance + share };
+    });
+  });
+
+  /**
+   * The balance's own row at the top of the pane, or null when an option holds
+   * it.
+   *
+   * Drawn for a line whose product no option row can show: a group added line
+   * that was never picked (backend `0055`, section 3), and a line whose product
+   * the catalog has since dropped, which {@link options} leaves out rather than
+   * drawing as an id. Both need somewhere for the rest to go, and a shopper needs
+   * to see what an unpicked remainder means.
+   *
+   * `name` is null only in the first case, which is the one that reads "no
+   * product chosen": the second has a name and simply has no row of its own.
+   */
+  protected readonly restRow = computed<{ name: string | null } | null>(() =>
+    this.options().some((row) => row.chosen)
+      ? null
+      : { name: this.productName() }
+  );
+
+  /** Whether anything has been moved, which is what the commit waits on. */
+  protected readonly moved = computed(() =>
+    [...this._shares().values()].some((quantity) => quantity > 0)
+  );
+
+  /**
    * How old the prices on the pane are, once, under it (section 5.4): the
    * oldest `observedAt` among the options shown, and whether the server
    * flagged any of them stale, in the same sentence. Null when nothing is
@@ -627,20 +733,70 @@ export class SettleSheet {
     });
   }
 
-  /** Swap the pick. Anybody may, guests included: options are catalog data. */
-  protected async choose(itemId: string): Promise<void> {
-    this._busy.set(true);
-    this._failedOp.set(null);
-    const changed = await this._store.setPick(this._lineId, itemId);
-    this._busy.set(false);
-    if (changed === null) {
-      // A refused swap used to say **nothing at all**: the pane simply stayed where
-      // it was and the person tapped the same option again. It reports now, like
-      // every other act on this sheet.
-      this._failedOp.set('basket.pick');
+  /**
+   * Move units onto one product, or off it.
+   *
+   * Clamped **here** rather than trusted from the control, because the control is
+   * a number field and a keyboard can type past its `max`. The floor is zero and
+   * the ceiling is the balance plus this row's own value, which is the same rule
+   * {@link productRows} draws.
+   */
+  protected setShare(itemId: string, quantity: number): void {
+    this._shares.update((held) => {
+      const own = held.get(itemId) ?? 0;
+      const ceiling = this.balance() + own;
+      const next = new Map(held);
+      next.set(
+        itemId,
+        Math.max(0, Math.min(ceiling, Math.trunc(quantity) || 0))
+      );
+      return next;
+    });
+  }
+
+  /** One step up or down on a product's stepper. */
+  protected step(itemId: string, by: number): void {
+    this.setShare(itemId, (this._shares().get(itemId) ?? 0) + by);
+  }
+
+  /**
+   * Commit the split: one write, on the button, and never per stepper move.
+   *
+   * Each tick of a stepper is a fragment of one decision, and creating a row per
+   * tick would draw and fold rows while the thumb is still moving (section 2).
+   *
+   * The sheet dismisses on success, which is also what keeps section 3.1 simple:
+   * this line may be the one the split folded away, and a sheet that stayed open
+   * would be about a row that no longer exists. It goes either way, so there is
+   * no case to tell apart.
+   */
+  protected async apply(): Promise<void> {
+    const shares = [...this._shares()]
+      .filter(([, quantity]) => quantity > 0)
+      .map(([itemId, quantity]) => ({ itemId, quantity }));
+    if (shares.length === 0) {
       return;
     }
-    this._pane.set('settle');
+
+    this._busy.set(true);
+    this._failedOp.set(null);
+    const result = await this._store.splitLine(this._lineId, {
+      from: this._from(),
+      shares,
+    });
+    this._busy.set(false);
+
+    if (result === null) {
+      this._failedOp.set('basket.split');
+      // The store has already refetched on a stale `from`, so the pane reloads
+      // its numbers rather than sitting on the ones it was refused for: the
+      // sentence under the button names the amount as it now stands, exactly as
+      // `0054` section 4.1 draws a stale reel.
+      this._openProductPane();
+      return;
+    }
+
+    this.close();
   }
 
   protected openPane(pane: Pane): void {
@@ -656,7 +812,23 @@ export class SettleSheet {
       // rather than filling it in from nothing (section 4.2).
       this.allocation.set(this._defaultAllocation());
     }
+    if (pane === 'product') {
+      this._openProductPane();
+    }
     this._pane.set(pane);
+  }
+
+  /**
+   * Take the pane's numbers from the line as it now stands: nothing moved, and
+   * the whole outstanding amount as the balance.
+   *
+   * Called on the way in and again after a refused write, which is the same act:
+   * the steppers a person set were refused, so leaving them there would invite
+   * the same refusal.
+   */
+  private _openProductPane(): void {
+    this._from.set(this.outstanding());
+    this._shares.set(new Map());
   }
 
   protected setAllocation(listId: string, quantity: number): void {
@@ -682,6 +854,9 @@ export class SettleSheet {
    * person was looking at before, and never reopens a spent sheet.
    */
   protected close(): void {
+    // Marked before the navigation and not after, so the effect above cannot
+    // dismiss a second time for a line that went away as this sheet was leaving.
+    this._left = true;
     void this._sheet.dismiss(
       basketPath(this._locale(), this._basePath, this._generatedListId())
     );
