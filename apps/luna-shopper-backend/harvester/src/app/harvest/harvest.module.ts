@@ -16,7 +16,10 @@ import { FileImportRunner } from './file-import.runner';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
 import { HarvestController } from './harvest.controller';
+import { LidlCatalogRunner } from './lidl-catalog.runner';
+import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
+import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
@@ -63,6 +66,11 @@ import { SupermarketSourceService } from './supermarket-source.service';
     CatalogClient,
     HarvestRunStore,
     SupermarketSourceService,
+    // STORE_DISCOVERY dispatches on the adapter too (plan 0089, section 9):
+    // a chain that names its own shops is read from that chain, and everything
+    // else is a radius over OpenStreetMap.
+    OsmStoreDiscoveryRunner,
+    LidlStoreDiscoveryRunner,
     StoreDiscoveryRunner,
     // The second half of every run, whatever the first half was (plan 0086, D5).
     SourceIngest,
@@ -70,6 +78,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
     DezaCatalogRunner,
     CarrefourCatalogRunner,
     CarrefourDetailRunner,
+    LidlCatalogRunner,
     CatalogDiscoveryRunner,
     // The one runner that fetches nothing at all (plan 0086, D6): its input is
     // an uploaded document rather than a storefront.

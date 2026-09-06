@@ -1,0 +1,28 @@
+{
+  "name": "luna-shopper/lidl",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/lidl/src",
+  "prefix": "lib",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/luna-shopper/lidl/jest.config.cts"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "capture-fixtures": {
+      "//": "Refreshes the checked in fixtures from the live site (plan 0089, section 6). Never run by CI: it makes real requests, and the fixtures are what keeps every other test off the network.",
+      "executor": "nx:run-commands",
+      "options": {
+        "//tsconfig": "The workspace has no root tsconfig.json, so tsx is pointed at the base one or the `@portfolio/luna-shopper/contracts` import does not resolve.",
+        "command": "npx tsx --tsconfig tsconfig.base.json libs/luna-shopper/lidl/tools/capture-fixtures.ts"
+      }
+    }
+  }
+}

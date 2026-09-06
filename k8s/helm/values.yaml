@@ -493,6 +493,13 @@ lunaShopperBackend:
     overpassUrl: ''
     nominatimUrl: ''
 
+    # The key LIDL's public store search bundle ships (plan 0089, section 10).
+    # It is configuration and not a secret, which is why it sits here and not in
+    # the Secret: it is the same fixed string every browser sends. Empty means
+    # the value the library carries, and a 401 from the store service is the
+    # signal that the chain rotated it.
+    lidlStoresApiKey: ''
+
   # -------------------------------------------------------------------------
   # The assistant (plan 0039).
   #
