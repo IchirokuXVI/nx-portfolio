@@ -37,6 +37,48 @@
   --admin-danger-ink: #ffffff;
   --admin-danger-wash: #fbeaeb;
 
+  // What a chart draws a series in (plan 0015, section 2).
+  //
+  // Fixed across every environment, and deliberately not the accent. The accent is
+  // red in production, amber in staging and blue in development, so a series drawn
+  // in it would change colour with the deployment and say nothing at all about the
+  // data. The accent means one thing everywhere it appears, and this is how it goes
+  // on meaning it.
+  //
+  // Six, because `PriceSourceKind` has six members and that is the widest
+  // categorical series any planned chart carries. A seventh folds into the sixth as
+  // "other" rather than taking a hue nobody chose.
+  //
+  // The values are validated rather than eyeballed: the `dataviz` skill's
+  // `scripts/validate_palette.js` run against this app's raised surface passes the
+  // lightness band, the chroma floor, the worst adjacent pair under each form of
+  // colour blindness and the worst adjacent pair in normal vision. Three of them
+  // are under 3:1 against white, which is why every chart of two or more series
+  // carries a legend, four or fewer carry direct labels, and all of them offer a
+  // table. `chart-palette.ts` holds the same six so a spec can read them.
+  //
+  // The order is the numbering, and a series takes its colour by position. Do not
+  // reorder them: a reader who learned a colour last month would be told something
+  // different this month by the same picture.
+  --admin-chart-1: #2a78d6;
+  --admin-chart-2: #eb6834;
+  --admin-chart-3: #1baf7a;
+  --admin-chart-4: #eda100;
+  --admin-chart-5: #e87ba4;
+  --admin-chart-6: #008300;
+
+  --admin-chart-ink: var(--admin-ink-muted);
+  --admin-chart-grid: var(--admin-border);
+
+  // A queue with rows in it, found from across the room (plan 0015, section 3.3).
+  //
+  // Fixed for the same reason `--admin-danger` is fixed: a stat tile that wore the
+  // accent would be shouting production red at an operator on every dashboard in
+  // production, whether or not anything was waiting. Violet also sits outside the
+  // six above, so a tile in it is never mistaken for a series.
+  --admin-status-attention: #4a3aa7;
+  --admin-status-attention-wash: #efedf9;
+
   // The environment accent, and the reason this file exists (plan 0001, section 6).
   //
   // The resting value is the one for an environment the app could not establish:
