@@ -17,6 +17,17 @@ export interface ShellLink {
   /** A translation key. */
   readonly label: string;
   /**
+   * Whether this entry belongs in front of the resources rather than after
+   * them (admin plan 0016).
+   *
+   * The bespoke screens are a section at the end of the navigation, which is
+   * where a group of them belongs. The dashboard is not one of that group: it
+   * is the screen the app opens to, so it sits first, above everything it
+   * summarises. `AdminShellPage` is what reads this, because it is what puts the
+   * two lists together.
+   */
+  readonly leading?: boolean;
+  /**
    * How much work is waiting behind this link, when it is the sort of screen
    * that has an answer to that.
    *
@@ -92,7 +103,7 @@ export interface ShellLink {
                 <a
                   (click)="close()"
                   [routerLink]="link.path"
-                  [routerLinkActiveOptions]="{ exact: false }"
+                  [routerLinkActiveOptions]="{ exact: link.path === '/' }"
                   routerLinkActive="current"
                 >
                   {{ link.label | rokuT }}
@@ -217,6 +228,16 @@ export interface ShellLink {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppShell {
+  /**
+   * The navigation, in the order it is drawn.
+   *
+   * A link to `/` is matched **exactly** and every other link is matched by
+   * prefix. Prefix matching is what makes `/harvest/runs` stay highlighted on
+   * `/harvest/runs/abc`, and it is also what would leave a link to `/` marked as
+   * the current page on every screen in the app, since every URL starts with a
+   * slash. Only that one path needs the exception, so only that one path gets
+   * it.
+   */
   readonly links = input.required<readonly ShellLink[]>();
   /** `null` when the environment could not be established, `undefined` while asking. */
   readonly deployment = input.required<Deployment | null | undefined>();

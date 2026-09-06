@@ -104,3 +104,42 @@ describe('AdminShellPage navigation', () => {
     expect(hrefs).toEqual(['/shops', '/harvest/runs', '/harvest/sources']);
   });
 });
+
+/**
+ * A named screen that belongs in front of the resources (admin plan 0016).
+ *
+ * The bespoke screens are a section at the end of the navigation. The dashboard
+ * is not one of that group: it is the screen the app opens to, so it sits above
+ * everything it summarises.
+ */
+describe('AdminShellPage navigation with a leading link', () => {
+  const overview = { path: '/', label: 'dashboard.nav', leading: true };
+  const runs = { path: '/harvest/runs', label: 'harvest.nav.runs' };
+
+  it('puts it first and leaves the section last', async () => {
+    const fixture = await render([runs, overview]);
+
+    expect(fixture.componentInstance.links()).toEqual([
+      overview,
+      { path: '/shops', label: 'shops.many' },
+      runs,
+    ]);
+  });
+
+  /**
+   * A link to `/` with prefix matching is active on every page, since every URL
+   * starts with a slash. Only that path needs the exception, so only that path
+   * gets it and `/shops` keeps matching `/shops/abc`.
+   */
+  it('matches a link to the root exactly and every other link by prefix', async () => {
+    const fixture = await render([runs, overview]);
+    const options = [...fixture.nativeElement.querySelectorAll('nav a')].map(
+      (node: Element) => node.getAttribute('href')
+    );
+
+    expect(options).toEqual(['/', '/shops', '/harvest/runs']);
+    expect(
+      fixture.componentInstance.links().map((link) => link.path === '/')
+    ).toEqual([true, false, false]);
+  });
+});

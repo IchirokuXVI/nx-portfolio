@@ -6,6 +6,7 @@ export * from './lib/environment/environment-badge';
 export * from './lib/harvest/harvest-notice';
 export * from './lib/harvest/queue-frame';
 export * from './lib/harvest/run-progress';
+export * from './lib/harvest/run-row';
 export * from './lib/harvest/switch-panel';
 export * from './lib/resource/field-control';
 export * from './lib/resource/localized-text-control';

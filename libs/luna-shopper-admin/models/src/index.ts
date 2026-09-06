@@ -4,6 +4,8 @@ export * from './lib/admin-session';
 export * from './lib/app-api-config';
 export * from './lib/app-key';
 export * from './lib/app-version';
+export * from './lib/dashboard/activity-target';
+export * from './lib/dashboard/week-delta';
 export * from './lib/deployment';
 export * from './lib/harvest/harvest-document';
 export * from './lib/harvest/harvest-run';
