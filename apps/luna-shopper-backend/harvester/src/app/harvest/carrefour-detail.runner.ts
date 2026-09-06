@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { CarrefourClient } from '@portfolio/luna-shopper/carrefour';
+import {
+  CarrefourClient,
+  isSkippable,
+} from '@portfolio/luna-shopper/carrefour';
 import {
   ItemSourceMatch,
   PriceSourceKind,
@@ -107,6 +110,7 @@ export class CarrefourDetailRunner implements CatalogRunner {
       let eansWritten = 0;
       let resolved = 0;
       let missing = 0;
+      let skipped = 0;
 
       for (const row of pending) {
         if (context.signal.aborted) {
@@ -135,10 +139,19 @@ export class CarrefourDetailRunner implements CatalogRunner {
               `(${row.url}) failed: ${String(error)}`
           );
           await context.report({ failed: 1 });
-          // A refusal is the storefront telling this run to stop, and section 5
-          // records that the penalty escalates. Everything written so far
-          // stands, which is what makes stopping cheap.
-          throw error;
+          // **An isolated refusal costs one product and nothing else**, and
+          // here it costs even less than it does in the crawl: the row keeps no
+          // EAN, which is the state it was already in, so the next backfill
+          // picks it up for free. The storefront refuses an occasional page
+          // with hundreds of clean loads either side, and a pass of thousands
+          // that died on the first would never finish one.
+          //
+          // The block does stop it, because that one says every page after it
+          // will fail too and be worse for having been asked.
+          if (!isSkippable(error)) {
+            throw error;
+          }
+          skipped += 1;
         }
       }
 
@@ -148,11 +161,15 @@ export class CarrefourDetailRunner implements CatalogRunner {
         eansWritten,
         resolved,
         noEanOnTheirPage: missing,
+        // Pages the storefront refused. Their rows keep no EAN, which is the
+        // state they were already in, so the next backfill takes them again.
+        refusedPages: skipped,
         pageLoads: client.loads,
       });
       this.logger.log(
         `Run ${context.runId}: ${eansWritten} EAN(s) written, ${resolved} ` +
-          `row(s) resolved to an item, ${missing} page(s) printed none`
+          `row(s) resolved to an item, ${missing} page(s) printed none, ` +
+          `${skipped} refused`
       );
     } finally {
       await client.close();

@@ -53,7 +53,7 @@ class TestRunner extends CarrefourDetailRunner {
   constructor(
     entries: Repository<SourceCatalogEntry>,
     catalog: CatalogClient,
-    private readonly pages: Record<string, unknown>
+    protected readonly pages: Record<string, unknown>
   ) {
     super(entries, catalog, {
       getOrThrow: () => ({ userAgent: 'LunaShopperBot/1.0' }),
@@ -70,6 +70,30 @@ class TestRunner extends CarrefourDetailRunner {
           return state
             ? { status: 200, state: state as Record<string, unknown> }
             : { status: 404, state: null };
+        },
+        close: async () => undefined,
+      }),
+    });
+  }
+}
+
+/**
+ * The same runner, over a session that refuses every page it does not hold.
+ *
+ * {@link TestRunner} answers 404 for an unknown path, which is a product page
+ * that moved. This one answers 403, which is the storefront refusing.
+ */
+class RefusingRunner extends TestRunner {
+  protected override createClient(): CarrefourClient {
+    return new CarrefourClient({
+      userAgent: 'LunaShopperBot/1.0',
+      sleepImpl: async () => undefined,
+      openSession: async () => ({
+        goto: async (url: string) => {
+          const state = this.pages[url.replace('https://www.carrefour.es', '')];
+          return state
+            ? { status: 200, state: state as Record<string, unknown> }
+            : { status: 403, state: null };
         },
         close: async () => undefined,
       }),
@@ -199,6 +223,40 @@ describe('CarrefourDetailRunner', () => {
     expect(runContext.setReport).toHaveBeenCalledWith(
       expect.objectContaining({ pending: 0 })
     );
+  });
+
+  it('steps over a page the storefront refused and keeps going', async () => {
+    // The live storefront refused the very first page of a backfill, and the
+    // whole pass died. A skipped row keeps no EAN, which is the state it was
+    // already in, so the next backfill takes it again for free.
+    const rows = [entry({ externalId: 'p1' }), entry({ externalId: 'p2' })];
+    const { repo, saved } = repository(rows);
+    const runContext = context();
+    // Only the second product has a page; the first is refused.
+    await new RefusingRunner(repo, catalogWith(null), {
+      '/supermercado/p2/p': productPage('p2', '8411327052016'),
+    }).run(runContext, { supermarketId: CHAIN }, source());
+
+    expect(saved.map((row) => row.externalId)).toEqual(['p2']);
+    expect(runContext.setReport).toHaveBeenCalledWith(
+      expect.objectContaining({ eansWritten: 1, refusedPages: 1 })
+    );
+  });
+
+  it('stops when the refusals stop being isolated', async () => {
+    // Three in a row is the block, and every page after it would be worse for
+    // having been asked.
+    const rows = ['p1', 'p2', 'p3', 'p4'].map((id) =>
+      entry({ externalId: id })
+    );
+    const { repo } = repository(rows);
+    await expect(
+      new RefusingRunner(repo, catalogWith(null), {}).run(
+        context(),
+        { supermarketId: CHAIN },
+        source()
+      )
+    ).rejects.toThrow(/refused/);
   });
 
   it('never touches the columns that say a run observed the product', async () => {
