@@ -8,6 +8,8 @@ import {
   AdminPostalCodesController,
   AdminZonesController,
 } from './admin-core.controller';
+import { AdminDashboardController } from './admin-dashboard.controller';
+import { AdminDashboardService } from './admin-dashboard.service';
 import {
   AdminAdminsController,
   AdminUsersController,
@@ -43,6 +45,7 @@ import { AdminUserNamesService } from './admin-user-names.service';
   controllers: [
     AdminAuthController,
     AdminEnvironmentController,
+    AdminDashboardController,
     AdminUsersController,
     AdminAdminsController,
     AdminZonesController,
@@ -50,6 +53,6 @@ import { AdminUserNamesService } from './admin-user-names.service';
     AdminBasketsController,
     AdminPostalCodesController,
   ],
-  providers: [AdminJwtStrategy, AdminUserNamesService],
+  providers: [AdminJwtStrategy, AdminUserNamesService, AdminDashboardService],
 })
 export class GatewayAdminModule {}

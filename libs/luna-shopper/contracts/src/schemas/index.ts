@@ -12,6 +12,7 @@ export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';
 export * from './harvest-document';
 export { ADMIN_AUTH_SCHEMA_IDS } from './messages/admin-auth.schemas';
 export { ADMIN_CORE_SCHEMA_IDS } from './messages/admin-core.schemas';
+export { ADMIN_DASHBOARD_SCHEMA_IDS } from './messages/admin-dashboard.schemas';
 export { ADMIN_USERS_SCHEMA_IDS } from './messages/admin-users.schemas';
 export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';
 export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';

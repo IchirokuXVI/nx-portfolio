@@ -31,6 +31,10 @@ import {
   adminCoreSchemas,
 } from './messages/admin-core.schemas';
 import {
+  adminDashboardMessageContracts,
+  adminDashboardSchemas,
+} from './messages/admin-dashboard.schemas';
+import {
   adminUsersMessageContracts,
   adminUsersSchemas,
 } from './messages/admin-users.schemas';
@@ -79,6 +83,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...adminAuthMessageContracts,
   ...adminUsersMessageContracts,
   ...adminCoreMessageContracts,
+  ...adminDashboardMessageContracts,
   ...accountMessageContracts,
   ...zoneMessageContracts,
   ...listMessageContracts,
@@ -109,6 +114,7 @@ export const allSchemas: JsonSchema[] = [
   ...adminAuthSchemas,
   ...adminUsersSchemas,
   ...adminCoreSchemas,
+  ...adminDashboardSchemas,
   ...accountSchemas,
   ...zoneSchemas,
   ...listSchemas,
