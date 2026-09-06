@@ -30,7 +30,8 @@ export const LIST_SCHEMA_IDS = {
   listAccessEntry: schemaId('list/ListAccessEntry'),
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
-  lineViewList: schemaId('list/LineViewList'),
+  addLineResult: schemaId('list/AddLineResult'),
+  addLineResultList: schemaId('list/AddLineResultList'),
   lineClaimRef: schemaId('list/LineClaimRef'),
   lineClaimChangedEvent: schemaId('list/LineClaimChangedEvent'),
   lineSettlementView: schemaId('list/LineSettlementView'),
@@ -327,18 +328,28 @@ const commentAudioView = object(
   ['commentId', 'contentType', 'audio']
 );
 
+// What an add did: the line as it now stands, and whether the add raised one
+// that was already there rather than creating it (plan 0091, section 4).
+const addLineResult = object(
+  LIST_SCHEMA_IDS.addLineResult,
+  { line: ref(LIST_SCHEMA_IDS.lineView), merged: boolean() },
+  ['line', 'merged']
+);
+
 /**
- * The batch add's answer: the created lines in request order (plan 0040, 6.1).
+ * The batch add's answer: one result per item, in request order (plan 0040,
+ * 6.1; plan 0091, section 6).
  *
  * A bare array rather than a page, because it is neither paginated nor open
  * ended: it is exactly as long as the request was, and `reorder` set the
  * precedent that a batch write on this resource answers in a shape every client
- * already knows how to read.
+ * already knows how to read. Two items naming one thing therefore answer twice
+ * with the same line, which is what folding them into one line means.
  */
-const lineViewList: JsonSchema = {
-  $id: LIST_SCHEMA_IDS.lineViewList,
+const addLineResultList: JsonSchema = {
+  $id: LIST_SCHEMA_IDS.addLineResultList,
   type: 'array',
-  items: ref(LIST_SCHEMA_IDS.lineView),
+  items: ref(LIST_SCHEMA_IDS.addLineResult),
 };
 
 const listPage = paginated(LIST_SCHEMA_IDS.listPage, LIST_SCHEMA_IDS.listView);
@@ -659,7 +670,8 @@ export const listSchemas: JsonSchema[] = [
   listAccessEntry,
   listAccessView,
   lineView,
-  lineViewList,
+  addLineResult,
+  addLineResultList,
   lineClaimRef,
   lineClaimChangedEvent,
   lineSettlementView,
@@ -733,11 +745,11 @@ export const listMessageContracts: Record<
   },
   [LINE_PATTERNS.add]: {
     request: LIST_SCHEMA_IDS.addLineRequest,
-    response: LIST_SCHEMA_IDS.lineView,
+    response: LIST_SCHEMA_IDS.addLineResult,
   },
   [LINE_PATTERNS.addMany]: {
     request: LIST_SCHEMA_IDS.addLinesRequest,
-    response: LIST_SCHEMA_IDS.lineViewList,
+    response: LIST_SCHEMA_IDS.addLineResultList,
   },
   [LINE_PATTERNS.update]: {
     request: LIST_SCHEMA_IDS.updateLineRequest,

@@ -1,3 +1,5 @@
+import { normalizeContent } from '../lists/line-content';
+
 /**
  * How a generation run decides that two zone lines are the same thing (plan 0050,
  * section 3).
@@ -13,36 +15,15 @@
  */
 
 /**
- * The combining marks left behind by an `NFD` decomposition.
+ * The fold itself lives in `lists/line-content.ts`, because the add uses it too
+ * (plan 0091, section 1): a list that holds one line per normalized name and a
+ * run that merges on normalized text have to agree, or a basket line composed
+ * from "Jamón" would miss the "jamon" line the add merged into.
  *
- * Written as escapes rather than as the characters themselves, which are
- * invisible in an editor: a regex whose contents cannot be seen is a regex nobody
- * can review.
+ * Re-exported here so the run's own rule still reads as one module, and so the
+ * callers that already read it from here need no edit.
  */
-const COMBINING_MARKS = new RegExp('[\u0300-\u036f]', 'g');
-
-/**
- * The text two free text lines have to share to be merged: trimmed, case folded,
- * accent folded, and with runs of whitespace collapsed.
- *
- * **Deliberately conservative.** "milk" and "whole milk" stay separate, because
- * merging two things a user meant separately is a worse failure than showing two
- * lines they can merge by hand: the first loses a purchase silently, the second
- * is visible and takes one gesture to fix. Nothing here stems, and nothing here
- * strips a word.
- *
- * Accent folding is `NFD` plus a strip of the combining marks, so "Café" and
- * "cafe" meet. That is safe in both languages the product ships in, where an
- * accent is a spelling of the same word rather than a different word.
- */
-export function normalizeContent(content: string): string {
-  return content
-    .normalize('NFD')
-    .replace(COMBINING_MARKS, '')
-    .toLocaleLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ');
-}
+export { normalizeContent };
 
 /**
  * The key two lines must share to be merged into one basket line.

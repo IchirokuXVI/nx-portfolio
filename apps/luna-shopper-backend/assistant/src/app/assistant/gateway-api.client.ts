@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {
+  AddLineResult,
   LinePage,
   LineSettlementResult,
   LineView,
@@ -151,8 +152,8 @@ export class GatewayApiClient {
     caller: ApiCaller,
     listId: string,
     body: { content: string; quantity?: number }
-  ): Promise<LineView> {
-    return this.request<LineView>(
+  ): Promise<AddLineResult> {
+    return this.request<AddLineResult>(
       caller,
       'POST',
       `/v1/lists/${encodeURIComponent(listId)}/lines`,
@@ -176,8 +177,8 @@ export class GatewayApiClient {
     caller: ApiCaller,
     listId: string,
     items: { content: string; quantity?: number }[]
-  ): Promise<LineView[]> {
-    return this.request<LineView[]>(
+  ): Promise<AddLineResult[]> {
+    return this.request<AddLineResult[]>(
       caller,
       'POST',
       `/v1/lists/${encodeURIComponent(listId)}/lines/batch`,

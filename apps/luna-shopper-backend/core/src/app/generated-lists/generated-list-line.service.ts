@@ -352,7 +352,13 @@ export class GeneratedListLineService {
     options: { quantity?: number } = {}
   ): Promise<PromotedLine> {
     const quantity = options.quantity ?? line.quantity;
-    const created = await this.zoneLines.add({
+    // The add may answer a line the list already held rather than a new one
+    // (plan 0091): a household that already asks for milk keeps one Milk, raised
+    // by what this basket line contributed. The origin row below is written
+    // against whichever line it landed on, with the units this promotion added
+    // rather than that line total, so a settle allocates against what this list
+    // actually asked for.
+    const { line: created } = await this.zoneLines.add({
       userId,
       listId: targetListId,
       content: line.content,

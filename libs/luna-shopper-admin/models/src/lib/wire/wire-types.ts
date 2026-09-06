@@ -2724,6 +2724,19 @@ export type HarvestSupermarketSourceView = {
 };
 
 /**
+ * `list.AddLineResult` in the gateway's OpenAPI document.
+ */
+export type ListAddLineResult = {
+  line: ListLineView;
+  merged: boolean;
+};
+
+/**
+ * `list.AddLineResultList` in the gateway's OpenAPI document.
+ */
+export type ListAddLineResultList = ListAddLineResult[];
+
+/**
  * `list.CommentPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2822,11 +2835,6 @@ export type ListLineView = {
   createdAt: string;
   updatedAt: string;
 };
-
-/**
- * `list.LineViewList` in the gateway's OpenAPI document.
- */
-export type ListLineViewList = ListLineView[];
 
 /**
  * `list.ListAccessEntry` in the gateway's OpenAPI document.

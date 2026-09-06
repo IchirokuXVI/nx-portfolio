@@ -6389,7 +6389,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineView"
+                  "$ref": "#/components/schemas/list.AddLineResult"
                 }
               }
             }
@@ -6494,7 +6494,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineViewList"
+                  "$ref": "#/components/schemas/list.AddLineResultList"
                 }
               }
             }
@@ -27802,6 +27802,28 @@
         ],
         "additionalProperties": false
       },
+      "list.AddLineResult": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/list.LineView"
+          },
+          "merged": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "line",
+          "merged"
+        ],
+        "additionalProperties": false
+      },
+      "list.AddLineResultList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/list.AddLineResult"
+        }
+      },
       "list.CommentPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -28138,12 +28160,6 @@
           "updatedAt"
         ],
         "additionalProperties": false
-      },
-      "list.LineViewList": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/list.LineView"
-        }
       },
       "list.ListAccessEntry": {
         "type": "object",
