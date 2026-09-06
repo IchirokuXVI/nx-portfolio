@@ -47,7 +47,8 @@ export class SpawnHarvestRunDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Required for CATALOG_DISCOVERY and FILE_IMPORT.',
+    description:
+      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`).',
   })
   @IsOptional()
   @IsUUID()
@@ -56,7 +57,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices; a `deza-web` one accepts it and ignores it, because the site prints none.',
+      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices. A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself.',
   })
   @IsOptional()
   @IsUUID()
@@ -65,7 +66,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     maxLength: 16,
     description:
-      'Required for STORE_DISCOVERY. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8).',
+      'Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8).',
   })
   @IsOptional()
   @IsString()

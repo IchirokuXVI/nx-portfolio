@@ -151,6 +151,13 @@ export const ADAPTER_KEYS = [
   // A rendered page again, and behind Cloudflare (plan 0090). It writes prices,
   // which `deza-web` does not, and it is the only adapter that needs a browser.
   'carrefour-web',
+  // The one source that publishes an EAN, a price and the window the price is
+  // valid for in the same read (plan 0089). It is also the only one whose
+  // assortment is **not a catalog**: the site publishes the week's offers, so a
+  // run is a snapshot and the catalog is built by running every week. It names
+  // its own shops too, which is why `STORE_DISCOVERY` dispatches on this field
+  // as well.
+  'lidl-api',
   'osm-places',
   'manual',
 ] as const;

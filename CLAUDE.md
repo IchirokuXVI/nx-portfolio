@@ -317,11 +317,26 @@ own. Two things the DEZA half is built around and neither is a detail:
   is `harvest_runs.report`, which names every section the budget could not
   finish. Do not add a number that claims otherwise.
 
-`@portfolio/luna-shopper/mercadona`, `@portfolio/luna-shopper/deza` and
+`@portfolio/luna-shopper/mercadona`, `@portfolio/luna-shopper/deza`,
+`@portfolio/luna-shopper/carrefour`, `@portfolio/luna-shopper/lidl` and
 `@portfolio/luna-shopper/osm-places` are framework free by hard constraint: no
 TypeORM, no Nest, no database, and every test runs against checked in fixtures
 with no network. Refresh those fixtures with each library's `capture-fixtures`
 target, never by hand.
+
+**LIDL is the one source whose assortment is not a catalog** (plan 0089). The
+site publishes the week's offers rather than what a shop stocks, so a run is a
+snapshot of a rolling window and the catalog is built by running every week.
+Two rules follow, and both are easy to break by accident:
+
+- **A price belongs to an offer region, and there are 59 of them.** Every store
+  record names its own region, so a shop's price scope is read from the source
+  and never derived from its postal code. Do not collapse the regions into the
+  two or three groups that happen to agree this week: the format allows a price
+  per region, and a collapsed model cannot store the week one region differs.
+- **`STORE_DISCOVERY` dispatches on `adapterKey` too.** A chain that publishes
+  its own shop list is read from that chain; everything else, including every
+  run the postal code queue starts, is a radius over OpenStreetMap.
 
 - **The committed OpenAPI document must always be current.** Any change to a gateway route, a
   request or response DTO, an error code, or a contract schema in `libs/luna-shopper/contracts`

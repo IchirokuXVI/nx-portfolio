@@ -19,6 +19,7 @@ import {
   type ItemPage,
   type ItemPriceBatchEntry,
   type ItemView,
+  type LocalizedText,
   type PostalCodeLocationCountsView,
   type PriceScopeKind,
   type PriceScopePage,
@@ -201,16 +202,26 @@ export class CatalogClient {
     });
   }
 
+  /**
+   * A scope, with the name the chain gave it (plan 0089, section 4).
+   *
+   * The label is the source's own word for the group, which is what makes a
+   * list of 59 rows readable: `Huesca` beside `21` rather than `21` alone. It
+   * is optional because a chain that publishes a key and no name still gets a
+   * scope, which is where Mercadona's warehouse codes sit.
+   */
   createPriceScope(
     supermarketId: string,
     kind: PriceScopeKind,
-    externalKey: string | null
+    externalKey: string | null,
+    label: LocalizedText | null = null
   ): Promise<PriceScopeView> {
     return this.send(PRICE_SCOPE_PATTERNS.create, {
       userId: this.actor(),
       supermarketId,
       kind,
       externalKey,
+      label,
     });
   }
 
