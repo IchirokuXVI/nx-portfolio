@@ -51,7 +51,10 @@ import {
 import { LineClaimService } from './line-claim.service';
 import { mergeKey } from './line-dedup';
 import { namesOfLists, type NamedList } from './list-names';
-import { WaitingSettlementService } from './waiting-settlement.service';
+import {
+  WaitingSettlementService,
+  type RehomedSettlement,
+} from './waiting-settlement.service';
 
 /**
  * What a basket line is made of, and how a household changes its share of it
@@ -561,6 +564,13 @@ export class GeneratedListOriginsService {
       );
     }
 
+    // And the purchases this list has just inherited (plan 0093, section 3).
+    // `line.settled` rather than `line.updated`, and after the demand change
+    // above rather than instead of it: the list first asked for the units and
+    // then heard they were already bought, which is the order the two facts
+    // happened in.
+    this.waiting.announce(written.rehomed);
+
     const announcement: GeneratedListLineMovedEvent = {
       generatedListId: list.id,
       // Redacted to the least privileged reader in the room, because a broadcast
@@ -696,17 +706,32 @@ export class GeneratedListOriginsService {
       line.lastEditedAt = new Date();
       await basketLines.save(line);
 
+      let rehomed: RehomedSettlement[] = [];
       if (origin && !existing) {
-        // The units bought before this list held the line (section 4.3), inside
-        // this transaction so they commit with the row that made them belong
-        // anywhere. Nothing until plan 0093 fills it.
-        await this.waiting.rehome(line.id, manager);
+        // The units bought before this list held the line (section 4.3; plan
+        // 0093, section 3), inside this transaction so they commit with the row
+        // that made them belong anywhere. What they moved is announced by the
+        // caller, after the commit.
+        rehomed = await this.waiting.rehome(line.id, manager);
+      }
+
+      if (rehomed.length > 0) {
+        // Re-homing lowers the zone line, so the row this method is holding is
+        // now behind the database. Re-read rather than adjusted in memory, or
+        // the `line.updated` below would carry the quantity as it stood before
+        // the purchases landed and undo them on every screen watching the list.
+        const settled = await zoneLines.findOne({ where: { id: source.id } });
+        if (settled) {
+          source.quantity = settled.quantity;
+          source.version = settled.version;
+        }
       }
 
       return {
         source,
         zoneMoved: zoneDelta !== 0,
         origin,
+        rehomed,
         // Read through the caller's manager rather than this service's own
         // repositories, which would take a second connection while this
         // transaction holds one; enough concurrent edits and every connection in
@@ -999,6 +1024,13 @@ export class GeneratedListOriginsService {
     });
     const perLine = new Map<string, number>();
     for (const row of rows) {
+      if (row.lineId === null) {
+        // A waiting settlement belongs to no origin (plan 0093, section 2.2):
+        // it was bought before this line reached any list. Skipped rather than
+        // counted, or the floor plan 0057 section 5.2 computes would gain a key
+        // of `null` and hold units against an origin nobody can name.
+        continue;
+      }
       perLine.set(row.lineId, (perLine.get(row.lineId) ?? 0) + row.quantity);
     }
     return perLine;
@@ -1146,6 +1178,15 @@ interface WrittenOrigin {
   items: LineItemSet;
   settlements: LineSettlementSummary;
   claim: Awaited<ReturnType<LineClaimService['claimOf']>>;
+  /**
+   * The purchases this write brought home, for announcing after the commit
+   * (plan 0093, section 3).
+   *
+   * Carried out of the transaction rather than announced inside it, which is the
+   * convention every write path in core follows: an event for a write that then
+   * rolled back is a client showing something that never happened.
+   */
+  rehomed: RehomedSettlement[];
 }
 
 /**

@@ -207,8 +207,9 @@ function build(options: {
     zoneLines,
     claims.service,
     sharing,
-    // Plan 0092 section 4.3's seam, which does nothing until plan 0093.
-    new WaitingSettlementService(),
+    // Plan 0092's seam, filled by plan 0093, and real rather than stubbed: no
+    // line in this file has a waiting purchase, so it must answer nothing.
+    new WaitingSettlementService(claims.service, publisher),
     publisher
   );
 

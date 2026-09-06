@@ -446,15 +446,74 @@ describe('a line with no origins can still finish (plan 0055, section 6)', () =>
     expect(harness.basketLine.settledQuantity).toBe(2);
   });
 
-  it('writes no settlement, because there is no zone line to be a fact about', async () => {
-    // A settlement is a **zone fact** (plan 0047, section 3.1). Nothing enters
-    // any household's consumption history until plan 0058 binds the line.
+  it('writes the purchase anyway, attached to the basket line alone', async () => {
+    // Plan 0093 section 2.1 reverses plan 0058 section 4.1. The row used to be
+    // dropped, on the reasoning that a settlement is a zone fact (plan 0047,
+    // section 3.1) with no zone line to be a fact about. That was right about
+    // the fact and wrong about the record: the shopper bought the units, and a
+    // history that omits a real purchase lies to whoever reads the line later.
     const harness = build({ quantity: 2, origins: [] });
     const result = await settle(harness);
 
-    expect(harness.settlements).toHaveLength(0);
+    expect(harness.settlements).toHaveLength(1);
+    expect(harness.settlements[0]).toMatchObject({
+      // The pair that makes it a waiting row, null together.
+      lineId: null,
+      listId: null,
+      // And everything that makes it a purchase: what, how many, who, and when.
+      generatedListLineId: BASKET_LINE,
+      outcome: SettlementOutcome.BOUGHT,
+      quantity: 2,
+      settledByParticipantId: GUEST_PARTICIPANT,
+      settledByUserId: null,
+      revertedAt: null,
+    });
+    expect(harness.settlements[0].settledAt).toBeInstanceOf(Date);
+
+    // Not a settlement ref, because a ref names a line and a list and this row
+    // names neither. What the shopper is told is `waitingSettled` on the line.
     expect(result.settlements).toEqual([]);
     expect(result.skippedCount).toBe(0);
+  });
+
+  it('records the pick, so the purchase knows what was bought', async () => {
+    // The one field that cannot be recovered later: a basket line's pick can be
+    // swapped at the shelf, and the row has to say which product it was.
+    const harness = build({
+      quantity: 1,
+      origins: [],
+      itemId: 'i-old',
+      optionIds: ['i-new'],
+    });
+    await settle(harness, { itemId: 'i-new' });
+
+    expect(harness.settlements[0]).toMatchObject({ itemId: 'i-new' });
+  });
+
+  it('writes one row of zero units for NOT_AVAILABLE', async () => {
+    // An outcome rather than a quantity (section 2.1), and it is written for the
+    // reason the bought row is: it is the only record that the shop had none.
+    const harness = build({ quantity: 2, origins: [] });
+    await settle(harness, { outcome: SettlementOutcome.NOT_AVAILABLE });
+
+    expect(harness.settlements).toHaveLength(1);
+    expect(harness.settlements[0]).toMatchObject({
+      lineId: null,
+      listId: null,
+      outcome: SettlementOutcome.NOT_AVAILABLE,
+      quantity: 0,
+    });
+  });
+
+  it('writes one row per act rather than per settle of the same line', async () => {
+    // Two taps on a line of three are two purchases, made at two moments, and
+    // the allocation that places them later takes the oldest first.
+    const harness = build({ quantity: 3, origins: [] });
+    await settle(harness, { quantity: 1 });
+    await settle(harness, { quantity: 2 });
+
+    expect(harness.settlements.map((row) => row.quantity)).toEqual([1, 2]);
+    expect(harness.settlements.every((row) => row.lineId === null)).toBe(true);
   });
 
   it('is still capped at what is outstanding', async () => {
@@ -505,8 +564,11 @@ describe('a line with no origins can still finish (plan 0055, section 6)', () =>
     //
     // Plan 0051 section 6.4 already decided what to do about it: a partial
     // settle is a real outcome and is reported rather than swallowed. So the
-    // units land on the basket line, no settlement is written, and the skip is
-    // what tells the shopper an origin was missed.
+    // units land on the basket line, the skip is what tells the shopper an
+    // origin was missed, and the purchase itself waits (plan 0093, section
+    // 2.1): the branch is `eligible.length === 0`, which this reaches with an
+    // origin it may not write, so the units are recorded and the household is
+    // still not touched.
     const harness = build({
       quantity: 2,
       origins: [
@@ -525,7 +587,12 @@ describe('a line with no origins can still finish (plan 0055, section 6)', () =>
 
     expect(harness.basketLine.settledQuantity).toBe(2);
     expect(result.skippedCount).toBe(1);
-    expect(harness.settlements).toHaveLength(0);
+    // Waiting, so no list has it and none can be told about it.
+    expect(harness.settlements).toHaveLength(1);
+    expect(harness.settlements[0]).toMatchObject({
+      lineId: null,
+      listId: null,
+    });
     // And the household's line is untouched, which is the point of the skip.
     expect(harness.zoneLines.get('zl-1')?.quantity).toBe(5);
   });

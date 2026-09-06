@@ -946,6 +946,24 @@ export interface GeneratedListBasketLineView {
    */
   lastOutcome: SettlementOutcome | null;
   /**
+   * Units bought on this line before it reached any list, and still waiting for
+   * one (plan 0093, section 2.2). Zero once every unit is re-homed.
+   *
+   * Somebody adds "batteries" in the shop and buys four before anybody has said
+   * whose they are. Those four are recorded when they happen, attached to the
+   * basket line alone, and they land on the first list the line reaches, oldest
+   * purchase first, up to what that list asked for. This is what is still
+   * unplaced, which is what lets the screen say "4 recorded as bought there"
+   * when a list receives them.
+   *
+   * **Present for every reader, guests included**, unlike the three fields
+   * below: it is a count of this basket's own purchases and it names no list, no
+   * zone and no household, so section 5.2 has nothing to redact. Reverted rows
+   * are not in it, for the reason they are in no other total (plan 0054,
+   * section 3.3).
+   */
+  waitingSettled: number;
+  /**
    * Where this line came from. **Absent** for a reader who does not pass
    * section 5.2, rather than empty: a tin of tomatoes never names its household.
    */
