@@ -2,8 +2,7 @@ module.exports = {
   displayName: 'luna-shopper-admin/feature-harvest',
   preset: '../../../jest.preset.js',
   setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
-  coverageDirectory:
-    '../../../coverage/libs/luna-shopper-admin/feature-harvest',
+  coverageDirectory: '../../../coverage/libs/luna-shopper-admin/feature-harvest',
   transform: {
     '^.+\\.(ts|mjs|js|html)$': [
       'jest-preset-angular',
@@ -13,14 +12,13 @@ module.exports = {
       },
     ],
   },
-  // d3-scale and d3-shape are ESM only: their main entry is src/index.js
-  // with an export statement in it, so jest has to transform them rather
-  // than skip them the way it skips the rest of node_modules. Every d3
-  // package and internmap, which d3-scale depends on, are named here. The
-  // separator class covers Windows, where a path is spelled with backslashes.
-  transformIgnorePatterns: [
-    'node_modules[\\\\/](?!(?:.*\\.mjs$|d3-|internmap))',
-  ],
+  // d3's arithmetic modules ship ES modules and nothing else, so their `main` is
+  // the source and jest stops at the first `export`. Every project that reaches
+  // `@portfolio/luna-shopper-admin/ui` reaches them through it, so this line is
+  // the same in every config here (admin plan 0015, section 1). Mapping them to
+  // their UMD builds instead would reach the app bundle too, and tree shaking is
+  // the reason those three were taken rather than `d3` itself.
+  transformIgnorePatterns: ['node_modules/(?!(?:.*\\.mjs$|d3-|internmap))'],
   snapshotSerializers: [
     'jest-preset-angular/build/serializers/no-ng-attributes',
     'jest-preset-angular/build/serializers/ng-snapshot',

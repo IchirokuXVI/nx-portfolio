@@ -23,13 +23,27 @@ import {
 import type { ChartSeries } from './chart-types';
 import { hostWidth } from './chart-width';
 
+interface EndLabel {
+  /** Where the line actually ends. */
+  readonly x: number;
+  readonly y: number;
+  /** Where the text sits, which is the same unless two of them collided. */
+  readonly labelY: number;
+}
+
 interface PlottedSeries {
   readonly key: string;
   readonly label: string;
   readonly colour: string;
   readonly path: string;
-  readonly endLabel: { readonly x: number; readonly y: number } | null;
+  readonly endLabel: EndLabel | null;
 }
+
+/** The least vertical room two direct labels need to read as two labels. */
+const LABEL_GAP = 14;
+
+/** Below this the plot is too narrow to give a quarter of itself to labels. */
+const DIRECT_LABEL_WIDTH = 480;
 
 interface HoverPoint {
   readonly key: string;
@@ -104,9 +118,17 @@ interface HoverPoint {
           @for (plotted of plotted(); track plotted.key) {
             <path [attr.d]="plotted.path" [attr.stroke]="plotted.colour" />
             @if (plotted.endLabel; as endLabel) {
+              <line
+                [attr.stroke]="plotted.colour"
+                [attr.x1]="endLabel.x"
+                [attr.x2]="endLabel.x + 7"
+                [attr.y1]="endLabel.y"
+                [attr.y2]="endLabel.labelY"
+                class="leader"
+              />
               <text
-                [attr.x]="endLabel.x + 6"
-                [attr.y]="endLabel.y"
+                [attr.x]="endLabel.x + 10"
+                [attr.y]="endLabel.labelY"
                 class="direct"
                 dy="0.32em"
               >
@@ -273,6 +295,10 @@ interface HoverPoint {
 
     .crosshair {
       stroke: var(--admin-chart-ink);
+    }
+
+    .leader {
+      stroke-width: 1;
     }
 
     .tick {
@@ -558,12 +584,12 @@ export class LineChart {
 
     const x = this._x();
     const y = this._y();
-    const direct = this.series().length >= 2 && this.series().length <= 4;
+    const direct = this._directLabels();
     const path = d3Line<{ at: Date; value: number }>()
       .x((point) => x(point.at))
       .y((point) => y(point.value));
 
-    return this.series().map((entry) => {
+    const plotted = this.series().map((entry) => {
       const points = entry.points
         .map((point) => ({ at: parseDay(point.day), value: point.value }))
         .filter(
@@ -579,11 +605,73 @@ export class LineChart {
         path: path(points) ?? '',
         endLabel:
           direct && last !== undefined
-            ? { x: x(last.at), y: y(last.value) }
+            ? { x: x(last.at), y: y(last.value), labelY: y(last.value) }
             : null,
       };
     });
+
+    return this._separateLabels(plotted);
   });
+
+  /**
+   * Two lines that converge put their two labels in the same place.
+   *
+   * Left alone they overprint and neither can be read. Moved apart with nothing
+   * joining them they stop belonging to a line, so each one that had to move
+   * keeps a hairline connector back to the point it names. Past four series the
+   * connectors would themselves be a thicket, which is the other reason four is
+   * the ceiling.
+   */
+  private _separateLabels(
+    plotted: readonly PlottedSeries[]
+  ): readonly PlottedSeries[] {
+    const labelled = plotted.filter((entry) => entry.endLabel !== null);
+    if (labelled.length < 2) {
+      return plotted;
+    }
+
+    const moved = new Map<string, number>();
+    const order = [...labelled].sort(
+      (a, b) => (a.endLabel as EndLabel).y - (b.endLabel as EndLabel).y
+    );
+
+    let floor = Number.NEGATIVE_INFINITY;
+    for (const entry of order) {
+      const label = entry.endLabel as EndLabel;
+      const placed = Math.max(label.y, floor + LABEL_GAP);
+      moved.set(entry.key, placed);
+      floor = placed;
+    }
+
+    // Everything was pushed downward, so a crowded set can run off the bottom.
+    // Sliding the whole set back up keeps the spacing and the order.
+    const overflow = floor - this.innerHeight();
+    const shift = overflow > 0 ? overflow : 0;
+
+    return plotted.map((entry) =>
+      entry.endLabel === null
+        ? entry
+        : {
+            ...entry,
+            endLabel: {
+              ...entry.endLabel,
+              labelY: Math.max(0, (moved.get(entry.key) ?? 0) - shift),
+            },
+          }
+    );
+  }
+
+  /**
+   * Direct labels for two to four series, and only where they fit.
+   *
+   * The right hand quarter of a phone width plot is too much to spend on text
+   * that the legend above already carries, so below that width identity rests on
+   * the legend alone and the plot gets the room back.
+   */
+  private _directLabels(): boolean {
+    const count = this.series().length;
+    return count >= 2 && count <= 4 && this.width() >= DIRECT_LABEL_WIDTH;
+  }
 
   readonly hover = computed(() => {
     const index = this._hoverIndex();
@@ -680,6 +768,6 @@ export class LineChart {
 
   /** Room on the right for a direct label, and only when there will be one. */
   private _rightMargin(): number {
-    return this.series().length >= 2 && this.series().length <= 4 ? 96 : 12;
+    return this._directLabels() ? 96 : 12;
   }
 }
