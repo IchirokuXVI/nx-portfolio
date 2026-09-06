@@ -23,7 +23,7 @@ Depends on `0083`, so that the chain arrives as a row rather than as a variable.
 Plan `0038` section 4.3 already reserved this ground. It measured Node against the workload,
 concluded the runtime is not the constraint, and named the exception: "where a different runtime
 would genuinely earn its place is the CPU bound work backlog 0001 defers: leaflet OCR, and
-browser driven adapters". This is that adapter. Section 10 says why it stays in Node anyway.
+browser driven adapters". This is that adapter. Section 11 says why it stays in Node anyway.
 
 ## 1. What was measured
 
@@ -35,12 +35,16 @@ Those scripts are checked in so the numbers can be re-taken, not because they ar
 | --- | --- |
 | Product cards per listing page | 24 |
 | Page weight, images refused | About 250 KB |
-| Fields on a card | 16 |
+| Fields on every card | 14, and 19 distinct names across a page |
 | Price on a card | Yes, and a price per unit |
-| EAN on a card | No |
+| EAN on a card | No. On the product page, yes |
 | Product id on a card | Yes, two of them |
 | Paging ceiling per category | 1008 |
-| First level categories | 10 |
+| First level categories | 10, of which 5 fit under the ceiling |
+| Categories in the crawl frontier | 84 |
+| Product listings across the frontier | 17,135 |
+| Page loads for a full run | 851, about 62 minutes |
+| Categories the ceiling truncated | 0 |
 | Sustained pace with no block | 30 loads in 131 s, 0 refused |
 | Clients that can read the site | Chromium, and Windows `curl` |
 | Clients that cannot | node `fetch`, node `http2`, Linux `curl` |
@@ -104,7 +108,7 @@ Docker row above is exactly that case. It is refused.
 
 That leaves a browser. `@portfolio/luna-shopper/mercadona` and `@portfolio/luna-shopper/deza`
 are framework free by hard constraint, and this library cannot be: it depends on Playwright.
-Section 9 says what that changes and what it does not.
+Section 10 says what that changes and what it does not.
 
 ## 4. The Cloudflare cookies have to be thrown away
 
@@ -132,7 +136,7 @@ block.** Dropping them before every navigation is the whole fix.
 
 **Drop the two Cloudflare cookies and keep the rest.** Clearing the jar works equally well
 today and throws away `salepoint`, which is the cookie that decides which shop's assortment and
-prices the listing shows. Section 8 needs that cookie.
+prices the listing shows. Section 9 needs that cookie.
 
 This is worth stating plainly because it inverts the usual advice, and a later reader who
 "fixes" the client by keeping its session will break it in a way that looks like a rate limit.
@@ -154,7 +158,64 @@ Two operational notes for whoever tunes this:
   with images refused and several megabytes with them. Both were measured and neither changes
   whether the page is served.
 
-## 6. Paging stops at 1008, so a run walks leaves
+## 6. What one product card carries
+
+Measured over a full page of "La Despensa". Fourteen names appear on every card and
+nineteen appear across the page.
+
+| Field | On | Notes |
+| --- | --- | --- |
+| `product_id` | 24/24 | The chain's id, for example `VC4AECOMM-539367`. This is `externalId`. |
+| `sku_id` | 24/24 | A second id, numeric. Not an EAN. |
+| `name` | 24/24 | Spanish, and it already carries the size: "pack de 9 unidades de 1 l." |
+| `brand` | 24/24 | Present on every card, `CARREFOUR` for the private label. |
+| `price` | 24/24 | Display text, `"7,65 €"`. Comma decimal, dot thousands. |
+| `price_per_unit` | 24/24 | Display text. The comparison price. |
+| `measure_unit` | 24/24 | `l`, `kg`, `ud` and so on. The unit `price_per_unit` is per. |
+| `sell_pack_unit` | 24/24 | How many the shopper buys at once. |
+| `app_price`, `app_price_per_unit` | 24/24 | The app's own price. Equal to `price` in the sample. |
+| `images` | 24/24 | `desktop` and `mobile` URLs. |
+| `url` | 24/24 | The product page path. |
+| `catalog`, `document_type` | 24/24 | Both `food` throughout the grocery storefront. |
+| `units_in_stock` | 21/24 | Availability, per the sale point the page was rendered for. |
+| `badge`, `badge_map` | 7/24 | Promotion markers. |
+| `info_tags` | 6/24 | Diet and origin labels. |
+| `restrictions` | 3/24 | Purchase limits, with a display name and a quantity. |
+| **`ean`** | **0/24** | **Absent.** Section 14. |
+
+Three of these are worth a decision rather than a shrug:
+
+- **`product_id` has no single shape.** One sample of 192 products held three:
+  `VC4AECOMM-651364`, `600805795` and `prod301649`. It is still the right `externalId`,
+  because it is what the product URL is built from and it was unique across the sample with
+  no duplicates. Do not parse it, do not assume it is numeric, and do not derive anything from
+  its prefix.
+
+- **`name` contains the size and the pack count**, which the catalog's own merge rules
+  say must not be in a product name. So the size has to be parsed out of the name, the
+  way plan `0085` section 7 does for DEZA, and `measure_unit` plus `sell_pack_unit` are
+  the two fields that make that parse checkable rather than a guess.
+- **`app_price` was equal to `price` on every card in the sample.** Do not assume that
+  holds. `sample-products.ts` reports both, and if they ever diverge the till price is
+  `price`, because that is the one the storefront shows a web shopper.
+
+A second sample, 192 products over eight pages of `Congelados`, says how clean the data is:
+
+| | |
+| --- | --- |
+| Unique products | 192 |
+| Duplicate ids within the category | 0 |
+| Products with no readable price | 0 |
+| Products with no price per unit | 8 |
+| Products with no brand | 4 |
+| Distinct brands | 41 |
+| Distinct measure units | `kg`, `l`, `ud` |
+
+So a price is close to universal on this source, and the no price case of section 12 is real
+but rare. The eight without a price per unit are the ones to watch, because that field is the
+comparison the shopper actually wants.
+
+## 7. Paging stops at 1008, so a run pages the frontier
 
 A listing page reports two different totals and the difference is the whole enumeration
 problem. `productCardList.results.total_results` is what the result set holds.
@@ -163,32 +224,58 @@ it stops at 42 pages of 24, which is **1008**.
 
 "La Despensa" holds 6341 products and hands over 1008 of them. No page size parameter moves it.
 
-So the run enumerates **leaf categories**, and the honest test of the enumeration is whether
-any leaf still reports more than 1008. The category tree is not published in a form a client
-can read, because `categories-api` is one of the closed routes, so it is discovered by walking:
-every listing page names its own children under
+So a category over the ceiling has to be read through its children. The category tree is not
+published in a form a client can read, because `categories-api` is one of the closed routes, so
+it is discovered by walking: every listing page names its own children under
 `horizontalNavigation.secondLevelCategories`. `walk-categories.ts` does that walk.
 
-Measured to depth 2:
+### 7.1 The obvious rule is wrong, and it loses most of the catalog
+
+The obvious reading of a paging ceiling is "crawl the leaves". Measured over the whole tree,
+633 nodes, on 2026-09-06:
+
+| Strategy | Categories paged | Products found |
+| --- | --- | --- |
+| Every childless leaf | 106 | 2,780 |
+| Shallowest node under the ceiling | 84 | **17,135** |
+
+**The deep levels of this tree are curated views, not an exhaustive breakdown.** "Vinos Tintos"
+holds 257 products and its six children hold 90 between them. "Pienso para gatos" holds 250 and
+its three children hold 79. Seven branching nodes lose more than 40 percent of themselves this
+way. A run that descends to the bottom throws away six products in seven.
+
+At the top of the tree the children do cover the parent, and that is what makes the ceiling
+workable at all: the ten first level categories are covered by their children to within a few
+percent, and 413 of the 526 branching nodes reach 95 percent of their parent. Coverage is a
+property of the first three levels, not of the tree.
+
+### 7.2 The rule
+
+**Descend only while a node reports more than the ceiling. Page the node you land on whole.**
+The set that results is the frontier, and it is what a run enumerates.
+
+Measured with `walk-categories.ts --prune`, which walks exactly that way:
 
 | | |
 | --- | --- |
-| Nodes | 99 |
-| Products summed over leaves | 17,593 |
-| Leaves still over the ceiling | 3 |
-| Listing pages to crawl every leaf | 760 |
-| Total page loads for a full run | 859 |
-| Wall clock at the measured pace | About 50 minutes |
+| Page loads to find the frontier | 95 |
+| Frontier categories | 84 |
+| Products in the frontier | 17,135 |
+| Listing pages to read them | 756 |
+| Total page loads for a full run | 851 |
+| Wall clock at the measured pace | About 62 minutes |
+| Frontier nodes over the ceiling with no children | 0 |
 
-The three that overflow at depth 2 are `Alimentación` (1044), `Desayuno` (1151) and
-`Conservas, Sopas y Precocinados` (1202). All three have children, so the full walk resolves
-them, and the run's rule is this: **descend while a node reports more than the ceiling and
-has children.**
+Five of the ten first level categories already fit under the ceiling and are paged without
+descending at all: Congelados, Bebé, Mascotas, Parafarmacia and the Ofertas view. Only five
+need opening. The frontier sits at depth 1 for five of them, depth 2 for 49 and depth 3 for 30,
+so the walk never goes deeper than three levels.
 
-A node that reports more than the ceiling and has **no** children is the case the run cannot
-enumerate completely. If any exist, the run records them in `harvest_runs.report`, the way plan
-`0085` section 3 does for DEZA. Do not add a number that claims completeness the source does
-not support.
+**Nothing was capped in the measured run**, so no product was knowingly missed. That is a
+measurement and not a guarantee. A node over the ceiling with no children is the case the run
+cannot enumerate, and if one ever appears the run records it in `harvest_runs.report`, the way
+plan `0085` section 3 does for DEZA. Do not add a number that claims completeness the source
+does not support.
 
 Two node kinds are skipped:
 
@@ -197,19 +284,23 @@ Two node kinds are skipped:
 - Promotion views, whose URL carries an `F-` token instead of a `cat` id. They re-list products
   a real category already holds, so walking them counts products twice.
 
-## 7. Scope is `/supermercado`, and that is the whole filter
+**17,135 is a count of category memberships, not of distinct products.** A product listed in two
+frontier categories is counted twice here, and the run deduplicates on `product_id` as it goes.
+The distinct total is not known until a run has finished, and this plan does not guess at it.
+
+## 8. Scope is `/supermercado`, and that is the whole filter
 
 The requirement is groceries and not electronics. **No exclusion list is needed to get that.**
 `carrefour.es/supermercado` is the grocery storefront and it has its own category tree, ten
 first level nodes: Frescos, La Despensa, Bebidas, Congelados, Cuidado personal e Higiene,
 Droguería y Limpieza, Bebé, Mascotas, Parafarmacia, and an Ofertas view. Electronics, clothing,
-toys and the marketplace live under other sections of the site, and the walk in section 6 never
+toys and the marketplace live under other sections of the site, and the walk in section 7 never
 reaches them, because it only follows children of nodes it already holds.
 
 Parafarmacia is inside the grocery storefront and stays. It is what a Spanish supermarket sells
 next to the tills, and excluding it needs a rule the source does not offer.
 
-## 8. Carrefour Express is not a second source, and here is why
+## 9. Carrefour Express is not a second source, and here is why
 
 Carrefour Spain runs three physical grocery formats. The store finder names them as its own
 three filters: `cb1` Hipermercado, `cb2` Carrefour Market, `cb3` Carrefour Express.
@@ -232,9 +323,9 @@ be is two other things this repository already has shapes for:
 **Whether prices differ by sale point was not measured and this plan does not assume either
 way.** The `salepoint` cookie is real and section 4 keeps it deliberately. Measuring price
 variation across sale points is a prerequisite for treating Carrefour as more than one price
-scope, and section 13 leaves it out of this plan rather than guessing at it.
+scope, and section 14 leaves it out of this plan rather than guessing at it.
 
-## 9. `@portfolio/luna-shopper/carrefour`
+## 10. `@portfolio/luna-shopper/carrefour`
 
 A new library beside `mercadona` and `deza`, holding the client and the parser, and no database
 and no Nest.
@@ -266,7 +357,7 @@ the library that launches one, and CI never runs it.
 `walkCategories` is the enumeration, `readListing` is the page read. There is no `search`,
 because the search API is the closed one.
 
-## 10. Where the browser runs, and why this stays in Node
+## 11. Where the browser runs, and why this stays in Node
 
 A browser in the harvester image is the real cost of this plan, and it is worth stating in
 megabytes. Chromium plus its shared libraries adds roughly 400 MB to an image that is currently
@@ -280,7 +371,7 @@ because the browser is the cost and the browser is the same in any language. Pla
 API is also the one this repository already uses for e2e, so the dependency is not new to the
 workspace, only new to a backend image.
 
-Two decisions follow, and both are section 12's to enforce:
+Two decisions follow, and both are section 13's to enforce:
 
 - **One browser per run, not per page.** Launching Chromium costs about a second. A run holds
   one browser and one context for its whole life, and drops the Cloudflare cookies between
@@ -288,7 +379,7 @@ Two decisions follow, and both are section 12's to enforce:
 - **The browser is torn down when the run ends, including when it aborts.** A leaked Chromium
   is 300 MB of resident memory in a pod sized for a Nest service.
 
-## 11. The run
+## 12. The run
 
 `CATALOG_DISCOVERY`, dispatched on `supermarket_sources.adapterKey` exactly as plan `0085`
 built it. The key is `carrefour-web`. `CatalogDiscoveryRunner` gains a third branch and no new
@@ -299,7 +390,7 @@ What the run writes, per plan `0086`:
 - One `source_catalog_entries` row per product, keyed on (`supermarketId`, `externalId`), with
   `externalId` the card's `product_id` and `sourceKind` `OFFICIAL_WEB`.
 - `name` and `brand` verbatim, Spanish, never rewritten, per `0086` D8 and plan `0079`.
-- `ean` **null**. The listing card carries none. Section 13 covers the product page.
+- `ean` from the product page, on the terms in 12.1. The listing card carries none.
 - One `source_entry_prices` row per entry for the run's price scope, carrying `price` and the
   card's `price_per_unit` verbatim in `unitPrice` and `unitPriceLabel`.
 
@@ -316,7 +407,44 @@ no price for exactly this case.
 Nothing here writes to `supermarket_items`. Plan `0080` decides which source a shopper sees, on
 read, and this is one more source.
 
-## 12. Politeness
+### 12.1 The EAN is on the product page, and it is worth one visit per product
+
+The listing card has no EAN. The **product page does**, at `__INITIAL_STATE__.pdp.product.ean`,
+and it is a real EAN-13: `8431876300383` for Carrefour's own bagged ice. The same page also
+carries ingredients, net content as its own field ("2000 g"), and vegan and vegetarian flags.
+
+**This matters more than any other field on the page.** An EAN is the top rung of plan `0086`'s
+ladder. With it a Carrefour product resolves to an existing item with confidence 1 and no
+person in the loop. Without it every row lands in the fuzzy rung and waits in the queue, which
+is where DEZA already sits. Reading it turns Carrefour from a source that makes work into a
+source that resolves itself.
+
+**The cost is one page load per product, and it is paid once.** A listing page carries 24
+cards, so reading every product page is roughly twenty times the crawl: an 851 load run becomes
+of the order of 18,000 loads, which is most of a day at the measured pace.
+
+So the detail pass is **keyed on the product and not on the run**. An EAN does not change, so a
+product whose `source_catalog_entries` row already holds one is never fetched again. That gives
+two very different costs:
+
+| Pass | Loads | When |
+| --- | --- | --- |
+| Prices, the frontier crawl | 851 | Every run |
+| EAN backfill, products with no EAN yet | Up to about 18,000 once, then only new products | First run, then rarely |
+
+**Build the price crawl first and the detail pass behind its own switch.** The price crawl is
+the thing the product is for, it finishes in an hour, and it is complete on its own terms. The
+detail pass is a backfill that can run overnight, resume where it stopped, and be interrupted
+without costing anything, because a row with no EAN is exactly the state it started in.
+
+Two things to hold to when building it:
+
+- **Never block a run on the detail pass.** A price crawl that waits for 18,000 loads is a
+  price crawl that never finishes.
+- **A missing EAN is a value, not an error.** Some pages will not carry one. Write the entry
+  without it and let the fuzzy rung do its job.
+
+## 13. Politeness
 
 The knobs plan `0085` section 4 established already cover this and no new environment variable
 is added, per plan `0083`.
@@ -330,24 +458,22 @@ is added, per plan `0083`.
   penalty escalates.
 - A `User-Agent` that names the app and a contact address, as every other client here does.
 
-## 13. What this does not do
+## 14. What this does not do
 
-- **It does not read the product page, so it writes no EAN.** A listing page carries 24
-  products, so opening every product page multiplies a 859 load run by 24, into roughly 20,000
-  loads and most of a day at the measured pace. Whether the product page even carries an EAN is
-  what `probe-product-page.ts` answers, and until an EAN is proven to be there the cost cannot
-  be justified. Without it every Carrefour row resolves through the fuzzy rung of `0086` and
-  waits for a person, which is the same position DEZA is in.
+- **It does not read the product page in the price crawl.** The EAN is there and it is worth
+  having, and section 12.1 is how: a separate backfill, keyed on the product rather than on the
+  run, behind its own switch. Until that backfill runs, every Carrefour row resolves through
+  the fuzzy rung of `0086` and waits for a person, which is where DEZA sits today.
 - **It does not measure price variation by sale point**, so Carrefour is one price scope. See
-  section 8.
-- **It does not harvest Carrefour Express or Carrefour Market as sources.** Section 8.
+  section 9.
+- **It does not harvest Carrefour Express or Carrefour Market as sources.** Section 9.
 - **It does not touch leaflets.** Plan `0081` already reads a leaflet, and a Carrefour leaflet
   is an upload, not a crawl.
 - **It does not use the search API**, because the search API is blocked. A future maintainer
   looking for a cheaper enumeration will find `search-api/query/v1/search` in the page config
   and must read section 2 first.
 
-## 14. Testing
+## 15. Testing
 
 - `state.ts`, `listing.ts`, `price.ts` and `categories.ts` against checked in fixtures, with no
   network and no browser. This is the bulk of it, and it is the same arrangement `deza` has.
@@ -363,15 +489,17 @@ is added, per plan `0083`.
   writes an entry with no price row when the card had no price.
 - Nothing in CI launches a browser or reaches the network.
 
-## 15. Exit criteria
+## 16. Exit criteria
 
 1. `supermarket_sources` holds a Carrefour row with `adapterKey` `carrefour-web`, disabled.
-2. Enabling it and starting a `CATALOG_DISCOVERY` run walks the tree, pages every leaf, and
-   finishes without a refusal.
+2. Enabling it and starting a `CATALOG_DISCOVERY` run finds the frontier, pages every category
+   in it, and finishes without a refusal.
 3. The run writes `source_catalog_entries` with verbatim names and brands, and
    `source_entry_prices` with prices and printed unit prices, for the order of ten thousand
-   products section 6 measured.
-4. Any leaf the ceiling truncated is named in `harvest_runs.report`.
-5. No row reaches `supermarket_items` except through the `0080` read path.
-6. The harvester image builds with Chromium, and a run that aborts leaves no browser behind.
-7. `npx nx run luna-shopper-backend-gateway:openapi` produces no diff, or its diff is committed.
+   distinct products section 7 measured.
+4. Any frontier category the ceiling truncated is named in `harvest_runs.report`.
+5. The EAN backfill of 12.1 runs behind its own switch, never blocks a price crawl, and can be
+   stopped and restarted without losing what it already wrote.
+6. No row reaches `supermarket_items` except through the `0080` read path.
+7. The harvester image builds with Chromium, and a run that aborts leaves no browser behind.
+8. `npx nx run luna-shopper-backend-gateway:openapi` produces no diff, or its diff is committed.

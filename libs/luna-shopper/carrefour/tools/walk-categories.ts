@@ -1,7 +1,7 @@
 /**
- * Walk the Carrefour supermarket category tree and report its size.
+ * Walk the Carrefour supermarket category tree and size a full crawl.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/walk-categories.ts [--out tree.json] [--depth N]
+ * Run: npx tsx libs/luna-shopper/carrefour/tools/walk-categories.ts [--prune] [--out tree.json]
  *
  * The tree is not published anywhere a client can read in one call. `categories-api`
  * is not routed to the internet and neither is the menu route. What is available is
@@ -9,19 +9,38 @@
  * `__INITIAL_STATE__.horizontalNavigation.secondLevelCategories`. So the tree is
  * discovered by walking it, at one page load per node.
  *
- * Scope: everything under `/supermercado`, which is the grocery storefront. Electronics,
- * clothing, toys and the marketplace live under other sections of carrefour.es and are
- * never reachable from this walk, so no exclusion list is needed to keep them out.
+ * ## The frontier, and why it is not the leaves
  *
- * Two node kinds are skipped on purpose:
+ * Paging stops at 1008 rows per category, so a category holding more than that has to
+ * be read through its children. The obvious reading of that is "crawl the leaves", and
+ * **the obvious reading is wrong and loses most of the catalog.**
  *
- * - `catmasterlist` ("Mis productos") is a signed in shopper's own history, not a
- *   category, and is empty for an anonymous client.
+ * Measured over the full tree, 633 nodes, on 2026-09-06:
+ *
+ * | Strategy | Categories paged | Products found |
+ * | --- | --- | --- |
+ * | Every childless leaf | 106 | 2,780 |
+ * | Shallowest node under the ceiling | 86 | **17,262** |
+ *
+ * The deep levels of this tree are curated views, not an exhaustive breakdown. "Vinos
+ * Tintos" holds 257 products and its six children hold 90 between them. Descending
+ * into them throws the other 167 away.
+ *
+ * So the rule a run follows, and what this script reports, is the **frontier**: the
+ * shallowest node whose own total fits under the ceiling. Descend only past the
+ * ceiling, and page the node you land on whole. Five of the ten first level categories
+ * fit under the ceiling already and are paged without descending at all.
+ *
+ * `--prune` walks the way a run does, descending only past the ceiling. That costs
+ * about 94 loads instead of 633 and finds the same frontier. The full walk is worth
+ * running when the question is the shape of the tree rather than the cost of a crawl.
+ *
+ * Two node kinds are skipped:
+ *
+ * - `catmasterlist`, "Mis productos", a signed in shopper's own history, empty for an
+ *   anonymous client.
  * - Promotion views, whose URL carries an `F-` token instead of a `cat` id. They
- *   re-list products a real category already holds, so walking them double counts.
- *
- * `--depth N` stops the walk at depth N. Use it for a cheap structural sample before
- * committing to the full walk, which is hundreds of page loads.
+ *   re-list products a real category already holds, so walking them counts twice.
  */
 
 import { writeFileSync } from 'node:fs';
@@ -35,6 +54,12 @@ import {
 const SEED = '/supermercado/la-despensa/cat20001/c';
 
 const SKIP_IDS = new Set(['catmasterlist']);
+
+/** Rows paging will serve for one category: 42 pages of 24. */
+const CEILING = 1008;
+
+/** Product cards on one listing page. */
+const PAGE_SIZE = 24;
 
 interface Node {
   id: string;
@@ -58,12 +83,14 @@ function isWalkable(link: CategoryLink): boolean {
 async function main(): Promise<void> {
   const outIndex = process.argv.indexOf('--out');
   const outPath = outIndex > 0 ? process.argv[outIndex + 1] : null;
-  const depthIndex = process.argv.indexOf('--depth');
-  const maxDepth =
-    depthIndex > 0 ? Number(process.argv[depthIndex + 1]) : Infinity;
+  const prune = process.argv.includes('--prune');
 
   console.log(`# Carrefour category walk  (${new Date().toISOString()})`);
-  if (maxDepth !== Infinity) console.log(`# stopping at depth ${maxDepth}`);
+  console.log(
+    prune
+      ? '# --prune: descending only past the ceiling, the way a run does'
+      : '# full walk: every node, for the shape of the tree'
+  );
 
   const browser = await CarrefourBrowser.open();
   const started = Date.now();
@@ -99,12 +126,13 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const children =
-        depth >= maxDepth
-          ? []
-          : listing.secondLevelCategories.filter(
-              (c) => isWalkable(c) && c.id !== link.id && !nodes.has(c.id)
-            );
+      // In prune mode a node that already fits is the frontier, so it is not opened.
+      const stop = prune && listing.totalResults <= CEILING;
+      const children = stop
+        ? []
+        : listing.secondLevelCategories.filter(
+            (c) => isWalkable(c) && c.id !== link.id && !nodes.has(c.id)
+          );
 
       const node: Node = {
         id: link.id,
@@ -121,7 +149,6 @@ async function main(): Promise<void> {
       console.log(
         `  ${'  '.repeat(depth - 1)}${link.id.padEnd(14)} ` +
           `total=${String(node.totalResults).padStart(6)} ` +
-          `pageable=${String(node.pageableResults).padStart(5)} ` +
           `children=${String(children.length).padStart(2)}  ${node.name}`
       );
 
@@ -130,64 +157,94 @@ async function main(): Promise<void> {
       }
     }
 
-    report(nodes, failures, browser, started, outPath);
+    report(nodes, failures, browser, started, outPath, prune);
   } finally {
     await browser.close();
   }
 }
 
+/**
+ * Pick the frontier and report what crawling it costs.
+ *
+ * The frontier is the shallowest node under the ceiling on every branch. A node over
+ * the ceiling with no children cannot be read completely, and that is the one thing a
+ * run has to admit in `harvest_runs.report` rather than paper over.
+ */
 function report(
   nodes: Map<string, Node>,
   failures: number,
   browser: CarrefourBrowser,
   started: number,
-  outPath: string | null
+  outPath: string | null,
+  prune: boolean
 ): void {
   const all = [...nodes.values()];
-  const leaves = all.filter((n) => n.childIds.length === 0);
-  const maxDepth = Math.max(...all.map((n) => n.depth));
+  const roots = all.filter((n) => n.parentId === null);
 
-  // A leaf whose result set exceeds what paging serves cannot be read completely from
-  // that leaf alone. This count decides whether the walk can claim completeness.
-  const capped = leaves.filter((n) => n.totalResults > n.pageableResults);
-  const leafProducts = leaves.reduce((s, n) => s + n.totalResults, 0);
-  const leafPageable = leaves.reduce(
-    (s, n) => s + Math.min(n.totalResults, n.pageableResults),
+  const frontier: Node[] = [];
+  const capped: Node[] = [];
+
+  const descend = (n: Node): void => {
+    if (n.totalResults <= CEILING) {
+      frontier.push(n);
+      return;
+    }
+    const kids = n.childIds
+      .map((id) => nodes.get(id))
+      .filter((k): k is Node => !!k);
+    if (kids.length === 0) {
+      capped.push(n);
+      return;
+    }
+    for (const k of kids) descend(k);
+  };
+  for (const r of roots) descend(r);
+
+  const products = frontier.reduce((s, n) => s + n.totalResults, 0);
+  const pages = frontier.reduce(
+    (s, n) => s + Math.ceil(n.totalResults / PAGE_SIZE),
     0
   );
 
+  const leaves = all.filter((n) => n.childIds.length === 0);
+  const leafProducts = leaves.reduce((s, n) => s + n.totalResults, 0);
+
   console.log('\n## Shape of the tree\n');
-  console.log(`nodes                 ${all.length}`);
-  console.log(`leaves                ${leaves.length}`);
-  console.log(`max depth             ${maxDepth}`);
-  console.log(`page loads            ${browser.requests}`);
+  console.log(`nodes discovered      ${all.length}`);
+  console.log(`max depth             ${Math.max(...all.map((n) => n.depth))}`);
+  console.log(`page loads spent      ${browser.requests}`);
   console.log(`throttles survived    ${browser.throttles}`);
   console.log(`failures              ${failures}`);
   console.log(
     `elapsed               ${((Date.now() - started) / 60000).toFixed(1)} min`
   );
-  console.log('');
+
+  console.log('\n## The crawl frontier\n');
+  console.log(`frontier categories   ${frontier.length}`);
+  console.log(`products in it        ${products}`);
+  console.log(`listing pages         ${pages}`);
   console.log(
-    `products over leaves  ${leafProducts}   (sum of leaf total_results)`
+    `walk loads to find it ${prune ? browser.requests : 'run again with --prune'}`
   );
-  console.log(`reachable by paging   ${leafPageable}`);
-  console.log(`capped leaves         ${capped.length}`);
+  console.log(`capped, no children   ${capped.length}`);
   for (const n of capped) {
     console.log(
-      `  ${n.id.padEnd(14)} ${String(n.totalResults).padStart(6)} > ${n.pageableResults}  ${n.name}`
+      `  ${n.id.padEnd(14)} ${n.totalResults} > ${CEILING}  ${n.name}`
     );
   }
 
-  // Page loads a full crawl would need, at the observed 24 cards per listing page.
-  const pages = leaves.reduce(
-    (s, n) => s + Math.ceil(Math.min(n.totalResults, n.pageableResults) / 24),
-    0
-  );
-  console.log('');
-  console.log(`listing pages to crawl every leaf: ${pages}`);
-  console.log(
-    `plus ${all.length} tree walk loads = ${pages + all.length} page loads for a full run`
-  );
+  const byDepth: Record<number, number> = {};
+  for (const n of frontier) byDepth[n.depth] = (byDepth[n.depth] ?? 0) + 1;
+  console.log(`frontier by depth     ${JSON.stringify(byDepth)}`);
+
+  if (!prune) {
+    console.log('\n## Why not the leaves\n');
+    console.log(`childless leaves      ${leaves.length}`);
+    console.log(`products in them      ${leafProducts}`);
+    console.log(
+      `crawling leaves instead of the frontier loses ${products - leafProducts} products`
+    );
+  }
 
   if (outPath) {
     writeFileSync(outPath, JSON.stringify(all, null, 1), 'utf8');

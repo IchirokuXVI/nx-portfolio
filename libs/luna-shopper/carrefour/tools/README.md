@@ -23,8 +23,10 @@ npx tsx libs/luna-shopper/carrefour/tools/compare-clients.ts
 npx tsx libs/luna-shopper/carrefour/tools/probe-endpoints.ts
 
 # How fast can pages be read before the edge starts refusing them?
-npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts 8000 25
-npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts 8000 25 --assets
+# 2000 ms apart gave 30 loads and 0 refusals. --assets lets the page load its images.
+npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts 2000 30
+npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts 2000 30 --assets
+npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts --recover
 
 # How big is the category tree, and how many page loads is a full crawl?
 npx tsx libs/luna-shopper/carrefour/tools/walk-categories.ts --depth 2
@@ -33,21 +35,22 @@ npx tsx libs/luna-shopper/carrefour/tools/walk-categories.ts --out tree.json
 # What does one product card carry, and is it enough to write a price?
 npx tsx libs/luna-shopper/carrefour/tools/sample-products.ts cat20001 5
 
-# Does the product page add anything the listing card lacks, an EAN above all?
+# Does the product page add anything the listing card lacks, an EAN above all? It does.
+# Pass a full URL: Git Bash rewrites a leading slash into a Windows path.
 npx tsx libs/luna-shopper/carrefour/tools/probe-product-page.ts \
-  /supermercado/gazpacho-carrefour-sin-gluten-1-l/805505583/p
+  "https://www.carrefour.es/supermercado/hielo-en-cubitos-carrefour-2-kg/R-VC4AECOMM-651364/p"
 ```
 
 ## Please do not run these in a loop
 
-Every one of them makes real requests to a live storefront. The edge rate limits
-aggressively and the limit escalates: once it trips, a single load per minute can keep
-failing for several minutes afterwards. Each script is written to produce one result per
-invocation, and re-running one immediately after a blocked run measures the block rather
-than the site.
+Every one of them makes real requests to a live storefront. Each script is written to
+produce one result per invocation, and re-running one immediately after a blocked run
+measures the block rather than the site.
 
-If a script reports everything as blocked, that is the cooldown, not a change in the
-site. Wait, then run it again.
+If a script reports everything blocked after the first load, read the note on
+`CarrefourBrowser` before you change anything. That is the Cloudflare cookie behaviour,
+the client already handles it, and a burst of unpaced requests can put the address into
+the same state for several minutes. Wait, then run it again.
 
 ## What the scripts assume
 

@@ -13,7 +13,20 @@
  * So the question is not whether a product page holds more, which it plainly does. It
  * is whether it holds anything the catalog needs. The field the catalog wants most is
  * the EAN, because that is what makes a product from one chain the same product as one
- * from another. Whether it is there is what this script reports.
+ * from another.
+ *
+ * ## The answer, measured on 2026-09-06
+ *
+ * **It carries one.** `pdp.product.ean`, mirrored at `criteo.productData.ean`, and it is
+ * a real EAN-13: `8431876300383` for Carrefour's own bagged ice. The page also holds
+ * ingredients, net content as its own field, and vegan and vegetarian flags.
+ *
+ * That makes the product page worth reading, and plan 0089 section 12.1 says on what
+ * terms: a backfill keyed on the product rather than on the run, because an EAN does
+ * not change and a product that already has one is never fetched again.
+ *
+ * Pass a full URL rather than a path. A leading slash on the command line is rewritten
+ * into a Windows path by Git Bash, which produces a confusing DNS error.
  */
 
 import { writeFileSync } from 'node:fs';
