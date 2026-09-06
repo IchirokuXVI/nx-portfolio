@@ -36,6 +36,7 @@ import {
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import { LineClaimService } from './line-claim.service';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /** Answered for a line that is not on the basket the request named. */
 const NO_SUCH_LINE = 'Generated list line not found';
@@ -71,6 +72,26 @@ export interface PromotedLine {
   zoneId: string;
   /** The units the zone line was created with, which the origin row records. */
   quantity: number;
+  /**
+   * Whether the add landed on a line the list already held (plan 0091, section
+   * 4) rather than creating one.
+   *
+   * Carried because a caller that has to redraw a household's list needs to know
+   * whether a row appeared or an existing row moved, and because the two emit
+   * different events on the zone room.
+   */
+  merged: boolean;
+  /**
+   * Whether the provenance row was inserted, or a row for that zone line was
+   * already there.
+   *
+   * The insert is `ON CONFLICT DO NOTHING`, and plan 0092 section 5 is explicit
+   * that a conflict is a **state** the caller must decide about rather than a
+   * silent success: for the owner's default target it is nothing to report, and
+   * for a raise from a sheet it means the client was looking at a row it thought
+   * stood at zero.
+   */
+  originCreated: boolean;
 }
 
 /**
@@ -120,6 +141,9 @@ export class GeneratedListLineService {
     // participant, including the owner adding a line from their laptop, so the
     // two attribution columns speak one vocabulary rather than two.
     private readonly sharing: GeneratedListSharingService,
+    // The seam plan 0092 section 4.3 leaves for plan 0093: a purchase made
+    // before this line reached a list comes home the moment it has one.
+    private readonly waiting: WaitingSettlementService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -358,7 +382,7 @@ export class GeneratedListLineService {
     // against whichever line it landed on, with the units this promotion added
     // rather than that line total, so a settle allocates against what this list
     // actually asked for.
-    const { line: created } = await this.zoneLines.add({
+    const { line: created, merged } = await this.zoneLines.add({
       userId,
       listId: targetListId,
       content: line.content,
@@ -367,13 +391,18 @@ export class GeneratedListLineService {
     });
     const list = await this.listAccess.getList(targetListId);
 
-    line.targetListId = targetListId;
+    // Written on the **first** list this line reaches and never again, because
+    // plan 0050 section 5 reads it as "the owner said where this goes" and
+    // nothing else needs it (plan 0092, section 2). It refuses nothing any more:
+    // a line reaches as many lists as are raised.
+    line.targetListId ??= targetListId;
     await this.lines.manager.getRepository(GeneratedListLine).save(line);
-    await this.lines.manager.query(
+    const inserted = await this.lines.manager.query(
       `INSERT INTO "generated_list_line_origins"
          ("generatedListLineId", "zoneId", "listId", "lineId", "quantity", "lineVersion")
        VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT ON CONSTRAINT "uq_generated_list_line_origin" DO NOTHING`,
+       ON CONFLICT ON CONSTRAINT "uq_generated_list_line_origin" DO NOTHING
+       RETURNING "id"`,
       [
         line.id,
         list.zoneId,
@@ -386,8 +415,22 @@ export class GeneratedListLineService {
         created.version,
       ]
     );
+    const originCreated = (inserted as unknown[]).length > 0;
 
-    return { line: created, zoneId: list.zoneId, quantity };
+    if (originCreated) {
+      // The units bought before this line reached the list (plan 0092, section
+      // 4.3). Nothing until plan 0093 fills it, and it runs through this
+      // service's own manager, which is the connection the insert above used.
+      await this.waiting.rehome(line.id, this.lines.manager);
+    }
+
+    return {
+      line: created,
+      zoneId: list.zoneId,
+      quantity,
+      merged,
+      originCreated,
+    };
   }
 
   /**

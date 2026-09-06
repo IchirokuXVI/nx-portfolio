@@ -4,6 +4,7 @@ import {
   GENERATED_LIST_LIMITS,
   isLiveGeneratedList,
   LineApprovalStatus,
+  LIVE_GENERATED_LIST_STATUSES,
   OriginUnavailableReason,
   RealtimeEvent,
   SettlementOutcome,
@@ -35,23 +36,22 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import {
-  toLineItemSet,
-  type LineItemSet,
-} from '../lists/line-item-set';
+import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineView } from '../lists/list.mappers';
+import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import {
-  ACTIVE_OVERLAP_SQL,
+  LIVE_OVERLAP_SQL,
   SHEET_CANDIDATE_LINES_SQL,
-  type ActiveOverlapRow,
+  type LiveOverlapRow,
   type SheetCandidateLineRow,
   type WritableListRow,
 } from './generated-list.sql';
 import { LineClaimService } from './line-claim.service';
 import { mergeKey } from './line-dedup';
 import { namesOfLists, type NamedList } from './list-names';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * What a basket line is made of, and how a household changes its share of it
@@ -106,20 +106,42 @@ export class GeneratedListOriginsService {
     private readonly shoppingLists: Repository<ShoppingList>,
     private readonly sharing: GeneratedListSharingService,
     private readonly generated: GeneratedListService,
+    // The write back (plan 0050, section 5). Reused rather than repeated, so the
+    // access check at that moment, the list's approval rules and the ordinary
+    // `line.added` event all come with it unchanged. It is what makes raising a
+    // list with no matching line the ordinary add (section 4.2).
+    private readonly lineWrites: GeneratedListLineService,
     private readonly claims: LineClaimService,
+    // The seam plan 0093 fills (section 4.3), called after every origin insert.
+    private readonly waiting: WaitingSettlementService,
     private readonly events: CoreEventsPublisher
   ) {}
 
   // --- The read --------------------------------------------------------------
 
   /**
-   * A basket line's origins, and the lists that hold the same thing and are not
-   * origins (plan 0057, section 3).
+   * Every list this line could be asked of, in three collections (plan 0057
+   * section 3, widened by plan 0092 section 3).
    *
    * The read the allocation sheet could never be. That one appears only while
    * settling and can only say how many of the units **already bought** belong to
    * each list; this one says what each household currently wants, and it is the
    * only place plan 0050's provenance rows can be read back at all.
+   *
+   * ## The three collections partition one set
+   *
+   * The set is the lists the reader and the owner can both write. A list is an
+   * **origin** if this line already came from it, a **candidate** if it holds a
+   * matching line that is not an origin, and an **other** if it holds nothing
+   * matching at all. Every row is a number the sheet can move, and raising an
+   * other from zero is what creates the line there (section 4.2).
+   *
+   * ## It answers for any line, including one with nothing
+   *
+   * Plan 0057 served this only for a line with origins or candidates and the
+   * client hid the entry otherwise. An `ADDED` line nobody has sent anywhere now
+   * answers two empty collections and every writable list, which is exactly the
+   * row set plan 0058's deleted target picker showed, at zero.
    */
   async lineOrigins(
     req: GetGeneratedListLineOriginsRequest
@@ -144,15 +166,29 @@ export class GeneratedListOriginsService {
       rows.map((row) => row.listId)
     );
 
+    // Read once and used twice: the candidates are drawn from it and the others
+    // are what is left of it, so a list cannot be missing from both because two
+    // reads disagreed about the reader's access.
+    const scope = await this.candidateScope(list.ownerUserId, actorUserId);
     const candidates = await this.candidatesFor(
       list,
       line,
       rows,
       sourceLines,
-      actorUserId
+      scope
     );
 
     const names = await namesOfLists(this.shoppingLists, [
+      ...rows.map((row) => row.listId),
+      ...scope.map((row) => row.listId),
+    ]);
+    const fromRun = this.runSources(list);
+
+    // A list that appears above appears once. An origin is not offered again as
+    // a candidate, and a list holding a matching line is a candidate rather than
+    // an other even when the match cannot be adopted, because the row's job is
+    // to say what that list holds.
+    const placed = new Set([
       ...rows.map((row) => row.listId),
       ...candidates.map((row) => row.listId),
     ]);
@@ -173,12 +209,38 @@ export class GeneratedListOriginsService {
         listQuantity: sourceLines.get(row.lineId)?.quantity ?? 0,
         settledHere: settledHere.get(row.lineId) ?? 0,
         writable: ownerWritable.has(row.listId),
+        fromRun: fromRun.has(row.listId),
+        // `APPROVED` for a zone line that is gone, under the same rule as the
+        // zero above: a line nobody can find is not waiting for anybody.
+        approvalStatus:
+          sourceLines.get(row.lineId)?.approvalStatus ??
+          LineApprovalStatus.APPROVED,
       })),
       candidates: candidates.map((row) => ({
         ...row,
         ...named(names, row.listId),
       })),
+      others: scope
+        .filter((row) => !placed.has(row.listId))
+        .map((row) => ({
+          listId: row.listId,
+          zoneId: row.zoneId,
+          ...named(names, row.listId),
+          fromRun: fromRun.has(row.listId),
+        })),
     };
+  }
+
+  /**
+   * The lists the run drew this basket from (plan 0092, section 3).
+   *
+   * Read from the basket's own source snapshot rather than from the line's
+   * origins, because an added line has no origins at all: what makes one row the
+   * likely answer is where this **basket** came from. It is the same fact on all
+   * three collections, which is why it is computed once here.
+   */
+  private runSources(list: GeneratedList): ReadonlySet<string> {
+    return new Set(list.sourceSnapshot.sources.map((source) => source.listId));
   }
 
   /**
@@ -196,9 +258,8 @@ export class GeneratedListOriginsService {
     line: GeneratedListLine,
     rows: readonly GeneratedListLineOrigin[],
     sourceLines: ReadonlyMap<string, ListLine>,
-    actorUserId: string
+    scope: readonly WritableListRow[]
   ): Promise<Omit<GeneratedListOriginCandidate, 'listName' | 'zoneName'>[]> {
-    const scope = await this.candidateScope(list.ownerUserId, actorUserId);
     if (scope.length === 0) {
       return [];
     }
@@ -216,17 +277,14 @@ export class GeneratedListOriginsService {
     }
 
     // The run's own overlap query, asked about the **owner**: a line another
-    // active basket of theirs is carrying is one plan 0050 section 3 refuses to
+    // live basket of theirs is carrying is one plan 0050 section 3 refuses to
     // put in two places at once.
-    const claimed = new Set(
-      (
-        await this.lists.query<ActiveOverlapRow[]>(ACTIVE_OVERLAP_SQL, [
-          list.ownerUserId,
-          found.map((row) => row.id),
-        ])
-      ).map((row) => row.lineId)
+    const claimed = await this.carriedElsewhere(
+      list,
+      found.map((row) => row.id)
     );
 
+    const fromRun = this.runSources(list);
     const zoneOf = new Map(scope.map((row) => [row.listId, row.zoneId]));
     return found.map((row) => ({
       listId: row.listId,
@@ -240,29 +298,63 @@ export class GeneratedListOriginsService {
       // conservative about it, so a text match is offered and flagged rather
       // than offered silently (section 8).
       matchedOnText: !row.itemSetHash,
+      fromRun: fromRun.has(row.listId),
       ...this.unavailability(row, claimed),
     }));
   }
 
   /**
+   * Which of these zone lines another live basket of the owner's is carrying
+   * (plan 0092, section 3.2).
+   *
+   * **Another**, which is the fix as much as the statuses are. The query tested
+   * `status = 'ACTIVE'` and nothing ever writes that, so it never fired; asking
+   * it against the live set makes it fire, and this basket's own lines would be
+   * the first thing it refused. Plan 0094 puts two siblings of one split on one
+   * zone line deliberately, so a basket is never in the way of itself.
+   */
+  private async carriedElsewhere(
+    list: GeneratedList,
+    lineIds: readonly string[]
+  ): Promise<ReadonlySet<string>> {
+    if (lineIds.length === 0) {
+      return new Set();
+    }
+    const rows = await this.lists.query<LiveOverlapRow[]>(LIVE_OVERLAP_SQL, [
+      list.ownerUserId,
+      lineIds,
+      LIVE_GENERATED_LIST_STATUSES,
+      list.id,
+    ]);
+    return new Set(rows.map((row) => row.lineId));
+  }
+
+  /**
    * Why this candidate cannot be adopted, or nothing at all when it can.
    *
-   * The three reasons are checked in the order section 3.2's table states them,
-   * and the property that matters is that a candidate carrying one is **served
-   * rather than filtered out**.
+   * Two reasons survive plan 0092 section 3.2, and what went is the interesting
+   * half. A **pending** line is adoptable, because a pending origin is still
+   * claimed and still settled and the row says it is waiting; a line **at zero**
+   * is adoptable, because a list at zero is a list that can be asked again and
+   * raising it is exactly that. Both used to be refused for reasons that read as
+   * "the run would not have taken it", which is a rule about composing a basket
+   * rather than about a person deciding to buy something.
+   *
+   * The property that matters is unchanged: a candidate carrying a reason is
+   * **served rather than filtered out**.
    */
   private unavailability(
     row: SheetCandidateLineRow,
     claimed: ReadonlySet<string>
   ): { unavailable?: OriginUnavailableReason } {
+    if (row.approvalStatus === LineApprovalStatus.REJECTED) {
+      // The household said no (plan 0091, section 3.1). Raising it would ask a
+      // list for something it has already decided against, and re-requesting
+      // through a rejected line is a decision this sheet does not get to make.
+      return { unavailable: OriginUnavailableReason.REJECTED };
+    }
     if (claimed.has(row.id)) {
       return { unavailable: OriginUnavailableReason.CLAIMED };
-    }
-    if (row.approvalStatus !== LineApprovalStatus.APPROVED) {
-      return { unavailable: OriginUnavailableReason.NOT_APPROVED };
-    }
-    if (row.quantity <= 0) {
-      return { unavailable: OriginUnavailableReason.SETTLED };
     }
     return {};
   }
@@ -326,13 +418,19 @@ export class GeneratedListOriginsService {
   // --- The write -------------------------------------------------------------
 
   /**
-   * Set one list's contribution to a basket line (plan 0057, section 5).
+   * Set one list's contribution to a basket line (plan 0057 section 5, plan 0092
+   * section 4).
    *
-   * An upsert: an existing origin for that zone line is edited, one that does not
-   * exist is adopted, and a contribution set to zero takes the list off the line.
-   * In one transaction the zone line moves by the difference, the origin row is
-   * written, the basket line moves by the same difference, and the claim moves
-   * with it.
+   * An upsert over three cases, decided by what exists:
+   *
+   * | Case                                                 | What happens        |
+   * | ---------------------------------------------------- | ------------------- |
+   * | an origin row exists for `sourceLineId`              | edit, the delta path |
+   * | no origin, `sourceLineId` names a matching zone line | adopt, section 4.1  |
+   * | no origin, no `sourceLineId`                         | create, section 4.2 |
+   *
+   * In one transaction the zone line moves, the origin row is written, the
+   * basket line moves, and the claim moves with it.
    *
    * **The basket line moves by the delta and is never recomputed** from the sum
    * of its origins. The obvious implementation sets `quantity = sum(origins)` and
@@ -358,9 +456,12 @@ export class GeneratedListOriginsService {
     const quantity = this.checkQuantity(req.quantity, 'quantity');
     this.checkQuantity(req.from, 'from');
 
-    const existing = await this.origins.findOne({
-      where: { generatedListLineId: line.id, lineId: req.sourceLineId },
-    });
+    const sourceLineId = req.sourceLineId;
+    const existing = sourceLineId
+      ? await this.origins.findOne({
+          where: { generatedListLineId: line.id, lineId: sourceLineId },
+        })
+      : null;
     const previous = existing?.quantity ?? 0;
     if (req.from !== previous) {
       // Two people editing one split must not silently overwrite each other's
@@ -373,8 +474,17 @@ export class GeneratedListOriginsService {
       );
     }
 
+    if (!sourceLineId) {
+      // The list holds no matching line, so there is nothing to name and nothing
+      // to adopt: raising the row creates the line (section 4.2).
+      return this.createOrigin(list, line, req, quantity, {
+        actorUserId,
+        seesZoneData,
+      });
+    }
+
     const source = await this.zoneLines.findOne({
-      where: { id: req.sourceLineId },
+      where: { id: sourceLineId },
     });
     if (!source || source.listId !== req.sourceListId) {
       throw new NotFoundException('Line not found');
@@ -382,7 +492,7 @@ export class GeneratedListOriginsService {
     await this.requireWritable(list, actorUserId, req.sourceListId);
 
     const settledHere = (await this.settledPerOrigin(line.id)).get(
-      req.sourceLineId
+      sourceLineId
     );
     if (quantity < (settledHere ?? 0)) {
       // Two units of the flat's milk have been bought through this basket, so
@@ -413,7 +523,7 @@ export class GeneratedListOriginsService {
       throw new NotFoundException('List not found');
     }
 
-    const written = await this.write(line, existing, req, {
+    const written = await this.write(line, existing, sourceLineId, req, {
       zoneId: zone.zoneId,
       quantity,
       delta,
@@ -427,17 +537,24 @@ export class GeneratedListOriginsService {
     // demand change: it re triggers no approval (plan 0047, section 7) and it
     // wrote no settlement, so the zone hears exactly what it hears when somebody
     // edits the quantity on the list page.
-    this.events.emit(
-      RealtimeEvent.LineUpdated,
-      zone.zoneId,
-      toLineView(
-        written.source,
-        written.items,
-        written.settlements,
-        written.claim
-      ),
-      req.sourceListId
-    );
+    //
+    // **Nothing at all when the zone line did not move**, which is the adoption
+    // of section 4.1 taking over demand the list already had: the household's
+    // line stands exactly where it stood, and announcing it would redraw a row
+    // to say it is unchanged.
+    if (written.zoneMoved) {
+      this.events.emit(
+        RealtimeEvent.LineUpdated,
+        zone.zoneId,
+        toLineView(
+          written.source,
+          written.items,
+          written.settlements,
+          written.claim
+        ),
+        req.sourceListId
+      );
+    }
 
     const announcement: GeneratedListLineMovedEvent = {
       generatedListId: list.id,
@@ -455,7 +572,7 @@ export class GeneratedListOriginsService {
     const ref = {
       zoneId: zone.zoneId,
       listId: req.sourceListId,
-      lineId: req.sourceLineId,
+      lineId: sourceLineId,
     };
     if (!existing) {
       // An adoption claims the zone line, so the other household's list says
@@ -482,10 +599,25 @@ export class GeneratedListOriginsService {
   /**
    * The transaction (section 5): the zone line, the origin row and the basket
    * line move together, or none of them do.
+   *
+   * ## An adoption does not add the whole contribution to the list
+   *
+   * Plan 0057 moved the zone line by the whole contribution on adoption, so a
+   * list already asking for one, adopted at one, was pushed to two. That is
+   * wrong about what adoption is (plan 0092, section 4.1): this basket is taking
+   * over demand the list already has rather than adding to it, and the run
+   * itself never raised a list it drew from. So the zone line moves by
+   * `max(0, quantity - listQuantity)`, read under the lock, and only the part
+   * above what the list already asks for is new demand.
+   *
+   * An **edit** keeps the pure delta, because after adoption the contribution
+   * and the list's demand move together and lowering one is the household
+   * changing its mind.
    */
   private async write(
     line: GeneratedListLine,
     existing: GeneratedListLineOrigin | null,
+    sourceLineId: string,
     req: SetGeneratedListOriginQuantityRequest,
     move: { zoneId: string; quantity: number; delta: number }
   ): Promise<WrittenOrigin> {
@@ -499,19 +631,28 @@ export class GeneratedListOriginsService {
       // that vanishes with nothing logged and nothing errored (plan 0040,
       // section 3).
       const source = await zoneLines.findOne({
-        where: { id: req.sourceLineId },
+        where: { id: sourceLineId },
         lock: { mode: 'pessimistic_write' },
       });
       if (!source) {
         throw new NotFoundException('Line not found');
       }
 
-      // Floored at zero, exactly as the signed delta path floors it. The zone
-      // line may already be below what this origin contributed, because somebody
-      // settled it from the list page, and it lands at zero rather than below it.
-      source.quantity = Math.max(0, source.quantity + move.delta);
-      source.version += 1;
-      await zoneLines.save(source);
+      // Section 4.1, computed here rather than by the caller because the number
+      // it compares against is the zone line's quantity **at the moment of the
+      // write**, which only the locked row can answer.
+      const zoneDelta = existing
+        ? move.delta
+        : Math.max(0, move.quantity - source.quantity);
+      if (zoneDelta !== 0) {
+        // Floored at zero, exactly as the signed delta path floors it. The zone
+        // line may already be below what this origin contributed, because
+        // somebody settled it from the list page, and it lands at zero rather
+        // than below it.
+        source.quantity = Math.max(0, source.quantity + zoneDelta);
+        source.version += 1;
+        await zoneLines.save(source);
+      }
 
       let origin: GeneratedListLineOrigin | null = null;
       if (move.quantity === 0 && existing) {
@@ -528,7 +669,7 @@ export class GeneratedListOriginsService {
             generatedListLineId: line.id,
             zoneId: move.zoneId,
             listId: req.sourceListId,
-            lineId: req.sourceLineId,
+            lineId: sourceLineId,
             quantity: move.quantity,
             // The zone line's version as this write leaves it, so a row adopted
             // now does not immediately read as an origin that has moved. What
@@ -550,8 +691,16 @@ export class GeneratedListOriginsService {
       line.lastEditedAt = new Date();
       await basketLines.save(line);
 
+      if (origin && !existing) {
+        // The units bought before this list held the line (section 4.3), inside
+        // this transaction so they commit with the row that made them belong
+        // anywhere. Nothing until plan 0093 fills it.
+        await this.waiting.rehome(line.id, manager);
+      }
+
       return {
         source,
+        zoneMoved: zoneDelta !== 0,
         origin,
         // Read through the caller's manager rather than this service's own
         // repositories, which would take a second connection while this
@@ -568,25 +717,24 @@ export class GeneratedListOriginsService {
    * Whether a zone line this basket does not already carry may be adopted
    * (section 3.2).
    *
-   * The same three refusals the sheet reports as `unavailable`, restated on the
-   * write, plus the match itself. The sheet is a projection and the projection is
-   * not the authority: a client holding a stale sheet, or one calling the route
+   * The refusals the sheet reports as `unavailable`, restated on the write, plus
+   * the match itself. The sheet is a projection and the projection is not the
+   * authority: a client holding a stale sheet, or one calling the route
    * directly, has to meet the same rules.
+   *
+   * Two of plan 0057's three are gone, and their absence is the plan: a pending
+   * line and a line at zero are both adoptable now (plan 0092, section 3.2).
    */
   private async checkAdoptable(
     list: GeneratedList,
     line: GeneratedListLine,
     source: ListLine
   ): Promise<void> {
-    if (source.approvalStatus !== LineApprovalStatus.APPROVED) {
+    if (source.approvalStatus === LineApprovalStatus.REJECTED) {
+      // The household said no to it (plan 0091, section 3.1), and a basket must
+      // not raise a line the list will never buy.
       throw new ValidationException(
-        'That line has not been approved, so a basket cannot take it',
-        { messageArgs: { field: 'sourceLineId' } }
-      );
-    }
-    if (source.quantity <= 0) {
-      throw new ValidationException(
-        'That line is not currently wanted, so there is nothing to take',
+        'That line was rejected, so a basket cannot ask for it',
         { messageArgs: { field: 'sourceLineId' } }
       );
     }
@@ -605,16 +753,136 @@ export class GeneratedListOriginsService {
       );
     }
 
-    const carried = await this.lists.query<ActiveOverlapRow[]>(
-      ACTIVE_OVERLAP_SQL,
-      [list.ownerUserId, [source.id]]
-    );
-    if (carried.length > 0) {
+    const carried = await this.carriedElsewhere(list, [source.id]);
+    if (carried.size > 0) {
       throw new ValidationException(
         'Another basket is already carrying that line',
         { messageArgs: { field: 'sourceLineId' } }
       );
     }
+  }
+
+  // --- Creating the line this list does not have -----------------------------
+
+  /**
+   * Raise a list that holds no matching line, which creates one (plan 0092,
+   * section 4.2).
+   *
+   * The ordinary add, through {@link GeneratedListLineService.promote}, so the
+   * list's own approval rule decides (plan 0058, section 4.3), the zone hears
+   * the ordinary `line.added`, and the products plan 0065 chose travel with it.
+   * Nothing here inserts a zone line of its own.
+   *
+   * ## It may land on a line the candidate read never offered
+   *
+   * After plan 0091 an add answers the line it landed on, and the names can fold
+   * together where the product sets did not: the sheet showed the list under
+   * `others` and the add merged into a line that was there all along. That is
+   * correct and the origin row is written against whichever id came back.
+   *
+   * ## Which is why the stale check comes first
+   *
+   * A raise that lands on a row the client showed at zero has to be shown again
+   * before it means anything, so a list that is already an origin of this line is
+   * refused **before** the add rather than after it: `promote` commits its own
+   * transaction, and a refusal after it would leave a household's list raised by
+   * a write that answered an error.
+   */
+  private async createOrigin(
+    list: GeneratedList,
+    line: GeneratedListLine,
+    req: SetGeneratedListOriginQuantityRequest,
+    quantity: number,
+    reader: { actorUserId: string; seesZoneData: boolean }
+  ): Promise<SetGeneratedListOriginQuantityResult> {
+    if (quantity === 0) {
+      // A reel released where it started costs nothing (section 4.2): no zone
+      // line is created for an amount of zero, and this is not an error.
+      return {
+        line: await this.generated.basketLineViewFor(line, reader.seesZoneData),
+        origin: null,
+        listQuantity: 0,
+      };
+    }
+    await this.requireWritable(list, reader.actorUserId, req.sourceListId);
+
+    const already = await this.origins.findOne({
+      where: { generatedListLineId: line.id, listId: req.sourceListId },
+    });
+    if (already) {
+      throw new StaleQuantityException(
+        'This basket has already sent that line to this list',
+        { messageArgs: { current: already.quantity } }
+      );
+    }
+
+    // The **actor's** account, as plan 0058 section 4 had it: a household's list
+    // may name only accounts, and the account that raised the row is the honest
+    // author. The owner's own access was checked beside it above, because it is
+    // what authorizes every later settle on the origin this creates.
+    const promoted = await this.lineWrites.promote(
+      reader.actorUserId,
+      line,
+      req.sourceListId,
+      { quantity }
+    );
+    if (!promoted.originCreated) {
+      // Unreachable behind the check above, and kept as the assertion of last
+      // resort: an origin row that was already there means the client raised a
+      // row it had been shown at zero.
+      throw new StaleQuantityException(
+        'This basket has already sent that line to this list'
+      );
+    }
+
+    // The basket will buy what the list asked for, so the reel moves by the
+    // whole amount, exactly as an adoption's does. Floored at what this basket
+    // has already settled, like every other move of this number.
+    line.quantity = Math.max(line.settledQuantity, line.quantity + quantity);
+    line.lastEditedByParticipantId = req.participantId;
+    line.lastEditedAt = new Date();
+    await this.lines.save(line);
+
+    const ref = {
+      zoneId: promoted.zoneId,
+      listId: req.sourceListId,
+      lineId: promoted.line.id,
+    };
+    // The line is now in somebody's basket, so the household's list says so
+    // (plan 0051, section 5.3). Named as the **owner** and never as the actor,
+    // exactly as a run is (plan 0052, section 2).
+    this.claims.announce(true, list.ownerUserId, [ref]);
+
+    const announcement: GeneratedListLineMovedEvent = {
+      generatedListId: list.id,
+      // Redacted to the least privileged reader in the room, because a broadcast
+      // cannot be projected per socket. A guest in the shop hears that the line
+      // moved and learns no list name from it.
+      line: await this.generated.basketLineViewFor(line, false),
+    };
+    this.events.emitToGeneratedList(
+      RealtimeEvent.GeneratedListLineUpdated,
+      list.id,
+      announcement
+    );
+
+    // Read back rather than composed from the promotion, so the row the sheet
+    // redraws is the row the database holds.
+    const [origin, source] = await Promise.all([
+      this.origins.findOne({
+        where: { generatedListLineId: line.id, lineId: promoted.line.id },
+      }),
+      this.zoneLines.findOne({ where: { id: promoted.line.id } }),
+    ]);
+
+    return {
+      line: await this.generated.basketLineViewFor(line, reader.seesZoneData),
+      origin:
+        origin && source
+          ? await this.detailOf(list, line, origin, source)
+          : null,
+      listQuantity: source?.quantity ?? quantity,
+    };
   }
 
   /**
@@ -810,6 +1078,11 @@ export class GeneratedListOriginsService {
       listQuantity: source.quantity,
       settledHere: settled.get(origin.lineId) ?? 0,
       writable: writable.has(origin.listId),
+      fromRun: this.runSources(list).has(origin.listId),
+      // Read off the zone line rather than derived from the list's settings: a
+      // created line is `PENDING` unless the list's own rules approved it (plan
+      // 0058, section 4.3), and an adopted one was already whatever it was.
+      approvalStatus: source.approvalStatus,
     };
   }
 
@@ -855,6 +1128,14 @@ export class GeneratedListOriginsService {
 interface WrittenOrigin {
   /** The zone line as this write left it. */
   source: ListLine;
+  /**
+   * Whether the zone line actually moved (plan 0092, section 4.1).
+   *
+   * An adoption of demand the list already had moves nothing, and the zone room
+   * hears nothing in that case: announcing a row to say it is unchanged is a
+   * redraw with no news in it.
+   */
+  zoneMoved: boolean;
   /** The provenance row, or null when the contribution was set to zero. */
   origin: GeneratedListLineOrigin | null;
   items: LineItemSet;

@@ -16,6 +16,7 @@ import { GeneratedListLineService } from './generated-list-line.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
 import type { GeneratedListService } from './generated-list.service';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * Editing a basket (plan 0050, section 5), which is one rule tested from every
@@ -206,6 +207,8 @@ function build(options: {
     zoneLines,
     claims.service,
     sharing,
+    // Plan 0092 section 4.3's seam, which does nothing until plan 0093.
+    new WaitingSettlementService(),
     publisher
   );
 

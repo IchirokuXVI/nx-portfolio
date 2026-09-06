@@ -16,7 +16,6 @@ import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
-import { GeneratedListBindService } from './generated-list-bind.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
@@ -28,6 +27,7 @@ import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListController } from './generated-list.controller';
 import { GeneratedListService } from './generated-list.service';
 import { LineClaimModule } from './line-claim.module';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * Generated shopping lists (plan 0050): the four tables, the run that composes
@@ -88,13 +88,14 @@ import { LineClaimModule } from './line-claim.module';
     GeneratedListBasketService,
     // Editing what each household asked for, which is deliberately not the
     // settle service (plan 0057, section 1): it changes a zone list without
-    // buying anything.
+    // buying anything. Since plan 0092 it is also the one gesture that takes a
+    // line out of the basket, because raising a list from zero is what sending
+    // a line there means, and plan 0058's separate bind service went with it.
     GeneratedListOriginsService,
-    // The one gesture that takes a line out of the basket (plan 0058). It writes
-    // no zone rows of its own: it is a picker and a set of preconditions in
-    // front of the write back above, which is where plan 0050 section 5's rule
-    // lives and where it stays.
-    GeneratedListBindService,
+    // The purchases waiting for a list to arrive (plan 0092 section 4.3, filled
+    // by plan 0093). It does nothing yet, and it is provided rather than left
+    // out so the two origin inserts already call the one method.
+    WaitingSettlementService,
     // The backstop for a trip nobody finished (plan 0059, section 4). A timer
     // in the zone reaper's shape that finishes live baskets past the claim
     // window, through `GeneratedListService.update` so the release is heard.
