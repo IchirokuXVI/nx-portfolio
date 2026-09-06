@@ -36,6 +36,59 @@ describe('splitCardName', () => {
     });
   });
 
+  it('moves the pack phrase whatever the chain counts in', () => {
+    // The first full crawl left 421 names ending in a dangling `de`, because
+    // only `unidades` was accepted. Each of these is a real name from it.
+    expect(
+      splitCardName(
+        'Atún claro Classic Carrefour pack de 8 latas de 52 g.',
+        'kg'
+      )
+    ).toMatchObject({
+      name: 'Atún claro Classic Carrefour',
+      sizeFormat: 'pack de 8 latas de 52 g.',
+      // Eight tins of 52 g, which is what the chain's own price per kilogram
+      // says: 6,59 € over 15,84 €/kg is 0,416 kg.
+      unitSize: 0.416,
+    });
+    expect(
+      splitCardName('Arroz Carrefour Classic pack 6 unidades de 167 g.', 'kg')
+    ).toMatchObject({ name: 'Arroz Carrefour Classic', unitSize: 1.002 });
+  });
+
+  it('moves a container phrase that has no pack in front of it', () => {
+    expect(splitCardName('Langostinos pink caja de 500 g', 'kg')).toMatchObject(
+      {
+        name: 'Langostinos pink',
+        sizeFormat: 'caja de 500 g',
+        unitSize: 0.5,
+      }
+    );
+    expect(
+      splitCardName('Gelatina para gatos Carrefour 4 sobres de 100 g.', 'kg')
+    ).toMatchObject({ name: 'Gelatina para gatos Carrefour', unitSize: 0.4 });
+  });
+
+  it('keeps the aprox the chain prints on a weight that varies', () => {
+    // 503 names carry it. It qualifies the size, so it travels with the size
+    // rather than being left on the end of a product name.
+    expect(splitCardName('Solomillo de cerdo 500 g aprox', 'kg')).toMatchObject(
+      {
+        name: 'Solomillo de cerdo',
+        sizeFormat: '500 g aprox',
+        unitSize: 0.5,
+      }
+    );
+  });
+
+  it('does not read a name that merely ends in "de" as a container', () => {
+    // The container list is closed for this reason: any word there would eat
+    // the last word of a name whenever the name happened to end in `de`.
+    expect(
+      splitCardName('Aceite de oliva virgen extra Carbonell 1 l', 'l')
+    ).toMatchObject({ name: 'Aceite de oliva virgen extra Carbonell' });
+  });
+
   it('states no size when the trailing word is not a unit', () => {
     // The alternative, "a number followed by any short word", reads a till key
     // number or a flavour as a size.
@@ -60,9 +113,11 @@ describe('splitCardName', () => {
     // `3x187` is three of something and `28+16` is a bonus pack. The chain
     // prints both in the same field, and guessing which arithmetic it meant
     // writes a number nobody checked.
-    expect(splitCardName('Detergente CARREFOUR 28+16 lavados', null)).toEqual({
-      name: 'Detergente CARREFOUR 28+16 lavados',
-      sizeFormat: null,
+    expect(splitCardName('Detergente CARREFOUR 28+16 lavados', 'ud')).toEqual({
+      name: 'Detergente CARREFOUR',
+      // Stored exactly as printed. Expanding `a+b` into its sum belongs to the
+      // matcher, and rewriting it here destroys what the chain printed.
+      sizeFormat: '28+16 lavados',
       unitSize: null,
     });
     expect(splitCardName('Zumo DON SIMON 3x200 ml', 'l')).toMatchObject({

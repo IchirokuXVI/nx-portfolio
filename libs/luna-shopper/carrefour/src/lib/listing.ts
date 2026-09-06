@@ -48,11 +48,30 @@ const UNITS: Readonly<Record<string, { base: string; factor: number }>> = {
   grs: { base: 'kg', factor: 0.001 },
   gramos: { base: 'kg', factor: 0.001 },
   mg: { base: 'kg', factor: 0.000001 },
-  // Count, in units.
+  // Count, in units. The chain counts a household product in what it holds, so
+  // `lavados` and `rollos` are units here exactly as `ud` is, and the card
+  // measuring in `ud` is what says so.
   ud: { base: 'ud', factor: 1 },
   uds: { base: 'ud', factor: 1 },
   unidad: { base: 'ud', factor: 1 },
   unidades: { base: 'ud', factor: 1 },
+  lavado: { base: 'ud', factor: 1 },
+  lavados: { base: 'ud', factor: 1 },
+  rollo: { base: 'ud', factor: 1 },
+  rollos: { base: 'ud', factor: 1 },
+  sobre: { base: 'ud', factor: 1 },
+  sobres: { base: 'ud', factor: 1 },
+  bolsa: { base: 'ud', factor: 1 },
+  bolsas: { base: 'ud', factor: 1 },
+  capsula: { base: 'ud', factor: 1 },
+  capsulas: { base: 'ud', factor: 1 },
+  cápsula: { base: 'ud', factor: 1 },
+  cápsulas: { base: 'ud', factor: 1 },
+  dosis: { base: 'ud', factor: 1 },
+  pastilla: { base: 'ud', factor: 1 },
+  pastillas: { base: 'ud', factor: 1 },
+  racion: { base: 'ud', factor: 1 },
+  raciones: { base: 'ud', factor: 1 },
   // Length, in metres.
   m: { base: 'm', factor: 1 },
   cm: { base: 'm', factor: 0.01 },
@@ -63,17 +82,39 @@ const UNITS: Readonly<Record<string, { base: string; factor: number }>> = {
 const QUANTITY = String.raw`\d+(?:[.,]\d+)?(?:\s*[x+]\s*\d+(?:[.,]\d+)?)*`;
 
 /**
- * How the chain writes a multi pack inside the name: `pack de 9 unidades de`.
+ * What the chain calls the thing it packs a product in.
+ *
+ * **A closed list, like the units.** The phrase this appears in is `<count>
+ * <container> de <size>`, and accepting any word there would eat the last word
+ * of a product name whenever the name happened to end in `de`.
+ */
+const CONTAINER = String.raw`(?:caja|cajas|lata|latas|bote|botes|botella|botellas|brick|bricks|estuche|estuches|tarrina|tarrinas|bandeja|bandejas|bolsa|bolsas|sobre|sobres|unidad|unidades|ud|uds|pieza|piezas|base|bases|pack|packs|vaso|vasos|tarro|tarros|barra|barras|rollo|rollos|blister|blisters)`;
+
+/**
+ * How the chain writes a multi pack inside the name.
  *
  * It is part of the size and not part of the name, so the whole phrase moves
  * across. Splitting it in the middle would leave `Leche entera CARREFOUR pack
- * de 9 unidades de` as a product name.
+ * de 9 unidades de` as a product name, and a broken name is worse than a
+ * missing size: the name is the key a product with no EAN is matched on.
+ *
+ * **Measured against the whole crawl, not guessed.** The first full run left
+ * 421 of 15,444 names ending in a dangling `de`, because only `pack de N
+ * unidades de` was accepted. The chain also writes `pack de 8 latas de`, `pack
+ * 6 unidades de`, `pack 6 de`, `caja de` and `4 sobres de`, so there are two
+ * shapes here: after the word `pack` the counted noun can be anything, and
+ * without it the noun has to be one the chain packs things in.
  */
-const PACK = String.raw`(?:pack\s+de\s+(\d+)\s+(?:unidades?|uds?\.?)\s+de\s+)?`;
+const PACK = String.raw`(?:(?:pack\s+(?:de\s+)?(\d+)(?:\s+[A-Za-zÀ-ÿ]{2,12})?|(\d+)?\s*${CONTAINER})\s+de\s+)?`;
 
-/** An optional pack phrase, a quantity, and one word, anchored at the end. */
+/**
+ * An optional pack phrase, a quantity, one word, and an optional `aprox`.
+ *
+ * `aprox` is the chain saying the weight varies, which 503 names do. It belongs
+ * with the size it qualifies rather than left on the end of a product name.
+ */
 const TRAILING_SIZE = new RegExp(
-  String.raw`(^|\s)(${PACK}(${QUANTITY})\s*([A-Za-zÀ-ſ]{1,10}))\.*\s*$`,
+  String.raw`(^|\s)(${PACK}(${QUANTITY})\s*([A-Za-zÀ-ſ]{1,10})\.?(?:\s+aprox)?)\.*\s*$`,
   'i'
 );
 
@@ -116,7 +157,7 @@ export function splitCardName(
     return { name: trimmed, sizeFormat: null, unitSize: null };
   }
 
-  const unit = UNITS[match[5].toLowerCase()];
+  const unit = UNITS[match[6].toLowerCase()];
   const expected = MEASURE_BASE[(measureUnit ?? '').trim().toLowerCase()];
   // The check the plan asks for. An unknown word is not a unit, and a unit from
   // another family is a coincidence: `Café molido 500 g` is a size when the
@@ -138,7 +179,9 @@ export function splitCardName(
     // Verbatim, trailing full stop and all, because that is what the chain
     // printed and the matcher is the thing allowed to normalize it.
     sizeFormat: trimmed.slice(start).trim(),
-    unitSize: sizeAsNumber(match[3], match[4], unit.factor),
+    // Either shape of the pack phrase states the count, and only one of them
+    // matched, so the first that is set is the one this name used.
+    unitSize: sizeAsNumber(match[3] ?? match[4], match[5], unit.factor),
   };
 }
 
