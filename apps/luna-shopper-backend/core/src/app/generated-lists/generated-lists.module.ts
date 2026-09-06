@@ -23,6 +23,7 @@ import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
+import { GeneratedListSplitService } from './generated-list-split.service';
 import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListController } from './generated-list.controller';
 import { GeneratedListService } from './generated-list.service';
@@ -86,6 +87,12 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // new: lowering calls the settle above it rather than settling its own way.
     GeneratedListOutstandingService,
     GeneratedListBasketService,
+    // A line split by the product that was got (plan 0094). A provider of its
+    // own rather than a method on the basket service, because it is the one
+    // write here that creates rows, folds rows away and moves provenance rows
+    // between them, all in one transaction, and it replaced the pick that did
+    // live there.
+    GeneratedListSplitService,
     // Editing what each household asked for, which is deliberately not the
     // settle service (plan 0057, section 1): it changes a zone list without
     // buying anything. Since plan 0092 it is also the one gesture that takes a

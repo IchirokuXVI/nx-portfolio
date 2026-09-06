@@ -112,14 +112,19 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    */
   basketGet: 'generatedList.basket.get',
   /**
-   * Swap a line's pick to another of its options (section 6.1).
+   * Give units of a line to other products, which splits the line (plan 0094,
+   * section 2).
    *
    * On the participant surface rather than beside `generatedList.updateLine`,
    * because **anyone** holding the basket may do it, guests included: the options
    * are catalog products and never zone data, and the person at the shelf is
-   * exactly who wants another brand.
+   * exactly who took three skimmed and two whole.
+   *
+   * It replaces `generatedList.setPick`. Moving every outstanding unit to
+   * another product is this message with one share, and two ways of choosing a
+   * product would be two rules about which product a settlement records.
    */
-  setPick: 'generatedList.setPick',
+  splitLine: 'generatedList.splitLine',
   /**
    * Put a line in the basket, as any live participant (plan 0055, section 3).
    *
@@ -1118,17 +1123,67 @@ export interface GetGeneratedListBasketRequest {
 }
 
 /**
- * Swap a line's pick (plan 0051, section 6.1).
+ * Give units of a line to other products (plan 0094, section 2).
  *
- * `itemId` must be one of the line's own options, which the service checks: the
- * options are the line's set rather than the whole catalog, so this cannot be
- * used to point a line at an arbitrary product.
+ * A basket line holds **one** product, because a settlement names one and
+ * everything downstream of a settlement assumes a line does too. So this does
+ * not put several products on a line: it splits the line. The original keeps its
+ * own product and the balance, one sibling appears under it per other product,
+ * and the shopper settles each row as they already do.
+ *
+ * Every `itemId` must be one of the line's own options, which the service
+ * checks: the options are the line's set rather than the whole catalog, so this
+ * cannot be used to point a line at an arbitrary product.
  */
-export interface SetGeneratedListPickRequest {
+export interface SplitGeneratedListLineRequest {
   generatedListId: string;
   lineId: string;
   participantId: string;
+  /**
+   * The outstanding amount the client believed, refused on a mismatch (plan
+   * 0056, section 3.2).
+   *
+   * Two phones splitting one line must not double it, and what a gesture meant
+   * depends on where it started.
+   */
+  from: number;
+  /**
+   * Units for products **other than** the line's own. The line's own product
+   * takes the rest.
+   *
+   * The balance is never typed, which is what makes a stale or hand edited
+   * request land somewhere honest: the shares sum to at most the outstanding
+   * amount and whatever is left stays where it was.
+   */
+  shares: GeneratedListLineShare[];
+}
+
+/** One product of a split, and how many units go to it. */
+export interface GeneratedListLineShare {
   itemId: string;
+  quantity: number;
+}
+
+/**
+ * What a split did, in four collections a client reconciles by id (plan 0094,
+ * section 6).
+ *
+ * Four rather than one basket, because the screen redraws the rows it was told
+ * about and nothing else: a whole basket would take the scroll position and any
+ * row a second shopper is editing with it.
+ */
+export interface SplitGeneratedListLineResult {
+  /** The line the split was asked of, or the reassignment of it (section 2.2). */
+  line: GeneratedListBasketLineView;
+  /** One per product that had no row here yet, in position order. */
+  created: GeneratedListBasketLineView[];
+  /** The rows a share was given to rather than a new sibling (section 5). */
+  merged: GeneratedListBasketLineView[];
+  /**
+   * The ids of rows folded away, which is how moving every unit back off a
+   * sibling ends: it kept nothing, so it is gone.
+   */
+  removed: string[];
 }
 
 // --- What a basket line is made of (plan 0057) -----------------------------

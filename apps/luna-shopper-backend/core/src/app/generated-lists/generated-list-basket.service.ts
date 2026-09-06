@@ -13,13 +13,11 @@ import {
   type GeneratedListLineMovedEvent,
   type GeneratedListSourceName,
   type GetGeneratedListBasketRequest,
-  type SetGeneratedListPickRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   GeneratedListFinishedException,
   NotFoundException,
   UnauthorizedException,
-  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import {
@@ -37,6 +35,7 @@ import {
   checkRoom,
   nextPosition,
 } from './basket-line-limits';
+import { findMergeTarget } from './basket-merge';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { toBasketView } from './generated-list.mappers';
@@ -155,76 +154,6 @@ export class GeneratedListBasketService {
   }
 
   /**
-   * Swap a line's pick to another of its options (plan 0051, section 6.1).
-   *
-   * **Anybody holding the basket may do this, guests included.** The options are
-   * catalog products and never zone data, and the person at the shelf is exactly
-   * who wants another brand. So there is no `seesZoneData` check on the write,
-   * only on what is handed back.
-   *
-   * The new pick has to be one of the line's **own** options, which is checked
-   * rather than assumed: without it this route would repoint any line at any
-   * product in the catalog.
-   */
-  async setPick(
-    req: SetGeneratedListPickRequest
-  ): Promise<GeneratedListBasketLineView> {
-    const { list, seesZoneData } = await this.resolve(req);
-
-    if (!isLiveGeneratedList(list.status)) {
-      // A finished basket refuses every write (plan 0059, section 3.2), and a
-      // pick is one: it moves the product the row names, which is what the
-      // receipt a finished trip has become would then misreport.
-      throw new GeneratedListFinishedException(
-        'This basket is finished, so its picks cannot be changed'
-      );
-    }
-
-    const line = await this.lines.findOne({
-      where: { id: req.lineId, generatedListId: list.id },
-    });
-    if (!line) {
-      throw new NotFoundException('Line not found');
-    }
-
-    const option = await this.options.findOne({
-      where: { generatedListLineId: line.id, itemId: req.itemId },
-    });
-    if (!option) {
-      // A free text line has no options at all and lands here too, which is the
-      // right answer: it has no product identity, so it has no pick to make.
-      throw new ValidationException(
-        'That product is not one of this line’s options',
-        { messageArgs: { field: 'itemId' } }
-      );
-    }
-
-    if (line.itemId !== req.itemId) {
-      line.itemId = req.itemId;
-      line.lastEditedByParticipantId = req.participantId;
-      line.lastEditedAt = new Date();
-      await this.lines.save(line);
-    }
-
-    const view = await this.generated.basketLineViewFor(line, seesZoneData);
-    // Redacted to the least privileged reader in the room, because a broadcast
-    // cannot be projected per socket. Nothing is lost: the three gated fields do
-    // not move when a pick is swapped, so a reader who passes section 5.2 merges
-    // the mutable fields onto the line they already hold.
-    const announcement: GeneratedListLineMovedEvent = {
-      generatedListId: list.id,
-      line: await this.generated.basketLineViewFor(line, false),
-    };
-    this.events.emitToGeneratedList(
-      RealtimeEvent.GeneratedListLineUpdated,
-      list.id,
-      announcement
-    );
-
-    return view;
-  }
-
-  /**
    * Put a line in the basket, as any live participant (plan 0055, section 3).
    *
    * The gesture the basket could not make: every write on this surface until now
@@ -273,6 +202,29 @@ export class GeneratedListBasketService {
     const content = checkContent(req.content);
     const quantity = checkQuantity(req.quantity ?? 1);
     const optionIds = checkOptions(req.options);
+
+    // Plan 0094, section 5: a typed "Milk" lands on the Milk that is already
+    // there. The basket cannot merge by name alone, because siblings share a
+    // name on purpose, so the rule is the name **and** the product, with a
+    // product free row as the fallback so nothing chooses a milk the shopper did
+    // not.
+    const existing = findMergeTarget(
+      await this.lines.find({
+        where: { generatedListId: list.id },
+        order: { position: 'ASC', createdAt: 'ASC' },
+      }),
+      { content, itemId: req.itemId ?? null }
+    );
+    if (existing) {
+      return this.raise(list, existing, {
+        participant,
+        quantity,
+        itemId: req.itemId ?? null,
+        optionIds,
+        seesZoneData,
+      });
+    }
+
     await checkRoom(this.lines, list.id);
 
     const position = await nextPosition(this.lines, list.id);
@@ -335,6 +287,93 @@ export class GeneratedListBasketService {
       announcement
     );
 
+    return view;
+  }
+
+  /**
+   * The add landed on a line the basket already holds (plan 0094, section 5).
+   *
+   * It sums rather than appends, takes the incoming product when the row named
+   * none, and adds any option the row was not offering. The row keeps its
+   * position, its `createdByParticipantId` and everything attached to it: the
+   * person adding two more milks did not put the milk there.
+   *
+   * ## It announces an update and not an add
+   *
+   * A client receiving `lineAdded` appends a row, and appending a row it already
+   * draws is the duplicate this rule exists to prevent. So the merge is a
+   * `lineUpdated`, which is what actually happened to the basket.
+   *
+   * ## The owner's default target still applies
+   *
+   * The owner saying "everything I add today also goes in the flat list" is
+   * about the units they just added, whether they landed on a new row or an old
+   * one, so the promotion runs either way and the flat's own line is raised by
+   * the ordinary write back. A guest's add takes this branch as little as it
+   * takes the other one.
+   */
+  private async raise(
+    list: GeneratedList,
+    line: GeneratedListLine,
+    args: {
+      participant: GeneratedListParticipant;
+      quantity: number;
+      itemId: string | null;
+      optionIds: readonly string[];
+      seesZoneData: boolean;
+    }
+  ): Promise<GeneratedListBasketLineView> {
+    line.quantity += args.quantity;
+    line.itemId ??= args.itemId;
+    line.lastEditedByParticipantId = args.participant.id;
+    line.lastEditedAt = new Date();
+    await this.lines.save(line);
+
+    if (args.optionIds.length > 0) {
+      const held = await this.options.find({
+        where: { generatedListLineId: line.id },
+        order: { position: 'ASC', createdAt: 'ASC' },
+      });
+      const known = new Set(held.map((row) => row.itemId));
+      const missing = args.optionIds.filter((itemId) => !known.has(itemId));
+      if (missing.length > 0) {
+        await this.options.insert(
+          missing.map((itemId, index) => ({
+            generatedListLineId: line.id,
+            itemId,
+            position: held.length + index,
+          }))
+        );
+      }
+    }
+
+    if (
+      args.participant.kind === ParticipantKind.OWNER &&
+      list.defaultTargetListId
+    ) {
+      await this.lineWrites.promote(
+        list.ownerUserId,
+        line,
+        list.defaultTargetListId,
+        // What this add asked for, and not the row's new total: the flat has
+        // already been told about the units that were on the row before.
+        { quantity: args.quantity }
+      );
+    }
+
+    const view = await this.generated.basketLineViewFor(
+      line,
+      args.seesZoneData
+    );
+    const announcement: GeneratedListLineMovedEvent = {
+      generatedListId: list.id,
+      line: await this.generated.basketLineViewFor(line, false),
+    };
+    this.events.emitToGeneratedList(
+      RealtimeEvent.GeneratedListLineUpdated,
+      list.id,
+      announcement
+    );
     return view;
   }
 

@@ -23,6 +23,7 @@ import { GeneratedListOutstandingService } from './generated-list-outstanding.se
 import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
+import { GeneratedListSplitService } from './generated-list-split.service';
 import { GeneratedListService } from './generated-list.service';
 import type { ZoneLineClaimRef } from './line-claim.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
@@ -248,6 +249,16 @@ function build(status: GeneratedListStatus): Harness {
     lineWrites,
     publisher
   );
+  const splitWrites = new GeneratedListSplitService(
+    dataSource,
+    lists as never,
+    lines as never,
+    options as never,
+    noRows as never,
+    sharing,
+    generated,
+    publisher
+  );
   const originWrites = new GeneratedListOriginsService(
     dataSource,
     lists as never,
@@ -303,12 +314,15 @@ function build(status: GeneratedListStatus): Harness {
         generatedListId: BASKET,
         lineIds: [LINE],
       }),
-    'swap the product pick': () =>
-      basketWrites.setPick({
+    'split a line by the product that was got': () =>
+      splitWrites.split({
         generatedListId: BASKET,
         lineId: LINE,
         participantId: ACTOR,
-        itemId: ITEM,
+        // The line asks for two and one is settled, so this is the outstanding
+        // amount and the stale guard is not what refuses the request.
+        from: 1,
+        shares: [{ itemId: ITEM, quantity: 1 }],
       }),
     'participant adds a line': () =>
       basketWrites.addLine({
