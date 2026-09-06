@@ -1,0 +1,221 @@
+You are reading ONE page of a Spanish supermarket promotional leaflet (folleto)
+from the chain Dia.
+
+Return ONLY a JSON array of the product offers advertised on this page.
+No prose, no explanation, no markdown code fence. Just the array.
+
+The array elements are rows that will be imported into a product catalog, so
+every element MUST have exactly these keys:
+
+{
+  "name": "product description as printed, without the price",
+  "brand": "manufacturer brand, or null",
+  "unitSize": 0.0,
+  "sizeFormat": "kg" | "g" | "l" | "ml" | "ud" | "m" | null,
+  "price": 0.00,
+  "unitPrice": 0.00,
+  "unitPriceLabel": "the comparison figure, transcribed by rule 4, or null",
+  "category": "PRODUCE",
+  "categoryPath": [],
+  "leaflet": {
+    "format": "the pack as printed, or null",
+    "basis": "unit" | "pack" | "kg" | "l",
+    "wasPrice": 0.00,
+    "loyalty": false,
+    "promotion": null
+  }
+}
+
+"category" MUST be one of exactly these values, and nothing else:
+PRODUCE, DAIRY, BAKERY, MEAT, SEAFOOD, FROZEN, BEVERAGES, SNACKS, PANTRY,
+HOUSEHOLD, PERSONAL_CARE, OTHER.
+Choose the one that fits the product itself. Cleaning products, laundry,
+kitchen roll, foil and pet food are HOUSEHOLD. Shampoo, soap, razors, nappies,
+deodorant and toothpaste are PERSONAL_CARE. Wine, beer, water, juice and soft
+drinks are BEVERAGES. Crisps, biscuits, sweets and chocolate are SNACKS.
+Tinned food, pasta, rice, oil, sauces, coffee and sugar are PANTRY. Use OTHER
+only when none of the twelve fits.
+
+"leaflet.promotion" is either null or an object:
+
+{
+  "type": "price_drop" | "n_for_m" | "pack_bonus"
+        | "second_unit_discount" | "multibuy_unit_price"
+        | "multibuy_total" | "buy_n_get_free",
+  "rawText": "the offer wording as printed",
+  "requiredQuantity": 0,
+  "effectiveUnitPrice": 0.00,
+  "totalPrice": 0.00,
+  "singleUnitPrice": 0.00
+}
+
+"rawText" is required whenever "type" is set. A promotion with no wording is
+dropped from the offer and recorded as a warning instead.
+
+HOW THIS LEAFLET IS LAID OUT
+
+The page is tall and narrow. There is no grid. Product photographs sit loosely
+on a themed background. Each one has a solid rectangular price badge beside
+it, red on a white page and black on a coloured campaign page, and a caption
+in bold dark text with the product name over a lighter line with the brand and
+the size. A busy page holds ten to twenty offers. A feature page holds one.
+
+Rules, in order of importance:
+
+1. THE BADGE PRICE IS ONE NUMBER SPLIT IN TWO. The euros are printed large and
+   the cents are printed small and raised, with no comma between them. A large
+   0 with a raised 49 is 0.49. A large 1 with a raised 20 is 1.20. A large 6
+   with a raised 97 is 6.97. A badge with a large figure and no raised cents is
+   a whole euro: 1 is 1.00 and 2 is 2.00. Every other number on the page uses a
+   comma instead: 1,23 is 1.23 and 2,85 is 2.85. Never read 1,23 as 123.
+
+2. WHICH OF THE TILE'S NUMBERS IS THE PRICE. A tile can print up to four.
+   Decide in this order and stop at the first line that matches:
+     a) A white strip under the badge reads "PVP NO SOCIO" and a price.
+        That price is "price". The badge number is the Club Dia member price
+        and a card price is not the price a non member pays.
+     b) A white strip under the badge reads "Llevando 1 ud." and a price.
+        That price is "price". The badge number is what a second or a bulk
+        unit costs, and it is not what one unit costs.
+     c) Otherwise the badge number is "price".
+   An old price struck through under the badge is never "price". It goes in
+   "leaflet.wasPrice".
+
+3. THE COMPARISON FIGURE. A small number over a unit sits inside the badge to
+   the right of the big number, and the "PVP NO SOCIO" and "Llevando 1 ud."
+   strips each carry one of their own. Take the comparison figure that belongs
+   to the number rule 2 chose: the one on that strip when a strip supplied the
+   price, the one inside the badge otherwise. Put it in "unitPrice". A
+   comparison figure is never the product price.
+
+4. "unitPriceLabel" IS THE COMPARISON FIGURE WITH ITS UNIT WRITTEN OUT.
+   Dia prints the unit as an abbreviation, and the shared builder reads the
+   basis out of a word, so transcribe the unit and keep the number exactly as
+   printed, comma and all:
+     "1,23 €/kg"     -> "KILO 1,23"
+     "0,46 €/l"      -> "LITRO 0,46"
+     "1,06 €/ud."    -> "UNIDAD 1,06"
+     "0,23 €/lavado" -> "LAVADO 0,23"
+     "3,63 €/100 ml" -> "100 ml 3,63"
+   When the unit beside the big number carries no number of its own, it names
+   the basis of the badge price rather than a comparison. Then leave
+   "unitPrice" null and write the basis on its own:
+     "€/kg" alone    -> "EUR/KILO"
+     "€/l" alone     -> "EUR/LITRO"
+     "€/ud." alone   -> "EUR/UNIDAD"
+   A tile can print both: "0,35" with "/ud." beside it and "1,06 €/l" under
+   that means the badge price buys one unit and 1.06 is the comparison figure.
+
+5. "leaflet.basis" SAYS WHAT THE PRICE BUYS. Decide it in this order, and stop
+   at the first line that matches:
+     - The tile is labelled "PRECIO POR KG", or the badge carries "€/kg" with
+       no number of its own                              -> "kg"
+     - The badge carries "€/l" with no number of its own -> "l"
+     - The format names a tray, a multipack or several items sold together:
+       "pack-3 x 215 g", "pack-12 latas x 33 cl", "pack-2 vasos x 125 g",
+       "8 uds. 320 g", "bandeja 450 g aprox."            -> "pack"
+     - Anything else, including a single bottle, jar, tin or packet
+                                                         -> "unit"
+   A tray labelled "PVP BANDEJA APROXIMADO" is "pack", because the price buys
+   that one tray. Only a price genuinely quoted per kilo is "kg".
+
+6. "unitSize" AND "sizeFormat" ARE THE SIZE AS A NUMBER AND ITS OWN TOKEN.
+   Read them from the size the leaflet prints, and keep the leaflet's own unit
+   rather than converting it:
+     "400 g"                -> unitSize 400,  sizeFormat "g"
+     "lata 33 cl"           -> unitSize 330,  sizeFormat "ml"
+     "1,5 l"                -> unitSize 1.5,  sizeFormat "l"
+     "1 kg"                 -> unitSize 1,    sizeFormat "kg"
+     "pack-3 x 215 g"       -> unitSize 645,  sizeFormat "g"
+     "pack-12 latas x 33 cl"-> unitSize 3960, sizeFormat "ml"
+     "pack-2 vasos x 125 g" -> unitSize 250,  sizeFormat "g"
+     "bandeja 450 g aprox." -> unitSize 450,  sizeFormat "g"
+     "50 uds."              -> unitSize 50,   sizeFormat "ud"
+   Centilitres are the one conversion you make: 1 cl is 10 ml. A multipack
+   states its TOTAL content, so three packs of 215 g are 645 g. When a tile
+   prints both a count and a weight, "8 uds. 320 g", take the weight.
+   When the page prints no size at all, set both to null. Never guess a size
+   from the photograph.
+
+7. "price" is always the price of ONE unit, as rule 2 decided it. It is what a
+   shopper with no card and no second unit pays at the till.
+
+8. A PACK SIZE IS NOT A PROMOTION. "pack-3 x 215 g" means a box of three
+   cartons. It is NOT a three for one offer. The same holds for
+   "pack-12 latas x 33 cl", "pack-2 vasos x 125 g" and an "x8" printed on the
+   bag. Those strings belong in "leaflet.format", and "promotion" stays null.
+   Only wording that names a saving is a promotion.
+
+9. TEXT PRINTED ON THE PACKAGING IS NOT A DIA PROMOTION. Flashes such as "x2",
+   "x8", "SIN GLUTEN", "SIN AZÚCARES AÑADIDOS", "100% natural",
+   "PREMIO SEGURO", "FORMATO FAMILIAR", a Michelin star seal or an origin seal
+   sit on the product photograph and belong to the manufacturer's pack. So
+   does "PRODUCTOS combinables entre sí", which only says which tiles a mix
+   and match offer covers. Leave "promotion" null for all of them.
+
+10. PROMOTION WORDING MAPS LIKE THIS, AND FOUR TYPES ARE FORBIDDEN HERE.
+    Record the mechanic only with these three types:
+      - "¡SUPER PRECIO!" or "Ahora -20%" with a struck old price under the
+        badge                                 -> "price_drop", the struck
+                                                 price in "wasPrice"
+      - "3x2", "2x1€", "3x1€", "2 X 1"        -> "n_for_m", the first digit in
+                                                 "requiredQuantity"
+      - "Pack-3+1 GRATIS", "+50% GRATIS"      -> "pack_bonus"
+    NEVER use "second_unit_discount", "multibuy_unit_price", "multibuy_total"
+    or "buy_n_get_free" on a tile that prints a "Llevando 1 ud." price. The
+    shared builder treats those four as a price it cannot state on its own, and
+    it is handed no single unit price, so naming one would throw away the price
+    the tile actually printed. A "LA 2ª UD. -50%" tile with a "Llevando 1 ud."
+    strip therefore takes the single unit price by rule 2 and leaves
+    "promotion" null. Use one of the four only when a conditional tile prints
+    no single unit price at all: then put the conditional number in "price",
+    name the type, and the document will refuse the tile, which is correct.
+    Text such as "tu precio" or "Más de 100 productos a 1€" with no old price
+    and no quantity is a slogan, not a promotion. Leave "promotion" null.
+    Never divide the total by the quantity to invent a single unit price.
+
+11. "loyalty" IS ABOUT THE PRICE YOU RECORDED, NOT ABOUT THE FLASH. A
+    "con CLUB Dia" flash on its own does not make a tile a card price. Set
+    "loyalty" to false whenever the tile prints a "PVP NO SOCIO" or a
+    "Llevando 1 ud." price, because the number rule 2 chose needs no card. Set
+    it to true only when a "con CLUB Dia" tile prints neither: then the only
+    number on the tile is a card price. Put the badge number in "price" in
+    that case, so the document can refuse it by the loyalty rule.
+
+12. "categoryPath" IS EMPTY ON EVERY PAGE OF THIS LEAFLET. Dia prints no
+    department heading banner. A campaign banner such as
+    "DIA WORLD BURGER TOUR", "TU COMPRA AYUDA", "COMPRA 1, DONAMOS 1" or
+    "VIVE LA CARRERA EN MADRING" names a campaign and not a department, so it
+    is not a path. Use [] unless the page prints a banner that genuinely names
+    a department, and then copy that banner as printed.
+
+13. Ignore the sideways article reference number beside the badge (326, 50844,
+    221537), the QR codes, the app adverts, the social media icons, the store
+    address, the phone number, the alcohol legal notice and the
+    "Ofertas no acumulables con cupones descuento" footer. Only include
+    products that carry a price. Text printed on the product packaging in the
+    photograph is not the product name; use the caption set in the leaflet's
+    own dark text.
+
+14. Use null for anything the page does not state. Do not invent values and do
+    not compute a value the page does not print. Never divide one printed
+    number by another to produce a price.
+
+WHY THREE OF THESE FIELDS MATTER MORE THAN THE REST
+
+The reading is turned into a HarvestDocument (backend plan 0086, section 6.1)
+by the shared build-document.mjs, which calls the shared to-harvest-document.mjs.
+That script decides which number on a tile a shopper actually pays for one unit,
+and it reads exactly three things to decide:
+
+- "leaflet.loyalty". True means the tile states no price at all, because a card
+  price is not the price a non member pays. On this chain that is rare, because
+  a Club Dia tile almost always prints its "PVP NO SOCIO" price as well.
+- "leaflet.promotion.type". The four conditional types make the script look for
+  a single unit price it is never handed, so a tile that names one states no
+  price. Rule 10 says when that is the honest answer and when it is not.
+- "leaflet.basis". A "kg" or "l" basis is a price per weight or volume, so it
+  becomes a unit price and the product gets no till price.
+
+Get those three right even when you are unsure about the rest. A wrong price is
+worse than a missing one.
