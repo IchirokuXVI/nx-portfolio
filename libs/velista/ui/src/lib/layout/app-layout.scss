@@ -69,8 +69,40 @@
 //
 // `min-block-size` was `100%`, which is the same class of mistake on the other axis: a
 // percentage height against a parent with no definite height resolves to `auto`.
-// `100dvh` is what the shell already uses for its own host and what `styles.scss` uses
-// on `body`.
+//
+// It was then `100dvh`, which is what the shell uses for its own host, and that is the
+// unit this app cannot use. **The full height of this app is `100svh`, everywhere.**
+//
+// Chrome on Android draws a strip at the foot of the screen that the system navigation
+// bar sits over, and from Chrome 135 it retracts that strip while the page is scrolled.
+// The dynamic viewport follows it, so `100dvh` grows by the height of the navigation
+// bar the moment the strip retracts, and shrinks again when it comes back. In a browser
+// tab the platform reports the retracted strip through `env(safe-area-inset-bottom)`,
+// so a page can pad itself out of it. In an **installed** app it does not: the inset
+// stays at zero while the viewport grows, so every box sized in `dvh` becomes exactly
+// one navigation bar taller than the screen and nothing tells the app to reserve the
+// difference.
+//
+// What that looked like: the app opened correctly, one pull to refresh made every page
+// scroll by the height of the navigation bar with nothing to scroll to, and a bottom
+// action bar sat half under the bar. Anything that forced Chrome to re establish the
+// viewport put it right again, which is why locking the phone, switching away and back,
+// and opening a sheet all appeared to be fixes.
+//
+// `svh` is the small viewport, the one measured with every retractable piece of browser
+// and system chrome **shown**. It is a static value, it never grows into the strip, and
+// on a platform with nothing to retract it is the same number `dvh` reports. So it is
+// correct on the desktop, in a tab, in the shell and in the installed app, and it is the
+// unit `--app-sheet-max-height` and `list-viewers` already use.
+//
+// The cost is the strip itself. While it is retracted the visible viewport is taller
+// than this element, and those few pixels would be painted by the document canvas, which
+// carries no colour of its own and would therefore be white under the Night theme. The
+// shadow paints them in the ground colour. It takes no part in layout and adds no
+// scrollable overflow, which is the whole reason to reach for a shadow rather than for
+// more height. The offset is half the spread, so the shadow starts at this element's own
+// top edge and reaches only downwards and sideways: mounted in the portfolio it can
+// therefore never paint over shell chrome above the app.
 :host {
   @include tokens.app-root;
 
@@ -78,8 +110,9 @@
   flex: 1;
   // So a wide child cannot push the flex item past the viewport.
   min-inline-size: 0;
-  min-block-size: 100dvh;
+  min-block-size: 100svh;
   background: var(--app-surface-ground);
+  box-shadow: 0 50vmax 0 50vmax var(--app-surface-ground);
   color: var(--app-text-primary);
   font-family: var(--app-font-sans);
   font-size: var(--app-text-base);

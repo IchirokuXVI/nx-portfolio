@@ -1,0 +1,492 @@
+{
+  "productsRead": 153,
+  "provincesTotal": 52,
+  "provincesSplitAcrossRegions": 12,
+  "provincesWhereRegionsDisagreeOnPrice": 0,
+  "storesInDisagreeingProvinces": 0,
+  "totalStores": 730,
+  "shareOfStoresAPostalCodeRuleWouldRisk": 0,
+  "perProvince": [
+    {
+      "province": "43",
+      "stores": 19,
+      "regions": [
+        "25=Tarragona",
+        "57=Cat 2",
+        "26=Barcelona"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "07",
+      "stores": 31,
+      "regions": [
+        "48=Palma de mallorca",
+        "59=Ibiza",
+        "58=Menorca"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "03",
+      "stores": 39,
+      "regions": [
+        "38=Alicante",
+        "39=Murcia"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "12",
+      "stores": 11,
+      "regions": [
+        "36=Castellón",
+        "37=Valencia "
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "24",
+      "stores": 6,
+      "regions": [
+        "5=Asturias",
+        "6=León"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "28",
+      "stores": 94,
+      "regions": [
+        "28=Madrid",
+        "56=Vit 2"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "23",
+      "stores": 8,
+      "regions": [
+        "45=Jaén",
+        "44=Málaga"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "04",
+      "stores": 15,
+      "regions": [
+        "47=Almería",
+        "39=Murcia"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "06",
+      "stores": 8,
+      "regions": [
+        "30=Bádajoz",
+        "41=Sevilla"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "38",
+      "stores": 20,
+      "regions": [
+        "49=Santa Cruz de Tenerife",
+        "50=Las Palmas"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "35",
+      "stores": 20,
+      "regions": [
+        "55=Gran Canaria",
+        "53=Fuerteventura",
+        "54=Lanzarote"
+      ],
+      "productsWithADisagreement": 0
+    },
+    {
+      "province": "44",
+      "stores": 2,
+      "regions": [
+        "23=Teruel",
+        "57=Cat 2"
+      ],
+      "productsWithADisagreement": 0
+    }
+  ],
+  "productsWhosePriceIsNotTheSameEverywhere": 132,
+  "examples": [],
+  "priceSplitSample": [
+    {
+      "productId": 11008286,
+      "title": "Bellarom Café natural molido",
+      "groups": [
+        {
+          "price": [
+            4.38
+          ],
+          "provinces": [
+            "01",
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08",
+            "09",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+            "21",
+            "22",
+            "23",
+            "24",
+            "25",
+            "26",
+            "27",
+            "28",
+            "29",
+            "30",
+            "31",
+            "32",
+            "33",
+            "34",
+            "36",
+            "37",
+            "39",
+            "40",
+            "41",
+            "42",
+            "43",
+            "44",
+            "45",
+            "46",
+            "47",
+            "48",
+            "49",
+            "50",
+            "51",
+            "52"
+          ]
+        },
+        {
+          "price": [
+            null
+          ],
+          "provinces": [
+            "35",
+            "38"
+          ]
+        }
+      ]
+    },
+    {
+      "productId": 11000491,
+      "title": "MILBONA Queso Edam",
+      "groups": [
+        {
+          "price": [
+            5.69
+          ],
+          "provinces": [
+            "01",
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08",
+            "09",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+            "21",
+            "22",
+            "23",
+            "24",
+            "25",
+            "26",
+            "27",
+            "28",
+            "29",
+            "30",
+            "31",
+            "32",
+            "33",
+            "34",
+            "36",
+            "37",
+            "39",
+            "40",
+            "41",
+            "42",
+            "43",
+            "44",
+            "45",
+            "46",
+            "47",
+            "48",
+            "49",
+            "50",
+            "51",
+            "52"
+          ]
+        },
+        {
+          "price": [
+            null
+          ],
+          "provinces": [
+            "35",
+            "38"
+          ]
+        }
+      ]
+    },
+    {
+      "productId": 11004136,
+      "title": "FLORALYS Papel higiénico super suave",
+      "groups": [
+        {
+          "price": [
+            3.39
+          ],
+          "provinces": [
+            "01",
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08",
+            "09",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+            "21",
+            "22",
+            "23",
+            "24",
+            "25",
+            "26",
+            "27",
+            "28",
+            "29",
+            "30",
+            "31",
+            "32",
+            "33",
+            "34",
+            "36",
+            "37",
+            "39",
+            "40",
+            "41",
+            "42",
+            "43",
+            "44",
+            "45",
+            "46",
+            "47",
+            "48",
+            "49",
+            "50",
+            "51",
+            "52"
+          ]
+        },
+        {
+          "price": [
+            null
+          ],
+          "provinces": [
+            "35",
+            "38"
+          ]
+        }
+      ]
+    },
+    {
+      "productId": 11115672,
+      "title": "Conde Noble Tinto de verano limón",
+      "groups": [
+        {
+          "price": [
+            0.52
+          ],
+          "provinces": [
+            "01",
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08",
+            "09",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+            "21",
+            "22",
+            "23",
+            "24",
+            "25",
+            "26",
+            "27",
+            "28",
+            "29",
+            "30",
+            "31",
+            "32",
+            "33",
+            "34",
+            "36",
+            "37",
+            "39",
+            "40",
+            "41",
+            "42",
+            "43",
+            "44",
+            "45",
+            "46",
+            "47",
+            "48",
+            "49",
+            "50",
+            "51",
+            "52"
+          ]
+        },
+        {
+          "price": [
+            null
+          ],
+          "provinces": [
+            "35",
+            "38"
+          ]
+        }
+      ]
+    },
+    {
+      "productId": 11150912,
+      "title": "Piña",
+      "groups": [
+        {
+          "price": [
+            1.19
+          ],
+          "provinces": [
+            "01",
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08",
+            "09",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+            "21",
+            "22",
+            "23",
+            "24",
+            "25",
+            "26",
+            "27",
+            "28",
+            "29",
+            "30",
+            "31",
+            "32",
+            "33",
+            "34",
+            "36",
+            "37",
+            "39",
+            "40",
+            "41",
+            "42",
+            "43",
+            "44",
+            "45",
+            "46",
+            "47",
+            "48",
+            "49",
+            "50",
+            "51",
+            "52"
+          ]
+        },
+        {
+          "price": [
+            null
+          ],
+          "provinces": [
+            "35",
+            "38"
+          ]
+        }
+      ]
+    }
+  ],
+  "priceSplitShapes": [
+    {
+      "shape": "none:2 + price:50",
+      "count": 132
+    }
+  ]
+}

@@ -89,6 +89,10 @@ describeIntegration('item prices migration (real Postgres)', () => {
       INSERT INTO "supermarkets" ("name") VALUES ('{"en":"Chain","es":"Cadena"}')
       RETURNING id
     `);
+    // `WAREHOUSE` and not `REGION`, deliberately. The rename to `REGION` is
+    // migration 1757000000000, which is after `ItemPrices`, so the undo above
+    // takes the enum back to its old label. Writing today's name here inserts a
+    // value the type does not hold yet.
     const [{ id: scopeId }] = await dataSource.query(
       `INSERT INTO "price_scopes" ("supermarketId", "kind", "externalKey")
        VALUES ($1, 'WAREHOUSE', '4661') RETURNING id`,

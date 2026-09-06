@@ -224,7 +224,7 @@ export type CreateListDto = {
  */
 export type CreatePriceScopeDto = {
   supermarketId: string;
-  kind: 'NATIONAL' | 'WAREHOUSE' | 'POSTAL_CODE' | 'STORE';
+  kind: 'NATIONAL' | 'REGION' | 'POSTAL_CODE' | 'STORE';
   externalKey?: string | null;
   label?: LocalizedTextDto;
 };
@@ -807,7 +807,7 @@ export type UpdatePricePolicyDto = {
  * `UpdatePriceScopeDto` in the gateway's OpenAPI document.
  */
 export type UpdatePriceScopeDto = {
-  kind?: 'NATIONAL' | 'WAREHOUSE' | 'POSTAL_CODE' | 'STORE';
+  kind?: 'NATIONAL' | 'REGION' | 'POSTAL_CODE' | 'STORE';
   externalKey?: string | null;
   label?: LocalizedTextDto;
 };
@@ -2086,7 +2086,7 @@ export type EnumsPostalCodeSource = 'SOURCE' | 'DERIVED' | 'MANUAL';
  */
 export type EnumsPriceScopeKind =
   | 'NATIONAL'
-  | 'WAREHOUSE'
+  | 'REGION'
   | 'POSTAL_CODE'
   | 'STORE';
 

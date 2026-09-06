@@ -33,10 +33,13 @@ The numbers below come from `dry-run.mjs`, which performed a complete run on
   internal code and 5% carry nothing.
 - **Every price has a validity window.** 166 of 228 price observations expired
   the Sunday of the week they were read, and 56 expired the Sunday after.
-- **20% of products cost different amounts in different regions.** There are 59
-  price regions and they are named after Spanish provinces.
-- **730 stores**, each one naming the price region it belongs to, so a regional
-  price can be attached to the shops it applies to.
+- **A price is published per region, and there are 59 of them.** They are named
+  mostly after Spanish provinces, with a few operational names such as `Cat 2`.
+  Each product carries a price pointer for every region, so the format allows 59
+  different prices for one product. 20% of the sampled products used more than
+  one. See the section below for what grocery did this week.
+- **730 stores**, every single one naming the price region it belongs to, with no
+  gaps, so a regional price attaches to its shops with nothing inferred.
 - **Per store stock is published but always empty.** `/p/api/storestock` answers
   `UNKNOWN` for every product and every store in Spain.
 
@@ -48,6 +51,43 @@ running every week and keeping what earlier runs found.
 That the window is all there is was tested, not assumed. `probe-coverage.mjs`
 searched 105 grocery terms, covering aisles, staples and every LIDL own brand,
 and found **zero** products the empty query had not already returned.
+
+## The region is a real region, and a postal code does not give it
+
+Two probes answer the question that decides the whole price model: what is the
+smallest group of shops LIDL charges the same in?
+
+**A region is not a shop.** 730 shops sit in 59 regions, a mean of 12.4 shops
+each, a median of 7, and 84 in Madrid. Six regions hold exactly one shop, which is
+because those provinces have one Lidl and not because a region means a shop. The
+site's own page state carries `selectedRegion` separately from `selectedZone`,
+with `defaultRegion: "26"`, so choosing a shop on the storefront selects that
+shop's region and the storefront prices per region.
+
+**A postal code does not give the region.** 12 of the 52 provinces hold shops in
+more than one region, covering 273 of the 730 shops. Going finer helps but does
+not fix it: of the 652 full postcodes that hold a Lidl, three hold shops in two
+regions, which are `43700`, `04700` and `28922`.
+
+**It does not need to, because every shop states its own region.**
+`marketingData.offerRegion` is present on all 730 records with no gaps. So the
+harvester copies the region and derives nothing.
+
+**What grocery did this week is not a rule.** Across all 132 priced grocery
+products, no two regions disagreed on a price. Every split had one shape, which
+`out/province-price-conflict.json` states in a line:
+
+```json
+priceSplitShapes: [{ "shape": "none:2 + price:50", "count": 132 }]
+```
+
+That is 50 provinces with a price and the two Canary ones with none. It is
+tempting to read that as three zones, `PEN`, `BAL` and `CAN`, and store three
+scopes instead of 59. **Do not.** The pointer per region is real, a `Livarno` lamp
+in the middle aisle already uses three distinct prices, and a model built on this
+week's agreement cannot store the week LIDL prices one region on its own. The
+zone is worth recording as an attribute, because it explains the missing Canary
+prices, and it decides nothing.
 
 ## The scripts
 
@@ -63,6 +103,8 @@ which is git ignored except for the small reports the plan quotes.
 | `walk-assortment.mjs`   | Walks the in-store assortment and tallies the fields on what it finds.                           |
 | `probe-coverage.mjs`    | The 105 term keyword sweep that showed the empty query is complete.                              |
 | `probe-regions.mjs`     | Proves the store region ids and the price region ids are one id space.                           |
+| `probe-postal-to-region.mjs` | Tests whether a postal code decides the region. It does not. Names the 12 provinces that split. |
+| `probe-province-price-conflict.mjs` | Reads every grocery product page and asks whether the regions inside one province ever charge differently. |
 | `probe-pdp-sample.mjs`  | Reads a spread of product pages and measures how usable `eans` and `regionsV2` are.              |
 | `dry-run.mjs`           | A complete catalog discovery in the shape a runner performs it, writing nothing.                 |
 

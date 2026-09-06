@@ -15,18 +15,26 @@ export enum UnitOfMeasure {
 }
 
 /**
- * The scope a price applies to (plan 0038, section 5.1).
+ * The scope a price applies to (plan 0038, section 5.1; renamed by plan 0089).
  *
- * A chain that publishes one price per warehouse needs one row per warehouse, not
- * one per store: Mercadona answered identically for three warehouses across a 25
- * product sample, so keying prices on the store wrote twelve identical rows for
+ * A chain that publishes one price for a group of shops needs one row per group,
+ * not one per store: Mercadona answered identically for three warehouses across a
+ * 25 product sample, so keying prices on the store wrote twelve identical rows for
  * one city. A chain with no obtainable data instead gets one STORE scope per
  * location and hand entered prices. Both are the same shape, which is why nothing
  * downstream branches on the chain.
  */
 export enum PriceScopeKind {
   NATIONAL = 'NATIONAL',
-  WAREHOUSE = 'WAREHOUSE',
+  /**
+   * A grouping the chain defines and names itself, whatever it calls it.
+   *
+   * Mercadona calls it a warehouse and keys it `4661`. LIDL calls it an offer
+   * region and keys it `26`. Neither is a postal code and neither is a shop, and
+   * the two behave identically here, so they are one kind. This value was
+   * `WAREHOUSE` until plan 0089 found the second chain that needed it.
+   */
+  REGION = 'REGION',
   POSTAL_CODE = 'POSTAL_CODE',
   STORE = 'STORE',
 }

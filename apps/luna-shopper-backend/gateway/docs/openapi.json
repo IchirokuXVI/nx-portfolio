@@ -21900,7 +21900,7 @@
             "type": "string",
             "enum": [
               "NATIONAL",
-              "WAREHOUSE",
+              "REGION",
               "POSTAL_CODE",
               "STORE"
             ]
@@ -21933,7 +21933,7 @@
             "type": "string",
             "enum": [
               "NATIONAL",
-              "WAREHOUSE",
+              "REGION",
               "POSTAL_CODE",
               "STORE"
             ]
@@ -25728,7 +25728,7 @@
         "type": "string",
         "enum": [
           "NATIONAL",
-          "WAREHOUSE",
+          "REGION",
           "POSTAL_CODE",
           "STORE"
         ]

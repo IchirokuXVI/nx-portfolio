@@ -1,4 +1,6 @@
-> **PR:** [#239](https://github.com/IchirokuXVI/nx-portfolio/pull/239)
+> **PR:** [#239](https://github.com/IchirokuXVI/nx-portfolio/pull/239),
+> [#248](https://github.com/IchirokuXVI/nx-portfolio/pull/248) (the `REGION` rename
+> and the price granularity it settles)
 
 # 0089 A catalog that arrives a week at a time
 
@@ -131,19 +133,58 @@ same in", and every `SupermarketLocation` already carries a required `priceScope
   region name, which is a province. 59 scopes for one chain, created on first sight by the run.
 - **A store's `priceScopeId` is its region's scope.** That is written by store discovery, section 9,
   and it is the whole reason store discovery has to run before a price is useful.
-- **A product is ingested once per distinct price.** A product with one price across 54 regions is
-  one ingest against the scopes that share that price. A product with two prices is two.
-  `SourceIngest` takes one `priceScopeId` per call, so the runner groups its observations by price id
-  and calls it once per group.
+- **The run writes one ingest call per scope, not per product.** `SourceIngest.ingest()` takes a
+  single `priceScopeId`, so the runner resolves every product's price for every region first, groups
+  the whole run's observations by scope, and then makes one call per scope carrying every product
+  priced in it. That is about 54 calls of roughly 132 products each, not 54 times 132 calls. Widening
+  `ingest` to accept several scope ids for one set of observations turns those 54 into one, and it is
+  deliberately not done here: it changes a contract every existing caller uses, for a saving of 53
+  batched NATS calls a week.
 
-**`PriceScopeKind` gains `REGION`.** `NATIONAL`, `WAREHOUSE`, `POSTAL_CODE` and `STORE` are the four
-that exist, and a Spanish province is none of them. Calling it `WAREHOUSE` borrows Mercadona's word
-for a different thing and makes the admin list lie. The ripple is named in section 11.
+**Nothing in the source stops the 59 regions disagreeing.** `regionsV2` gives each region its own
+`regionPriceId` pointer and `regionsPrices` is keyed by that id, so a product can carry up to 59
+distinct prices. This week's grocery uses one, plus nothing for the Canaries, and one `Livarno` lamp
+in the middle aisle already uses three. **A model that collapses the regions into the two or three
+groups that happen to agree today cannot store next week's disagreement**, so the scope stays at the
+granularity the source publishes at.
 
-**A region with no price is not a price of zero.** The five Canary region ids carry no current price
-for most products. Those observations are dropped, not written as null and not written as the
-mainland figure. A shopper in Las Palmas is shown nothing rather than a price that does not exist
-there.
+**`WAREHOUSE` is renamed to `REGION`, and that is the whole enum change.** The four values were
+`NATIONAL`, `WAREHOUSE`, `POSTAL_CODE` and `STORE`. A LIDL offer region is not a postal code and not
+a shop, so the only candidate was `WAREHOUSE`, which is Mercadona's word for the same idea: an opaque
+group of shops the chain prices together, keyed by a number the chain publishes. A second value
+beside it makes every reader ask what separates the two, and nothing does, so the one value takes the
+wider name. Migration `1757000000000-PriceScopeRegionRename` runs `ALTER TYPE ... RENAME VALUE`,
+which rewrites the label in place and leaves every row and index untouched. The ripple is named in
+section 11.
+
+**A region with no price is not a price of zero.** The five Canary region ids, which hold 40 shops,
+carry no current price for most products. Those observations are dropped, not written as null and not
+written as the mainland figure. A shopper in Las Palmas is shown nothing rather than a price that
+does not exist there. This is also why `NATIONAL` is the wrong scope for LIDL: it prices those 40
+shops at mainland figures the chain never published.
+
+### 4.1 A postal code is an index, never the answer
+
+The shortcut worth naming, because it looks right, is to derive the region from the shop's postal
+code, which catalog already stores. Two probes measured it and it does not hold.
+
+**The province is far too coarse.** Taking the first two digits, 12 of the 52 Spanish provinces hold
+shops in more than one region, covering 273 of the 730 shops. Madrid splits across `Madrid` and
+`Vit 2`. Las Palmas splits into Gran Canaria, Fuerteventura and Lanzarote.
+`apps/luna-shopper-backend/harvester/docs/research/lidl/probe-postal-to-region.mjs` lists all
+twelve.
+
+**The full five digit code is nearly exact, and nearly is not a schema.** 652 postcodes hold a Lidl.
+Three of them hold shops in two different regions: `43700`, `04700` and `28922`.
+
+**None of it is needed, because the shop states its own region.** Every one of the 730 store records
+carries `marketingData.offerRegion` and `offerRegionName`, with no gaps at all. So a store's scope is
+read from the source, never inferred, and the postal code is not in the path.
+
+A derived `postal code -> price scope` index is still worth building one day, for the different
+question "what does a shopper near here pay" when no shop has been chosen. It answers 649 of 652
+postcodes, it covers only the postcodes that contain a Lidl, which is 652 of roughly 11,000 in Spain,
+and it is derived from the shops rather than the other way round. It is not part of this plan.
 
 ## 5. Which products are supermarket products
 
@@ -278,6 +319,10 @@ shops, official names, street, postcode, province, coordinates, opening hours, a
 So `STORE_DISCOVERY` gains a dispatcher of the same shape `CatalogDiscoveryRunner` already has, and
 `OsmStoreDiscoveryRunner` becomes the `osm-places` case rather than the only case.
 
+`marketingData.offerRegion` is present on all 730 records, with no gaps, which is what makes section
+4.1 a footnote rather than a problem. The link between a shop and the price it pays is stated by the
+chain, so the run copies it and derives nothing.
+
 The LIDL case takes no postal code and no radius. It reads every store in three requests and:
 
 - creates one `PriceScope` per distinct `offerRegion`, keyed on the region id,
@@ -321,11 +366,14 @@ rather than a 401 with a name on it.
   sources disagree.
 - **No nutrition, ingredients or allergens.** The product page publishes none.
 - **No claim of completeness.** Section 2.
-- **`PriceScopeKind.REGION` ripples.** The value is added in
-  `libs/luna-shopper/contracts/src/lib/enums/catalog.enums.ts`, which needs the catalog migration that
-  alters the Postgres enum, the regenerated `openapi.json`, the regenerated
-  `wire-types.ts`, and the admin price scope form. That is the largest single piece of work outside
-  the adapter itself and it is named here so that it is not discovered halfway.
+- **No postal code to region table.** Section 4.1. The shop names its own region, so nothing derives
+  it, and the index that answers the other question is a separate piece of work.
+- **`PriceScopeKind.REGION` no longer ripples, because the rename is already done.** It landed ahead
+  of the adapter, as a change of its own: the enum in
+  `libs/luna-shopper/contracts/src/lib/enums/catalog.enums.ts`, the catalog migration
+  `1757000000000-PriceScopeRegionRename`, the regenerated `openapi.json` and `wire-types.ts`, the
+  admin option list and its English label. It is listed here because it was the largest single piece
+  of work outside the adapter, and pulling it forward is what stops it being discovered halfway.
 
 ## 12. Testing
 
@@ -349,7 +397,8 @@ rather than a 401 with a name on it.
 - `libs/luna-shopper/lidl` exists, is framework free, and its tests pass with no network.
 - `ADAPTER_KEYS` holds `lidl-api`, and `openapi.json` and `wire-types.ts` are regenerated and
   committed.
-- `PriceScopeKind.REGION` exists, with its catalog migration, and the admin form offers it.
+- `PriceScopeKind.REGION` exists, with its catalog migration, and the admin form offers it. **Done
+  ahead of the rest**, as the rename of `WAREHOUSE`.
 - `CatalogDiscoveryRunner` dispatches to `LidlCatalogRunner`, and `StoreDiscoveryRunner` dispatches
   to an OSM case and a LIDL case.
 - A store discovery run against the compose stack creates 59 price scopes and 730 discovered places.
