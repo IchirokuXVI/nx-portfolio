@@ -433,9 +433,9 @@ export interface ShopView {
 
 /**
  * One price scope: the set of stores a chain charges the same in (plan 0038,
- * section 5.1). Mercadona gets one WAREHOUSE scope per warehouse code; a chain
- * with no obtainable data gets one STORE scope per location and hand entered
- * prices, and needs no special case anywhere.
+ * section 5.1). Mercadona gets one REGION scope per warehouse code and LIDL one
+ * per offer region. A chain with no obtainable data gets one STORE scope per
+ * location and hand entered prices, and needs no special case anywhere.
  */
 export interface PriceScopeView {
   id: string;

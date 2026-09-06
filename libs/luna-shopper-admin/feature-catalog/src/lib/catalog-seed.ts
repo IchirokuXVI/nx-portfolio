@@ -51,14 +51,14 @@ export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
   {
     id: 'ps_mercadona_4661',
     supermarketId: MERCADONA,
-    kind: 'WAREHOUSE',
+    kind: 'REGION',
     externalKey: '4661',
     label: { en: 'Córdoba warehouse', es: 'Almacén de Córdoba' },
   },
   {
     id: 'ps_mercadona_3421',
     supermarketId: MERCADONA,
-    kind: 'WAREHOUSE',
+    kind: 'REGION',
     externalKey: '3421',
     label: null,
   },

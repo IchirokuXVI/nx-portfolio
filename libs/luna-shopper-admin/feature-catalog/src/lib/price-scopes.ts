@@ -46,9 +46,9 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
   /**
    * What one scope is called, which is mostly not its label.
    *
-   * A harvested scope has no label at all: it is `WAREHOUSE 4661`, and that is
+   * A harvested scope has no label at all: it is `REGION 4661`, and that is
    * the string an operator recognises, because the external key is the
-   * warehouse number the source publishes. So the kind and the key are the
+   * number the source publishes. So the kind and the key are the
    * fallback rather than the id, which would name it after something nobody has
    * ever seen.
    */
