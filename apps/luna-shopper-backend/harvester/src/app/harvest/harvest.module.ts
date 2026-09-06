@@ -5,6 +5,8 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { HARVESTER_ENTITIES } from '../entities';
+import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
+import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
@@ -66,6 +68,8 @@ import { SupermarketSourceService } from './supermarket-source.service';
     SourceIngest,
     MercadonaCatalogRunner,
     DezaCatalogRunner,
+    CarrefourCatalogRunner,
+    CarrefourDetailRunner,
     CatalogDiscoveryRunner,
     // The one runner that fetches nothing at all (plan 0086, D6): its input is
     // an uploaded document rather than a storefront.

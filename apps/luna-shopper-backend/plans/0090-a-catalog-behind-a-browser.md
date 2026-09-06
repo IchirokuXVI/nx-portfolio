@@ -1,4 +1,6 @@
-> **PR:** [#243](https://github.com/IchirokuXVI/nx-portfolio/pull/243)
+> **PR:** [#243](https://github.com/IchirokuXVI/nx-portfolio/pull/243) (the plan and
+> the research), [#246](https://github.com/IchirokuXVI/nx-portfolio/pull/246) (the
+> adapter and the backfill)
 
 # 0090 A catalog behind a browser
 
@@ -30,7 +32,7 @@ browser driven adapters". This is that adapter. Section 11 says why it stays in 
 ## 1. What was measured
 
 Everything in this plan was measured against the live site on 2026-09-06, with the scripts in
-[`tools/research/carrefour`](../../../tools/research/carrefour/README.md).
+[`apps/luna-shopper-backend/harvester/docs/research/carrefour`](../harvester/docs/research/carrefour/README.md).
 Those scripts are checked in so the numbers can be re-taken, not because they are library code.
 
 | Fact | Value |

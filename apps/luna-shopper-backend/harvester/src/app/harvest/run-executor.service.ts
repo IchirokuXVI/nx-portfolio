@@ -125,6 +125,9 @@ export class RunExecutor implements OnApplicationShutdown {
             {
               supermarketId: run.supermarketId as string,
               priceScopeId: run.priceScopeId ?? undefined,
+              // Plan 0090, section 12.1. The spawn already refused it for
+              // every adapter that has no product page to read.
+              detailBackfill: run.input['detailBackfill'] === true,
             },
             requireSource(source)
           );
