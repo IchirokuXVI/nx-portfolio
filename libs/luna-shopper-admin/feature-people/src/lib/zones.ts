@@ -29,6 +29,10 @@ export const ZONE_STATUS_OPTIONS = [
  * a zone they are merely in, of any membership status, because "why can this
  * person not see their zone" is the question the screen exists to answer.
  *
+ * The owner is askable on its own beside it (plan 0012, section 3), for the
+ * sake of its other answer: "none" is the zones nobody owns, which is what an
+ * owner's deletion leaves behind and the one orphaned row these screens hold.
+ *
  * **Two fields change and the other six do not** (plan 0009, section 3.1).
  * `name` and `config` are the whole of what a zone's own owner may change, and
  * an operator gets exactly the same two. The join code is regenerated rather
@@ -150,6 +154,14 @@ export const ZONES = defineResource<Zone>({
       param: 'userId',
       label: 'people.zones.filter.userId',
       resource: 'users',
+    },
+    {
+      kind: 'reference',
+      param: 'ownerUserId',
+      label: 'people.zones.filter.ownerUserId',
+      resource: 'users',
+      // Null once the owner is deleted and until somebody claims the zone.
+      nullable: true,
     },
     {
       kind: 'date',

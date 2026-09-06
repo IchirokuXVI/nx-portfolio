@@ -5,7 +5,7 @@ import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   AdminHarvestEntriesController,
-  AdminHarvestItemRefsController,
+  AdminHarvestImportsController,
   AdminHarvestPlacesController,
   AdminHarvestRunsController,
   AdminHarvestSourcesController,
@@ -167,8 +167,10 @@ const ADMIN_CONTROLLERS = [
   AdminCatalogLocationItemsController,
   AdminHarvestRunsController,
   AdminHarvestPlacesController,
+  // One queue over one table since plan 0086. `AdminHarvestItemRefsController`
+  // and the two alias controllers were the same queue over two other tables.
   AdminHarvestEntriesController,
-  AdminHarvestItemRefsController,
+  AdminHarvestImportsController,
   AdminHarvestSourcesController,
 ];
 

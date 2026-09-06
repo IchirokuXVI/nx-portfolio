@@ -115,7 +115,7 @@ describe('adminAuthInterceptor', () => {
   let lifecycle: SessionLifecycle;
 
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
     control.refreshes = 0;
     control.refreshFails = false;
     health.probes = 0;
@@ -142,7 +142,7 @@ describe('adminAuthInterceptor', () => {
 
   afterEach(() => {
     backend.verify();
-    sessionStorage.clear();
+    localStorage.clear();
   });
 
   async function signIn() {
@@ -299,7 +299,7 @@ describe('adminAuthInterceptor', () => {
 
       expect(await answer).toBeInstanceOf(HttpErrorResponse);
       expect(sessions.signedIn()).toBe(false);
-      expect(sessionStorage.length).toBe(0);
+      expect(localStorage.length).toBe(0);
     });
 
     /**

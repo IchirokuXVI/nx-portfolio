@@ -1,0 +1,31 @@
+{
+  "productsPerPage": {
+    "mean": 8,
+    "max": 12
+  },
+  "shares": {
+    "withPrice": 0.646,
+    "withUnitPriceOnly": 0.229,
+    "withNeither": 0.125,
+    "withPromotion": 1,
+    "withNullSize": 0,
+    "withBrand": 0.896
+  },
+  "unitPriceLabelPatterns": [
+    "#ML",
+    "KG",
+    "L",
+    "UNIT"
+  ],
+  "headings": [
+    "CARNICERIA",
+    "bebidas",
+    "cover",
+    "drogueria",
+    "lacteos",
+    "perfumeria"
+  ],
+  "unrecognizedHeadings": [
+    "cover"
+  ]
+}

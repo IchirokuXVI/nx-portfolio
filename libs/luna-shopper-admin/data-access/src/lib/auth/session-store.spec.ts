@@ -65,8 +65,8 @@ function setup(service: SessionServiceI) {
 }
 
 describe('SessionStore', () => {
-  beforeEach(() => sessionStorage.clear());
-  afterEach(() => sessionStorage.clear());
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
 
   it('starts with no session', () => {
     const store = setup(serviceThat({ error: new Error('unused') }));
@@ -141,7 +141,7 @@ describe('SessionStore', () => {
       await second.signIn('ops', 'wrong');
 
       expect(second.signedIn()).toBe(false);
-      expect(sessionStorage.length).toBe(0);
+      expect(localStorage.length).toBe(0);
     });
   });
 
@@ -152,7 +152,7 @@ describe('SessionStore', () => {
     store.signOut();
 
     expect(store.signedIn()).toBe(false);
-    expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
   });
 
   /**
@@ -167,6 +167,110 @@ describe('SessionStore', () => {
     await store.signIn('ops', 'ops');
 
     expect(store.token()).toBe('a.b.c');
+  });
+
+  /** Plan 0013, sections 3 and 4. */
+  describe('the other tabs', () => {
+    const KEY = 'luna-shopper-admin.session';
+
+    /** What another tab left in storage, as that tab would have written it. */
+    function shared(token: string, minutes: number): void {
+      localStorage.setItem(
+        KEY,
+        JSON.stringify({
+          adminId: 'adm_1',
+          username: 'ops',
+          displayName: 'Operations',
+          accessToken: token,
+          expiresAt: new Date(Date.now() + minutes * 60 * 1000).toISOString(),
+          receivedAt: new Date().toISOString(),
+        })
+      );
+    }
+
+    /** A refresh that answers, and counts. */
+    function countingService() {
+      const calls = { refreshes: 0 };
+      const service: SessionServiceI = {
+        ...serviceThat({ session }),
+        refresh: async () => {
+          calls.refreshes += 1;
+          return { ...session, accessToken: 'mine' };
+        },
+      };
+      return { service, calls };
+    }
+
+    it('takes a session another tab renewed', async () => {
+      const store = setup(serviceThat({ session }));
+      await store.signIn('ops', 'ops');
+
+      const taken = store.adopt({
+        ...session,
+        accessToken: 'theirs',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      });
+
+      expect(taken).toBe(true);
+      expect(store.token()).toBe('theirs');
+    });
+
+    /**
+     * Storage is not written back. The tab that produced the session already
+     * wrote it, and writing the same value again would be a second `storage`
+     * event for every other tab to react to.
+     */
+    it('does not write back what it adopted', async () => {
+      const store = setup(serviceThat({ session }));
+      await store.signIn('ops', 'ops');
+      const before = localStorage.getItem(KEY);
+
+      store.adopt({
+        ...session,
+        accessToken: 'theirs',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      });
+
+      expect(localStorage.getItem(KEY)).toBe(before);
+    });
+
+    it('refuses a session that does not supersede the held one', async () => {
+      const store = setup(serviceThat({ session }));
+      await store.signIn('ops', 'ops');
+
+      expect(store.adopt({ ...session })).toBe(false);
+      expect(store.token()).toBe('a.b.c');
+    });
+
+    /**
+     * The whole point of plan 0013, section 4. Five tabs decide to renew at the
+     * same instant because they all read the same expiry; the lock lets them in
+     * one at a time, and every one after the first finds the answer already in
+     * storage and asks the gateway for nothing.
+     */
+    it('makes no request when another tab has already renewed', async () => {
+      const { service, calls } = countingService();
+      const store = setup(service);
+      await store.signIn('ops', 'ops');
+      shared('theirs', 30);
+
+      await expect(store.refresh()).resolves.toBe(true);
+
+      expect(calls.refreshes).toBe(0);
+      expect(store.token()).toBe('theirs');
+    });
+
+    /** A stored token no better than the held one is not a renewal. */
+    it('renews for itself when storage holds nothing newer', async () => {
+      const { service, calls } = countingService();
+      const store = setup(service);
+      await store.signIn('ops', 'ops');
+
+      await expect(store.refresh()).resolves.toBe(true);
+
+      expect(calls.refreshes).toBe(1);
+      expect(store.token()).toBe('mine');
+    });
   });
 
   /** Plan 0003, section 4. */
@@ -199,7 +303,7 @@ describe('SessionStore', () => {
       await expect(store.refresh()).resolves.toBe(true);
 
       expect(store.token()).toBe('renewed.token');
-      expect(sessionStorage.length).toBe(1);
+      expect(localStorage.length).toBe(1);
     });
 
     /**
@@ -278,7 +382,7 @@ describe('SessionStore', () => {
 
       await expect(renewing).resolves.toBe(false);
       expect(store.signedIn()).toBe(false);
-      expect(sessionStorage.length).toBe(0);
+      expect(localStorage.length).toBe(0);
     });
   });
 });

@@ -3,47 +3,38 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
-  ITEM_SOURCE_REF_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   POSTAL_CODE_EVENTS,
-  SOURCE_ALIAS_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
-  type AcceptSourceAliasRequest,
-  type CreateItemFromSourceAliasRequest,
+  type AcceptSourceEntryRequest,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
   type DiscoveredPlacePage,
   type DiscoveredPlaceView,
+  type ExportHarvestRunRequest,
   type GroupDiscoveredPlacesRequest,
+  type HarvestRunExportResult,
   type HarvestRunIdRequest,
   type HarvestRunPage,
   type HarvestRunView,
   type ImportDiscoveredPlaceRequest,
-  type ItemSourceRefIdRequest,
-  type ItemSourceRefPage,
-  type ItemSourceRefView,
-  type ItemView,
   type ListDiscoveredPlacesRequest,
   type ListHarvestRunsRequest,
-  type ListItemSourceRefsRequest,
   type ListPostalCodeDiscoveryRequestsRequest,
-  type ListSourceAliasesRequest,
   type ListSourceEntriesRequest,
   type ListSourceLocationsRequest,
   type ListSupermarketSourcesRequest,
   type MapSourceLocationRequest,
   type PostalCodeDiscoveryRequestPage,
   type PostalCodesAddedEvent,
-  type SetManualItemSourceRefRequest,
   type SetSupermarketSourceEnabledRequest,
-  type SourceAliasAcceptResult,
-  type SourceAliasIdRequest,
-  type SourceAliasPage,
-  type SourceAliasView,
   type SourceCatalogEntryPage,
+  type SourceCatalogEntryView,
+  type SourceEntryAcceptResult,
+  type SourceEntryIdRequest,
   type SourceLocationIdRequest,
   type SourceLocationPage,
   type SourceLocationView,
@@ -55,9 +46,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
-import { ItemSourceRefService } from './item-source-ref.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
-import { SourceAliasService } from './source-alias.service';
 import { SourceEntryService } from './source-entry.service';
 import { SourceLocationService } from './source-location.service';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -81,9 +70,7 @@ export class HarvestController {
     private readonly runs: HarvestRunService,
     private readonly places: DiscoveredPlaceService,
     private readonly entries: SourceEntryService,
-    private readonly refs: ItemSourceRefService,
     private readonly shops: SourceLocationService,
-    private readonly aliases: SourceAliasService,
     private readonly sources: SupermarketSourceService,
     private readonly discovery: PostalCodeDiscoveryService
   ) {}
@@ -121,6 +108,20 @@ export class HarvestController {
   @MessagePattern(HARVEST_PATTERNS.runList)
   listRuns(@Payload() req: ListHarvestRunsRequest): Promise<HarvestRunPage> {
     return this.runs.list(req);
+  }
+
+  /**
+   * Everything one run observed, as a file (plan 0086, section 6.2).
+   *
+   * The other half of a file import, and a **read**: it is not gated by
+   * `HARVEST_ENABLED`, because exporting from a machine that crawled to a
+   * cluster that is not allowed to crawl is the point of it.
+   */
+  @MessagePattern(HARVEST_PATTERNS.export)
+  exportRun(
+    @Payload() req: ExportHarvestRunRequest
+  ): Promise<HarvestRunExportResult> {
+    return this.entries.export(req);
   }
 
   // --- The postal code discovery queue (plan 0063) -------------------------
@@ -182,8 +183,13 @@ export class HarvestController {
     return this.places.reject(req);
   }
 
-  // --- Source entries ------------------------------------------------------
+  // --- The one queue (plan 0086, sections 7 and 10) ------------------------
 
+  /**
+   * The rows waiting for a person, for every chain and every source kind.
+   * Absent `status` lists the two that are waiting, which is what the back
+   * office asks for.
+   */
   @MessagePattern(SOURCE_ENTRY_PATTERNS.list)
   listEntries(
     @Payload() req: ListSourceEntriesRequest
@@ -191,11 +197,34 @@ export class HarvestController {
     return this.entries.list(req);
   }
 
+  /**
+   * Bind a row to a product, and write the prices it holds.
+   *
+   * The write is the half that is easy to miss: the run that observed those
+   * prices is over, and without writing here an admin who works the queue after
+   * an eighteen minute walk would have to run it again to get them.
+   */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.accept)
+  acceptEntry(
+    @Payload() req: AcceptSourceEntryRequest
+  ): Promise<SourceEntryAcceptResult> {
+    return this.entries.accept(req);
+  }
+
+  /** The same, for a product the catalog does not hold yet. */
   @MessagePattern(SOURCE_ENTRY_PATTERNS.createItem)
   createItemFromEntry(
     @Payload() req: CreateItemFromSourceEntryRequest
-  ): Promise<ItemView> {
+  ): Promise<SourceEntryAcceptResult> {
     return this.entries.createItem(req);
+  }
+
+  /** Not a product he tracks. The next run that observes the key asks nobody. */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.reject)
+  rejectEntry(
+    @Payload() req: SourceEntryIdRequest
+  ): Promise<SourceCatalogEntryView> {
+    return this.entries.reject(req);
   }
 
   // --- Source locations: which shop of theirs is which of ours (plan 0084) --
@@ -233,82 +262,6 @@ export class HarvestController {
     @Payload() req: SourceLocationIdRequest
   ): Promise<SourceLocationView> {
     return this.shops.unignore(req);
-  }
-
-  // --- Source aliases (plan 0081) ------------------------------------------
-
-  /**
-   * The queue of printed names waiting for a person. Absent `status` lists the
-   * two that are waiting, which is what the back office asks for.
-   */
-  @MessagePattern(SOURCE_ALIAS_PATTERNS.list)
-  listAliases(
-    @Payload() req: ListSourceAliasesRequest
-  ): Promise<SourceAliasPage> {
-    return this.aliases.list(req);
-  }
-
-  /**
-   * Bind a printed name to a product, and write the price it was queued for.
-   * The only thing besides {@link createItemFromAlias} that ever produces an
-   * ACTIVE alias: a run proposes and never binds.
-   */
-  @MessagePattern(SOURCE_ALIAS_PATTERNS.accept)
-  acceptAlias(
-    @Payload() req: AcceptSourceAliasRequest
-  ): Promise<SourceAliasAcceptResult> {
-    return this.aliases.accept(req);
-  }
-
-  /** The same, for a product the catalog does not hold yet. */
-  @MessagePattern(SOURCE_ALIAS_PATTERNS.createItem)
-  createItemFromAlias(
-    @Payload() req: CreateItemFromSourceAliasRequest
-  ): Promise<SourceAliasAcceptResult> {
-    return this.aliases.createItem(req);
-  }
-
-  /** Not a product he tracks. The next leaflet printing it does not ask again. */
-  @MessagePattern(SOURCE_ALIAS_PATTERNS.reject)
-  rejectAlias(@Payload() req: SourceAliasIdRequest): Promise<SourceAliasView> {
-    return this.aliases.reject(req);
-  }
-
-  // --- Item source refs ----------------------------------------------------
-
-  @MessagePattern(ITEM_SOURCE_REF_PATTERNS.list)
-  listRefs(
-    @Payload() req: ListItemSourceRefsRequest
-  ): Promise<ItemSourceRefPage> {
-    return this.refs.list(req);
-  }
-
-  @MessagePattern(ITEM_SOURCE_REF_PATTERNS.listUnresolved)
-  listUnresolvedRefs(
-    @Payload() req: ListItemSourceRefsRequest
-  ): Promise<ItemSourceRefPage> {
-    return this.refs.listUnresolved(req);
-  }
-
-  @MessagePattern(ITEM_SOURCE_REF_PATTERNS.confirm)
-  confirmRef(
-    @Payload() req: ItemSourceRefIdRequest
-  ): Promise<ItemSourceRefView> {
-    return this.refs.confirm(req);
-  }
-
-  @MessagePattern(ITEM_SOURCE_REF_PATTERNS.reject)
-  rejectRef(
-    @Payload() req: ItemSourceRefIdRequest
-  ): Promise<ItemSourceRefView> {
-    return this.refs.reject(req);
-  }
-
-  @MessagePattern(ITEM_SOURCE_REF_PATTERNS.setManual)
-  setManualRef(
-    @Payload() req: SetManualItemSourceRefRequest
-  ): Promise<ItemSourceRefView> {
-    return this.refs.setManual(req);
   }
 
   // --- Source configuration ------------------------------------------------

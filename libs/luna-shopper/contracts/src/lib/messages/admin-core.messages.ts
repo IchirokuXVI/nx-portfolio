@@ -259,10 +259,28 @@ export interface AdminZoneDetailView extends AdminZoneView {
  * A member counts, not only an owner. Somebody asking which zones a person is in
  * wants the answer for a person who joined one, and filtering on
  * `zones.ownerUserId` would silently answer a narrower question.
+ *
+ * The owner **is** askable on its own, beside that filter rather than instead
+ * of it (admin plan 0012, section 3), because of its other answer: the zones
+ * with no owner are what deleting an owner leaves behind, and an operator
+ * looking for what to claim or reap needs to be able to list them.
  */
 export interface ListAdminZonesRequest extends AdminCredential, PageQuery {
   /** The user whose zones these are, as owner or as member of any status. */
   targetUserId?: string;
+  /** The user who owns these zones. Narrower than `targetUserId` on purpose. */
+  ownerUserId?: string;
+  /**
+   * Only the zones with no owner: `ownerUserId IS NULL`, which is the state a
+   * zone is left in when its owner is deleted and nobody has claimed it.
+   *
+   * A separate flag rather than a null `ownerUserId`, because absent already
+   * means "any owner" and a filter cannot spell "no owner" by leaving itself
+   * out. `false` is the same as absent. Set beside an `ownerUserId` it asks for
+   * the zones somebody owns that nobody owns, which is nothing, and the
+   * service answers exactly that rather than picking one of the two.
+   */
+  withoutOwner?: boolean;
   /** ISO 8601. Inclusive lower bound on `createdAt`. */
   createdAfter?: string;
   /** ISO 8601. Exclusive upper bound on `createdAt`. */
@@ -342,7 +360,8 @@ export interface SetAdminZoneDeletionMarkRequest extends AdminCredential {
 }
 
 /** A page of one zone's memberships (plan 0077, section 9). */
-export interface ListAdminMembershipsRequest extends AdminCredential, PageQuery {
+export interface ListAdminMembershipsRequest
+  extends AdminCredential, PageQuery {
   zoneId: string;
 }
 
@@ -451,9 +470,7 @@ export interface AdminListIdRequest extends AdminCredential {
 }
 
 /** A page of one list's lines (plan 0077, section 9). */
-export interface ListAdminListLinesRequest
-  extends AdminCredential,
-    PageQuery {
+export interface ListAdminListLinesRequest extends AdminCredential, PageQuery {
   listId: string;
 }
 

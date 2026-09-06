@@ -1,0 +1,64 @@
+<!--
+  Always dismissible. Nothing on this sheet is a request that must be seen through:
+  the resend is one call whose whole outcome is a sentence, and closing before it lands
+  loses a sentence rather than a result (unlike the rename and delete sheets, which
+  hold the exit while their write is out).
+-->
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  #shell
+  labelledBy="account-confirm-email-title"
+>
+  <lib-mail-icon aria-hidden="true" class="mark" />
+
+  <h2 class="title" id="account-confirm-email-title">
+    {{ 'account.email.confirm.title' | rokuT }}
+  </h2>
+
+  @if (confirmed()) {
+    <!--
+      Reachable two ways: the link was opened in another tab while this was up, and a
+      cold arrival at this URL on an account that never needed it. Nothing guards the
+      route on it, because a guard would answer with a redirect where a sentence is
+      what is wanted.
+    -->
+    <p class="body">
+      {{ 'account.email.confirm.already' | rokuT: { email: email() ?? '' } }}
+    </p>
+  } @else {
+    @if (email(); as address) {
+      <p class="body">
+        {{ 'account.email.confirm.body' | rokuT: { email: address } }}
+      </p>
+
+      <!--
+        The offer, and the countdown that keeps it honest. Ready reads "Still want to
+        confirm it? Send it again", which is the question this sheet was opened to
+        answer; the dashboard's copy asks the other one.
+      -->
+      <lib-resend-sentence
+        (resend)="resend()"
+        [state]="resendState()"
+        [waitSeconds]="resendWait()"
+        class="resend"
+        promptKey="auth.resend.promptExpired"
+      />
+    } @else {
+      <!--
+        A cold arrival, before the profile has landed. The address is the subject of
+        every sentence here, so there is nothing to draw until it exists.
+      -->
+      <p aria-live="polite" class="body" role="status">
+        {{ 'account.email.loading' | rokuT }}
+      </p>
+    }
+  }
+
+  <!--
+    Through the shell rather than emitting straight out, so Close plays the same fall
+    the scrim and Escape do.
+  -->
+  <button (click)="shell.requestDismiss()" class="cancel" type="button">
+    {{ 'account.email.confirm.close' | rokuT }}
+  </button>
+</lib-sheet-shell>

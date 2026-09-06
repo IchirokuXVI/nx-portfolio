@@ -310,6 +310,19 @@ describe('the zones descriptor', () => {
   });
 
   /**
+   * Plan 0012, section 3: the owner alone is askable, and its "none" is the
+   * zones an owner's deletion left behind. The person filter offers no "none",
+   * because a zone nobody is in at all is not a question with a route.
+   */
+  it('offers none on the owner filter and on no other', () => {
+    const offering = (ZONES.filters ?? [])
+      .filter((filter) => filter.kind === 'reference' && filter.nullable)
+      .map((filter) => filter.param);
+
+    expect(offering).toEqual(['ownerUserId']);
+  });
+
+  /**
    * Plan 0074, section 3: where an id does not resolve, because a user was
    * reaped or a race was lost, the screen renders the id. A listing never fails
    * because a decoration failed.

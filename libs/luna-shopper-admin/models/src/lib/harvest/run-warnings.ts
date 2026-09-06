@@ -2,15 +2,15 @@ import type * as Wire from '../wire/wire-types';
 import type { HarvestRun } from './harvest-run';
 
 /**
- * What a leaflet import dropped, and why (admin plan 0010, section 5).
+ * What a file import dropped, and why (admin plan 0010, section 5).
  *
- * A `LEAFLET_IMPORT` run's counters say how much was skipped and how much was
- * queued. They do not say which offer or which rule, and that is the question
+ * A `FILE_IMPORT` run's counters say how much was skipped and how much was
+ * queued. They do not say which product or which rule, and that is the question
  * the operator actually has: the owner's condition for dropping loyalty offers
  * at all was that he could see afterwards what had been dropped.
  *
- * The extractor's own warnings ride in the same list with code `EXTRACTOR`
- * (backend plan 0081, section 7), so what the extractor lost and what the
+ * The producer's own warnings ride in the same list with code `EXTRACTOR`
+ * (backend plan 0086, section 6.1), so what the producer lost and what the
  * import skipped are read in one place rather than in two.
  */
 export interface RunWarningRow {
@@ -30,13 +30,12 @@ export interface RunWarningRow {
 /**
  * Whether this run read a document rather than fetched anything.
  *
- * The one thing that decides whether the warnings table and the queue link are
- * drawn at all. A discovery run's `warnings` is empty, so drawing an empty
- * table for it would be harmless and would still be an empty table on every
- * catalog run anybody opens.
+ * The one thing that decides whether the warnings table is drawn at all. A
+ * discovery run's `warnings` is empty, so drawing an empty table for it would be
+ * harmless and would still be an empty table on every catalog run anybody opens.
  */
-export function isLeafletRun(run: HarvestRun | null): boolean {
-  return run !== null && run.mode === 'LEAFLET_IMPORT';
+export function isFileImportRun(run: HarvestRun | null): boolean {
+  return run !== null && run.mode === 'FILE_IMPORT';
 }
 
 /**
@@ -64,14 +63,14 @@ export function runWarningRows(
 }
 
 /**
- * How many offers this run put in front of a person.
+ * How many products this run put in front of a person.
  *
- * `notFound` is the counter the import writes a queue entry against (backend
- * plan 0081, section 7), so it is the count the queue link carries. Naming it
- * here rather than reading `notFound` at the call site is the whole of the
- * difference: on a crawl that counter means a product the storefront no longer
- * stocks, and the two are not the same number with two names.
+ * `notFound` is the counter the import writes a queue entry against, so it is
+ * the count the queue link carries. Naming it here rather than reading
+ * `notFound` at the call site is the whole of the difference: on a crawl that
+ * counter means a product the storefront no longer stocks, and the two are not
+ * the same number with two names.
  */
 export function queuedByRun(run: HarvestRun | null): number {
-  return run === null || !isLeafletRun(run) ? 0 : run.notFound;
+  return run === null || !isFileImportRun(run) ? 0 : run.notFound;
 }

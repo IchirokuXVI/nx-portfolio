@@ -46,7 +46,7 @@ export const DEFAULT_GEMINI_BASE_URL =
  *
  * 2 MB, and the number is one decision rather than three guesses: base64 inflates
  * it to about 2.7 MB on the broker leg, the transcript and envelope take it under
- * 3 MB, and `max_payload` is 8 MB. The headroom is deliberate — setting the
+ * 3 MB, and `max_payload` is 16 MB. The headroom is deliberate — setting the
  * broker just above the cap would mean the next change to either number has to
  * move both.
  *

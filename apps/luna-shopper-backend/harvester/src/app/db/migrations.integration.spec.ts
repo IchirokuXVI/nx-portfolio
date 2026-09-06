@@ -14,6 +14,11 @@ import { HARVESTER_ENTITIES } from '../entities';
  * that either works or silently does not: a mocked repository cannot tell you
  * which, and neither can reading it.
  *
+ * The **fold** of plan 0086 has a spec of its own beside this one
+ * (`one-source-product.migration.integration.spec.ts`), because it needs the
+ * state before a migration rather than after every migration, so it builds a
+ * database of its own rather than reading this one.
+ *
  *   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up
  *   LUNA_INTEGRATION=1 HARVESTER_DB_URL=postgres://luna_harvester:luna_harvester@localhost:<port>/luna_harvester \
  *     npx nx run luna-shopper-backend-harvester:test-integration
@@ -44,12 +49,16 @@ describeIntegration('harvester schema (real Postgres)', () => {
     const rows = await dataSource.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`
     );
-    const names = new Set(rows.map((r: { table_name: string }) => r.table_name));
+    const names = new Set(
+      rows.map((r: { table_name: string }) => r.table_name)
+    );
     for (const table of [
       'supermarket_sources',
       'harvest_runs',
       'source_catalog_entries',
-      'item_source_refs',
+      // The price each scope stated for one of those rows (plan 0086, D3).
+      // `item_source_refs` and `source_aliases` folded into the row itself.
+      'source_entry_prices',
       'discovered_places',
     ]) {
       expect(names.has(table)).toBe(true);
@@ -74,7 +83,7 @@ describeIntegration('harvester schema (real Postgres)', () => {
     await expect(
       dataSource.query(
         `INSERT INTO "harvest_runs" ("supermarketId", "mode", "status", "correlationId")
-         VALUES ($1, 'REFRESH', 'PENDING', 'integration-test')`,
+         VALUES ($1, 'FILE_IMPORT', 'PENDING', 'integration-test')`,
         [supermarketId]
       )
     ).rejects.toThrow(/uq_harvest_run_active/);
@@ -87,7 +96,7 @@ describeIntegration('harvester schema (real Postgres)', () => {
     await expect(
       dataSource.query(
         `INSERT INTO "harvest_runs" ("supermarketId", "mode", "status", "correlationId")
-         VALUES ($1, 'REFRESH', 'PENDING', 'integration-test')`,
+         VALUES ($1, 'FILE_IMPORT', 'PENDING', 'integration-test')`,
         [supermarketId]
       )
     ).resolves.toBeDefined();
@@ -133,7 +142,7 @@ describeIntegration('harvester schema (real Postgres)', () => {
       await expect(
         dataSource.query(
           `INSERT INTO "harvest_runs" ("supermarketId", "mode", "status", "correlationId")
-           VALUES ($1, 'REFRESH', 'RUNNING', 'integration-test')`,
+           VALUES ($1, 'CATALOG_DISCOVERY', 'RUNNING', 'integration-test')`,
           [supermarketId]
         )
       ).resolves.toBeDefined();

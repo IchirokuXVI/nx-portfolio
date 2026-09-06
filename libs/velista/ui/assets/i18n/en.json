@@ -166,6 +166,8 @@
       "password": "Password",
       "emailPlaceholder": "you@example.com",
       "passwordPlaceholder": "Your password",
+      "confirmPassword": "Confirm password",
+      "confirmPasswordPlaceholder": "Type it again",
       "passwordRule": "At least 8 characters",
       "showPassword": "Show password",
       "hidePassword": "Hide password"
@@ -182,6 +184,7 @@
     "nudge": {
       "title": "Confirm your email",
       "body": "We sent a link to {{email}}. You can carry on without it, but confirming keeps the account yours",
+      "bodyStanding": "{{email}} is not confirmed yet. You can carry on without it, but confirming keeps the account yours",
       "dismiss": "Dismiss"
     },
     "resend": {
@@ -199,6 +202,7 @@
       "emailTakenAction": "Sign in instead",
       "badEmail": "That does not look like an email address",
       "shortPassword": "Passwords need at least 8 characters",
+      "passwordMismatch": "Those two passwords are not the same. Check the second one",
       "tooMany": "Too many tries. Wait a minute and try again"
     }
   },
@@ -643,7 +647,13 @@
       "unconfirmed": "Not confirmed",
       "loading": "Loading your email",
       "failed": "We could not read your account details",
-      "retry": "Try again"
+      "retry": "Try again",
+      "confirm": {
+        "title": "Confirm your email",
+        "body": "{{email}} is not confirmed yet. Open the link we emailed you to confirm it. You can carry on without it, but confirming keeps the account yours",
+        "already": "{{email}} is confirmed. There is nothing left to do here",
+        "close": "Close"
+      }
     },
     "password": {
       "label": "Password",

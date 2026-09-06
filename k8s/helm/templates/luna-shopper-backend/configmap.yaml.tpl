@@ -104,7 +104,7 @@ part of the render and would trip that very check.
   # for. The comment is already stored and playable; this only stops a hung
   # provider holding a task behind a request that was answered.
   VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: {{ $cfg.voiceCommentTranscribeTimeoutMs | default 45000 | quote }}
-  # --- The leaflet upload (plan 0081, section 7) -----------------------------
+  # --- The file import (plan 0086, section 10) -------------------------------
   #
   # The one route on this gateway with a body limit of its own. Nest's JSON
   # parser defaults to 100 KB and this gateway configured none, so every real
@@ -112,9 +112,12 @@ part of the render and would trip that very check.
   # with a bare 413 before the route existed. The app is now created with no
   # built in parser and mounts this path's own ahead of the default one.
   #
-  # Gateway only. NATS carries 8 MB, so the broker needs nothing, and the
-  # harvester reads the document off a message rather than off a request.
-  LEAFLET_MAX_BYTES: {{ $cfg.leafletMaxBytes | default 2097152 | quote }}
+  # 10 MB, because the file is no longer only a leaflet: a finished walk of a
+  # chain's 4,232 products exports one, and a cluster that is not allowed to
+  # crawl imports it. Gateway only, and the **broker had to be raised with it**:
+  # the document crosses whole inside `harvest.spawn`, so `nats.maxPayload` is
+  # 16 MB rather than the 8 MB this would have sat against.
+  HARVESTER_FILE_IMPORT_MAX_BYTES: {{ $cfg.fileImportMaxBytes | default 10485760 | quote }}
   # --- The harvester (plan 0038) --------------------------------------------
   #
   # Rendered unconditionally, even with `harvester.enabled` false and no harvester

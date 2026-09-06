@@ -5,15 +5,17 @@ import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { toGatewayError } from '../gateway-error';
 import type {
-  AliasQuery,
+  AcceptSourceEntryInput,
+  CreateItemFromSourceEntryInput,
   EntryQuery,
   HarvestServiceI,
-  ItemRefQuery,
+  ImportHarvestDocumentInput,
   PageQuery,
   PlaceGroupQuery,
   PlaceQuery,
   RunQuery,
   ShopQuery,
+  SourceEntryAcceptResult,
 } from './harvest-service';
 
 /** Everything under `/v1/admin/harvest`, which is where all of it already is. */
@@ -104,146 +106,66 @@ export class HarvestApi implements HarvestServiceI {
   }
 
   /**
-   * Entries are addressed under their chain, not under a flat collection.
+   * The one queue, over one flat collection (backend plan 0086, section 10).
    *
-   * `supermarketId` is a path segment rather than a filter, which is why this
-   * screen asks which chain before it can ask anything else. Plan 0006 section 1
-   * lists `GET .../entries` alongside `groups`, `import` and `reject`, but those
-   * three belong to `places`: there is no grouping route for entries and no way
-   * to reject one, so this queue offers the two things that exist.
+   * `GET /entries` with the chain as a filter, where it used to be
+   * `GET /supermarkets/{id}/entries` with the chain as a path segment. The three
+   * decisions below are addressed by the row's own id, which is unique and which
+   * an operator acting on a row has, so none of them names the chain twice.
    */
   listEntries(query: EntryQuery): Promise<Wire.HarvestSourceCatalogEntryPage> {
-    const { supermarketId, ...rest } = query;
-    return this._send(
-      'get',
-      `${ROOT}/supermarkets/${segment(supermarketId)}/entries`,
-      { params: toParams(rest) }
-    );
+    return this._send('get', `${ROOT}/entries`, { params: toParams(query) });
+  }
+
+  acceptEntry(
+    id: string,
+    input: AcceptSourceEntryInput
+  ): Promise<SourceEntryAcceptResult> {
+    return this._send('post', `${ROOT}/entries/${segment(id)}/accept`, {
+      body: input,
+    });
   }
 
   createItemFromEntry(
-    supermarketId: string,
-    entryId: string,
-    input: Wire.CreateItemFromEntryDto
-  ): Promise<Wire.CatalogItemView> {
-    return this._send(
-      'post',
-      `${ROOT}/supermarkets/${segment(supermarketId)}/entries/${segment(
-        entryId
-      )}/item`,
-      { body: input }
-    );
-  }
-
-  listItemRefs(query: ItemRefQuery): Promise<Wire.HarvestItemSourceRefPage> {
-    return this._send('get', `${ROOT}/item-refs`, { params: toParams(query) });
-  }
-
-  listUnresolvedItemRefs(
-    query: ItemRefQuery
-  ): Promise<Wire.HarvestItemSourceRefPage> {
-    return this._send('get', `${ROOT}/item-refs/unresolved`, {
-      params: toParams(query),
+    id: string,
+    input: CreateItemFromSourceEntryInput
+  ): Promise<SourceEntryAcceptResult> {
+    return this._send('post', `${ROOT}/entries/${segment(id)}/item`, {
+      body: input,
     });
   }
 
-  setManualItemRef(
-    input: Wire.SetManualItemSourceRefDto
-  ): Promise<Wire.HarvestItemSourceRefView> {
-    return this._send('put', `${ROOT}/item-refs`, { body: input });
-  }
-
-  confirmItemRef(id: string): Promise<Wire.HarvestItemSourceRefView> {
-    return this._send('post', `${ROOT}/item-refs/${segment(id)}/confirm`, {
-      body: {},
-    });
-  }
-
-  rejectItemRef(id: string): Promise<Wire.HarvestItemSourceRefView> {
-    return this._send('post', `${ROOT}/item-refs/${segment(id)}/reject`, {
+  rejectEntry(id: string): Promise<Wire.HarvestSourceCatalogEntryView> {
+    return this._send('post', `${ROOT}/entries/${segment(id)}/reject`, {
       body: {},
     });
   }
 
   /**
-   * A leaflet, uploaded (backend plan 0081, section 7).
+   * A harvest document, uploaded (backend plan 0086, section 6.2).
    *
-   * A plain JSON body, and deliberately not multipart: the extractor produces
-   * JSON, the schema validates JSON, and a form part around it would add a
-   * parse step for nothing. This is the one route in the gateway with a body
-   * limit of its own, because the default parser refuses 100 KB and a real
-   * leaflet is three times that.
+   * A plain JSON body, and deliberately not multipart: the producer emits JSON,
+   * the schema validates JSON, and a form part around it would add a parse step
+   * for nothing. This is the one route in the gateway with a body limit of its
+   * own, raised again by `0086` because a re-imported catalog walk is four
+   * thousand products rather than a leaflet's two hundred.
    */
-  importLeaflet(
-    input: Wire.ImportLeafletDto
+  importDocument(
+    input: ImportHarvestDocumentInput
   ): Promise<Wire.HarvestHarvestRunView> {
-    return this._send('post', `${ROOT}/leaflets`, { body: input });
+    return this._send('post', `${ROOT}/imports`, { body: input });
   }
 
   /**
-   * One chain's queued printed names (backend plan 0081, section 2).
+   * A finished run's rows, as a document (backend plan 0086, section 6.2).
    *
-   * Under the chain in the path, like the entries queue and unlike the shops
-   * one, because that is where the gateway declares it. So `supermarketId` is
-   * pulled out of the query rather than sent as a filter: sending it as well
-   * would be a property the DTO does not declare, and the validation pipe
-   * refuses the whole request over one.
+   * Read as JSON rather than as a blob, and turned into a file by the screen.
+   * The request carries the bearer token, so it cannot be a plain link an anchor
+   * follows, and the file's name is the chain, the scope and the day, which the
+   * screen resolves through the directory and the document does not spell out.
    */
-  listAliases(query: AliasQuery): Promise<Wire.HarvestSourceAliasPage> {
-    const { supermarketId, ...rest } = query;
-    return this._send(
-      'get',
-      `${ROOT}/supermarkets/${segment(supermarketId)}/aliases`,
-      { params: toParams(rest) }
-    );
-  }
-
-  /**
-   * Bind a printed name to a product, which is what writes the price.
-   *
-   * The three decisions are addressed by the alias rather than by the chain: an
-   * alias id is unique and an operator acting on a row has it. Accepting is not
-   * only a binding: the run that queued this row is over and its offer sits in
-   * the run's stored document, so the harvester writes the price it was queued
-   * for and answers how many rows it wrote.
-   */
-  acceptAlias(
-    id: string,
-    input: Wire.AcceptSourceAliasDto
-  ): Promise<Wire.HarvestSourceAliasAcceptResult> {
-    return this._send('post', `${ROOT}/aliases/${segment(id)}/accept`, {
-      body: input,
-    });
-  }
-
-  /**
-   * The same, for a product the catalog does not hold yet.
-   *
-   * **One call**, the way `entries/:entryId/item` is one call: it creates the
-   * item and binds the alias in the harvester. Two calls would leave a window
-   * where an item exists that nothing points at, and the operator would have no
-   * way to tell that from a queue row they had not decided.
-   */
-  createItemFromAlias(
-    id: string,
-    input: Wire.CreateItemFromAliasDto
-  ): Promise<Wire.HarvestSourceAliasAcceptResult> {
-    return this._send('post', `${ROOT}/aliases/${segment(id)}/item`, {
-      body: input,
-    });
-  }
-
-  /**
-   * Not a product he tracks.
-   *
-   * The row stays as `REJECTED` rather than being deleted, so the next leaflet
-   * that prints the string skips it with a warning instead of asking again. The
-   * status is the owner's, and a run does not get to overwrite a decision.
-   */
-  rejectAlias(id: string): Promise<Wire.HarvestSourceAliasView> {
-    return this._send('post', `${ROOT}/aliases/${segment(id)}/reject`, {
-      body: {},
-    });
+  exportRun(id: string): Promise<Readonly<Record<string, unknown>>> {
+    return this._send('get', `${ROOT}/runs/${segment(id)}/export`);
   }
 
   /**

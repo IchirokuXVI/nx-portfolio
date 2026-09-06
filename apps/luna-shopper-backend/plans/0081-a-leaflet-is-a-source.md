@@ -317,6 +317,10 @@ Multipart is not used: the admin produces JSON, the schema validates JSON, and a
 it adds a parse step for nothing. NATS carries 8 MB (`nats.conf`, `values.yaml`), so the broker
 needs nothing.
 
+> Plan `0086` renamed that route to `POST /v1/admin/harvest/imports` and the setting to
+> `HARVESTER_FILE_IMPORT_MAX_BYTES`, raised the cap to 10 MB because a whole chain's assortment is
+> exported through it, and raised `max_payload` to 16 MB to carry it.
+
 The route is a new controller, `admin/harvest/leaflets` version 1, beside the four in
 `harvest.controller.ts`. Its body is `{ supermarketId, priceScopeId, validFrom?, validUntil?,
 document }`. It validates, then sends `harvest.spawn` with mode `LEAFLET_IMPORT`, and answers the

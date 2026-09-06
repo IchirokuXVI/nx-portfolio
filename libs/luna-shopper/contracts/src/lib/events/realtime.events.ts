@@ -15,6 +15,12 @@ export enum RealtimeEvent {
    */
   ZoneCreated = 'zone.created',
   ZoneUpdated = 'zone.updated',
+  /**
+   * A zone was deleted. Addressed to the zone room **and** to every user whose
+   * membership was still PENDING (plan 0030, section 5): an applicant is refused
+   * the zone room, so the room alone would leave their open join request drawn
+   * over a group that no longer exists. The payload is `{ id }`.
+   */
   ZoneDeleted = 'zone.deleted',
   ZoneMarkedForDeletion = 'zone.markedForDeletion',
   ZoneOwnershipChanged = 'zone.ownershipChanged',

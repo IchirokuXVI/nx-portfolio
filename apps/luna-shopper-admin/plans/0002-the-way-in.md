@@ -57,6 +57,12 @@ already failed against themselves.
 
 ## 3. Where the token lives
 
+> **Superseded by [`0013`](0013-one-session-for-every-tab.md).** The store is `localStorage` now.
+> The limit this section states below, that the session is per tab, is the thing `0013` exists to
+> remove, and the paragraph about a `localStorage` handshake being more machinery than it saves is
+> the judgement it reverses. What follows is kept because it says what the token is and why memory
+> only was given up, both of which still hold.
+
 **In `sessionStorage`, and nowhere else.** A signal in a provided service, mirrored into that one
 store.
 

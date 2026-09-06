@@ -3,17 +3,30 @@ import { fakeAudit } from '../audit/core-audit.testing';
 import { Zone } from '../entities';
 import { ZoneReaperService } from './zone-reaper.service';
 
-function build(zones: Partial<Zone>[]) {
+/**
+ * `applicants` are the user ids holding a PENDING membership in the zone under
+ * test. They are the one audience the zone room cannot carry the deletion to,
+ * which is why the reaper reads them (plan 0030, section 5).
+ */
+function build(zones: Partial<Zone>[], applicants: string[] = []) {
   const zonesRepo = {
     find: jest.fn(async () => zones.map((z) => ({ ...z }))),
     findOne: jest.fn(async () => (zones[0] ? { ...zones[0] } : null)),
     delete: jest.fn(async () => ({ affected: 1 })),
   };
-  const events = { emit: jest.fn() };
+  const membershipsRepo = {
+    find: jest.fn(async () => applicants.map((userId) => ({ userId }))),
+  };
+  const events = { emitTo: jest.fn() };
   const logger = { log: jest.fn(), error: jest.fn() };
   const configService = {
     getOrThrow: () => ({
-      reaper: { enabled: true, graceMs: 1000, intervalMs: 1000, batchSize: 200 },
+      reaper: {
+        enabled: true,
+        graceMs: 1000,
+        intervalMs: 1000,
+        batchSize: 200,
+      },
     }),
   };
   const audit = fakeAudit([
@@ -21,12 +34,13 @@ function build(zones: Partial<Zone>[]) {
   ]);
   const svc = new ZoneReaperService(
     zonesRepo as never,
+    membershipsRepo as never,
     events as never,
     logger as never,
     audit.service,
     configService as never
   );
-  return { svc, zonesRepo, events, audit };
+  return { svc, zonesRepo, membershipsRepo, events, audit };
 }
 
 describe('ZoneReaperService.reap', () => {
@@ -36,20 +50,45 @@ describe('ZoneReaperService.reap', () => {
     ]);
     await expect(svc.reap()).resolves.toBe(1);
     expect(zonesRepo.delete).toHaveBeenCalledWith({ id: 'z1' });
-    expect(events.emit).toHaveBeenCalledWith(
+    expect(events.emitTo).toHaveBeenCalledWith(
       RealtimeEvent.ZoneDeleted,
-      'z1',
+      { zoneId: 'z1' },
       { id: 'z1' }
+    );
+  });
+
+  it('addresses the deletion to whoever was still waiting to join', async () => {
+    const { svc, zonesRepo, membershipsRepo, events } = build(
+      [{ id: 'z1', ownerUserId: null, status: ZoneStatus.MARKED_FOR_DELETION }],
+      ['applicant-1', 'applicant-2']
+    );
+
+    await svc.reap();
+
+    // A PENDING member is refused the zone room, so the room alone would leave
+    // their request drawn over a group that no longer exists.
+    expect(events.emitTo).toHaveBeenCalledWith(
+      RealtimeEvent.ZoneDeleted,
+      { zoneId: 'z1', userIds: ['applicant-1', 'applicant-2'] },
+      { id: 'z1' }
+    );
+    // Read before the delete: the membership rows cascade with the zone.
+    expect(membershipsRepo.find.mock.invocationCallOrder[0]).toBeLessThan(
+      zonesRepo.delete.mock.invocationCallOrder[0]
     );
   });
 
   it('skips a zone that regained an owner between the query and now', async () => {
     const { svc, zonesRepo, events } = build([
-      { id: 'z2', ownerUserId: 'rescuer', status: ZoneStatus.MARKED_FOR_DELETION },
+      {
+        id: 'z2',
+        ownerUserId: 'rescuer',
+        status: ZoneStatus.MARKED_FOR_DELETION,
+      },
     ]);
     await expect(svc.reap()).resolves.toBe(0);
     expect(zonesRepo.delete).not.toHaveBeenCalled();
-    expect(events.emit).not.toHaveBeenCalled();
+    expect(events.emitTo).not.toHaveBeenCalled();
   });
 
   it('returns 0 when nothing is eligible', async () => {
@@ -80,9 +119,11 @@ describe('ZoneReaperService.deleteZoneAsOperator', () => {
     expect(zonesRepo.delete).toHaveBeenCalledWith({ id: 'z1' });
     // The same announcement the scheduled path makes, so a client holding the
     // zone hears about it whichever removed it.
-    expect(events.emit).toHaveBeenCalledWith(RealtimeEvent.ZoneDeleted, 'z1', {
-      id: 'z1',
-    });
+    expect(events.emitTo).toHaveBeenCalledWith(
+      RealtimeEvent.ZoneDeleted,
+      { zoneId: 'z1' },
+      { id: 'z1' }
+    );
     expect(audit.recorded).toEqual([
       {
         actorId: 'admin-1',
@@ -99,6 +140,28 @@ describe('ZoneReaperService.deleteZoneAsOperator', () => {
     ]);
   });
 
+  it('addresses the deletion to whoever was still waiting to join', async () => {
+    const { svc, events } = build(
+      [
+        {
+          id: 'z1',
+          name: 'Casa',
+          ownerUserId: 'u1',
+          status: ZoneStatus.ACTIVE,
+        },
+      ],
+      ['applicant-1']
+    );
+
+    await svc.deleteZoneAsOperator('z1', 'admin-1');
+
+    expect(events.emitTo).toHaveBeenCalledWith(
+      RealtimeEvent.ZoneDeleted,
+      { zoneId: 'z1', userIds: ['applicant-1'] },
+      { id: 'z1' }
+    );
+  });
+
   it('answers 404 for a zone that is already gone', async () => {
     const { svc, zonesRepo, events } = build([]);
 
@@ -106,6 +169,6 @@ describe('ZoneReaperService.deleteZoneAsOperator', () => {
       'Zone not found'
     );
     expect(zonesRepo.delete).not.toHaveBeenCalled();
-    expect(events.emit).not.toHaveBeenCalled();
+    expect(events.emitTo).not.toHaveBeenCalled();
   });
 });

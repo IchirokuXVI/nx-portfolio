@@ -166,6 +166,8 @@
       "password": "Contraseña",
       "emailPlaceholder": "tu@ejemplo.com",
       "passwordPlaceholder": "Tu contraseña",
+      "confirmPassword": "Confirma la contraseña",
+      "confirmPasswordPlaceholder": "Escríbela otra vez",
       "passwordRule": "Al menos 8 caracteres",
       "showPassword": "Mostrar contraseña",
       "hidePassword": "Ocultar contraseña"
@@ -182,6 +184,7 @@
     "nudge": {
       "title": "Confirma tu correo",
       "body": "Te hemos enviado un enlace a {{email}}. Puedes seguir sin él, pero confirmarlo mantiene la cuenta a tu nombre",
+      "bodyStanding": "{{email}} todavía no está confirmado. Puedes seguir sin confirmarlo, pero hacerlo mantiene la cuenta a tu nombre",
       "dismiss": "Descartar"
     },
     "resend": {
@@ -199,6 +202,7 @@
       "emailTakenAction": "Entrar en su lugar",
       "badEmail": "Eso no parece un correo",
       "shortPassword": "Las contraseñas necesitan al menos 8 caracteres",
+      "passwordMismatch": "Las dos contraseñas no coinciden. Revisa la segunda",
       "tooMany": "Demasiados intentos. Espera un minuto e inténtalo de nuevo"
     }
   },
@@ -643,7 +647,13 @@
       "unconfirmed": "Sin confirmar",
       "loading": "Cargando tu correo",
       "failed": "No pudimos leer los datos de tu cuenta",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "confirm": {
+        "title": "Confirma tu correo",
+        "body": "{{email}} todavía no está confirmado. Abre el enlace que te enviamos para confirmarlo. Puedes seguir sin hacerlo, pero confirmarlo mantiene la cuenta a tu nombre",
+        "already": "{{email}} está confirmado. Aquí no queda nada por hacer",
+        "close": "Cerrar"
+      }
     },
     "password": {
       "label": "Contraseña",

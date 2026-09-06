@@ -8,8 +8,8 @@ export { ENUM_IDS } from './enums.schemas';
 export { CATALOG_EVENT_SCHEMA_IDS } from './events/catalog.schemas';
 export { IDENTITY_EVENT_SCHEMA_IDS } from './events/identity.schemas';
 export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';
-// The uploaded leaflet contract and the types that mirror it (plan 0081).
-export * from './leaflet';
+// The file import contract and the types that mirror it (plan 0086, section 6.1).
+export * from './harvest-document';
 export { ADMIN_AUTH_SCHEMA_IDS } from './messages/admin-auth.schemas';
 export { ADMIN_CORE_SCHEMA_IDS } from './messages/admin-core.schemas';
 export { ADMIN_USERS_SCHEMA_IDS } from './messages/admin-users.schemas';

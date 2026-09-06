@@ -2,21 +2,19 @@ import type {
   AdapterKey,
   DiscoveredPlaceView,
   HarvestRunView,
-  ItemSourceRefView,
-  LeafletOffer,
+  ItemPriceDetails,
   PostalCodeDiscoveryRequestView,
-  SourceAliasView,
   SourceCatalogEntryView,
+  SourceEntryPriceView,
   SourceLocationView,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
 import type {
   DiscoveredPlace,
   HarvestRun,
-  ItemSourceRef,
   PostalCodeDiscoveryRequest,
-  SourceAlias,
   SourceCatalogEntry,
+  SourceEntryPrice,
   SourceLocation,
   SupermarketSource,
 } from '../entities';
@@ -94,50 +92,6 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
   };
 }
 
-/**
- * One printed name a chain used (plan 0081, section 2), with the offer it is
- * waiting on where the caller loaded it.
- *
- * The offer is **not** stored on the row. It belongs to the document the run
- * kept, and copying its price here would be a second copy to go stale the first
- * time a later leaflet prints the same string at a different number. The queue
- * reads it back from the run instead, one document per page.
- */
-export function toSourceAliasView(
-  row: SourceAlias,
-  offer?: LeafletOffer
-): SourceAliasView {
-  const unitPrice = offer?.pricing?.unit_price;
-  return {
-    id: row.id,
-    supermarketId: row.supermarketId,
-    aliasKey: row.aliasKey,
-    printedName: row.printedName,
-    printedFormat: row.printedFormat,
-    printedBrand: row.printedBrand,
-    itemId: row.itemId,
-    candidateItemId: row.candidateItemId,
-    candidateEntryId: row.candidateEntryId,
-    status: row.status,
-    matchedBy: row.matchedBy,
-    confidence: Number(row.confidence),
-    timesSeen: row.timesSeen,
-    firstSeenAt: row.firstSeenAt.toISOString(),
-    lastSeenAt: row.lastSeenAt.toISOString(),
-    firstRunId: row.firstRunId,
-    lastRunId: row.lastRunId,
-    offerPrice: offer?.pricing?.price?.amount ?? null,
-    offerCurrency: offer?.pricing?.price?.currency ?? null,
-    offerUnitPrice:
-      typeof unitPrice?.amount === 'number' ? unitPrice.amount : null,
-    offerUnitPriceLabel: unitPrice?.per ?? null,
-    offerPage: offer?.page ?? null,
-    offerRawText: offer?.raw_text ?? [],
-    offerConfidence:
-      typeof offer?.confidence === 'number' ? offer.confidence : null,
-  };
-}
-
 export function toDiscoveredPlaceView(
   row: DiscoveredPlace
 ): DiscoveredPlaceView {
@@ -165,6 +119,14 @@ export function toDiscoveredPlaceView(
   };
 }
 
+/**
+ * One product as a source described it, and what became of it (plan 0086,
+ * section 3.1), with the price each scope stated where the caller loaded them.
+ *
+ * `prices` defaults to empty rather than being trusted: a caller that did not
+ * ask for the relation gets a row with no `prices` property at all, and an empty
+ * list is what "this row is waiting on nothing" means everywhere else.
+ */
 export function toSourceCatalogEntryView(
   row: SourceCatalogEntry
 ): SourceCatalogEntryView {
@@ -172,32 +134,46 @@ export function toSourceCatalogEntryView(
     id: row.id,
     supermarketId: row.supermarketId,
     externalId: row.externalId,
+    sourceKind: row.sourceKind,
     name: row.name,
     brand: row.brand,
     ean: row.ean,
     unitSize: toNumber(row.unitSize),
     sizeFormat: row.sizeFormat,
-    price: toNumber(row.price),
-    unitPrice: toNumber(row.unitPrice),
-    unitPriceLabel: row.unitPriceLabel,
     categoryPath: row.categoryPath ?? [],
     url: row.url,
+    extra: row.extra ?? null,
+    timesSeen: row.timesSeen,
+    firstSeenAt: row.firstSeenAt.toISOString(),
     lastSeenAt: row.lastSeenAt.toISOString(),
+    firstRunId: row.firstRunId,
+    lastRunId: row.lastRunId,
+    itemId: row.itemId,
+    candidateEntryId: row.candidateEntryId,
+    status: row.status,
+    matchedBy: row.matchedBy,
+    confidence: Number(row.confidence),
+    decidedAt: iso(row.decidedAt),
+    prices: (row.prices ?? []).map(toSourceEntryPriceView),
   };
 }
 
-export function toItemSourceRefView(row: ItemSourceRef): ItemSourceRefView {
+/** The latest price one scope stated for one row (plan 0086, section 3.2). */
+export function toSourceEntryPriceView(
+  row: SourceEntryPrice
+): SourceEntryPriceView {
   return {
     id: row.id,
-    itemId: row.itemId,
-    supermarketId: row.supermarketId,
-    externalId: row.externalId,
-    externalUrl: row.externalUrl,
-    matchedBy: row.matchedBy,
-    status: row.status,
-    confidence: Number(row.confidence),
-    lastResolvedAt: iso(row.lastResolvedAt),
-    lastSeenAt: iso(row.lastSeenAt),
+    priceScopeId: row.priceScopeId,
+    price: toNumber(row.price),
+    currency: row.currency,
+    unitPrice: toNumber(row.unitPrice),
+    unitPriceLabel: row.unitPriceLabel,
+    validFrom: iso(row.validFrom),
+    validUntil: iso(row.validUntil),
+    details: row.details ?? null,
+    observedAt: row.observedAt.toISOString(),
+    runId: row.runId,
   };
 }
 
@@ -247,4 +223,51 @@ export function toPostalCodeDiscoveryRequestView(
     runId: row.runId,
     error: row.error,
   };
+}
+
+/**
+ * The `extra` bag as catalog's price details, where the two overlap (plan 0086,
+ * section 6.1; plan 0081, section 6.4).
+ *
+ * `extra` is free and catalog's `item_price_details` is not, so this is a
+ * translation rather than a pass through: the five keys that table holds are
+ * taken where the producer used those names and everything else stays on the
+ * row, where the queue shows it. A bag with none of them writes no details row
+ * at all, which is what a walk's price looks like.
+ *
+ * **Nothing reads either side to decide anything.** The rules that used to read
+ * `promotion` and `loyalty` moved to the producer with plan 0086, and this is
+ * carried for the admin price history alone.
+ */
+export function toItemPriceDetails(
+  extra: Record<string, unknown> | null
+): ItemPriceDetails | null {
+  if (!extra) {
+    return null;
+  }
+  const offerId = extra['offer_id'] ?? extra['offerId'];
+  const page = extra['page'];
+  const rawText = extra['raw_text'] ?? extra['rawText'];
+  const promotion = extra['promotion'];
+  const loyalty = extra['loyalty'];
+  const details: ItemPriceDetails = {
+    offerId: typeof offerId === 'string' ? offerId : null,
+    page: typeof page === 'number' ? page : null,
+    rawText: Array.isArray(rawText)
+      ? rawText.filter((line): line is string => typeof line === 'string')
+      : [],
+    promotion: isBag(promotion) ? promotion : null,
+    loyalty: isBag(loyalty) ? loyalty : null,
+  };
+  const empty =
+    details.offerId === null &&
+    details.page === null &&
+    details.rawText.length === 0 &&
+    details.promotion === null &&
+    details.loyalty === null;
+  return empty ? null : details;
+}
+
+function isBag(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

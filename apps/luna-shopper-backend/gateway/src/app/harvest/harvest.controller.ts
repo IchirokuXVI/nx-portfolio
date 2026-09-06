@@ -4,61 +4,60 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpStatus,
   Param,
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
+  HARVEST_SCHEMA_IDS,
   HarvestRunMode,
-  ITEM_SOURCE_REF_PATTERNS,
-  SOURCE_ALIAS_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
-  validateLeafletDocument,
+  validateHarvestDocument,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlacePage,
   type DiscoveredPlaceView,
+  type HarvestRunExportResult,
   type HarvestRunPage,
   type HarvestRunView,
-  type ItemSourceRefPage,
-  type ItemSourceRefView,
-  type ItemView,
-  type SourceAliasAcceptResult,
-  type SourceAliasPage,
-  type SourceAliasView,
   type SourceCatalogEntryPage,
+  type SourceCatalogEntryView,
+  type SourceEntryAcceptResult,
   type SourceLocationPage,
   type SourceLocationView,
   type SupermarketSourcePage,
   type SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
+import type { Response } from 'express';
 import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
 import { ActingAdmin } from '../admin/current-admin.decorator';
-import { ApiContractResponse, ApiProblemResponses } from '../docs';
+import {
+  ApiComposedResponse,
+  ApiContractResponse,
+  ApiProblemResponses,
+} from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
-  AcceptSourceAliasDto,
-  CreateItemFromAliasDto,
+  AcceptSourceEntryDto,
   CreateItemFromEntryDto,
   DiscoveredPlaceGroupQueryDto,
   DiscoveredPlaceListQueryDto,
   HarvestRunListQueryDto,
   ImportDiscoveredPlaceDto,
-  ImportLeafletDto,
-  ItemSourceRefListQueryDto,
+  ImportHarvestDocumentDto,
   MapSourceLocationDto,
-  SetManualItemSourceRefDto,
   SetSourceEnabledDto,
-  SourceAliasListQueryDto,
   SourceEntryListQueryDto,
   SourceLocationListQueryDto,
   SpawnHarvestRunDto,
@@ -186,38 +185,95 @@ export class AdminHarvestRunsController {
       runId: id,
     });
   }
+
+  /**
+   * Everything this run observed, as a file (plan 0086, section 6.2).
+   *
+   * The other half of a file import, and the reason the schema is one schema: a
+   * walk runs where there is room for 4,383 requests, its export is uploaded to
+   * a cluster that is not allowed to crawl, and that cluster's rows, ladder,
+   * queue and prices are exactly what a walk there would have produced. So it is
+   * offered whether or not this deployment may start runs.
+   *
+   * A **download** rather than a JSON response body, because what an operator
+   * does with it is put it in a file and upload it somewhere else. The name is
+   * the chain, the scope and the day, so a directory of them is readable.
+   *
+   * The set is every row whose `lastRunId` is this run, so a chain walked again
+   * since answers fewer rows and the newest run of a chain is the one to export.
+   */
+  @Get(':id/export')
+  @Header('content-type', 'application/json; charset=utf-8')
+  @ApiComposedResponse(HARVEST_SCHEMA_IDS.harvestDocument, {
+    description:
+      'The run as a HarvestDocument, offered as a download. Every row the run was the last to observe, with that run’s price for that run’s scope and none of the decisions a person made, which mean nothing on another cluster.',
+  })
+  @ApiProblemResponses({ body: true })
+  async exportRun(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response
+  ): Promise<unknown> {
+    const result = await this.nats.send<HarvestRunExportResult>(
+      HARVEST_PATTERNS.export,
+      { ...adminCredential(admin), runId: id }
+    );
+    response.setHeader(
+      'content-disposition',
+      `attachment; filename="${exportFilename(result)}"`
+    );
+    return result.document;
+  }
 }
 
 /**
- * The leaflet upload (plan 0081, section 7).
+ * What a downloaded export is called: the chain, the scope and the day.
+ *
+ * Ids rather than names, because the gateway proxies and holds neither. They
+ * are what tells two exports of one chain for two regions apart, which is the
+ * only thing the name has to do; the operator uploading it picks the chain from
+ * a directory anyway.
+ */
+export function exportFilename(result: HarvestRunExportResult): string {
+  const day = new Date().toISOString().slice(0, 10);
+  const scope = result.priceScopeId ? `-${result.priceScopeId}` : '';
+  return `harvest-${result.supermarketId}${scope}-${day}.json`;
+}
+
+/**
+ * The file import (plan 0086, section 6; plan 0081, section 7).
  *
  * **This is the only route in the gateway with its own body limit.** Nest's JSON
  * parser defaults to 100 KB and this gateway configured none, so every real
  * leaflet (337 KB and 349 KB for the two committed extractions) was refused with
  * a bare 413 before the route existed. `main.ts` creates the app with
- * `bodyParser: false` and mounts this path's parser at `LEAFLET_MAX_BYTES`
- * ahead of the default one.
+ * `bodyParser: false` and mounts this path's parser at the configured cap ahead
+ * of the default one.
  *
- * Multipart is deliberately not used: the admin produces JSON, the schema
+ * It is `imports` and not `leaflets` because the upload is not a leaflet tool.
+ * A file is a list of products as a source described them, whoever produced it:
+ * a leaflet extractor, a person typing a chain's prices, or the harvester's own
+ * export from a machine that is allowed to crawl.
+ *
+ * Multipart is deliberately not used: the producer writes JSON, the schema
  * validates JSON, and a form part around it adds a parse step for nothing.
  */
 @ApiTags('admin-harvest')
 @ApiBearerAuth('access-token')
 @UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
-@Controller({ path: 'admin/harvest/leaflets', version: '1' })
-export class AdminHarvestLeafletsController {
+@Controller({ path: 'admin/harvest/imports', version: '1' })
+export class AdminHarvestImportsController {
   constructor(private readonly nats: NatsClient) {}
 
   /**
-   * Validate the document, then start a `LEAFLET_IMPORT` run for it.
+   * Validate the document, then start a `FILE_IMPORT` run for it.
    *
-   * The validation here is the first of two (section 4). It happens **before**
-   * the document crosses the broker, so a malformed file is answered in
-   * milliseconds with every failure named by its JSON path and its offer id
-   * rather than after a run has been inserted. The harvester validates again at
-   * spawn, because it owns the schema version and a broker message is not a
-   * trusted input.
+   * The validation here is the first of two. It happens **before** the document
+   * crosses the broker, so a malformed file is answered in milliseconds with
+   * every failure named by its JSON path and its product id rather than after a
+   * run has been inserted. The harvester validates again at spawn, because it
+   * owns the schema version and a broker message is not a trusted input.
    *
    * Answers the PENDING run, like the spawn route beside it, and 409 with the
    * earlier run's id when this chain has already imported this exact file.
@@ -225,149 +281,35 @@ export class AdminHarvestLeafletsController {
   @Post()
   @ApiContractResponse(HARVEST_PATTERNS.spawn, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true, conflict: true })
-  importLeaflet(
+  importDocument(
     @ActingAdmin() admin: CurrentAdmin,
-    @Body() dto: ImportLeafletDto
+    @Body() dto: ImportHarvestDocumentDto
   ): Promise<HarvestRunView> {
-    const { valid, failures } = validateLeafletDocument(dto.document);
+    const { valid, failures } = validateHarvestDocument(dto.document);
     if (!valid) {
       // One line per failure, each starting with the JSON path, because the
       // house filter keys the envelope's `errors` map on the first word. The
-      // offer id rides in the text so the upload screen can highlight the tile
+      // product id rides in the text so the upload screen can name the product
       // rather than an array index nobody can find in the file.
       throw new BadRequestException({
-        error: 'The leaflet document does not match the import schema',
+        error: 'The file does not match the import schema',
         message: failures.map(
           (failure) =>
             `${failure.path || '/'} ${failure.message}` +
-            (failure.offerId ? ` (offer ${failure.offerId})` : '')
+            (failure.productId ? ` (product ${failure.productId})` : '')
         ),
       });
     }
 
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.spawn, {
       ...adminCredential(admin),
-      mode: HarvestRunMode.LEAFLET_IMPORT,
+      mode: HarvestRunMode.FILE_IMPORT,
       supermarketId: dto.supermarketId,
       priceScopeId: dto.priceScopeId,
+      sourceKind: dto.sourceKind,
       validFrom: dto.validFrom ?? null,
       validUntil: dto.validUntil ?? null,
       document: dto.document,
-    });
-  }
-}
-
-/**
- * The queue of printed names a leaflet import could not resolve (plan 0081,
- * sections 2 and 3).
- *
- * Three decisions per row, and **all three are a person's**: accept to a product
- * the catalog holds, accept as a new product, or reject. A run proposes and
- * never binds, because a bad fuzzy match writes a wrong price onto a real
- * product that people then shop on.
- */
-@ApiTags('admin-harvest')
-@ApiBearerAuth('access-token')
-@UseGuards(AdminJwtGuard)
-@ApiProblemResponses({ auth: true, membership: true })
-@Controller({
-  path: 'admin/harvest/supermarkets/:supermarketId/aliases',
-  version: '1',
-})
-export class AdminHarvestAliasesController {
-  constructor(private readonly nats: NatsClient) {}
-
-  @Get()
-  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.list)
-  list(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Param('supermarketId') supermarketId: string,
-    @Query() query: SourceAliasListQueryDto
-  ): Promise<SourceAliasPage> {
-    return this.nats.send<SourceAliasPage>(SOURCE_ALIAS_PATTERNS.list, {
-      ...adminCredential(admin),
-      supermarketId,
-      status: query.status,
-      query: query.query,
-      cursor: query.cursor,
-      limit: query.limit,
-    });
-  }
-}
-
-/**
- * The three decisions themselves, addressed by the alias rather than by the
- * chain: an alias id is unique, and an operator acting on a row has it.
- */
-@ApiTags('admin-harvest')
-@ApiBearerAuth('access-token')
-@UseGuards(AdminJwtGuard)
-@ApiProblemResponses({ auth: true, membership: true })
-@Controller({ path: 'admin/harvest/aliases', version: '1' })
-export class AdminHarvestAliasDecisionsController {
-  constructor(private readonly nats: NatsClient) {}
-
-  /**
-   * Bind a printed name to a product, and write the price it was queued for.
-   *
-   * The write is the half that is easy to miss: the run that queued this row is
-   * over, the offer sits in its stored document, and without writing here an
-   * admin who works the queue would have to upload the same file again to get
-   * the prices he just resolved.
-   */
-  @Post(':id/accept')
-  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.accept, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({ body: true })
-  accept(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Body() dto: AcceptSourceAliasDto
-  ): Promise<SourceAliasAcceptResult> {
-    return this.nats.send<SourceAliasAcceptResult>(
-      SOURCE_ALIAS_PATTERNS.accept,
-      { ...adminCredential(admin), aliasId: id, itemId: dto.itemId }
-    );
-  }
-
-  /**
-   * The same, for a product the catalog does not hold yet: one call that
-   * creates the item and binds the alias, the way `entries/:entryId/item` does
-   * for a discovery entry. `name.en` may be left out (plan 0079).
-   */
-  @Post(':id/item')
-  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.createItem, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({ body: true, conflict: true })
-  createItem(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Body() dto: CreateItemFromAliasDto
-  ): Promise<SourceAliasAcceptResult> {
-    return this.nats.send<SourceAliasAcceptResult>(
-      SOURCE_ALIAS_PATTERNS.createItem,
-      { ...adminCredential(admin), aliasId: id, ...dto }
-    );
-  }
-
-  /**
-   * Not a product he tracks. The row stays as REJECTED rather than being
-   * deleted, so the next leaflet that prints the string skips it with a warning
-   * instead of asking again.
-   */
-  @Post(':id/reject')
-  @ApiContractResponse(SOURCE_ALIAS_PATTERNS.reject, {
-    status: HttpStatus.CREATED,
-  })
-  reject(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
-  ): Promise<SourceAliasView> {
-    return this.nats.send<SourceAliasView>(SOURCE_ALIAS_PATTERNS.reject, {
-      ...adminCredential(admin),
-      aliasId: id,
     });
   }
 }
@@ -454,18 +396,24 @@ export class AdminHarvestPlacesController {
 }
 
 /**
- * The catalog discovery snapshot, and the one action that turns it into catalog
- * rows (plan 0038, section 6.2). Deliberately a review queue rather than a bulk
- * insert of 4,232 products nobody chose.
+ * The one queue (plan 0086, D7 and section 10).
+ *
+ * One row per product a source described, for every chain and every source
+ * kind, and three decisions about one: accept it onto a product the catalog
+ * holds, accept it as a new product, or reject it. **All three are a person's**,
+ * because a bad fuzzy match writes a wrong price onto a real product that people
+ * then shop on.
+ *
+ * It replaces three screens over three tables: `entries` for the products a walk
+ * found and nothing matched, `item-refs` for the fuzzy matches a walk proposed,
+ * and `aliases` for the printed names a leaflet queued. Those two controllers
+ * are deleted.
  */
 @ApiTags('admin-harvest')
 @ApiBearerAuth('access-token')
 @UseGuards(AdminJwtGuard)
 @ApiProblemResponses({ auth: true, membership: true })
-@Controller({
-  path: 'admin/harvest/supermarkets/:supermarketId/entries',
-  version: '1',
-})
+@Controller({ path: 'admin/harvest/entries', version: '1' })
 export class AdminHarvestEntriesController {
   constructor(private readonly nats: NatsClient) {}
 
@@ -473,13 +421,13 @@ export class AdminHarvestEntriesController {
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.list)
   list(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('supermarketId') supermarketId: string,
     @Query() query: SourceEntryListQueryDto
   ): Promise<SourceCatalogEntryPage> {
     return this.nats.send<SourceCatalogEntryPage>(SOURCE_ENTRY_PATTERNS.list, {
       ...adminCredential(admin),
-      supermarketId,
-      unmatchedOnly: query.unmatchedOnly,
+      supermarketId: query.supermarketId,
+      status: query.status,
+      sourceKind: query.sourceKind,
       query: query.query,
       cursor: query.cursor,
       limit: query.limit,
@@ -487,104 +435,72 @@ export class AdminHarvestEntriesController {
   }
 
   /**
-   * Promote one entry to a catalog `Item`. This is the path that populates the
-   * database, and it is where the English name is fetched: paying for it during
-   * discovery would double a 4,232 request run.
+   * Bind a row to a product, and write the prices the row holds.
+   *
+   * The write is the half that is easy to miss: the run that observed those
+   * prices is over, and without writing here an admin who works the queue after
+   * an eighteen minute walk would have to run it again to get them. The answer
+   * says how many went, and zero is a normal answer for a source that prints
+   * none.
    */
-  @Post(':entryId/item')
+  @Post(':id/accept')
+  @ApiContractResponse(SOURCE_ENTRY_PATTERNS.accept, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  accept(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: AcceptSourceEntryDto
+  ): Promise<SourceEntryAcceptResult> {
+    return this.nats.send<SourceEntryAcceptResult>(
+      SOURCE_ENTRY_PATTERNS.accept,
+      { ...adminCredential(admin), entryId: id, itemId: dto.itemId }
+    );
+  }
+
+  /**
+   * The same, for a product the catalog does not hold yet: one call that creates
+   * the item and binds the row. Every field of the body is optional, because the
+   * row already holds a default for each, and `name.en` may be left out (plan
+   * 0079).
+   *
+   * The English name is fetched here, and only for a row whose id the source can
+   * be asked about: paying for it during a walk would double a 4,232 request
+   * run, and a leaflet row's key is not an id anything can fetch.
+   */
+  @Post(':id/item')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.createItem, {
     status: HttpStatus.CREATED,
   })
   @ApiProblemResponses({ body: true, conflict: true })
   createItem(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('entryId') entryId: string,
+    @Param('id') id: string,
     @Body() dto: CreateItemFromEntryDto
-  ): Promise<ItemView> {
-    return this.nats.send<ItemView>(SOURCE_ENTRY_PATTERNS.createItem, {
-      ...adminCredential(admin),
-      entryId,
-      ...dto,
-    });
-  }
-}
-
-/**
- * The links between catalog items and a chain's products (plan 0038, section
- * 6.2). `listUnresolved` is the review queue: a CANDIDATE came from a fuzzy name
- * match and **never writes a price** until it is confirmed here.
- */
-@ApiTags('admin-harvest')
-@ApiBearerAuth('access-token')
-@UseGuards(AdminJwtGuard)
-@ApiProblemResponses({ auth: true, membership: true })
-@Controller({ path: 'admin/harvest/item-refs', version: '1' })
-export class AdminHarvestItemRefsController {
-  constructor(private readonly nats: NatsClient) {}
-
-  @Get()
-  @ApiContractResponse(ITEM_SOURCE_REF_PATTERNS.list)
-  list(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Query() query: ItemSourceRefListQueryDto
-  ): Promise<ItemSourceRefPage> {
-    return this.nats.send<ItemSourceRefPage>(ITEM_SOURCE_REF_PATTERNS.list, {
-      ...adminCredential(admin),
-      ...query,
-    });
-  }
-
-  @Get('unresolved')
-  @ApiContractResponse(ITEM_SOURCE_REF_PATTERNS.listUnresolved)
-  listUnresolved(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Query() query: ItemSourceRefListQueryDto
-  ): Promise<ItemSourceRefPage> {
-    return this.nats.send<ItemSourceRefPage>(
-      ITEM_SOURCE_REF_PATTERNS.listUnresolved,
-      { ...adminCredential(admin), ...query }
+  ): Promise<SourceEntryAcceptResult> {
+    return this.nats.send<SourceEntryAcceptResult>(
+      SOURCE_ENTRY_PATTERNS.createItem,
+      { ...adminCredential(admin), entryId: id, ...dto }
     );
   }
 
-  @Put()
-  @ApiContractResponse(ITEM_SOURCE_REF_PATTERNS.setManual)
-  @ApiProblemResponses({ body: true })
-  setManual(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Body() dto: SetManualItemSourceRefDto
-  ): Promise<ItemSourceRefView> {
-    return this.nats.send<ItemSourceRefView>(
-      ITEM_SOURCE_REF_PATTERNS.setManual,
-      { ...adminCredential(admin), ...dto }
-    );
-  }
-
-  @Post(':id/confirm')
-  @ApiContractResponse(ITEM_SOURCE_REF_PATTERNS.confirm, {
-    status: HttpStatus.CREATED,
-  })
-  confirm(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
-  ): Promise<ItemSourceRefView> {
-    return this.nats.send<ItemSourceRefView>(ITEM_SOURCE_REF_PATTERNS.confirm, {
-      ...adminCredential(admin),
-      refId: id,
-    });
-  }
-
+  /**
+   * Not a product he tracks. The row stays as REJECTED rather than being
+   * deleted, so the next run that observes the key touches it and asks nobody.
+   */
   @Post(':id/reject')
-  @ApiContractResponse(ITEM_SOURCE_REF_PATTERNS.reject, {
+  @ApiContractResponse(SOURCE_ENTRY_PATTERNS.reject, {
     status: HttpStatus.CREATED,
   })
   reject(
     @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string
-  ): Promise<ItemSourceRefView> {
-    return this.nats.send<ItemSourceRefView>(ITEM_SOURCE_REF_PATTERNS.reject, {
-      ...adminCredential(admin),
-      refId: id,
-    });
+  ): Promise<SourceCatalogEntryView> {
+    return this.nats.send<SourceCatalogEntryView>(
+      SOURCE_ENTRY_PATTERNS.reject,
+      { ...adminCredential(admin), entryId: id }
+    );
   }
 }
 

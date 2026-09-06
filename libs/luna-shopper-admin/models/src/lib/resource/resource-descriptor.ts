@@ -121,6 +121,17 @@ export type FilterDescriptor =
       readonly label: string;
       /** The `name` of the resource being pointed at. */
       readonly resource: string;
+      /**
+       * Whether the column may point at nothing (plan 0012, section 2).
+       *
+       * When it may, the picker offers "none" beside the rows it finds, and
+       * choosing it sends {@link REFERENCE_NONE} on this same parameter: the
+       * products in no group, the zones nobody owns. Declared per filter rather
+       * than assumed, because offering it on a column that is never null would
+       * be a choice whose only answer is an empty list, and because the gateway
+       * route has to accept the literal before the screen may send it.
+       */
+      readonly nullable?: boolean;
     };
 
 /**

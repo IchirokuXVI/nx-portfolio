@@ -41,7 +41,8 @@ export class SessionBootstrap {
    */
   async run(): Promise<void> {
     if (this._sessions.signedIn()) {
-      // Restored from `sessionStorage`. The environment read still has to
+      // Restored from `localStorage`, which is what a tab opened beside a signed
+      // in one now finds too (plan 0013). The environment read still has to
       // happen, for the accent colour, and so does the identity read, because a
       // restored session was never answered by a `me`. Neither is awaited: both
       // decorate a session that is already usable.

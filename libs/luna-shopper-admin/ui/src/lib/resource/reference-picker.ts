@@ -8,6 +8,10 @@ import {
   type OnDestroy,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  REFERENCE_NONE,
+  isReferenceNone,
+} from '@portfolio/luna-shopper-admin/models';
 import type {
   ReferenceLookup,
   ReferenceOption,
@@ -33,6 +37,14 @@ const SEARCH_DELAY_MS = 250;
  * A reference whose target no longer exists says so rather than showing an
  * empty box, because those are different problems and only one of them is fixed
  * by picking something.
+ *
+ * **"None" is a third answer, offered only where the column allows it** (plan
+ * 0012, section 2). A filter over a nullable reference can ask for the rows
+ * that point at nothing, and the way to ask is a choice in this same list,
+ * shown while the search box is still blank: an operator who has typed a name
+ * is looking for a row, not for the absence of one. Choosing it holds
+ * {@link REFERENCE_NONE} as the value, which is drawn by name like any other
+ * choice and is never looked up, because there is nothing to look up.
  */
 @Component({
   selector: 'lib-reference-picker',
@@ -40,7 +52,9 @@ const SEARCH_DELAY_MS = 250;
   template: `
     @if (value() !== '' && !changing()) {
       <p class="chosen">
-        @if (resolving()) {
+        @if (isNone()) {
+          <span class="name">{{ 'resource.reference.none' | rokuT }}</span>
+        } @else if (resolving()) {
           <span class="muted">{{
             'resource.reference.resolving' | rokuT
           }}</span>
@@ -78,10 +92,17 @@ const SEARCH_DELAY_MS = 250;
 
       @if (searching()) {
         <p class="muted">{{ 'resource.reference.searching' | rokuT }}</p>
-      } @else if (options().length === 0) {
+      } @else if (options().length === 0 && !offersNone()) {
         <p class="muted">{{ 'resource.reference.noResults' | rokuT }}</p>
       } @else {
         <ul>
+          @if (offersNone()) {
+            <li>
+              <button (click)="chooseNone()" class="none" type="button">
+                {{ 'resource.reference.none' | rokuT }}
+              </button>
+            </li>
+          }
           @for (option of options(); track option.id) {
             <li>
               <button (click)="choose(option)" type="button">
@@ -150,6 +171,11 @@ const SEARCH_DELAY_MS = 250;
       list-style: none;
     }
 
+    li button.none {
+      font-style: italic;
+      color: var(--admin-ink-muted);
+    }
+
     li button {
       inline-size: 100%;
       min-block-size: 2.75rem;
@@ -202,6 +228,15 @@ export class ReferencePicker implements OnDestroy {
    */
   readonly scope = input<ReferenceScope>({});
   readonly nullable = input(false);
+  /**
+   * Whether "none" is a choice here: the rows that point at nothing.
+   *
+   * Set by a filter over a nullable column and by nothing else. A form's
+   * nullable field already has "clear", which submits null, and the two are
+   * different acts: clearing a field empties it, and filtering to none asks for
+   * every row that is already empty.
+   */
+  readonly none = input(false);
   readonly disabled = input(false);
 
   readonly valueChange = output<string>();
@@ -221,12 +256,31 @@ export class ReferencePicker implements OnDestroy {
   constructor() {
     effect(() => {
       const id = this.value();
-      if (id === '') {
+      // "None" names nothing, so there is nothing to resolve and nothing to be
+      // missing: the template draws it from the value alone.
+      if (id === '' || isReferenceNone(id)) {
         this.chosen.set(null);
         return;
       }
       void this._resolve(id);
     });
+  }
+
+  /** Whether the value held is "none" rather than an id. */
+  isNone(): boolean {
+    return isReferenceNone(this.value());
+  }
+
+  /**
+   * Whether the list starts with "none" right now.
+   *
+   * Only while nothing is typed. A term is a search for a row by name, and a
+   * row that does not exist has no name to match; showing "none" under a typed
+   * word would read as "nothing matched", which is a different sentence and
+   * already has one.
+   */
+  offersNone(): boolean {
+    return this.none() && this.term().trim() === '';
   }
 
   ngOnDestroy(): void {
@@ -245,6 +299,12 @@ export class ReferencePicker implements OnDestroy {
     this.chosen.set(option);
     this.changing.set(false);
     this.valueChange.emit(option.id);
+  }
+
+  chooseNone(): void {
+    this.chosen.set(null);
+    this.changing.set(false);
+    this.valueChange.emit(REFERENCE_NONE);
   }
 
   clear(): void {

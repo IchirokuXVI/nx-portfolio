@@ -5,6 +5,7 @@ import {
   isReverted,
   isTerminalRun,
   PRICE_WRITING_MODES,
+  runCounterKeys,
   runProgress,
   spawnBlockReason,
   TERMINAL_RUN_STATUSES,
@@ -234,5 +235,32 @@ describe('canRevert', () => {
 
   it('is false for no run at all', () => {
     expect(canRevert(null)).toBe(false);
+  });
+});
+
+/**
+ * What the run screen calls two of its counters (admin plan 0014, section 3).
+ *
+ * A walk writes prices now, so on a run that writes any, `updated` and
+ * `unchanged` are prices written and prices confirmed, which is what the ingest
+ * actually counted. On a store discovery they are shops, and naming a shop a
+ * price would be worse than saying nothing.
+ */
+describe('runCounterKeys', () => {
+  it.each(['CATALOG_DISCOVERY', 'FILE_IMPORT'] as const)(
+    'reads a %s run counters as prices',
+    (mode) => {
+      expect(runCounterKeys(run({ mode }))).toEqual({
+        updated: 'pricesWritten',
+        unchanged: 'pricesConfirmed',
+      });
+    }
+  );
+
+  it('leaves a store discovery counters neutral', () => {
+    expect(runCounterKeys(run({ mode: 'STORE_DISCOVERY' }))).toEqual({
+      updated: 'updated',
+      unchanged: 'unchanged',
+    });
   });
 });

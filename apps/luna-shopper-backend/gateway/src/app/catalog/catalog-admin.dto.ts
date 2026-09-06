@@ -14,6 +14,10 @@ import {
   MaxLength,
 } from 'class-validator';
 import {
+  IsUuidOrNone,
+  referenceFilterDescription,
+} from '../admin/reference-none';
+import {
   asBoolean,
   CatalogListQueryDto,
   SearchOrderQueryDto,
@@ -44,22 +48,22 @@ export class AdminSearchItemsQueryDto extends SearchOrderQueryDto {
   @IsEnum(ItemCategory)
   category?: ItemCategory;
 
+  /**
+   * One parameter for two questions (admin plan 0012, section 2). A uuid is
+   * the group's members; the literal `none` is the products in no group, which
+   * is what curation has not reached yet. It used to be a second boolean
+   * parameter, `withoutProductGroup`, which the back office's picker could not
+   * offer as a choice; the literal is what the picker sends.
+   */
   @ApiPropertyOptional({
-    format: 'uuid',
-    description: 'Only this group’s members.',
+    description: referenceFilterDescription(
+      'Only this group’s members.',
+      'the products belonging to no group, which is what curation has not reached yet.'
+    ),
   })
   @IsOptional()
-  @IsUUID()
+  @IsUuidOrNone()
   productGroupId?: string;
-
-  @ApiPropertyOptional({
-    description:
-      'Only the products belonging to no group, which is what curation has not reached yet. Set beside `productGroupId` it answers with nothing, because the two together are a contradiction.',
-  })
-  @IsOptional()
-  @Transform(asBoolean)
-  @IsBoolean()
-  withoutProductGroup?: boolean;
 }
 
 /**

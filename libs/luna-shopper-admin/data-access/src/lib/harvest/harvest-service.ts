@@ -1,5 +1,9 @@
 import { inject } from '@angular/core';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import type {
+  OfficialSourceKind,
+  SourceEntryStatus,
+  Wire,
+} from '@portfolio/luna-shopper-admin/models';
 import { serviceToken } from '@portfolio/shared/data-access';
 import { HarvestMemory } from './harvest-memory';
 
@@ -45,25 +49,59 @@ export interface HarvestServiceI {
   ): Promise<Wire.HarvestDiscoveredPlaceView>;
   rejectPlace(id: string): Promise<Wire.HarvestDiscoveredPlaceView>;
 
+  /**
+   * The one queue (admin plan 0014, section 1; backend plan 0086, section 10).
+   *
+   * There were three of these: entries a walk found and nothing matched, refs a
+   * walk proposed, and aliases a leaflet queued. `0086` folded the three tables
+   * into `source_catalog_entries` with one status column, so they are one call
+   * over one route, and `listItemRefs`, `listUnresolvedItemRefs`,
+   * `setManualItemRef`, `confirmItemRef`, `rejectItemRef`, `listAliases`,
+   * `acceptAlias`, `createItemFromAlias` and `rejectAlias` are gone with them.
+   */
   listEntries(query: EntryQuery): Promise<Wire.HarvestSourceCatalogEntryPage>;
-  createItemFromEntry(
-    supermarketId: string,
-    entryId: string,
-    input: Wire.CreateItemFromEntryDto
-  ): Promise<Wire.CatalogItemView>;
-
-  listItemRefs(query: ItemRefQuery): Promise<Wire.HarvestItemSourceRefPage>;
-  listUnresolvedItemRefs(
-    query: ItemRefQuery
-  ): Promise<Wire.HarvestItemSourceRefPage>;
-  setManualItemRef(
-    input: Wire.SetManualItemSourceRefDto
-  ): Promise<Wire.HarvestItemSourceRefView>;
-  confirmItemRef(id: string): Promise<Wire.HarvestItemSourceRefView>;
-  rejectItemRef(id: string): Promise<Wire.HarvestItemSourceRefView>;
 
   /**
-   * Start a `LEAFLET_IMPORT` run for a document the operator dropped in.
+   * Bind a row to a product the catalog already holds.
+   *
+   * Accepting is not only a binding: every price on the row that has not expired
+   * is written through catalog with its own scope and its own run, so an
+   * operator who accepts a Mercadona product on Tuesday gets the price Monday's
+   * walk saw, and reverting Monday's run takes it back with the rest (backend
+   * plan 0086, section 7). {@link SourceEntryAcceptResult.pricesWritten} is what
+   * the confirmation names.
+   */
+  acceptEntry(
+    id: string,
+    input: AcceptSourceEntryInput
+  ): Promise<SourceEntryAcceptResult>;
+
+  /**
+   * The same, for a product the catalog does not hold yet.
+   *
+   * **One call**: it creates the item and binds the row in the harvester. Two
+   * calls would leave a window where an item exists that nothing points at, and
+   * the operator would have no way to tell that from a row they had not decided.
+   *
+   * Every field of the input is optional, because the row already holds a
+   * default for each, so this sends only what the operator changed.
+   */
+  createItemFromEntry(
+    id: string,
+    input: CreateItemFromSourceEntryInput
+  ): Promise<SourceEntryAcceptResult>;
+
+  /**
+   * Not a product he tracks.
+   *
+   * The row stays as `REJECTED` rather than being deleted, so the next run that
+   * observes the key touches the row and asks nobody. The status is the owner's,
+   * and a run does not get to overwrite a decision.
+   */
+  rejectEntry(id: string): Promise<Wire.HarvestSourceCatalogEntryView>;
+
+  /**
+   * Start a `FILE_IMPORT` run for a document the operator dropped in.
    *
    * A spawn like any other, from this app's side: it answers the `PENDING` run
    * and the run screen watches it to completion. What is different is the
@@ -71,21 +109,27 @@ export interface HarvestServiceI {
    * the schema does not accept comes back 400 with one message per failure
    * keyed on its JSON path, and a document this chain has already imported
    * comes back 409 naming the earlier run.
+   *
+   * `importLeaflet` before backend plan `0086`, and the rename is the point of
+   * that plan's section 6: the upload is not a leaflet tool, it is how the
+   * result of a harvester run that happened somewhere else gets in.
    */
-  importLeaflet(
-    input: Wire.ImportLeafletDto
+  importDocument(
+    input: ImportHarvestDocumentInput
   ): Promise<Wire.HarvestHarvestRunView>;
 
-  listAliases(query: AliasQuery): Promise<Wire.HarvestSourceAliasPage>;
-  acceptAlias(
-    id: string,
-    input: Wire.AcceptSourceAliasDto
-  ): Promise<Wire.HarvestSourceAliasAcceptResult>;
-  createItemFromAlias(
-    id: string,
-    input: Wire.CreateItemFromAliasDto
-  ): Promise<Wire.HarvestSourceAliasAcceptResult>;
-  rejectAlias(id: string): Promise<Wire.HarvestSourceAliasView>;
+  /**
+   * The other direction: a finished run's rows, as a document (backend plan
+   * 0086, section 6.2).
+   *
+   * A read, so it is not gated by `HARVEST_ENABLED`. That is the whole point of
+   * it: a machine that is allowed to crawl exports, and a cluster that is not
+   * imports. It answers the document itself rather than a file, because the
+   * request carries a bearer token and so cannot be a plain link, and because
+   * the file's name is the chain, the scope and the day, which this app resolves
+   * and the run does not carry.
+   */
+  exportRun(id: string): Promise<Readonly<Record<string, unknown>>>;
 
   listShops(query: ShopQuery): Promise<Wire.HarvestSourceLocationPage>;
   mapShop(
@@ -138,17 +182,52 @@ export interface PlaceGroupQuery {
   readonly sampleSize?: number;
 }
 
+/**
+ * One chain's source catalog entries (backend plan 0086, section 10).
+ *
+ * `supermarketId` is **required**, as the shops query's is and for the same
+ * reason: a row is keyed on (`supermarketId`, `externalId`) and a chain's own
+ * name for a product means nothing outside that chain, so there is no queue over
+ * every chain's rows and no screen that could use one.
+ *
+ * `status` absent lists `CANDIDATE` and `UNRESOLVED` together, which is the
+ * queue: the rows waiting for a person. That default is the route's rather than
+ * a screen's, so no caller sends it to get it.
+ *
+ * `unmatchedOnly` is gone. It was the `NOT EXISTS` that stood in for a status
+ * column, and the status says it now.
+ */
 export interface EntryQuery extends PageQuery {
   readonly supermarketId: string;
-  readonly unmatchedOnly?: boolean;
+  readonly status?: SourceEntryStatus;
+  /**
+   * One kind at a time, so an operator working through a leaflet's rows is not
+   * interleaved with a walk's four thousand.
+   */
+  readonly sourceKind?: OfficialSourceKind;
   readonly query?: string;
 }
 
-export interface ItemRefQuery extends PageQuery {
-  readonly itemId?: string;
-  readonly supermarketId?: string;
-  readonly status?: string;
-}
+/**
+ * The four shapes backend plan `0086` adds to the gateway, under this app's own
+ * names.
+ *
+ * Aliases of the generated types rather than copies of them, which is plan 0004
+ * section 2's exception in force: the OpenAPI document describes these, so the
+ * generated shapes are this app's parameters and answers and a stale one is a
+ * red test rather than a silent drift. The names are here so that a call site
+ * says what it is sending rather than which gateway class the generator happened
+ * to name it after.
+ *
+ * `CreateItemFromEntryDto` has **every field optional**, which is the design
+ * rather than laxity: the row already holds a default for each, the backend
+ * fills in what is absent, and the screen sends only what was changed. An empty
+ * object is a legitimate create.
+ */
+export type AcceptSourceEntryInput = Wire.AcceptSourceEntryDto;
+export type CreateItemFromSourceEntryInput = Wire.CreateItemFromEntryDto;
+export type SourceEntryAcceptResult = Wire.HarvestSourceEntryAcceptResult;
+export type ImportHarvestDocumentInput = Wire.ImportHarvestDocumentDto;
 
 /**
  * The shops one source names (backend plan 0084, section 7).
@@ -161,25 +240,6 @@ export interface ItemRefQuery extends PageQuery {
 export interface ShopQuery extends PageQuery {
   readonly supermarketId: string;
   readonly status?: Wire.EnumsSourceLocationStatus;
-}
-
-/**
- * The printed names one chain's leaflets could not resolve (backend plan 0081,
- * section 2).
- *
- * `supermarketId` is **required**, like the shops query and for the same
- * reason: an alias is keyed on (`supermarketId`, `aliasKey`) and a printed name
- * only means anything inside the chain that printed it, so the route addresses
- * the collection under the chain and there is no queue over every chain's.
- *
- * `status` absent lists `CANDIDATE` and `UNRESOLVED` together, which is the
- * queue: the rows waiting for a person. The other two are asked for by name, to
- * find a rejection somebody wants back or an alias somebody wants unbound.
- */
-export interface AliasQuery extends PageQuery {
-  readonly supermarketId: string;
-  readonly status?: Wire.EnumsSourceAliasStatus;
-  readonly query?: string;
 }
 
 /**

@@ -127,7 +127,7 @@ own body parser, mounted ahead of the 100 KB default because Nest's built in one
 cannot vary per route. Gateway only: the harvester reads the document off a
 broker message, and NATS carries 8 MB.
 */}}
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS" "LEAFLET_MAX_BYTES") }}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS" "HARVESTER_FILE_IMPORT_MAX_BYTES") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

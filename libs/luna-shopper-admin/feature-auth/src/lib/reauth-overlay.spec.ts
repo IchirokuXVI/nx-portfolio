@@ -126,8 +126,8 @@ async function submit(fixture: ComponentFixture<ReauthOverlay>) {
 }
 
 describe('ReauthOverlay', () => {
-  beforeEach(() => sessionStorage.clear());
-  afterEach(() => sessionStorage.clear());
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
 
   it('asks for a password, and only a password', async () => {
     const { fixture } = await render();

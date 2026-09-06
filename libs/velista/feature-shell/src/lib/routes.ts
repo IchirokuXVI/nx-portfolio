@@ -619,6 +619,18 @@ export const AppShellRoutes: Route[] = [
                   ),
               }),
               sheet({
+                // What an unconfirmed address opens, and the only screen in the
+                // product that can ask for another confirmation email. `email` and
+                // not `confirm/email`: `confirm/` is what the two **typed**
+                // confirmations are addressed under, and this one confirms nothing
+                // and destroys nothing. It is a sheet about the email row.
+                path: 'email',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-account').then(
+                    (m) => m.ConfirmEmailSheet
+                  ),
+              }),
+              sheet({
                 // `confirm/delete`, matching the shape `0010` gave a member action, so
                 // the two typed confirmations in this app are addressed the same way.
                 path: 'confirm/delete',

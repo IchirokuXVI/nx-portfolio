@@ -53,11 +53,26 @@ const ERROR_ID = 'register-error';
  * lands on the dashboard, signed in, with a dismissible nudge and no blocking step
  * anywhere (section 5.2).
  *
- * ## Two fields, and only two
+ * ## Three fields
  *
  * No display name: the backend generates a username regardless of what is sent, and
- * nothing in the app renders a display name. No confirm password and no strength meter
- * either; neither is backed by anything the server checks (section 5.1).
+ * nothing in the app renders a display name. No strength meter either, because nothing
+ * the server checks is behind one.
+ *
+ * There **is** a confirm password field, and section 5.1 argued against one on the
+ * grounds that the server does not check it. That is the wrong test: the server cannot
+ * check it, because only this screen ever sees the password twice. A typo in the one
+ * field nobody can read back produces an account whose password is not the one its
+ * owner believes they chose, and the product has no way out of that worth having:
+ * signing in fails with the deliberately incurious "that email and password do not
+ * match", and the reset flow this app cannot reach yet is what would be needed to
+ * recover. Typing it twice is the only check available anywhere, which is why it
+ * belongs here rather than nowhere.
+ *
+ * The mismatch is checked **on submit** rather than as the second field is typed. A
+ * password that does not match yet while it is being entered is not wrong, it is
+ * unfinished, which is the same reasoning that makes the length rule a rule rather
+ * than an error.
  */
 @Component({
   selector: 'lib-register-page',
@@ -89,20 +104,26 @@ export class RegisterPage {
 
   readonly email = signal('');
   readonly password = signal('');
+  readonly confirmPassword = signal('');
   readonly submitting = signal(false);
   readonly error = signal<AuthErrorCopy | null>(null);
 
   /**
-   * Both fields non empty, and nothing else.
+   * All three fields non empty, and nothing else.
    *
-   * The length rule is stated on screen from the start and enforced by the server, and
-   * disabling the button until it is met would leave somebody staring at a control
-   * that will not press with no message saying why. A short password comes back as a
-   * `validation_failed` against the password field, which is a sentence they can act
-   * on (section 5.5).
+   * Neither the length rule nor the match is a condition on the button. The rule is
+   * stated on screen from the start and enforced by the server, and disabling the
+   * button until either is met would leave somebody staring at a control that will not
+   * press with no message saying why. A short password comes back as a
+   * `validation_failed` against the password field and a mismatch is answered by
+   * `submit`, and both are sentences somebody can act on (section 5.5).
    */
   readonly canSubmit = computed(
-    () => this.email() !== '' && this.password() !== '' && !this.submitting()
+    () =>
+      this.email() !== '' &&
+      this.password() !== '' &&
+      this.confirmPassword() !== '' &&
+      !this.submitting()
   );
 
   /** Never to a guest. See the same computed on `SignInPage` for why it matters. */
@@ -116,6 +137,19 @@ export class RegisterPage {
 
   async submit(): Promise<void> {
     if (!this.canSubmit()) {
+      return;
+    }
+
+    // Before the request, because there is nothing to ask the server: it sees one
+    // password and cannot know it was typed wrong. Compared exactly, with no trimming
+    // and no case folding, since both of those are characters somebody may genuinely
+    // have meant and a check that ignored them would pass a pair that does not match.
+    if (this.password() !== this.confirmPassword()) {
+      this.error.set({
+        key: 'auth.error.passwordMismatch',
+        placement: 'password',
+      });
+      this._focusConfirmField();
       return;
     }
 
@@ -170,6 +204,20 @@ export class RegisterPage {
   private _focusFirstField(): void {
     this._host.nativeElement
       .querySelector<HTMLInputElement>('input[type="email"]')
+      ?.focus();
+  }
+
+  /**
+   * The second password box, which is the one a mismatch is about.
+   *
+   * By id rather than by type, because the reveal toggle swaps a password input's type
+   * to `text` and a selector on the type would miss a revealed field. The first box is
+   * deliberately not focused: its contents are the ones being confirmed, so sending
+   * somebody back to it invites them to change the wrong one.
+   */
+  private _focusConfirmField(): void {
+    this._host.nativeElement
+      .querySelector<HTMLInputElement>('#register-confirm-password')
       ?.focus();
   }
 }

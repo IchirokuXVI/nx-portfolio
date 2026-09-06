@@ -127,16 +127,12 @@ export class AuthApi implements AuthServiceI {
   }
 
   /**
-   * `POST /v1/auth/resend-verification`, bearer authenticated.
-   *
-   * Nothing calls this yet: `VERIFY_RESEND_AVAILABLE` is false until the endpoint
-   * lands (plan 0009, section 5.8). It is written now because the shape it answers is
-   * the whole of rule C3, and because the countdown it feeds is built and tested.
+   * `POST /v1/auth/resend-verification`, bearer authenticated, one per minute.
    *
    * **The path was `/v1/auth/verify-resend` until plan 0015 checked it**, which is a
-   * route the gateway has never served. Nothing had noticed because the flag above
-   * meant nothing called it; the correction is here so that turning the flag on is the
-   * one line change 0009 promised rather than a 404 to debug afterwards.
+   * route the gateway has never served. Nothing had noticed because
+   * `VERIFY_RESEND_AVAILABLE` was false and no screen called it. Both halves agree now
+   * and the flag is on, so this is live on three screens.
    *
    * A refusal is an outcome rather than a thrown error. The server's own wait comes
    * back in the problem document's `retryAfterSeconds`, in the body and not a header,
