@@ -1237,7 +1237,7 @@ export type AdminDashboardAdminHarvestDashboard = {
     byStatus: AdminDashboardAdminHarvestRunStatusCount[];
     inWindow: number;
   };
-  running: HarvestHarvestRunView | unknown;
+  running: HarvestHarvestRunView | null;
   recent: HarvestHarvestRunView[];
   queues: {
     entries: AdminDashboardAdminHarvestQueueEntry[];
@@ -1370,10 +1370,10 @@ export type AdminUsersAdminUserView = {
  */
 export type AdminAdminDashboardResponse = {
   window: AdminDashboardAdminDashboardWindow;
-  identity: AdminDashboardAdminIdentityDashboard | unknown;
-  core: AdminDashboardAdminCoreDashboard | unknown;
-  catalog: AdminDashboardAdminCatalogDashboard | unknown;
-  harvest: AdminDashboardAdminHarvestDashboard | unknown;
+  identity: AdminDashboardAdminIdentityDashboard | null;
+  core: AdminDashboardAdminCoreDashboard | null;
+  catalog: AdminDashboardAdminCatalogDashboard | null;
+  harvest: AdminDashboardAdminHarvestDashboard | null;
   activity: AdminDashboardAdminDashboardActivityEntry[];
   measuredAt: string;
 };
@@ -1498,8 +1498,8 @@ export type CatalogCatalogSuggestResponse = {
  */
 export type CatalogCatalogSuggestion = {
   kind: 'group' | 'item';
-  group: CatalogProductGroupOfferView | unknown;
-  item: CatalogItemView | unknown;
+  group: CatalogProductGroupOfferView | null;
+  item: CatalogItemView | null;
 };
 
 /**
@@ -1513,7 +1513,7 @@ export type CatalogItemOfferView = {
   unitPrice: number | null;
   unitPriceLabel: string | null;
   observedAt: string | null;
-  sourceKind: EnumsPriceSourceKind | unknown;
+  sourceKind: EnumsPriceSourceKind | null;
   stale: boolean;
 };
 
@@ -1534,16 +1534,12 @@ export type CatalogItemPriceDetails = {
   offerId: string | null;
   page: number | null;
   rawText: string[];
-  promotion:
-    | {
-        [key: string]: unknown;
-      }
-    | unknown;
-  loyalty:
-    | {
-        [key: string]: unknown;
-      }
-    | unknown;
+  promotion: {
+    [key: string]: unknown;
+  } | null;
+  loyalty: {
+    [key: string]: unknown;
+  } | null;
 };
 
 /**
@@ -1589,9 +1585,9 @@ export type CatalogItemPriceView = {
   validUntil: string | null;
   sourceRunId: string | null;
   lastObservedRunId: string | null;
-  overrides: CatalogItemPriceOverrides | unknown;
+  overrides: CatalogItemPriceOverrides | null;
   protectedUntil: string | null;
-  details: CatalogItemPriceDetails | unknown;
+  details: CatalogItemPriceDetails | null;
 };
 
 /**
@@ -1608,7 +1604,7 @@ export type CatalogItemView = {
   category: EnumsItemCategory;
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;
-  bestOffer?: CatalogItemOfferView | unknown;
+  bestOffer?: CatalogItemOfferView | null;
 };
 
 /**
@@ -1670,7 +1666,7 @@ export type CatalogPriceScopeView = {
   supermarketId: string;
   kind: EnumsPriceScopeKind;
   externalKey: string | null;
-  label: CatalogLocalizedText | unknown;
+  label: CatalogLocalizedText | null;
 };
 
 /**
@@ -1688,8 +1684,8 @@ export type CatalogProductGroupOfferPage = {
  */
 export type CatalogProductGroupOfferView = {
   group: CatalogProductGroupView;
-  cheapestItem: CatalogItemView | unknown;
-  offer: CatalogItemOfferView | unknown;
+  cheapestItem: CatalogItemView | null;
+  offer: CatalogItemOfferView | null;
   itemIds: string[];
 };
 
@@ -1803,7 +1799,7 @@ export type CatalogSupermarketItemView = {
   unitPrice: number | null;
   unitPriceLabel: string | null;
   observedAt: string | null;
-  sourceKind: EnumsPriceSourceKind | unknown;
+  sourceKind: EnumsPriceSourceKind | null;
   stale: boolean;
   validUntil: string | null;
   itemPriceId: string | null;
@@ -1838,7 +1834,7 @@ export type CatalogSupermarketLocationItemView = {
   supermarketLocationId: string;
   positionInStore: string | null;
   available: boolean | null;
-  availabilitySourceKind: EnumsPriceSourceKind | unknown;
+  availabilitySourceKind: EnumsPriceSourceKind | null;
   availabilityObservedAt: string | null;
   availabilitySourceRunId: string | null;
 };
@@ -1860,12 +1856,12 @@ export type CatalogSupermarketLocationView = {
   id: string;
   supermarketId: string;
   priceScopeId: string;
-  label: CatalogLocalizedText | unknown;
+  label: CatalogLocalizedText | null;
   address: string | null;
   city: string | null;
   country: string | null;
   postalCode: string | null;
-  postalCodeSource: EnumsPostalCodeSource | unknown;
+  postalCodeSource: EnumsPostalCodeSource | null;
   latitude: number | null;
   longitude: number | null;
   externalRef: string | null;
@@ -2201,7 +2197,7 @@ export type GeneratedListSharingBasketResult = {
  */
 export type GeneratedListSharingBasketScopeLocationView = {
   supermarketLocationId: string;
-  label: CatalogLocalizedText | unknown;
+  label: CatalogLocalizedText | null;
   address: string | null;
   city: string | null;
   postalCode: string | null;
@@ -2631,7 +2627,7 @@ export type HarvestSourceCatalogEntryView = {
   itemId: string | null;
   candidateEntryId: string | null;
   status: EnumsSourceEntryStatus;
-  matchedBy: EnumsItemSourceMatch | unknown;
+  matchedBy: EnumsItemSourceMatch | null;
   confidence: number;
   decidedAt: string | null;
   prices: HarvestSourceEntryPriceView[];
@@ -2643,7 +2639,7 @@ export type HarvestSourceCatalogEntryView = {
 export type HarvestSourceEntryAcceptResult = {
   entry: HarvestSourceCatalogEntryView;
   pricesWritten: number;
-  createdItem: CatalogItemView | unknown;
+  createdItem: CatalogItemView | null;
 };
 
 /**
@@ -2747,8 +2743,8 @@ export type ListCommentView = {
   lineId: string;
   authorUserId: string;
   body: string;
-  recording: ListCommentRecording | unknown;
-  transcription: EnumsCommentTranscription | unknown;
+  recording: ListCommentRecording | null;
+  transcription: EnumsCommentTranscription | null;
   createdAt: string;
 };
 
@@ -2813,7 +2809,7 @@ export type ListLineView = {
   approvedByUserId: string | null;
   version: number;
   boughtCount: number;
-  lastSettlementOutcome: EnumsSettlementOutcome | unknown;
+  lastSettlementOutcome: EnumsSettlementOutcome | null;
   claimed: boolean;
   claimedByUserId: string | null;
   createdAt: string;
@@ -2914,7 +2910,7 @@ export type MergeMergeRequestView = {
  */
 export type MsgAssistantTurnResponse = {
   reply: string;
-  link: AssistantAssistantListLink | unknown;
+  link: AssistantAssistantListLink | null;
   choices: AssistantAssistantChoice[];
   listResolution?: EnumsListResolutionBranch;
   heard?: string;
@@ -2963,7 +2959,7 @@ export type MsgGeneratedListParticipantRevokeResponse = {
  */
 export type MsgGeneratedListSetOriginQuantityResponse = {
   line: GeneratedListSharingBasketLineView;
-  origin: GeneratedListSharingLineOriginDetail | unknown;
+  origin: GeneratedListSharingLineOriginDetail | null;
   listQuantity: number;
 };
 
@@ -3085,8 +3081,8 @@ export type StatsIdentityStats = {
  * Platform totals. Either block is `null` when that service did not answer: a broken service degrades the figure rather than taking down the public page.
  */
 export type StatsPlatformStatsResponse = {
-  identity: StatsIdentityStats | unknown;
-  core: StatsCoreStats | unknown;
+  identity: StatsIdentityStats | null;
+  core: StatsCoreStats | null;
   measuredAt: string;
 };
 

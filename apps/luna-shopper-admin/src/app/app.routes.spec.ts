@@ -16,7 +16,6 @@ import {
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
 import { appRoutes } from './app.routes';
-import { ADMIN_RESOURCES } from './resources';
 
 /**
  * The two branches and the guards that pair them (plan 0002, then 0004).
@@ -27,15 +26,24 @@ import { ADMIN_RESOURCES } from './resources';
  * a white tab in a browser and a hang in jest — and this is precisely the pair
  * of routes where that mistake is available.
  *
- * Since `0004` the guarded branch is the chrome and the resources under it, so
- * a signed in operator asking for `/` lands on the first resource rather than on
- * a landing page. The guard is on the branch and not on its children, which is
- * what keeps an unknown URL from a signed out operator going to the login
- * screen rather than to a "no such screen" page they could not act on anyway.
+ * Since `0004` the guarded branch is the chrome and the resources under it, and
+ * since admin plan `0016` a signed in operator asking for `/` stays on `/`,
+ * which is the dashboard. It used to redirect to the first resource, because
+ * `0004` refused an empty landing page; the screen that answers the questions
+ * six screens otherwise answer is what replaced that redirect. The guard is on
+ * the branch and not on its children, which is what keeps an unknown URL from a
+ * signed out operator going to the login screen rather than to a "no such
+ * screen" page they could not act on anyway.
  */
 
-/** Where `/` settles for a signed in operator: the app's first resource. */
-const FIRST_SCREEN = `/${ADMIN_RESOURCES[0].segment}`;
+/**
+ * Where `/` settles for a signed in operator: nowhere, because `/` is the
+ * dashboard.
+ *
+ * A constant rather than the literal at three call sites, so the day this app
+ * opens somewhere else the change is one line here.
+ */
+const HOME = '/';
 
 const session: AdminSession = {
   adminId: 'adm_1',
@@ -108,12 +116,12 @@ describe('appRoutes', () => {
     expect(router.url).toBe('/sign-in');
   });
 
-  it('lets an operator with a session reach the first screen', async () => {
+  it('lets an operator with a session reach the screen the app opens to', async () => {
     const { router } = await boot(true);
 
     await router.navigateByUrl('/');
 
-    expect(router.url).toBe(FIRST_SCREEN);
+    expect(router.url).toBe(HOME);
   });
 
   /**
@@ -131,14 +139,14 @@ describe('appRoutes', () => {
 
   /**
    * The loop guard. A reload onto the login screen with a session held must land
-   * on the first screen and *stop*, rather than bounce between the two.
+   * on the dashboard and *stop*, rather than bounce between the two.
    */
   it('sends an operator who already has a session away from the login screen', async () => {
     const { router } = await boot(true);
 
     await router.navigateByUrl('/sign-in');
 
-    expect(router.url).toBe(FIRST_SCREEN);
+    expect(router.url).toBe(HOME);
   });
 
   /**
@@ -153,7 +161,7 @@ describe('appRoutes', () => {
   it('sends the operator back to the login screen once the session is gone', async () => {
     const signedIn = await boot(true);
     await signedIn.router.navigateByUrl('/');
-    expect(signedIn.router.url).toBe(FIRST_SCREEN);
+    expect(signedIn.router.url).toBe(HOME);
 
     signedIn.sessions.signOut();
 

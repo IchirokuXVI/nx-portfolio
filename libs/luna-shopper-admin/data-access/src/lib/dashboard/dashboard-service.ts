@@ -1,5 +1,5 @@
 import { inject } from '@angular/core';
-import type { HarvestRun } from '@portfolio/luna-shopper-admin/models';
+import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { serviceToken } from '@portfolio/shared/data-access';
 import { DashboardMemory } from './dashboard-memory';
 
@@ -15,20 +15,7 @@ import { DashboardMemory } from './dashboard-memory';
  * 200. That is the case the screen is shaped around, so the type says it and no
  * caller may treat a missing block as an empty one.
  */
-export type DashboardDocument = DashboardDocumentShape;
-
-/**
- * The shape until the gateway's own is generated.
- *
- * Replaced by the alias to `Wire.AdminDashboardResponse` the moment backend plan
- * `0088` lands: a hand written wire type is a type this app cannot be told is
- * wrong, and the generated one is checked against the committed OpenAPI document
- * by a spec.
- */
-interface DashboardDocumentShape {
-  readonly measuredAt: string;
-  readonly harvest: { readonly running: HarvestRun | null } | null;
-}
+export type DashboardDocument = Wire.AdminAdminDashboardResponse;
 
 /**
  * The one read (admin plan 0016, section 1).
