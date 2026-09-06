@@ -25,6 +25,7 @@ only what that one chain needs.
 | `build-document.mjs`          | Per page model readings, plus one leaflet's own small `leaflet.json`, into one document.                   |
 | `drift-check.mjs`             | Compares a build's statistics with the chain's `baseline.json` and refuses a reading that drifted too far. |
 | `validate.mjs`                | Validates a built document against the contract itself, not a copy of it.                                  |
+| `AGENT-PROMPT.md`             | The two prompts to paste to a model agent: a leaflet of a known chain, and a chain's first leaflet.        |
 | `chains/<slug>/prompt.txt`    | What a model is asked for one page of that chain's leaflet.                                                |
 | `chains/<slug>/headings.mjs`  | That chain's department heading vocabulary, its default fixed pages, and the model it has used so far.     |
 | `chains/<slug>/layout.md`     | What one page of that chain's leaflet looks like, for a person (and a model) to check before reading.      |
