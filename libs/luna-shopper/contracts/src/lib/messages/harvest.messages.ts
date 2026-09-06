@@ -148,6 +148,9 @@ export const SUPERMARKET_SOURCE_PATTERNS = {
 export const ADAPTER_KEYS = [
   'mercadona-api',
   'deza-web',
+  // A rendered page again, and behind Cloudflare (plan 0090). It writes prices,
+  // which `deza-web` does not, and it is the only adapter that needs a browser.
+  'carrefour-web',
   'osm-places',
   'manual',
 ] as const;
@@ -534,6 +537,23 @@ export interface SpawnHarvestRunRequest extends AdminCredential {
    */
   validFrom?: string | null;
   validUntil?: string | null;
+  /**
+   * Read product pages for the EAN instead of crawling the assortment (plan
+   * 0090, section 12.1). `carrefour-web` only.
+   *
+   * **It is a switch and not a mode**, because it is the same run against the
+   * same chain asking a second question of the same pages. A price crawl reads
+   * 851 listing pages in about an hour and is complete on its own terms; a
+   * backfill reads one product page per product that has no EAN yet, which is
+   * of the order of 18,000 loads the first time and almost none after it.
+   *
+   * **The two never happen in one run.** A price crawl that waited for the
+   * backfill is a price crawl that never finishes, so a backfill is started
+   * on its own, can be aborted at any point, and loses nothing when it is: an
+   * EAN is written as it is read, and a product that already has one is never
+   * fetched again.
+   */
+  detailBackfill?: boolean;
 }
 
 /**

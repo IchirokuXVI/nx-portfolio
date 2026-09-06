@@ -99,6 +99,15 @@ export class SpawnHarvestRunDto {
   @IsArray()
   @IsString({ each: true })
   brandKeys?: string[];
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Read product pages for the EAN instead of crawling the assortment (plan 0090, section 12.1). `carrefour-web` only. A crawl reads 851 listing pages in about an hour; a backfill reads one page per product that has no EAN yet, of the order of 18,000 the first time, so the two are never one run. Stopping a backfill costs nothing: an EAN is written as it is read, and a product that has one is never fetched again.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  detailBackfill?: boolean;
 }
 
 /**

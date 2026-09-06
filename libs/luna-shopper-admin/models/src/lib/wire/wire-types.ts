@@ -673,6 +673,7 @@ export type SpawnHarvestRunDto = {
   country?: string;
   radiusMetres?: number;
   brandKeys?: string[];
+  detailBackfill?: boolean;
 };
 
 /**
@@ -905,7 +906,12 @@ export type UpsertSupermarketLocationItemDto = {
  * `UpsertSupermarketSourceDto` in the gateway's OpenAPI document.
  */
 export type UpsertSupermarketSourceDto = {
-  adapterKey: 'mercadona-api' | 'deza-web' | 'osm-places' | 'manual';
+  adapterKey:
+    | 'mercadona-api'
+    | 'deza-web'
+    | 'carrefour-web'
+    | 'osm-places'
+    | 'manual';
   enabled?: boolean;
   config?: {
     [key: string]: unknown;
@@ -1917,6 +1923,7 @@ export type CommonUserIdResult = {
 export type EnumsAdapterKey =
   | 'mercadona-api'
   | 'deza-web'
+  | 'carrefour-web'
   | 'osm-places'
   | 'manual';
 

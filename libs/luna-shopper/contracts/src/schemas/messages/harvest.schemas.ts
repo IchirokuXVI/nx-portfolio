@@ -590,6 +590,11 @@ const spawnRunRequest = object(
     document: freeObject(),
     validFrom: nullableString(),
     validUntil: nullableString(),
+    // Read product pages for the EAN instead of crawling the assortment (plan
+    // 0090, section 12.1). A switch and not a mode: the same run against the
+    // same chain, asking a second question of the same pages, and never at the
+    // same time as a price crawl.
+    detailBackfill: boolean(),
   },
   ['userId', 'mode']
 );

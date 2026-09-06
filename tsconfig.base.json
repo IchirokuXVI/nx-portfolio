@@ -92,6 +92,9 @@
       "@portfolio/luna-shopper/contracts": [
         "./libs/luna-shopper/contracts/src/index.ts"
       ],
+      "@portfolio/luna-shopper/carrefour": [
+        "./libs/luna-shopper/carrefour/src/index.ts"
+      ],
       "@portfolio/luna-shopper/deza": ["./libs/luna-shopper/deza/src/index.ts"],
       "@portfolio/luna-shopper/mercadona": [
         "./libs/luna-shopper/mercadona/src/index.ts"

@@ -10,6 +10,7 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   PriceSourceKind,
+  type AdapterKey,
   type HarvestRunIdRequest,
   type HarvestRunPage,
   type HarvestRunView,
@@ -28,12 +29,12 @@ import {
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { readHarvestDocument } from './harvest-document.reader';
 import {
   ActiveRunExistsError,
   DocumentAlreadyImportedError,
   HarvestRunStore,
 } from './harvest-run.store';
-import { readHarvestDocument } from './harvest-document.reader';
 import { toHarvestRunView } from './harvest.mappers';
 import { resolveImportWindow } from './import-window';
 import { PlatformAdminService } from './platform-admin.service';
@@ -60,6 +61,18 @@ const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
   // 4,232 products and threw it away, which is what the deleted REFRESH mode
   // existed to fetch again.
   HarvestRunMode.CATALOG_DISCOVERY,
+];
+
+/**
+ * The adapters whose walk states a price, and which therefore need a scope to
+ * write it for (plan 0086, section 9; plan 0090, section 12).
+ *
+ * `deza-web` is absent because the site prints none: it accepts a scope and
+ * ignores it, and a required field that does nothing is a lie in a form.
+ */
+const PRICE_YIELDING_ADAPTERS: readonly AdapterKey[] = [
+  'mercadona-api',
+  'carrefour-web',
 ];
 
 /**
@@ -276,6 +289,16 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         `A ${run.mode} run writes no price, so there is nothing to revert.`
       );
     }
+    if (run.input?.['detailBackfill'] === true) {
+      // A backfill fills one field on rows another run created (plan 0090,
+      // section 12.1). It writes no price and no row of its own, so a revert
+      // would delete nothing and mark the run anyway, which reads as an act
+      // that happened when none did.
+      throw new ValidationException(
+        'An EAN backfill writes no price and creates no row, so there is ' +
+          'nothing to revert. Revert the crawl that wrote them.'
+      );
+    }
 
     const prices = await this.catalog.deletePricesByRun(run.id);
     // Section 8's two deletes, in the harvester's own database. The rows this
@@ -430,10 +453,26 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     // somewhere to write them (plan 0086, section 9). `deza-web` accepts a scope
     // and ignores it, because the site prints no price and a required field that
     // does nothing is a lie in a form.
-    if (source?.adapterKey === 'mercadona-api' && !req.priceScopeId) {
+    // `carrefour-web` writes a price for every card it reads, which is what
+    // separates it from the other rendered page adapter (plan 0090, section 12).
+    const detailBackfill = req.detailBackfill === true;
+    if (
+      PRICE_YIELDING_ADAPTERS.includes(source?.adapterKey ?? 'manual') &&
+      !req.priceScopeId &&
+      !detailBackfill
+    ) {
       throw new ValidationException(
         "This chain's walk fetches a price for every product, so it needs the " +
           'price scope to write the prices for.'
+      );
+    }
+    // A backfill reads product pages for the EAN, and only one adapter has a
+    // product page to read (plan 0090, section 12.1). Refusing it here names
+    // the field on the form rather than starting a run that finds nothing.
+    if (detailBackfill && source?.adapterKey !== 'carrefour-web') {
+      throw new ValidationException(
+        'Only a carrefour-web source has product pages to backfill EANs from. ' +
+          'Start this run without the backfill switch.'
       );
     }
     return {
@@ -443,6 +482,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       payload: {
         supermarketId: req.supermarketId,
         priceScopeId: req.priceScopeId ?? null,
+        detailBackfill,
       },
     };
   }

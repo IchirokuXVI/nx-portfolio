@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { AdapterKey } from '@portfolio/luna-shopper/contracts';
 import type { SupermarketSource } from '../entities';
+import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
+import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import { DezaCatalogRunner } from './deza-catalog.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
@@ -27,7 +29,9 @@ export type { CatalogDiscoveryInput } from './catalog-runner';
 export class CatalogDiscoveryRunner {
   constructor(
     private readonly mercadona: MercadonaCatalogRunner,
-    private readonly deza: DezaCatalogRunner
+    private readonly deza: DezaCatalogRunner,
+    private readonly carrefour: CarrefourCatalogRunner,
+    private readonly carrefourDetail: CarrefourDetailRunner
   ) {}
 
   // `async` so a refusal is a rejected promise rather than a synchronous throw
@@ -38,23 +42,37 @@ export class CatalogDiscoveryRunner {
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
-    await this.runnerFor(source.adapterKey).run(context, input, source);
+    await this.runnerFor(source.adapterKey, input).run(context, input, source);
   }
 
   /**
    * The adapter, or a refusal naming the row that has to change.
+   *
+   * A backfill dispatches here too, because it is a `carrefour-web` run
+   * against the same chain asking a second question of the same pages, and a
+   * mode of its own would say it was a different kind of act.
    *
    * `osm-places` and `manual` are deliberately absent: the first belongs to a
    * store discovery run and the second means a person types the prices, so
    * neither has an assortment to walk. Reaching here with one of them is a
    * misconfigured source rather than a missing feature, and the message says so.
    */
-  private runnerFor(adapterKey: AdapterKey): CatalogRunner {
+  private runnerFor(
+    adapterKey: AdapterKey,
+    input: CatalogDiscoveryInput
+  ): CatalogRunner {
     switch (adapterKey) {
       case 'mercadona-api':
         return this.mercadona;
       case 'deza-web':
         return this.deza;
+      case 'carrefour-web':
+        // The one adapter with two passes over the same pages (plan 0090,
+        // section 12.1). The switch is on the run and not on the row, because
+        // an hour long price crawl and a backfill of the order of a day are
+        // two things an operator starts on purpose, never one that implies the
+        // other.
+        return input.detailBackfill ? this.carrefourDetail : this.carrefour;
       default:
         throw new Error(
           `The adapter "${adapterKey}" has no catalog discovery. Set this ` +

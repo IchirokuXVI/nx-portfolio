@@ -18,12 +18,12 @@ walk to write them. Depends on `0083`, so that a third chain arrives without a t
 variable. Depends on `0080`, because a LIDL price is one source among several and must not overwrite
 what another source said. Depends on `0079`, because LIDL prints Spanish only.
 
-The research that produced every number below is committed at `tools/research/lidl/`, with the
+The research that produced every number below is committed at `apps/luna-shopper-backend/harvester/docs/research/lidl/`, with the
 probes that measured each one.
 
 ## 1. What the site gives, and what it does not
 
-Measured on 2026-09-06 against the live site, by `tools/research/lidl/dry-run.mjs`. The complete run
+Measured on 2026-09-06 against the live site, by `apps/luna-shopper-backend/harvester/docs/research/lidl/dry-run.mjs`. The complete run
 took 161 seconds and 216 requests and raised no warning.
 
 | Fact                           | Value                                                                       |
@@ -73,7 +73,7 @@ Sunday after. Three ran to the end of the year and one to March. Nothing else wa
 window is one to two weeks wide and it moves.
 
 **The window is all there is, and that was tested rather than assumed.**
-`tools/research/lidl/probe-coverage.mjs` searched 105 grocery terms, covering the aisles, the staples
+`apps/luna-shopper-backend/harvester/docs/research/lidl/probe-coverage.mjs` searched 105 grocery terms, covering the aisles, the staples
 and every LIDL own brand, and found **zero** products that the unfiltered query had not already
 returned. There is no fuller listing behind a keyword, a category or a facet.
 
@@ -121,7 +121,7 @@ This is the part the existing model already fits, exactly.
 Each product carries `regionsV2`, a map of region id to `{ regionName, regionPriceId }`, and
 `regionsPrices`, a map of price id to the price. Each store carries
 `marketingData.offerRegion` and `offerRegionName`. **The two id spaces are the same one.**
-`tools/research/lidl/probe-regions.mjs` proved it: 54 of the 59 region ids on a product matched a
+`apps/luna-shopper-backend/harvester/docs/research/lidl/probe-regions.mjs` proved it: 54 of the 59 region ids on a product matched a
 region named by a store, covering 690 of the 730 shops.
 
 `PriceScope` was built for this. Its own docstring calls it "the set of stores a chain charges the
