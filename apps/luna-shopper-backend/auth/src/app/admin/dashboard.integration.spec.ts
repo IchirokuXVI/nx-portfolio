@@ -120,13 +120,7 @@ describeIntegration('auth’s dashboard block (real Postgres)', () => {
       requireAdmin: jest.fn(async () => OPERATOR),
     } as unknown as AuthPlatformAdminService;
 
-    dashboard = new AuthDashboardService(
-      users,
-      admins,
-      failures,
-      gate,
-      audit
-    );
+    dashboard = new AuthDashboardService(users, admins, failures, gate, audit);
   }, 120_000);
 
   afterAll(async () => {
@@ -213,10 +207,9 @@ describeIntegration('auth’s dashboard block (real Postgres)', () => {
     // A temporary user has no address to confirm, so `verified` counting the
     // column on its own would answer the same number by a different question.
     // This row proves the kind is part of the filter.
-    await users.update(
-      (await newUser(UserKind.TEMPORARY, false)).id,
-      { emailVerifiedAt: at(MIDDLE_DAY) }
-    );
+    await users.update((await newUser(UserKind.TEMPORARY, false)).id, {
+      emailVerifiedAt: at(MIDDLE_DAY),
+    });
 
     const block = await dashboard.dashboard(REQUEST);
 
