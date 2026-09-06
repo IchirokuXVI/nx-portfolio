@@ -1,0 +1,8 @@
+# Raw captures. These are large, they change every week, and every one of them
+# can be produced again by the script that wrote it. Only the small reports the
+# plan quotes are committed, and they are listed below.
+out/*
+!out/dry-run.report.json
+!out/pdp-sample.json
+!out/enumeration.json
+!out/endpoints.json

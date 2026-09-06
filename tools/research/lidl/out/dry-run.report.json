@@ -1,0 +1,18 @@
+{
+  "observedAt": "2026-09-06T01:43:53.490Z",
+  "seconds": 161,
+  "requests": 216,
+  "inStoreListed": 493,
+  "inStoreReported": 494,
+  "groceryProducts": 208,
+  "detailPagesRead": 208,
+  "stores": 730,
+  "priceRegions": 59,
+  "observations": 228,
+  "distinctProducts": 187,
+  "productsWithEan13": 155,
+  "productsWithSize": 144,
+  "observationsWithValidUntil": 228,
+  "productsPricedDifferentlyByRegion": 38,
+  "warnings": []
+}
