@@ -20,6 +20,7 @@ export * from './lib/enums/zone.enums';
 // Messages
 export * from './lib/messages/admin-auth.messages';
 export * from './lib/messages/admin-core.messages';
+export * from './lib/messages/admin-dashboard.messages';
 export * from './lib/messages/admin-users.messages';
 export * from './lib/messages/assistant.messages';
 export * from './lib/messages/auth.messages';

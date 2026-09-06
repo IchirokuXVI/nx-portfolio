@@ -1,4 +1,5 @@
 import {
+  ADMIN_DASHBOARD_SCHEMA_IDS,
   allSchemas,
   AUTH_SCHEMA_IDS,
   STATS_SCHEMA_IDS,
@@ -226,6 +227,87 @@ export function hoistAdminEnvironment(): string {
         type: 'boolean',
         description:
           'Whether this deployment will issue an admin token without a password, from `ADMIN_DEV_AUTOLOGIN`. The back office asks rather than deciding for itself that it is in development, so the decision to skip the login screen is the server’s. False everywhere it would matter: auth refuses to boot with the switch on against a non local database.',
+      },
+    },
+  });
+}
+
+/**
+ * Publishes the body of `GET /v1/admin/dashboard` (plan 0088, section 5).
+ *
+ * Composed here for the reason `hoistPlatformStats` is: no broker message has
+ * this shape. The four blocks are the contract schemas the four subjects already
+ * define, and only the composition around them is authored in the gateway.
+ *
+ * Each block is `oneOf` its schema and `null`, which is the endpoint degrading
+ * rather than failing: a harvester that is not deployed costs the harvest block
+ * and nothing else. A count inside a block is never null, so a screen can tell
+ * "did not answer" from "answered zero".
+ */
+export function hoistAdminDashboard(): string {
+  const window = hoistContractSchema(ADMIN_DASHBOARD_SCHEMA_IDS.window);
+  const identity = hoistContractSchema(
+    ADMIN_DASHBOARD_SCHEMA_IDS.identityDashboard
+  );
+  const core = hoistContractSchema(ADMIN_DASHBOARD_SCHEMA_IDS.coreDashboard);
+  const catalog = hoistContractSchema(
+    ADMIN_DASHBOARD_SCHEMA_IDS.catalogDashboard
+  );
+  const harvest = hoistContractSchema(
+    ADMIN_DASHBOARD_SCHEMA_IDS.harvestDashboard
+  );
+  const activity = hoistContractSchema(
+    ADMIN_DASHBOARD_SCHEMA_IDS.dashboardActivityEntry
+  );
+
+  return registerComponent('admin.AdminDashboardResponse', {
+    type: 'object',
+    description:
+      'What the back office opens to. Each block is `null` when that service did not answer, and the response is still 200: one stopped service costs its own block rather than the whole page.',
+    required: [
+      'window',
+      'identity',
+      'core',
+      'catalog',
+      'harvest',
+      'activity',
+      'measuredAt',
+    ],
+    additionalProperties: false,
+    properties: {
+      window: {
+        ...componentRef(window),
+        description:
+          'The days every daily series covers, stated by the gateway so four services fill the same window.',
+      },
+      identity: {
+        oneOf: [componentRef(identity), { type: 'null' }],
+        description: 'Users, admins and failed operator logins, from auth.',
+      },
+      core: {
+        oneOf: [componentRef(core), { type: 'null' }],
+        description: 'Zones, memberships, lists and baskets, from core.',
+      },
+      catalog: {
+        oneOf: [componentRef(catalog), { type: 'null' }],
+        description: 'The catalog totals and the prices written, from catalog.',
+      },
+      harvest: {
+        oneOf: [componentRef(harvest), { type: 'null' }],
+        description:
+          'Runs, the run in flight and the per chain queues, from the harvester.',
+      },
+      activity: {
+        type: 'array',
+        items: componentRef(activity),
+        description:
+          'The three audit trails merged, newest first, at most twenty, each actor named.',
+      },
+      measuredAt: {
+        type: 'string',
+        format: 'date-time',
+        description:
+          'When the numbers were taken, so a tab opened yesterday is not read as now.',
       },
     },
   });

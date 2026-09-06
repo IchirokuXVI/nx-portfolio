@@ -927,6 +927,62 @@
         ]
       }
     },
+    "/v1/admin/dashboard": {
+      "get": {
+        "operationId": "AdminDashboardController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The four dashboard blocks and the merged activity feed. A block is null when that service did not answer, and the response is still 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin.AdminDashboardResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-dashboard"
+        ]
+      }
+    },
     "/v1/admin/users": {
       "get": {
         "operationId": "AdminUsersController_list_v1",
@@ -23010,6 +23066,607 @@
         ],
         "additionalProperties": false
       },
+      "admin-dashboard.AdminActivityEntry": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorKind": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SERVICE"
+            ]
+          },
+          "actorId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CREATE",
+              "UPDATE",
+              "DELETE"
+            ]
+          }
+        },
+        "required": [
+          "at",
+          "actorKind",
+          "actorId",
+          "entity",
+          "entityId",
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminCatalogDashboard": {
+        "type": "object",
+        "properties": {
+          "supermarkets": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "locations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "productGroups": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "supermarketItems": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "priced",
+              "stale",
+              "unavailable"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "priced": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "stale": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unavailable": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "pricesWritten": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminPricesWrittenSeries"
+            }
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminActivityEntry"
+            }
+          }
+        },
+        "required": [
+          "supermarkets",
+          "locations",
+          "items",
+          "productGroups",
+          "supermarketItems",
+          "pricesWritten",
+          "activity"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminCoreDashboard": {
+        "type": "object",
+        "properties": {
+          "zones": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "active",
+              "markedForDeletion"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "active": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "markedForDeletion": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "memberships": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pending"
+            ],
+            "properties": {
+              "pending": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "lists": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "baskets": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "draft",
+              "completed"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "draft": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "zonesCreated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.DailyCount"
+            }
+          },
+          "listsCreated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.DailyCount"
+            }
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminActivityEntry"
+            }
+          }
+        },
+        "required": [
+          "zones",
+          "memberships",
+          "lists",
+          "baskets",
+          "zonesCreated",
+          "listsCreated",
+          "activity"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminDashboardActivityEntry": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorKind": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SERVICE"
+            ]
+          },
+          "actorId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CREATE",
+              "UPDATE",
+              "DELETE"
+            ]
+          },
+          "actorName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The admin’s display name, else the username, else the id itself. A service actor keeps its id."
+          }
+        },
+        "required": [
+          "at",
+          "actorKind",
+          "actorId",
+          "entity",
+          "entityId",
+          "action",
+          "actorName"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminDashboardWindow": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The first day in every series, as `YYYY-MM-DD`, UTC."
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The last day in every series, as `YYYY-MM-DD`, UTC. Today."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminHarvestDashboard": {
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "byStatus",
+              "inWindow"
+            ],
+            "properties": {
+              "byStatus": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/admin-dashboard.AdminHarvestRunStatusCount"
+                }
+              },
+              "inWindow": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.HarvestRunView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.HarvestRunView"
+            }
+          },
+          "queues": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "entries",
+              "places",
+              "shops"
+            ],
+            "properties": {
+              "entries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/admin-dashboard.AdminHarvestQueueEntry"
+                }
+              },
+              "places": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "shops": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/admin-dashboard.AdminHarvestShopQueue"
+                }
+              }
+            }
+          },
+          "sources": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "enabled"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "enabled": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "required": [
+          "runs",
+          "running",
+          "recent",
+          "queues",
+          "sources"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminHarvestQueueEntry": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "candidate": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unresolved": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "supermarketId",
+          "candidate",
+          "unresolved"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminHarvestRunStatusCount": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/enums.HarvestRunStatus"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "status",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminHarvestShopQueue": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unmapped": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "supermarketId",
+          "unmapped"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminIdentityDashboard": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "registered",
+              "temporary",
+              "verified"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "registered": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "temporary": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "verified": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "signUps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.DailyCount"
+            }
+          },
+          "admins": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "disabled"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "disabled": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "loginFailures": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "last24h",
+              "last7d",
+              "recent"
+            ],
+            "properties": {
+              "last24h": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "last7d": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "recent": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/admin-dashboard.AdminLoginFailureView"
+                }
+              }
+            }
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminActivityEntry"
+            }
+          }
+        },
+        "required": [
+          "users",
+          "signUps",
+          "admins",
+          "loginFailures",
+          "activity"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminLoginFailureView": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "username": {
+            "type": "string"
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "at",
+          "username",
+          "ip"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminPricesWrittenSeries": {
+        "type": "object",
+        "properties": {
+          "sourceKind": {
+            "$ref": "#/components/schemas/enums.PriceSourceKind"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.DailyCount"
+            }
+          }
+        },
+        "required": [
+          "sourceKind",
+          "points"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.DailyCount": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "minLength": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "day",
+          "count"
+        ],
+        "additionalProperties": false
+      },
       "admin-users.AdminUserDetailView": {
         "type": "object",
         "properties": {
@@ -23149,6 +23806,82 @@
           "updatedAt"
         ],
         "additionalProperties": false
+      },
+      "admin.AdminDashboardResponse": {
+        "type": "object",
+        "description": "What the back office opens to. Each block is `null` when that service did not answer, and the response is still 200: one stopped service costs its own block rather than the whole page.",
+        "required": [
+          "window",
+          "identity",
+          "core",
+          "catalog",
+          "harvest",
+          "activity",
+          "measuredAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "window": {
+            "$ref": "#/components/schemas/admin-dashboard.AdminDashboardWindow",
+            "description": "The days every daily series covers, stated by the gateway so four services fill the same window."
+          },
+          "identity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/admin-dashboard.AdminIdentityDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Users, admins and failed operator logins, from auth."
+          },
+          "core": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/admin-dashboard.AdminCoreDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Zones, memberships, lists and baskets, from core."
+          },
+          "catalog": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/admin-dashboard.AdminCatalogDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The catalog totals and the prices written, from catalog."
+          },
+          "harvest": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/admin-dashboard.AdminHarvestDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Runs, the run in flight and the per chain queues, from the harvester."
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminDashboardActivityEntry"
+            },
+            "description": "The three audit trails merged, newest first, at most twenty, each actor named."
+          },
+          "measuredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the numbers were taken, so a tab opened yesterday is not read as now."
+          }
+        }
       },
       "admin.AdminEnvironmentResponse": {
         "type": "object",

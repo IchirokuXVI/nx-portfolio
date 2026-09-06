@@ -16,6 +16,7 @@ import { ZonesModule } from '../zones/zones.module';
 import { AdminListService } from './admin-list.service';
 import { AdminZoneService } from './admin-zone.service';
 import { CoreAdminController } from './admin.controller';
+import { CoreDashboardService } from './dashboard.service';
 import { CorePlatformAdminService } from './platform-admin.service';
 
 /**
@@ -50,6 +51,12 @@ import { CorePlatformAdminService } from './platform-admin.service';
     AccountModule,
   ],
   controllers: [CoreAdminController],
-  providers: [CorePlatformAdminService, AdminZoneService, AdminListService],
+  providers: [
+    CorePlatformAdminService,
+    AdminZoneService,
+    AdminListService,
+    // The dashboard's core block (plan 0088), behind the same gate.
+    CoreDashboardService,
+  ],
 })
 export class CoreAdminModule {}

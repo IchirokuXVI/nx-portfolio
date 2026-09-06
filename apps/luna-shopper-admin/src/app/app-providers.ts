@@ -13,6 +13,8 @@ import {
 import {
   adminAuthInterceptor,
   clientVersionInterceptor,
+  DASHBOARD_SERVICE,
+  DashboardApi,
   DEPLOYMENT_SERVICE,
   DeploymentApi,
   DIRECTORY_SERVICE,
@@ -30,6 +32,7 @@ import {
   SessionBootstrap,
   SessionLifecycle,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { DASHBOARD_LINK } from '@portfolio/luna-shopper-admin/feature-dashboard';
 import { HARVEST_LINKS } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   provideResources,
@@ -100,6 +103,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // stack: the service is switched off in both clusters on purpose.
   provideService(HARVEST_SERVICE, HarvestApi),
 
+  // The one read the dashboard makes (admin plan 0016), bound here for the same
+  // reason as the rest: it needs the `HttpClient` configured above.
+  // `DashboardMemory` stays the token's default, so the screen draws a populated
+  // dashboard for anybody running this app with nothing listening.
+  provideService(DASHBOARD_SERVICE, DashboardApi),
+
   // The liveness probe (plan 0008). Bound here for the same reason the others
   // are: it needs the `HttpClient` configured above. `HealthMemory` stays the
   // token's default and answers that the server is there, so no spec and no run
@@ -115,7 +124,9 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // The screens that are not resources, so the navigation can reach them. A
   // hand written screen has no descriptor for the registry to read, so it says
   // it exists here instead, from the same library that declares its routes.
-  provideShellLinks(...HARVEST_LINKS),
+  // The dashboard's entry is `leading`, so it is drawn in front of the
+  // resources rather than after them with the harvester's section.
+  provideShellLinks(DASHBOARD_LINK, ...HARVEST_LINKS),
 
   // Ask the server about itself, and take a passwordless session if it offers one
   // (plan 0002, section 5).

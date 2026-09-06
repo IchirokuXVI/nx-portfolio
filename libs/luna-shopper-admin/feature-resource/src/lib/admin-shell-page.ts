@@ -72,16 +72,24 @@ export class AdminShellPage {
    * plan 0006's harvester screens are the first, because a run and a review
    * queue are not resources with a form.
    *
-   * Resources first, in both cases in the order the app named them. The
-   * bespoke screens are the ones with a reason to be grouped at the end: they
-   * are a section rather than more of the same list.
+   * Resources in the middle, in the order the app named them. The bespoke
+   * screens are the ones with a reason to be grouped at the end: they are a
+   * section rather than more of the same list.
+   *
+   * A named screen may say it belongs in front of them instead, with
+   * `leading` (admin plan 0016). The dashboard is what that is for, and it is
+   * one entry rather than a second token: it is not a section, it is the screen
+   * the app opens to, and it sits above everything it summarises. Both groups
+   * keep the order they were named in, so an app naming two leading screens
+   * gets them in that order.
    */
   readonly links = computed<readonly ShellLink[]>(() => [
+    ...this._extraLinks.filter((link) => link.leading === true),
     ...this._registry.all().map((descriptor) => ({
       path: `/${descriptor.segment}`,
       label: descriptor.labels.many,
     })),
-    ...this._extraLinks,
+    ...this._extraLinks.filter((link) => link.leading !== true),
   ]);
 
   /**

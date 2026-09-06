@@ -1,3 +1,4 @@
+import type { Type } from '@angular/core';
 import type { Route } from '@angular/router';
 import {
   hasDetailScreen,
@@ -110,14 +111,21 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
  * screen that says the address is wrong and also takes away the menu leaves the
  * operator with nothing but the back button.
  *
- * The empty path lands on the first resource the app named. There is no
- * dashboard and this plan does not add one: an operator opens this tool to
- * change a specific thing, and a landing page in front of that is a click
- * between them and it.
+ * The empty path lands on the first resource the app named, unless the app gave
+ * it a `home` (admin plan 0016). `0004` refused a landing page because an
+ * operator opens this tool to change a specific thing and a page in front of
+ * that is a click between them and it. That argument is against an *empty*
+ * landing page and it stands; it is not against one that answers, on arrival,
+ * the questions an operator otherwise opens six screens to answer.
+ *
+ * So the home is optional and the redirect is what it replaces. Without one
+ * nothing changes at all, which is what keeps every app and every spec that
+ * never names a home exactly as it was.
  */
 export function adminRoutes(
   descriptors: readonly AnyResourceDescriptor[],
-  sections: readonly Route[] = []
+  sections: readonly Route[] = [],
+  home?: Type<unknown>
 ): Route[] {
   const first = descriptors[0];
 
@@ -138,17 +146,37 @@ export function adminRoutes(
         // they can go: a catch all matches anything, so a route declared after
         // it is unreachable.
         ...sections,
-        ...(first === undefined
-          ? []
-          : [
-              {
-                path: '',
-                pathMatch: 'full' as const,
-                redirectTo: first.segment,
-              },
-            ]),
+        // The screen the app opens to, or the redirect that stands in for one.
+        // Never both: a route table with a component at the empty path and a
+        // redirect from it draws whichever was declared first, which is a
+        // question nobody should have to answer by reading this file.
+        //
+        // `pathMatch: 'full'` either way. Without it the empty path matches
+        // every URL under the chrome, and the dashboard would be drawn over
+        // every resource in the app.
+        ...emptyPath(home, first),
         { path: '**', component: NotFoundPage },
       ],
     },
   ];
+}
+
+/**
+ * What sits at the empty path: the home, else the redirect, else nothing.
+ *
+ * Nothing is a real case. An app with no resources and no home has no screen to
+ * open on, and a redirect to a segment that does not exist would land on the not
+ * found page by a route the app itself declared.
+ */
+function emptyPath(
+  home: Type<unknown> | undefined,
+  first: AnyResourceDescriptor | undefined
+): Route[] {
+  if (home !== undefined) {
+    return [{ path: '', pathMatch: 'full', component: home }];
+  }
+
+  return first === undefined
+    ? []
+    : [{ path: '', pathMatch: 'full', redirectTo: first.segment }];
 }

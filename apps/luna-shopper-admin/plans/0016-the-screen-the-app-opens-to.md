@@ -1,3 +1,5 @@
+> **PR:** [#242](https://github.com/IchirokuXVI/nx-portfolio/pull/242)
+
 # 0016 The screen the app opens to
 
 The app opens on the supermarkets list. `0004` decided that: "an operator opens this tool to

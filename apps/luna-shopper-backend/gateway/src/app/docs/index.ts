@@ -21,6 +21,7 @@ export {
 export {
   componentNameFor,
   componentRef,
+  hoistAdminDashboard,
   hoistAdminEnvironment,
   hoistContractSchema,
   hoistPlatformStats,

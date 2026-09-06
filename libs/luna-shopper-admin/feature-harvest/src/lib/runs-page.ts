@@ -29,7 +29,9 @@ import {
 import {
   HarvestNotice,
   ReferencePicker,
+  RunRowView,
   SwitchPanel,
+  type RunRow,
 } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
 import { HARVEST_SEGMENT } from './harvest-paths';
@@ -99,6 +101,7 @@ const SCOPED_ADAPTER = 'mercadona-api';
     RokuTranslatorPipe,
     HarvestNotice,
     ReferencePicker,
+    RunRowView,
     SwitchPanel,
   ],
   template: `
@@ -225,31 +228,10 @@ const SCOPED_ADAPTER = 'mercadona-api';
       <ul class="runs">
         @for (row of rows(); track row.id) {
           <li>
-            <a [routerLink]="[row.id]">
-              <span class="mode">{{ 'harvest.mode.' + row.mode | rokuT }}</span>
-              <span [class]="row.status" class="status">
-                {{ 'harvest.status.' + row.status | rokuT }}
-              </span>
-              <!-- A second chip rather than a replacement: the status says how
-                   the run ended and a revert does not change that. -->
-              @if (row.reverted !== '') {
-                <span [title]="row.revertedBy" class="reverted">
-                  {{
-                    'harvest.runs.row.reverted' | rokuT: { when: row.reverted }
-                  }}
-                </span>
-              }
-              <span class="when">{{ row.requested }}</span>
-              <span class="counts">
-                {{
-                  'harvest.runs.row.counts'
-                    | rokuT: { processed: row.processed, failed: row.failed }
-                }}
-              </span>
-              @if (row.reasonKey; as key) {
-                <span class="reason">{{ key | rokuT }}</span>
-              }
-            </a>
+            <!-- Relative, because the run screen is a child of this one. The
+                 dashboard draws the same row with an absolute link, which is
+                 why the link is the row component's input. -->
+            <lib-run-row [link]="[row.id]" [row]="row" />
           </li>
         }
       </ul>
@@ -350,65 +332,10 @@ const SCOPED_ADAPTER = 'mercadona-api';
       list-style: none;
     }
 
-    .runs a {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: baseline;
-      padding: var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      text-decoration: none;
-      color: inherit;
-    }
-
-    .mode {
-      font-weight: 700;
-    }
-
-    .status {
-      padding: var(--admin-space-1) var(--admin-space-2);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface);
-      font-size: 0.75rem;
-      text-transform: uppercase;
-    }
-
-    .status.RUNNING,
-    .status.PENDING {
-      background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
-    }
-
-    .status.FAILED,
-    .status.STALE {
-      background: var(--admin-danger-wash);
-      color: var(--admin-danger-ink);
-    }
-
     .filters {
       display: flex;
       flex-wrap: wrap;
       gap: var(--admin-space-3);
-    }
-
-    .reverted {
-      padding: var(--admin-space-1) var(--admin-space-2);
-      border-radius: var(--admin-radius);
-      background: var(--admin-danger-wash);
-      font-size: 0.75rem;
-      color: var(--admin-danger-ink);
-    }
-
-    .when,
-    .counts,
-    .reason {
-      color: var(--admin-ink-muted);
-    }
-
-    .reason {
-      flex-basis: 100%;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -568,7 +495,7 @@ export class RunsPage {
     }
   }
 
-  readonly rows = computed(() =>
+  readonly rows = computed<readonly RunRow[]>(() =>
     this.runs().map((run) => ({
       id: run.id,
       mode: run.mode,

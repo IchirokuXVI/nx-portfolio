@@ -1,6 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  ADMIN_DASHBOARD_PATTERNS,
   ADMIN_POSTAL_CODE_PATTERNS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
@@ -15,6 +16,8 @@ import {
   type AddItemPriceBatchRequest,
   type AddItemPriceBatchResult,
   type AddItemPriceRequest,
+  type AdminCatalogDashboard,
+  type AdminDashboardRequest,
   type AdminListSupermarketItemsRequest,
   type AdminPostalCodePage,
   type CountLocationsByPostalCodeRequest,
@@ -92,6 +95,7 @@ import {
   type UpdateSupermarketRequest,
   type UpsertSupermarketLocationItemRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { CatalogDashboardService } from './dashboard.service';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { PostalCodeService } from './postal-code.service';
@@ -123,8 +127,23 @@ export class CatalogController {
     private readonly scopeResolver: ScopeResolverService,
     private readonly postalCodes: PostalCodeService,
     private readonly itemPrices: ItemPriceService,
-    private readonly pricePolicies: PricePolicyService
+    private readonly pricePolicies: PricePolicyService,
+    private readonly dashboard: CatalogDashboardService
   ) {}
+
+  // --- The back office dashboard -------------------------------------------
+
+  /**
+   * Catalog's block of the back office dashboard (plan 0088). Gated inside the
+   * service, like every write here, even though these are reads: the numbers are
+   * an operator's screen and not part of the open read surface.
+   */
+  @MessagePattern(ADMIN_DASHBOARD_PATTERNS.catalog)
+  catalogDashboard(
+    @Payload() req: AdminDashboardRequest
+  ): Promise<AdminCatalogDashboard> {
+    return this.dashboard.dashboard(req);
+  }
 
   // --- Supermarkets --------------------------------------------------------
 

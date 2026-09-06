@@ -255,3 +255,62 @@ describe('resourceRoutes for a resource with its own detail screen', () => {
     );
   });
 });
+
+/**
+ * The screen the app opens to (admin plan 0016).
+ *
+ * `0004` refused an empty landing page, and that refusal stands. What this
+ * argument adds is a page that answers, on arrival, the questions an operator
+ * otherwise opens six screens to answer, so it replaces the redirect rather than
+ * sitting in front of it.
+ */
+describe('adminRoutes with a home', () => {
+  class DashboardPage {}
+
+  const children =
+    adminRoutes([shops, items], [], DashboardPage)[0].children ?? [];
+  const empty = children.filter((route) => route.path === '');
+
+  it('draws the home at the empty path, inside the chrome', () => {
+    expect(empty).toHaveLength(1);
+    expect(empty[0].component).toBe(DashboardPage);
+    expect(empty[0].pathMatch).toBe('full');
+  });
+
+  /**
+   * A component at the empty path and a redirect from it would draw whichever
+   * was declared first, which is a question nobody should have to answer by
+   * reading the route table.
+   */
+  it('emits no redirect beside it', () => {
+    expect(empty[0].redirectTo).toBeUndefined();
+  });
+
+  it('leaves every resource exactly where it was', () => {
+    expect(children.map((route) => route.path)).toEqual([
+      'shops',
+      'items',
+      '',
+      '**',
+    ]);
+  });
+
+  /** An app with a home and no resources still has a screen to open on. */
+  it('needs no resource to have somewhere to land', () => {
+    const alone =
+      adminRoutes([] as readonly AnyResourceDescriptor[], [], DashboardPage)[0]
+        .children ?? [];
+
+    expect(alone.map((route) => route.path)).toEqual(['', '**']);
+    expect(alone[0].component).toBe(DashboardPage);
+  });
+
+  /** Without one, nothing changes at all. */
+  it('still redirects to the first resource when no home is given', () => {
+    const without = adminRoutes([shops, items])[0].children ?? [];
+    const redirect = without.find((route) => route.path === '');
+
+    expect(redirect?.redirectTo).toBe('shops');
+    expect(redirect?.component).toBeUndefined();
+  });
+});

@@ -1089,5 +1089,112 @@
         }
       }
     }
+  },
+  "dashboard": {
+    "nav": "Overview",
+    "heading": "Overview",
+    "measuredAt": "Taken {{when}}",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "stale": "The last refresh did not answer, so these numbers are older than the time above.",
+    "loading": "Reading the numbers…",
+    "error": {
+      "heading": "The dashboard could not be read",
+      "retry": "Try again"
+    },
+    "down": {
+      "identity": "Auth did not answer",
+      "core": "Core did not answer",
+      "catalog": "Catalog did not answer",
+      "harvest": "The harvester did not answer",
+      "body": "Everything else on this page is current. This part of it is missing rather than empty.",
+      "retry": "Try again"
+    },
+    "waiting": {
+      "heading": "Work waiting",
+      "joinRequests": "Join requests waiting",
+      "entries": "Products to decide, {{chain}}",
+      "shops": "Shops to map, {{chain}}",
+      "places": "Places found",
+      "stalePrices": "Stale prices",
+      "loginFailures": "Failed admin sign ins, last 24 hours",
+      "clear": "Nothing is waiting for a decision."
+    },
+    "harvest": {
+      "heading": "The harvester",
+      "running": "Running now",
+      "noRun": "Nothing is running.",
+      "openRun": "Open this run",
+      "recent": "Recent runs",
+      "noRuns": "Nothing has run yet.",
+      "byStatus": "Runs",
+      "byStatusTitle": "Runs by status",
+      "sources": "{{enabled}} of {{total}} chains enabled"
+    },
+    "people": {
+      "heading": "People",
+      "users": "Users",
+      "usersCaption": "{{registered}} registered, {{temporary}} temporary, {{verified}} verified",
+      "zones": "Zones",
+      "zonesCaption": "{{active}} active of {{total}}",
+      "lists": "Lists",
+      "baskets": "Baskets",
+      "basketsCaption": "{{draft}} draft, {{completed}} completed",
+      "signUps": "Sign ups",
+      "signUpsTitle": "Sign ups per day",
+      "zonesSeries": "Zones",
+      "listsSeries": "Lists",
+      "zonesAndLists": "Zones and lists created per day",
+      "inLast7Days": "in the last 7 days"
+    },
+    "catalog": {
+      "heading": "Catalog",
+      "supermarkets": "Chains",
+      "locations": "Shops",
+      "items": "Products",
+      "productGroups": "Product groups",
+      "supermarketItems": "Priced products",
+      "supermarketItemsCaption": "{{priced}} priced, {{stale}} stale, {{unavailable}} unavailable",
+      "pricesWritten": "Prices written per day"
+    },
+    "signIns": {
+      "heading": "Admin sign ins",
+      "last24h": "Failed, last 24 hours",
+      "last7d": "Failed, last 7 days",
+      "when": "When",
+      "username": "Username",
+      "ip": "From",
+      "noIp": "not recorded",
+      "none": "No failed sign in has been recorded."
+    },
+    "activity": {
+      "heading": "Recent activity",
+      "when": "When",
+      "who": "Who",
+      "what": "What",
+      "none": "Nothing has changed.",
+      "service": "harvester",
+      "entry": "{{action}} {{entity}}",
+      "action": {
+        "CREATE": "created",
+        "UPDATE": "updated",
+        "DELETE": "deleted"
+      },
+      "entity": {
+        "zones": "a zone",
+        "shopping_lists": "a list",
+        "users": "a user",
+        "items": "a product",
+        "item_prices": "a price",
+        "supermarket_items": "a priced product",
+        "list_lines": "a list line",
+        "zone_memberships": "a membership",
+        "supermarkets": "a chain",
+        "supermarket_locations": "a shop",
+        "product_groups": "a product group",
+        "price_scopes": "a price scope",
+        "price_policies": "a price policy"
+      }
+    }
   }
 }
