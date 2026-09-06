@@ -101,6 +101,14 @@ const ENTITY_KEYS: Readonly<Record<string, string | undefined>> = {
   supermarket_items: 'dashboard.activity.entity.supermarket_items',
   list_lines: 'dashboard.activity.entity.list_lines',
   zone_memberships: 'dashboard.activity.entity.zone_memberships',
+  // Catalog tables a walk and an operator both write. They have a noun here and
+  // no target in `activityTarget`, and the two lists are separate on purpose:
+  // knowing what a row is called is not the same as knowing a URL that opens it.
+  supermarkets: 'dashboard.activity.entity.supermarkets',
+  supermarket_locations: 'dashboard.activity.entity.supermarket_locations',
+  product_groups: 'dashboard.activity.entity.product_groups',
+  price_scopes: 'dashboard.activity.entity.price_scopes',
+  price_policies: 'dashboard.activity.entity.price_policies',
 };
 
 /** The six price source kinds, in the order that fixes their chart colours. */
@@ -322,7 +330,8 @@ export function runsByStatusChart(
  */
 export function pricesWrittenChart(
   catalog: Wire.AdminDashboardAdminCatalogDashboard,
-  translate: Translate
+  translate: Translate,
+  formatDay: (day: string) => string = (day) => day
 ): BarChartView {
   const written = new Map(
     catalog.pricesWritten.map((entry) => [entry.sourceKind, entry.points])
@@ -344,7 +353,10 @@ export function pricesWrittenChart(
     })),
     bars: days.map((point, index) => ({
       key: point.day,
-      label: point.day,
+      // A short month and a day rather than the ISO string the wire carries.
+      // Thirty ISO dates along an axis are unreadable, and the chart thins the
+      // labels rather than shortening them, which is the caller's job.
+      label: formatDay(point.day),
       values: drawn.map((entry) => entry.points[index]?.count ?? 0),
     })),
   };

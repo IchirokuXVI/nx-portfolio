@@ -488,7 +488,7 @@ import {
        content and the page has nothing to say about where that happens. */
     .tiles {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
       gap: var(--admin-space-3);
     }
 
@@ -748,7 +748,7 @@ export class DashboardPage {
     const catalog = this.document()?.catalog ?? null;
     return catalog === null
       ? { bars: [], series: [] }
-      : pricesWrittenChart(catalog, this._text);
+      : pricesWrittenChart(catalog, this._text, (day) => this._day(day));
   });
 
   readonly failures = computed(() => {
@@ -779,6 +779,21 @@ export class DashboardPage {
   /** A key as a sentence, for a component input that takes words not keys. */
   text(key: string): string {
     return this._text(key);
+  }
+
+  /**
+   * A day of the window as a short label, with `Intl` and never with `DatePipe`.
+   *
+   * The wire carries `YYYY-MM-DD` and thirty of those along an axis are
+   * unreadable. Parsed at noon UTC rather than at midnight, so a viewer west of
+   * Greenwich is not shown the day before.
+   */
+  private _day(day: string): string {
+    return new Intl.DateTimeFormat(this._translate.locale(), {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(`${day}T12:00:00.000Z`));
   }
 
   /** How far a run has got, which is the run screen's own arithmetic. */

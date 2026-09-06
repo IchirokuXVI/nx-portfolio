@@ -1188,7 +1188,12 @@
         "item_prices": "a price",
         "supermarket_items": "a priced product",
         "list_lines": "a list line",
-        "zone_memberships": "a membership"
+        "zone_memberships": "a membership",
+        "supermarkets": "a chain",
+        "supermarket_locations": "a shop",
+        "product_groups": "a product group",
+        "price_scopes": "a price scope",
+        "price_policies": "a price policy"
       }
     }
   }

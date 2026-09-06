@@ -313,6 +313,24 @@ describe('pricesWrittenChart', () => {
       '2026-08-03',
     ]);
   });
+
+  /**
+   * Thirty ISO dates along an axis are unreadable, and the chart thins its
+   * labels rather than shortening them, which is the caller's job.
+   */
+  it('labels a day with whatever the caller formats it as', () => {
+    const chart = pricesWrittenChart(
+      catalog({ pricesWritten: [series('OFFICIAL_API', 1, 2, 3)] }),
+      translate,
+      (day) => `on ${day.slice(-2)}`
+    );
+
+    expect(chart.bars.map((bar) => bar.label)).toEqual([
+      'on 01',
+      'on 02',
+      'on 03',
+    ]);
+  });
 });
 
 describe('peopleTiles', () => {
