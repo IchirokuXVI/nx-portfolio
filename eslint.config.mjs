@@ -13,7 +13,18 @@ export default [
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
   {
-    ignores: ['**/dist'],
+    /**
+     * `docs/research/` is evidence, not code.
+     *
+     * Those scripts are checked in so the numbers in the plans they produced
+     * can be re-taken by somebody who did not write them. Nothing imports them,
+     * no target builds them and CI never runs them, so linting them would fail
+     * a pull request over the style of a measurement already taken. It is
+     * ignored here rather than in the owning project's config because two
+     * projects lint the same directory: the service the research belongs to,
+     * and the umbrella project whose root contains it.
+     */
+    ignores: ['**/dist', '**/docs/research/**'],
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
