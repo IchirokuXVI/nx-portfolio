@@ -11,13 +11,14 @@ import {
 } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogController } from './catalog.controller';
+import { CatalogDashboardService } from './dashboard.service';
 import { EffectivePriceService } from './effective-price.service';
 import { EffectivePriceSweep } from './effective-price.sweep';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
-import { PricePolicyService } from './price-policy.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
+import { PricePolicyService } from './price-policy.service';
 import { PriceScopeService } from './price-scope.service';
 import { ProductGroupService } from './product-group.service';
 import { ScopeResolverService } from './scope-resolver.service';
@@ -77,6 +78,8 @@ import { SupermarketService } from './supermarket.service';
     PostalCodeService,
     SupermarketItemService,
     SupermarketLocationItemService,
+    // The dashboard's catalog block (plan 0088), behind the same gate.
+    CatalogDashboardService,
   ],
 })
 export class CatalogModule {}

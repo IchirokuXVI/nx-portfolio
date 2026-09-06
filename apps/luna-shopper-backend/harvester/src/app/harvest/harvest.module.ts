@@ -7,11 +7,12 @@ import type { HarvesterConfig } from '../config/app-config';
 import { HARVESTER_ENTITIES } from '../entities';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
+import { HarvestDashboardService } from './dashboard.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
+import { FileImportRunner } from './file-import.runner';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
-import { FileImportRunner } from './file-import.runner';
 import { HarvestController } from './harvest.controller';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import { PlatformAdminService } from './platform-admin.service';
@@ -80,6 +81,8 @@ import { SupermarketSourceService } from './supermarket-source.service';
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,
     PostalCodeDiscoveryWorker,
+    // The dashboard's harvest block (plan 0088), behind the same gate.
+    HarvestDashboardService,
   ],
 })
 export class HarvestModule {}

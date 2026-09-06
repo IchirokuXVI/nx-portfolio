@@ -2,11 +2,14 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ADMIN_BASKET_PATTERNS,
+  ADMIN_DASHBOARD_PATTERNS,
   ADMIN_LIST_PATTERNS,
   ADMIN_MEMBERSHIP_PATTERNS,
   ADMIN_ZONE_PATTERNS,
   type AdminBasketDetailView,
   type AdminBasketPage,
+  type AdminCoreDashboard,
+  type AdminDashboardRequest,
   type AdminListDetailView,
   type AdminListIdRequest,
   type AdminListLinePage,
@@ -43,6 +46,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { AdminListService } from './admin-list.service';
 import { AdminZoneService } from './admin-zone.service';
+import { CoreDashboardService } from './dashboard.service';
 
 /**
  * Core's back office surface on the broker (plan 0074).
@@ -70,8 +74,20 @@ import { AdminZoneService } from './admin-zone.service';
 export class CoreAdminController {
   constructor(
     private readonly zones: AdminZoneService,
-    private readonly lists: AdminListService
+    private readonly lists: AdminListService,
+    private readonly dashboard: CoreDashboardService
   ) {}
+
+  /**
+   * Core's block of the back office dashboard (plan 0088). Gated like every
+   * handler below it, inside the service.
+   */
+  @MessagePattern(ADMIN_DASHBOARD_PATTERNS.core)
+  coreDashboard(
+    @Payload() req: AdminDashboardRequest
+  ): Promise<AdminCoreDashboard> {
+    return this.dashboard.dashboard(req);
+  }
 
   @MessagePattern(ADMIN_ZONE_PATTERNS.list)
   listZones(@Payload() req: ListAdminZonesRequest): Promise<AdminZonePage> {
@@ -189,9 +205,7 @@ export class CoreAdminController {
   }
 
   @MessagePattern(ADMIN_LIST_PATTERNS.getLine)
-  getLine(
-    @Payload() req: GetAdminListLineRequest
-  ): Promise<AdminListLineView> {
+  getLine(@Payload() req: GetAdminListLineRequest): Promise<AdminListLineView> {
     return this.lists.getLine(req);
   }
 
