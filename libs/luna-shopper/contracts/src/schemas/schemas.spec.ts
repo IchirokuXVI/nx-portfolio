@@ -271,36 +271,41 @@ describe('contract schemas', () => {
 
     it('line.add response (a free text line, and no trip status on it)', () => {
       expect(
+        // The line, and whether the add raised one the list already held rather
+        // than creating it (plan 0091, section 4).
         validateMessageResponse('line.add', {
-          id: 'l',
-          listId: 'li',
-          content: 'Milk',
-          quantity: 1,
-          // A free text line, which is what most lines are: an empty set and a
-          // null hash, both stated rather than left out (plan 0048, 1.1).
-          itemIds: [],
-          itemSetHash: null,
-          // Subscribed to nothing, stated rather than left out for the same
-          // reason (plan 0070, section 9): a hand made line says so.
-          productGroupId: null,
-          groupItemIds: [],
-          position: 1,
-          approvalStatus: 'PENDING',
-          createdByUserId: 'u',
-          approvedByUserId: null,
-          version: 1,
-          // A line that has just been added cannot have been bought, and both
-          // indicators say so explicitly rather than by being absent (plan 0047,
-          // section 5).
-          boughtCount: 0,
-          lastSettlementOutcome: null,
-          // And the third one, which nothing can be a moment after it was typed
-          // (plan 0052, section 4). Stated for the same reason: absent would
-          // read as "this server does not say".
-          claimed: false,
-          claimedByUserId: null,
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
+          merged: false,
+          line: {
+            id: 'l',
+            listId: 'li',
+            content: 'Milk',
+            quantity: 1,
+            // A free text line, which is what most lines are: an empty set and a
+            // null hash, both stated rather than left out (plan 0048, 1.1).
+            itemIds: [],
+            itemSetHash: null,
+            // Subscribed to nothing, stated rather than left out for the same
+            // reason (plan 0070, section 9): a hand made line says so.
+            productGroupId: null,
+            groupItemIds: [],
+            position: 1,
+            approvalStatus: 'PENDING',
+            createdByUserId: 'u',
+            approvedByUserId: null,
+            version: 1,
+            // A line that has just been added cannot have been bought, and both
+            // indicators say so explicitly rather than by being absent (plan 0047,
+            // section 5).
+            boughtCount: 0,
+            lastSettlementOutcome: null,
+            // And the third one, which nothing can be a moment after it was typed
+            // (plan 0052, section 4). Stated for the same reason: absent would
+            // read as "this server does not say".
+            claimed: false,
+            claimedByUserId: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
         }).valid
       ).toBe(true);
     });

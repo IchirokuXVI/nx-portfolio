@@ -4,7 +4,10 @@ import type {
   OriginUnavailableReason,
   ParticipantKind,
 } from '../enums/generated-list.enums';
-import type { SettlementOutcome } from '../enums/list.enums';
+import type {
+  LineApprovalStatus,
+  SettlementOutcome,
+} from '../enums/list.enums';
 import type { ItemView, LocalizedText } from './catalog.messages';
 import type {
   GeneratedListLineOriginView,
@@ -150,14 +153,20 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * different number with a different meaning, and it is the only place the
    * provenance rows plan 0050 wrote can be read back at all.
    *
-   * Gated on plan 0051 section 5.2's all or nothing rule. A guest sees neither
-   * collection, and that is not a degraded experience: a guest must never have to
-   * know which household a tin of tomatoes belongs to.
+   * Since plan 0092 it answers a third collection, `others`, which is every list
+   * in scope holding no matching line at all, and it is offered for **any** line
+   * rather than only one with origins. An added line nobody has sent anywhere
+   * answers two empty collections and every writable list, which is the row set
+   * the deleted target picker used to be.
+   *
+   * Gated on plan 0051 section 5.2's all or nothing rule. A guest sees none of
+   * the three collections, and that is not a degraded experience: a guest must
+   * never have to know which household a tin of tomatoes belongs to.
    */
   lineOrigins: 'generatedList.lineOrigins',
   /**
-   * Set one list's contribution to a basket line, editing an origin or adopting
-   * a new one (plan 0057, section 5).
+   * Set one list's contribution to a basket line: editing an origin, adopting a
+   * matching line, or creating one (plan 0057 section 5, plan 0092 section 4).
    *
    * **This is not buying anything**, and that is the distinction the whole plan
    * rests on. Lowering the number here is a household changing its mind, exactly
@@ -167,6 +176,11 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * {@link SetGeneratedListOriginQuantityResult} carries no settlement refs and
    * no skip report, so a client cannot draw "got it" from something the server
    * never said.
+   *
+   * **Raising a list from zero is how a line reaches it** (plan 0092). A list
+   * holding no matching line has one created through the ordinary add, so this
+   * one write replaced plan 0058's separate bind route and its picker, and a
+   * line reaches as many lists as are raised rather than one list once.
    */
   setOriginQuantity: 'generatedList.setOriginQuantity',
   /**
@@ -185,40 +199,6 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * disagreeing about who bought it.
    */
   setOutstanding: 'generatedList.setOutstanding',
-  /**
-   * Which shopping lists an added basket line may be sent to (plan 0058,
-   * section 3).
-   *
-   * The picker in front of the one gesture that takes a line out of the basket,
-   * and it is a **set**: the server answers which lists qualify and flags the
-   * ones the run drew from, and the client groups by zone and orders. Sorting
-   * here would be sorting for a screen this service has never seen.
-   *
-   * Gated on plan 0051 section 5.2 like {@link lineOrigins}, and refused rather
-   * than redacted for the same reason: every field of a target names a list or a
-   * zone, so a guest would receive an empty set that told them nothing and cost
-   * them a request. A guest's line stays in the basket, which is where they put
-   * it, and anybody with an account binds it afterwards.
-   */
-  lineTargets: 'generatedList.lineTargets',
-  /**
-   * Send an added basket line to a shopping list, once (plan 0058, section 4).
-   *
-   * The half of plan 0050 section 5 that says **somebody has said which list**,
-   * made reachable from the screen the person holding the basket is actually on.
-   * Until now the only way to set a target was the owner's own account surface,
-   * so a line a co-shopper added had nowhere to go.
-   *
-   * It writes nothing of its own: core's write back runs exactly as it does
-   * for the owner, so the zone line is created through the ordinary add path with the list's ordinary approval behaviour, the
-   * provenance row is written, and the claim follows.
-   *
-   * **One way, and there is no inverse.** Clearing a target does not delete the
-   * line it created (plan 0050, section 5), because a shared list is not
-   * something a basket may take things back out of. Removing it is done on the
-   * target list, by somebody with access, as an ordinary delete.
-   */
-  bindLine: 'generatedList.bindLine',
 } as const;
 
 /**
@@ -1198,6 +1178,28 @@ export interface GeneratedListLineOriginDetail {
    * can no longer write is one every subsequent settle skips and reports.
    */
   writable: boolean;
+  /**
+   * Whether the run drew from this list (plan 0092, section 3).
+   *
+   * Read from the basket's own source snapshot, so it is the same fact on every
+   * row of every collection here: the client draws the run's own lists first and
+   * the server sorts nothing.
+   */
+  fromRun: boolean;
+  /**
+   * The zone line's approval, so a row can say the household has not agreed yet
+   * (plan 0092, section 3).
+   *
+   * It was one flag on the deleted bind result, and it is now one field on every
+   * origin, which is what it always was: a line created by raising a list starts
+   * under that list's ordinary approval rule (plan 0058, section 4.3), and an
+   * adopted pending line was already waiting before this basket found it.
+   *
+   * `APPROVED` for an origin whose zone line has been deleted underneath the
+   * basket, which is the same case {@link listQuantity} answers with zero: the
+   * line is not waiting for anybody, it is gone.
+   */
+  approvalStatus: LineApprovalStatus;
 }
 
 /**
@@ -1242,9 +1244,43 @@ export interface GeneratedListOriginCandidate {
    * the whole of {@link OriginUnavailableReason}'s doc comment.
    */
   unavailable?: OriginUnavailableReason;
+  /** Whether the run drew from this list (plan 0092, section 3). */
+  fromRun: boolean;
 }
 
-/** What a basket line is made of, and what else could go into it (section 3). */
+/**
+ * A list in scope that holds no matching line at all (plan 0092, section 3).
+ *
+ * The third collection, and the one that replaced plan 0058's target picker.
+ * Raising one of these from zero **creates** the line through the ordinary add
+ * (section 4.2), so a row here is a list this basket has never touched and could
+ * send this line to.
+ *
+ * It carries no quantity, because there is nothing to carry one: the list asks
+ * for none of this and every row here stands at zero until somebody moves it.
+ */
+export interface GeneratedListListRef {
+  listId: string;
+  zoneId: string;
+  /**
+   * The list's own name, under the same rule as
+   * {@link GeneratedListLineOriginDetail.listName}: null rather than invented.
+   */
+  listName: string | null;
+  zoneName: string | null;
+  /** Whether the run drew from this list (plan 0092, section 3). */
+  fromRun: boolean;
+}
+
+/**
+ * What a basket line is made of, what else could go into it, and everywhere else
+ * it could be sent (section 3, widened by plan 0092).
+ *
+ * The three collections partition the lists this reader may write: a list is an
+ * origin, or it holds a matching line and is a candidate, or it holds nothing
+ * matching and is an other. Every one of them is a row with a number on the
+ * sheet, and the number is what that list asked for through this basket.
+ */
 export interface GeneratedListLineOriginsResult {
   generatedListId: string;
   lineId: string;
@@ -1252,6 +1288,11 @@ export interface GeneratedListLineOriginsResult {
   origins: GeneratedListLineOriginDetail[];
   /** Lists holding the same thing that are not origins yet. */
   candidates: GeneratedListOriginCandidate[];
+  /**
+   * Lists in scope holding no matching line. Raising one creates the line
+   * (section 4.2).
+   */
+  others: GeneratedListListRef[];
 }
 
 /**
@@ -1273,8 +1314,16 @@ export interface SetGeneratedListOriginQuantityRequest {
   participantId: string;
   /** The zone list whose contribution is being set. */
   sourceListId: string;
-  /** Its line: an existing origin of this basket line, or one being adopted. */
-  sourceLineId: string;
+  /**
+   * Its line: an existing origin of this basket line, or one being adopted.
+   *
+   * **Absent for a list holding no matching line** (plan 0092, section 4.2). The
+   * write then creates the line through the ordinary add rather than adopting
+   * one, which is what raising a row of {@link GeneratedListLineOriginsResult.others}
+   * from zero means. There is nothing for the client to name, since the line
+   * does not exist yet.
+   */
+  sourceLineId?: string;
   /** What this list should contribute. Zero drops the origin (section 5.3). */
   quantity: number;
   /**
@@ -1400,122 +1449,6 @@ export interface GeneratedListBasketScope {
 export interface GeneratedListLineAddedEvent {
   generatedListId: string;
   line: GeneratedListBasketLineView;
-}
-
-// --- Binding an added line to a list (plan 0058) ---------------------------
-
-/**
- * Which lists an added basket line may be sent to (plan 0058, section 3).
- *
- * No `userId`, like every other request on this surface: the participant id is
- * the whole of the identity, and the actor's own account is resolved from it in
- * core, where section 3.1's intersection is computed.
- */
-export interface GetGeneratedListLineTargetsRequest {
-  generatedListId: string;
-  /** The basket line, not a zone line. */
-  lineId: string;
-  participantId: string;
-}
-
-/**
- * One list a basket line may be bound into (plan 0058, section 3).
- *
- * ## Why the flag rather than an order
- *
- * {@link fromRun} is the whole ergonomics of the picker, and it is a fact rather
- * than a ranking. The line was almost certainly remembered while shopping for
- * the lists this basket was composed from, so a client draws those first and
- * everything else below, and the server sorts nothing: this read is a set, and
- * the grouping by zone belongs to the client because the zone is how the reader
- * thinks about it rather than how the data is stored.
- *
- * Every list here is one **both** the actor and the basket's owner may write
- * right now (section 3.1). The owner's half is not a formality: binding creates
- * an origin, and every settle on that origin is authorized by the owner's
- * access, so a target the owner cannot write would produce a line the household
- * sees and never sees bought.
- */
-export interface GeneratedListLineTarget {
-  listId: string;
-  zoneId: string;
-  /**
-   * The list's own name, composed here as `sourceNames` on the basket read is.
-   * A reader with two lists called Food needs the zone beside it.
-   *
-   * Null when the list could not be named, under the same rule the origin sheet
-   * uses: a list deleted between the scope read and the naming read is the
-   * ordinary way a set of ids outruns its captions rather than an error.
-   */
-  listName: string | null;
-  /** The zone the list belongs to. Null under the same rule as {@link listName}. */
-  zoneName: string | null;
-  /**
-   * Whether the run drew from this list.
-   *
-   * Read from the basket's own source snapshot rather than from the line's
-   * origins, because an added line has no origins at all: what is being asked is
-   * where this **basket** came from, which is what makes one of these rows the
-   * likely answer.
-   */
-  fromRun: boolean;
-}
-
-/** The lists that may receive this line, unordered (section 3). */
-export interface GetGeneratedListLineTargetsResult {
-  generatedListId: string;
-  lineId: string;
-  targets: GeneratedListLineTarget[];
-}
-
-/**
- * Send an added basket line to a shopping list (plan 0058, section 4).
- *
- * `listId` names the **zone** list receiving it, and {@link lineId} means the
- * basket line, as it does everywhere on this surface.
- *
- * There is no quantity: what the zone line asks for is the basket line's
- * outstanding amount and the server computes it (section 4.1). A shopper who has
- * already bought three of the four batteries is asking the household for one,
- * and a quantity on the request would let a client ask for four.
- */
-export interface BindGeneratedListLineRequest {
-  generatedListId: string;
-  lineId: string;
-  participantId: string;
-  /** The shopping list the line is being sent to. */
-  listId: string;
-}
-
-/**
- * What binding a line did (plan 0058, section 4).
- *
- * ## The two fields a client cannot work out for itself
- *
- * {@link pendingApproval} is section 4.3: the created line starts `PENDING`
- * unless the list's ordinary rules approved it, and a reader who is not told
- * will believe their line landed on a household's list when it is waiting for
- * somebody to agree to it. The server decides approval (plan 0037) and this is
- * the server saying what it decided.
- *
- * {@link quantity} is section 4.1: the zone line was created with what was
- * **outstanding**, not with what the basket line asks for, and it may be zero. A
- * zone line at zero is plan 0047 section 2.2's line, which the household now
- * knows about and does not currently need, and no settlement is backfilled for
- * the units bought before the binding.
- */
-export interface BindGeneratedListLineResult {
-  /** The basket line as it now stands, with its target and its origin. */
-  line: GeneratedListBasketLineView;
-  /** The list it went into. */
-  listId: string;
-  zoneId: string;
-  /** The zone line that was created, which is now this line's only origin. */
-  createdLineId: string;
-  /** What that line asks for: the basket line's outstanding amount (4.1). */
-  quantity: number;
-  /** Whether it is waiting for somebody on that list to approve it (4.3). */
-  pendingApproval: boolean;
 }
 
 // --- Presence --------------------------------------------------------------

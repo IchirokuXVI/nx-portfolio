@@ -93,7 +93,8 @@ export class SetGeneratedListPickDto {
 }
 
 /**
- * Set one list's contribution to a basket line (plan 0057, section 5).
+ * Set one list's contribution to a basket line (plan 0057 section 5, plan 0092
+ * section 4).
  *
  * `listId` and `lineId` name the **zone** line, not the basket line: the basket
  * line is already in the path. They keep the plan's own names here, where the
@@ -104,6 +105,9 @@ export class SetGeneratedListPickDto {
  * **This buys nothing.** The same control one screen up means "bought"; this one
  * means what a household wants, and the response carries neither settlement refs
  * nor a skip report so a client cannot read one into the other.
+ *
+ * **A body without `lineId` sends the line to a list that does not hold it**,
+ * which is the write that replaced plan 0058's bind route (section 4.2).
  */
 export class SetGeneratedListOriginQuantityDto {
   @ApiProperty({
@@ -114,13 +118,14 @@ export class SetGeneratedListOriginQuantityDto {
   @IsUUID()
   listId!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it.',
+      'The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it. Leave it out for a list that holds no matching line, and the line is created there through the ordinary add, under that list’s own approval rule.',
   })
+  @IsOptional()
   @IsUUID()
-  lineId!: string;
+  lineId?: string;
 
   @ApiProperty({
     minimum: 0,
@@ -324,29 +329,4 @@ export class SetGeneratedListLineOutstandingDto {
   @Min(0)
   @Max(LINE_QUANTITY_MAX)
   from!: number;
-}
-
-/**
- * Send an added basket line to a shopping list (plan 0058, section 4).
- *
- * `listId` names the **zone** list receiving the line; the basket line is
- * already in the path.
- *
- * **One field, and deliberately no quantity.** What the created line asks for is
- * the basket line's outstanding amount, and the server computes it (section
- * 4.1): a shopper who has already bought three of the four batteries is asking
- * the household for one, and a number here would let a client ask for four.
- *
- * There is no inverse of this request and there is not going to be one. Clearing
- * a target does not delete the line it created (plan 0050, section 5); removing
- * it is done on the target list, by somebody with access, as an ordinary delete.
- */
-export class BindGeneratedListLineDto {
-  @ApiProperty({
-    format: 'uuid',
-    description:
-      'The shopping list to send this line to. Must be one both you and the basket’s owner can write right now: the owner’s access is what authorizes every later settle on it, so a list they cannot write would give the household a line it never sees bought.',
-  })
-  @IsUUID()
-  listId!: string;
 }

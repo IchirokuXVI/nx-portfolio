@@ -7,6 +7,7 @@ import {
   type AddCommentRequest,
   type AddLineQuantityRequest,
   type AddLineRequest,
+  type AddLineResult,
   type AddLinesRequest,
   type AddVoiceCommentRequest,
   type CommentAudioView,
@@ -95,12 +96,12 @@ export class ListController {
   }
 
   @MessagePattern(LINE_PATTERNS.add)
-  addLine(@Payload() req: AddLineRequest): Promise<LineView> {
+  addLine(@Payload() req: AddLineRequest): Promise<AddLineResult> {
     return this.lines.add(req);
   }
 
   @MessagePattern(LINE_PATTERNS.addMany)
-  addLines(@Payload() req: AddLinesRequest): Promise<LineView[]> {
+  addLines(@Payload() req: AddLinesRequest): Promise<AddLineResult[]> {
     return this.lines.addMany(req);
   }
 

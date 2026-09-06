@@ -143,13 +143,6 @@ export type AvailabilityEntryDto = {
 };
 
 /**
- * `BindGeneratedListLineDto` in the gateway's OpenAPI document.
- */
-export type BindGeneratedListLineDto = {
-  listId: string;
-};
-
-/**
  * `CreateGeneratedListDto` in the gateway's OpenAPI document.
  */
 export type CreateGeneratedListDto = {
@@ -566,7 +559,7 @@ export type SetGeneratedListLineOutstandingDto = {
  */
 export type SetGeneratedListOriginQuantityDto = {
   listId: string;
-  lineId: string;
+  lineId?: string;
   quantity: number;
   from: number;
 };
@@ -2068,6 +2061,7 @@ export type EnumsMergeRequestStatus =
  */
 export type EnumsOriginUnavailableReason =
   | 'CLAIMED'
+  | 'REJECTED'
   | 'NOT_APPROVED'
   | 'SETTLED';
 
@@ -2235,17 +2229,8 @@ export type GeneratedListSharingLineOriginDetail = {
   listQuantity: number;
   settledHere: number;
   writable: boolean;
-};
-
-/**
- * `generated-list-sharing.LineTarget` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingLineTarget = {
-  listId: string;
-  zoneId: string;
-  listName: string | null;
-  zoneName: string | null;
   fromRun: boolean;
+  approvalStatus: EnumsLineApprovalStatus;
 };
 
 /**
@@ -2255,6 +2240,17 @@ export type GeneratedListSharingLinkPreview = {
   joinable: boolean;
   name?: string | null;
   participantCount?: number;
+};
+
+/**
+ * `generated-list-sharing.ListRef` in the gateway's OpenAPI document.
+ */
+export type GeneratedListSharingListRef = {
+  listId: string;
+  zoneId: string;
+  listName: string | null;
+  zoneName: string | null;
+  fromRun: boolean;
 };
 
 /**
@@ -2270,6 +2266,7 @@ export type GeneratedListSharingOriginCandidate = {
   content: string;
   matchedOnText: boolean;
   unavailable?: EnumsOriginUnavailableReason;
+  fromRun: boolean;
 };
 
 /**
@@ -2724,6 +2721,19 @@ export type HarvestSupermarketSourceView = {
 };
 
 /**
+ * `list.AddLineResult` in the gateway's OpenAPI document.
+ */
+export type ListAddLineResult = {
+  line: ListLineView;
+  merged: boolean;
+};
+
+/**
+ * `list.AddLineResultList` in the gateway's OpenAPI document.
+ */
+export type ListAddLineResultList = ListAddLineResult[];
+
+/**
  * `list.CommentPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2824,11 +2834,6 @@ export type ListLineView = {
 };
 
 /**
- * `list.LineViewList` in the gateway's OpenAPI document.
- */
-export type ListLineViewList = ListLineView[];
-
-/**
  * `list.ListAccessEntry` in the gateway's OpenAPI document.
  */
 export type ListListAccessEntry = {
@@ -2924,18 +2929,6 @@ export type MsgAssistantTurnResponse = {
 };
 
 /**
- * `msg.generatedList.bindLine.response` in the gateway's OpenAPI document.
- */
-export type MsgGeneratedListBindLineResponse = {
-  line: GeneratedListSharingBasketLineView;
-  listId: string;
-  zoneId: string;
-  createdLineId: string;
-  quantity: number;
-  pendingApproval: boolean;
-};
-
-/**
  * `msg.generatedList.lineOrigins.response` in the gateway's OpenAPI document.
  */
 export type MsgGeneratedListLineOriginsResponse = {
@@ -2943,15 +2936,7 @@ export type MsgGeneratedListLineOriginsResponse = {
   lineId: string;
   origins: GeneratedListSharingLineOriginDetail[];
   candidates: GeneratedListSharingOriginCandidate[];
-};
-
-/**
- * `msg.generatedList.lineTargets.response` in the gateway's OpenAPI document.
- */
-export type MsgGeneratedListLineTargetsResponse = {
-  generatedListId: string;
-  lineId: string;
-  targets: GeneratedListSharingLineTarget[];
+  others: GeneratedListSharingListRef[];
 };
 
 /**

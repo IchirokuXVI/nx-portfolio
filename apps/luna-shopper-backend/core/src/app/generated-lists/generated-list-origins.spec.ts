@@ -16,18 +16,21 @@ import {
   ListLineItem,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import type { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
 import type { GeneratedListService } from './generated-list.service';
 import {
-  ACTIVE_OVERLAP_SQL,
+  LIVE_OVERLAP_SQL,
   SHEET_CANDIDATE_LINES_SQL,
   WRITABLE_LISTS_SQL,
 } from './generated-list.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
- * Editing an origin, and adopting a new one (plan 0057).
+ * Editing an origin, adopting one, and creating one (plan 0057, widened by plan
+ * 0092).
  *
  * The property this file exists to pin is section 1, and it is asserted on every
  * write case rather than once: **lowering what a list asked for is not buying
@@ -35,6 +38,11 @@ import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
  * event is `line.updated` and never `line.settled`. It is the thing most likely
  * to be got wrong by somebody implementing beside the settle service, and the
  * only way it can break is quietly.
+ *
+ * Plan 0092 added the second property worth stating up front: **there is one
+ * write**, and which of the three things it does is decided by what exists
+ * rather than by which route was called. It replaced plan 0058's bind service,
+ * and `generated-list-bind.spec.ts` went with it.
  *
  * Faked at the repository boundary in the style `generated-list-settle.spec.ts`
  * established, with the three raw queries routed by the constant they were given
@@ -45,6 +53,8 @@ const OWNER = 'u-owner';
 const CO_SHOPPER = 'u-marc';
 const OWNER_PARTICIPANT = 'p-owner';
 const BASKET = 'gl-1';
+/** Another live basket of the owner's, which is what a claim refuses. */
+const OTHER_BASKET = 'gl-other';
 const BASKET_LINE = 'gll-1';
 
 const LIST_A = 'l-flat';
@@ -61,6 +71,17 @@ const LINE_C = 'zl-office';
 
 /** The product set two households typing different words still merge on. */
 const MILK = 'h-milk';
+
+/** Which zone each list belongs to, which every collection reports beside it. */
+const ZONE_OF: Record<string, string> = {
+  [LIST_A]: ZONE_A,
+  [LIST_B]: ZONE_B,
+  [LIST_C]: ZONE_C,
+};
+
+function zoneOf(listId: string): string {
+  return ZONE_OF[listId];
+}
 
 interface ZoneLineSeed {
   id: string;
@@ -85,6 +106,13 @@ interface SettlementSeed {
   outcome?: SettlementOutcome;
 }
 
+/** What a promotion was asked to do, so a creation can assert the call. */
+interface PromotionCall {
+  userId: string;
+  listId: string;
+  quantity: number;
+}
+
 interface Harness {
   service: GeneratedListOriginsService;
   basketLine: Partial<GeneratedListLine>;
@@ -93,6 +121,8 @@ interface Harness {
   settlements: SettlementSeed[];
   claims: FakeLineClaims;
   events: { event: RealtimeEvent; listId?: string; payload?: unknown }[];
+  /** Every `promote` this write made, which is how a line reaches a new list. */
+  promotions: PromotionCall[];
 }
 
 function build(
@@ -104,8 +134,19 @@ function build(
     settlements?: SettlementSeed[];
     /** Which lists each user may write, at request time (section 4.1). */
     writable?: Record<string, string[]>;
-    /** Lines an ACTIVE basket of the owner's is already carrying (plan 0050, section 3). */
+    /** Lines another live basket of the owner's is carrying (plan 0050, section 3). */
     carried?: string[];
+    /** The same, naming the basket, so a seed can say "this one carries it". */
+    carriedBy?: Record<string, string>;
+    /**
+     * The zone line a promotion into this list lands on, when the list already
+     * holds the name (plan 0091, section 4). Absent means the add creates one.
+     */
+    promoteLandsOn?: Record<string, string>;
+    /** The approval a created line starts with (plan 0058, section 4.3). */
+    promoteApproval?: LineApprovalStatus;
+    /** The run's own source lists, which every row reports as `fromRun`. */
+    runLists?: string[];
     actorUserId?: string;
     actorKind?: ParticipantKind;
     seesZoneData?: boolean;
@@ -152,13 +193,18 @@ function build(
     [OWNER]: [LIST_A, LIST_B, LIST_C],
     [CO_SHOPPER]: [LIST_A, LIST_B, LIST_C],
   };
-  const zoneOfList: Record<string, string> = {
-    [LIST_A]: ZONE_A,
-    [LIST_B]: ZONE_B,
-    [LIST_C]: ZONE_C,
-  };
-  const carried = new Set(options.carried ?? []);
+  const zoneOfList = ZONE_OF;
+  // Which live basket carries each line. The sugar names another basket, which
+  // is the ordinary case; a seed may name this one, which must not refuse
+  // anything (plan 0092, section 3.2).
+  const carriedBy = new Map<string, string>([
+    ...(options.carried ?? []).map(
+      (lineId) => [lineId, OTHER_BASKET] as [string, string]
+    ),
+    ...Object.entries(options.carriedBy ?? {}),
+  ]);
   const events: Harness['events'] = [];
+  const promotions: PromotionCall[] = [];
 
   /**
    * The three raw reads, routed by the constant rather than by matching SQL
@@ -189,11 +235,19 @@ function build(
           approvalStatus: row.approvalStatus,
         }));
     }
-    if (sql === ACTIVE_OVERLAP_SQL) {
+    if (sql === LIVE_OVERLAP_SQL) {
       const lineIds = parameters[1] as string[];
+      // The query excludes the asking basket on its fourth parameter (plan
+      // 0092, section 3.2), and the fake honours it rather than ignoring it, so
+      // a line this basket itself carries answers nothing.
+      const excluded = parameters[3] as string | null;
       return lineIds
-        .filter((lineId) => carried.has(lineId))
-        .map((lineId) => ({ lineId, generatedListId: 'gl-other' }));
+        .filter((lineId) => carriedBy.has(lineId))
+        .map((lineId) => ({
+          lineId,
+          generatedListId: carriedBy.get(lineId) as string,
+        }))
+        .filter((row) => row.generatedListId !== excluded);
     }
     throw new Error('unmocked raw query');
   };
@@ -240,11 +294,19 @@ function build(
 
   const originRepo = {
     find: async () => [...origins],
+    // Both shapes the service asks for: by the zone line, which is the edit and
+    // the adoption, and by the **list**, which is the creation's stale check
+    // (plan 0092, section 4.2).
     findOne: async ({
       where,
     }: {
-      where: { generatedListLineId: string; lineId: string };
-    }) => origins.find((row) => row.lineId === where.lineId) ?? null,
+      where: { generatedListLineId: string; lineId?: string; listId?: string };
+    }) =>
+      origins.find(
+        (row) =>
+          (where.lineId === undefined || row.lineId === where.lineId) &&
+          (where.listId === undefined || row.listId === where.listId)
+      ) ?? null,
     create: (row: OriginSeed) => ({ ...row, id: `o-${origins.length + 1}` }),
     save: async (row: OriginSeed) => {
       const index = origins.findIndex((existing) => existing.id === row.id);
@@ -344,6 +406,64 @@ function build(
 
   const claims = fakeLineClaims();
 
+  /**
+   * The write back, faked at the same boundary the service uses it: it adds a
+   * zone line through the ordinary add and writes the provenance row, and it
+   * answers which line it landed on (plan 0091, section 4).
+   *
+   * Faked rather than real because `promote` reaches `LineService.add`, whose
+   * own merge rule has its own spec. What this file owns is what the origins
+   * write does with the answer.
+   */
+  const lineWrites = {
+    promote: async (
+      userId: string,
+      _line: unknown,
+      targetListId: string,
+      promoteOptions: { quantity?: number } = {}
+    ) => {
+      const quantity = promoteOptions.quantity ?? 0;
+      promotions.push({ userId, listId: targetListId, quantity });
+      const landsOn = options.promoteLandsOn?.[targetListId];
+      const createdId = landsOn ?? `zl-new-${targetListId}`;
+      const existing = zoneLines.get(createdId);
+      if (existing) {
+        existing.quantity += quantity;
+        existing.version += 1;
+      } else {
+        zoneLines.set(createdId, {
+          id: createdId,
+          listId: targetListId,
+          quantity,
+          content: basketLine.content as string,
+          itemSetHash: MILK,
+          approvalStatus: options.promoteApproval ?? LineApprovalStatus.PENDING,
+          version: 1,
+        } as never);
+      }
+      const already = origins.find((row) => row.lineId === createdId);
+      if (!already) {
+        origins.push({
+          id: `o-${origins.length + 1}`,
+          lineId: createdId,
+          listId: targetListId,
+          zoneId: zoneOfList[targetListId],
+          quantity,
+        });
+      }
+      return {
+        line: {
+          id: createdId,
+          version: zoneLines.get(createdId)?.version ?? 1,
+        },
+        zoneId: zoneOfList[targetListId],
+        quantity,
+        merged: landsOn !== undefined,
+        originCreated: already === undefined,
+      };
+    },
+  } as unknown as GeneratedListLineService;
+
   const service = new GeneratedListOriginsService(
     dataSource,
     {
@@ -351,10 +471,26 @@ function build(
         id: BASKET,
         ownerUserId: OWNER,
         status: GeneratedListStatus.ACTIVE,
+        sourceSnapshot: {
+          profileId: null,
+          pricingProfileId: null,
+          sources: (options.runLists ?? [LIST_A]).map((listId) => ({
+            zoneId: zoneOfList[listId],
+            listId,
+          })),
+        },
       }),
       query,
     } as never,
-    { findOne: async () => basketLine } as never,
+    {
+      findOne: async () => basketLine,
+      // Saved outside the transaction on the creation path, because `promote`
+      // commits its own (plan 0092, section 4.2).
+      save: async (row: Partial<GeneratedListLine>) => {
+        Object.assign(basketLine, row);
+        return row;
+      },
+    } as never,
     originRepo as never,
     {
       findOne: async ({ where }: { where: { id: string } }) =>
@@ -377,7 +513,11 @@ function build(
     } as never,
     sharing,
     generated,
+    lineWrites,
     claims.service,
+    // Plan 0092 section 4.3's seam, real rather than stubbed: it must be a no op
+    // until plan 0093 fills it.
+    new WaitingSettlementService(),
     {
       emit: (
         event: RealtimeEvent,
@@ -398,6 +538,7 @@ function build(
     settlements,
     claims,
     events,
+    promotions,
   };
 }
 
@@ -409,9 +550,13 @@ function read(harness: Harness) {
   });
 }
 
+/**
+ * One write. `lineId` is omitted for a list that holds no matching line, which
+ * is the creation case (plan 0092, section 4.2).
+ */
 function set(
   harness: Harness,
-  body: { listId: string; lineId: string; quantity: number; from: number }
+  body: { listId: string; lineId?: string; quantity: number; from: number }
 ) {
   return harness.service.setOriginQuantity({
     generatedListId: BASKET,
@@ -499,7 +644,7 @@ describe('reading what a basket line is made of (section 3)', () => {
     expect(candidate.matchedOnText).toBe(true);
   });
 
-  it('shows a candidate another active basket carries, marked, rather than hiding it', async () => {
+  it('serves a candidate it cannot offer rather than hiding it', async () => {
     // The one place this codebase deliberately serves something the caller
     // cannot act on: "somebody else is already buying it" is worth knowing while
     // standing in a dairy aisle.
@@ -511,7 +656,11 @@ describe('reading what a basket line is made of (section 3)', () => {
     );
   });
 
-  it('marks a line the run would not have taken rather than dropping it', async () => {
+  it('offers a pending line and a line at zero, which plan 0057 refused', async () => {
+    // Plan 0092 section 3.2. A pending origin is still claimed and still
+    // settled, and a list at zero is a list that can be asked again: both
+    // refusals were rules about composing a basket rather than about a person
+    // deciding to buy something.
     const pending = build({
       zoneLines: [
         { id: LINE_A, listId: LIST_A, quantity: 5, itemSetHash: MILK },
@@ -531,11 +680,41 @@ describe('reading what a basket line is made of (section 3)', () => {
       ],
     });
 
-    expect((await read(pending)).candidates[0].unavailable).toBe(
-      OriginUnavailableReason.NOT_APPROVED
+    expect((await read(pending)).candidates[0].unavailable).toBeUndefined();
+    expect((await read(spent)).candidates[0].unavailable).toBeUndefined();
+  });
+
+  it('refuses a rejected line, which is a decision the household made', async () => {
+    // Plan 0091 section 3.1: raising it would ask a list for something it has
+    // already said no to, so it gets its own reason and the row says so.
+    const harness = build({
+      zoneLines: [
+        { id: LINE_A, listId: LIST_A, quantity: 5, itemSetHash: MILK },
+        {
+          id: LINE_B,
+          listId: LIST_B,
+          quantity: 1,
+          itemSetHash: MILK,
+          approvalStatus: LineApprovalStatus.REJECTED,
+        },
+      ],
+    });
+
+    expect((await read(harness)).candidates[0].unavailable).toBe(
+      OriginUnavailableReason.REJECTED
     );
-    expect((await read(spent)).candidates[0].unavailable).toBe(
-      OriginUnavailableReason.SETTLED
+  });
+
+  it('ignores a line this basket carries itself, and refuses one another does', async () => {
+    // Plan 0092 section 3.2's other half. The query tested `ACTIVE`, which is
+    // never written, so it never fired; asking it against the live set makes it
+    // fire, and this basket's own lines would be the first thing it refused.
+    const mine = build({ carriedBy: { [LINE_B]: BASKET } });
+    const theirs = build({ carriedBy: { [LINE_B]: OTHER_BASKET } });
+
+    expect((await read(mine)).candidates[0].unavailable).toBeUndefined();
+    expect((await read(theirs)).candidates[0].unavailable).toBe(
+      OriginUnavailableReason.CLAIMED
     );
   });
 
@@ -549,6 +728,106 @@ describe('reading what a basket line is made of (section 3)', () => {
     });
 
     expect((await read(harness)).candidates).toEqual([]);
+  });
+});
+
+describe('every list the line could be asked of (plan 0092, section 3)', () => {
+  it('answers a line with nothing at all with every list in scope', async () => {
+    // Section 3.1: an added line nobody has sent anywhere. Two empty
+    // collections and every writable list, which is the row set the deleted
+    // target picker showed, at zero.
+    const harness = build({
+      origins: [],
+      zoneLines: [],
+      runLists: [LIST_A],
+    });
+
+    const result = await read(harness);
+
+    expect(result.origins).toEqual([]);
+    expect(result.candidates).toEqual([]);
+    expect(result.others.map((row) => row.listId).sort()).toEqual(
+      [LIST_A, LIST_B, LIST_C].sort()
+    );
+    expect(
+      result.others.filter((row) => row.fromRun).map((row) => row.listId)
+    ).toEqual([LIST_A]);
+    expect(result.others[0]).toMatchObject({
+      zoneId: zoneOf(result.others[0].listId),
+      listName: `${result.others[0].listId} list`,
+    });
+  });
+
+  it('places each list once, as an origin, a candidate or an other', async () => {
+    // The three collections partition one set: the flat is an origin, the
+    // parents hold a matching line, and the office holds bread.
+    const result = await read(build());
+
+    expect(result.origins.map((row) => row.listId)).toEqual([LIST_A]);
+    expect(result.candidates.map((row) => row.listId)).toEqual([LIST_B]);
+    expect(result.others.map((row) => row.listId)).toEqual([LIST_C]);
+  });
+
+  it('keeps a list holding a match it cannot offer out of the others', async () => {
+    // A row's job is to say what that list holds, so a rejected match is a
+    // candidate carrying a reason rather than an other offering to create a
+    // second line beside it.
+    const harness = build({
+      zoneLines: [
+        { id: LINE_A, listId: LIST_A, quantity: 5, itemSetHash: MILK },
+        {
+          id: LINE_B,
+          listId: LIST_B,
+          quantity: 1,
+          itemSetHash: MILK,
+          approvalStatus: LineApprovalStatus.REJECTED,
+        },
+      ],
+    });
+
+    const result = await read(harness);
+
+    expect(result.candidates.map((row) => row.listId)).toEqual([LIST_B]);
+    expect(result.others.map((row) => row.listId)).toEqual([LIST_C]);
+  });
+
+  it('says on every row whether the run drew from that list', async () => {
+    const result = await read(build({ runLists: [LIST_A, LIST_B] }));
+
+    expect(result.origins[0].fromRun).toBe(true);
+    expect(result.candidates[0].fromRun).toBe(true);
+    expect(result.others[0].fromRun).toBe(false);
+  });
+
+  it('says on every origin whether the household has agreed to it yet', async () => {
+    // One field on every origin rather than one flag on a bind result, which is
+    // what it always was.
+    const harness = build({
+      zoneLines: [
+        {
+          id: LINE_A,
+          listId: LIST_A,
+          quantity: 5,
+          itemSetHash: MILK,
+          approvalStatus: LineApprovalStatus.PENDING,
+        },
+      ],
+    });
+
+    expect((await read(harness)).origins[0].approvalStatus).toBe(
+      LineApprovalStatus.PENDING
+    );
+  });
+
+  it('reads a deleted zone line as nothing wanted and nobody waiting', async () => {
+    // The origin outlives what it came from (plan 0050, section 1), and a line
+    // nobody can find is not waiting for anybody.
+    const harness = build({ zoneLines: [] });
+
+    const [origin] = (await read(harness)).origins;
+
+    expect(origin.listQuantity).toBe(0);
+    expect(origin.approvalStatus).toBe(LineApprovalStatus.APPROVED);
   });
 });
 
@@ -762,13 +1041,72 @@ describe('zero takes the list off the line (section 5.3)', () => {
 });
 
 describe('adopting a list that was not in the run (section 5)', () => {
-  it('adds an origin, raises its zone line, claims it and raises the basket line', async () => {
+  it('takes over the demand the list already has before it adds any', async () => {
+    // Plan 0092 section 4.1. Plan 0057 moved the zone line by the whole
+    // contribution, so a list asking for one, adopted at one, was pushed to two.
+    // This basket is taking over demand that exists, and the run itself never
+    // raised a list it drew from.
+    const asIs = build();
+    const above = build();
+
+    await set(asIs, { listId: LIST_B, lineId: LINE_B, quantity: 1, from: 0 });
+    await set(above, { listId: LIST_B, lineId: LINE_B, quantity: 3, from: 0 });
+
+    // The parents asked for one. Adopted at one, their line stands still.
+    expect(asIs.zoneLines.get(LINE_B)?.quantity).toBe(1);
+    // Adopted at three, only the two above what they asked for are new demand.
+    expect(above.zoneLines.get(LINE_B)?.quantity).toBe(3);
+    // The basket buys all of it either way.
+    expect(asIs.basketLine.quantity).toBe(3);
+    expect(above.basketLine.quantity).toBe(5);
+  });
+
+  it('says nothing on the zone room when the zone line did not move', async () => {
+    // A redraw to report that a row is unchanged is a redraw with no news in
+    // it. The basket's own room still hears, because its line moved.
+    const harness = build();
+
+    await set(harness, {
+      listId: LIST_B,
+      lineId: LINE_B,
+      quantity: 1,
+      from: 0,
+    });
+
+    expect(harness.events.map((entry) => entry.event)).toEqual([
+      RealtimeEvent.GeneratedListLineUpdated,
+    ]);
+  });
+
+  it('moves by the delta on the edit that follows the adoption', async () => {
+    // After adoption the contribution and the list's demand move together, so
+    // an edit is plan 0057's pure delta and lowering one is the household
+    // changing its mind.
+    const harness = build();
+
+    await set(harness, {
+      listId: LIST_B,
+      lineId: LINE_B,
+      quantity: 1,
+      from: 0,
+    });
+    await set(harness, {
+      listId: LIST_B,
+      lineId: LINE_B,
+      quantity: 3,
+      from: 1,
+    });
+
+    expect(harness.zoneLines.get(LINE_B)?.quantity).toBe(3);
+  });
+
+  it('adds an origin, claims it and raises the basket line', async () => {
     const harness = build();
 
     const result = await set(harness, {
       listId: LIST_B,
       lineId: LINE_B,
-      quantity: 1,
+      quantity: 2,
       from: 0,
     });
 
@@ -777,11 +1115,11 @@ describe('adopting a list that was not in the run (section 5)', () => {
       listId: LIST_B,
       lineId: LINE_B,
       zoneId: ZONE_B,
-      quantity: 1,
+      quantity: 2,
     });
     expect(harness.zoneLines.get(LINE_B)?.quantity).toBe(2);
-    expect(harness.basketLine.quantity).toBe(3);
-    expect(result.origin?.contributed).toBe(1);
+    expect(harness.basketLine.quantity).toBe(4);
+    expect(result.origin?.contributed).toBe(2);
     // The other household's list now says somebody is out buying it, named as
     // the basket's owner rather than as the actor (plan 0051, section 5.3).
     expect(harness.claims.announced).toEqual([
@@ -796,7 +1134,7 @@ describe('adopting a list that was not in the run (section 5)', () => {
     expect(harness.settlements).toEqual([]);
   });
 
-  it('refuses a line another active basket already carries', async () => {
+  it('refuses a line another live basket already carries', async () => {
     // The sheet marks it and the write refuses it: a projection is not the
     // authority, and a client holding a stale sheet meets the same rule.
     const harness = build({ carried: [LINE_B] });
@@ -807,6 +1145,48 @@ describe('adopting a list that was not in the run (section 5)', () => {
       )
     ).toBe('validation_failed');
     expect(harness.origins).toHaveLength(1);
+  });
+
+  it('refuses a rejected line and takes a pending one', async () => {
+    // The write restates exactly the refusals the sheet reports, which after
+    // plan 0092 is one of plan 0057's three.
+    const rejected = build({
+      zoneLines: [
+        { id: LINE_A, listId: LIST_A, quantity: 5, itemSetHash: MILK },
+        {
+          id: LINE_B,
+          listId: LIST_B,
+          quantity: 1,
+          itemSetHash: MILK,
+          approvalStatus: LineApprovalStatus.REJECTED,
+        },
+      ],
+    });
+    const pending = build({
+      zoneLines: [
+        { id: LINE_A, listId: LIST_A, quantity: 5, itemSetHash: MILK },
+        {
+          id: LINE_B,
+          listId: LIST_B,
+          quantity: 1,
+          itemSetHash: MILK,
+          approvalStatus: LineApprovalStatus.PENDING,
+        },
+      ],
+    });
+
+    expect(
+      await codeOf(
+        set(rejected, { listId: LIST_B, lineId: LINE_B, quantity: 1, from: 0 })
+      )
+    ).toBe('validation_failed');
+    await set(pending, {
+      listId: LIST_B,
+      lineId: LINE_B,
+      quantity: 1,
+      from: 0,
+    });
+    expect(pending.origins).toHaveLength(2);
   });
 
   it('refuses a line the run’s own rule would not have merged', async () => {
@@ -846,5 +1226,132 @@ describe('adopting a list that was not in the run (section 5)', () => {
         set(harness, { listId: LIST_B, lineId: LINE_B, quantity: 1, from: 0 })
       )
     ).toBe('forbidden');
+  });
+});
+
+/**
+ * Raising a list that holds no matching line, which is what "send this line
+ * there" now means (plan 0092, section 4.2).
+ */
+describe('creating the line a list does not have (section 4.2)', () => {
+  /** A basket line nobody has sent anywhere: no origins, no zone lines. */
+  function added(overrides: Parameters<typeof build>[0] = {}): Harness {
+    return build({ origins: [], zoneLines: [], quantity: 1, ...overrides });
+  }
+
+  it('creates the zone line through the ordinary add, writes the origin and claims it', async () => {
+    const harness = added();
+
+    const result = await set(harness, { listId: LIST_B, quantity: 2, from: 0 });
+
+    // Through `promote` and not by an insert of its own, so the list's access
+    // check, its approval rules and its `line.added` all come with it.
+    expect(harness.promotions).toEqual([
+      { userId: OWNER, listId: LIST_B, quantity: 2 },
+    ]);
+    expect(harness.origins).toHaveLength(1);
+    expect(harness.origins[0]).toMatchObject({ listId: LIST_B, quantity: 2 });
+    // The basket buys what the list asked for.
+    expect(harness.basketLine.quantity).toBe(3);
+    expect(result.origin?.contributed).toBe(2);
+    expect(harness.claims.announced).toEqual([
+      {
+        zoneId: ZONE_B,
+        listId: LIST_B,
+        lineId: harness.origins[0].lineId,
+        claimed: true,
+        claimedByUserId: OWNER,
+      },
+    ]);
+    // Still not a purchase, on the one path that creates something.
+    expect(harness.settlements).toEqual([]);
+  });
+
+  it('says whether the household still has to agree to the created line', async () => {
+    // Plan 0058 section 4.3 survives as a field on the origin rather than a flag
+    // on a bind result: nothing here approves anything and nothing overrides the
+    // add, so this reports what the ordinary path decided.
+    const waiting = added({ promoteApproval: LineApprovalStatus.PENDING });
+    const agreed = added({ promoteApproval: LineApprovalStatus.APPROVED });
+
+    expect(
+      (await set(waiting, { listId: LIST_B, quantity: 1, from: 0 })).origin
+        ?.approvalStatus
+    ).toBe(LineApprovalStatus.PENDING);
+    expect(
+      (await set(agreed, { listId: LIST_B, quantity: 1, from: 0 })).origin
+        ?.approvalStatus
+    ).toBe(LineApprovalStatus.APPROVED);
+  });
+
+  it('lands on a line the list already held when the names fold together', async () => {
+    // After plan 0091 the add answers the line it landed on, and the candidate
+    // read never offered this one because the product sets did not meet. The
+    // origin is written against whichever id came back.
+    const harness = added({ promoteLandsOn: { [LIST_B]: LINE_B } });
+
+    const result = await set(harness, { listId: LIST_B, quantity: 2, from: 0 });
+
+    expect(harness.origins[0].lineId).toBe(LINE_B);
+    expect(result.origin?.lineId).toBe(LINE_B);
+  });
+
+  it('writes nothing at all for a row released where it started', async () => {
+    // No zone line is created for an amount of zero, and this is not an error.
+    const harness = added();
+
+    const result = await set(harness, { listId: LIST_B, quantity: 0, from: 0 });
+
+    expect(harness.promotions).toEqual([]);
+    expect(harness.origins).toEqual([]);
+    expect(harness.events).toEqual([]);
+    expect(result.origin).toBeNull();
+  });
+
+  it('refuses a raise onto a list this basket has already reached', async () => {
+    // A raise that lands on a row the client showed at zero has to be shown
+    // again before it means anything, and the refusal comes **before** the add,
+    // because `promote` commits its own transaction.
+    const harness = added();
+    await set(harness, { listId: LIST_B, quantity: 2, from: 0 });
+
+    expect(
+      await codeOf(set(harness, { listId: LIST_B, quantity: 1, from: 0 }))
+    ).toBe('stale_quantity');
+    expect(harness.promotions).toHaveLength(1);
+    expect(harness.origins).toHaveLength(1);
+  });
+
+  it('refuses a stale `from` before it promotes anything', async () => {
+    const harness = added();
+
+    expect(
+      await codeOf(set(harness, { listId: LIST_B, quantity: 2, from: 1 }))
+    ).toBe('stale_quantity');
+    expect(harness.promotions).toEqual([]);
+    expect(harness.origins).toEqual([]);
+  });
+
+  it('refuses a list the owner may no longer write, and promotes nothing', async () => {
+    const harness = added({
+      writable: { [OWNER]: [LIST_A], [CO_SHOPPER]: [LIST_A, LIST_B] },
+    });
+
+    expect(
+      await codeOf(set(harness, { listId: LIST_B, quantity: 1, from: 0 }))
+    ).toBe('forbidden');
+    expect(harness.promotions).toEqual([]);
+  });
+
+  it('sends the line to as many lists as are raised', async () => {
+    // The whole point of the plan: reaching one list never refuses the next,
+    // which plan 0058's "binding is once" did.
+    const harness = added();
+
+    await set(harness, { listId: LIST_B, quantity: 2, from: 0 });
+    await set(harness, { listId: LIST_C, quantity: 1, from: 0 });
+
+    expect(harness.origins.map((row) => row.listId)).toEqual([LIST_B, LIST_C]);
+    expect(harness.basketLine.quantity).toBe(4);
   });
 });

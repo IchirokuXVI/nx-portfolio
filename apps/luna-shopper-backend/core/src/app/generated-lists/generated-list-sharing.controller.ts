@@ -3,8 +3,6 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   GENERATED_LIST_SHARING_PATTERNS,
   type AddGeneratedListParticipantLineRequest,
-  type BindGeneratedListLineRequest,
-  type BindGeneratedListLineResult,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
   type GeneratedListBasketScope,
@@ -21,8 +19,6 @@ import {
   type GeneratedListShareRequest,
   type GetGeneratedListBasketRequest,
   type GetGeneratedListLineOriginsRequest,
-  type GetGeneratedListLineTargetsRequest,
-  type GetGeneratedListLineTargetsResult,
   type JoinGeneratedListRequest,
   type ListParticipantsRequest,
   type PreviewShareLinkRequest,
@@ -37,7 +33,6 @@ import {
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
-import { GeneratedListBindService } from './generated-list-bind.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
@@ -63,8 +58,7 @@ export class GeneratedListSharingController {
     private readonly reopenService: GeneratedListReopenService,
     private readonly outstanding: GeneratedListOutstandingService,
     private readonly basket: GeneratedListBasketService,
-    private readonly origins: GeneratedListOriginsService,
-    private readonly bind: GeneratedListBindService
+    private readonly origins: GeneratedListOriginsService
   ) {}
 
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
@@ -229,13 +223,17 @@ export class GeneratedListSharingController {
   }
 
   /**
-   * What a basket line is made of, and what else could go into it (plan 0057,
-   * section 3).
+   * Every list this line could be asked of (plan 0057 section 3, widened by plan
+   * 0092 section 3).
+   *
+   * Three collections rather than two, and answered for any line: an added line
+   * nobody has sent anywhere gets every writable list under `others`, which is
+   * what the deleted target picker used to be.
    *
    * Refused outright for a reader who does not pass plan 0051 section 5.2 rather
    * than redacted, which is the one place this surface differs from the rest of
-   * itself: every field of an origin and of a candidate names a zone or a list,
-   * so there would be nothing left after the redaction.
+   * itself: every field of all three names a zone or a list, so there would be
+   * nothing left after the redaction.
    */
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.lineOrigins)
   lineOrigins(
@@ -245,54 +243,24 @@ export class GeneratedListSharingController {
   }
 
   /**
-   * Set one list's contribution, editing an origin or adopting a new one (plan
-   * 0057, section 5).
+   * Set one list's contribution: editing an origin, adopting a matching line, or
+   * creating one (plan 0057 section 5, plan 0092 section 4).
    *
    * **The one operation here that changes a household's own list without buying
    * anything.** The settle beside it lowers a zone line because units were
    * bought; this lowers one because the household changed its mind, and the two
    * are kept apart down to the response shape: this writes no settlement, sets no
    * bought indicator, and answers with neither settlement refs nor a skip report.
+   *
+   * It is also the gesture plan 0050 section 5 waited for, since plan 0092.
+   * Raising a list that holds no matching line **is** sending the line there, so
+   * plan 0058's separate bind route went, and a line reaches as many lists as
+   * are raised rather than one list once.
    */
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity)
   setOriginQuantity(
     @Payload() req: SetGeneratedListOriginQuantityRequest
   ): Promise<SetGeneratedListOriginQuantityResult> {
     return this.origins.setOriginQuantity(req);
-  }
-
-  /**
-   * Which lists an added line may be sent to (plan 0058, section 3).
-   *
-   * The picker in front of the write below, and refused for a reader who does
-   * not pass plan 0051 section 5.2 for the reason the origin sheet is: a target
-   * is nothing but the name of a list and the name of a zone, so a guest gets
-   * nothing rather than less.
-   */
-  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.lineTargets)
-  lineTargets(
-    @Payload() req: GetGeneratedListLineTargetsRequest
-  ): Promise<GetGeneratedListLineTargetsResult> {
-    return this.bind.lineTargets(req);
-  }
-
-  /**
-   * Send an added line to a shopping list, once (plan 0058, section 4).
-   *
-   * **The gesture plan 0050 section 5 has always been waiting for**: an edit
-   * inside a basket changes a shared list only when somebody has said which one,
-   * and until now the only place to say it was the owner's own account surface.
-   * A line a co-shopper added in the aisle had nowhere to go.
-   *
-   * It creates nothing itself. The write back runs exactly as it does for the
-   * owner, so the zone line is added through the ordinary path with the list's
-   * ordinary approval behaviour, and the response says whether the household
-   * still has to agree to it.
-   */
-  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.bindLine)
-  bindLine(
-    @Payload() req: BindGeneratedListLineRequest
-  ): Promise<BindGeneratedListLineResult> {
-    return this.bind.bindLine(req);
   }
 }

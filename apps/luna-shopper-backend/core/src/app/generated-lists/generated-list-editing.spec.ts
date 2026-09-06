@@ -16,6 +16,7 @@ import { GeneratedListLineService } from './generated-list-line.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
 import type { GeneratedListService } from './generated-list.service';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * Editing a basket (plan 0050, section 5), which is one rule tested from every
@@ -62,6 +63,11 @@ function build(options: {
   optionRows?: Partial<GeneratedListLineOption>[];
   /** The zone lines this basket line came from (plan 0052, section 3.3). */
   claiming?: { zoneId: string; listId: string; lineId: string }[];
+  /**
+   * Make the zone add answer a line the list already held rather than a new one
+   * (plan 0091), which is what a promotion has to write its provenance against.
+   */
+  mergedInto?: string;
 }): Harness {
   const basket = {
     id: BASKET,
@@ -166,7 +172,15 @@ function build(options: {
       quantity?: number;
     }) => {
       zoneAdds.push(req);
-      return { id: 'zone-line-1', version: 1 } as LineView;
+      // The add answers what it did as well as the line (plan 0091): the list
+      // may have held the name already, in which case the answer is that line
+      // raised rather than a new one.
+      return options.mergedInto === undefined
+        ? { line: { id: 'zone-line-1', version: 1 } as LineView, merged: false }
+        : {
+            line: { id: options.mergedInto, version: 9 } as LineView,
+            merged: true,
+          };
     },
   } as unknown as LineService;
 
@@ -193,6 +207,8 @@ function build(options: {
     zoneLines,
     claims.service,
     sharing,
+    // Plan 0092 section 4.3's seam, which does nothing until plan 0093.
+    new WaitingSettlementService(),
     publisher
   );
 
@@ -353,6 +369,30 @@ describe('adding a line to a basket', () => {
     expect(promotions).toHaveLength(1);
     expect(promotions[0]).toContain('zone-line-1');
     expect(promotions[0]).toContain(ZONE);
+  });
+
+  it('records the provenance against the line the add landed on, merged or not', async () => {
+    // Plan 0091: the household already asks for batteries, so the add raises
+    // that line and answers it. The provenance row names it, at the units this
+    // basket line contributed rather than the line total, or a settle would
+    // allocate against units nobody here asked for.
+    const { service, promotions } = build({ mergedInto: 'zone-line-held' });
+
+    await service.addLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      content: 'Batteries',
+      quantity: 2,
+      targetListId: TARGET_LIST,
+    });
+
+    expect(promotions).toHaveLength(1);
+    expect(promotions[0]).toContain('zone-line-held');
+    expect(promotions[0]).not.toContain('zone-line-1');
+    // The units this promotion added, and the version the raised line now
+    // stands at.
+    expect(promotions[0][4]).toBe(2);
+    expect(promotions[0][5]).toBe(9);
   });
 
   it('uses the basket default when the request says nothing', async () => {

@@ -143,25 +143,58 @@ export const CANDIDATE_LINE_ITEMS_SQL = `
 `;
 
 /**
- * Which of these lines is already carried by an `ACTIVE` basket of this user
- * (plan 0050, section 3). `$1` is the caller, `$2` the candidate line ids.
+ * Which of these lines is already carried by a **live** basket of this user
+ * (plan 0050, section 3). `$1` is the caller, `$2` the candidate line ids, `$3`
+ * the statuses that count as live, `$4` a basket to ignore or null, and `$5` the
+ * oldest a basket may be and still be carrying anything.
  *
  * Two live baskets both claiming the same milk is how a household ends up with
  * two milks. The overlap is **reported** rather than silently dropped, so the
  * person can see why a line they distinctly remember writing is missing, which is
  * the difference between answering that question and guessing at it.
  *
+ * ## It tested `ACTIVE` and therefore never fired
+ *
+ * A run composes a `DRAFT` and nothing ever writes `ACTIVE`, so the check plan
+ * 0050 section 3 describes has never refused anything. Plan 0092 section 3.2
+ * fixed it against `LIVE_GENERATED_LIST_STATUSES`, which is the set every other
+ * "is somebody still shopping this" question in this folder already asks, and
+ * that is why the constant is a parameter rather than a literal here: the claim
+ * query beside it passes the same one.
+ *
+ * ## Turning it on meant matching the claim exactly
+ *
+ * The last two predicates are {@link LINE_CLAIMS_SQL}'s, and they are here
+ * because **this query and that one must not disagree**. Without them a line
+ * bought all the way through, in a basket somebody left open a fortnight ago,
+ * reads as carried here and as claimed by nobody there: one screen says the milk
+ * is free and the next refuses to put it in a basket, and neither is wrong about
+ * the query it ran. A dead predicate hid that for as long as it stayed dead.
+ *
+ * - `gll."settledQuantity" < gll."quantity"` is plan 0052 section 3.3: a basket
+ *   line settled all the way through is done and releases its origins.
+ * - `gl."generatedAt" >= $5` is the claim window, so an abandoned basket stops
+ *   holding a household's lines hostage. `LineClaimService.since()` is where both
+ *   callers get it, so there is one window rather than two.
+ *
+ * `$4` is the caller's own basket, excluded because a line may legitimately be
+ * carried twice by **one** basket: plan 0094 puts two siblings on one zone line
+ * on purpose. The run passes null, having no basket yet.
+ *
  * It runs on the reverse index over `generated_list_line_origins."lineId"`, which
  * exists for this query alone.
  */
-export const ACTIVE_OVERLAP_SQL = `
+export const LIVE_OVERLAP_SQL = `
   SELECT DISTINCT o."lineId" AS "lineId", gl.id AS "generatedListId"
   FROM "generated_list_line_origins" o
   JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
   JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
   WHERE gl."ownerUserId" = $1
-    AND gl.status = 'ACTIVE'
     AND o."lineId" = ANY($2)
+    AND gl.status::text = ANY($3::text[])
+    AND ($4::uuid IS NULL OR gl.id <> $4::uuid)
+    AND gl."generatedAt" >= $5::timestamptz
+    AND gll."settledQuantity" < gll."quantity"
 `;
 
 /**
@@ -250,8 +283,8 @@ export interface SheetCandidateLineRow extends CandidateLineRow {
   approvalStatus: LineApprovalStatus;
 }
 
-/** One row of {@link ACTIVE_OVERLAP_SQL}. */
-export interface ActiveOverlapRow {
+/** One row of {@link LIVE_OVERLAP_SQL}. */
+export interface LiveOverlapRow {
   lineId: string;
   generatedListId: string;
 }

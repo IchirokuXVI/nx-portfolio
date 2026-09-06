@@ -5,6 +5,7 @@ import {
   GeneratedLineOrigin,
   GeneratedListStatus,
   isLiveGeneratedList,
+  LIVE_GENERATED_LIST_STATUSES,
   RealtimeEvent,
   SettlementOutcome,
   type CreateGeneratedListRequest,
@@ -43,14 +44,14 @@ import {
   type GeneratedListLineCounts,
 } from './generated-list.mappers';
 import {
-  ACTIVE_OVERLAP_SQL,
   CANDIDATE_LINE_ITEMS_SQL,
   CANDIDATE_LINES_SQL,
   GENERATED_LIST_COUNTS_SQL,
+  LIVE_OVERLAP_SQL,
   WRITABLE_LISTS_SQL,
-  type ActiveOverlapRow,
   type CandidateLineRow,
   type GeneratedListCountsRow,
+  type LiveOverlapRow,
   type WritableListRow,
 } from './generated-list.sql';
 import { LineClaimService } from './line-claim.service';
@@ -302,10 +303,17 @@ export class GeneratedListService {
     if (candidates.length === 0) {
       return { kept: [], skipped: [] };
     }
-    const rows = await this.lists.query<ActiveOverlapRow[]>(
-      ACTIVE_OVERLAP_SQL,
-      [userId, candidates.map((line) => line.id)]
-    );
+    const rows = await this.lists.query<LiveOverlapRow[]>(LIVE_OVERLAP_SQL, [
+      userId,
+      candidates.map((line) => line.id),
+      LIVE_GENERATED_LIST_STATUSES,
+      // No basket to exclude: this run is composing the one that would hold
+      // these lines, and it does not exist yet.
+      null,
+      // The same window the claim uses, so a run refuses exactly the lines the
+      // household is being told somebody is out buying.
+      this.claims.since(),
+    ]);
     if (rows.length === 0) {
       return { kept: candidates, skipped: [] };
     }

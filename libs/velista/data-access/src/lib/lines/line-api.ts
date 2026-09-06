@@ -96,7 +96,12 @@ export class LineApi implements LineServiceI {
       })
     );
 
-    return required(toLine(body), 'lines.add');
+    // The route answers what the add did, not the line alone (plan 0091): it may
+    // have raised a line the list already held rather than created one. Only the
+    // line is read here, because the store upserts by id, so a merge lands on the
+    // screen as the existing row moving rather than a new row appearing.
+    const record = body as Record<string, unknown> | null;
+    return required(toLine(record?.['line']), 'lines.add');
   }
 
   async updateLine(

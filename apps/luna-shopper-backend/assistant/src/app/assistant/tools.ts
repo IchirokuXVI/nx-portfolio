@@ -309,9 +309,18 @@ const upsertLines: AssistantTool = {
         wrote = true;
         // The batch answers in request order, which is what lets a line be put
         // back against the item that asked for it.
-        added.forEach((line, position) => {
+        //
+        // It answers whether each item created a line or raised one already on
+        // the list (plan 0091). Everything here was resolved as new against a
+        // read of the list, so a merge means that read was stale or the person
+        // named one thing twice in one sentence, and either way "one more of
+        // those" is the true report and "added" would not be.
+        added.forEach((result, position) => {
           runtime.link.list(list);
-          results[fresh[position].index] = describeLine('added', line);
+          results[fresh[position].index] = describeLine(
+            result.merged ? 'increased' : 'added',
+            result.line
+          );
         });
       } catch (error) {
         firstFailure = error;

@@ -17,7 +17,6 @@ import type { LineService } from '../lists/line.service';
 import type { ListAccessService } from '../lists/list-access.service';
 import type { ProfileService } from '../profiles/profile.service';
 import { GeneratedListBasketService } from './generated-list-basket.service';
-import { GeneratedListBindService } from './generated-list-bind.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
@@ -27,6 +26,7 @@ import type { GeneratedListSharingService } from './generated-list-sharing.servi
 import { GeneratedListService } from './generated-list.service';
 import type { ZoneLineClaimRef } from './line-claim.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * A finished basket refuses every write (plan 0059, section 3).
@@ -194,6 +194,8 @@ function build(status: GeneratedListStatus): Harness {
     basketLineViewsFor: async () => [],
   } as unknown as GeneratedListService;
 
+  // Plan 0092 section 4.3's seam, which does nothing until plan 0093 fills it.
+  const waiting = new WaitingSettlementService();
   const lineWrites = new GeneratedListLineService(
     lines as never,
     options as never,
@@ -202,6 +204,7 @@ function build(status: GeneratedListStatus): Harness {
     {} as unknown as LineService,
     claims.service,
     sharing,
+    waiting,
     publisher
   );
   const settle = new GeneratedListSettleService(
@@ -244,16 +247,6 @@ function build(status: GeneratedListStatus): Harness {
     lineWrites,
     publisher
   );
-  const bind = new GeneratedListBindService(
-    lists as never,
-    lines as never,
-    noRows as never,
-    sharing,
-    generated,
-    lineWrites,
-    claims.service,
-    publisher
-  );
   const originWrites = new GeneratedListOriginsService(
     dataSource,
     lists as never,
@@ -264,7 +257,9 @@ function build(status: GeneratedListStatus): Harness {
     noRows as never,
     sharing,
     generated,
+    lineWrites,
     claims.service,
+    waiting,
     publisher
   );
 
@@ -328,12 +323,17 @@ function build(status: GeneratedListStatus): Harness {
         outstanding: 0,
         from: 1,
       }),
-    'bind an added line to a list': () =>
-      bind.bindLine({
+    // Plan 0092's replacement for plan 0058's bind: raising a list that holds
+    // no matching line is what sends the line there, so it is the same write as
+    // the row below with no zone line named.
+    'send a line to a list that does not hold it': () =>
+      originWrites.setOriginQuantity({
         generatedListId: BASKET,
         lineId: LINE,
         participantId: ACTOR,
-        listId: LIST,
+        sourceListId: LIST,
+        quantity: 1,
+        from: 0,
       }),
     'change what a household asked for': () =>
       originWrites.setOriginQuantity({
