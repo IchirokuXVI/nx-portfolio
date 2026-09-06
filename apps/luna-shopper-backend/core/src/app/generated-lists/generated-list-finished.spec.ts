@@ -194,8 +194,9 @@ function build(status: GeneratedListStatus): Harness {
     basketLineViewsFor: async () => [],
   } as unknown as GeneratedListService;
 
-  // Plan 0092 section 4.3's seam, which does nothing until plan 0093 fills it.
-  const waiting = new WaitingSettlementService();
+  // Plan 0092's seam, filled by plan 0093. Real rather than stubbed, because a
+  // finished basket must keep its waiting units rather than place them.
+  const waiting = new WaitingSettlementService(claims.service, publisher);
   const lineWrites = new GeneratedListLineService(
     lines as never,
     options as never,
@@ -376,6 +377,21 @@ describe('a finished basket refuses every write (section 3)', () => {
       await codeOf(harness.writes[name]());
       expect(harness.events).toEqual([]);
       expect(harness.claims.calls).toEqual([]);
+    });
+
+    it('leaves a purchase with no list where it is (plan 0093, section 3.3)', async () => {
+      // A basket that finishes with waiting units keeps them, attached to no
+      // list. Every write that could create an origin is refused here, and
+      // re-homing happens only inside one of those, so the units stay basket
+      // history: the shopper bought them, nobody was ever told for whom, and the
+      // record says exactly that. Putting them on the last list as extra was the
+      // alternative, and the last list is whichever the shopper happened to
+      // raise last, which is not a fact about who wanted the units.
+      const harness = build(GeneratedListStatus.COMPLETED);
+      await codeOf(harness.writes[name]());
+      // The harness's write repositories throw, so a settlement that moved would
+      // have surfaced as a `threw:` code above rather than as this refusal.
+      expect(await codeOf(harness.writes[name]())).toBe(FINISHED);
     });
 
     it('gets past the status on an ACTIVE basket, so the refusal above was the status', async () => {

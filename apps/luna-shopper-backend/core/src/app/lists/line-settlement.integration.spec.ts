@@ -473,4 +473,78 @@ describeIntegration('the settlement history (real Postgres)', () => {
       await lines.delete({ id: line.id });
     });
   });
+  describe('a purchase with no list is invisible to both reads (plan 0093)', () => {
+    // Plan 0093 section 2.2 states this as structural rather than careful: both
+    // reads select by `lineId` or join the list through `listId`, and a waiting
+    // row has neither. It is asserted here rather than trusted, because the day
+    // somebody adds a read over `generatedListLineId` alone is the day a guest's
+    // purchase could be named to a household that never received the line.
+    const basketLine = randomUUID();
+
+    /** A purchase attached to a basket line and to no list at all. */
+    async function waiting(): Promise<LineSettlement> {
+      const repo = dataSource.getRepository(LineSettlement);
+      return repo.save(
+        repo.create({
+          lineId: null,
+          listId: null,
+          itemId: MILK,
+          outcome: SettlementOutcome.BOUGHT,
+          quantity: 4,
+          settledByUserId: null,
+          settledByParticipantId: randomUUID(),
+          settledAt: new Date('2026-05-01T10:00:00.000Z'),
+          generatedListLineId: basketLine,
+        })
+      );
+    }
+
+    afterEach(async () => {
+      await dataSource
+        .getRepository(LineSettlement)
+        .delete({ generatedListLineId: basketLine });
+    });
+
+    it("is not in the line's own history, next to a purchase that is", async () => {
+      await settlement(ids.line, ids.list, '2026-01-01T10:00:00.000Z');
+      const hidden = await waiting();
+
+      const page = await settlements.listForLine({
+        userId: ids.shopper,
+        lineId: ids.line,
+      });
+
+      expect(page.items).toHaveLength(1);
+      expect(page.items.map((row) => row.id)).not.toContain(hidden.id);
+    });
+
+    it("is not in the product's history across every readable list", async () => {
+      await settlement(ids.line, ids.list, '2026-01-01T10:00:00.000Z');
+      const hidden = await waiting();
+
+      const page = await settlements.listForItem({
+        userId: ids.shopper,
+        itemId: MILK,
+      });
+
+      expect(page.items).toHaveLength(1);
+      expect(page.items.map((row) => row.id)).not.toContain(hidden.id);
+    });
+
+    it('is stored all the same, which is the point of writing it', async () => {
+      // The failing half of the assertion above would be a purchase that was
+      // simply never written, which is the state plan 0093 exists to end.
+      const written = await waiting();
+      const back = await dataSource
+        .getRepository(LineSettlement)
+        .findOneByOrFail({ id: written.id });
+
+      expect(back).toMatchObject({
+        lineId: null,
+        listId: null,
+        quantity: 4,
+        generatedListLineId: basketLine,
+      });
+    });
+  });
 });

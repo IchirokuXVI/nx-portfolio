@@ -47,9 +47,12 @@ const ZONE_B = 'z-parents';
 
 interface SettlementSeed {
   id: string;
-  /** The zone line it landed on. */
-  lineId: string;
-  listId: string;
+  /**
+   * The zone line it landed on, or null for a **waiting** purchase: one made
+   * before this basket line reached any list (plan 0093, section 2).
+   */
+  lineId: string | null;
+  listId: string | null;
   quantity: number;
   outcome?: SettlementOutcome;
   /** Already taken back before this call, so this call must leave it alone. */
@@ -99,7 +102,9 @@ function build(options: {
 
   const zoneLines = new Map(
     seeds
-      .filter((seed) => !missing.has(seed.lineId))
+      // A waiting row has no zone line, which is the whole of what a reopen has
+      // to do differently about one.
+      .filter((seed) => seed.lineId !== null && !missing.has(seed.lineId))
       .map((seed) => [
         seed.lineId,
         {
@@ -215,11 +220,13 @@ function build(options: {
   } as unknown as GeneratedListService;
 
   const claims = fakeLineClaims({}, () =>
-    seeds.map((seed) => ({
-      zoneId: seed.listId === LIST_B ? ZONE_B : ZONE_A,
-      listId: seed.listId,
-      lineId: seed.lineId,
-    }))
+    seeds
+      .filter((seed) => seed.lineId !== null)
+      .map((seed) => ({
+        zoneId: seed.listId === LIST_B ? ZONE_B : ZONE_A,
+        listId: seed.listId as string,
+        lineId: seed.lineId as string,
+      }))
   );
 
   const service = new GeneratedListReopenService(
@@ -617,5 +624,87 @@ describe('who may, and what they are told (sections 3.2 and 3.5)', () => {
 
     expect(harness.basketLine.settledQuantity).toBe(0);
     expect(harness.zoneLines.get('zl-1')?.quantity).toBe(5);
+  });
+});
+
+describe('a purchase with no list is taken back too (plan 0093, section 4)', () => {
+  /** The line was settled before it reached any list, so its row is waiting. */
+  const waitingOnly = {
+    quantity: 4,
+    settledQuantity: 4,
+    settlements: [{ id: 's-waiting', lineId: null, listId: null, quantity: 4 }],
+  };
+
+  it('marks the waiting row reverted and resets the basket line', async () => {
+    // The same query finds it and the same column takes it back. What differs
+    // is everything after: there is no zone line to restore units to, no list to
+    // name and no household to tell.
+    const harness = build(waitingOnly);
+
+    const result = await reopen(harness);
+
+    expect(harness.settlements[0]).toMatchObject({
+      id: 's-waiting',
+      lineId: null,
+      listId: null,
+      revertedByParticipantId: ACTOR,
+    });
+    expect(harness.settlements[0].revertedAt).toBeInstanceOf(Date);
+    expect(harness.basketLine.settledQuantity).toBe(0);
+    // Not a skip: a skip is an origin this call could not put units back on, and
+    // a waiting row never took any off one.
+    expect(result.skippedCount).toBe(0);
+  });
+
+  it('tells no zone anything, because no zone was ever touched', async () => {
+    const harness = build(waitingOnly);
+
+    await reopen(harness);
+
+    expect(
+      harness.events.filter(
+        (entry) => entry.event === RealtimeEvent.LineSettled
+      )
+    ).toHaveLength(0);
+    // The basket's own room and the owner's sessions still hear it, which is how
+    // the shopper's screen goes back to outstanding.
+    expect(
+      harness.events.filter(
+        (entry) => entry.event === RealtimeEvent.GeneratedListLineSettled
+      )
+    ).toHaveLength(2);
+  });
+
+  it('leaves a reverted row where it is, so it never comes home', async () => {
+    // Section 3.2 read from the other end: re-homing skips a reverted row, and
+    // this is the act that marks one. A list this line reaches afterwards
+    // receives nothing, because there is nothing standing to receive.
+    const harness = build(waitingOnly);
+
+    await reopen(harness);
+
+    const standing = harness.settlements.filter((row) => !row.revertedAt);
+    expect(standing).toHaveLength(0);
+  });
+
+  it('restores the origins it did land on and skips the one it did not', async () => {
+    // A line can hold both: units bought before it reached a list, and units
+    // bought after. One call takes back all of them, and only the second kind
+    // moves a household's line.
+    const harness = build({
+      quantity: 5,
+      settledQuantity: 5,
+      settlements: [
+        { id: 's-waiting', lineId: null, listId: null, quantity: 3 },
+        { id: 's-home', lineId: 'zl-1', listId: LIST_A, quantity: 2 },
+      ],
+    });
+
+    await reopen(harness);
+
+    expect(harness.settlements.every((row) => row.revertedAt)).toBe(true);
+    // Three, the seeded quantity, plus the two this basket had taken off it.
+    expect(harness.zoneLines.get('zl-1')?.quantity).toBe(5);
+    expect(harness.basketLine.settledQuantity).toBe(0);
   });
 });

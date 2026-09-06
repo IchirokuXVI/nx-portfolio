@@ -43,21 +43,39 @@ export class LineSettlement {
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 
-  @Column({ type: 'uuid' })
-  lineId!: string;
+  /**
+   * The zone line this purchase is a fact about, or null while it waits for one
+   * (plan 0093, section 2).
+   *
+   * A row with both this and {@link listId} null is a **waiting settlement**: a
+   * purchase made on a basket line before that line reached any list. It belongs
+   * to the basket line through {@link generatedListLineId} and to no household
+   * yet, and it comes home the moment the line reaches a list.
+   *
+   * Nullable since plan 0093, which reversed plan 0058 section 4.1. Before it, a
+   * settle on a line with no origins wrote no row at all, so a shopper who
+   * bought four batteries and then sent the line to the flat's list gave the flat
+   * a line asking for nothing and a history saying batteries were never bought.
+   *
+   * The two columns are null **together**, which is `ck_line_settlements_home`
+   * rather than a service rule: a row naming a line and no list, or a list and no
+   * line, would be a purchase nobody could read by either key.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  lineId!: string | null;
 
-  @ManyToOne(() => ListLine, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ListLine, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'lineId' })
-  line!: ListLine;
+  line!: ListLine | null;
 
   /**
    * The line's list, copied so a list scoped read needs no join (section 3).
    *
    * A line never moves between lists, so this cannot drift from what the join
-   * would say.
+   * would say. Null exactly when {@link lineId} is, and for the same reason.
    */
-  @Column({ type: 'uuid' })
-  listId!: string;
+  @Column({ type: 'uuid', nullable: true })
+  listId!: string | null;
 
   /**
    * **The exact product that was bought**, copied at settle time (section 3.2).

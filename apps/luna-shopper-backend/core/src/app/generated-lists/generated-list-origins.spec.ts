@@ -101,7 +101,11 @@ interface OriginSeed {
 }
 
 interface SettlementSeed {
-  lineId: string;
+  /**
+   * The zone line it landed on, or null for a **waiting** purchase: one made
+   * before this basket line reached any list (plan 0093, section 2).
+   */
+  lineId: string | null;
   quantity: number;
   outcome?: SettlementOutcome;
 }
@@ -464,6 +468,17 @@ function build(
     },
   } as unknown as GeneratedListLineService;
 
+  const publisher = {
+    emit: (
+      event: RealtimeEvent,
+      _zoneId: string,
+      payload: unknown,
+      listId?: string
+    ) => events.push({ event, listId, payload }),
+    emitToGeneratedList: (event: RealtimeEvent) => events.push({ event }),
+    emitToUsers: (event: RealtimeEvent) => events.push({ event }),
+  } as unknown as CoreEventsPublisher;
+
   const service = new GeneratedListOriginsService(
     dataSource,
     {
@@ -515,19 +530,12 @@ function build(
     generated,
     lineWrites,
     claims.service,
-    // Plan 0092 section 4.3's seam, real rather than stubbed: it must be a no op
-    // until plan 0093 fills it.
-    new WaitingSettlementService(),
-    {
-      emit: (
-        event: RealtimeEvent,
-        _zoneId: string,
-        payload: unknown,
-        listId?: string
-      ) => events.push({ event, listId, payload }),
-      emitToGeneratedList: (event: RealtimeEvent) => events.push({ event }),
-      emitToUsers: (event: RealtimeEvent) => events.push({ event }),
-    } as unknown as CoreEventsPublisher
+    // Plan 0092's seam, filled by plan 0093, and real rather than stubbed: no
+    // line in this file has a waiting purchase, so it must answer nothing. It
+    // shares the publisher, so a purchase it did announce would land in the same
+    // list of events every other assertion here reads.
+    new WaitingSettlementService(claims.service, publisher),
+    publisher
   );
 
   return {
@@ -1353,5 +1361,42 @@ describe('creating the line a list does not have (section 4.2)', () => {
 
     expect(harness.origins.map((row) => row.listId)).toEqual([LIST_B, LIST_C]);
     expect(harness.basketLine.quantity).toBe(4);
+  });
+});
+
+describe('a purchase with no list belongs to no origin (plan 0093, section 2.2)', () => {
+  it('is not counted as bought here, on any origin', async () => {
+    // `settledPerOrigin` groups by the zone line a settlement landed on, and a
+    // waiting row landed on none. Counting it would give the floor a key of
+    // `null` and hold units against an origin nobody can name.
+    const harness = build({
+      settlements: [
+        { lineId: LINE_A, quantity: 1 },
+        { lineId: null, quantity: 3 },
+      ],
+    });
+
+    const result = await read(harness);
+
+    expect(result.origins).toHaveLength(1);
+    expect(result.origins[0].settledHere).toBe(1);
+  });
+
+  it('does not raise the floor under a contribution', async () => {
+    // The floor is what this basket has already bought **for this list** (plan
+    // 0057, section 5.2). Three units bought before the list held the line are
+    // not units this list asked for, so lowering it to one is still allowed.
+    const harness = build({
+      settlements: [{ lineId: null, quantity: 3 }],
+    });
+
+    const result = await set(harness, {
+      listId: LIST_A,
+      lineId: LINE_A,
+      from: 2,
+      quantity: 1,
+    });
+
+    expect(result.origin?.contributed).toBe(1);
   });
 });

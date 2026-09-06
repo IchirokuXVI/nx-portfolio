@@ -14,6 +14,7 @@ import { PostalCodeSourceAndNearby1756001500000 } from './1756001500000-PostalCo
 import { ProfileLocationPreferences1756001600000 } from './1756001600000-ProfileLocationPreferences';
 import { LineProductGroupSubscription1756001700000 } from './1756001700000-LineProductGroupSubscription';
 import { CoreAudit1756001800000 } from './1756001800000-CoreAudit';
+import { WaitingSettlements1756001900000 } from './1756001900000-WaitingSettlements';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -62,4 +63,8 @@ export const CORE_MIGRATIONS = [
   // A new table that references nothing, so it follows everything and depends on
   // none of it (plan 0077, section 8).
   CoreAudit1756001800000,
+  // Alters the table `LineSettlements1756000800000` created and `plan 0054`'s
+  // migration last touched, so it follows both and nothing else (plan 0093,
+  // section 5).
+  WaitingSettlements1756001900000,
 ];

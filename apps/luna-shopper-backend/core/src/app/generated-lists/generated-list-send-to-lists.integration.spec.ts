@@ -4,6 +4,7 @@ import {
   LineApprovalStatus,
   MembershipStatus,
   ParticipantKind,
+  SettlementOutcome,
   ZoneRole,
   ZoneStatus,
 } from '@portfolio/luna-shopper/contracts';
@@ -34,6 +35,7 @@ import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
+import { GeneratedListSettleService } from './generated-list-settle.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
 import type { GeneratedListService } from './generated-list.service';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
@@ -64,6 +66,7 @@ describeIntegration(
   () => {
     let dataSource: DataSource;
     let origins: GeneratedListOriginsService;
+    let settles: GeneratedListSettleService;
     let claims: FakeLineClaims;
 
     const ids = {
@@ -145,7 +148,9 @@ describeIntegration(
         { emitToUsers: jest.fn(), emit: jest.fn() } as never,
         new CoreAuditService(dataSource)
       );
-      const waiting = new WaitingSettlementService();
+      const waiting = new WaitingSettlementService(claims.service, {
+        emit: jest.fn(),
+      } as never);
       const lineWrites = new GeneratedListLineService(
         dataSource.getRepository(GeneratedListLine),
         dataSource.getRepository(GeneratedListLineOption),
@@ -166,6 +171,15 @@ describeIntegration(
           id: PARTICIPANT,
           kind: ParticipantKind.OWNER,
           userId: ids.shopper,
+        }),
+        // Whoever is asked for is live on this basket, which is the answer the
+        // settle needs and an access question the unit spec already owns.
+        livePresenceEntry: async (participantId: string) => ({
+          participantId,
+          kind: ParticipantKind.GUEST,
+          displayName: 'Dani',
+          guestNumber: 1,
+          userId: null,
         }),
         seesZoneData: async () => true,
         writableAmong: async (_userId: string, listIds: readonly string[]) =>
@@ -192,6 +206,23 @@ describeIntegration(
         lineWrites,
         claims.service,
         waiting,
+        {
+          emitToUsers: jest.fn(),
+          emit: jest.fn(),
+          emitToGeneratedList: jest.fn(),
+        } as never
+      );
+
+      settles = new GeneratedListSettleService(
+        dataSource,
+        dataSource.getRepository(GeneratedList),
+        dataSource.getRepository(GeneratedListLine),
+        dataSource.getRepository(GeneratedListLineOrigin),
+        dataSource.getRepository(GeneratedListLineOption),
+        dataSource.getRepository(ShoppingList),
+        sharing,
+        generated,
+        claims.service,
         {
           emitToUsers: jest.fn(),
           emit: jest.fn(),
@@ -455,6 +486,115 @@ describeIntegration(
         .find({ where: { listId: ids.flat } });
       expect(rows).toHaveLength(1);
       expect(rows[0].quantity).toBe(2);
+    });
+
+    describe('a purchase made before the line reached a list (plan 0093)', () => {
+      /** A guest in the shop, who has no account and no access to any list. */
+      const GUEST = randomUUID();
+
+      /** Buy some of a basket line, whatever it is currently bound to. */
+      function settle(line: GeneratedListLine, quantity: number) {
+        return settles.settle({
+          generatedListId: ids.basket,
+          lineId: line.id,
+          participantId: GUEST,
+          outcome: SettlementOutcome.BOUGHT,
+          quantity,
+        });
+      }
+
+      it('is recorded when it happens and lands on the first list raised', async () => {
+        // The whole plan in one pass, through real Postgres and its two new
+        // check constraints. A guest types a line in the aisle, buys four before
+        // anybody has said whose they are, and the owner sends the line to the
+        // flat's list at home. The flat's line then reads bought, because it
+        // was.
+        const line = await seedBasketLine(
+          `Batteries ${randomUUID().slice(0, 8)}`
+        );
+        await dataSource
+          .getRepository(GeneratedListLine)
+          .update({ id: line.id }, { quantity: 4 });
+        line.quantity = 4;
+
+        await settle(line, 4);
+
+        // Written, dated, attributed and named by product, and belonging to no
+        // list: this is the row plan 0058 section 4.1 refused to write.
+        const settlements = dataSource.getRepository(LineSettlement);
+        const waiting = await settlements.find({
+          where: { generatedListLineId: line.id },
+        });
+        expect(waiting).toHaveLength(1);
+        expect(waiting[0]).toMatchObject({
+          lineId: null,
+          listId: null,
+          quantity: 4,
+          settledByParticipantId: GUEST,
+          settledByUserId: null,
+        });
+
+        await raise(line, ids.flat, 4);
+
+        // One settlement, home, attributed to the guest who made it.
+        const home = await settlements.find({
+          where: { generatedListLineId: line.id },
+        });
+        expect(home).toHaveLength(1);
+        expect(home[0]).toMatchObject({
+          listId: ids.flat,
+          quantity: 4,
+          settledByParticipantId: GUEST,
+        });
+        expect(home[0].lineId).not.toBeNull();
+        expect(home[0].settledAt).toEqual(waiting[0].settledAt);
+
+        // And the household's line: asked for four, receives four, lands at zero
+        // with the bought indicator set (plan 0047, section 5).
+        const zoneLine = await dataSource
+          .getRepository(ListLine)
+          .findOneByOrFail({ id: home[0].lineId as string });
+        expect(zoneLine.listId).toBe(ids.flat);
+        expect(zoneLine.quantity).toBe(0);
+      });
+
+      it('splits across two lists, oldest purchase first', async () => {
+        // Four bought, a list asking for three, then a second asking for two:
+        // three come home to the first, one to the second, and the second still
+        // asks for one.
+        const line = await seedBasketLine(`Milk ${randomUUID().slice(0, 8)}`);
+        await dataSource
+          .getRepository(GeneratedListLine)
+          .update({ id: line.id }, { quantity: 4 });
+        line.quantity = 4;
+
+        await settle(line, 4);
+        await raise(line, ids.flat, 3);
+        await raise(line, ids.parents, 2);
+
+        const settlements = dataSource.getRepository(LineSettlement);
+        const rows = await settlements.find({
+          where: { generatedListLineId: line.id },
+          order: { quantity: 'DESC' },
+        });
+        expect(rows).toHaveLength(2);
+        expect(rows.map((row) => [row.listId, row.quantity])).toEqual([
+          [ids.flat, 3],
+          [ids.parents, 1],
+        ]);
+        // Both halves keep the moment the purchase was made.
+        expect(rows[1].settledAt).toEqual(rows[0].settledAt);
+
+        const lines = dataSource.getRepository(ListLine);
+        const flat = await lines.findOneByOrFail({
+          id: rows[0].lineId as string,
+        });
+        const parents = await lines.findOneByOrFail({
+          id: rows[1].lineId as string,
+        });
+        expect(flat.quantity).toBe(0);
+        expect(parents.quantity).toBe(1);
+      });
     });
   }
 );
