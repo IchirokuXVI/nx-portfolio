@@ -137,6 +137,34 @@ describe('CarrefourClient', () => {
     expect(calls).toBe(2);
   });
 
+  it('stops a category at a page that came back empty', async () => {
+    // Paging past the result set answers an empty item list rather than an
+    // error, so an empty page is where the category stopped.
+    const category: CarrefourCategory = {
+      id: 'cat1',
+      name: 'A category',
+      url: '/x',
+      path: [],
+      totalResults: 1000,
+    };
+    let calls = 0;
+    const empty = {
+      productCardList: { results: { items: [], total_results: 1000 } },
+      pagination: { page_size: 24, total_pages: 42 },
+    };
+    const walker = client(async () => {
+      calls += 1;
+      return calls === 1 ? listingPage : empty;
+    });
+
+    const products = [];
+    for await (const product of walker.walkCategory(category)) {
+      products.push(product);
+    }
+    expect(products).toHaveLength(24);
+    expect(calls).toBe(2);
+  });
+
   it('never paces faster than the interval that was measured', () => {
     const fast = new CarrefourClient({
       userAgent: 'x',

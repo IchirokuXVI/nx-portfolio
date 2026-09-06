@@ -47,11 +47,6 @@ const PAGES: ReadonlyArray<{ name: string; path: string; why: string }> = [
     why: 'a category over the ceiling that has children, so the walk descends',
   },
   {
-    name: 'listing-past-the-end',
-    path: '/supermercado/x/cat20003/c?offset=1200',
-    why: 'paging past the result set answers an empty list, not an error',
-  },
-  {
     name: 'product-page',
     path: '/supermercado/cerveza-mahou-clasica-lata-50-cl/R-520661336/p',
     why: 'the EAN a listing card does not carry (section 12.1)',
