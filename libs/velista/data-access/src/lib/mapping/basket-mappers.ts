@@ -20,6 +20,7 @@ import {
   type BasketSession,
   type BasketSettleResult,
   type BasketShareLink,
+  type BasketSplitResult,
   type BasketView,
   type ScopeLocation,
 } from '@portfolio/velista/models';
@@ -394,6 +395,38 @@ export function toBasketOriginQuantityResult(
         line,
         origin: toBasketLineOriginDetail(raw['origin']),
         listQuantity: numOr(raw['listQuantity'], 0),
+      };
+}
+
+/**
+ * From `msg.generatedList.splitLine.response` (`POST .../products`), velista
+ * `0069` section 5.
+ *
+ * The three collections are mapped with {@link mapArray}, which drops a row it
+ * cannot read rather than failing the whole answer: a sibling the client cannot
+ * parse is a row missing from the screen until the next read, where a null result
+ * would leave the original drawn at a quantity the server no longer holds.
+ *
+ * `line` is the one required field, for {@link toBasketOriginQuantityResult}'s
+ * reason: it is the row the gesture was about, and an answer that cannot say what
+ * happened to it says nothing worth applying.
+ *
+ * `removed` is mapped through {@link str} rather than trusted as a string array,
+ * because an id that is not a string would delete nothing and hide the fact.
+ */
+export function toBasketSplitResult(raw: unknown): BasketSplitResult | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const line = toBasketLine(raw['line']);
+  return line === null
+    ? null
+    : {
+        line,
+        created: mapArray(raw['created'], toBasketLine),
+        merged: mapArray(raw['merged'], toBasketLine),
+        removed: mapArray(raw['removed'], str),
       };
 }
 

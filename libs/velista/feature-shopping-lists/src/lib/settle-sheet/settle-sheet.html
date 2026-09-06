@@ -207,78 +207,148 @@
     }
 
     <!--
-      The options are the line's own set, and the default is marked. Since
-      velista 0062 each is priced where the run's scopes have a price, and the
-      cheapest is marked beside the pick rather than in place of it: the pick is
-      still the first option added rather than the cheapest (backend 0050), and
-      showing that the two differ is what this pane is for.
+      One stepper per product and one commit, since velista 0069.
+
+      It was a radio group: one tap chose one product for the whole line, so
+      somebody holding three skimmed and two whole recorded the other two as the
+      wrong milk. A line still holds one product, because a settlement names one,
+      so choosing several **splits** the line (backend 0094): the row keeps its
+      own product and the balance, and one row appears under it per other
+      product.
+
+      Everything velista 0062 draws is unchanged. The order is the line's own
+      option order and never changes, the cheapest is marked rather than moved,
+      and a row with no price and a row with one are the same shape.
     -->
     @case ('product') {
       <p class="pane-title">{{ 'basket.product.title' | rokuT }}</p>
-      <p class="hint">{{ 'basket.product.hint' | rokuT }}</p>
-
       <!--
-        Each option: the name and the price on one line, the place and the unit
-        price under them (velista 0062, section 5). The order is the line's own
-        option order and never changes; the cheapest is marked, not moved. A
-        row with no price and a row with one are the same shape, and "No price"
-        is drawn only when its neighbours are priced (section 5.3).
+        Named after the product that keeps the balance, so the sentence says
+        where the units nobody moved are going. A line that names no product has
+        no name to put in it and gets the other sentence, which says the same
+        thing without one.
       -->
+      @if (productName(); as product) {
+        <p class="hint">
+          {{ 'basket.product.hint' | rokuT: { name: product } }}
+        </p>
+      } @else {
+        <p class="hint">{{ 'basket.product.hintNone' | rokuT }}</p>
+      }
+
       <ul class="options">
-        @for (option of options(); track option.id) {
-          <li>
-            <button
-              (click)="choose(option.id)"
-              [attr.aria-current]="option.chosen ? 'true' : null"
-              [disabled]="busy()"
-              class="option"
-              type="button"
-            >
-              <span class="option-line">
-                <span class="option-name">{{ option.name }}</span>
-                @if (option.price) {
-                  <span class="option-price">{{ option.price }}</span>
-                } @else if (option.noPrice) {
-                  <span class="option-price is-unknown">
-                    {{ 'basket.product.noPrice' | rokuT }}
-                  </span>
+        <!--
+          The balance's own row, for a line no option row can hold it on: one
+          added to a group with no product picked, and one whose product the
+          catalog has since dropped. Without it the rule would read differently
+          for those lines, and nothing on screen would say what an unpicked
+          remainder means.
+        -->
+        @if (restRow(); as rest) {
+          <li class="option is-rest">
+            <span class="option-line">
+              <span class="option-name">
+                {{ rest.name || ('basket.product.noneRest' | rokuT) }}
+              </span>
+              <span class="option-balance" role="status">{{ balance() }}</span>
+            </span>
+            <span class="option-line option-detail">
+              <span class="option-rest-label">
+                {{ 'basket.product.rest' | rokuT }}
+              </span>
+            </span>
+          </li>
+        }
+
+        @for (option of productRows(); track option.id) {
+          <li [class.is-rest]="option.chosen" class="option">
+            <span class="option-line">
+              <span class="option-name">{{ option.name }}</span>
+              @if (option.price) {
+                <span class="option-price">{{ option.price }}</span>
+              } @else if (option.noPrice) {
+                <span class="option-price is-unknown">
+                  {{ 'basket.product.noPrice' | rokuT }}
+                </span>
+              }
+            </span>
+            @if (option.brand || option.place || option.unitPrice) {
+              <span class="option-line option-detail">
+                <span class="option-brand">
+                  @if (option.brand) {
+                    {{ option.brand }}
+                  }
+                  @if (option.brand && option.place) {
+                    ·
+                  }
+                  @if (option.place) {
+                    {{ option.place }}
+                  }
+                </span>
+                @if (option.unitPrice) {
+                  <span class="option-unit-price">{{ option.unitPrice }}</span>
                 }
               </span>
-              @if (option.brand || option.place || option.unitPrice) {
-                <span class="option-line option-detail">
-                  <span class="option-brand">
-                    @if (option.brand) {
-                      {{ option.brand }}
-                    }
-                    @if (option.brand && option.place) {
-                      ·
-                    }
-                    @if (option.place) {
-                      {{ option.place }}
-                    }
+            }
+            <span class="option-line option-foot">
+              @if (option.cheapest) {
+                <span class="option-cheapest">
+                  {{ 'basket.product.cheapest' | rokuT }}
+                </span>
+              }
+              <!--
+                The line's own product carries the balance and no control: it is
+                what the steppers did not take, and a control over it would be a
+                second way to say one number (section 2).
+              -->
+              @if (option.chosen) {
+                <span class="option-rest">
+                  <span class="option-rest-label">
+                    {{ 'basket.product.rest' | rokuT }}
                   </span>
-                  @if (option.unitPrice) {
-                    <span class="option-unit-price">{{
-                      option.unitPrice
-                    }}</span>
-                  }
+                  <span class="option-balance" role="status">
+                    {{ balance() }}
+                  </span>
+                </span>
+              } @else {
+                <span class="share-stepper">
+                  <button
+                    (click)="step(option.id, -1)"
+                    [attr.aria-label]="
+                      'basket.product.less' | rokuT: { name: option.name }
+                    "
+                    [disabled]="busy() || option.share === 0"
+                    class="share-step"
+                    type="button"
+                  >
+                    −
+                  </button>
+                  <input
+                    (input)="setShare(option.id, +$any($event.target).value)"
+                    [attr.aria-label]="
+                      'basket.product.units' | rokuT: { name: option.name }
+                    "
+                    [disabled]="busy()"
+                    [max]="option.max"
+                    [value]="option.share"
+                    class="share-field"
+                    min="0"
+                    type="number"
+                  />
+                  <button
+                    (click)="step(option.id, 1)"
+                    [attr.aria-label]="
+                      'basket.product.more' | rokuT: { name: option.name }
+                    "
+                    [disabled]="busy() || option.share >= option.max"
+                    class="share-step"
+                    type="button"
+                  >
+                    +
+                  </button>
                 </span>
               }
-              @if (option.chosen || option.cheapest) {
-                <span class="option-marks">
-                  @if (option.chosen) {
-                    <span class="option-chosen">
-                      {{ 'basket.product.current' | rokuT }}
-                    </span>
-                  }
-                  @if (option.cheapest) {
-                    <span class="option-cheapest">
-                      {{ 'basket.product.cheapest' | rokuT }}
-                    </span>
-                  }
-                </span>
-              }
-            </button>
+            </span>
           </li>
         }
       </ul>
@@ -292,9 +362,31 @@
         <p class="prices-as-of">{{ asOf.key | rokuT: { when: asOf.when } }}</p>
       }
 
-      <button (click)="openPane('settle')" class="quiet" type="button">
-        {{ 'basket.settle.cancel' | rokuT }}
-      </button>
+      <div class="actions">
+        <button
+          (click)="apply()"
+          [disabled]="busy() || !moved()"
+          class="primary"
+          type="button"
+        >
+          {{ 'basket.product.apply' | rokuT }}
+        </button>
+        <button
+          (click)="openPane('settle')"
+          [disabled]="busy()"
+          class="quiet"
+          type="button"
+        >
+          {{ 'basket.settle.cancel' | rokuT }}
+        </button>
+      </div>
+
+      <!--
+        This pane used to change the record of a purchase and now changes only
+        what is still to buy (section 2.1). Under the button, because that is
+        where somebody looks before pressing it.
+      -->
+      <p class="hint">{{ 'basket.product.notBought' | rokuT }}</p>
     }
 
     <!--

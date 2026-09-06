@@ -624,6 +624,21 @@ export class BasketPage {
     () => this._store.lastAdded()?.content ?? ''
   );
 
+  /**
+   * The most recent split, said in the **same** region (velista `0069`, section
+   * 4).
+   *
+   * The store sets one of the two and clears the other, so whichever happened
+   * last is what the region holds. Null after an add, and null for a split that
+   * left one row, which is a sibling folded back into the row it came from:
+   * nothing was split, so nothing is said.
+   *
+   * The new rows need no scroll and no highlight. They carry positions between
+   * the original and the line after it, so they are already under the row the
+   * shopper was looking at.
+   */
+  protected readonly splitAnnouncement = this._store.lastSplit;
+
   private readonly _composer = viewChild(LineComposer);
 
   /** The last thing typed, which the effect below watches. */

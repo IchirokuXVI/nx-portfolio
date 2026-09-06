@@ -111,7 +111,7 @@ function storeDouble() {
     open: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
-    setPick: jest.fn().mockResolvedValue(null),
+    splitLine: jest.fn().mockResolvedValue(null),
     setOutstanding: jest.fn().mockResolvedValue(null),
     loadLineOrigins: jest.fn().mockResolvedValue(null),
     setOriginQuantity: jest.fn().mockResolvedValue(null),
