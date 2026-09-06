@@ -47,6 +47,16 @@ interface DrawnBar {
 let instanceCount = 0;
 
 /**
+ * The horizontal room one category label needs before it touches its neighbour.
+ *
+ * A measurement would be exact and would cost a layout pass per render inside a
+ * `computed`, which is the one thing this chart does not do. 56 is wide enough
+ * for a short date or a status word at the tick size, which is what these labels
+ * are.
+ */
+const LABEL_SLOT = 56;
+
+/**
  * A value per category, or a stack per category (plan 0015, section 3.2).
  *
  * The same construction as the line chart: d3 does the arithmetic, the template
@@ -116,6 +126,7 @@ let instanceCount = 0;
                 [attr.width]="segment.width"
                 [attr.x]="segment.x"
                 [attr.y]="segment.y"
+                class="segment"
               />
             }
           }
@@ -550,16 +561,22 @@ export class BarChart {
   });
 
   /**
-   * Every nth category label once there are more than ten.
+   * Every nth category label, where n is what the plot has room for.
    *
    * Thirty stacks of one day each is the case this exists for: every label drawn
    * would overlap its neighbours into a grey band, and a band of unreadable text
-   * is worse than five readable dates. The full label is still one hover away and
-   * still in the table.
+   * says less than five readable dates. The full label is still one hover away
+   * and still in the table.
+   *
+   * The count that fits comes from the measured width rather than from a fixed
+   * ten, because a plot on a phone is half the width of one on a desktop and
+   * collides at half as many labels. Ten is what {@link LABEL_SLOT} happens to
+   * allow at the default width, so the desktop behaviour is the same either way.
    */
   readonly xLabels = computed(() => {
     const bars = this.drawn();
-    const stride = bars.length > 10 ? Math.ceil(bars.length / 10) : 1;
+    const fits = Math.max(1, Math.floor(this.innerWidth() / LABEL_SLOT));
+    const stride = bars.length > fits ? Math.ceil(bars.length / fits) : 1;
     const labels: { key: string; x: number; text: string }[] = [];
 
     for (let index = 0; index < bars.length; index += stride) {
