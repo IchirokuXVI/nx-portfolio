@@ -2,6 +2,14 @@
   "app": {
     "name": "Luna Shopper admin"
   },
+  "chart": {
+    "showTable": "Show as table",
+    "hideTable": "Hide table",
+    "empty": "Nothing in this window",
+    "tooltipDay": "Day",
+    "category": "Category",
+    "legend": "Series"
+  },
   "environment": {
     "label": "Environment",
     "production": "Production",
