@@ -56,6 +56,11 @@ import {
   walkFrontier,
   type CarrefourFrontier,
 } from './categories';
+import {
+  CarrefourBlockedError,
+  CarrefourBrowserError,
+  CarrefourHttpError,
+} from './errors';
 import { readCards } from './listing';
 import { readDetail, readListing } from './state';
 import {
@@ -67,19 +72,9 @@ import {
   type CarrefourDetail,
   type CarrefourListing,
   type CarrefourProduct,
+  type CarrefourSession,
   type CarrefourStateLoader,
 } from './types';
-
-/** Thrown when the storefront answers something a retry cannot fix. */
-export class CarrefourHttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly url: string
-  ) {
-    super(`Carrefour answered ${status} for ${url}`);
-    this.name = 'CarrefourHttpError';
-  }
-}
 
 /** The smallest part of a Playwright browser context this client needs. */
 export interface CarrefourCookieJar {
@@ -118,6 +113,49 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * The deadline on one call into the browser.
+ *
+ * Comfortably above the 60 s navigation timeout Playwright is given, because
+ * this is the backstop for a call that will never come back at all rather than
+ * a tighter budget for a slow page.
+ */
+const BROWSER_TIMEOUT_MS = 90_000;
+
+/**
+ * How many refusals in a row end the run.
+ *
+ * Plan 0090 section 13 says a refusal aborts the run rather than retrying into
+ * a deeper block, and the reason is section 5: the penalty escalates, and its
+ * signature is that only the first load of a fresh session succeeds. **That
+ * signature is consecutive refusals.** An isolated one is something else: the
+ * first crawl met two, three minutes apart, with hundreds of clean loads either
+ * side, so failing the whole hour on the first would have failed every run.
+ *
+ * So neither refusal is ever retried, which is the rule that matters, and a run
+ * gives up once they stop being isolated. The category a skipped page belonged
+ * to is named in the run report, so nothing claims to have read what it did not.
+ */
+const CONSECUTIVE_REFUSALS = 3;
+
+/** Run `work`, or raise {@link CarrefourBrowserError} when it does not answer. */
+async function withDeadline<T>(what: string, work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new CarrefourBrowserError(what)),
+          BROWSER_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * The storefront, read one page at a time.
  *
  * **One browser per client and one client per run** (plan 0090, section 11).
@@ -133,8 +171,11 @@ export class CarrefourClient {
   private readonly baseUrl: string;
   private readonly delayMs: number;
   private readonly loader: CarrefourStateLoader;
-  private session: PlaywrightSession | null = null;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private session: CarrefourSession | null = null;
   private lastLoadAt = 0;
+  /** Refusals since the last page that answered. See {@link CONSECUTIVE_REFUSALS}. */
+  private refusals = 0;
 
   /** Pages loaded by this client, for a run that reports its own cost. */
   loads = 0;
@@ -147,7 +188,8 @@ export class CarrefourClient {
       options.delayMs ?? CARREFOUR_MIN_DELAY_MS,
       CARREFOUR_MIN_DELAY_MS
     );
-    this.loader = options.loader ?? ((path) => this.load(path));
+    this.sleep = options.sleepImpl ?? sleep;
+    this.loader = (path) => this.load(path);
   }
 
   /**
@@ -250,19 +292,51 @@ export class CarrefourClient {
     const session = await this.open();
     this.loads += 1;
     const url = path.startsWith('http') ? path : this.baseUrl + path;
-    const { status, state } = await session.goto(url);
+
+    let status: number;
+    let state: Record<string, unknown> | null;
+    try {
+      ({ status, state } = await session.goto(url));
+    } catch (error) {
+      // A browser that hangs or dies costs this page and not the run. The
+      // session is dropped **without being awaited**, because the thing that
+      // just failed to answer is the thing a close would ask, and the next load
+      // launches a fresh one.
+      this.discardSession();
+      throw error;
+    }
+
     if (status === 200) {
+      this.refusals = 0;
       return state;
     }
     if (status === 403 || status === 429) {
-      // A refusal aborts the run rather than retrying into a deeper block.
-      // Section 5 records that the penalty escalates and is not instant to
-      // clear, so a retry loop here buys a longer outage, not a page.
+      this.refusals += 1;
+      // Never retried, whichever branch this takes: a retry is what turns a
+      // refusal into a deeper block. What differs is whether the run goes on.
+      if (this.refusals >= CONSECUTIVE_REFUSALS) {
+        throw new CarrefourBlockedError(status, url, this.refusals);
+      }
       throw new CarrefourHttpError(status, url);
     }
     // Anything else, a 404 or a 5xx, is this page and not the storefront. The
     // caller records the gap and carries on.
+    this.refusals = 0;
     return null;
+  }
+
+  /**
+   * Forget the browser without waiting for it.
+   *
+   * `close()` awaits, which is right when the browser is healthy and wrong when
+   * it is the thing that stopped answering: awaiting there is the hang all over
+   * again. The close is still asked for, so a live browser is not leaked, and
+   * its failure is swallowed because there is nothing left to do about it.
+   */
+  private discardSession(): void {
+    const session = this.session;
+    this.session = null;
+    void session?.close().catch(() => undefined);
   }
 
   /** The shared bucket when a run passed one, and the floor either way. */
@@ -272,17 +346,19 @@ export class CarrefourClient {
     }
     const wait = this.lastLoadAt + this.delayMs - Date.now();
     if (wait > 0) {
-      await sleep(wait);
+      await this.sleep(wait);
     }
     this.lastLoadAt = Date.now();
   }
 
-  private async open(): Promise<PlaywrightSession> {
+  private async open(): Promise<CarrefourSession> {
     if (!this.session) {
-      this.session = await PlaywrightSession.start(
-        this.options.userAgent,
-        this.options.blockAssets ?? true
-      );
+      this.session = this.options.openSession
+        ? await this.options.openSession()
+        : await PlaywrightSession.start(
+            this.options.userAgent,
+            this.options.blockAssets ?? true
+          );
     }
     return this.session;
   }
@@ -320,7 +396,13 @@ class PlaywrightSession {
     // does, does not load Playwright or look for a browser on disk.
     const { chromium } =
       (await import('playwright')) as typeof import('playwright');
-    const browser = await chromium.launch({ headless: true });
+    // Launching is inside the deadline too. A launch that never returns is the
+    // same stall as a navigation that never returns, and it looks identical
+    // from outside: a run that is somehow neither working nor failing.
+    const browser = await withDeadline(
+      'launching the browser',
+      chromium.launch({ headless: true })
+    );
     const context = await browser.newContext({
       locale: 'es-ES',
       userAgent,
@@ -342,22 +424,37 @@ class PlaywrightSession {
     );
   }
 
+  /**
+   * One navigation, and every part of it under a deadline.
+   *
+   * **The cookie call needs one as much as the navigation does.** Playwright's
+   * own `timeout` covers `goto` and covers nothing else, so a browser that has
+   * stopped answering leaves `cookies()` pending forever, which is where the
+   * first full crawl stopped. Each of the three is wrapped separately so the
+   * error names the one that failed.
+   */
   async goto(
     url: string
   ): Promise<{ status: number; state: Record<string, unknown> | null }> {
-    await dropCloudflareCookies(this.context);
-    const response = await this.page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 60_000,
-    });
+    await withDeadline(
+      'reading the cookies',
+      dropCloudflareCookies(this.context)
+    );
+    const response = await withDeadline(
+      `loading ${url}`,
+      this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+    );
     const status = response?.status() ?? 0;
     if (status !== 200) {
       return { status, state: null };
     }
-    const state = await this.page.evaluate(
-      () =>
-        (window as unknown as { __INITIAL_STATE__?: unknown })
-          .__INITIAL_STATE__ ?? null
+    const state = await withDeadline(
+      'reading the page state',
+      this.page.evaluate(
+        () =>
+          (window as unknown as { __INITIAL_STATE__?: unknown })
+            .__INITIAL_STATE__ ?? null
+      )
     );
     return {
       status,

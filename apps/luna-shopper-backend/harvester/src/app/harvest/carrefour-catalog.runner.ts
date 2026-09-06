@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  CarrefourBlockedError,
   CarrefourClient,
   type CarrefourCappedCategory,
   type CarrefourCategory,
@@ -82,14 +83,27 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       );
       const products = new Map<string, CarrefourProduct>();
       const unreadable = [...frontier.unreadable];
+      let blocked: unknown = null;
       for (const category of frontier.categories) {
         context.signal.throwIfAborted();
         try {
-          await this.pageCategory(client, category, products);
+          await this.pageCategory(context, client, category, products);
         } catch (error) {
-          // A category that fails does not fail the run. It is counted, logged
-          // and named in the report, which is the same shape an unreadable node
-          // produces and reads the same way to an operator.
+          // **The block is the one failure a category may not swallow** (plan
+          // 0090, section 13). Refusals that have stopped being isolated say
+          // the address is in the state section 4 describes, and every page
+          // after that deepens it, so the crawl stops here and the run fails
+          // once what it already read is written.
+          if (error instanceof CarrefourBlockedError) {
+            this.logger.warn(`Run ${context.runId}: ${String(error)}`);
+            unreadable.push(category.url);
+            await context.report({ failed: 1 });
+            blocked = error;
+            break;
+          }
+          // Anything else costs one category. It is counted, logged and named
+          // in the report, which is the same shape an unreadable node produces
+          // and reads the same way to an operator.
           this.logger.warn(
             `Run ${context.runId}: category ${category.id} (${category.name}) ` +
               `failed: ${String(error)}`
@@ -110,9 +124,17 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           frontier.capped,
           unreadable,
           products.size,
-          client.loads
+          client.loads,
+          blocked
         )
       );
+      if (blocked) {
+        // Raised **after** the snapshot, so the run ends FAILED and keeps every
+        // product it read. Prices already fetched are valid data (plan 0038,
+        // section 6.6); what a block costs is the rest of the crawl, not the
+        // part that worked.
+        throw blocked;
+      }
     } finally {
       // Including when the run aborted, and including when it never opened a
       // page (plan 0090, section 11).
@@ -153,15 +175,24 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * answer as the last.
    */
   private async pageCategory(
+    context: RunContext,
     client: CarrefourClient,
     category: CarrefourCategory,
     products: Map<string, CarrefourProduct>
   ): Promise<void> {
+    let seen = 0;
     for await (const product of client.walkCategory(category)) {
+      seen += 1;
       if (!products.has(product.externalId)) {
         products.set(product.externalId, product);
       }
     }
+    // **Progress, and a heartbeat with it.** The first crawl reported nothing
+    // between the frontier and the snapshot, so an hour of paging looked
+    // identical to a run that had stopped, and it was a stopped run that showed
+    // it. A category is the smallest unit worth a row: 86 of them over an hour
+    // is a number that moves, without a write per page.
+    await context.report({ processed: seen });
   }
 
   /**
@@ -231,7 +262,8 @@ function report(
   capped: readonly CarrefourCappedCategory[],
   unreadable: readonly string[],
   products: number,
-  loads: number
+  loads: number,
+  blocked: unknown
 ): Record<string, unknown> {
   return {
     frontierCategories: frontier.length,
@@ -252,6 +284,12 @@ function report(
       path: category.path,
     })),
     unreadableCategories: [...unreadable],
+    /**
+     * Set when the run stopped because the refusals stopped being isolated. It
+     * is the difference between a crawl that read the whole frontier and one
+     * that read part of it, and no count on this object says which.
+     */
+    blockedAfter: blocked ? String(blocked) : null,
   };
 }
 

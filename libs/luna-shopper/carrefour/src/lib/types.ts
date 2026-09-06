@@ -137,15 +137,28 @@ export interface CarrefourDetail {
 }
 
 /**
- * What loads one page and hands back its state.
- *
- * The enumeration and the parsing are written against this rather than against
- * Playwright, so every test in this library runs with a fake loader, no browser
- * and no network (plan 0090, section 15).
+ * One page, loaded. The enumeration and the parsing are written against this
+ * rather than against Playwright.
  */
 export type CarrefourStateLoader = (
   path: string
 ) => Promise<Record<string, unknown> | null>;
+
+/**
+ * A browser session, reduced to what one page load needs.
+ *
+ * **This is the test seam, and it sits here rather than higher up on purpose.**
+ * A seam above the client's own loading would skip the parts most worth
+ * testing: the pacing, the counting of consecutive refusals, and dropping a
+ * session that stopped answering. A fake session leaves all three in play and
+ * takes only Chromium out, which is the one thing a test cannot have.
+ */
+export interface CarrefourSession {
+  goto(
+    url: string
+  ): Promise<{ status: number; state: Record<string, unknown> | null }>;
+  close(): Promise<void>;
+}
 
 export interface CarrefourClientOptions {
   /** Defaults to {@link CARREFOUR_ORIGIN}. */
@@ -170,10 +183,12 @@ export interface CarrefourClientOptions {
    */
   blockAssets?: boolean;
   /**
-   * A loader to use instead of Chromium. The test seam, and the only way
-   * anything in CI reaches this class.
+   * A session to use instead of launching Chromium. The test seam, and the
+   * only way anything in CI reaches this class.
    */
-  loader?: CarrefourStateLoader;
+  openSession?: () => Promise<CarrefourSession>;
+  /** Waiting, so a test does not spend the real interval between pages. */
+  sleepImpl?: (ms: number) => Promise<void>;
 }
 
 /** The origin every path is resolved against. */

@@ -35,6 +35,7 @@
  * than papered over.
  */
 
+import { isSkippable } from './errors';
 import { readListing } from './state';
 import {
   CARREFOUR_CEILING,
@@ -127,7 +128,7 @@ export async function walkFrontier(
   const seen = new Set<string>();
   let loads = 0;
 
-  const seedState = await load(seedPath);
+  const seedState = await read(load, seedPath);
   loads += 1;
   if (!seedState) {
     unreadable.push(seedPath);
@@ -147,7 +148,7 @@ export async function walkFrontier(
     }
     seen.add(node.link.id);
 
-    const state = await load(node.link.url);
+    const state = await read(load, node.link.url);
     loads += 1;
     if (!state) {
       // A node that did not answer is recorded and stepped over. Retrying into
@@ -191,4 +192,27 @@ export async function walkFrontier(
   }
 
   return { categories: frontier, capped, loads, unreadable };
+}
+
+/**
+ * One node, or nothing.
+ *
+ * **A refusal costs one node and not the walk.** The live storefront refuses an
+ * occasional page with hundreds of clean loads either side, and a walk of 95
+ * loads that died on the first of those would leave the run with no frontier at
+ * all. The refusal is still never retried. The block is the one failure that
+ * does propagate, because it says the next node will fail too.
+ */
+async function read(
+  load: CarrefourStateLoader,
+  path: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    return await load(path);
+  } catch (error) {
+    if (isSkippable(error)) {
+      return null;
+    }
+    throw error;
+  }
 }

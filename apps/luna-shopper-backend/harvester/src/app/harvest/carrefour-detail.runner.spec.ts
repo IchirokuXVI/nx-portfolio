@@ -63,8 +63,16 @@ class TestRunner extends CarrefourDetailRunner {
   protected override createClient(): CarrefourClient {
     return new CarrefourClient({
       userAgent: 'LunaShopperBot/1.0',
-      loader: async (path) =>
-        (this.pages[path] ?? null) as Record<string, unknown> | null,
+      sleepImpl: async () => undefined,
+      openSession: async () => ({
+        goto: async (url: string) => {
+          const state = this.pages[url.replace('https://www.carrefour.es', '')];
+          return state
+            ? { status: 200, state: state as Record<string, unknown> }
+            : { status: 404, state: null };
+        },
+        close: async () => undefined,
+      }),
     });
   }
 }

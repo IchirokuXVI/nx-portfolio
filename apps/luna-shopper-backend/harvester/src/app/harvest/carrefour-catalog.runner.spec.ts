@@ -82,7 +82,7 @@ class TestRunner extends CarrefourCatalogRunner {
 
   constructor(
     ingest: SourceIngest,
-    private readonly states: Record<string, Record<string, unknown>>
+    protected readonly states: Record<string, Record<string, unknown>>
   ) {
     super(ingest, {
       getOrThrow: () => ({ userAgent: 'LunaShopperBot/1.0' }),
@@ -91,11 +91,44 @@ class TestRunner extends CarrefourCatalogRunner {
 
   protected override createClient(): CarrefourClient {
     return new CarrefourClient({
+      // The seam is the browser session, so the run below exercises the real
+      // pacing, the real refusal counting and the real session handling.
       userAgent: 'LunaShopperBot/1.0',
-      loader: async (path) => {
-        this.asked.push(path);
-        return this.states[path] ?? null;
-      },
+      sleepImpl: async () => undefined,
+      openSession: async () => ({
+        goto: async (url: string) => {
+          const path = url.replace('https://www.carrefour.es', '');
+          this.asked.push(path);
+          const state = this.states[path];
+          return state ? { status: 200, state } : { status: 404, state: null };
+        },
+        close: async () => undefined,
+      }),
+    });
+  }
+}
+
+/**
+ * The same runner, over a session that refuses every page it does not know.
+ *
+ * {@link TestRunner} answers 404 for an unknown path, which is one page missing.
+ * This one answers 403, which is the storefront refusing, and three in a row is
+ * the block.
+ */
+class BlockingRunner extends TestRunner {
+  protected override createClient(): CarrefourClient {
+    return new CarrefourClient({
+      userAgent: 'LunaShopperBot/1.0',
+      sleepImpl: async () => undefined,
+      openSession: async () => ({
+        goto: async (url: string) => {
+          const path = url.replace('https://www.carrefour.es', '');
+          this.asked.push(path);
+          const state = this.states[path];
+          return state ? { status: 200, state } : { status: 403, state: null };
+        },
+        close: async () => undefined,
+      }),
     });
   }
 }
@@ -242,6 +275,48 @@ describe('CarrefourCatalogRunner', () => {
         truncatedCategories: [
           expect.objectContaining({ id: 'cat9999', totalResults: 2000 }),
         ],
+      })
+    );
+  });
+
+  it('stops the crawl when the refusals stop being isolated, and keeps what it read', async () => {
+    // The block is the one failure a category may not swallow. What it costs is
+    // the rest of the crawl, never the part that worked: prices already fetched
+    // are valid data (plan 0038, section 6.6).
+    const good = link('cat1', 'Bebidas');
+    const refused = ['cat2', 'cat3', 'cat4'].map((id, n) =>
+      link(id, `Refused ${n}`)
+    );
+    const states: Record<string, Record<string, unknown>> = {
+      '/seed': page({ firstLevel: [good, ...refused] }),
+      [good.url]: page({ totalResults: 1 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €')],
+      }),
+    };
+    // Each is found by the walk and then refused on its first page of results.
+    // Three refusals with no page answering between them is the escalation
+    // signature, and the third is what stops the crawl.
+    for (const category of refused) {
+      states[category.url] = page({ totalResults: 500 });
+    }
+    const runner = new BlockingRunner(ingest, states);
+    const runContext = context();
+
+    await expect(
+      runner.run(
+        runContext,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ seedPath: '/seed' })
+      )
+    ).rejects.toThrow(/refused/);
+
+    // The one product the crawl did read was written before the run failed.
+    expect(ingested?.observations).toHaveLength(1);
+    expect(runContext.setReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blockedAfter: expect.stringMatching(/refused/),
       })
     );
   });

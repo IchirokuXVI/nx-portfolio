@@ -17,7 +17,6 @@
 
 export {
   CarrefourClient,
-  CarrefourHttpError,
   dropCloudflareCookies,
   isCloudflareCookie,
   type CarrefourCookieJar,
@@ -31,6 +30,12 @@ export {
   type CarrefourCappedCategory,
   type CarrefourFrontier,
 } from './lib/categories';
+export {
+  CarrefourBlockedError,
+  CarrefourBrowserError,
+  CarrefourHttpError,
+  isSkippable,
+} from './lib/errors';
 export { readCard, readCards, splitCardName } from './lib/listing';
 export type { SplitCardName } from './lib/listing';
 export { priceToCents, unitPriceLabel } from './lib/price';

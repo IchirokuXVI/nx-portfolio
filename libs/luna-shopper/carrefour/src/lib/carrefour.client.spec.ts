@@ -6,7 +6,16 @@ import {
   isCloudflareCookie,
   type CarrefourCookieJar,
 } from './carrefour.client';
-import { CARREFOUR_MIN_DELAY_MS, type CarrefourCategory } from './types';
+import {
+  CarrefourBlockedError,
+  CarrefourBrowserError,
+  CarrefourHttpError,
+} from './errors';
+import {
+  CARREFOUR_MIN_DELAY_MS,
+  type CarrefourCategory,
+  type CarrefourSession,
+} from './types';
 
 /** A jar that records what was done to it, standing in for a browser context. */
 class FakeJar implements CarrefourCookieJar {
@@ -64,24 +73,77 @@ describe('the Cloudflare cookie rule', () => {
   });
 });
 
+/** One answer the fake session gives for one URL. */
+type Answer = { status: number; state?: unknown } | { throws: Error };
+
+/**
+ * A session that answers what a test states, and counts how often it was
+ * opened and closed.
+ *
+ * The seam is here rather than above the client's own loading, so every test
+ * below exercises the real pacing, the real refusal counting and the real
+ * session handling. Only Chromium is missing.
+ */
+class FakeBrowser {
+  opened = 0;
+  closed = 0;
+  readonly asked: string[] = [];
+
+  constructor(private readonly answer: (url: string) => Answer) {}
+
+  open = async (): Promise<CarrefourSession> => {
+    this.opened += 1;
+    return {
+      goto: async (url: string) => {
+        this.asked.push(url);
+        const answer = this.answer(url);
+        if ('throws' in answer) {
+          throw answer.throws;
+        }
+        return {
+          status: answer.status,
+          state: (answer.state ?? null) as Record<string, unknown> | null,
+        };
+      },
+      close: async () => {
+        this.closed += 1;
+      },
+    };
+  };
+}
+
 describe('CarrefourClient', () => {
-  const client = (
-    loader: (path: string) => Promise<unknown>
-  ): CarrefourClient =>
+  const clientOn = (browser: FakeBrowser): CarrefourClient =>
     new CarrefourClient({
       userAgent: 'LunaShopperBot/1.0 (+https://velista.app)',
-      loader: async (path) =>
-        (await loader(path)) as Record<string, unknown> | null,
+      openSession: browser.open,
+      // The interval the storefront needs is not an interval a test spends.
+      sleepImpl: async () => undefined,
     });
 
-  it('reads a listing page through the loader it was given', async () => {
-    const listing = await client(async () => listingPage).readListing('/x');
+  const ok = (state: unknown) => () => ({ status: 200, state });
+  const refused = () => ({ status: 403 });
+
+  it('reads a listing page through the session it was given', async () => {
+    const listing = await clientOn(
+      new FakeBrowser(ok(listingPage))
+    ).readListing('/x');
     expect(listing?.cards.length).toBe(24);
   });
 
   it('reads a product page for its EAN', async () => {
-    const detail = await client(async () => productPage).readDetail('/x');
+    const detail = await clientOn(new FakeBrowser(ok(productPage))).readDetail(
+      '/x'
+    );
     expect(detail?.ean).toMatch(/^\d{13}$/);
+  });
+
+  it('resolves a path against the storefront origin', async () => {
+    const browser = new FakeBrowser(ok(listingPage));
+    await clientOn(browser).readListing('/supermercado/x/cat1/c');
+    expect(browser.asked).toEqual([
+      'https://www.carrefour.es/supermercado/x/cat1/c',
+    ]);
   });
 
   it('pages a category to its end and deduplicates within it', async () => {
@@ -92,49 +154,20 @@ describe('CarrefourClient', () => {
       path: ['Bebidas'],
       totalResults: 30,
     };
-    const asked: string[] = [];
     // The same page twice: 30 products is two pages, and the second repeats the
     // first, which is what a product filed twice looks like.
-    const walker = client(async (path) => {
-      asked.push(path);
-      return listingPage;
-    });
-
+    const browser = new FakeBrowser(ok(listingPage));
     const products = [];
-    for await (const product of walker.walkCategory(category)) {
+    for await (const product of clientOn(browser).walkCategory(category)) {
       products.push(product);
     }
 
-    expect(asked).toEqual([
-      '/supermercado/x/cat20003/c?offset=0',
-      '/supermercado/x/cat20003/c?offset=24',
+    expect(browser.asked).toEqual([
+      'https://www.carrefour.es/supermercado/x/cat20003/c?offset=0',
+      'https://www.carrefour.es/supermercado/x/cat20003/c?offset=24',
     ]);
     expect(products).toHaveLength(24);
     expect(products[0].categoryPath).toEqual(['Bebidas']);
-  });
-
-  it('stops a category at the first page that answers nothing', async () => {
-    const category: CarrefourCategory = {
-      id: 'cat1',
-      name: 'A category',
-      url: '/x',
-      path: [],
-      totalResults: 1000,
-    };
-    let calls = 0;
-    const walker = client(async () => {
-      calls += 1;
-      return calls === 1 ? listingPage : null;
-    });
-
-    const products = [];
-    for await (const product of walker.walkCategory(category)) {
-      products.push(product);
-    }
-    // The products it held are lost for this run and found by the next. Paging
-    // on into a refusal is what escalates the block.
-    expect(products).toHaveLength(24);
-    expect(calls).toBe(2);
   });
 
   it('stops a category at a page that came back empty', async () => {
@@ -147,30 +180,108 @@ describe('CarrefourClient', () => {
       path: [],
       totalResults: 1000,
     };
-    let calls = 0;
     const empty = {
       productCardList: { results: { items: [], total_results: 1000 } },
       pagination: { page_size: 24, total_pages: 42 },
     };
-    const walker = client(async () => {
+    let calls = 0;
+    const browser = new FakeBrowser(() => {
       calls += 1;
-      return calls === 1 ? listingPage : empty;
+      return { status: 200, state: calls === 1 ? listingPage : empty };
     });
 
     const products = [];
-    for await (const product of walker.walkCategory(category)) {
+    for await (const product of clientOn(browser).walkCategory(category)) {
       products.push(product);
     }
     expect(products).toHaveLength(24);
     expect(calls).toBe(2);
   });
 
-  it('never paces faster than the interval that was measured', () => {
-    const fast = new CarrefourClient({
-      userAgent: 'x',
-      delayMs: 10,
-      loader: async () => null,
+  describe('a refusal', () => {
+    it('is never retried, and costs the page rather than the run', async () => {
+      // A retry is what turns a refusal into a deeper block (plan 0090,
+      // section 5), so the page is raised straight to the caller.
+      const browser = new FakeBrowser(refused);
+      const client = clientOn(browser);
+      await expect(client.readListing('/x')).rejects.toBeInstanceOf(
+        CarrefourHttpError
+      );
+      expect(browser.asked).toHaveLength(1);
     });
+
+    it('ends the run once the refusals stop being isolated', async () => {
+      // Consecutive refusals are the escalation signature of section 4: only
+      // the first load of a fresh session succeeds. A crawl that fetched on
+      // through that would deepen the block.
+      const client = clientOn(new FakeBrowser(refused));
+      await expect(client.readListing('/1')).rejects.not.toBeInstanceOf(
+        CarrefourBlockedError
+      );
+      await expect(client.readListing('/2')).rejects.not.toBeInstanceOf(
+        CarrefourBlockedError
+      );
+      await expect(client.readListing('/3')).rejects.toBeInstanceOf(
+        CarrefourBlockedError
+      );
+    });
+
+    it('starts counting again after a page that answered', async () => {
+      // Two refusals three minutes apart with hundreds of clean loads between
+      // them is what the live storefront actually did, and it is not a block.
+      let n = 0;
+      const client = clientOn(
+        new FakeBrowser(() =>
+          ++n === 2 ? { status: 200, state: listingPage } : { status: 403 }
+        )
+      );
+      await expect(client.readListing('/1')).rejects.toBeInstanceOf(
+        CarrefourHttpError
+      );
+      await expect(client.readListing('/2')).resolves.not.toBeNull();
+      await expect(client.readListing('/3')).rejects.toBeInstanceOf(
+        CarrefourHttpError
+      );
+      await expect(client.readListing('/4')).rejects.not.toBeInstanceOf(
+        CarrefourBlockedError
+      );
+    });
+  });
+
+  describe('a browser that stops answering', () => {
+    it('is dropped, and the next page gets a fresh one', async () => {
+      // The first full crawl stalled with the Chromium process gone and the
+      // run neither working nor failing. A page load that cannot fail is worse
+      // than one that fails, so the session is discarded and relaunched.
+      let n = 0;
+      const browser = new FakeBrowser(() =>
+        ++n === 1
+          ? { throws: new CarrefourBrowserError('loading') }
+          : { status: 200, state: listingPage }
+      );
+      const client = clientOn(browser);
+
+      await expect(client.readListing('/1')).rejects.toBeInstanceOf(
+        CarrefourBrowserError
+      );
+      await expect(client.readListing('/2')).resolves.not.toBeNull();
+      expect(browser.opened).toBe(2);
+      // Asked to close, but never awaited: the thing that stopped answering is
+      // the thing a close would ask.
+      expect(browser.closed).toBe(1);
+    });
+
+    it('does not keep launching one browser per page when it works', async () => {
+      const browser = new FakeBrowser(ok(listingPage));
+      const client = clientOn(browser);
+      await client.readListing('/1');
+      await client.readListing('/2');
+      expect(browser.opened).toBe(1);
+    });
+  });
+
+  it('never paces faster than the interval that was measured', () => {
+    const fast = new CarrefourClient({ userAgent: 'x', delayMs: 10 });
     // Clamped up and never down: the block escalates and does not clear at
     // once, so this is not a number to tune by trial against the live site.
     expect((fast as unknown as { delayMs: number }).delayMs).toBe(
@@ -182,7 +293,15 @@ describe('CarrefourClient', () => {
     // The runner closes from a `finally` that also runs when the run failed
     // before its first page.
     await expect(
-      new CarrefourClient({ userAgent: 'x', loader: async () => null }).close()
+      new CarrefourClient({ userAgent: 'x' }).close()
     ).resolves.toBeUndefined();
+  });
+
+  it('closes the browser it opened', async () => {
+    const browser = new FakeBrowser(ok(listingPage));
+    const client = clientOn(browser);
+    await client.readListing('/1');
+    await client.close();
+    expect(browser.closed).toBe(1);
   });
 });
