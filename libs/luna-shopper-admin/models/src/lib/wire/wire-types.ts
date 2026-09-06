@@ -1154,6 +1154,176 @@ export type AdminCoreAdminZoneRowView = {
 };
 
 /**
+ * `admin-dashboard.AdminActivityEntry` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminActivityEntry = {
+  at: string;
+  actorKind: 'ADMIN' | 'SERVICE';
+  actorId: string;
+  entity: string;
+  entityId: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+};
+
+/**
+ * `admin-dashboard.AdminCatalogDashboard` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminCatalogDashboard = {
+  supermarkets: number;
+  locations: number;
+  items: number;
+  productGroups: number;
+  supermarketItems: {
+    total: number;
+    priced: number;
+    stale: number;
+    unavailable: number;
+  };
+  pricesWritten: AdminDashboardAdminPricesWrittenSeries[];
+  activity: AdminDashboardAdminActivityEntry[];
+};
+
+/**
+ * `admin-dashboard.AdminCoreDashboard` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminCoreDashboard = {
+  zones: {
+    total: number;
+    active: number;
+    markedForDeletion: number;
+  };
+  memberships: {
+    pending: number;
+  };
+  lists: {
+    total: number;
+  };
+  baskets: {
+    total: number;
+    draft: number;
+    completed: number;
+  };
+  zonesCreated: AdminDashboardDailyCount[];
+  listsCreated: AdminDashboardDailyCount[];
+  activity: AdminDashboardAdminActivityEntry[];
+};
+
+/**
+ * `admin-dashboard.AdminDashboardActivityEntry` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminDashboardActivityEntry = {
+  at: string;
+  actorKind: 'ADMIN' | 'SERVICE';
+  actorId: string;
+  entity: string;
+  entityId: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  actorName: string;
+};
+
+/**
+ * `admin-dashboard.AdminDashboardWindow` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminDashboardWindow = {
+  from: string;
+  to: string;
+};
+
+/**
+ * `admin-dashboard.AdminHarvestDashboard` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminHarvestDashboard = {
+  runs: {
+    byStatus: AdminDashboardAdminHarvestRunStatusCount[];
+    inWindow: number;
+  };
+  running: HarvestHarvestRunView | unknown;
+  recent: HarvestHarvestRunView[];
+  queues: {
+    entries: AdminDashboardAdminHarvestQueueEntry[];
+    places: number;
+    shops: AdminDashboardAdminHarvestShopQueue[];
+  };
+  sources: {
+    total: number;
+    enabled: number;
+  };
+};
+
+/**
+ * `admin-dashboard.AdminHarvestQueueEntry` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminHarvestQueueEntry = {
+  supermarketId: string;
+  candidate: number;
+  unresolved: number;
+};
+
+/**
+ * `admin-dashboard.AdminHarvestRunStatusCount` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminHarvestRunStatusCount = {
+  status: EnumsHarvestRunStatus;
+  count: number;
+};
+
+/**
+ * `admin-dashboard.AdminHarvestShopQueue` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminHarvestShopQueue = {
+  supermarketId: string;
+  unmapped: number;
+};
+
+/**
+ * `admin-dashboard.AdminIdentityDashboard` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminIdentityDashboard = {
+  users: {
+    total: number;
+    registered: number;
+    temporary: number;
+    verified: number;
+  };
+  signUps: AdminDashboardDailyCount[];
+  admins: {
+    total: number;
+    disabled: number;
+  };
+  loginFailures: {
+    last24h: number;
+    last7d: number;
+    recent: AdminDashboardAdminLoginFailureView[];
+  };
+  activity: AdminDashboardAdminActivityEntry[];
+};
+
+/**
+ * `admin-dashboard.AdminLoginFailureView` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminLoginFailureView = {
+  at: string;
+  username: string;
+  ip: string | null;
+};
+
+/**
+ * `admin-dashboard.AdminPricesWrittenSeries` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardAdminPricesWrittenSeries = {
+  sourceKind: EnumsPriceSourceKind;
+  points: AdminDashboardDailyCount[];
+};
+
+/**
+ * `admin-dashboard.DailyCount` in the gateway's OpenAPI document.
+ */
+export type AdminDashboardDailyCount = {
+  day: string;
+  count: number;
+};
+
+/**
  * `admin-users.AdminUserDetailView` in the gateway's OpenAPI document.
  */
 export type AdminUsersAdminUserDetailView = {
@@ -1191,6 +1361,21 @@ export type AdminUsersAdminUserView = {
   emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * `admin.AdminDashboardResponse` in the gateway's OpenAPI document.
+ *
+ * What the back office opens to. Each block is `null` when that service did not answer, and the response is still 200: one stopped service costs its own block rather than the whole page.
+ */
+export type AdminAdminDashboardResponse = {
+  window: AdminDashboardAdminDashboardWindow;
+  identity: AdminDashboardAdminIdentityDashboard | unknown;
+  core: AdminDashboardAdminCoreDashboard | unknown;
+  catalog: AdminDashboardAdminCatalogDashboard | unknown;
+  harvest: AdminDashboardAdminHarvestDashboard | unknown;
+  activity: AdminDashboardAdminDashboardActivityEntry[];
+  measuredAt: string;
 };
 
 /**

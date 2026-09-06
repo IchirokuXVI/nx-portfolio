@@ -57,6 +57,10 @@ export * from './lib/throttling/problem-throttler.guard';
 export * from './lib/throttling/redis-throttler.storage';
 export * from './lib/throttling/throttler-config';
 
+// The back office dashboard's window fill (plan 0088, section 2). Four services
+// fill the same window, so the loop that does it lives once.
+export * from './lib/dashboard/daily-window';
+
 // Pagination
 export * from './lib/pagination/cursor';
 export * from './lib/pagination/page-query.dto';
