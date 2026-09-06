@@ -1,3 +1,5 @@
+> **PR:** [#241](https://github.com/IchirokuXVI/nx-portfolio/pull/241)
+
 # 0088 What the back office opens to
 
 The back office opens on the first resource in its navigation, a list of supermarkets, because
