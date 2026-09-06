@@ -75,21 +75,64 @@ export class JoinGeneratedListDto {
   displayName?: string;
 }
 
-/**
- * Swap a line's pick (plan 0051, section 6.1).
- *
- * A body of one field rather than a query parameter, because it is a write and
- * because the same shape is where a second product attribute would go if the
- * pick ever grew one.
- */
-export class SetGeneratedListPickDto {
+/** One product of a split, and how many units go to it (plan 0094). */
+export class GeneratedListLineShareDto {
   @ApiProperty({
     format: 'uuid',
     description:
-      'The product to buy instead. Must be one of the line’s own options, which the service checks: the options are the line’s set rather than the whole catalog.',
+      'The product these units go to. Must be one of the line’s own options, and never the product the line already names: that one is the balance.',
   })
   @IsUUID()
   itemId!: string;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'How many units go to this product. Zero is folded out rather than refused, so a screen drawing a stepper per option can send every option it drew.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  quantity!: number;
+}
+
+/**
+ * Give units of a line to other products, which splits the line (plan 0094,
+ * section 2).
+ *
+ * It replaces the pick body, which named one product and moved the whole line to
+ * it. That is this request with one share, and two ways of choosing a product
+ * would be two rules about which product a settlement records.
+ *
+ * **The balance is never typed.** The shares are units for products other than
+ * the line's own, they sum to at most what is outstanding, and whatever is left
+ * stays on the line, which is what makes a stale or hand edited request land
+ * somewhere honest.
+ */
+export class SplitGeneratedListLineDto {
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'The outstanding amount you believed. Refused with a conflict when the line has moved since it was read, so two phones splitting one line cannot double it.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  from!: number;
+
+  @ApiProperty({
+    type: [GeneratedListLineShareDto],
+    maxItems: GENERATED_LIST_LIMITS.maxOptions,
+    description:
+      'Units for products other than the line’s own. One sibling appears under the line per product, and the line keeps its own product and the rest.',
+  })
+  @IsArray()
+  @ArrayMaxSize(GENERATED_LIST_LIMITS.maxOptions)
+  @ValidateNested({ each: true })
+  @Type(() => GeneratedListLineShareDto)
+  shares!: GeneratedListLineShareDto[];
 }
 
 /**

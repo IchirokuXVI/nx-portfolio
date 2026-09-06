@@ -303,6 +303,14 @@ export type GeneratedListAllocationDto = {
 };
 
 /**
+ * `GeneratedListLineShareDto` in the gateway's OpenAPI document.
+ */
+export type GeneratedListLineShareDto = {
+  itemId: string;
+  quantity: number;
+};
+
+/**
  * `GeneratedListSourceDto` in the gateway's OpenAPI document.
  */
 export type GeneratedListSourceDto = {
@@ -565,13 +573,6 @@ export type SetGeneratedListOriginQuantityDto = {
 };
 
 /**
- * `SetGeneratedListPickDto` in the gateway's OpenAPI document.
- */
-export type SetGeneratedListPickDto = {
-  itemId: string;
-};
-
-/**
  * `SetListAccessDto` in the gateway's OpenAPI document.
  */
 export type SetListAccessDto = {
@@ -667,6 +668,14 @@ export type SpawnHarvestRunDto = {
   radiusMetres?: number;
   brandKeys?: string[];
   detailBackfill?: boolean;
+};
+
+/**
+ * `SplitGeneratedListLineDto` in the gateway's OpenAPI document.
+ */
+export type SplitGeneratedListLineDto = {
+  from: number;
+  shares: GeneratedListLineShareDto[];
 };
 
 /**
@@ -2367,6 +2376,16 @@ export type GeneratedListSharingSourceName = {
   listId: string;
   name: string;
   zoneName: string | null;
+};
+
+/**
+ * `generated-list-sharing.SplitLineResult` in the gateway's OpenAPI document.
+ */
+export type GeneratedListSharingSplitLineResult = {
+  line: GeneratedListSharingBasketLineView;
+  created: GeneratedListSharingBasketLineView[];
+  merged: GeneratedListSharingBasketLineView[];
+  removed: string[];
 };
 
 /**

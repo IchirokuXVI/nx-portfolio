@@ -54,7 +54,7 @@ interface Harness {
   /** Option rows inserted beside a created line. */
   inserted: { generatedListLineId: string; itemId: string }[];
   /** Every promotion into a zone list, which a guest must never cause. */
-  promotions: { userId: string; targetListId: string }[];
+  promotions: { userId: string; targetListId: string; quantity?: number }[];
   events: { event: RealtimeEvent; generatedListId?: string }[];
 }
 
@@ -77,6 +77,17 @@ function build(
      * the rows already in it were written by the old code.
      */
     snapshotWithoutPricingKey?: boolean;
+    /** Lines the basket already holds, which the merge rule reads (plan 0094). */
+    held?: {
+      id?: string;
+      content?: string;
+      itemId?: string | null;
+      quantity?: number;
+      position?: number;
+      createdByParticipantId?: string | null;
+    }[];
+    /** The option rows those lines already offer. */
+    heldOptions?: { generatedListLineId: string; itemId: string }[];
   } = {}
 ): Harness {
   const list = {
@@ -119,8 +130,30 @@ function build(
   const promotions: Harness['promotions'] = [];
   const events: Harness['events'] = [];
 
+  // The lines the basket already holds, which is what plan 0094 section 5's
+  // merge rule reads. Empty by default, so every test written before that plan
+  // still describes an add that lands on nothing.
+  const held = (options.held ?? []).map(
+    (line, index) =>
+      ({
+        id: line.id ?? `gll-held-${index}`,
+        generatedListId: BASKET,
+        content: line.content ?? 'Milk',
+        quantity: line.quantity ?? 1,
+        settledQuantity: 0,
+        itemId: line.itemId ?? null,
+        origin: GeneratedLineOrigin.DERIVED,
+        targetListId: null,
+        position: line.position ?? index + 1,
+        createdByParticipantId: line.createdByParticipantId ?? null,
+        lastEditedByParticipantId: null,
+        lastEditedAt: null,
+      }) as GeneratedListLine
+  );
+
   const lineRepo = {
     findOne: async () => null,
+    find: async () => held,
     create: (data: Partial<GeneratedListLine>) => ({ ...data }),
     save: async (row: Partial<GeneratedListLine>) => {
       const stored = { ...row, id: row.id ?? 'gll-new' };
@@ -137,6 +170,7 @@ function build(
 
   const optionRepo = {
     findOne: async () => null,
+    find: async () => options.heldOptions ?? [],
     insert: async (rows: Harness['inserted']) => {
       inserted.push(...rows);
     },
@@ -157,9 +191,10 @@ function build(
     promote: async (
       userId: string,
       _line: GeneratedListLine,
-      targetListId: string
+      targetListId: string,
+      opts: { quantity?: number } = {}
     ) => {
-      promotions.push({ userId, targetListId });
+      promotions.push({ userId, targetListId, quantity: opts.quantity });
     },
   } as unknown as GeneratedListLineService;
 
@@ -294,6 +329,150 @@ describe('a participant adds a line (section 3)', () => {
   it('refuses a basket that is already full, which is what caps the damage', async () => {
     const harness = build({ lineCount: 500 });
     await expect(add(harness)).rejects.toBeInstanceOf(ValidationException);
+  });
+});
+
+/**
+ * The basket's own merge rule (plan 0094, section 5).
+ *
+ * > Two basket lines merge when their normalized content is equal and their
+ * > products are equal or one of them has none.
+ *
+ * The zone list's rule cannot be borrowed, because plan 0094 makes siblings that
+ * share a name deliberately: Milk, Skimmed and Milk, Whole are two rows of one
+ * shop, and folding them together would put two products on a line that may hold
+ * one.
+ */
+describe('an add lands on the line that is already there (section 5)', () => {
+  const SKIMMED = 'item-skimmed';
+  const WHOLE = 'item-whole';
+
+  it('sums into the row rather than appending a second one', async () => {
+    const harness = build({
+      held: [{ id: 'gll-milk', content: 'Milk', itemId: SKIMMED, quantity: 2 }],
+    });
+    await add(harness, { content: 'Milk', quantity: 3, itemId: SKIMMED });
+
+    expect(harness.saved).toHaveLength(1);
+    expect(harness.saved[0]).toMatchObject({ id: 'gll-milk', quantity: 5 });
+  });
+
+  it('folds the same way the lists do, so an accent is not a second row', async () => {
+    const harness = build({
+      held: [{ id: 'gll-ham', content: 'Jamón', itemId: null }],
+    });
+    await add(harness, { content: 'jamon' });
+
+    expect(harness.saved[0]).toMatchObject({ id: 'gll-ham' });
+  });
+
+  it('lands a typed name on the product free row before a named one', async () => {
+    // Case 2 before case 3, deliberately: nothing chooses a milk the shopper did
+    // not.
+    const harness = build({
+      held: [
+        { id: 'gll-skimmed', content: 'Milk', itemId: SKIMMED, position: 1 },
+        { id: 'gll-plain', content: 'Milk', itemId: null, position: 2 },
+      ],
+    });
+    await add(harness, { content: 'Milk' });
+
+    expect(harness.saved[0]).toMatchObject({ id: 'gll-plain' });
+  });
+
+  it('lands a named add on the row naming that product', async () => {
+    const harness = build({
+      held: [
+        { id: 'gll-plain', content: 'Milk', itemId: null, position: 1 },
+        { id: 'gll-skimmed', content: 'Milk', itemId: SKIMMED, position: 2 },
+      ],
+    });
+    await add(harness, { content: 'Milk', itemId: SKIMMED });
+
+    expect(harness.saved[0]).toMatchObject({ id: 'gll-skimmed' });
+  });
+
+  it('gives a survivor with no product the incoming one', async () => {
+    const harness = build({
+      held: [{ id: 'gll-plain', content: 'Milk', itemId: null, quantity: 1 }],
+    });
+    await add(harness, { content: 'Milk', itemId: WHOLE });
+
+    expect(harness.saved[0]).toMatchObject({
+      id: 'gll-plain',
+      itemId: WHOLE,
+      quantity: 2,
+    });
+  });
+
+  it('leaves a sibling alone, which is the row set this rule exists for', async () => {
+    // Milk, Skimmed is there and Milk, Whole is added: two products, two rows,
+    // and the settle keeps naming one product per act.
+    const harness = build({
+      held: [{ id: 'gll-skimmed', content: 'Milk', itemId: SKIMMED }],
+    });
+    await add(harness, { content: 'Milk', itemId: WHOLE });
+
+    expect(harness.saved[0].id).toBe('gll-new');
+    expect(harness.saved[0]).toMatchObject({ itemId: WHOLE, quantity: 1 });
+  });
+
+  it('adds only the options the row was not offering', async () => {
+    const harness = build({
+      held: [{ id: 'gll-plain', content: 'Milk', itemId: null }],
+      heldOptions: [{ generatedListLineId: 'gll-plain', itemId: SKIMMED }],
+    });
+    await add(harness, { content: 'Milk', options: [SKIMMED, WHOLE] });
+
+    expect(harness.inserted).toEqual([
+      { generatedListLineId: 'gll-plain', itemId: WHOLE, position: 1 },
+    ]);
+  });
+
+  it('updates rather than appends, so no client draws the row twice', async () => {
+    const harness = build({
+      held: [{ id: 'gll-milk', content: 'Milk', itemId: null }],
+    });
+    await add(harness, { content: 'Milk' });
+
+    expect(harness.events).toEqual([
+      {
+        event: RealtimeEvent.GeneratedListLineUpdated,
+        generatedListId: BASKET,
+      },
+    ]);
+  });
+
+  it('still promotes the owner’s units, and only the units they added', async () => {
+    const harness = build({
+      defaultTargetListId: TARGET_LIST,
+      held: [{ id: 'gll-milk', content: 'Milk', itemId: null, quantity: 2 }],
+      participant: {
+        id: OWNER_PARTICIPANT,
+        kind: ParticipantKind.OWNER,
+        userId: OWNER,
+      },
+    });
+    await add(harness, {
+      content: 'Milk',
+      quantity: 3,
+      participantId: OWNER_PARTICIPANT,
+    });
+
+    // The flat has already been told about the two that were on the row.
+    expect(harness.promotions).toEqual([
+      { userId: OWNER, targetListId: TARGET_LIST, quantity: 3 },
+    ]);
+  });
+
+  it('never promotes a guest’s units onto a merged row either', async () => {
+    const harness = build({
+      defaultTargetListId: TARGET_LIST,
+      held: [{ id: 'gll-milk', content: 'Milk', itemId: null }],
+    });
+    await add(harness, { content: 'Milk' });
+
+    expect(harness.promotions).toEqual([]);
   });
 });
 

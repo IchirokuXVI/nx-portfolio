@@ -56,8 +56,9 @@ import {
   type SetGeneratedListLineOutstandingRequest,
   type SetGeneratedListOriginQuantityRequest,
   type SetGeneratedListOriginQuantityResult,
-  type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
+  type SplitGeneratedListLineRequest,
+  type SplitGeneratedListLineResult,
   type SupermarketLocationPage,
   type SupermarketPage,
   type UserProfileView,
@@ -86,8 +87,8 @@ import {
   RevokeShareLinkDto,
   SetGeneratedListLineOutstandingDto,
   SetGeneratedListOriginQuantityDto,
-  SetGeneratedListPickDto,
   SettleGeneratedListLineDto,
+  SplitGeneratedListLineDto,
 } from './generated-list-sharing.dto';
 import {
   PARTICIPANT_THROTTLE_LIMITS,
@@ -887,32 +888,46 @@ export class GeneratedListParticipantController {
   }
 
   /**
-   * Swap a line's pick to another of its options (section 6.1).
+   * Give units of a line to other products, which splits the line (plan 0094).
    *
    * **No `seesZoneData` check**, unlike the allocation sheet below it. The
-   * options are catalog products and never zone data, so a guest at the shelf may
-   * prefer another brand and say so; the settlement that follows records whatever
-   * is actually in the trolley.
+   * products are the line's own options, which are catalog data, so a guest at
+   * the shelf may say they took three skimmed and two whole; the origins that
+   * move with the units are never shown to anybody who could not see them
+   * already.
+   *
+   * `…/products` rather than `…/pick`, and it replaces that route: moving every
+   * outstanding unit to another product is this write with one share, and two
+   * ways of choosing a product would be two rules about which product a
+   * settlement records.
    */
-  @Post(':id/lines/:lineId/pick')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setPick, {
+  @Post(':id/lines/:lineId/products')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.splitLine, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ auth: true, body: true, notFound: true })
-  setPick(
+  // 409 for a line whose outstanding amount has moved since it was read (plan
+  // 0056, section 3.2): the request is well formed and the state refuses it.
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+  })
+  splitLine(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
     @Param('lineId') lineId: string,
-    @Body() dto: SetGeneratedListPickDto
-  ): Promise<GeneratedListBasketLineView> {
-    const req: SetGeneratedListPickRequest = {
+    @Body() dto: SplitGeneratedListLineDto
+  ): Promise<SplitGeneratedListLineResult> {
+    const req: SplitGeneratedListLineRequest = {
       generatedListId: id,
       lineId,
       participantId: participant.participantId,
-      itemId: dto.itemId,
+      from: dto.from,
+      shares: dto.shares,
     };
-    return this.nats.send<GeneratedListBasketLineView>(
-      GENERATED_LIST_SHARING_PATTERNS.setPick,
+    return this.nats.send<SplitGeneratedListLineResult>(
+      GENERATED_LIST_SHARING_PATTERNS.splitLine,
       req
     );
   }

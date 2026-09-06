@@ -29,8 +29,9 @@ import {
   type SetGeneratedListLineOutstandingRequest,
   type SetGeneratedListOriginQuantityRequest,
   type SetGeneratedListOriginQuantityResult,
-  type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
+  type SplitGeneratedListLineRequest,
+  type SplitGeneratedListLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
@@ -38,6 +39,7 @@ import { GeneratedListOutstandingService } from './generated-list-outstanding.se
 import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
+import { GeneratedListSplitService } from './generated-list-split.service';
 
 /**
  * Core's sharing surface (plan 0051, sections 3 and 4). The gateway is the only
@@ -58,7 +60,8 @@ export class GeneratedListSharingController {
     private readonly reopenService: GeneratedListReopenService,
     private readonly outstanding: GeneratedListOutstandingService,
     private readonly basket: GeneratedListBasketService,
-    private readonly origins: GeneratedListOriginsService
+    private readonly origins: GeneratedListOriginsService,
+    private readonly split: GeneratedListSplitService
   ) {}
 
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
@@ -181,16 +184,18 @@ export class GeneratedListSharingController {
   }
 
   /**
-   * Swap a line's pick (plan 0051, section 6.1).
+   * Give units of a line to other products, which splits the line (plan 0094).
    *
-   * Any participant may, guests included: the options are catalog products and
-   * never zone data, and the person at the shelf is who wants another brand.
+   * Any participant may, guests included: the products are the line's own
+   * options, which are catalog data, and the person at the shelf is who took
+   * three skimmed and two whole. It replaces the pick, which was this write with
+   * one share and every outstanding unit in it.
    */
-  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.setPick)
-  setPick(
-    @Payload() req: SetGeneratedListPickRequest
-  ): Promise<GeneratedListBasketLineView> {
-    return this.basket.setPick(req);
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.splitLine)
+  splitLine(
+    @Payload() req: SplitGeneratedListLineRequest
+  ): Promise<SplitGeneratedListLineResult> {
+    return this.split.split(req);
   }
 
   /**

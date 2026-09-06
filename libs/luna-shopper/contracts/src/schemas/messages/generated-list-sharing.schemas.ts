@@ -87,7 +87,12 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
     'generated-list-sharing/BasketScopeLocationView'
   ),
   basketRequest: schemaId('msg/generatedList.basket.get/request'),
-  setPickRequest: schemaId('msg/generatedList.setPick/request'),
+  /** Units for products other than a line's own, which splits the line. */
+  splitLineRequest: schemaId('msg/generatedList.splitLine/request'),
+  /** One product of a split, and how many units go to it. */
+  lineShare: schemaId('generated-list-sharing/LineShare'),
+  /** The four collections a split answers with (plan 0094, section 6). */
+  splitLineResult: schemaId('generated-list-sharing/SplitLineResult'),
   /** Put a line in the basket as any live participant (plan 0055, section 3). */
   addLineRequest: schemaId('msg/generatedList.basket.addLine/request'),
   /** Where a search inside this basket is priced (plan 0055, section 5.1). */
@@ -721,15 +726,57 @@ const basketRequest = object(
   ['generatedListId', 'participantId']
 );
 
-const setPickRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.setPickRequest,
+const lineShare = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.lineShare,
+  {
+    itemId: nonEmptyString(),
+    quantity: integer({
+      minimum: 0,
+      maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    }),
+  },
+  ['itemId', 'quantity']
+);
+
+/**
+ * Give units of a line to other products (plan 0094, section 2).
+ *
+ * `from` is required and is the whole of the stale guard: the balance is never
+ * typed, so a request that started from a number the line no longer has is
+ * refused rather than landing on units somebody else has already moved.
+ *
+ * A share of **zero** is allowed through here and folded out by the service
+ * before anything else, which is section 2.1: a client that draws a stepper per
+ * option sends every option it drew, and refusing the untouched ones would make
+ * an ordinary screen build a request by hand.
+ */
+const splitLineRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineRequest,
   {
     generatedListId: nonEmptyString(),
     lineId: nonEmptyString(),
     participantId: nonEmptyString(),
-    itemId: nonEmptyString(),
+    from: integer({ minimum: 0, maximum: GENERATED_LIST_LIMITS.maxQuantity }),
+    shares: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.lineShare)),
   },
-  ['generatedListId', 'lineId', 'participantId', 'itemId']
+  ['generatedListId', 'lineId', 'participantId', 'from', 'shares']
+);
+
+/**
+ * What a split did (plan 0094, section 6).
+ *
+ * Four collections rather than a whole basket, so the client redraws the rows it
+ * was told about and draws nothing it was not.
+ */
+const splitLineResult = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineResult,
+  {
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+    created: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView)),
+    merged: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView)),
+    removed: array(nonEmptyString()),
+  },
+  ['line', 'created', 'merged', 'removed']
 );
 
 /**
@@ -966,7 +1013,9 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   sourceName,
   lineMovedEvent,
   basketRequest,
-  setPickRequest,
+  lineShare,
+  splitLineRequest,
+  splitLineResult,
   addLineRequest,
   basketScope,
   lineAddedEvent,
@@ -1045,11 +1094,12 @@ export const generatedListSharingMessageContracts: Record<
     // `skippedCount: 0` and no settlement refs, which is true of it.
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.settleResult,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.setPick]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.setPickRequest,
-    // The same shape a settle answers with, and for the same reason: both move
-    // one line, and the screen updates one row from either.
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView,
+  [GENERATED_LIST_SHARING_PATTERNS.splitLine]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineRequest,
+    // Deliberately **not** one line, which is what the pick this replaced
+    // answered with: a split makes rows and can fold rows away, so an answer of
+    // one line would leave the screen redrawing a basket it was not told about.
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineResult,
   },
   [GENERATED_LIST_SHARING_PATTERNS.addLine]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.addLineRequest,
