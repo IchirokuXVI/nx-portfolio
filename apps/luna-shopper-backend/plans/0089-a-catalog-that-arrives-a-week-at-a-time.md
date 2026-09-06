@@ -1,3 +1,5 @@
+> **PR:** [#239](https://github.com/IchirokuXVI/nx-portfolio/pull/239)
+
 # 0089 A catalog that arrives a week at a time
 
 LIDL Spain publishes its in-store assortment through a JSON search endpoint, one product page per
