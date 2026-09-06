@@ -97,6 +97,14 @@ export function fakeLineClaims(
       );
     },
     announce,
+    /**
+     * The claim window, which the overlap query asks for too (plan 0092).
+     *
+     * A day back rather than the real service's configured window, because
+     * every basket a spec seeds is generated now and the only thing this has to
+     * do is not exclude it.
+     */
+    since: () => new Date(Date.now() - 24 * 60 * 60 * 1000),
   } as unknown as LineClaimService;
 
   return { announced, calls, service };

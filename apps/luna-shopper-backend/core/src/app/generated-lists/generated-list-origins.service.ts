@@ -312,6 +312,10 @@ export class GeneratedListOriginsService {
    * it against the live set makes it fire, and this basket's own lines would be
    * the first thing it refused. Plan 0094 puts two siblings of one split on one
    * zone line deliberately, so a basket is never in the way of itself.
+   *
+   * The window is the claim's own, for the reason the query's doc gives at
+   * length: a row that says `CLAIMED` while the line's claim says nobody has it
+   * is one screen contradicting the next.
    */
   private async carriedElsewhere(
     list: GeneratedList,
@@ -325,6 +329,7 @@ export class GeneratedListOriginsService {
       lineIds,
       LIVE_GENERATED_LIST_STATUSES,
       list.id,
+      this.claims.since(),
     ]);
     return new Set(rows.map((row) => row.lineId));
   }

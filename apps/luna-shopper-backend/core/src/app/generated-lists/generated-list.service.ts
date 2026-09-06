@@ -310,6 +310,9 @@ export class GeneratedListService {
       // No basket to exclude: this run is composing the one that would hold
       // these lines, and it does not exist yet.
       null,
+      // The same window the claim uses, so a run refuses exactly the lines the
+      // household is being told somebody is out buying.
+      this.claims.since(),
     ]);
     if (rows.length === 0) {
       return { kept: candidates, skipped: [] };

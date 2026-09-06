@@ -354,6 +354,95 @@ describeIntegration(
       expect(origin.quantity).toBe(2);
     });
 
+    it('refuses a line another basket is carrying, and takes it once that basket has bought it', async () => {
+      // The two predicates plan 0092 had to copy from `LINE_CLAIMS_SQL` when it
+      // turned this check on. Without them a line bought all the way through, in
+      // a basket somebody left open, reads as carried here and as claimed by
+      // nobody there: one screen says the milk is free and the next refuses to
+      // put it in a basket.
+      const content = `Rice ${randomUUID().slice(0, 8)}`;
+      const zoneLine = await dataSource.getRepository(ListLine).save(
+        dataSource.getRepository(ListLine).create({
+          listId: ids.parents,
+          content,
+          quantity: 2,
+          itemSetHash: null,
+          position: 1,
+          approvalStatus: LineApprovalStatus.APPROVED,
+          createdByUserId: ids.shopper,
+          approvedByUserId: ids.shopper,
+          version: 1,
+        })
+      );
+      const other = await dataSource.getRepository(GeneratedList).save(
+        dataSource.getRepository(GeneratedList).create({
+          ownerUserId: ids.shopper,
+          name: 'Thursday',
+          status: GeneratedListStatus.DRAFT,
+          generatedAt: new Date(),
+          sourceSnapshot: {
+            profileId: null,
+            pricingProfileId: null,
+            sources: [],
+          },
+          defaultTargetListId: null,
+          idempotencyKey: null,
+        })
+      );
+      const otherLine = await dataSource.getRepository(GeneratedListLine).save(
+        dataSource.getRepository(GeneratedListLine).create({
+          generatedListId: other.id,
+          content,
+          quantity: 2,
+          settledQuantity: 0,
+          itemId: null,
+          origin: GeneratedLineOrigin.DERIVED,
+          targetListId: null,
+          position: 1,
+        })
+      );
+      await dataSource.getRepository(GeneratedListLineOrigin).save(
+        dataSource.getRepository(GeneratedListLineOrigin).create({
+          generatedListLineId: otherLine.id,
+          zoneId: ids.zone,
+          listId: ids.parents,
+          lineId: zoneLine.id,
+          quantity: 2,
+          lineVersion: zoneLine.version,
+        })
+      );
+
+      const line = await seedBasketLine(content);
+      const adopt = () =>
+        origins.setOriginQuantity({
+          generatedListId: ids.basket,
+          lineId: line.id,
+          participantId: PARTICIPANT,
+          sourceListId: ids.parents,
+          sourceLineId: zoneLine.id,
+          quantity: 2,
+          from: 0,
+        });
+
+      await expect(adopt()).rejects.toMatchObject({
+        code: 'validation_failed',
+      });
+
+      // The other basket bought all of it, so it is done with the line and
+      // releases it, exactly as the claim says it does.
+      await dataSource
+        .getRepository(GeneratedListLine)
+        .update({ id: otherLine.id }, { settledQuantity: 2 });
+
+      await adopt();
+      const written = await dataSource
+        .getRepository(GeneratedListLineOrigin)
+        .find({ where: { generatedListLineId: line.id } });
+      expect(written).toHaveLength(1);
+
+      await dataSource.getRepository(GeneratedList).delete({ id: other.id });
+    });
+
     it('refuses a second raise onto a list this basket has already reached', async () => {
       const line = await seedBasketLine(`Bread ${randomUUID().slice(0, 8)}`);
       await raise(line, ids.flat, 2);
