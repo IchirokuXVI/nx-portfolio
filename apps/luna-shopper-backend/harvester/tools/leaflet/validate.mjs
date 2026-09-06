@@ -5,7 +5,7 @@
  * here, so a change to the contract fails this check instead of drifting past it.
  *
  *   node --experimental-strip-types \
- *     apps/luna-shopper-backend/catalog/tools/leaflet/validate.mjs <file.json> ...
+ *     apps/luna-shopper-backend/harvester/tools/leaflet/validate.mjs <file.json> ...
  *
  * `--experimental-strip-types` is what lets Node import the contract's own `.ts`
  * file. Without it Node refuses the extension and the run reads as a missing
@@ -23,7 +23,7 @@ const HERE = new URL('.', import.meta.url).pathname.replace(
   /^\/([A-Za-z]:)/,
   '$1'
 );
-/** tools/leaflet, tools, catalog, luna-shopper-backend, apps, then the root. */
+/** tools/leaflet, tools, harvester, luna-shopper-backend, apps, then the root. */
 const REPO = join(HERE, '..', '..', '..', '..', '..');
 const DEFAULT_SCHEMA = join(
   REPO,

@@ -3,7 +3,7 @@
  * Converts a leaflet document into a HarvestDocument (backend plan 0086,
  * section 6.1), which is the one file schema the harvester's file import reads.
  *
- *   node apps/luna-shopper-backend/catalog/tools/leaflet/to-harvest-document.mjs \
+ *   node apps/luna-shopper-backend/harvester/tools/leaflet/to-harvest-document.mjs \
  *     <in.json> [--out <out.json>] [--pdf <file.pdf>]
  *
  * The input is the leaflet shape of plan 0081: `tmp/leaflet/leaflet.schema.json`

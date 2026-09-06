@@ -1,0 +1,48 @@
+{
+  "productsPerPage": {
+    "mean": 5.29,
+    "max": 16
+  },
+  "shares": {
+    "withPrice": 0.963,
+    "withUnitPriceOnly": 0.037,
+    "withNeither": 0,
+    "withPromotion": 0,
+    "withNullSize": 0.172,
+    "withBrand": 0.949
+  },
+  "unitPriceLabelPatterns": [
+    "# ML #",
+    "EL KILO A #",
+    "EL LITRO A #",
+    "KG",
+    "KILO #",
+    "LAVADO #",
+    "LITRO #",
+    "METRO #",
+    "UNIDAD #"
+  ],
+  "headings": [
+    "ACEITES Y SALSAS",
+    "ALIMENTACIÓN",
+    "AMBIENTACIÓN",
+    "APERITIVOS",
+    "BAZAR - ESPECIAL PISO DE ESTUDIANTES",
+    "BEBIDAS",
+    "CARNICERÍA",
+    "CERVEZAS Y VINOS",
+    "CHARCUTERÍA",
+    "CHARCUTERÍA AL CORTE",
+    "CONGELADOS",
+    "DESAYUNOS Y MERIENDAS",
+    "ELABORADOS CÁRNICOS",
+    "FRUTERÍA",
+    "LIMPIEZA",
+    "PERFUMERÍA",
+    "PESCADERÍA",
+    "PLATOS PREPARADOS",
+    "REFRIGERADOS",
+    "VUELTA AL COLE"
+  ],
+  "unrecognizedHeadings": []
+}

@@ -168,7 +168,7 @@ Rules, in order of importance:
 WHY THREE OF THESE FIELDS MATTER MORE THAN THE REST
 
 The reading is turned into a HarvestDocument (backend plan 0086, section 6.1)
-by tools/build-deza-document.mjs, which calls tools/to-harvest-document.mjs.
+by the shared build-document.mjs, which calls the shared to-harvest-document.mjs.
 That script decides which number on a tile a shopper actually pays for one unit,
 and it reads exactly three things to decide:
 
