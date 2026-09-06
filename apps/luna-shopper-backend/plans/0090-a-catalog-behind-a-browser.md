@@ -1,4 +1,6 @@
-> **PR:** [#243](https://github.com/IchirokuXVI/nx-portfolio/pull/243)
+> **PR:** [#243](https://github.com/IchirokuXVI/nx-portfolio/pull/243) (the plan and
+> the research), [#246](https://github.com/IchirokuXVI/nx-portfolio/pull/246) (the
+> adapter and the backfill)
 
 # 0090 A catalog behind a browser
 
