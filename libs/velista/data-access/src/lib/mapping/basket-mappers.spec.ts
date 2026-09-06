@@ -1,8 +1,6 @@
 import {
-  toBasketBindResult,
   toBasketLine,
   toBasketLineOrigins,
-  toBasketLineTarget,
   toBasketOriginQuantityResult,
 } from './basket-mappers';
 
@@ -47,6 +45,15 @@ describe('toBasketLine: what kind of line it is, and where it was sent', () => {
     );
   });
 
+  it('reads what a line has bought and not yet put on any list', () => {
+    // Zero against a backend from before luna `0093`, which is the truth about one:
+    // it wrote no waiting row, so nothing on its lines is unplaced.
+    expect(toBasketLine({ ...LINE, waitingSettled: 4 })?.waitingSettled).toBe(
+      4
+    );
+    expect(toBasketLine(LINE)?.waitingSettled).toBe(0);
+  });
+
   it('keeps absent and null apart on `targetListId`', () => {
     // Absent is "you may not see this" and null is "it has been sent nowhere". The
     // send control is offered over the second and never over the first, so
@@ -63,7 +70,7 @@ describe('toBasketLine: what kind of line it is, and where it was sent', () => {
 });
 
 describe('toBasketLineOrigins', () => {
-  it('reads the lists on a line and the lists that could be', () => {
+  it('reads the lists on a line, the lists that could be, and every other', () => {
     const answer = toBasketLineOrigins({
       generatedListId: 'b-1',
       lineId: 'line-1',
@@ -79,6 +86,8 @@ describe('toBasketLineOrigins', () => {
           listQuantity: 2,
           settledHere: 1,
           writable: true,
+          fromRun: true,
+          approvalStatus: 'PENDING',
         },
       ],
       candidates: [
@@ -91,21 +100,36 @@ describe('toBasketLineOrigins', () => {
           listQuantity: 2,
           content: 'Milk',
           matchedOnText: true,
+          fromRun: false,
+        },
+      ],
+      others: [
+        {
+          listId: 'list-cabin',
+          zoneId: 'zone-cabin',
+          listName: 'Cabin trip',
+          zoneName: 'Weekend away',
+          fromRun: false,
         },
       ],
     });
 
     expect(answer?.origins[0].settledHere).toBe(1);
     expect(answer?.origins[0].writable).toBe(true);
+    expect(answer?.origins[0].fromRun).toBe(true);
+    expect(answer?.origins[0].approvalStatus).toBe('PENDING');
     // Absent means adoptable on the wire, and the model spends a value on it so the
     // sheet has one field to branch on.
     expect(answer?.candidates[0].unavailable).toBeNull();
     expect(answer?.candidates[0].matchedOnText).toBe(true);
+    expect(answer?.others[0].listName).toBe('Cabin trip');
   });
 
   it('reads a reason this build has never heard of as not adoptable', () => {
-    // Offering the row anyway would be a control the server refuses. `CLAIMED` is the
-    // reading that says least about why.
+    // Offering the row a reel anyway would be a control the server refuses, and
+    // reading it as `CLAIMED` would put a sentence about somebody else's shopping
+    // under a row nobody said that about. `UNAVAILABLE` says only that it cannot be
+    // taken (velista `0068`, section 7).
     const answer = toBasketLineOrigins({
       lineId: 'line-1',
       origins: [],
@@ -124,7 +148,39 @@ describe('toBasketLineOrigins', () => {
       ],
     });
 
-    expect(answer?.candidates[0].unavailable).toBe('CLAIMED');
+    expect(answer?.candidates[0].unavailable).toBe('UNAVAILABLE');
+  });
+
+  it('reads a line the household has agreed to, and one it has not', () => {
+    // The loud direction on purpose: `PENDING` is the fallback, because a caption a
+    // reader can dismiss is better than somebody believing a household has agreed to
+    // something it has not.
+    const answer = toBasketLineOrigins({
+      lineId: 'line-1',
+      origins: [
+        {
+          originId: 'o-1',
+          listId: 'list-weekly',
+          lineId: 'zl-1',
+          zoneId: 'zone-flat',
+          approvalStatus: 'APPROVED',
+        },
+        {
+          originId: 'o-2',
+          listId: 'list-office',
+          lineId: 'zl-2',
+          zoneId: 'zone-office',
+          approvalStatus: 'SOMETHING_NEW',
+        },
+      ],
+      candidates: [],
+      others: [],
+    });
+
+    expect(answer?.origins.map((row) => row.approvalStatus)).toEqual([
+      'APPROVED',
+      'PENDING',
+    ]);
   });
 
   it('drops a row with half an identity rather than drawing it', () => {
@@ -132,14 +188,31 @@ describe('toBasketLineOrigins', () => {
       lineId: 'line-1',
       origins: [{ originId: 'o-1', listId: 'list-weekly' }],
       candidates: [{ listId: 'list-office' }],
+      others: [{ listId: 'list-cabin' }],
     });
 
     expect(answer?.origins).toEqual([]);
     expect(answer?.candidates).toEqual([]);
+    expect(answer?.others).toEqual([]);
+  });
+
+  it('reads no other lists from a backend that answers none', () => {
+    // A backend from before luna `0092`. Empty rather than absent, and it reads
+    // correctly: such a server has a separate route for those lists, and this build
+    // no longer draws one.
+    const answer = toBasketLineOrigins({
+      lineId: 'line-1',
+      origins: [],
+      candidates: [],
+    });
+
+    expect(answer?.others).toEqual([]);
   });
 
   it('refuses a report that cannot say which line it is about', () => {
-    expect(toBasketLineOrigins({ origins: [], candidates: [] })).toBeNull();
+    expect(
+      toBasketLineOrigins({ origins: [], candidates: [], others: [] })
+    ).toBeNull();
   });
 });
 
@@ -160,83 +233,6 @@ describe('toBasketOriginQuantityResult', () => {
   it('refuses a result whose line cannot be read', () => {
     expect(
       toBasketOriginQuantityResult({ origin: null, listQuantity: 0 })
-    ).toBeNull();
-  });
-});
-
-describe('toBasketLineTarget', () => {
-  it('reads a list the run drew from', () => {
-    const target = toBasketLineTarget({
-      listId: 'list-weekly',
-      zoneId: 'zone-flat',
-      listName: 'Weekly shop',
-      zoneName: 'Flat 3B',
-      fromRun: true,
-    });
-
-    expect(target?.fromRun).toBe(true);
-  });
-
-  it('keeps a target whose flag it could not read, unordered rather than gone', () => {
-    // Failing to read the flag costs the picker its ordering. Dropping the row would
-    // cost somebody the list they meant.
-    const target = toBasketLineTarget({
-      listId: 'list-weekly',
-      zoneId: 'zone-flat',
-      listName: null,
-      zoneName: null,
-    });
-
-    expect(target?.fromRun).toBe(false);
-    expect(target?.listName).toBeNull();
-  });
-
-  it('drops a target with no list or no zone', () => {
-    expect(toBasketLineTarget({ listId: 'list-weekly' })).toBeNull();
-    expect(toBasketLineTarget({ zoneId: 'zone-flat' })).toBeNull();
-  });
-});
-
-describe('toBasketBindResult', () => {
-  it('reads the line, where it went, and whether it is waiting', () => {
-    const result = toBasketBindResult({
-      line: { ...LINE, origin: 'ADDED', targetListId: 'list-weekly' },
-      listId: 'list-weekly',
-      zoneId: 'zone-flat',
-      createdLineId: 'zl-9',
-      quantity: 2,
-      pendingApproval: true,
-    });
-
-    expect(result?.line.targetListId).toBe('list-weekly');
-    expect(result?.createdLineId).toBe('zl-9');
-    expect(result?.pendingApproval).toBe(true);
-  });
-
-  it('says nothing is waiting unless the server said so', () => {
-    // The quieter direction: a row that fails to say "waiting for that list to
-    // approve it" is better than one that says it about a line already on the list.
-    const result = toBasketBindResult({
-      line: LINE,
-      listId: 'list-weekly',
-      zoneId: 'zone-flat',
-      createdLineId: 'zl-9',
-      quantity: 2,
-    });
-
-    expect(result?.pendingApproval).toBe(false);
-    expect(result?.quantity).toBe(2);
-  });
-
-  it('refuses a result missing the line it created', () => {
-    expect(
-      toBasketBindResult({
-        line: LINE,
-        listId: 'list-weekly',
-        zoneId: 'zone-flat',
-        quantity: 0,
-        pendingApproval: false,
-      })
     ).toBeNull();
   });
 });

@@ -39,10 +39,8 @@ export type BasketOperation =
   | 'basket.people'
   /** Saying how many are still to get, from the row's own number (velista 0054). */
   | 'basket.outstanding'
-  /** The units sheet: reading the lists on a line, and changing what one asked for. */
-  | 'basket.origins'
-  /** The send sheet: reading where a line may go, and sending it there. */
-  | 'basket.bind';
+  /** The units sheet: reading every list on a line, and changing what one asked for. */
+  | 'basket.origins';
 
 /** The message any failure falls back to, including one with no code at all. */
 const GENERIC = 'basket.error.failed';
@@ -104,11 +102,6 @@ export function basketErrorKey(
           // from a malformed quantity. Two people working one list in a shop is the
           // ordinary case rather than the exotic one, so it gets its own sentence.
           return 'basket.error.alreadyFinished';
-        case 'basket.bind':
-          // A line can be sent to one list and only once. This is the person who
-          // pressed send twice, or two phones that both did, and it is not a failure
-          // so much as an answer: it has already gone.
-          return 'basket.error.alreadySent';
         default:
           return GENERIC;
       }
@@ -121,32 +114,29 @@ export function basketErrorKey(
           // Caught in the sheet before the request in every other case, so this is
           // the belt on top of the braces.
           return 'basket.error.alreadyFinished';
-        case 'basket.bind':
-          // The one thing a bind refuses on the shape of the line rather than on its
-          // state: only a line somebody typed here can be sent to a list, because a
-          // derived one already has the lists it came from. The control is not drawn
-          // over one, so this is the belt.
-          return 'basket.error.notSendable';
         default:
+          // A refused raise, among others. The units sheet answers this one itself
+          // (velista `0068`, section 5): a list that said no to the line and a list
+          // another basket has claimed both arrive here, and the honest sentence is
+          // whichever of the two the row says about itself once it has been read
+          // again, so the sheet re-reads rather than picking one blind.
           return GENERIC;
       }
 
     case 'forbidden':
-      // `basket.origins` and `basket.bind` sit with the row writes rather than apart:
-      // the three zone surfaces refuse a guest and a reader who has lost `WRITE`
-      // outright rather than answering an empty sheet, so a 403 on one of them is the
-      // same fact as a 403 on a settle. The comment is above the group and not between
-      // two of its labels because `no-fallthrough` reads one there as a case with a
-      // body and no break.
+      // `basket.origins` sits with the row writes rather than apart: the zone surface
+      // refuses a guest and a reader who has lost `WRITE` outright rather than
+      // answering an empty sheet, so a 403 on it is the same fact as a 403 on a
+      // settle. The comment is above the group and not between two of its labels
+      // because `no-fallthrough` reads one there as a case with a body and no break.
       switch (operation) {
-        // The last three refuse a guest and a reader who has lost `WRITE` outright
+        // The last two refuse a guest and a reader who has lost `WRITE` outright
         // rather than answering an empty sheet, so a 403 on one of them is the same
         // fact the first two report.
         case 'basket.settle':
         case 'basket.reopen':
         case 'basket.outstanding':
         case 'basket.origins':
-        case 'basket.bind':
           // Access to one of the lists behind this line moved since the basket was
           // generated. The line is still on the screen and still readable, so this
           // says what changed rather than taking the basket away.

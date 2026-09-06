@@ -1048,7 +1048,7 @@ describe('SettleSheet: how many did you get', () => {
  * `RokuTranslatorTestingModule.forTesting()` does not interpolate and the assertion
  * is about which control exists.
  */
-describe('SettleSheet: the two sheets this one leads on to', () => {
+describe('SettleSheet: the sheet this one leads on to', () => {
   const entries = (fixture: ComponentFixture<SettleSheet>) =>
     [
       ...(fixture.nativeElement as HTMLElement).querySelectorAll(
@@ -1056,11 +1056,11 @@ describe('SettleSheet: the two sheets this one leads on to', () => {
       ),
     ].map((button) => button.textContent?.trim());
 
-  /** A line somebody typed into the basket in an aisle, sent nowhere yet. */
+  /** A line somebody typed into the basket in an aisle, on no list yet. */
   const added = (overrides: Partial<BasketLine> = {}) =>
     line({ kind: 'ADDED', origins: [], targetListId: null, ...overrides });
 
-  it('offers both ways on to the owner', async () => {
+  it('offers the way in to the owner', async () => {
     const { fixture } = await render({
       lines: [
         added({
@@ -1077,11 +1077,11 @@ describe('SettleSheet: the two sheets this one leads on to', () => {
       ],
     });
 
-    expect(entries(fixture)).toEqual(['basket.units.open', 'basket.send.open']);
+    expect(entries(fixture)).toEqual(['basket.units.open']);
   });
 
-  it('offers neither to a guest', async () => {
-    // Both routes name households, and the server refuses the whole of each to
+  it('offers nothing to a guest', async () => {
+    // The route names households, and the server refuses the whole of it to
     // somebody who arrived on a link. A guest is never asked which household a tin
     // of tomatoes belongs to.
     const { fixture } = await render({ meKind: 'GUEST', lines: [added()] });
@@ -1089,9 +1089,9 @@ describe('SettleSheet: the two sheets this one leads on to', () => {
     expect(entries(fixture)).toEqual([]);
   });
 
-  it('offers neither to a registered participant who does not pass the rule', async () => {
+  it('offers nothing to a registered participant who does not pass the rule', async () => {
     // `seesZoneData` is the server's answer on the most recent basket read, so
-    // losing `WRITE` on one source list takes both controls away on the next one.
+    // losing `WRITE` on one source list takes the control away on the next one.
     const { fixture } = await render({
       meKind: 'REGISTERED',
       seesZoneData: false,
@@ -1101,15 +1101,25 @@ describe('SettleSheet: the two sheets this one leads on to', () => {
     expect(entries(fixture)).toEqual([]);
   });
 
-  it('never offers to send a line the run composed', async () => {
-    // A derived line already has the lists it came from, so there is nothing to send
-    // and the server refuses the bind as a validation failure.
+  it('offers it over a line the run composed', async () => {
     const { fixture } = await render();
 
     expect(entries(fixture)).toEqual(['basket.units.open']);
   });
 
-  it('never offers to send a line that has already gone', async () => {
+  it('offers it over a line that is on nobody’s list, which is the point', async () => {
+    // The rule velista `0068` reversed. A line somebody typed in an aisle used to
+    // draw no way in here, because the sheet had nothing to show it and a second
+    // sheet sent it to one list; backend `0092` made every list a row at zero, so
+    // it is now the line the sheet is most worth opening for.
+    const { fixture } = await render({ lines: [added()] });
+
+    expect(entries(fixture)).toEqual(['basket.units.open']);
+  });
+
+  it('offers it over a line already on a list', async () => {
+    // There is no "already sent" any more: a line reaches as many lists as somebody
+    // raises, so the one it has reached does not close the sheet to the rest.
     const { fixture } = await render({
       lines: [
         added({
@@ -1130,32 +1140,10 @@ describe('SettleSheet: the two sheets this one leads on to', () => {
     expect(entries(fixture)).toEqual(['basket.units.open']);
   });
 
-  it('never offers the units sheet over a line that is on nobody’s list', async () => {
-    // An added line sent nowhere has no origins and no candidates of its own, so the
-    // sheet would open on two empty sections. Once it has been sent somewhere it has
-    // an origin, and then it does.
-    const { fixture } = await render({ lines: [added()] });
-
-    expect(entries(fixture)).toEqual(['basket.send.open']);
-  });
-
-  it('draws neither where the field was redacted rather than null', async () => {
-    // `targetListId` absent is "you may not see this" and null is "sent nowhere".
-    // A falsy check would collapse them and offer the send control to exactly the
-    // reader who may not use it. The guard on `seesZoneData` is what actually stops
-    // that today, and this is the second half of the same rule.
-    const redacted = added();
-    delete (redacted as { targetListId?: string | null }).targetListId;
-
-    const { fixture } = await render({ lines: [redacted] });
-
-    expect(entries(fixture)).toEqual([]);
-  });
-
-  it('still offers them over a finished line, which is the point', async () => {
-    // Velista `0056` section 5.2 sends a line that was already bought, and `0055`
-    // raises a finished line's contribution. Neither is a purchase, so neither
-    // belongs inside the block that hides the settle targets.
+  it('still offers it over a finished line, which is the point', async () => {
+    // Velista `0055` raises a finished line's number and `0068` puts a line already
+    // bought onto a household's list. Neither is a purchase, so neither belongs
+    // inside the block that hides the settle targets.
     const { fixture } = await render({
       lines: [line({ settled: 4, lastOutcome: 'BOUGHT' })],
     });

@@ -2,12 +2,10 @@ import { Injectable } from '@angular/core';
 import {
   basketTakesLines,
   type BasketAddLineRequest,
-  type BasketBindResult,
   type BasketLine,
   type BasketLineOrigin,
   type BasketLineOriginDetail,
   type BasketLineOrigins,
-  type BasketLineTarget,
   type BasketLinkPreview,
   type BasketOriginCandidate,
   type BasketOriginQuantityRequest,
@@ -22,6 +20,7 @@ import {
   type BasketShareLink,
   type BasketView,
   type CatalogSuggestion,
+  type LineApprovalStatus,
   type ProductOffer,
 } from '@portfolio/velista/models';
 import { CatalogMemory } from '../catalog/catalog-memory';
@@ -171,15 +170,27 @@ const LISTS: Readonly<
 interface OriginFacts {
   listQuantity: number;
   settledHere: number;
+  /**
+   * The zone line's own approval, which the basket read carries even less than the
+   * two numbers above: a line raised onto a list that vets its lines is waiting,
+   * and the row that raised it is the only thing standing there to say so.
+   *
+   * Defaulted to `APPROVED` by {@link BasketMemory._facts}, because every line this
+   * fake starts with is one a run already drew from a list that had accepted it.
+   */
+  approvalStatus: LineApprovalStatus;
 }
 
 /**
  * The lists holding the same thing that the run did **not** take, for `line-milk`.
  *
  * Three, and they are three because the sheet draws three different things: one
- * that can be adopted, one another basket is already carrying, and one still
- * waiting for its own list to accept it. A fake with only the first would let a
- * screen ship that draws every candidate as a button.
+ * that can be adopted, one another basket is already carrying, and one the
+ * household said no to. A fake with only the first would let a screen ship that
+ * draws every candidate as a reel.
+ *
+ * The two refusals are the two backend `0092` section 3.2 left standing. A pending
+ * line and a line at zero are both adoptable now, so neither appears here.
  */
 const MILK_CANDIDATES: readonly BasketOriginCandidate[] = [
   {
@@ -192,6 +203,7 @@ const MILK_CANDIDATES: readonly BasketOriginCandidate[] = [
     content: 'Milk',
     matchedOnText: false,
     unavailable: null,
+    fromRun: false,
   },
   {
     listId: 'list-shared',
@@ -206,6 +218,7 @@ const MILK_CANDIDATES: readonly BasketOriginCandidate[] = [
     // identity.
     matchedOnText: true,
     unavailable: 'CLAIMED',
+    fromRun: false,
   },
   {
     listId: 'list-cabin',
@@ -216,35 +229,36 @@ const MILK_CANDIDATES: readonly BasketOriginCandidate[] = [
     listQuantity: 4,
     content: 'Milk',
     matchedOnText: false,
-    unavailable: 'NOT_APPROVED',
+    unavailable: 'REJECTED',
+    fromRun: false,
   },
 ];
 
-/**
- * Where a line may be sent, with the run's own sources first.
- *
- * More than the two sources on purpose: the picker's whole job is that the list
- * somebody means is usually one of the run's and occasionally is not, and a fake
- * offering only the two would let a screen ship with no ordering at all.
- */
-const TARGET_LIST_IDS: readonly string[] = [
-  'list-weekly',
-  'list-groceries',
-  'list-office',
-  'list-shared',
-];
-
-/** Which of those the run drew from, which is what the picker draws first. */
+/** Which lists the run drew from, which is what the sheet draws first. */
 const SOURCE_LIST_IDS: readonly string[] = ['list-weekly', 'list-groceries'];
 
 /**
- * The one list that does not accept a sent line on its own.
+ * The one list that does not accept a raised line on its own.
  *
- * So `bindLine` can answer `pendingApproval` both ways without a second fake, which
- * is the whole of what the row's "waiting for that list to approve it" caption
- * needs to be developed against.
+ * So a raise can answer `PENDING` and `APPROVED` without a second fake, which is
+ * the whole of what the row's "waiting for the list to agree" caption and the
+ * basket row's own "waiting for that list to approve it" need to be developed
+ * against.
  */
 const APPROVES_BY_HAND = 'list-groceries';
+
+/**
+ * A list whose add lands on a line the read never offered (backend `0092`, 4.2).
+ *
+ * The name fold: `line.add` answers the line it landed on, and after `0091` that
+ * can be an existing line the candidate read did not match, because the names fold
+ * together on the list and the products do not. The sheet has to take the answered
+ * line rather than the one it asked for, and this is the fixture that proves it
+ * does without a backend.
+ */
+const FOLDS_ONTO: Readonly<Record<string, string>> = {
+  'list-cabin': 'zl-cabin-existing',
+};
 
 const OWNER: BasketParticipant = {
   id: 'p-owner',
@@ -347,15 +361,15 @@ export class BasketMemory implements BasketServiceI {
    * let a screen ship that reads them off a line the server never fills them on.
    */
   private _originFacts = new Map<string, OriginFacts>([
-    ['o-1', { listQuantity: 2, settledHere: 0 }],
-    ['o-2', { listQuantity: 1, settledHere: 0 }],
+    ['o-1', { listQuantity: 2, settledHere: 0, approvalStatus: 'APPROVED' }],
+    ['o-2', { listQuantity: 1, settledHere: 0, approvalStatus: 'APPROVED' }],
     // Two of the eggs have been bought against this list, which is the floor a
     // contribution may not go under. It is here so `below_settled` is reachable
     // without arranging a purchase first.
-    ['o-3', { listQuantity: 12, settledHere: 2 }],
+    ['o-3', { listQuantity: 12, settledHere: 2, approvalStatus: 'APPROVED' }],
     // The bread was closed by a shop that had none, which settles the line and buys
     // nothing, so nothing has been bought against this origin.
-    ['o-4', { listQuantity: 1, settledHere: 0 }],
+    ['o-4', { listQuantity: 1, settledHere: 0, approvalStatus: 'APPROVED' }],
   ]);
 
   private _lines: BasketLine[] = [
@@ -364,6 +378,7 @@ export class BasketMemory implements BasketServiceI {
       content: 'Milk',
       quantity: 3,
       settled: 0,
+      waitingSettled: 0,
       pickId: 'item-milk-hacendado',
       optionIds: [
         'item-milk-hacendado',
@@ -405,6 +420,7 @@ export class BasketMemory implements BasketServiceI {
       content: 'Eggs',
       quantity: 12,
       settled: 2,
+      waitingSettled: 0,
       pickId: 'item-eggs',
       optionIds: ['item-eggs'],
       position: 1,
@@ -429,6 +445,7 @@ export class BasketMemory implements BasketServiceI {
       content: 'Sourdough loaf',
       quantity: 1,
       settled: 1,
+      waitingSettled: 0,
       pickId: null,
       optionIds: [],
       position: 2,
@@ -589,6 +606,13 @@ export class BasketMemory implements BasketServiceI {
     const settled: BasketLine = {
       ...line,
       settled: line.settled + advance,
+      // A purchase on a line no list has yet is written anyway and waits for one
+      // (backend `0093`, section 2). Only a purchase: `NOT_AVAILABLE` says the shop
+      // had none, which is about the product rather than about units, so it adds
+      // nothing to what is waiting for a home.
+      waitingSettled:
+        line.waitingSettled +
+        (this._unplaced(line) && body.outcome === 'BOUGHT' ? advance : 0),
       pickId: body.itemId ?? line.pickId,
       touchedBy: this.me.id,
       touchedAt: new Date(),
@@ -644,6 +668,9 @@ export class BasketMemory implements BasketServiceI {
     const reopened: BasketLine = {
       ...line,
       settled: 0,
+      // A reverted waiting row is history and not a fact about any list, so it is in
+      // no total any more and is never re-homed (backend `0093`, section 3.2).
+      waitingSettled: 0,
       touchedBy: this.me.id,
       touchedAt: new Date(),
       lastOutcome: null,
@@ -709,6 +736,11 @@ export class BasketMemory implements BasketServiceI {
         : {
             ...line,
             settled: line.settled + (current - wanted),
+            // Lowering the number is a purchase by another name, so it waits for a
+            // list exactly as the settle sheet's does (backend `0093`, section 2).
+            waitingSettled:
+              line.waitingSettled +
+              (this._unplaced(line) ? current - wanted : 0),
             touchedBy: this.me.id,
             touchedAt: new Date(),
             lastOutcome: 'BOUGHT',
@@ -719,14 +751,16 @@ export class BasketMemory implements BasketServiceI {
   }
 
   /**
-   * Which lists are on this line, and which could be (velista `0055`).
+   * Every list this reader may write, in three collections (backend `0092`).
    *
    * Refused outright to a guest and to a reader who does not pass the rule, rather
    * than answered empty. A redacted version of this answer would be an empty sheet,
    * which reads as "no household wants this" and is a worse lie than a refusal.
    *
-   * An `ADDED` line answers empty on both sides, which is not a redaction and is the
-   * truth about it: nobody's list asked for it, and the run never looked.
+   * An `ADDED` line answers empty on the first two collections and **every list on
+   * the third**, which is the case velista `0068` exists for: a line somebody typed
+   * in an aisle is the one that most needs the sheet, and the old fake answering it
+   * empty is what let a screen ship with no way in for it.
    */
   async getLineOrigins(
     _generatedListId: string,
@@ -738,22 +772,38 @@ export class BasketMemory implements BasketServiceI {
     const origins = (line.origins ?? []).map((origin) => this._detail(origin));
     const taken = new Set(origins.map((origin) => origin.listId));
 
+    // Only milk has any, which is enough: it is the line the run matched in two
+    // households and could have matched in three. A candidate already adopted stops
+    // being one, which the filter keeps true after a write rather than only on the
+    // first read.
+    const candidates =
+      lineId === 'line-milk'
+        ? MILK_CANDIDATES.filter((candidate) => !taken.has(candidate.listId))
+        : [];
+    const matching = new Set(candidates.map((candidate) => candidate.listId));
+
     return {
       lineId,
       origins,
-      // Only milk has any, which is enough: it is the line the run matched in two
-      // households and could have matched in three. A candidate already adopted
-      // stops being one, which the filter keeps true after a write rather than only
-      // on the first read.
-      candidates:
-        lineId === 'line-milk'
-          ? MILK_CANDIDATES.filter((candidate) => !taken.has(candidate.listId))
-          : [],
+      candidates,
+      // The partition the contract states: every list this fake knows that is
+      // neither an origin nor a candidate. Composed rather than listed, so a list
+      // cannot appear in two collections at once however the write moves it.
+      others: Object.keys(LISTS)
+        .filter((listId) => !taken.has(listId) && !matching.has(listId))
+        .map((listId) => ({
+          listId,
+          zoneId: LISTS[listId].zoneId,
+          listName: LISTS[listId].listName,
+          zoneName: LISTS[listId].zoneName,
+          fromRun: SOURCE_LIST_IDS.includes(listId),
+        })),
     };
   }
 
   /**
-   * Set what one list contributes to this line (velista `0055`).
+   * Set what one list asked for through this line (velista `0055`, widened by
+   * backend `0092`).
    *
    * **It never buys anything**, which is the rule the whole sheet rests on:
    * `settled` and `lastOutcome` are copied through untouched whichever way the
@@ -762,6 +812,14 @@ export class BasketMemory implements BasketServiceI {
    *
    * The line's own quantity follows the delta and is floored at what has been
    * settled, because a basket cannot ask for fewer than it has already bought.
+   *
+   * ## Three cases, decided by what exists
+   *
+   * An origin is **edited**, a candidate is **adopted**, and a list holding no
+   * matching line has one **created** on it. The fake keeps all three because the
+   * sheet's arithmetic differs between them: adoption takes over the demand the list
+   * already had before it adds any (backend `0092`, section 4.1), and creation
+   * starts under that list's own approval rule.
    */
   async setOriginQuantity(
     _generatedListId: string,
@@ -775,8 +833,11 @@ export class BasketMemory implements BasketServiceI {
     const origins = line.origins ?? [];
     const held =
       origins.find((origin) => origin.listId === body.listId) ?? null;
+    // Only milk has candidates, and the read says so, so the write has to agree:
+    // asking any other line about them would make a list that holds no such line
+    // look like one that does, and creation would never be reached.
     const candidate =
-      held === null
+      held === null && lineId === 'line-milk'
         ? (MILK_CANDIDATES.find((option) => option.listId === body.listId) ??
           null)
         : null;
@@ -793,7 +854,11 @@ export class BasketMemory implements BasketServiceI {
 
     const facts =
       held === null
-        ? { listQuantity: candidate?.listQuantity ?? 0, settledHere: 0 }
+        ? {
+            listQuantity: candidate?.listQuantity ?? 0,
+            settledHere: 0,
+            approvalStatus: 'APPROVED' as LineApprovalStatus,
+          }
         : this._facts(held.id);
 
     const wanted = Math.max(0, Math.round(body.quantity));
@@ -806,18 +871,38 @@ export class BasketMemory implements BasketServiceI {
       });
     }
 
-    const delta = wanted - current;
-    const listQuantity = Math.max(0, facts.listQuantity + delta);
+    // A reel let go where it started costs nothing, and a zone line is never
+    // created for none of something (backend `0092`, section 4.2).
+    if (held === null && wanted === 0) {
+      return { line: this._project(line), origin: null, listQuantity: 0 };
+    }
 
-    // Upserted, so adoption and an ordinary edit are one path: a candidate arrives
-    // carrying the ids the sheet was handed, and the origin it becomes keeps them.
-    const originId = held?.id ?? `o-adopted-${body.listId}`;
+    const creating = held === null && candidate === null;
+    const delta = wanted - current;
+    const listQuantity = creating
+      ? // The list had no line, so what it asks for is what was raised.
+        wanted
+      : held === null
+        ? // Adoption takes over the demand that is already there: up to what the
+          // list asks for, nothing moves, and above it the difference is new.
+          Math.max(facts.listQuantity, wanted)
+        : Math.max(0, facts.listQuantity + delta);
+
+    // Upserted, so all three cases are one path: an adoption arrives carrying the
+    // ids the sheet was handed, and a creation is answered the ids of the line the
+    // add landed on, which is not always a new one.
+    const originId = held?.id ?? `o-raised-${(this._bound += 1)}`;
+    const zoneLineId = creating
+      ? // The name fold: the add can land on a line the read never offered, and the
+        // answer is what the sheet has to keep (backend `0092`, section 4.2).
+        (FOLDS_ONTO[body.listId] ?? `zl-raised-${this._bound}`)
+      : (held?.lineId ?? body.lineId ?? '');
     const next: BasketLineOrigin = {
       id: originId,
       zoneId:
         held?.zoneId ?? candidate?.zoneId ?? LISTS[body.listId]?.zoneId ?? '',
       listId: body.listId,
-      lineId: held?.lineId ?? body.lineId,
+      lineId: zoneLineId,
       quantity: wanted,
     };
 
@@ -830,20 +915,38 @@ export class BasketMemory implements BasketServiceI {
               origin.listId === body.listId ? next : origin
             );
 
+    // Purchases made before the line reached any list come home with it, oldest
+    // first and only up to what this list asked for (backend `0093`, section 3).
+    // Only on the write that **puts a list on the line**: an edit of an origin that
+    // was already there has nothing waiting to claim.
+    const cameHome = held === null ? Math.min(line.waitingSettled, wanted) : 0;
+
     if (wanted === 0) {
       this._originFacts.delete(originId);
     } else {
       this._originFacts.set(originId, {
         listQuantity,
-        settledHere: facts.settledHere,
+        settledHere: facts.settledHere + cameHome,
+        // A created line starts under the list's own rule, and an adopted or
+        // edited one keeps whatever it already had.
+        approvalStatus: creating
+          ? body.listId === APPROVES_BY_HAND
+            ? 'PENDING'
+            : 'APPROVED'
+          : facts.approvalStatus,
       });
     }
 
     const moved: BasketLine = {
       ...line,
       // Floored at what has been settled: a basket cannot ask for fewer than it has
-      // already bought, whatever the households behind it now want.
+      // already bought, whatever the households behind it now want. The basket line
+      // moves by the whole delta even on an adoption, because the basket will buy
+      // all of what the list asked for.
       quantity: Math.max(line.settled, line.quantity + delta),
+      // What is left unplaced. Units that fit nowhere stay waiting, and the next
+      // list the line reaches gets them.
+      waitingSettled: line.waitingSettled - cameHome,
       origins: kept,
     };
     this._lines = this._lines.map((row) => (row.id === lineId ? moved : row));
@@ -854,96 +957,6 @@ export class BasketMemory implements BasketServiceI {
       // the row rather than leave it drawn at its old number.
       origin: wanted === 0 ? null : this._detail(next),
       listQuantity,
-    };
-  }
-
-  /**
-   * The lists this line could be sent to (velista `0056`).
-   *
-   * The run's own sources are marked, because the list somebody means in an aisle is
-   * almost always one of them. The other two are what make this a picker rather than
-   * a confirmation.
-   */
-  async getLineTargets(): Promise<readonly BasketLineTarget[]> {
-    this._requireZoneReader();
-
-    return TARGET_LIST_IDS.map((listId) => ({
-      listId,
-      zoneId: LISTS[listId].zoneId,
-      listName: LISTS[listId].listName,
-      zoneName: LISTS[listId].zoneName,
-      fromRun: SOURCE_LIST_IDS.includes(listId),
-    }));
-  }
-
-  /**
-   * Send a line to a shopping list (velista `0056`).
-   *
-   * Three refusals, and they are three codes rather than one because they are three
-   * sentences: a `DERIVED` line is not that kind of line, a bound one has already
-   * gone, and a finished basket is a trip that is over. A fake answering one code
-   * for all three would let a screen ship saying the wrong thing twice.
-   *
-   * `createdBy` is carried through untouched. It is written once, at the add, and
-   * sending the line somewhere does not make somebody else the person who put it
-   * there.
-   */
-  async bindLine(
-    _generatedListId: string,
-    lineId: string,
-    listId: string
-  ): Promise<BasketBindResult> {
-    this._requireZoneReader();
-    const line = this._require(lineId);
-    this._requireLive();
-
-    if (line.kind !== 'ADDED') {
-      throw new GatewayError({
-        code: 'validation_failed',
-        status: 400,
-        correlationId: 'memory',
-        detail: 'Only a line added here can be sent to a shopping list',
-      });
-    }
-    if (line.targetListId != null) {
-      throw new GatewayError({
-        code: 'conflict',
-        status: 409,
-        correlationId: 'memory',
-        detail: 'This line has already been sent to a shopping list',
-      });
-    }
-
-    const zoneId = LISTS[listId]?.zoneId ?? 'zone-unknown';
-    // What is **outstanding**, which may be zero on a line already bought. Sending
-    // one of those is still worth doing: it puts what happened onto the list.
-    const quantity = Math.max(0, line.quantity - line.settled);
-    const originId = `o-bound-${(this._bound += 1)}`;
-    const createdLineId = `zl-bound-${this._bound}`;
-
-    const bound: BasketLine = {
-      ...line,
-      targetListId: listId,
-      origins: [
-        ...(line.origins ?? []),
-        { id: originId, zoneId, listId, lineId: createdLineId, quantity },
-      ],
-    };
-    this._originFacts.set(originId, {
-      listQuantity: quantity,
-      settledHere: 0,
-    });
-    this._lines = this._lines.map((row) => (row.id === lineId ? bound : row));
-
-    return {
-      line: this._project(bound),
-      listId,
-      zoneId,
-      createdLineId,
-      quantity,
-      // One list that does not accept a sent line on its own, so both answers are
-      // reachable without a second fake.
-      pendingApproval: listId === APPROVES_BY_HAND,
     };
   }
 
@@ -1016,6 +1029,7 @@ export class BasketMemory implements BasketServiceI {
       content: body.content,
       quantity: body.quantity ?? 1,
       settled: 0,
+      waitingSettled: 0,
       pickId: body.itemId ?? null,
       optionIds: [...(body.options ?? [])],
       position: this._lines.length,
@@ -1180,10 +1194,28 @@ export class BasketMemory implements BasketServiceI {
     }
   }
 
+  /**
+   * Whether a purchase on this line has no list to be recorded against.
+   *
+   * The condition backend `0093` writes a waiting row on, and it is about the line
+   * rather than about the person: a line the run composed has origins from the
+   * start, and a line somebody typed in an aisle has none until somebody raises one.
+   */
+  private _unplaced(line: BasketLine): boolean {
+    return (line.origins ?? []).length === 0;
+  }
+
   /** The zone side of one origin, or zeroes for one this fake never recorded. */
   private _facts(originId: string): OriginFacts {
     return (
-      this._originFacts.get(originId) ?? { listQuantity: 0, settledHere: 0 }
+      this._originFacts.get(originId) ?? {
+        listQuantity: 0,
+        settledHere: 0,
+        // Approved, which is what a line the run drew from always was, and the
+        // quiet direction for one this fake has lost track of: a caption saying a
+        // household is still deciding is worse when it is not.
+        approvalStatus: 'APPROVED',
+      }
     );
   }
 
@@ -1205,6 +1237,8 @@ export class BasketMemory implements BasketServiceI {
       listQuantity: facts.listQuantity,
       settledHere: facts.settledHere,
       writable: true,
+      fromRun: SOURCE_LIST_IDS.includes(origin.listId),
+      approvalStatus: facts.approvalStatus,
     };
   }
 

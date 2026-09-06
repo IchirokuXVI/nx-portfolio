@@ -128,38 +128,24 @@
       }
 
       <!--
-        The two sheets about this line's **lists**, rather than about buying it
-        (velista 0055 and 0056). Outside the `!finished()` block on purpose: sending
-        a line that was already bought still puts what happened onto a household's
-        list, and raising a finished line's contribution is a correction of the
-        record rather than a purchase.
+        The sheet about this line's **lists**, rather than about buying it (velista
+        0055, widened by 0068). Outside the `!finished()` block on purpose: raising a
+        finished line's number is a correction of the record rather than a purchase,
+        and a line already bought still belongs on a household's list.
 
-        Their own group, below the settle targets, because they are not settle
-        targets: the thumb reaching for the big button must not find one of these.
+        Its own group, below the settle targets, because it is not one: the thumb
+        reaching for the big button must not find it.
       -->
-      @if (canEditUnits() || canSendToList()) {
+      @if (canEditUnits()) {
         <div class="actions lists">
-          @if (canEditUnits()) {
-            <button
-              (click)="openUnits()"
-              [disabled]="busy()"
-              class="secondary"
-              type="button"
-            >
-              {{ 'basket.units.open' | rokuT }}
-            </button>
-          }
-
-          @if (canSendToList()) {
-            <button
-              (click)="openSendToList()"
-              [disabled]="busy()"
-              class="secondary"
-              type="button"
-            >
-              {{ 'basket.send.open' | rokuT }}
-            </button>
-          }
+          <button
+            (click)="openUnits()"
+            [disabled]="busy()"
+            class="secondary"
+            type="button"
+          >
+            {{ 'basket.units.open' | rokuT }}
+          </button>
         </div>
       }
 

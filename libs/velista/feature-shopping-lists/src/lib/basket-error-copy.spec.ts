@@ -33,7 +33,6 @@ const OPERATIONS: readonly BasketOperation[] = [
   'basket.people',
   'basket.outstanding',
   'basket.origins',
-  'basket.bind',
 ];
 
 describe('basketErrorKey', () => {
@@ -188,9 +187,6 @@ describe('basketErrorKey: the three codes that used to read as a conflict', () =
         'basket.outstanding'
       )
     ).toBe('basket.error.basketFinished');
-    expect(
-      basketErrorKey(gateway('generated_list_finished', 409), 'basket.bind')
-    ).toBe('basket.error.basketFinished');
   });
 
   /**
@@ -216,7 +212,6 @@ describe('basketErrorKey: the three codes that used to read as a conflict', () =
     'basket.people',
     'basket.outstanding',
     'basket.origins',
-    'basket.bind',
   ] as const)('names the finished trip on a refused %s', (operation) => {
     expect(
       basketErrorKey(gateway('generated_list_finished', 409), operation)
@@ -224,28 +219,18 @@ describe('basketErrorKey: the three codes that used to read as a conflict', () =
   });
 });
 
-describe('basketErrorKey: sending a line to a list', () => {
-  it('tells a refused kind of line apart from one already sent', () => {
-    // Two refusals, two sentences. "Only a line added here can be sent" is about what
-    // the line is; "this has already been sent" is about what has happened to it, and
-    // one message for both would be no sentence at all.
-    expect(
-      basketErrorKey(gateway('validation_failed', 400), 'basket.bind')
-    ).toBe('basket.error.notSendable');
-    expect(basketErrorKey(gateway('conflict', 409), 'basket.bind')).toBe(
-      'basket.error.alreadySent'
-    );
-  });
-
-  it('does not borrow either sentence for any other act', () => {
-    // Both are about the bind. A conflict on the units sheet means something else,
-    // and borrowing the copy would be a confident wrong answer.
-    expect(basketErrorKey(gateway('conflict', 409), 'basket.origins')).toBe(
-      'basket.error.failed'
-    );
+describe('basketErrorKey: raising a list on a line', () => {
+  it('leaves the refusals the units sheet answers for itself', () => {
+    // A rejected list and a list another basket has claimed both arrive as one
+    // code, so this one has no honest sentence to pick between them. The sheet
+    // re-reads and draws whichever the row then says about itself (velista `0068`,
+    // section 5), and a generic answer here is what makes that the only sentence.
     expect(
       basketErrorKey(gateway('validation_failed', 400), 'basket.origins')
     ).toBe('basket.error.failed');
+    expect(basketErrorKey(gateway('conflict', 409), 'basket.origins')).toBe(
+      'basket.error.failed'
+    );
   });
 
   it('says the outstanding write met a line somebody else finished', () => {
@@ -257,16 +242,12 @@ describe('basketErrorKey: sending a line to a list', () => {
   });
 });
 
-describe('basketErrorKey: access that moved on the three zone surfaces', () => {
+describe('basketErrorKey: access that moved on the zone surfaces', () => {
   it('says what changed rather than taking the basket away', () => {
-    // The origins, targets and bind routes refuse a guest and a reader who has lost
-    // `WRITE` outright rather than answering an empty sheet, so a 403 on one is the
-    // same fact the settle already reports.
-    for (const operation of [
-      'basket.outstanding',
-      'basket.origins',
-      'basket.bind',
-    ] as const) {
+    // The origins route refuses a guest and a reader who has lost `WRITE` outright
+    // rather than answering an empty sheet, so a 403 on it is the same fact the
+    // settle already reports.
+    for (const operation of ['basket.outstanding', 'basket.origins'] as const) {
       expect(basketErrorKey(gateway('forbidden', 403), operation)).toBe(
         'basket.error.accessChanged'
       );

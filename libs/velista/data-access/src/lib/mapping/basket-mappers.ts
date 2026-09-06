@@ -1,15 +1,16 @@
 import {
   BASKET_LINE_KINDS,
   BASKET_ORIGIN_UNAVAILABLE_REASONS,
+  LINE_APPROVAL_STATUS_FALLBACK,
+  LINE_APPROVAL_STATUSES,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
-  type BasketBindResult,
   type BasketLine,
   type BasketLineOrigin,
   type BasketLineOriginDetail,
   type BasketLineOrigins,
-  type BasketLineTarget,
   type BasketLinkPreview,
+  type BasketListRef,
   type BasketOriginCandidate,
   type BasketOriginQuantityResult,
   type BasketParticipant,
@@ -171,6 +172,9 @@ export function toBasketLine(raw: unknown): BasketLine | null {
     content: strOr(raw['content'], ''),
     quantity: numOr(raw['quantity'], 0),
     settled: numOr(raw['settledQuantity'], 0),
+    // Zero against a backend from before luna `0093`, which is the truth about
+    // one: it wrote no waiting row, so nothing on its lines is unplaced.
+    waitingSettled: numOr(raw['waitingSettled'], 0),
     pickId: nullableStr(raw['itemId']),
     optionIds: mapArray(raw['options'], str),
     position: numOr(raw['position'], 0),
@@ -251,6 +255,18 @@ function toBasketLineOriginDetail(raw: unknown): BasketLineOriginDetail | null {
     // this build could not read the flag on draws no editor rather than one whose
     // every write the gateway refuses.
     writable: raw['writable'] === true,
+    // False unless the server said so, which costs the row its place at the top of
+    // the sheet and nothing else. An unreadable flag must not remove a list.
+    fromRun: raw['fromRun'] === true,
+    // `PENDING` is the fallback the enum names, and it is the loud direction here on
+    // purpose: a row that says "waiting for the list to agree" about a line already
+    // on the list is a caption to read past, and the silent version is somebody
+    // believing a household has agreed to something it has not.
+    approvalStatus: oneOf(
+      raw['approvalStatus'],
+      LINE_APPROVAL_STATUSES,
+      LINE_APPROVAL_STATUS_FALLBACK
+    ),
   };
 }
 
@@ -287,23 +303,58 @@ function toBasketOriginCandidate(raw: unknown): BasketOriginCandidate | null {
     listQuantity: numOr(raw['listQuantity'], 0),
     content: strOr(raw['content'], ''),
     matchedOnText: raw['matchedOnText'] === true,
+    fromRun: raw['fromRun'] === true,
     // A reason this build has never heard of still means "not adoptable", so it
-    // reads as `CLAIMED`, the one that says least about why. Offering the row anyway
-    // would be a control the server refuses.
+    // reads as `UNAVAILABLE`, which says only that (velista `0068`, section 7). The
+    // absence rule fails safe: offering a reel anyway would be a control the server
+    // refuses, and reading it as `CLAIMED` would put a sentence about somebody
+    // else's shopping under a row nobody said that about.
     unavailable:
       unavailable === null || unavailable === undefined
         ? null
-        : oneOf(unavailable, BASKET_ORIGIN_UNAVAILABLE_REASONS, 'CLAIMED'),
+        : oneOf(unavailable, BASKET_ORIGIN_UNAVAILABLE_REASONS, 'UNAVAILABLE'),
   };
+}
+
+/**
+ * From `ListRef`: a list this reader may write that holds no matching line
+ * (backend `0092`, section 3).
+ *
+ * The thinnest of the three collections, and it degrades the same way the other two
+ * do: a row whose ids cannot be read is dropped rather than drawn nameless, because
+ * every row here is a control that writes to the list it names.
+ */
+function toBasketListRef(raw: unknown): BasketListRef | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const listId = str(raw['listId']);
+  const zoneId = str(raw['zoneId']);
+
+  return listId === null || zoneId === null
+    ? null
+    : {
+        listId,
+        zoneId,
+        listName: nullableStr(raw['listName']),
+        zoneName: nullableStr(raw['zoneName']),
+        fromRun: raw['fromRun'] === true,
+      };
 }
 
 /**
  * From `msg.generatedList.lineOrigins.response` (`GET .../lines/:lineId/origins`).
  *
  * Null only when the line id is unreadable, because the sheet is about one line and
- * a report that cannot say which is not one. Both arrays degrade to empty, which is a
- * real state on both sides: a line whose lists were all taken off it, and a basket
- * whose zones hold nothing else like it.
+ * a report that cannot say which is not one. All three arrays degrade to empty, which
+ * is a real state on each: a line whose lists were all taken off it, a basket whose
+ * zones hold nothing else like it, and a reader with no other list to send it to.
+ *
+ * `others` is empty against a backend from before luna `0092`, and that reads
+ * correctly rather than as a gap: such a backend has a send sheet's route for the
+ * same lists, and this build no longer draws one. The sheet then offers what that
+ * backend can serve.
  */
 export function toBasketLineOrigins(raw: unknown): BasketLineOrigins | null {
   if (!isRecord(raw)) {
@@ -317,6 +368,7 @@ export function toBasketLineOrigins(raw: unknown): BasketLineOrigins | null {
         lineId,
         origins: mapArray(raw['origins'], toBasketLineOriginDetail),
         candidates: mapArray(raw['candidates'], toBasketOriginCandidate),
+        others: mapArray(raw['others'], toBasketListRef),
       };
 }
 
@@ -343,69 +395,6 @@ export function toBasketOriginQuantityResult(
         origin: toBasketLineOriginDetail(raw['origin']),
         listQuantity: numOr(raw['listQuantity'], 0),
       };
-}
-
-/**
- * From `LineTarget`: one list this line could be sent to (velista `0056`).
- *
- * `fromRun` defaults to false, which only costs the picker its ordering: a list the
- * run drew from that this build failed to read the flag on falls in with the rest
- * rather than disappearing from the picker altogether.
- */
-export function toBasketLineTarget(raw: unknown): BasketLineTarget | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const listId = str(raw['listId']);
-  const zoneId = str(raw['zoneId']);
-
-  return listId === null || zoneId === null
-    ? null
-    : {
-        listId,
-        zoneId,
-        listName: nullableStr(raw['listName']),
-        zoneName: nullableStr(raw['zoneName']),
-        fromRun: raw['fromRun'] === true,
-      };
-}
-
-/**
- * From `msg.generatedList.bindLine.response` (`POST .../lines/:lineId/target`).
- *
- * The line, the list it went to, and whether it is waiting. `pendingApproval` reads
- * as false unless the server said true, and that is the direction that costs least:
- * a row that fails to say "waiting for that list to approve it" is quieter than one
- * that says it about a line already on the household's list.
- */
-export function toBasketBindResult(raw: unknown): BasketBindResult | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const line = toBasketLine(raw['line']);
-  const listId = str(raw['listId']);
-  const zoneId = str(raw['zoneId']);
-  const createdLineId = str(raw['createdLineId']);
-
-  if (
-    line === null ||
-    listId === null ||
-    zoneId === null ||
-    createdLineId === null
-  ) {
-    return null;
-  }
-
-  return {
-    line,
-    listId,
-    zoneId,
-    createdLineId,
-    quantity: numOr(raw['quantity'], 0),
-    pendingApproval: raw['pendingApproval'] === true,
-  };
 }
 
 /**
