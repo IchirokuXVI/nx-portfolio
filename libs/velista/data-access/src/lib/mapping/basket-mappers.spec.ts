@@ -45,6 +45,15 @@ describe('toBasketLine: what kind of line it is, and where it was sent', () => {
     );
   });
 
+  it('reads what a line has bought and not yet put on any list', () => {
+    // Zero against a backend from before luna `0093`, which is the truth about one:
+    // it wrote no waiting row, so nothing on its lines is unplaced.
+    expect(toBasketLine({ ...LINE, waitingSettled: 4 })?.waitingSettled).toBe(
+      4
+    );
+    expect(toBasketLine(LINE)?.waitingSettled).toBe(0);
+  });
+
   it('keeps absent and null apart on `targetListId`', () => {
     // Absent is "you may not see this" and null is "it has been sent nowhere". The
     // send control is offered over the second and never over the first, so

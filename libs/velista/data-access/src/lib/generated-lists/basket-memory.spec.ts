@@ -431,6 +431,81 @@ describe('BasketMemory: raising a list that was asking for none', () => {
     ).toBe('generated_list_finished');
   });
 
+  it('brings home the units bought before the line reached any list', async () => {
+    // Backend `0093`. Somebody adds batteries, buys four, and sends the line home
+    // afterwards: the four are recorded when they happen and land on the first list
+    // the line reaches, up to what that list asked for.
+    const memory = new BasketMemory();
+    const added = await memory.addLine(ID, {
+      content: 'Batteries',
+      quantity: 4,
+    });
+    const bought = await memory.settle(ID, added.id, { outcome: 'BOUGHT' });
+    expect(bought.line.waitingSettled).toBe(4);
+
+    const result = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-weekly',
+      quantity: 4,
+      from: 0,
+    });
+
+    expect(result.origin?.settledHere).toBe(4);
+    expect(result.line.waitingSettled).toBe(0);
+  });
+
+  it('leaves what one list could not take waiting for the next', async () => {
+    const memory = new BasketMemory();
+    const added = await memory.addLine(ID, {
+      content: 'Batteries',
+      quantity: 4,
+    });
+    await memory.settle(ID, added.id, { outcome: 'BOUGHT' });
+
+    const first = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-weekly',
+      quantity: 1,
+      from: 0,
+    });
+
+    expect(first.origin?.settledHere).toBe(1);
+    expect(first.line.waitingSettled).toBe(3);
+
+    // And the next list the line reaches takes what is left of them.
+    const second = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-office',
+      quantity: 3,
+      from: 0,
+    });
+
+    expect(second.origin?.settledHere).toBe(3);
+    expect(second.line.waitingSettled).toBe(0);
+  });
+
+  it('waits for nothing on a shop that had none', async () => {
+    // `NOT_AVAILABLE` closes the outstanding amount and claims no purchase, so it is
+    // about the product rather than about units and adds nothing to the total.
+    const memory = new BasketMemory();
+    const added = await memory.addLine(ID, {
+      content: 'Batteries',
+      quantity: 4,
+    });
+
+    const result = await memory.settle(ID, added.id, {
+      outcome: 'NOT_AVAILABLE',
+    });
+
+    expect(result.line.waitingSettled).toBe(0);
+  });
+
+  it('has nothing waiting on a line the run composed', async () => {
+    // It had lists from the start, so every purchase against it was recorded on one.
+    const memory = new BasketMemory();
+
+    const result = await memory.settle(ID, 'line-milk', { outcome: 'BOUGHT' });
+
+    expect(result.line.waitingSettled).toBe(0);
+  });
+
   it('refuses the write to a guest', async () => {
     const memory = new BasketMemory();
     memory.me = { ...memory.me, kind: 'GUEST' };

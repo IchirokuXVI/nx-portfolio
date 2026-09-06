@@ -201,6 +201,23 @@ export interface BasketLine {
   quantity: number;
   /** How many have been settled so far, across however many shops. */
   settled: number;
+  /**
+   * Units bought on this line before it reached any list, and still waiting for
+   * one (backend `0093`, section 2.2). Zero once every unit has been re-homed.
+   *
+   * Somebody adds "batteries" in an aisle and buys four before anybody has said
+   * whose they are. Those four are recorded when they happen and land on the
+   * first list the line reaches, oldest purchase first, up to what that list
+   * asked for. This is what is **still unplaced**, which is what lets the units
+   * sheet say a second list would take the rest (velista `0068`, section 6).
+   *
+   * Present for every reader, guests included, unlike {@link origins}: it counts
+   * this basket's own purchases and names no list, no zone and no household, so
+   * there is nothing in it to redact. Zero against a backend from before that
+   * plan, which reads correctly, because such a server wrote no waiting row and
+   * had nothing unplaced to report.
+   */
+  waitingSettled: number;
   /** The exact product this line means. Null for a free text line. */
   pickId: string | null;
   /** The products the pick may be switched between. Catalog data, never zone data. */

@@ -172,6 +172,9 @@ export function toBasketLine(raw: unknown): BasketLine | null {
     content: strOr(raw['content'], ''),
     quantity: numOr(raw['quantity'], 0),
     settled: numOr(raw['settledQuantity'], 0),
+    // Zero against a backend from before luna `0093`, which is the truth about
+    // one: it wrote no waiting row, so nothing on its lines is unplaced.
+    waitingSettled: numOr(raw['waitingSettled'], 0),
     pickId: nullableStr(raw['itemId']),
     optionIds: mapArray(raw['options'], str),
     position: numOr(raw['position'], 0),

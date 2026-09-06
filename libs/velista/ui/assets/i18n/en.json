@@ -1057,6 +1057,8 @@
       "rejected": "that list said no to this line",
       "cannotTake": "this line cannot be added to that list",
       "cameHome": "Added to {{name}}. {{count}} recorded as bought there",
+      "stillWaiting_one": "1 bought and not yet on any list",
+      "stillWaiting_other": "{{count}} bought and not yet on any list",
       "alreadyHere": "this list already has it, read again",
       "byName": "matched by name: “{{content}}”",
       "loading": "Reading the lists",

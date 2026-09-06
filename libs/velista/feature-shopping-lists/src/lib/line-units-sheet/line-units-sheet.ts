@@ -115,7 +115,7 @@ interface UnitsRow {
    * own, what a raised list's line asks for now when the two have drifted, and
    * nothing at all for a list that holds no such line.
    */
-  readonly listCaption: RowNotice | null;
+  readonly listCaption: RowCaption | null;
   /** Whether the zone line is still waiting for its list to agree (section 4.2). */
   readonly pending: boolean;
   /** That list's own wording of the line, for a candidate matched on text alone. */
@@ -128,17 +128,35 @@ interface UnitsRow {
    * stays, and the row says in words why nothing can be done with it.
    */
   readonly reason: string | null;
-  /** What the last write on this row came to, if it said anything. */
-  readonly notice: RowNotice | null;
+  /**
+   * What the last write on this row came to, if it said anything. Empty otherwise.
+   *
+   * A list rather than one sentence, because a write that lands can have two things
+   * to say: that a list received units bought before it was on the line, and that
+   * there are units left over which a second list would take (section 6).
+   */
+  readonly notices: readonly RowNotice[];
   /** What the reel should show, which is the floor after a refusal and the contribution otherwise. */
   readonly shown: number;
 }
 
 /** One sentence on one row, with whatever it names. */
-interface RowNotice {
+interface RowCaption {
   readonly key: string;
   /** Interpolation for the key, empty where it takes none. */
   readonly values: Readonly<Record<string, string | number>>;
+}
+
+/** A sentence about what a write did, which a standing caption is not. */
+interface RowNotice extends RowCaption {
+  /**
+   * Whether this is a refusal or a thing that happened.
+   *
+   * Section 6 puts the write's own news in **the slot** a refusal uses, and a slot is
+   * not a colour: "Added to Flat. 4 recorded as bought there" drawn in the refusal's
+   * red would read as a failure to somebody who had just succeeded.
+   */
+  readonly tone: 'refusal' | 'news';
 }
 
 /**
@@ -263,7 +281,9 @@ export class LineUnitsSheet {
   private readonly _busy = signal<ReadonlySet<string>>(new Set());
 
   /** The last thing each row's write had to say, in the row's own words. */
-  private readonly _notices = signal<ReadonlyMap<string, RowNotice>>(new Map());
+  private readonly _notices = signal<ReadonlyMap<string, readonly RowNotice[]>>(
+    new Map()
+  );
 
   /**
    * Rows whose write was refused with `forbidden`, which loses them their reel.
@@ -499,7 +519,7 @@ export class LineUnitsSheet {
       return;
     }
 
-    this._record(row, result.origin);
+    this._record(row, result.origin, result.line);
   }
 
   /**
@@ -558,22 +578,51 @@ export class LineUnitsSheet {
   /**
    * Take what a write answered, and say what it did that the numbers do not.
    *
-   * The row keeps its place: what changes is the numbers behind it. The one sentence
-   * this draws is section 6's, and it is drawn from the answer rather than inferred,
-   * because "the flat now knows about batteries and needs none" is a strange enough
-   * outcome that it has to be said in words the moment it happens.
+   * The row keeps its place: what changes is the numbers behind it. The two sentences
+   * this draws are section 6's, and both are drawn from the answer rather than
+   * inferred, because "the flat now knows about batteries and needs none" is a strange
+   * enough outcome that it has to be said in words the moment it happens.
+   *
+   * Both are said **only on the answer that put this list on the line**. A later edit
+   * of a row that has always been bought against is not news, and repeating "some are
+   * still waiting" on every drag would turn a fact into wallpaper.
    */
-  private _record(row: UnitsRow, origin: BasketLineOriginDetail): void {
+  private _record(
+    row: UnitsRow,
+    origin: BasketLineOriginDetail,
+    line: BasketLine
+  ): void {
     this._written.update((held) => new Map(held).set(row.key, origin));
 
-    // Units bought before this list was on the line, recorded on it by the write that
-    // put it there (backend `0093`). Only on the answer that created the row: a later
-    // edit of a row that has always been bought against is not news.
-    if (row.contributed === 0 && origin.settledHere > 0) {
-      this._notice(row.key, 'basket.units.cameHome', {
-        name: row.label,
-        count: origin.settledHere,
+    if (row.contributed > 0) {
+      return;
+    }
+
+    const said: RowNotice[] = [];
+
+    // Units bought before this list was on the line, re-homed onto it by the write
+    // that put it there (backend `0093`, section 3).
+    if (origin.settledHere > 0) {
+      said.push({
+        key: 'basket.units.cameHome',
+        values: { name: row.label, count: origin.settledHere },
+        tone: 'news',
       });
+    }
+
+    // And what those purchases could not fill, because this list asked for fewer than
+    // were waiting. Said so the shopper knows a second list would take the rest,
+    // rather than leaving them to work it out from two numbers on two screens.
+    if (line.waitingSettled > 0) {
+      said.push({
+        key: 'basket.units.stillWaiting',
+        values: { count: line.waitingSettled },
+        tone: 'news',
+      });
+    }
+
+    if (said.length > 0) {
+      this._notices.update((held) => new Map(held).set(row.key, said));
     }
   }
 
@@ -653,7 +702,7 @@ export class LineUnitsSheet {
     values: Readonly<Record<string, string | number>>
   ): void {
     this._notices.update((held) =>
-      new Map(held).set(key, { key: messageKey, values })
+      new Map(held).set(key, [{ key: messageKey, values, tone: 'refusal' }])
     );
   }
 
@@ -834,7 +883,7 @@ export class LineUnitsSheet {
       reason: this._forbidden().has(source.key)
         ? 'basket.units.noAccess'
         : source.reason,
-      notice: this._notices().get(source.key) ?? null,
+      notices: this._notices().get(source.key) ?? [],
       shown: this._floors().get(source.key) ?? source.contributed,
     };
   }

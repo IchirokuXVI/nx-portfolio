@@ -173,13 +173,27 @@
   color: var(--app-text-secondary);
 }
 
-// What the last write on this row came to. Danger here, because this one is a refusal
-// of something the reader just did.
+// What the last write on this row came to, stacked where there are two of them.
+.row-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+// Danger by default, because the ordinary case is a refusal of something the reader
+// just did.
 .row-notice {
   font-size: var(--app-text-xs);
   line-height: var(--app-leading-body);
   color: var(--app-status-danger-fg);
   text-wrap: pretty;
+
+  // What a write that **landed** had to say, which is not a failure and must not be
+  // coloured as one (section 6). The quiet accent this app reads as "still to do",
+  // because that is what units waiting for a list are.
+  &.news {
+    color: var(--app-action-quiet-fg);
+  }
 }
 
 // The number on a row with no reel, drawn where the reel would have been so a column of

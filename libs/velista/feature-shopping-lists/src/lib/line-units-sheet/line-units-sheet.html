@@ -178,14 +178,22 @@
       }
 
       <!--
-        What the last write on this row came to: a refusal, or the one thing a
-        successful write has to say in words (section 6). On the row rather than on
-        the sheet, because one write per row means the row that failed is the row that
-        can say so.
+        What the last write on this row came to: a refusal, or the two things a write
+        that landed has to say in words (section 6). On the row rather than on the
+        sheet, because one write per row means the row that failed is the row that can
+        say so.
+
+        One live region around both, rather than one each: they are one announcement
+        ("added to Flat, four recorded there, two still waiting"), and two regions
+        would race to say half of it.
       -->
-      @if (row.notice; as notice) {
-        <span aria-live="polite" class="row-notice" role="status">
-          {{ notice.key | rokuT: notice.values }}
+      @if (row.notices.length > 0) {
+        <span aria-live="polite" class="row-notices" role="status">
+          @for (notice of row.notices; track notice.key) {
+            <span [class.news]="notice.tone === 'news'" class="row-notice">
+              {{ notice.key | rokuT: notice.values }}
+            </span>
+          }
         </span>
       }
     </span>

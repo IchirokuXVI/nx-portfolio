@@ -378,6 +378,7 @@ export class BasketMemory implements BasketServiceI {
       content: 'Milk',
       quantity: 3,
       settled: 0,
+      waitingSettled: 0,
       pickId: 'item-milk-hacendado',
       optionIds: [
         'item-milk-hacendado',
@@ -419,6 +420,7 @@ export class BasketMemory implements BasketServiceI {
       content: 'Eggs',
       quantity: 12,
       settled: 2,
+      waitingSettled: 0,
       pickId: 'item-eggs',
       optionIds: ['item-eggs'],
       position: 1,
@@ -443,6 +445,7 @@ export class BasketMemory implements BasketServiceI {
       content: 'Sourdough loaf',
       quantity: 1,
       settled: 1,
+      waitingSettled: 0,
       pickId: null,
       optionIds: [],
       position: 2,
@@ -603,6 +606,13 @@ export class BasketMemory implements BasketServiceI {
     const settled: BasketLine = {
       ...line,
       settled: line.settled + advance,
+      // A purchase on a line no list has yet is written anyway and waits for one
+      // (backend `0093`, section 2). Only a purchase: `NOT_AVAILABLE` says the shop
+      // had none, which is about the product rather than about units, so it adds
+      // nothing to what is waiting for a home.
+      waitingSettled:
+        line.waitingSettled +
+        (this._unplaced(line) && body.outcome === 'BOUGHT' ? advance : 0),
       pickId: body.itemId ?? line.pickId,
       touchedBy: this.me.id,
       touchedAt: new Date(),
@@ -658,6 +668,9 @@ export class BasketMemory implements BasketServiceI {
     const reopened: BasketLine = {
       ...line,
       settled: 0,
+      // A reverted waiting row is history and not a fact about any list, so it is in
+      // no total any more and is never re-homed (backend `0093`, section 3.2).
+      waitingSettled: 0,
       touchedBy: this.me.id,
       touchedAt: new Date(),
       lastOutcome: null,
@@ -723,6 +736,11 @@ export class BasketMemory implements BasketServiceI {
         : {
             ...line,
             settled: line.settled + (current - wanted),
+            // Lowering the number is a purchase by another name, so it waits for a
+            // list exactly as the settle sheet's does (backend `0093`, section 2).
+            waitingSettled:
+              line.waitingSettled +
+              (this._unplaced(line) ? current - wanted : 0),
             touchedBy: this.me.id,
             touchedAt: new Date(),
             lastOutcome: 'BOUGHT',
@@ -897,12 +915,18 @@ export class BasketMemory implements BasketServiceI {
               origin.listId === body.listId ? next : origin
             );
 
+    // Purchases made before the line reached any list come home with it, oldest
+    // first and only up to what this list asked for (backend `0093`, section 3).
+    // Only on the write that **puts a list on the line**: an edit of an origin that
+    // was already there has nothing waiting to claim.
+    const cameHome = held === null ? Math.min(line.waitingSettled, wanted) : 0;
+
     if (wanted === 0) {
       this._originFacts.delete(originId);
     } else {
       this._originFacts.set(originId, {
         listQuantity,
-        settledHere: facts.settledHere,
+        settledHere: facts.settledHere + cameHome,
         // A created line starts under the list's own rule, and an adopted or
         // edited one keeps whatever it already had.
         approvalStatus: creating
@@ -920,6 +944,9 @@ export class BasketMemory implements BasketServiceI {
       // moves by the whole delta even on an adoption, because the basket will buy
       // all of what the list asked for.
       quantity: Math.max(line.settled, line.quantity + delta),
+      // What is left unplaced. Units that fit nowhere stay waiting, and the next
+      // list the line reaches gets them.
+      waitingSettled: line.waitingSettled - cameHome,
       origins: kept,
     };
     this._lines = this._lines.map((row) => (row.id === lineId ? moved : row));
@@ -1002,6 +1029,7 @@ export class BasketMemory implements BasketServiceI {
       content: body.content,
       quantity: body.quantity ?? 1,
       settled: 0,
+      waitingSettled: 0,
       pickId: body.itemId ?? null,
       optionIds: [...(body.options ?? [])],
       position: this._lines.length,
@@ -1164,6 +1192,17 @@ export class BasketMemory implements BasketServiceI {
         detail: 'You do not have access to every list behind this basket',
       });
     }
+  }
+
+  /**
+   * Whether a purchase on this line has no list to be recorded against.
+   *
+   * The condition backend `0093` writes a waiting row on, and it is about the line
+   * rather than about the person: a line the run composed has origins from the
+   * start, and a line somebody typed in an aisle has none until somebody raises one.
+   */
+  private _unplaced(line: BasketLine): boolean {
+    return (line.origins ?? []).length === 0;
   }
 
   /** The zone side of one origin, or zeroes for one this fake never recorded. */

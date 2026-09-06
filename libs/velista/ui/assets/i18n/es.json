@@ -1057,6 +1057,8 @@
       "rejected": "esa lista ha dicho que no a esta línea",
       "cannotTake": "esta línea no se puede añadir a esa lista",
       "cameHome": "Añadido a {{name}}. Ahí constan {{count}} como comprados",
+      "stillWaiting_one": "1 comprado y todavía en ninguna lista",
+      "stillWaiting_other": "{{count}} comprados y todavía en ninguna lista",
       "alreadyHere": "esta lista ya lo tiene, vuelve a leer",
       "byName": "coincide por el nombre: «{{content}}»",
       "loading": "Leyendo las listas",

@@ -49,6 +49,7 @@ function line(overrides: Partial<BasketLine> = {}): BasketLine {
     content: 'Milk',
     quantity: 3,
     settled: 0,
+    waitingSettled: 0,
     pickId: null,
     optionIds: [],
     position: 0,
@@ -650,10 +651,13 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
       await release(fixture, 0, 4);
 
       expect(originReads).toHaveLength(2);
-      expect(fixture.componentInstance['asked']()[0].notice).toEqual({
-        key: 'basket.error.staleLine',
-        values: { count: 5 },
-      });
+      expect(fixture.componentInstance['asked']()[0].notices).toEqual([
+        {
+          key: 'basket.error.staleLine',
+          values: { count: 5 },
+          tone: 'refusal',
+        },
+      ]);
       expect(sheets.dismiss).not.toHaveBeenCalled();
     });
 
@@ -670,10 +674,13 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
       await release(fixture, 0, 1);
 
       const [row] = fixture.componentInstance['asked']();
-      expect(row.notice).toEqual({
-        key: 'basket.error.belowSettled',
-        values: { count: 2 },
-      });
+      expect(row.notices).toEqual([
+        {
+          key: 'basket.error.belowSettled',
+          values: { count: 2 },
+          tone: 'refusal',
+        },
+      ]);
       expect(row.shown).toBe(2);
       expect(row.contributed).toBe(5);
     });
@@ -718,10 +725,9 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
 
       await release(fixture, 0, 4);
 
-      expect(fixture.componentInstance['asked']()[0].notice).toEqual({
-        key: 'basket.error.failed',
-        values: {},
-      });
+      expect(fixture.componentInstance['asked']()[0].notices).toEqual([
+        { key: 'basket.error.failed', values: {}, tone: 'refusal' },
+      ]);
     });
   });
 
@@ -789,6 +795,7 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
     it('says so when units bought before it arrived came home with it', async () => {
       // Section 6. "The flat now knows about batteries and needs none" is a strange
       // enough outcome that it is said in words on the answer that created the row.
+      // Not in the refusal's colour: the write succeeded.
       const created = origin({
         originId: 'o4',
         listId: 'l4',
@@ -802,16 +809,88 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
       const { fixture } = await render({
         line: line({ kind: 'ADDED', origins: [], settled: 4 }),
         reads: [answer([], [], [other()])],
-        write: { line: line(), origin: created, listQuantity: 0 },
+        write: {
+          line: line({ settled: 4, waitingSettled: 0 }),
+          origin: created,
+          listQuantity: 0,
+        },
       });
 
       await openRest(fixture);
       await release(fixture, 0, 4);
 
-      expect(fixture.componentInstance['rest']()[0].notice).toEqual({
-        key: 'basket.units.cameHome',
-        values: { name: 'Cabin trip', count: 4 },
+      expect(fixture.componentInstance['rest']()[0].notices).toEqual([
+        {
+          key: 'basket.units.cameHome',
+          values: { name: 'Cabin trip', count: 4 },
+          tone: 'news',
+        },
+      ]);
+    });
+
+    it('says how many are still waiting when this list took fewer than were', async () => {
+      // Section 6's second sentence. Four were bought before the line reached any
+      // list, this one asked for two, and the shopper is told the other two are
+      // still unplaced so they know a second list would take them.
+      const created = origin({
+        originId: 'o4',
+        listId: 'l4',
+        lineId: 'zl-created',
+        listName: 'Cabin trip',
+        contributed: 2,
+        listQuantity: 0,
+        settledHere: 2,
+        fromRun: false,
       });
+      const { fixture } = await render({
+        line: line({
+          kind: 'ADDED',
+          origins: [],
+          settled: 4,
+          waitingSettled: 4,
+        }),
+        reads: [answer([], [], [other()])],
+        write: {
+          line: line({ settled: 4, waitingSettled: 2 }),
+          origin: created,
+          listQuantity: 0,
+        },
+      });
+
+      await openRest(fixture);
+      await release(fixture, 0, 2);
+
+      expect(fixture.componentInstance['rest']()[0].notices).toEqual([
+        {
+          key: 'basket.units.cameHome',
+          values: { name: 'Cabin trip', count: 2 },
+          tone: 'news',
+        },
+        {
+          key: 'basket.units.stillWaiting',
+          values: { count: 2 },
+          tone: 'news',
+        },
+      ]);
+    });
+
+    it('says nothing about waiting units on an edit of a row already there', async () => {
+      // Both sentences are about the write that **put a list on the line**. Repeating
+      // "some are still waiting" on every drag would turn a fact into wallpaper, and
+      // a row that has always been bought against received nothing to report.
+      const { fixture } = await render({
+        line: line({ waitingSettled: 3 }),
+        reads: [answer([origin({ contributed: 2 })])],
+        write: {
+          line: line({ waitingSettled: 3 }),
+          origin: origin({ contributed: 4 }),
+          listQuantity: 4,
+        },
+      });
+
+      await release(fixture, 0, 4);
+
+      expect(fixture.componentInstance['asked']()[0].notices).toEqual([]);
     });
 
     it('says the list already has it when the raise lands on a line that is there', async () => {
@@ -826,10 +905,9 @@ describe('LineUnitsSheet: changing what each list asked for', () => {
       await openRest(fixture);
       await release(fixture, 0, 1);
 
-      expect(fixture.componentInstance['rest']()[0].notice).toEqual({
-        key: 'basket.units.alreadyHere',
-        values: {},
-      });
+      expect(fixture.componentInstance['rest']()[0].notices).toEqual([
+        { key: 'basket.units.alreadyHere', values: {}, tone: 'refusal' },
+      ]);
       // And it read again, because the sheet was wrong about that list.
       expect(originReads).toHaveLength(2);
     });
