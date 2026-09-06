@@ -1,8 +1,8 @@
 /**
  * Page one Carrefour category and report what a product row actually carries.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/sample-products.ts <catId> [pages] [--out f.json]
- *   npx tsx libs/luna-shopper/carrefour/tools/sample-products.ts cat20001 5
+ * Run: npx tsx tools/research/carrefour/sample-products.ts <catId> [pages] [--out f.json]
+ *   npx tsx tools/research/carrefour/sample-products.ts cat20001 5
  *
  * This answers the question the plan must answer: is a listing card enough to write a
  * source product and a price, or must the harvester open every product page as well?

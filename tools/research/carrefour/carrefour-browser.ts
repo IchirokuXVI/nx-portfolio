@@ -2,7 +2,7 @@
  * Shared client and parsing helpers for the Carrefour probe scripts.
  *
  * These are research scripts, not library code. They exist so that the numbers in
- * `apps/luna-shopper-backend/plans/0089-a-catalog-behind-a-browser.md` can be
+ * `apps/luna-shopper-backend/plans/0090-a-catalog-behind-a-browser.md` can be
  * reproduced. Nothing here is wired into the harvester.
  *
  * ## Why this uses a browser and not `fetch`

@@ -1,7 +1,7 @@
 /**
  * Walk the Carrefour supermarket category tree and size a full crawl.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/walk-categories.ts [--prune] [--out tree.json]
+ * Run: npx tsx tools/research/carrefour/walk-categories.ts [--prune] [--out tree.json]
  *
  * The tree is not published anywhere a client can read in one call. `categories-api`
  * is not routed to the internet and neither is the menu route. What is available is

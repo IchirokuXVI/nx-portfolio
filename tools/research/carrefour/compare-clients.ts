@@ -1,9 +1,9 @@
 /**
  * Show which HTTP clients Cloudflare lets through to carrefour.es, and which it blocks.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/compare-clients.ts
+ * Run: npx tsx tools/research/carrefour/compare-clients.ts
  *
- * This is the script behind the central claim of plan 0089: the harvester cannot read
+ * This is the script behind the central claim of plan 0090: the harvester cannot read
  * this storefront with `fetch`, and needs a browser. The finding is easy to doubt,
  * because a 403 also looks like an ordinary rate limit, so the test is built to rule
  * that out:

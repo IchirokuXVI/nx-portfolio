@@ -1,6 +1,6 @@
 > **PR:** [#243](https://github.com/IchirokuXVI/nx-portfolio/pull/243)
 
-# 0089 A catalog behind a browser
+# 0090 A catalog behind a browser
 
 Carrefour publishes its grocery assortment at `https://www.carrefour.es/supermercado`, with a
 price on every product card. This plan says how to read it.
@@ -30,7 +30,7 @@ browser driven adapters". This is that adapter. Section 11 says why it stays in 
 ## 1. What was measured
 
 Everything in this plan was measured against the live site on 2026-09-06, with the scripts in
-[`libs/luna-shopper/carrefour/tools`](../../../libs/luna-shopper/carrefour/tools/README.md).
+[`tools/research/carrefour`](../../../tools/research/carrefour/README.md).
 Those scripts are checked in so the numbers can be re-taken, not because they are library code.
 
 | Fact | Value |

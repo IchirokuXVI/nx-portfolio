@@ -1,8 +1,8 @@
 /**
  * Measure how fast the Carrefour storefront can be read before Cloudflare throttles.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts [delayMs] [count]
- *   npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts 4000 40
+ * Run: npx tsx tools/research/carrefour/measure-rate-limit.ts [delayMs] [count]
+ *   npx tsx tools/research/carrefour/measure-rate-limit.ts 4000 40
  *
  * This is the number that decides the shape of a Carrefour run, because the crawl is
  * thousands of pages and the pace sets how long that takes.
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
 /**
  * Poll one page slowly until the edge stops refusing it, and report how long that took.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts --recover [everyMs]
+ * Run: npx tsx tools/research/carrefour/measure-rate-limit.ts --recover [everyMs]
  *
  * This is the other half of the pace question. A limit that clears in seconds and one
  * that clears in an hour lead to very different run designs, and the block here is a

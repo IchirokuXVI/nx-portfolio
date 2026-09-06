@@ -3,10 +3,11 @@
 Research scripts written to answer one question: can the harvester read the Carrefour
 catalog the way it reads Mercadona and DEZA?
 
-They are **not a library yet**. There is no `project.json`, no `src`, no test target and
-nothing imports them. They sit here because this is the place for a
-`@portfolio/luna-shopper/carrefour` library. They are checked in because the numbers in
-[`apps/luna-shopper-backend/plans/0089-a-catalog-behind-a-browser.md`](../../../../apps/luna-shopper-backend/plans/0089-a-catalog-behind-a-browser.md)
+They are **not a library**. There is no `project.json`, no `src`, no test target, nothing
+imports them and CI never runs them. They sit under `tools/research/` beside the LIDL
+probes, and the library they lead to goes somewhere else: `libs/luna-shopper/carrefour`,
+laid out in section 10 of the plan. They are checked in because the numbers in
+[`apps/luna-shopper-backend/plans/0090-a-catalog-behind-a-browser.md`](../../../apps/luna-shopper-backend/plans/0090-a-catalog-behind-a-browser.md)
 must be reproducible by somebody who did not write them.
 
 Read the plan first. It states the conclusion. These scripts are the evidence.
@@ -17,27 +18,27 @@ They need `playwright` and its Chromium download, both of which the workspace al
 
 ```sh
 # Which HTTP clients does Cloudflare let through? This is the central finding.
-npx tsx libs/luna-shopper/carrefour/tools/compare-clients.ts
+npx tsx tools/research/carrefour/compare-clients.ts
 
 # Which API routes are reachable from the internet, and which are server side only?
-npx tsx libs/luna-shopper/carrefour/tools/probe-endpoints.ts
+npx tsx tools/research/carrefour/probe-endpoints.ts
 
 # How fast can pages be read before the edge starts refusing them?
 # 2000 ms apart gave 30 loads and 0 refusals. --assets lets the page load its images.
-npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts 2000 30
-npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts 2000 30 --assets
-npx tsx libs/luna-shopper/carrefour/tools/measure-rate-limit.ts --recover
+npx tsx tools/research/carrefour/measure-rate-limit.ts 2000 30
+npx tsx tools/research/carrefour/measure-rate-limit.ts 2000 30 --assets
+npx tsx tools/research/carrefour/measure-rate-limit.ts --recover
 
 # How big is the category tree, and how many page loads is a full crawl?
-npx tsx libs/luna-shopper/carrefour/tools/walk-categories.ts --depth 2
-npx tsx libs/luna-shopper/carrefour/tools/walk-categories.ts --out tree.json
+npx tsx tools/research/carrefour/walk-categories.ts --depth 2
+npx tsx tools/research/carrefour/walk-categories.ts --out tree.json
 
 # What does one product card carry, and is it enough to write a price?
-npx tsx libs/luna-shopper/carrefour/tools/sample-products.ts cat20001 5
+npx tsx tools/research/carrefour/sample-products.ts cat20001 5
 
 # Does the product page add anything the listing card lacks, an EAN above all? It does.
 # Pass a full URL: Git Bash rewrites a leading slash into a Windows path.
-npx tsx libs/luna-shopper/carrefour/tools/probe-product-page.ts \
+npx tsx tools/research/carrefour/probe-product-page.ts \
   "https://www.carrefour.es/supermercado/hielo-en-cubitos-carrefour-2-kg/R-VC4AECOMM-651364/p"
 ```
 

@@ -1,8 +1,8 @@
 /**
  * Read one Carrefour product page and report what it adds over the listing card.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/probe-product-page.ts <url> [--out f.json]
- *   npx tsx libs/luna-shopper/carrefour/tools/probe-product-page.ts \
+ * Run: npx tsx tools/research/carrefour/probe-product-page.ts <url> [--out f.json]
+ *   npx tsx tools/research/carrefour/probe-product-page.ts \
  *     /supermercado/gazpacho-carrefour-sin-gluten-1-l/805505583/p
  *
  * This decides the cost of a run. A listing page carries 24 cards, so reading the
@@ -21,7 +21,7 @@
  * a real EAN-13: `8431876300383` for Carrefour's own bagged ice. The page also holds
  * ingredients, net content as its own field, and vegan and vegetarian flags.
  *
- * That makes the product page worth reading, and plan 0089 section 12.1 says on what
+ * That makes the product page worth reading, and plan 0090 section 12.1 says on what
  * terms: a backfill keyed on the product rather than on the run, because an EAN does
  * not change and a product that already has one is never fetched again.
  *

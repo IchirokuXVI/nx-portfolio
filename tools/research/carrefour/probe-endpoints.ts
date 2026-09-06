@@ -1,7 +1,7 @@
 /**
  * Probe the Carrefour API surface and report which parts the internet can reach.
  *
- * Run: npx tsx libs/luna-shopper/carrefour/tools/probe-endpoints.ts
+ * Run: npx tsx tools/research/carrefour/probe-endpoints.ts
  *
  * The storefront renders its own service map into every page, under
  * `__INITIAL_STATE__.config.endpoints`. Each entry names a `client` path, which the
