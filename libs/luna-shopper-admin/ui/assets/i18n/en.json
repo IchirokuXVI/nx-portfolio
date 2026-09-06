@@ -393,7 +393,7 @@
     },
     "priceScopeKind": {
       "NATIONAL": "Nationwide",
-      "WAREHOUSE": "Warehouse",
+      "REGION": "Chain region",
       "POSTAL_CODE": "Postal code area",
       "STORE": "Single shop"
     },

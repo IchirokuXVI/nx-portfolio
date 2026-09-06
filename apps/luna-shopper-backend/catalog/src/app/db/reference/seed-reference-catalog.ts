@@ -219,11 +219,11 @@ async function seedMercadona(
         {
           id: scopeId,
           supermarketId: id,
-          // The warehouse the Córdoba receipts were priced by. A WAREHOUSE
+          // The warehouse the Córdoba receipts were priced by. A REGION
           // scope rather than a STORE one even here, because that is how the
           // chain actually prices and a later harvest has to land on the same
           // shape rather than beside it.
-          kind: 'WAREHOUSE' as PriceScope['kind'],
+          kind: 'REGION' as PriceScope['kind'],
           externalKey: '4661',
           label: {
             en: 'Córdoba — warehouse 4661',

@@ -158,7 +158,7 @@ describeIntegration('item prices (real Postgres)', () => {
       await scopes.create({
         userId: OPERATOR,
         supermarketId: chain.id,
-        kind: PriceScopeKind.WAREHOUSE,
+        kind: PriceScopeKind.REGION,
         externalKey: '4661',
       })
     ).id;
@@ -320,7 +320,7 @@ describeIntegration('item prices (real Postgres)', () => {
       const later = await scopes.create({
         userId: OPERATOR,
         supermarketId: chainId,
-        kind: PriceScopeKind.WAREHOUSE,
+        kind: PriceScopeKind.REGION,
         externalKey: 'mad3',
       });
       expect(Number((await shown(later.id))?.price)).toBe(1.49);

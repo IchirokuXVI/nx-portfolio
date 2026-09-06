@@ -91,7 +91,7 @@ describeIntegration('item prices migration (real Postgres)', () => {
     `);
     const [{ id: scopeId }] = await dataSource.query(
       `INSERT INTO "price_scopes" ("supermarketId", "kind", "externalKey")
-       VALUES ($1, 'WAREHOUSE', '4661') RETURNING id`,
+       VALUES ($1, 'REGION', '4661') RETURNING id`,
       [supermarketId]
     );
     const ids: string[] = [];
