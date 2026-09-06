@@ -419,9 +419,16 @@ export class GeneratedListLineService {
 
     if (originCreated) {
       // The units bought before this line reached the list (plan 0092, section
-      // 4.3). Nothing until plan 0093 fills it, and it runs through this
-      // service's own manager, which is the connection the insert above used.
-      await this.waiting.rehome(line.id, this.lines.manager);
+      // 4.3; plan 0093, section 3), through this service's own manager, which is
+      // the connection the insert above used.
+      //
+      // Announced immediately rather than handed back to a caller, because this
+      // path is not a transaction: the insert above has already committed, so
+      // there is no commit left to wait for and the household can be told at
+      // once.
+      this.waiting.announce(
+        await this.waiting.rehome(line.id, this.lines.manager)
+      );
     }
 
     return {

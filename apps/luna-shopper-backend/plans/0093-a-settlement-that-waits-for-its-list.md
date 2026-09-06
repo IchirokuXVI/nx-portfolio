@@ -1,3 +1,5 @@
+> **PR:** [#257](https://github.com/IchirokuXVI/nx-portfolio/pull/257)
+
 # 0093: a settlement that waits for its list
 
 > Somebody adds "batteries" in the shop, buys four, and at home sends the line to the flat's

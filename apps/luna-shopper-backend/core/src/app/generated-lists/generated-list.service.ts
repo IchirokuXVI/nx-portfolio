@@ -766,7 +766,7 @@ export class GeneratedListService {
       return [];
     }
     const lineIds = lines.map((line) => line.id);
-    const [origins, options, outcomes] = await Promise.all([
+    const [origins, options, facts] = await Promise.all([
       this.origins.find({
         where: { generatedListLineId: In(lineIds) },
         order: { createdAt: 'ASC' },
@@ -775,7 +775,7 @@ export class GeneratedListService {
         where: { generatedListLineId: In(lineIds) },
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
-      this.lastOutcomes(lineIds),
+      this.settlementFacts(lineIds),
     ]);
     return lines.map((line) =>
       toBasketLineView(
@@ -783,7 +783,7 @@ export class GeneratedListService {
         {
           origins: origins.filter((row) => row.generatedListLineId === line.id),
           options: options.filter((row) => row.generatedListLineId === line.id),
-          lastOutcome: outcomes.get(line.id) ?? null,
+          ...(facts.get(line.id) ?? {}),
         },
         seesZoneData
       )
@@ -795,7 +795,7 @@ export class GeneratedListService {
     line: GeneratedListLine,
     seesZoneData: boolean
   ): Promise<GeneratedListBasketLineView> {
-    const [origins, options, outcomes] = await Promise.all([
+    const [origins, options, facts] = await Promise.all([
       this.origins.find({
         where: { generatedListLineId: line.id },
         order: { createdAt: 'ASC' },
@@ -804,54 +804,77 @@ export class GeneratedListService {
         where: { generatedListLineId: line.id },
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
-      this.lastOutcomes([line.id]),
+      this.settlementFacts([line.id]),
     ]);
     return toBasketLineView(
       line,
-      { origins, options, lastOutcome: outcomes.get(line.id) ?? null },
+      { origins, options, ...(facts.get(line.id) ?? {}) },
       seesZoneData
     );
   }
 
   /**
-   * What the newest settle on each of these basket lines said.
+   * The two things a basket line's own settlements say about it: what the newest
+   * settle said, and how many units are still waiting for a list.
    *
-   * **Not derivable from the line itself**, which is the whole reason this query
-   * exists: `NOT_AVAILABLE` closes the outstanding amount exactly as a purchase
+   * **Neither is derivable from the line itself**, which is why this query
+   * exists. `NOT_AVAILABLE` closes the outstanding amount exactly as a purchase
    * does, so a screen reading `settledQuantity` alone would caption a shop that
-   * had none as somebody who bought it (velista `0044`, section 4.2).
+   * had none as somebody who bought it (velista `0044`, section 4.2). And a
+   * waiting purchase (plan 0093, section 2) has advanced `settledQuantity`
+   * without landing on any list, so nothing on the line says how much a list is
+   * about to receive.
    *
-   * One query for the whole basket rather than one per line, ordered oldest
-   * first so the last write into the map wins. A settle writes one row per origin
-   * it touched, all with the same outcome, so reading the newest by `createdAt`
+   * One query for the whole basket rather than one per line and per fact,
+   * ordered oldest first so the last write into the map wins. A settle writes one
+   * row per origin it touched, all with the same outcome, so reading the newest
    * answers "what did the last act on this line say" whichever of its rows comes
    * last.
    */
-  private async lastOutcomes(
+  private async settlementFacts(
     lineIds: string[]
-  ): Promise<Map<string, SettlementOutcome>> {
+  ): Promise<Map<string, BasketLineSettlementFacts>> {
+    const facts = new Map<string, BasketLineSettlementFacts>();
     if (lineIds.length === 0) {
-      return new Map();
+      return facts;
     }
     const rows = await this.settlements.find({
       // A settlement somebody took back says nothing about the line any more
       // (plan 0054, section 3.3). Without this a reopened line would keep the
       // caption of the settle that was undone, which is the one field on the row
-      // that cannot be derived from the numbers.
+      // that cannot be derived from the numbers, and would count units a reopen
+      // has already given back.
       where: { generatedListLineId: In(lineIds), revertedAt: IsNull() },
       order: { createdAt: 'ASC', id: 'ASC' },
       // No `select` projection: TypeORM's typed form rejects a partial entity
       // here, and the rows are small and bounded by one basket's settlements.
     });
 
-    const newest = new Map<string, SettlementOutcome>();
     for (const row of rows) {
-      if (row.generatedListLineId !== null) {
-        newest.set(row.generatedListLineId, row.outcome);
+      if (row.generatedListLineId === null) {
+        continue;
       }
+      const known = facts.get(row.generatedListLineId) ?? {
+        lastOutcome: null,
+        waitingSettled: 0,
+      };
+      known.lastOutcome = row.outcome;
+      if (row.lineId === null && row.outcome === SettlementOutcome.BOUGHT) {
+        // Bought, and still belonging to no list (plan 0093, section 4). A
+        // `NOT_AVAILABLE` waiting row is not counted, because it moved no units:
+        // it is an outcome rather than a quantity.
+        known.waitingSettled += row.quantity;
+      }
+      facts.set(row.generatedListLineId, known);
     }
-    return newest;
+    return facts;
   }
+}
+
+/** What a basket line's own settlements say about it, for its view. */
+interface BasketLineSettlementFacts {
+  lastOutcome: SettlementOutcome | null;
+  waitingSettled: number;
 }
 
 /** A basket line as the run composed it, before it is written. */

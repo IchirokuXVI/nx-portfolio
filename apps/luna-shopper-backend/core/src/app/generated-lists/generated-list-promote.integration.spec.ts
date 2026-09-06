@@ -154,10 +154,12 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
       zoneLines,
       claims.service,
       undefined as never,
-      // Plan 0092 section 4.3's seam. Real rather than stubbed, because
-      // `promote` calls it after every origin insert and it must be a no op
-      // until plan 0093 fills it.
-      new WaitingSettlementService(),
+      // Plan 0092's seam, filled by plan 0093. Real rather than stubbed,
+      // because `promote` calls it after every origin insert and no line in this
+      // file has a waiting purchase for it to place.
+      new WaitingSettlementService(claims.service, {
+        emit: jest.fn(),
+      } as never),
       { emitToUsers: jest.fn(), emit: jest.fn() } as never
     );
 
