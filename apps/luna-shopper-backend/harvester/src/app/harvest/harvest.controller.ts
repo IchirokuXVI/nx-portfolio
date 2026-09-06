@@ -1,6 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  ADMIN_DASHBOARD_PATTERNS,
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
@@ -9,6 +10,8 @@ import {
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   type AcceptSourceEntryRequest,
+  type AdminDashboardRequest,
+  type AdminHarvestDashboard,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
@@ -44,6 +47,7 @@ import {
   type SupermarketSourceView,
   type UpsertSupermarketSourceRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { HarvestDashboardService } from './dashboard.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
@@ -72,8 +76,23 @@ export class HarvestController {
     private readonly entries: SourceEntryService,
     private readonly shops: SourceLocationService,
     private readonly sources: SupermarketSourceService,
-    private readonly discovery: PostalCodeDiscoveryService
+    private readonly discovery: PostalCodeDiscoveryService,
+    private readonly dashboard: HarvestDashboardService
   ) {}
+
+  // --- The back office dashboard -------------------------------------------
+
+  /**
+   * The harvester's block of the back office dashboard (plan 0088). Gated like
+   * every other subject here: this service answers nothing without an operator
+   * token.
+   */
+  @MessagePattern(ADMIN_DASHBOARD_PATTERNS.harvest)
+  harvestDashboard(
+    @Payload() req: AdminDashboardRequest
+  ): Promise<AdminHarvestDashboard> {
+    return this.dashboard.dashboard(req);
+  }
 
   // --- Runs ----------------------------------------------------------------
 
