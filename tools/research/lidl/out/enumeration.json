@@ -1,0 +1,152 @@
+[
+  {
+    "label": "empty q",
+    "params": {
+      "q": ""
+    },
+    "status": 200,
+    "numFound": 5278,
+    "items": 36,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=",
+    "raw": null
+  },
+  {
+    "label": "empty q + store=1",
+    "params": {
+      "q": "",
+      "store": "1"
+    },
+    "status": 200,
+    "numFound": 494,
+    "items": 36,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=&store=1",
+    "raw": null
+  },
+  {
+    "label": "q=*",
+    "params": {
+      "q": "*"
+    },
+    "status": 200,
+    "numFound": 5278,
+    "items": 36,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=*",
+    "raw": null
+  },
+  {
+    "label": "q=* + store=1",
+    "params": {
+      "q": "*",
+      "store": "1"
+    },
+    "status": 200,
+    "numFound": 494,
+    "items": 36,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=*&store=1",
+    "raw": null
+  },
+  {
+    "label": "no q at all",
+    "params": {},
+    "status": 200,
+    "numFound": 5278,
+    "items": 36,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0",
+    "raw": null
+  },
+  {
+    "label": "no q + store=1",
+    "params": {
+      "store": "1"
+    },
+    "status": 200,
+    "numFound": 494,
+    "items": 36,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&store=1",
+    "raw": null
+  },
+  {
+    "label": "q=a + store=1",
+    "params": {
+      "q": "a",
+      "store": "1"
+    },
+    "status": 200,
+    "numFound": 126,
+    "items": 36,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=a&store=1",
+    "raw": null
+  },
+  {
+    "label": "q=leche + store=1",
+    "params": {
+      "q": "leche",
+      "store": "1"
+    },
+    "status": 200,
+    "numFound": 41,
+    "items": 36,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=leche&store=1",
+    "raw": null
+  },
+  {
+    "label": "fetchsize=1000",
+    "params": {
+      "q": "leche",
+      "fetchsize": "1000"
+    },
+    "status": 200,
+    "numFound": 69,
+    "items": 68,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=leche&fetchsize=1000",
+    "raw": null
+  },
+  {
+    "label": "fetchsize=2000 (over max)",
+    "params": {
+      "q": "leche",
+      "fetchsize": "2000"
+    },
+    "status": 200,
+    "numFound": 69,
+    "items": 67,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=leche&fetchsize=2000",
+    "raw": null
+  },
+  {
+    "label": "deep offset=900",
+    "params": {
+      "q": "leche",
+      "fetchsize": "24",
+      "offset": "900"
+    },
+    "status": 200,
+    "numFound": null,
+    "items": null,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=leche&fetchsize=24&offset=900",
+    "raw": null
+  },
+  {
+    "label": "category browse (Food)",
+    "params": {
+      "q": "",
+      "category": "Food"
+    },
+    "status": 200,
+    "numFound": null,
+    "items": null,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&q=&category=Food",
+    "raw": null
+  },
+  {
+    "label": "type=category id",
+    "params": {
+      "category": "10097705"
+    },
+    "status": 200,
+    "numFound": null,
+    "items": null,
+    "url": "https://www.lidl.es/q/api/search?assortment=ES&locale=es_ES&version=2.0.0&category=10097705",
+    "raw": null
+  }
+]
