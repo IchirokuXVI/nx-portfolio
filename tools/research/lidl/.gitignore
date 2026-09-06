@@ -6,3 +6,5 @@ out/*
 !out/pdp-sample.json
 !out/enumeration.json
 !out/endpoints.json
+!out/postal-to-region.json
+!out/province-price-conflict.json

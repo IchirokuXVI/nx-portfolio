@@ -9,9 +9,9 @@ an account or a cookie. This is the third chain the harvester fetches from, afte
 in the same read.
 
 It is also the first whose assortment is **not a catalog**. The site publishes what is on offer this
-week and next, not what a shop stocks. A single run reaches 153 supermarket products. The chain sells
-several times that. **The catalog is built by running every week**, and section 2 is why every other
-decision in this plan follows from that one fact.
+week, not what a shop stocks. A single run reaches 153 supermarket products. The chain sells several
+times that. **The catalog is built by running every week**, and section 2 is why every other decision
+in this plan follows from that one fact.
 
 Depends on `0086` for the one source product table, because a LIDL run writes prices and needs the
 walk to write them. Depends on `0083`, so that a third chain arrives without a third environment
@@ -24,23 +24,23 @@ probes that measured each one.
 ## 1. What the site gives, and what it does not
 
 Measured on 2026-09-06 against the live site, by `tools/research/lidl/dry-run.mjs`. The complete run
-took 161 seconds and 216 requests and raised no warning.
+took 152 seconds and 161 requests and raised no warning.
 
-| Fact                           | Value                                                                       |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| Products flagged in store      | 493                                                                         |
-| Of those, supermarket products | 153 (`Food` and `F+V`), of which 132 carry a price                          |
-| The other 340                  | 285 online shop articles a shop also stocks, 43 middle aisle, 12 plants     |
-| EAN                            | Yes. 83% carry a real EAN-13, 15% an eight digit internal code, 5% nothing  |
-| Price                          | Yes, with the previous price beside it when the article is discounted       |
-| Validity window                | Yes, `startDate` and `endDate`, on every priced observation                 |
-| Size                           | A printed string such as `500 g`, `6x200ml`, `Aprox. 950g`. 144 of 208 rows |
-| Price regions                  | 59, named after Spanish provinces                                           |
-| Products priced by region      | 38 of 187, so about one in five                                             |
-| Stores                         | 730, with coordinates, address, postcode and opening hours                  |
-| Per store stock                | Published and always empty. See section 1.2.                                |
-| Category                       | A four level tree LIDL calls its need worlds, plus a coarse `Food` flag     |
-| `robots.txt`                   | Disallows search result URLs and any URL carrying `offset` or `sort`        |
+| Fact                           | Value                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------ |
+| Products flagged in store      | 493                                                                      |
+| Of those, supermarket products | 153 (`Food` and `F+V`), of which 132 carry a price                       |
+| The other 340                  | 285 online shop articles a shop also stocks, 43 middle aisle, 12 plants  |
+| EAN                            | Yes. 107 of the 132 priced products, so 81%. Section 7 for the other 19% |
+| Price                          | Yes, with the previous price beside it when the article is discounted    |
+| Validity window                | Yes, `startDate` and `endDate`, on all 132                               |
+| Size                           | A printed string such as `500 g`, `6x200ml`, `Aprox. 950g`. All 132      |
+| Price zones                    | 3: mainland, Balearics, Canaries. Decided by the postal code. Section 4  |
+| Products priced by zone        | None. No grocery product carried two different real prices. Section 4.1  |
+| Stores                         | 730, with coordinates, address, postcode and opening hours               |
+| Per store stock                | Published and always empty. See section 1.2.                             |
+| Category                       | A four level tree LIDL calls its need worlds, plus a coarse `Food` flag  |
+| `robots.txt`                   | Disallows search result URLs and any URL carrying `offset` or `sort`     |
 
 **The identity is stable and the price is not.** A product keeps its numeric id, its EAN and its URL
 across runs. Its price expires, usually the coming Sunday. That is the opposite of DEZA, where the
@@ -62,15 +62,16 @@ and for non food alike, across stores in five provinces.
 
 **So this plan writes no per store availability.** `catalog.setLocationAvailability` exists and plan
 `0084` built it, but calling it with a value the source does not know is worse than not calling it.
-A LIDL price applies to a region, and the region is what the run states.
+A LIDL price applies to a zone, and the zone is what the run states.
 
 ## 2. The assortment is a rolling window, and that is the whole shape
 
 This is the finding the design rests on, so it carries its own evidence.
 
-Of 228 price observations, 166 expired on the Sunday of the week they were read and 56 expired the
-Sunday after. Three ran to the end of the year and one to March. Nothing else was published. The
-window is one to two weeks wide and it moves.
+**The grocery window is exactly one week wide.** Of the 132 priced grocery products, **131 expired on
+the same Sunday**, the one that ended the week they were read. One ran to March. Nothing else was
+published. The wider in-store set, which carries the middle aisle this plan excludes, stretches a
+week or two further, and grocery does not.
 
 **The window is all there is, and that was tested rather than assumed.**
 `tools/research/lidl/probe-coverage.mjs` searched 105 grocery terms, covering the aisles, the staples
@@ -86,14 +87,16 @@ Three consequences, and none of them is optional:
   `source_catalog_entries` row and its last known price. It stops being confirmed, and plan `0080`
   already decides what a shopper sees when a price goes stale. Nothing here deletes a product for
   being absent from one week.
-- **The run is scheduled weekly, not daily.** Reading the same window twice in a week costs 216
-  requests and confirms prices that have not moved. Once a week, early in the week, catches the new
-  window. Section 9 states the trigger.
+- **The run is scheduled weekly, and the day matters.** Reading the same window twice in a week costs
+  161 requests and confirms prices that have not moved. Because the grocery window ends on a Sunday,
+  **a run scheduled for a Monday reads a full week and a run scheduled for a Sunday reads a window
+  about to expire.** Monday is the trigger.
 
-**Next week is already published.** 30 of the 493 in-store rows carry an `IN_STORE_FROM_DATE_FUTURE`
-badge and 39 more carry `ALSO_IN_STORE_FROM_DATE_FUTURE`. A run therefore reads prices that have not
-started yet. They arrive with a `startDate` in the future and are written with it, so the price model
-from plan `0080` decides on read whether the price applies, and nothing here has to hold them back.
+**A few prices start in the future, and they are written as they arrive.** Only 4 of the 153 grocery
+rows are dated forward, so this is a detail rather than a second week of coverage. They carry a
+`startDate` in the future and are written with it, so the price model from plan `0080` decides on
+read whether the price applies yet. Nothing here holds them back and nothing here treats them as
+current.
 
 ## 3. The parameters, because none of them are guessable
 
@@ -114,36 +117,84 @@ of which cost a round of probing:
 run pays one request per supermarket product, which is 153 requests, and that is the larger half of
 its cost. It is worth paying: the EAN is what lets plan `0086` resolve a product without an admin.
 
-## 4. A price belongs to a region, and a store names its region
+## 4. A price belongs to a zone, and a postal code decides the zone
 
-This is the part the existing model already fits, exactly.
+Each product carries `regionsV2`, a map of 59 region ids to `{ regionName, regionPriceId }`, and
+`regionsPrices`, a map of price id to the price. Each store carries `marketingData.offerRegion` and
+`marketingData.zone`. **The region is not what sets the price. The zone is**, and that turns a 59
+scope design into a 3 scope one.
 
-Each product carries `regionsV2`, a map of region id to `{ regionName, regionPriceId }`, and
-`regionsPrices`, a map of price id to the price. Each store carries
-`marketingData.offerRegion` and `offerRegionName`. **The two id spaces are the same one.**
-`tools/research/lidl/probe-regions.mjs` proved it: 54 of the 59 region ids on a product matched a
-region named by a store, covering 690 of the 730 shops.
+### 4.1 The measurement, because the obvious model is wrong twice
 
-`PriceScope` was built for this. Its own docstring calls it "the set of stores a chain charges the
-same in", and every `SupermarketLocation` already carries a required `priceScopeId`. So:
+The obvious model is one price scope per region, resolved from a store's postal code. Both halves of
+that fail, and they fail for different reasons.
 
-- **One price scope per LIDL region.** `externalKey` is the region id as a string, `label` is the
-  region name, which is a province. 59 scopes for one chain, created on first sight by the run.
-- **A store's `priceScopeId` is its region's scope.** That is written by store discovery, section 9,
-  and it is the whole reason store discovery has to run before a price is useful.
-- **A product is ingested once per distinct price.** A product with one price across 54 regions is
-  one ingest against the scopes that share that price. A product with two prices is two.
-  `SourceIngest` takes one `priceScopeId` per call, so the runner groups its observations by price id
-  and calls it once per group.
+**A postal code does not decide the region.** The first two digits of a Spanish postal code are the
+province, 01 through 52, so province looked like the natural key. It is not:
+`tools/research/lidl/probe-postal-to-region.mjs` found **12 of the 52 provinces hold stores in more
+than one region**, covering 273 of the 730 shops. Madrid (28) splits across region 28 `Madrid` and
+region 56 `Vit 2`. Las Palmas (35) splits three ways, into Gran Canaria, Fuerteventura and Lanzarote.
+Region names such as `Cat 2` and `Vit 2` are not provinces at all. It fails in the other direction
+too: region 39 `Murcia` holds stores in provinces 03, 04 and 30.
+
+**But a region is not what a shopper pays.** `tools/research/lidl/probe-province-price-conflict.mjs`
+read the product page of **all 153 grocery products** in the window and compared every region inside
+every province. **No province ever disagreed with itself, on any product.** The regions inside a
+province always carried the same price, so the 12 splits are a logistics detail with no effect on a
+price.
+
+**What does vary is whether a price exists at all.** All 132 priced products carried more than one
+price entry, and the report records the shape of every one of them. There is exactly one shape:
+
+```
+priceSplitShapes: [{ "shape": "none:2 + price:50", "count": 132 }]
+```
+
+Fifty provinces get the price and the two Canary ones get nothing, 132 times out of 132. **Not one
+grocery product carried two different real prices anywhere in Spain.** The only products that did
+were `NonFood`, the middle aisle bazar this plan excludes, and even those split by zone: a `Livarno`
+lamp is 3.79 on the mainland, 4.29 in the Balearics and 3.99 in the Canaries.
+
+**And a postal code decides the zone perfectly.** Across all 730 stores, no province reaches more
+than one zone:
+
+| Zone  | Provinces    | Stores | Grocery price          |
+| ----- | ------------ | ------ | ---------------------- |
+| `PEN` | the other 49 | 659    | published              |
+| `BAL` | `07`         | 31     | published, same as PEN |
+| `CAN` | `35`, `38`   | 40     | not published          |
+
+**No region straddles a zone either**, which is what makes the fold from 59 region ids down to 3
+zones safe. The dry run checks it on every run and reports `regionsCrossingZones`, which was 0.
+
+### 4.2 What that buys
+
+- **Three price scopes for the chain, not 59.** `externalKey` is `PEN`, `BAL` or `CAN`, and `label`
+  is the zone name LIDL prints.
+- **The scope is a pure function of the postal code the location already has.** `07` is `BAL`, `35`
+  and `38` are `CAN`, everything else is `PEN`. That is `zoneForPostalCode` in the adapter library,
+  a closed rule over three cases with no dataset behind it. `@portfolio/luna-shopper/postal-codes`
+  is not needed and is not used here.
+- **Store discovery no longer has to run first.** The three scopes are static, so a catalog run
+  creates them and a location resolves to one the moment it has a postcode. Section 9 loses the
+  ordering constraint it used to carry.
+- **A run still groups its observations by price**, not by zone, and writes each group to the scopes
+  that share it. Today grocery produces one group covering `PEN` and `BAL`. Writing it that way
+  rather than as a single national price is what keeps the model honest when it stops being true.
 
 **`PriceScopeKind` gains `REGION`.** `NATIONAL`, `WAREHOUSE`, `POSTAL_CODE` and `STORE` are the four
-that exist, and a Spanish province is none of them. Calling it `WAREHOUSE` borrows Mercadona's word
-for a different thing and makes the admin list lie. The ripple is named in section 11.
+that exist and a zone is none of them. `NATIONAL` is the tempting one and it is wrong: a national
+price would reach the 40 Canary stores, where LIDL publishes no price at all, and show a shopper in
+Las Palmas a figure that does not exist there. Section 11 names the ripple.
 
-**A region with no price is not a price of zero.** The five Canary region ids carry no current price
-for most products. Those observations are dropped, not written as null and not written as the
-mainland figure. A shopper in Las Palmas is shown nothing rather than a price that does not exist
-there.
+**A zone with no price is not a price of zero.** `CAN` observations are dropped. They are not written
+as null and not written as the mainland figure.
+
+**This is one week's measurement and the guard says so.** 153 products in one window is enough to
+choose the model and not enough to promise it forever. So the runner never assumes the mainland
+agrees with itself: it groups by the price the source gave, and **if a group ever splits a zone, it
+raises a `ZONE_PRICE_SPLIT` warning naming the product** rather than picking one price. That is how
+the day LIDL starts pricing by region arrives as a warning instead of as silently wrong data.
 
 ## 5. Which products are supermarket products
 
@@ -185,6 +236,7 @@ every test against checked in fixtures with no network.
 | `src/lib/lidl.client.ts`      | `LidlClient`: HTTP, the politeness gate, retry, `walkInStore`, `getProduct`, `listStores` |
 | `src/lib/normalize.ts`        | raw JSON in, plain records out. Pure, and where the tests live                            |
 | `src/lib/categories.ts`       | the need world path mapped onto `ItemCategory`                                            |
+| `src/lib/zones.ts`            | `zoneForPostalCode`, and the fold from 59 region ids to 3 zones. Section 4                |
 | `src/lib/size.ts`             | the printed size string split into a number and a `UnitOfMeasure`                         |
 | `src/lib/json.ts`             | defensive readers over third party JSON. Not exported                                     |
 | `src/lib/types.ts`            | `LidlProduct`, `LidlRegionPrice`, `LidlStore`, `LidlClientOptions`                        |
@@ -207,7 +259,7 @@ Three identifiers arrive and they do different work.
 | Field       | Example         | Use                                                             |
 | ----------- | --------------- | --------------------------------------------------------------- |
 | `productId` | `11000491`      | the `externalId` on the source entry. Stable, and in the URL    |
-| `eans`      | `4335619207615` | the EAN-13, when it is one. 83% of products                     |
+| `eans`      | `4335619207615` | the EAN-13, when it is one. 107 of the 132 priced products      |
 | `ians`      | `108391`        | LIDL's internal article number. Never an EAN, never used as one |
 
 **`externalId` is the `productId` and nothing else.** It is stable across weeks and it is what the
@@ -230,9 +282,10 @@ holds no fetching of its own, exactly as plan `0085` left it.
 `CatalogRunner`. Four stages:
 
 1. `LIST`. Walk `/q/api/search` with `q=`, `store=1`, `fetchsize=100`. Five requests. Keep the rows
-   whose category is `Food` or `F+V`.
+   whose category is `Food` or `F+V`. 153 of 493.
 2. `DETAIL`. One product page per kept row, for `eans` and `regionsV2`. 153 requests. A page that
-   fails is a warning naming the `externalId`, not a failed run.
+   fails is a warning naming the `externalId`, not a failed run. The regions are folded to zones
+   here, by section 4.
 3. `INGEST`. Group the observations by price id and call `SourceIngest.ingest` once per group, with
    the price scope that group's regions resolve to. `sourceKind` is `OFFICIAL_API`.
 4. `REPORT`. `context.setReport` with the counts in section 8.1.
@@ -253,11 +306,11 @@ rather than required. Passing one silently writes every region's price into a si
   detailFailed:      0,
   priced:            132,
   unpriced:          21,                in the window, but with no price published
-  withEan13:         126,
-  regionsSeen:       59,
-  scopesWritten:     59,
-  observations:      228,
-  regionallyPriced:  38                 products whose price is not the same everywhere
+  withEan13:         107,
+  observations:      132,               one per product, because one price is all there is
+  zonesWritten:      ['PEN', 'BAL'],    CAN carried no grocery price at all
+  productZonePairs:  264,               132 products against the 2 zones that have a price
+  zoneSplits:        0                  products priced differently in two zones
 }
 ```
 
@@ -274,23 +327,24 @@ allows, so that the catalog knows the article exists.
 so plan `0038` had to ask OpenStreetMap for one and hand the results to an admin.
 
 **LIDL publishes its own store list, and it is better than OSM in every field that matters**: 730
-shops, official names, street, postcode, province, coordinates, opening hours, and the price region.
-So `STORE_DISCOVERY` gains a dispatcher of the same shape `CatalogDiscoveryRunner` already has, and
+shops, official names, street, postcode, province, coordinates, opening hours, and the zone. So
+`STORE_DISCOVERY` gains a dispatcher of the same shape `CatalogDiscoveryRunner` already has, and
 `OsmStoreDiscoveryRunner` becomes the `osm-places` case rather than the only case.
 
-The LIDL case takes no postal code and no radius. It reads every store in three requests and:
-
-- creates one `PriceScope` per distinct `offerRegion`, keyed on the region id,
-- writes one `DiscoveredPlace` per shop, with the region on it.
+The LIDL case takes no postal code and no radius. It reads every store in three requests and writes
+one `DiscoveredPlace` per shop.
 
 **It still creates nothing in catalog.** The rule from plan `0038` section 6.1 holds: import is a
 second, explicit step by an admin. A source naming its own shops does not change who decides that a
 shop of theirs becomes a shop of ours, which is what plan `0084` settled.
 
-**Store discovery runs before the first catalog run.** A price scope has to exist before a price can
-point at it. A catalog run that meets a region with no scope creates the scope and warns, so the
-order is a recommendation rather than a hard gate, but a run in the wrong order produces scopes with
-no stores attached.
+**Neither run has to go first.** That was true of the 59 scope design and section 4 removed it. A
+zone is a function of the postal code, so a catalog run creates the three scopes on its own and a
+location resolves to one as soon as it has a postcode.
+
+**The store list carries `marketingData.zone` and the run reads it anyway, as a check.** The postal
+code rule and the zone LIDL prints agreed on all 730 shops. A shop where they disagree is a warning
+naming the shop, because one of the two is then wrong and neither is worth guessing between.
 
 ## 10. Politeness, and the key
 
@@ -300,7 +354,7 @@ row. Nothing new is configured.
 
 `https://www.lidl.es/robots.txt` disallows search result URLs and any URL carrying `offset`, `sort`,
 `idsOnly` or `productsOnly`. The walk in section 8 is that kind of URL. The rate limit is therefore
-treated as a real constraint and not a formality: a full run is 216 requests spread over about three
+treated as a real constraint and not a formality: a full run is 161 requests spread over about three
 minutes, once a week, from one client with a named user agent. `live.api.schwarz` serves no
 `robots.txt`.
 
@@ -321,6 +375,8 @@ rather than a 401 with a name on it.
   sources disagree.
 - **No nutrition, ingredients or allergens.** The product page publishes none.
 - **No claim of completeness.** Section 2.
+- **No per zone availability either.** A zone with no price says nothing about whether a shop stocks
+  the product. The Canaries are not published, which is not the same claim as not stocked.
 - **`PriceScopeKind.REGION` ripples.** The value is added in
   `libs/luna-shopper/contracts/src/lib/enums/catalog.enums.ts`, which needs the catalog migration that
   alters the Postgres enum, the regenerated `openapi.json`, the regenerated
@@ -330,7 +386,8 @@ rather than a 401 with a name on it.
 ## 12. Testing
 
 - **`normalize.spec.ts`**, against fixtures. One search page, one product page with a single price,
-  one with two regional prices, one with none, one with a short code instead of an EAN, one store
+  one priced on the mainland but not in the Canaries, one with no price at all, one with a short
+  code instead of an EAN, one carrying three different zone prices, one store
   page. Each fixture is a whole response, verbatim, never hand edited, with the
   `__fixtures__/README.md` table naming the case it pins.
 - **`size.spec.ts`**. `500 g`, `6x200ml`, `Aprox. 950g`, `1 kg`, `33cl` and `Paquete`. The last one
@@ -341,8 +398,11 @@ rather than a 401 with a name on it.
   and that a failed detail page becomes a warning rather than a failed run.
 - **`live-source.spec.ts`**, gated on `LUNA_LIVE_SOURCE_TEST=1` and `describe.skip` otherwise.
   Asserts field names only, never values, so a price change does not turn CI red.
-- **A runner integration spec** against a slot, in the `test-integration` target, asserting that one
-  product with two regional prices produces two ingest calls against two scopes.
+- **`zones.spec.ts`**. `07` is `BAL`, `35` and `38` are `CAN`, `28` and `52` are `PEN`, and the
+  59 region ids fold onto the three zones. A postcode of the wrong length parses to null.
+- **A runner integration spec** against a slot, in the `test-integration` target, asserting that a
+  product priced on the mainland and unpriced in the Canaries writes to `PEN` and `BAL` and not to
+  `CAN`, and that a product priced differently in two zones raises `ZONE_PRICE_SPLIT`.
 
 ## 13. Exit criteria
 
@@ -352,9 +412,11 @@ rather than a 401 with a name on it.
 - `PriceScopeKind.REGION` exists, with its catalog migration, and the admin form offers it.
 - `CatalogDiscoveryRunner` dispatches to `LidlCatalogRunner`, and `StoreDiscoveryRunner` dispatches
   to an OSM case and a LIDL case.
-- A store discovery run against the compose stack creates 59 price scopes and 730 discovered places.
-- A catalog run against the compose stack ingests the week's supermarket products, writes a price per
-  region group, writes no availability, and produces the report in section 8.1.
+- A store discovery run against the compose stack writes 730 discovered places, and the zone it
+  derives from each postal code matches the zone LIDL prints on that shop.
+- A catalog run against the compose stack ingests the week's supermarket products, creates the three
+  zone scopes, writes a price per zone group, writes no availability, and produces the report in
+  section 8.1.
 - The run refuses a request that names a `priceScopeId`.
 - `supermarket_sources` holds a disabled `lidl-api` row for LIDL, and the run refuses to start until
   an admin enables it, by plan `0083`.

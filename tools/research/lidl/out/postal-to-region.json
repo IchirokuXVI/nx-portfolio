@@ -1,0 +1,249 @@
+{
+  "stores": 730,
+  "usable": 730,
+  "missingPostcode": 0,
+  "missingRegion": 0,
+  "distinctRegions": 59,
+  "distinctProvinces": 52,
+  "splitProvinces": [
+    {
+      "province": "43",
+      "regions": [
+        {
+          "id": 25,
+          "name": "Tarragona"
+        },
+        {
+          "id": 57,
+          "name": "Cat 2"
+        },
+        {
+          "id": 26,
+          "name": "Barcelona"
+        }
+      ],
+      "stores": 19
+    },
+    {
+      "province": "07",
+      "regions": [
+        {
+          "id": 48,
+          "name": "Palma de mallorca"
+        },
+        {
+          "id": 59,
+          "name": "Ibiza"
+        },
+        {
+          "id": 58,
+          "name": "Menorca"
+        }
+      ],
+      "stores": 31
+    },
+    {
+      "province": "03",
+      "regions": [
+        {
+          "id": 38,
+          "name": "Alicante"
+        },
+        {
+          "id": 39,
+          "name": "Murcia"
+        }
+      ],
+      "stores": 39
+    },
+    {
+      "province": "12",
+      "regions": [
+        {
+          "id": 36,
+          "name": "Castellón"
+        },
+        {
+          "id": 37,
+          "name": "Valencia "
+        }
+      ],
+      "stores": 11
+    },
+    {
+      "province": "24",
+      "regions": [
+        {
+          "id": 5,
+          "name": "Asturias"
+        },
+        {
+          "id": 6,
+          "name": "León"
+        }
+      ],
+      "stores": 6
+    },
+    {
+      "province": "28",
+      "regions": [
+        {
+          "id": 28,
+          "name": "Madrid"
+        },
+        {
+          "id": 56,
+          "name": "Vit 2"
+        }
+      ],
+      "stores": 94
+    },
+    {
+      "province": "23",
+      "regions": [
+        {
+          "id": 45,
+          "name": "Jaén"
+        },
+        {
+          "id": 44,
+          "name": "Málaga"
+        }
+      ],
+      "stores": 8
+    },
+    {
+      "province": "04",
+      "regions": [
+        {
+          "id": 47,
+          "name": "Almería"
+        },
+        {
+          "id": 39,
+          "name": "Murcia"
+        }
+      ],
+      "stores": 15
+    },
+    {
+      "province": "06",
+      "regions": [
+        {
+          "id": 30,
+          "name": "Bádajoz"
+        },
+        {
+          "id": 41,
+          "name": "Sevilla"
+        }
+      ],
+      "stores": 8
+    },
+    {
+      "province": "38",
+      "regions": [
+        {
+          "id": 49,
+          "name": "Santa Cruz de Tenerife"
+        },
+        {
+          "id": 50,
+          "name": "Las Palmas"
+        }
+      ],
+      "stores": 20
+    },
+    {
+      "province": "35",
+      "regions": [
+        {
+          "id": 55,
+          "name": "Gran Canaria"
+        },
+        {
+          "id": 53,
+          "name": "Fuerteventura"
+        },
+        {
+          "id": 54,
+          "name": "Lanzarote"
+        }
+      ],
+      "stores": 20
+    },
+    {
+      "province": "44",
+      "regions": [
+        {
+          "id": 23,
+          "name": "Teruel"
+        },
+        {
+          "id": 57,
+          "name": "Cat 2"
+        }
+      ],
+      "stores": 2
+    }
+  ],
+  "wideRegions": [
+    {
+      "id": 26,
+      "name": "Barcelona",
+      "provinces": [
+        "08",
+        "43"
+      ]
+    },
+    {
+      "id": 57,
+      "name": "Cat 2",
+      "provinces": [
+        "43",
+        "44"
+      ]
+    },
+    {
+      "id": 39,
+      "name": "Murcia",
+      "provinces": [
+        "03",
+        "04",
+        "30"
+      ]
+    },
+    {
+      "id": 37,
+      "name": "Valencia ",
+      "provinces": [
+        "12",
+        "46"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Asturias",
+      "provinces": [
+        "24",
+        "33"
+      ]
+    },
+    {
+      "id": 44,
+      "name": "Málaga",
+      "provinces": [
+        "23",
+        "29"
+      ]
+    },
+    {
+      "id": 41,
+      "name": "Sevilla",
+      "provinces": [
+        "06",
+        "41"
+      ]
+    }
+  ]
+}

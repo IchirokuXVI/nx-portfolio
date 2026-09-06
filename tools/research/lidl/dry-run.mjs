@@ -38,8 +38,26 @@ const UA =
 const PAUSE_MS = 450;
 const PAGE_SIZE = 100;
 
-/** The four categories the site uses for what a supermarket sells. */
-const GROCERY = new Set(['Food', 'NonFood', 'P+F', 'F+V']);
+/**
+ * The two categories that are unambiguously supermarket goods. `NonFood` is the
+ * weekly middle aisle (tools, lamps, textiles) and `P+F` is plants, so both are
+ * out. This matches section 5 of the plan.
+ */
+const GROCERY = new Set(['Food', 'F+V']);
+
+/**
+ * LIDL prices by zone, not by region, and a Spanish postal code decides the zone
+ * (see probe-province-price-conflict.mjs). 07 is the Balearics, 35 and 38 are
+ * the two Canary provinces, everything else is the mainland.
+ */
+function zoneForPostalCode(zip) {
+  const province = String(zip ?? '')
+    .padStart(5, '0')
+    .slice(0, 2);
+  if (province === '07') return 'BAL';
+  if (province === '35' || province === '38') return 'CAN';
+  return 'PEN';
+}
 
 let requests = 0;
 const warnings = [];
@@ -250,6 +268,36 @@ const multiPriced = [...products].filter(
       .size > 1
 );
 
+// Fold the region ids on each observation onto the three zones a price belongs
+// to, using the postal codes of the stores in each region. A product that ends
+// up with two different prices in one zone is the case the runner must warn on.
+const regionZones = new Map();
+for (const store of stores) {
+  const id = store.marketingData?.offerRegion;
+  if (id == null) continue;
+  if (!regionZones.has(id)) regionZones.set(id, new Set());
+  regionZones.get(id).add(zoneForPostalCode(store.address?.zip));
+}
+const zonesWritten = new Set();
+const priceByProductZone = new Map();
+for (const o of observations) {
+  for (const regionId of o.regionIds ?? []) {
+    for (const zone of regionZones.get(regionId) ?? []) {
+      zonesWritten.add(zone);
+      const key = `${o.externalId}|${zone}`;
+      if (!priceByProductZone.has(key)) priceByProductZone.set(key, new Set());
+      priceByProductZone.get(key).add(o.price);
+    }
+  }
+}
+const zoneSplits = [...priceByProductZone.entries()].filter(
+  ([, prices]) => prices.size > 1
+);
+// A region whose stores fall in more than one zone would break the whole model.
+const regionsCrossingZones = [...regionZones.entries()].filter(
+  ([, zones]) => zones.size > 1
+);
+
 const report = {
   observedAt,
   seconds,
@@ -265,7 +313,11 @@ const report = {
   productsWithEan13: withEan.size,
   productsWithSize: withSize.size,
   observationsWithValidUntil: withWindow,
-  productsPricedDifferentlyByRegion: multiPriced.length,
+  productsWithTwoDifferentRealPrices: multiPriced.length,
+  zonesWritten: [...zonesWritten].sort(),
+  productZonePairsPriced: priceByProductZone.size,
+  zoneSplits: zoneSplits.length,
+  regionsCrossingZones: regionsCrossingZones.length,
   warnings,
 };
 
