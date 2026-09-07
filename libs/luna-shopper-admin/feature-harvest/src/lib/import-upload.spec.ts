@@ -465,3 +465,237 @@ describe('the import, refused by the deployment', () => {
     expect(page.errorKey()).toBe('resource.error.unknown');
   });
 });
+
+/**
+ * The preview, capped and searchable (admin plan 0019).
+ *
+ * The screen's own half. What matched and what is drawn is decided by two pure
+ * functions with their own table of cases in `harvest-document.spec.ts`, so
+ * everything here is about the three signals around them: that the cap is
+ * really applied to the DOM, that a term resets the window, that a refusal
+ * narrows the preview, and that a second file leaves none of it behind.
+ */
+describe('the import, previewing a large file', () => {
+  /** A file of `count` products, each findable by its own number. */
+  function big(count: number): Record<string, unknown> {
+    return document({
+      hints: undefined,
+      products: Array.from({ length: count }, (_, index) => ({
+        id: `p-${index}`,
+        name: `Product ${index}`,
+        brand: index === count - 1 ? 'Jamón' : 'Hacendado',
+        price: { amount: 1, currency: 'EUR' },
+      })),
+    });
+  }
+
+  const rows = (fixture: ComponentFixture<ImportUploadPage>): number =>
+    fixture.nativeElement.querySelectorAll('.products li').length;
+
+  /** Type into the box and let the 250 ms settle, without waiting for it. */
+  function search(page: ImportUploadPage, term: string): void {
+    page.onSearch({ target: { value: term } } as unknown as Event);
+    jest.advanceTimersByTime(300);
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('draws the first 250 of a 400 row file and offers the rest', async () => {
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(400)));
+    fixture.detectChanges();
+
+    expect(rows(fixture)).toBe(250);
+    expect(page.tally().kind).toBe('capped');
+    expect(page.window().remaining).toBe(150);
+    expect(text(fixture)).toContain('harvest.imports.preview.more');
+  });
+
+  it('draws 500 once "show more" has been pressed', async () => {
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(600)));
+    page.showMore();
+    fixture.detectChanges();
+
+    expect(rows(fixture)).toBe(500);
+  });
+
+  /** The document is untouched by any of this: only the `@for` is capped. */
+  it('holds every product and sends the file whole', async () => {
+    const { fixture, page, imported } = await render();
+    const doc = big(400);
+
+    await page.chooseFile(dropped(doc));
+    fixture.detectChanges();
+    page.supermarketId.set(CHAIN);
+    page.priceScopeId.set(SCOPE);
+    page.sourceKind.set('OFFICIAL_API');
+    await page.submit();
+
+    expect(page.read()?.products).toHaveLength(400);
+    expect((imported[0] as { document: unknown }).document).toEqual(doc);
+  });
+
+  /**
+   * The whole file is filtered and the window applied to what matched, so the
+   * one product on row 399 is drawn without "show more" being pressed once.
+   */
+  it('finds a product past the cap and drops the "show more"', async () => {
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(400)));
+    search(page, 'jamon');
+    fixture.detectChanges();
+
+    expect(rows(fixture)).toBe(1);
+    expect(page.window().hasMore).toBe(false);
+    expect(page.tally().kind).toBe('matching');
+    expect(page.tally().matched).toBe('1');
+    expect(text(fixture)).not.toContain('harvest.imports.preview.more');
+  });
+
+  it('resets the window when the term changes', async () => {
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(600)));
+    page.showMore();
+    expect(page.shown()).toBe(500);
+
+    search(page, 'product');
+    fixture.detectChanges();
+
+    expect(page.shown()).toBe(250);
+    expect(rows(fixture)).toBe(250);
+  });
+
+  it('says nothing matched rather than drawing an empty list', async () => {
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(400)));
+    search(page, 'chorizo');
+    fixture.detectChanges();
+
+    expect(page.tally().kind).toBe('none');
+    expect(rows(fixture)).toBe(0);
+  });
+
+  /** A leaflet. No cap in sight, and no control either. */
+  it('draws a small file whole and shows only its count', async () => {
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(40)));
+    fixture.detectChanges();
+
+    expect(rows(fixture)).toBe(40);
+    expect(page.tally().kind).toBe('all');
+    expect(page.tally().total).toBe('40');
+    expect(text(fixture)).not.toContain('harvest.imports.preview.more');
+  });
+
+  /**
+   * Under a cap, marking the blamed rows where they sit is a promise that
+   * cannot be kept: the row a message names is past the window and every drawn
+   * row is unmarked. So the preview follows the operator to the complaint.
+   */
+  it('narrows to the refused rows, and a control gives the file back', async () => {
+    refusal = new GatewayError({
+      code: 'validation_failed',
+      status: 400,
+      correlationId: '',
+      fieldErrors: {
+        '/products/300/price': ['A price is required.'],
+        '/products/301/price': ['A price is required.'],
+      },
+    });
+
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(400)));
+    page.supermarketId.set(CHAIN);
+    page.priceScopeId.set(SCOPE);
+    page.sourceKind.set('OFFICIAL_API');
+    await page.submit();
+    fixture.detectChanges();
+
+    expect(page.refusedOnly()).toBe(true);
+    expect(rows(fixture)).toBe(2);
+    expect(page.tally().kind).toBe('refused');
+    expect(page.tally().total).toBe('400');
+    expect(text(fixture)).toContain('harvest.imports.preview.wholeFile');
+
+    // Narrower still, because two filters at once read as the narrower question.
+    search(page, 'Product 300');
+    fixture.detectChanges();
+    expect(rows(fixture)).toBe(1);
+    expect(page.tally().kind).toBe('refusedMatching');
+
+    page.showWholeFile();
+    search(page, '');
+    fixture.detectChanges();
+    expect(page.refusedOnly()).toBe(false);
+    expect(rows(fixture)).toBe(250);
+  });
+
+  /**
+   * A complaint about the producer block names no product, so narrowing would
+   * hide the whole document to say something that is not about it.
+   */
+  it('leaves the preview alone for a refusal that names no product', async () => {
+    refusal = new GatewayError({
+      code: 'validation_failed',
+      status: 400,
+      correlationId: '',
+      fieldErrors: { '/producer/name': ['A producer is required.'] },
+    });
+
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(400)));
+    page.supermarketId.set(CHAIN);
+    page.priceScopeId.set(SCOPE);
+    page.sourceKind.set('OFFICIAL_API');
+    await page.submit();
+    fixture.detectChanges();
+
+    expect(page.refusedOnly()).toBe(false);
+    expect(rows(fixture)).toBe(250);
+  });
+
+  it('clears the term, the window and the refusal when a second file arrives', async () => {
+    refusal = new GatewayError({
+      code: 'validation_failed',
+      status: 400,
+      correlationId: '',
+      fieldErrors: { '/products/300/price': ['A price is required.'] },
+    });
+
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(big(400)));
+    page.supermarketId.set(CHAIN);
+    page.priceScopeId.set(SCOPE);
+    page.sourceKind.set('OFFICIAL_API');
+    await page.submit();
+    page.showMore();
+    search(page, 'jamon');
+    fixture.detectChanges();
+
+    refusal = null;
+    await page.chooseFile(dropped(big(400)));
+    fixture.detectChanges();
+
+    expect(page.term()).toBe('');
+    expect(page.shown()).toBe(250);
+    expect(page.refusedOnly()).toBe(false);
+    expect(page.failures()).toEqual([]);
+    expect(rows(fixture)).toBe(250);
+  });
+});

@@ -338,6 +338,87 @@ export function hintNotice(results: readonly HintResult[]): HintNotice {
 }
 
 /**
+ * How many preview rows are drawn at once, and how many "show more" adds
+ * (admin plan 0019, section 1).
+ *
+ * A compromise with one job on each side. Below it a leaflet, a hand typed price
+ * list and a small section export are drawn whole and nobody sees a control at
+ * all. Above it the browser is building elements an operator has not asked for
+ * yet: a four thousand row export is around fifty thousand of them, before the
+ * chain has even been picked.
+ */
+export const PREVIEW_PAGE = 250;
+
+/** What is drawn right now, and what the tally reads instead of recounting. */
+export interface PreviewWindow {
+  readonly rows: readonly HarvestProductRow[];
+  /** How many products matched, which is what the window was taken out of. */
+  readonly matched: number;
+  readonly hasMore: boolean;
+  /** How many matched products are not drawn. `0` when none are hidden. */
+  readonly remaining: number;
+}
+
+/**
+ * The products a term and a refusal set leave (admin plan 0019, section 2).
+ *
+ * **The whole document is filtered, and the window is applied to what matched.**
+ * The obvious implementation of a search over a capped list is the other way
+ * round, and it is wrong: filtering the drawn rows would leave a product on row
+ * 3,000 unfindable until the operator had pressed "show more" eleven times,
+ * which is the search failing at exactly the size that made it necessary.
+ *
+ * `only` is the refusal filter, `null` when there is none. It comes first
+ * because two filters at once read as the narrower question: an operator reading
+ * a complaint about fourteen rows and then typing a word is asking which of the
+ * fourteen, not which of the four thousand.
+ *
+ * Matching is a folded substring over `name`, `brand`, `size` and `ean`, each on
+ * its own rather than over the four joined, so a term cannot match across the
+ * gap between two fields and find a product that contains neither half.
+ */
+export function previewMatches(
+  products: readonly HarvestProductRow[],
+  term: string,
+  only: ReadonlySet<string> | null
+): readonly HarvestProductRow[] {
+  const rows =
+    only === null ? products : products.filter((row) => only.has(row.id));
+
+  const needle = fold(term.trim());
+  if (needle === '') {
+    return rows;
+  }
+
+  return rows.filter((row) =>
+    [row.name, row.brand, row.size, row.ean].some((field) =>
+      fold(field).includes(needle)
+    )
+  );
+}
+
+/**
+ * The first `shown` of what matched, and what is left over.
+ *
+ * Nothing here refuses a `shown` larger than the list or smaller than nothing:
+ * both are a window over what there is, and a preview that threw would be a
+ * blank screen where a shorter list belonged.
+ */
+export function previewWindow(
+  matched: readonly HarvestProductRow[],
+  shown: number
+): PreviewWindow {
+  const drawn = Math.min(Math.max(shown, 0), matched.length);
+
+  return {
+    rows: matched.slice(0, drawn),
+    matched: matched.length,
+    hasMore: matched.length > drawn,
+    remaining: matched.length - drawn,
+  };
+}
+
+/**
  * What a run's export is saved as (admin plan 0014, section 2).
  *
  * The chain, the scope and the day, because those are the three things somebody
@@ -366,23 +447,33 @@ const FIRST_MARK = 0x0300;
 const LAST_MARK = 0x036f;
 
 /**
- * A name as a file name can hold it: lower case, words joined by one dash.
+ * A value with its case and its accents dropped, for comparing two texts nobody
+ * typed the same way.
  *
  * The accents come off through `NFD` and a code point test rather than through a
  * regular expression over the combining marks. The characters in that range are
  * invisible in an editor, so a character class holding them is a class nobody can
  * check by reading it, and the two numbers above say plainly what is being
- * dropped. Without the step `Córdoba` slugs as `c-rdoba`, which is a file name an
- * operator cannot recognise.
+ * dropped. Without the step `Córdoba` folds as `c rdoba`, and an operator typing
+ * `jamon` is not shown `Jamón Serrano`.
+ *
+ * Two callers: {@link slug}, which turns a name into a file name, and
+ * {@link previewMatches}, which decides whether a typed word is in a product.
+ * One copy of the reasoning above, because it is the same reasoning.
  */
-function slug(value: string): string {
+export function fold(value: string): string {
   return [...value.normalize('NFD')]
     .filter((character) => {
       const code = character.codePointAt(0) ?? 0;
       return code < FIRST_MARK || code > LAST_MARK;
     })
     .join('')
-    .toLowerCase()
+    .toLowerCase();
+}
+
+/** A name as a file name can hold it: lower case, words joined by one dash. */
+function slug(value: string): string {
+  return fold(value)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
