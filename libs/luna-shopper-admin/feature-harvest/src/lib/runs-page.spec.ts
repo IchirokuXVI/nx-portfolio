@@ -12,6 +12,10 @@ import {
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  applyControlBase,
+  controlBaseProperties,
+} from './control-base.testing';
 import { RunsPage } from './runs-page';
 
 /**
@@ -249,5 +253,61 @@ describe('the run form, the price scope a walk writes to', () => {
     fixture.componentInstance.onChainChange();
 
     expect(fixture.componentInstance.priceScopeId()).toBe('');
+  });
+});
+
+/**
+ * The controls the form is made of (plan 0018, section 2).
+ *
+ * This screen was the report: "default select styles", and buttons that "aren't
+ * styled properly". It wrote no control styles of its own and there was no rule
+ * anywhere that gave it any, so the reverted filter was a browser `<select>` and
+ * the one button that starts a harvest run had an accent background, no padding
+ * and square corners.
+ *
+ * The rule is in `apps/luna-shopper-admin/src/styles.scss` now, which a
+ * `TestBed` does not load, so the spec puts it in front of the component the way
+ * a browser puts it in front of an operator. It is read out of that file rather
+ * than written here, since a copy would pass with the rule deleted.
+ */
+describe('the runs screen, and its controls', () => {
+  let remove: () => void;
+
+  beforeEach(() => {
+    remove = applyControlBase();
+  });
+
+  afterEach(() => remove());
+
+  it('draws the reverted filter as a control and not as browser chrome', async () => {
+    const { fixture } = await render();
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="reverted"]'
+    );
+
+    expect(select).not.toBeNull();
+    expect(getComputedStyle(select).getPropertyValue('min-block-size')).toBe(
+      '2.75rem'
+    );
+  });
+
+  /**
+   * The button that starts a run. `.primary` is a modifier and stays on this
+   * screen, so what it says is which button this is; the padding and the corners
+   * come from the base like every other control's.
+   */
+  it('draws the start button from the base and its own modifier', async () => {
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+
+    const start: HTMLButtonElement =
+      fixture.nativeElement.querySelector('button.primary');
+
+    expect(start).not.toBeNull();
+    expect(getComputedStyle(start).getPropertyValue('min-block-size')).toBe(
+      '2.75rem'
+    );
+    expect(controlBaseProperties()).toContain('padding');
+    expect(controlBaseProperties()).toContain('border-radius');
   });
 });

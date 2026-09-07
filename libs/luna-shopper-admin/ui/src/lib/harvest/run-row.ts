@@ -109,13 +109,13 @@ export interface RunRow {
     .status.RUNNING,
     .status.PENDING {
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     .status.FAILED,
     .status.STALE {
       background: var(--admin-danger-wash);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .reverted {
@@ -123,7 +123,7 @@ export interface RunRow {
       border-radius: var(--admin-radius);
       background: var(--admin-danger-wash);
       font-size: 0.75rem;
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .when,
