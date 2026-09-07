@@ -252,6 +252,30 @@ describe('DashboardPage against the seed', () => {
     expect(fixture.componentInstance.measured()?.exact).not.toBe('');
   });
 
+  /**
+   * Admin plan 0024, section 2. The caption is the tile's own input rather
+   * than a sibling paragraph in a wrapper, and the query-carrying tile keeps
+   * its filter on its own anchor, so both wrappers are gone and the tile is
+   * the grid item.
+   */
+  it('hands the caption to the tile and keeps the chain on the query string', async () => {
+    const fixture = await render();
+
+    const captioned = tiles(fixture).filter(
+      (tile) => tile.caption() !== undefined
+    );
+    expect(captioned).toHaveLength(1);
+    expect(captioned[0].label()).toBe('dashboard.waiting.postalCodes');
+
+    const entries = fixture.debugElement.query(
+      By.css(`a.tile[href="/harvest/entries?supermarketId=${MERCADONA}"]`)
+    );
+    expect(entries).not.toBeNull();
+
+    expect(fixture.debugElement.query(By.css('.captioned'))).toBeNull();
+    expect(fixture.debugElement.query(By.css('.wrap'))).toBeNull();
+  });
+
   /** Every tile is a link except the one whose rows are on this same page. */
   it('opens every tile that has somewhere to go', async () => {
     const fixture = await render();

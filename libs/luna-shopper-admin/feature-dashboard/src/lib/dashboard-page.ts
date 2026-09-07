@@ -121,34 +121,20 @@ import {
         }
 
         @if (waiting().length > 0) {
+          <!-- The tile is the grid item, so the grid stretches every one to
+               the row and equal boxes look like equal cards (admin plan 0024,
+               section 2). The caption and the query parameters ride on the
+               tile's own inputs, which is what let the wrappers go. -->
           <div class="tiles">
             @for (tile of waiting(); track tile.key) {
-              @if (tile.query; as query) {
-                <!-- The one queue that reads a chain from the query string,
-                     which a routerLink array cannot carry on its own. -->
-                <a [queryParams]="query" [routerLink]="tile.link" class="wrap">
-                  <lib-stat-tile
-                    [label]="tile.label"
-                    [tone]="tile.tone"
-                    [value]="tile.value"
-                  />
-                </a>
-              } @else {
-                <div class="captioned">
-                  <lib-stat-tile
-                    [label]="tile.label"
-                    [link]="tile.link ?? undefined"
-                    [tone]="tile.tone"
-                    [value]="tile.value"
-                  />
-                  <!-- Only the postal code tile carries one: how many failed
-                       and how long the oldest has waited are what turn a count
-                       into a decision (admin plan 0021, section 6). -->
-                  @if (tile.caption; as caption) {
-                    <p class="caption">{{ caption }}</p>
-                  }
-                </div>
-              }
+              <lib-stat-tile
+                [caption]="tile.caption ?? undefined"
+                [label]="tile.label"
+                [link]="tile.link ?? undefined"
+                [queryParams]="tile.query ?? undefined"
+                [tone]="tile.tone"
+                [value]="tile.value"
+              />
             }
           </div>
         } @else if (missing().length === 0) {
@@ -296,7 +282,6 @@ import {
     }
 
     .taken,
-    .caption,
     .state {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
@@ -334,18 +319,6 @@ import {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
       gap: var(--admin-space-3);
-    }
-
-    .captioned {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-    }
-
-    .wrap {
-      display: block;
-      color: inherit;
-      text-decoration: none;
     }
 
     .state {

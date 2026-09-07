@@ -133,17 +133,13 @@ import { HARVEST_SEGMENT } from './harvest-paths';
     @if (postalCodes(); as codes) {
       <section class="codes">
         <h2>{{ 'harvest.postalCodes.many' | rokuT }}</h2>
-        <div class="captioned">
-          <lib-stat-tile
-            [label]="text('dashboard.waiting.postalCodes')"
-            [link]="postalCodesLink() ?? undefined"
-            [tone]="codes.tone"
-            [value]="codes.queued"
-          />
-          @if (codes.caption; as caption) {
-            <p class="caption">{{ caption }}</p>
-          }
-        </div>
+        <lib-stat-tile
+          [caption]="codes.caption ?? undefined"
+          [label]="text('dashboard.waiting.postalCodes')"
+          [link]="postalCodesLink() ?? undefined"
+          [tone]="codes.tone"
+          [value]="codes.queued"
+        />
       </section>
     }
   `,
@@ -165,7 +161,6 @@ import { HARVEST_SEGMENT } from './harvest-paths';
       font-weight: 700;
     }
 
-    .caption,
     .state,
     .chain {
       font-size: 0.8125rem;
@@ -210,12 +205,6 @@ import { HARVEST_SEGMENT } from './harvest-paths';
       flex-direction: column;
       gap: var(--admin-space-3);
       align-items: flex-start;
-    }
-
-    .captioned {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
     }
 
     a:focus-visible {

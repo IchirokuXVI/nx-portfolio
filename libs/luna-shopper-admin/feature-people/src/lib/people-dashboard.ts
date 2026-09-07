@@ -58,21 +58,20 @@ import {
       }
 
       @if (tiles().length > 0) {
+        <!-- The tile is the grid item, so a plain tile beside the sparkline
+             tile shares its row's height, with quiet space under its number
+             (admin plan 0024, section 2). -->
         <div class="tiles">
           @for (tile of tiles(); track tile.key) {
-            <div class="captioned">
-              <lib-stat-tile
-                [delta]="tile.delta ?? undefined"
-                [label]="tile.label"
-                [link]="tile.link ?? undefined"
-                [tone]="tile.tone"
-                [trend]="tile.trend ?? undefined"
-                [value]="tile.value"
-              />
-              @if (tile.caption; as caption) {
-                <p class="caption">{{ caption }}</p>
-              }
-            </div>
+            <lib-stat-tile
+              [caption]="tile.caption ?? undefined"
+              [delta]="tile.delta ?? undefined"
+              [label]="tile.label"
+              [link]="tile.link ?? undefined"
+              [tone]="tile.tone"
+              [trend]="tile.trend ?? undefined"
+              [value]="tile.value"
+            />
           }
         </div>
       }
@@ -112,13 +111,6 @@ import {
       gap: var(--admin-space-3);
     }
 
-    .captioned {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-    }
-
-    .caption,
     .state {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);

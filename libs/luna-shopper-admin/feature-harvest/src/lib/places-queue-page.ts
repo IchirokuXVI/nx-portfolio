@@ -5,19 +5,22 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
   QueueStore,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { gatewayErrorKey } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  gatewayErrorKey,
+  ResourceReferences,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   HarvestNotice,
   QueueFrame,
+  ReferencePicker,
   type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { HarvestShell } from './harvest-shell';
@@ -53,18 +56,20 @@ type Place = Wire.HarvestDiscoveredPlaceView;
  *
  * Importing takes a supermarket id, and the field is offered rather than
  * required: `ImportDiscoveredPlaceDto` has both properties optional, so a place
- * whose chain catalog already knows can be imported without one. A bulk import
- * sends none at all, because a chain typed for one place is not an answer about
- * the other hundred and ninety nine.
+ * whose chain catalog already knows can be imported without one. The field is a
+ * reference picker over the chains rather than a uuid typed by hand (admin plan
+ * 0024, section 3), with the same wiring the shops queue has, and what is
+ * picked applies to the single decision **and** to a bulk import. The bulk half
+ * reverses an earlier rule on the owner's instruction; see {@link askImport}.
  */
 @Component({
   selector: 'lib-places-queue-page',
   imports: [
-    FormsModule,
     RokuTranslatorPipe,
     ConfirmDialog,
     QueueFrame,
     HarvestNotice,
+    ReferencePicker,
   ],
   template: `
     <lib-queue-frame
@@ -119,10 +124,17 @@ type Place = Wire.HarvestDiscoveredPlaceView;
           }
         </dl>
 
-        <label class="assign">
+        <div class="assign">
           <span>{{ 'harvest.places.supermarketId' | rokuT }}</span>
-          <input [(ngModel)]="supermarketId" name="supermarketId" type="text" />
-        </label>
+          <lib-reference-picker
+            (valueChange)="supermarketId.set($event)"
+            [controlId]="'places-chain'"
+            [lookup]="references"
+            [nullable]="true"
+            [resource]="'supermarkets'"
+            [value]="supermarketId()"
+          />
+        </div>
       }
 
       <section class="near" queueContext>
@@ -178,7 +190,7 @@ type Place = Wire.HarvestDiscoveredPlaceView;
       <lib-confirm-dialog
         (confirm)="go(bulk)"
         (dismiss)="pending.set(null)"
-        [bodyArgs]="{ count: bulk.count }"
+        [bodyArgs]="{ count: bulk.count, chain: bulk.chain }"
         [bodyKey]="bulk.bodyKey"
         [busy]="queue.busy()"
         [confirmKey]="bulk.confirmKey"
@@ -299,7 +311,15 @@ export class PlacesQueuePage {
   private readonly _route = inject(ActivatedRoute);
 
   readonly shell = inject(HarvestShell);
+  readonly references = inject(ResourceReferences);
 
+  /**
+   * The chain the picker holds, or `''`.
+   *
+   * Reset after every decision, single or bulk: a visible leftover choice
+   * quietly filing the next place under the previous chain is the mistake the
+   * reset prevents, and the picker makes re-choosing cheap.
+   */
   readonly supermarketId = signal('');
 
   /**
@@ -316,7 +336,7 @@ export class PlacesQueuePage {
     this._route.snapshot.queryParamMap.get('country') ?? '';
 
   /** The bulk action waiting for an answer, or null when none is. */
-  readonly pending = signal<PendingBulk | null>(null);
+  readonly pending = signal<PendingPlacesBulk | null>(null);
   /** What the last bulk run did, by name. Cleared when another one starts. */
   readonly report = signal<QueueReport | null>(null);
   readonly progressKey = signal('harvest.queue.bulk.progress');
@@ -372,6 +392,8 @@ export class PlacesQueuePage {
 
   importPlace(): void {
     const id = this.supermarketId().trim();
+    // The picker resets after each decision, as the text input it replaced
+    // did, so the next place is never quietly filed under the previous chain.
     void this.queue
       .decide((place) =>
         this._service.importPlace(
@@ -392,35 +414,59 @@ export class PlacesQueuePage {
   }
 
   /**
-   * Import every selected place, with no chain named.
+   * Import every selected place, under the picked chain when one is picked.
    *
-   * The empty body is what section 4 asks for: catalog resolves the chain from
-   * the place's own brand, and a place whose brand it cannot resolve is refused
-   * and named in the report. Sending the chain typed for one place would be one
-   * operator's answer applied to rows they did not look at.
+   * The bulk path used to send an empty body always, because one operator's
+   * typed answer applied to rows they did not look at. The owner weighed that
+   * and the chain applies now (admin plan 0024, section 3.2); what makes it
+   * acceptable is the control's nature. A typed uuid was opaque, where the
+   * picker shows the chosen chain **by name**, and the confirm dialog seals it:
+   * with a chain picked, the body names it beside the count, so the operator
+   * confirms "import 12 places under Mercadona" and not just "import 12
+   * places". With none picked the body and the behaviour are exactly the old
+   * ones: catalog resolves each place from its brand, and a place whose brand
+   * it cannot resolve is refused and named in the report.
    */
-  askImport(): void {
+  async askImport(): Promise<void> {
+    const supermarketId = this.supermarketId().trim();
+    const body = supermarketId === '' ? {} : { supermarketId };
+    // The name for the dialog's sentence. The id, when the lookup answered
+    // nothing: a blank would ask the operator to confirm filing under nothing
+    // in particular.
+    const chain =
+      supermarketId === ''
+        ? ''
+        : ((await this.references.resolve('supermarkets', supermarketId))
+            ?.title ?? supermarketId);
+
     this.pending.set({
       headingKey: 'harvest.places.bulk.importConfirm.heading',
-      bodyKey: 'harvest.places.bulk.importConfirm.body',
+      bodyKey:
+        supermarketId === ''
+          ? 'harvest.places.bulk.importConfirm.body'
+          : 'harvest.places.bulk.importConfirm.bodyChained',
       confirmKey: 'harvest.places.bulk.import',
       progressKey: 'harvest.places.bulk.importing',
       count: this.queue.selectedCount(),
       leftAlone: 0,
       tone: 'primary',
+      chain,
       run: () =>
         this._run({
           act: async (place) => {
-            await this._service.importPlace(place.id, {});
+            await this._service.importPlace(place.id, body);
             return null;
           },
           nameOf: (place) => place.name ?? place.externalRef,
-        }),
+          // The picker resets after a bulk run for the same reason it resets
+          // after a single decision.
+        }).then(() => this.supermarketId.set('')),
     });
   }
 
   askReject(): void {
     this.pending.set({
+      chain: '',
       headingKey: 'harvest.places.bulk.rejectConfirm.heading',
       bodyKey: 'harvest.places.bulk.rejectConfirm.body',
       confirmKey: 'harvest.places.bulk.reject',
@@ -451,4 +497,14 @@ export class PlacesQueuePage {
     this.report.set(await runQueueBulk(this.queue, bulk));
     this.progressKey.set('harvest.queue.bulk.progress');
   }
+}
+
+/**
+ * This screen's pending bulk, which also carries the chain by name.
+ *
+ * `''` for the actions that file under none, so the dialog's arguments always
+ * have the field and the chained body key is the only reader of it.
+ */
+interface PendingPlacesBulk extends PendingBulk {
+  readonly chain: string;
 }
