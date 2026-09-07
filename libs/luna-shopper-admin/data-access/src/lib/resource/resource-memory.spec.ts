@@ -105,6 +105,39 @@ describe('ResourceMemoryGateways', () => {
   });
 
   /**
+   * Admin plan 0017: the parent of a membership or a line is an ordinary
+   * filter here too, so both screens can be driven with no backend in either
+   * state. Unset lists every seeded row; set lists one parent's. There is no
+   * code behind this beyond the rule above, which is the reason the plan asks
+   * for the assertion rather than for an implementation.
+   */
+  it('lists every parent unfiltered, and one parent when asked', async () => {
+    const gateway = gateways.for({
+      path: '/v1/admin/memberships',
+      key: ['zoneId', 'membershipId'],
+      idField: 'membershipId',
+      seed: [
+        { membershipId: 'm1', zoneId: 'z1', zoneName: 'Kitchen' },
+        { membershipId: 'm2', zoneId: 'z1', zoneName: 'Kitchen' },
+        { membershipId: 'm3', zoneId: 'z2', zoneName: 'Allotment' },
+      ],
+    });
+
+    const all = await gateway.list({});
+    expect(all.items.map((row) => row['membershipId'])).toEqual([
+      'm1',
+      'm2',
+      'm3',
+    ]);
+
+    const scoped = await gateway.list({ filters: { zoneId: 'z1' } });
+    expect(scoped.items.map((row) => row['membershipId'])).toEqual([
+      'm1',
+      'm2',
+    ]);
+  });
+
+  /**
    * Plan 0012, section 2: the literal the gateway reads as "the rows whose
    * column is empty" means the same thing here, so a screen filtered to none
    * can be driven without a backend. A parameter that is not a column keeps

@@ -212,9 +212,22 @@ export interface AdminZoneView {
   updatedAt: string;
 }
 
-/** One membership, as a zone's detail screen shows it. */
+/**
+ * One membership, as a zone's detail screen and the flat collection show it.
+ *
+ * **The zone is on the row** (admin plan 0017, section 2), because the
+ * collection is readable with no zone named and a membership is addressed by
+ * the pair `(zoneId, membershipId)`. A row that left its zone to the URL had no
+ * address of its own once the URL stopped naming one. The **name** is here for
+ * the reason `AdminListView` carries `zoneName`: across zones, the household is
+ * the fact that tells two rows apart.
+ */
 export interface AdminZoneMemberView {
   membershipId: string;
+  /** The zone this membership is in, on the row rather than in the URL. */
+  zoneId: string;
+  /** That zone's name, joined so a cross zone listing reads. */
+  zoneName: string;
   userId: string;
   /** The per zone name, which is the only personal field a membership holds. */
   username: string;
@@ -359,10 +372,17 @@ export interface SetAdminZoneDeletionMarkRequest extends AdminCredential {
   marked: boolean;
 }
 
-/** A page of one zone's memberships (plan 0077, section 9). */
+/**
+ * A page of memberships, from one zone or from every zone (plan 0077, section
+ * 9, widened by admin plan 0017).
+ *
+ * `zoneId` is an ordinary filter rather than an address. An operator looking
+ * for one person's memberships does not know the households yet, which is why
+ * they came to this screen, so leaving it unset lists every zone's.
+ */
 export interface ListAdminMembershipsRequest
   extends AdminCredential, PageQuery {
-  zoneId: string;
+  zoneId?: string;
 }
 
 export type AdminMembershipPage = Paginated<AdminZoneMemberView>;
@@ -418,9 +438,19 @@ export interface AdminListView {
   updatedAt: string;
 }
 
-/** One line, on the list detail read and nowhere else. */
+/**
+ * One line, on the list detail read and on the flat collection.
+ *
+ * The list is on the row for the reason the zone is on a membership (admin plan
+ * 0017, section 2): the collection is readable with no list named, and a line
+ * is addressed by the pair `(listId, id)`.
+ */
 export interface AdminListLineView {
   id: string;
+  /** The list this line is on, on the row rather than in the URL. */
+  listId: string;
+  /** That list's name, joined so a cross list listing reads. */
+  listName: string;
   content: string;
   quantity: number;
   approvalStatus: LineApprovalStatus;
@@ -469,9 +499,15 @@ export interface AdminListIdRequest extends AdminCredential {
   listId: string;
 }
 
-/** A page of one list's lines (plan 0077, section 9). */
+/**
+ * A page of list lines, from one list or from every list (plan 0077, section 9,
+ * widened by admin plan 0017).
+ *
+ * `listId` is an ordinary filter rather than an address, for the reason
+ * {@link ListAdminMembershipsRequest.zoneId} is one.
+ */
 export interface ListAdminListLinesRequest extends AdminCredential, PageQuery {
-  listId: string;
+  listId?: string;
 }
 
 export type AdminListLinePage = Paginated<AdminListLineView>;

@@ -110,13 +110,24 @@ const zoneMemberView = object(
   ADMIN_CORE_SCHEMA_IDS.zoneMemberView,
   {
     membershipId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    zoneName: nonEmptyString(),
     userId: nonEmptyString(),
     username: nonEmptyString(),
     role: ref(ENUM_IDS.zoneRole),
     status: ref(ENUM_IDS.membershipStatus),
     createdAt: string({ format: 'date-time' }),
   },
-  ['membershipId', 'userId', 'username', 'role', 'status', 'createdAt']
+  [
+    'membershipId',
+    'zoneId',
+    'zoneName',
+    'userId',
+    'username',
+    'role',
+    'status',
+    'createdAt',
+  ]
 );
 
 const zoneListView = object(
@@ -193,6 +204,8 @@ const listLineView = object(
   ADMIN_CORE_SCHEMA_IDS.listLineView,
   {
     id: nonEmptyString(),
+    listId: nonEmptyString(),
+    listName: nonEmptyString(),
     content: string(),
     quantity: integer(),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
@@ -201,6 +214,8 @@ const listLineView = object(
   },
   [
     'id',
+    'listId',
+    'listName',
     'content',
     'quantity',
     'approvalStatus',
@@ -382,6 +397,8 @@ const setDeletionMarkRequest = object(
   ['userId', 'zoneId', 'marked']
 );
 
+// `zoneId` is a filter here and not an address (admin plan 0017): a read with
+// none lists every zone's memberships, grouped by the zone they are in.
 const listMembershipsRequest = object(
   ADMIN_CORE_SCHEMA_IDS.listMembershipsRequest,
   {
@@ -391,7 +408,7 @@ const listMembershipsRequest = object(
     limit: integer({ minimum: 1 }),
     order: string(),
   },
-  ['userId', 'zoneId']
+  ['userId']
 );
 
 // Role and per zone name. `status` is deliberately absent: it moves along a
@@ -421,6 +438,8 @@ const updateAdminListRequest = object(
   ['userId', 'listId']
 );
 
+// `listId` is a filter here and not an address, for the reason `zoneId` is one
+// above.
 const listLinesRequest = object(
   ADMIN_CORE_SCHEMA_IDS.listLinesRequest,
   {
@@ -430,7 +449,7 @@ const listLinesRequest = object(
     limit: integer({ minimum: 1 }),
     order: string(),
   },
-  ['userId', 'listId']
+  ['userId']
 );
 
 const lineIdRequest = object(

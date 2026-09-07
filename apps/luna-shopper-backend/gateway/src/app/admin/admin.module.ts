@@ -4,7 +4,9 @@ import { MessagingModule } from '../messaging/messaging.module';
 import { AdminAuthController } from './admin-auth.controller';
 import {
   AdminBasketsController,
+  AdminListLinesController,
   AdminListsController,
+  AdminMembershipsController,
   AdminPostalCodesController,
   AdminZonesController,
 } from './admin-core.controller';
@@ -49,7 +51,9 @@ import { AdminUserNamesService } from './admin-user-names.service';
     AdminUsersController,
     AdminAdminsController,
     AdminZonesController,
+    AdminMembershipsController,
     AdminListsController,
+    AdminListLinesController,
     AdminBasketsController,
     AdminPostalCodesController,
   ],

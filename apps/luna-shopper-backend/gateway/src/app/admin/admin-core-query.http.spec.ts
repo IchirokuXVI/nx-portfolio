@@ -2,7 +2,12 @@ import { Test } from '@nestjs/testing';
 import { createValidationPipe } from '@portfolio/luna-shopper/platform';
 import type { AddressInfo } from 'node:net';
 import { NatsClient } from '../messaging/nats-client';
-import { AdminZonesController } from './admin-core.controller';
+import {
+  AdminListLinesController,
+  AdminListsController,
+  AdminMembershipsController,
+  AdminZonesController,
+} from './admin-core.controller';
 import { AdminJwtGuard } from './admin-jwt.guard';
 import { AdminUserNamesService } from './admin-user-names.service';
 
@@ -22,12 +27,12 @@ interface SentMessage {
   readonly payload: Record<string, unknown>;
 }
 
-async function boot() {
+async function boot(controllers: unknown[] = [AdminZonesController]) {
   const sent: SentMessage[] = [];
 
   const nest = (
     await Test.createTestingModule({
-      controllers: [AdminZonesController],
+      controllers: controllers as never[],
       providers: [
         {
           provide: NatsClient,
@@ -123,6 +128,95 @@ describe('the zones nobody owns, over HTTP', () => {
       const res = await fetch(`${origin}/v1/admin/zones?userId=none`);
 
       expect(res.status).toBe(400);
+    } finally {
+      await nest.close();
+    }
+  });
+});
+
+/**
+ * The two collections that read across their parent (admin plan 0017).
+ *
+ * Over HTTP for the reason the block above is: the parent is a query parameter
+ * now, the global pipe validates the whole query object, and "absent is
+ * allowed" is a claim about the validator rather than about the handler. The
+ * two nested collections these replace are asserted gone in the same file,
+ * because a route that answered the same question twice is what the plan
+ * removed.
+ */
+describe('memberships and lines, addressed without their parent', () => {
+  const ZONE = '0f6c3a2b-7d8e-4f90-a1b2-c3d4e5f60718';
+  const LIST = '1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d';
+
+  it('narrows memberships to a zone when one is named', async () => {
+    const { nest, sent, origin } = await boot([AdminMembershipsController]);
+    try {
+      const res = await fetch(`${origin}/v1/admin/memberships?zoneId=${ZONE}`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['zoneId']).toBe(ZONE);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('lists memberships from every zone when none is named', async () => {
+    const { nest, sent, origin } = await boot([AdminMembershipsController]);
+    try {
+      const res = await fetch(`${origin}/v1/admin/memberships`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['zoneId']).toBeUndefined();
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('refuses a zone that is not a uuid', async () => {
+    const { nest, origin } = await boot([AdminMembershipsController]);
+    try {
+      const res = await fetch(`${origin}/v1/admin/memberships?zoneId=nowhere`);
+
+      expect(res.status).toBe(400);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('narrows lines to a list, lists every list without one, and refuses a bad id', async () => {
+    const { nest, sent, origin } = await boot([AdminListLinesController]);
+    try {
+      expect(
+        (await fetch(`${origin}/v1/admin/list-lines?listId=${LIST}`)).status
+      ).toBe(200);
+      expect(sent[0].payload['listId']).toBe(LIST);
+
+      expect((await fetch(`${origin}/v1/admin/list-lines`)).status).toBe(200);
+      expect(sent[1].payload['listId']).toBeUndefined();
+
+      expect(
+        (await fetch(`${origin}/v1/admin/list-lines?listId=nowhere`)).status
+      ).toBe(400);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  /** One question, one route. The nested collections answered it a second time. */
+  it('no longer answers the nested collections it replaced', async () => {
+    const { nest, origin } = await boot([
+      AdminZonesController,
+      AdminListsController,
+      AdminMembershipsController,
+      AdminListLinesController,
+    ]);
+    try {
+      expect(
+        (await fetch(`${origin}/v1/admin/zones/${ZONE}/members`)).status
+      ).toBe(404);
+      expect(
+        (await fetch(`${origin}/v1/admin/lists/${LIST}/lines`)).status
+      ).toBe(404);
     } finally {
       await nest.close();
     }

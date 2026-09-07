@@ -36,7 +36,6 @@ import {
   type MembershipView,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
-import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import {
   ApiComposedResponse,
   ApiContractResponse,
@@ -46,7 +45,9 @@ import { NatsClient } from '../messaging/nats-client';
 import { adminCredential } from './admin-credential';
 import {
   ListAdminBasketsQueryDto,
+  ListAdminListLinesQueryDto,
   ListAdminListsQueryDto,
+  ListAdminMembershipsQueryDto,
   ListAdminPostalCodesQueryDto,
   ListAdminZonesQueryDto,
 } from './admin-directory.dto';
@@ -310,29 +311,6 @@ export class AdminZonesController {
     });
   }
 
-  /**
-   * A page of the zone's memberships (plan 0077, section 9).
-   *
-   * The zone detail read keeps its embedded `members` array, unchanged: the zone
-   * screen renders its membership without a second call. This collection serves
-   * the screen that edits one membership, which reads and writes a row through
-   * its own address.
-   */
-  @Get(':id/members')
-  @ApiContractResponse(ADMIN_MEMBERSHIP_PATTERNS.list)
-  listMembers(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Query() query: PageQueryDto
-  ): Promise<AdminMembershipPage> {
-    return this.nats.send<AdminMembershipPage>(ADMIN_MEMBERSHIP_PATTERNS.list, {
-      ...adminCredential(admin),
-      zoneId: id,
-      cursor: query.cursor,
-      limit: query.limit,
-    });
-  }
-
   /** One membership, read through its own address. */
   @Get(':id/members/:membershipId')
   @ApiContractResponse(ADMIN_MEMBERSHIP_PATTERNS.get)
@@ -504,28 +482,6 @@ export class AdminListsController {
     });
   }
 
-  /**
-   * A page of the list's lines, in the household's own order (plan 0077, section
-   * 9).
-   *
-   * The detail read keeps its embedded array. This collection serves the screen
-   * that edits one line.
-   */
-  @Get(':id/lines')
-  @ApiContractResponse(ADMIN_LIST_PATTERNS.listLines)
-  listLines(
-    @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Query() query: PageQueryDto
-  ): Promise<AdminListLinePage> {
-    return this.nats.send<AdminListLinePage>(ADMIN_LIST_PATTERNS.listLines, {
-      ...adminCredential(admin),
-      listId: id,
-      cursor: query.cursor,
-      limit: query.limit,
-    });
-  }
-
   /** One line, read through its own address. */
   @Get(':id/lines/:lineId')
   @ApiContractResponse(ADMIN_LIST_PATTERNS.getLine)
@@ -603,6 +559,73 @@ export class AdminListsController {
       ...adminCredential(admin),
       listId: id,
       lineId,
+    });
+  }
+}
+
+/**
+ * Memberships, addressed without their zone (admin plan 0017).
+ *
+ * A controller of its own because a path prefix is what makes one, and
+ * `admin/memberships` sits under nothing that already exists. It replaces
+ * `GET /v1/admin/zones/:id/members`, which answered exactly what this answers
+ * with `zoneId` set: two ways to ask one question is the shape that drifts.
+ *
+ * Every route that addresses **one** membership is still nested under its zone,
+ * and stays there. A membership's address is genuinely the pair, and what
+ * changed is where the screen learns the first half of it: from the row, which
+ * now carries `zoneId` and `zoneName`, rather than from the URL it asked with.
+ */
+@ApiTags('admin-core')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/memberships', version: '1' })
+export class AdminMembershipsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(ADMIN_MEMBERSHIP_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: ListAdminMembershipsQueryDto
+  ): Promise<AdminMembershipPage> {
+    return this.nats.send<AdminMembershipPage>(ADMIN_MEMBERSHIP_PATTERNS.list, {
+      ...adminCredential(admin),
+      zoneId: query.zoneId,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+}
+
+/**
+ * List lines, addressed without their list, for the reason memberships are
+ * (admin plan 0017).
+ *
+ * It replaces `GET /v1/admin/lists/:id/lines`. The row routes stay under the
+ * list, and every row now carries `listId` and `listName` so that a page read
+ * across lists can still open one.
+ */
+@ApiTags('admin-core')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/list-lines', version: '1' })
+export class AdminListLinesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(ADMIN_LIST_PATTERNS.listLines)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: ListAdminListLinesQueryDto
+  ): Promise<AdminListLinePage> {
+    return this.nats.send<AdminListLinePage>(ADMIN_LIST_PATTERNS.listLines, {
+      ...adminCredential(admin),
+      listId: query.listId,
+      cursor: query.cursor,
+      limit: query.limit,
     });
   }
 }

@@ -1049,6 +1049,8 @@ export type AdminCoreAdminListLinePage = {
  */
 export type AdminCoreAdminListLineView = {
   id: string;
+  listId: string;
+  listName: string;
   content: string;
   quantity: number;
   approvalStatus: EnumsLineApprovalStatus;
@@ -1128,6 +1130,8 @@ export type AdminCoreAdminZoneListView = {
  */
 export type AdminCoreAdminZoneMemberView = {
   membershipId: string;
+  zoneId: string;
+  zoneName: string;
   userId: string;
   username: string;
   role: EnumsZoneRole;
