@@ -149,6 +149,17 @@
       "slow": "velista cannot reach the server. Try again in a moment."
     }
   },
+  "update": {
+    "required": {
+      "title": "velista is updating",
+      "body": "This version is too old to talk to the server. The new one is on its way and takes a few seconds."
+    },
+    "failed": {
+      "title": "velista could not update itself",
+      "body": "Close velista completely and open it again. If that does not work, open it in your browser once.",
+      "reload": "Try again"
+    }
+  },
   "auth": {
     "back": "Back",
     "signIn": {

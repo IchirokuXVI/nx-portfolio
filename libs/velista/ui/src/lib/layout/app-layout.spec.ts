@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, type Provider } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
@@ -6,8 +6,10 @@ import { type AppBrand } from '@portfolio/velista/models';
 import {
   BackendReadiness,
   ConnectionState,
+  provideFakeBrowserFacade,
   provideVelistaTesting,
   RENDERS_WHILE_CONNECTING,
+  StorageKeys,
   ThemeStore,
 } from '@portfolio/velista/platform';
 import { AppLayout } from './app-layout';
@@ -18,13 +20,21 @@ class TestPage {}
 
 async function createFixture(
   override: Partial<AppBrand> = {},
-  routes: Routes = []
+  routes: Routes = [],
+  extra: Provider[] = []
 ): Promise<ComponentFixture<AppLayout>> {
   await TestBed.configureTestingModule({
     imports: [AppLayout, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideRouter(routes),
       provideVelistaTesting({ brand: override }),
+      // `AppUpdates` is real here and it acts on a refusal: with no worker it spends
+      // this document's one attempt and reloads (plan 0072 D6). The double keeps that
+      // out of jsdom's `location`, and gives every fixture its own `sessionStorage`,
+      // without which the first refused fixture would leave the rest of the file
+      // looking like a tab that had already tried.
+      provideFakeBrowserFacade(),
+      ...extra,
     ],
   }).compileComponents();
 
@@ -188,16 +198,18 @@ describe('AppLayout', () => {
       expect(outletOf(fixture)).not.toBeNull();
     });
 
-    // `0072` draws the screen for this. Until it does, the app runs on what it has
-    // rather than sitting behind a screen that says Connecting when the truth is a
-    // refused build.
+    // It opens, and `0072`'s screen takes the place the outlet would have had. What
+    // it does not do is hold the word Connecting in front of somebody whose build the
+    // deployment will not serve, which is a thing that is not true.
     it('opens for a build the deployment refuses', async () => {
       const fixture = await createFixture();
 
       TestBed.inject(BackendReadiness).reportTooOld();
       fixture.detectChanges();
 
-      expect(outletOf(fixture)).not.toBeNull();
+      const host: HTMLElement = fixture.nativeElement;
+      expect(host.querySelector('lib-startup-screen')).toBeNull();
+      expect(host.querySelector('lib-update-screen')).not.toBeNull();
     });
 
     it('asks for a retry when the startup screen does', async () => {
@@ -207,6 +219,106 @@ describe('AppLayout', () => {
       fixture.componentInstance.retryConnection();
 
       expect(readiness.retryRequested()).toBe(1);
+    });
+  });
+
+  /**
+   * Plan 0072. A refused build is wrong about everything: every request it makes comes
+   * back 426, so it usually looks offline as well, and this is the one screen that
+   * tells the truth about why.
+   */
+  describe('a build the deployment refuses', () => {
+    it('replaces the app, landing included', async () => {
+      // D1. Landing draws while connecting because a front door in a tunnel is worth
+      // having, and all four of its actions end in a request this server will not
+      // answer, so there is nothing left worth showing.
+      const fixture = await createFixture({}, [
+        {
+          path: 'landing',
+          component: TestPage,
+          data: { [RENDERS_WHILE_CONNECTING]: true },
+        },
+      ]);
+
+      await TestBed.inject(Router).navigate(['/landing']);
+      TestBed.inject(BackendReadiness).reportTooOld();
+      fixture.detectChanges();
+
+      const host: HTMLElement = fixture.nativeElement;
+      expect(host.querySelector('lib-update-screen')).not.toBeNull();
+      expect(outletOf(fixture)).toBeNull();
+    });
+
+    it('replaces a page that was already running', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+      expect(outletOf(fixture)).not.toBeNull();
+
+      TestBed.inject(BackendReadiness).reportTooOld();
+      fixture.detectChanges();
+
+      expect(outletOf(fixture)).toBeNull();
+    });
+
+    it('wins over the connection screen', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+
+      // Which is what a refused build looks like from the outside: every request
+      // fails, so the transport reports itself as gone.
+      TestBed.inject(ConnectionState).reportNetworkFailure();
+      TestBed.inject(BackendReadiness).reportTooOld();
+      fixture.detectChanges();
+
+      const host: HTMLElement = fixture.nativeElement;
+      expect(host.querySelector('lib-update-screen')).not.toBeNull();
+      expect(host.querySelector('lib-connection-lost')).toBeNull();
+    });
+
+    it('draws the updating face while the attempt is still outstanding', async () => {
+      const fixture = await createFixture();
+
+      TestBed.inject(BackendReadiness).reportTooOld();
+      TestBed.tick();
+      fixture.detectChanges();
+
+      // No button: there is nothing for the user to do yet, and the screen says what
+      // is happening rather than asking them to fix it.
+      const screen = (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-update-screen'
+      );
+      expect(screen?.querySelector('button')).toBeNull();
+    });
+
+    it('offers one reload from the dead end, and takes it', async () => {
+      // A tab that already spent its attempt, which is the D4 loop being refused.
+      const reload = jest.fn();
+      const session = new Map([[StorageKeys.updateAttempt, '1']]);
+      const fixture = await createFixture({}, [], [
+        provideFakeBrowserFacade(new Map(), {
+          reload,
+          readSessionStorage: (key: string) => session.get(key) ?? null,
+          writeSessionStorage: (key: string, value: string) =>
+            void session.set(key, value),
+          removeSessionStorage: (key: string) => void session.delete(key),
+        }),
+      ] as Provider[]);
+
+      TestBed.inject(BackendReadiness).reportTooOld();
+      TestBed.tick();
+      fixture.detectChanges();
+
+      // The app itself reloaded nothing: that is the whole of D4.
+      expect(reload).not.toHaveBeenCalled();
+
+      const button = (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-update-screen button'
+      ) as HTMLButtonElement | null;
+      button?.click();
+
+      expect(reload).toHaveBeenCalledTimes(1);
     });
   });
 

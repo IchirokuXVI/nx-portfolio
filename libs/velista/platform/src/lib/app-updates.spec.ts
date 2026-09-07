@@ -1,10 +1,17 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NavigationEnd, Router } from '@angular/router';
 import { SwUpdate, type VersionEvent } from '@angular/service-worker';
 import { Subject } from 'rxjs';
-import { AppUpdates, UPDATE_CHECK_INTERVAL_MS } from './app-updates';
+import {
+  AppUpdates,
+  UPDATE_CHECK_INTERVAL_MS,
+  UPDATE_DOWNLOAD_TIMEOUT_MS,
+} from './app-updates';
+import { BackendReadiness } from './backend-readiness';
 import { BrowserFacade } from './browser-facade';
 import { ReloadBlocker } from './reload-blocker';
+import { StorageKeys } from './storage-keys';
 
 /**
  * A document that records its listeners, so a spec can drive a visibility change
@@ -40,6 +47,7 @@ describe('AppUpdates', () => {
   let checkForUpdate: jest.Mock<Promise<boolean>, []>;
   let reload: jest.Mock;
   let doc: ReturnType<typeof fakeDocument>;
+  let session: Map<string, string>;
 
   /** Lets every pending `then`/`finally` in the check chain run. */
   const flushMicrotasks = async () => {
@@ -53,6 +61,7 @@ describe('AppUpdates', () => {
     checkForUpdate = jest.fn().mockResolvedValue(false);
     reload = jest.fn();
     doc = fakeDocument();
+    session = new Map<string, string>();
 
     TestBed.configureTestingModule({
       providers: [
@@ -66,9 +75,28 @@ describe('AppUpdates', () => {
           },
         },
         { provide: Router, useValue: { events: routerEvents } },
-        { provide: BrowserFacade, useValue: { document: doc, reload } },
+        {
+          provide: BrowserFacade,
+          useValue: {
+            document: doc,
+            reload,
+            // `BackendReadiness` reads this through `ConnectionState`, and it holds
+            // the timer off with `isBrowser`, which a bare fake leaves undefined.
+            onLine: signal(true),
+            readSessionStorage: (key: string) => session.get(key) ?? null,
+            writeSessionStorage: (key: string, value: string) =>
+              void session.set(key, value),
+            removeSessionStorage: (key: string) => void session.delete(key),
+          },
+        },
       ],
     });
+  }
+
+  /** The refusal, arriving the way it does in the app: through the readiness state. */
+  function refuse(): void {
+    TestBed.inject(BackendReadiness).reportTooOld();
+    TestBed.tick();
   }
 
   function ready(appData?: object) {
@@ -204,6 +232,172 @@ describe('AppUpdates', () => {
       expect(reload).not.toHaveBeenCalled();
     });
 
+    /**
+     * Plan 0072. A build the deployment refuses is in the same position as a broken
+     * cache: nothing behind the screen can be submitted, so nothing is protected by
+     * waiting, and the only way out is a new bundle.
+     */
+    describe('a build the server refuses', () => {
+      it('asks the worker for a new version', async () => {
+        refuse();
+        await flushMicrotasks();
+
+        expect(checkForUpdate).toHaveBeenCalledTimes(1);
+      });
+
+      it('reloads a version that arrives without waiting for a navigation', async () => {
+        checkForUpdate.mockResolvedValue(true);
+        refuse();
+        await flushMicrotasks();
+
+        ready({ critical: false });
+
+        // No `NavigationEnd`. Plan 0034 D7 is untouched, because the reload still
+        // happens on `VERSION_READY` and only there; what it no longer waits for is a
+        // navigation that a user who is not navigating never makes.
+        expect(reload).toHaveBeenCalledTimes(1);
+      });
+
+      it('reloads over unsaved work, unlike every other update', async () => {
+        // D7. The form a blocker protects cannot be submitted by a client every one
+        // of whose requests is refused, so waiting costs the user time and saves them
+        // nothing.
+        blocker.block();
+        checkForUpdate.mockResolvedValue(true);
+        refuse();
+        await flushMicrotasks();
+
+        ready();
+
+        expect(reload).toHaveBeenCalledTimes(1);
+      });
+
+      it('takes a version already waiting for a navigation', async () => {
+        // The gap D3 describes from the other side: a check on the half hour timer
+        // found a version, and the user has not changed screens since. Asking the
+        // worker again would answer `false`, because nothing is newer than the latest
+        // it already holds, and the dead end would be drawn over a cached bundle.
+        ready();
+        expect(reload).not.toHaveBeenCalled();
+
+        refuse();
+        await flushMicrotasks();
+
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(checkForUpdate).not.toHaveBeenCalled();
+      });
+
+      it('stops on the dead end when there is no newer version', async () => {
+        // D5. `false` is the worker saying there is nothing to install, which is the
+        // honest end of the wait rather than a reason to keep waiting.
+        checkForUpdate.mockResolvedValue(false);
+        const updates = TestBed.inject(AppUpdates);
+
+        refuse();
+        await flushMicrotasks();
+
+        expect(reload).not.toHaveBeenCalled();
+        expect(updates.updateFailed()).toBe(true);
+      });
+
+      it('stops on the dead end when the version found never arrives', async () => {
+        checkForUpdate.mockResolvedValue(true);
+        const updates = TestBed.inject(AppUpdates);
+
+        refuse();
+        await flushMicrotasks();
+        expect(updates.updateFailed()).toBe(false);
+
+        jest.advanceTimersByTime(UPDATE_DOWNLOAD_TIMEOUT_MS);
+
+        expect(updates.updateFailed()).toBe(true);
+        expect(reload).not.toHaveBeenCalled();
+      });
+
+      it('does not reload twice in one document', async () => {
+        // D4. The reload happened, the tab came back, and the server refused the same
+        // build again: a deployment whose floor is above its own newest build, or a
+        // cache serving the old bundle back.
+        session.set(StorageKeys.updateAttempt, '1');
+        checkForUpdate.mockResolvedValue(true);
+        const updates = TestBed.inject(AppUpdates);
+
+        refuse();
+        await flushMicrotasks();
+
+        expect(checkForUpdate).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+        expect(updates.updateFailed()).toBe(true);
+      });
+
+      it('records the attempt when it does reload', async () => {
+        checkForUpdate.mockResolvedValue(true);
+        refuse();
+        await flushMicrotasks();
+
+        ready();
+
+        expect(session.get(StorageKeys.updateAttempt)).toBe('1');
+      });
+
+      it('clears the attempt once the backend serves this build again', () => {
+        // A floor moved later in a long lived tab gets an attempt of its own.
+        session.set(StorageKeys.updateAttempt, '1');
+
+        TestBed.inject(BackendReadiness).reportReady();
+        TestBed.tick();
+
+        expect(session.has(StorageKeys.updateAttempt)).toBe(false);
+      });
+
+      it('starts one attempt however many requests are refused', async () => {
+        checkForUpdate.mockResolvedValue(true);
+        const updates = TestBed.inject(AppUpdates);
+
+        refuse();
+        updates.demandUpdate();
+        updates.demandUpdate();
+        await flushMicrotasks();
+
+        expect(checkForUpdate).toHaveBeenCalledTimes(1);
+      });
+
+      it('reloads once by hand from the dead end, counter or not', () => {
+        session.set(StorageKeys.updateAttempt, '1');
+
+        TestBed.inject(AppUpdates).reloadByHand();
+
+        // Bypasses the counter on purpose: it exists to stop the app looping, and
+        // this is a person choosing.
+        expect(reload).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    /**
+     * Plan 0034 D7, which this plan preserves rather than reverses (0072 D3). A client
+     * that reloaded on the server's word alone, in the window between a deploy moving
+     * its floor and the new bundle being reachable, would come back identical, be told
+     * the same thing, and reload again with no way out.
+     */
+    it('reloads nothing on the refusal alone, nor on an advertised floor', async () => {
+      checkForUpdate.mockResolvedValue(true);
+      const updates = TestBed.inject(AppUpdates);
+
+      // What the interceptor does with the advertised floor header.
+      updates.checkNow();
+      await flushMicrotasks();
+      expect(reload).not.toHaveBeenCalled();
+
+      // And what it does with an outright refusal.
+      refuse();
+      await flushMicrotasks();
+      expect(reload).not.toHaveBeenCalled();
+
+      // Only a version actually cached moves anything.
+      ready();
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
     it('reloads immediately on an unrecoverable state, blocker or not', () => {
       // Nothing left to protect: the cached state is already broken, and honouring
       // a blocker here would strand the user in an app that cannot work.
@@ -241,6 +435,34 @@ describe('AppUpdates', () => {
       routerEvents.next(new NavigationEnd(1, '/en/home', '/en/home'));
 
       expect(reload).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Plan 0072 D6. There is no update channel here, so there is no `VERSION_READY`
+     * to wait for, and a plain reload is what fetches a fresh `index.html` and a
+     * fresh bundle. The one attempt counter bounds it exactly as it bounds the other
+     * path, which is what stops a refused build reloading the shell's page forever.
+     */
+    describe('and a build the server refuses', () => {
+      it('reloads the page itself, once', async () => {
+        refuse();
+        await flushMicrotasks();
+
+        expect(checkForUpdate).not.toHaveBeenCalled();
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(session.get(StorageKeys.updateAttempt)).toBe('1');
+      });
+
+      it('shows the dead end instead when the attempt is already spent', async () => {
+        session.set(StorageKeys.updateAttempt, '1');
+        const updates = TestBed.inject(AppUpdates);
+
+        refuse();
+        await flushMicrotasks();
+
+        expect(reload).not.toHaveBeenCalled();
+        expect(updates.updateFailed()).toBe(true);
+      });
     });
   });
 });

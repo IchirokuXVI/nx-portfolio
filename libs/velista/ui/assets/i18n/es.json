@@ -149,6 +149,17 @@
       "slow": "velista no consigue conectar con el servidor. Inténtalo dentro de un momento."
     }
   },
+  "update": {
+    "required": {
+      "title": "velista se está actualizando",
+      "body": "Esta versión es demasiado antigua para hablar con el servidor. La nueva ya viene y tarda unos segundos."
+    },
+    "failed": {
+      "title": "velista no ha podido actualizarse",
+      "body": "Cierra velista del todo y vuelve a abrirlo. Si así no funciona, ábrelo una vez en tu navegador.",
+      "reload": "Reintentar"
+    }
+  },
   "auth": {
     "back": "Atrás",
     "signIn": {
