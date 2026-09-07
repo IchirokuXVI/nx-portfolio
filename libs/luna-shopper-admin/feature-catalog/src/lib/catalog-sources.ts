@@ -132,7 +132,7 @@ export function productGroupSource(): ResourceSource<Wire.CatalogProductGroupVie
  * from the item prices, and the descriptor that draws it sends its one write,
  * the add, to {@link itemPriceSource} instead.
  */
-export function priceSource(): ResourceSource<Wire.CatalogSupermarketItemView> {
+export function priceSource(): ResourceSource<Wire.CatalogAdminSupermarketItemView> {
   return {
     path: PRICES_PATH,
     key: [...PRICE_KEY],

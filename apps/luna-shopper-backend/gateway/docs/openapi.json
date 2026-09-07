@@ -16196,7 +16196,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/catalog.SupermarketItemPage"
+                  "$ref": "#/components/schemas/catalog.AdminSupermarketItemPage"
                 }
               }
             }
@@ -24784,6 +24784,131 @@
           "latitude",
           "longitude",
           "locationCount"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.AdminSupermarketItemPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.AdminSupermarketItemView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "catalog.AdminSupermarketItemView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "price": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unitPriceLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceKind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PriceSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "validUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemPriceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "itemName": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "itemId",
+          "priceScopeId",
+          "price",
+          "currency",
+          "unitPrice",
+          "unitPriceLabel",
+          "observedAt",
+          "sourceKind",
+          "stale",
+          "validUntil",
+          "itemPriceId",
+          "available",
+          "itemName"
         ],
         "additionalProperties": false
       },

@@ -1518,6 +1518,36 @@ export type CatalogAdminPostalCodeView = {
 };
 
 /**
+ * `catalog.AdminSupermarketItemPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogAdminSupermarketItemPage = {
+  items: CatalogAdminSupermarketItemView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.AdminSupermarketItemView` in the gateway's OpenAPI document.
+ */
+export type CatalogAdminSupermarketItemView = {
+  id: string;
+  itemId: string;
+  priceScopeId: string;
+  price: number | null;
+  currency: string | null;
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  observedAt: string | null;
+  sourceKind: EnumsPriceSourceKind | null;
+  stale: boolean;
+  validUntil: string | null;
+  itemPriceId: string | null;
+  available: boolean;
+  itemName: CatalogLocalizedText | null;
+};
+
+/**
  * `catalog.CatalogScopeView` in the gateway's OpenAPI document.
  */
 export type CatalogCatalogScopeView = {

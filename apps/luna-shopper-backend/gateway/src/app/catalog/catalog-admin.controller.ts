@@ -23,6 +23,7 @@ import {
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type AdminSupermarketItemPage,
   type ItemPage,
   type ItemPricePage,
   type ItemPriceView,
@@ -35,7 +36,6 @@ import {
   type ProductGroupView,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityResult,
-  type SupermarketItemPage,
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
@@ -512,8 +512,8 @@ export class AdminCatalogSupermarketItemsController {
   list(
     @ActingAdmin() admin: CurrentAdmin,
     @Query() query: AdminListSupermarketItemsQueryDto
-  ): Promise<SupermarketItemPage> {
-    return this.nats.send<SupermarketItemPage>(
+  ): Promise<AdminSupermarketItemPage> {
+    return this.nats.send<AdminSupermarketItemPage>(
       SUPERMARKET_ITEM_PATTERNS.adminList,
       {
         ...adminCredential(admin),

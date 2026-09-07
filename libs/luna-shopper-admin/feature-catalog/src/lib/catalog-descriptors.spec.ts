@@ -103,6 +103,63 @@ describe('every catalog descriptor', () => {
   });
 });
 
+/**
+ * A reference column names what it points at (admin plan 0023, section 1).
+ *
+ * Two honest routes to the name, and each field says which is its: joined on
+ * by the backend where the target is large, resolved once per distinct id and
+ * cached where it is small. A field declaring neither keeps its id, which is
+ * the guard against the request storm plan 0004 refused.
+ */
+describe('reference columns that name their target', () => {
+  it('reads the product name off the wire on the price list', () => {
+    const itemId = fieldOf(PRICES, 'itemId');
+
+    expect(itemId?.kind).toBe('reference');
+    expect(itemId?.kind === 'reference' ? itemId.nameFrom : null).toBe(
+      'itemName'
+    );
+  });
+
+  it('looks the group and the chain up, both small targets', () => {
+    const group = fieldOf(ITEMS, 'productGroupId');
+    expect(group?.kind === 'reference' ? group.nameLookup : null).toBe(true);
+
+    const chain = fieldOf(PRICE_SCOPES, 'supermarketId');
+    expect(chain?.kind === 'reference' ? chain.nameLookup : null).toBe(true);
+  });
+
+  /** The two members are mutually exclusive, on every descriptor there is. */
+  it('never declares both sources on one field', () => {
+    for (const descriptor of ALL) {
+      for (const field of descriptor.fields) {
+        if (field.kind !== 'reference') {
+          continue;
+        }
+        const both = field.nameFrom !== undefined && field.nameLookup === true;
+        expect([descriptor.name, field.name, both]).toEqual([
+          descriptor.name,
+          field.name,
+          false,
+        ]);
+      }
+    }
+  });
+
+  /** Section 3.3: the compact card's heading gets the same name the column gets. */
+  it('titles a price by its product, id only when the join found nothing', () => {
+    expect(PRICES.title(PRICE_SEED[0] as unknown as ResourceRow)).toBe(
+      'Whole milk 1 L'
+    );
+    expect(
+      PRICES.title({
+        ...(PRICE_SEED[0] as unknown as ResourceRow),
+        itemName: null,
+      })
+    ).toBe('it_milk_1l');
+  });
+});
+
 describe('the catalog enumerations', () => {
   /**
    * The values are the wire's. A list that has fallen behind its type shows a
