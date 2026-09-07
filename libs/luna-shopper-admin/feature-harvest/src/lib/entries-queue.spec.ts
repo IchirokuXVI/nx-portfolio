@@ -440,3 +440,143 @@ describe('the one queue, saying what it wrote', () => {
     expect(page.writtenKey()).toBe('harvest.entries.written.none');
   });
 });
+
+/**
+ * Plan 0020. The same rows as a list, with a checkbox, for the ordinary end of
+ * a crawl where two hundred rows are obviously not products this shop tracks
+ * and each one costs a separate press.
+ */
+describe('the source products queue as a list', () => {
+  /** The screen opens one at a time, so the list is reached through the toggle. */
+  async function listed(chain: string) {
+    const rendered = await opened(chain);
+    const toggles =
+      rendered.fixture.nativeElement.querySelectorAll('.views button');
+    toggles[1].click();
+    await drain();
+    rendered.fixture.detectChanges();
+    return rendered;
+  }
+
+  it('draws one row per item, with a checkbox and the review view own columns', async () => {
+    const { fixture, page } = await listed(MERCADONA);
+
+    const rows = fixture.nativeElement.querySelectorAll('.rows li');
+    expect(rows).toHaveLength(page.queue!.items().length);
+    expect(rows[0].querySelector('input[type="checkbox"]')).not.toBeNull();
+    expect(rows[0].textContent).toContain('Leche entera');
+    expect(rows[0].textContent).toContain('harvest.entries.timesSeen');
+  });
+
+  it('opens a clicked row one at a time and points the controls at it', async () => {
+    const { fixture, page } = await listed(MERCADONA);
+    const second = page.listRows()[1];
+
+    fixture.nativeElement.querySelectorAll('.rows .cells')[1].click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.row()?.id).toBe(second.id);
+    // The picker follows the subject. A picker still holding the last row's
+    // product is exactly how a name gets bound to the wrong one.
+    expect(page.itemId()).toBe(second.itemId);
+  });
+
+  /**
+   * Section 4. Accepting to an item the operator picks and creating a product
+   * are each a choice about one row, so neither is offered over a selection.
+   */
+  it('offers exactly accept as proposed and reject', async () => {
+    const { fixture } = await listed(MERCADONA);
+
+    const labels = [
+      ...fixture.nativeElement.querySelectorAll('.bulk button'),
+    ].map((node: Element) => node.textContent?.trim());
+
+    expect(labels).toEqual([
+      'harvest.entries.bulk.accept',
+      'harvest.entries.bulk.reject',
+    ]);
+  });
+
+  /**
+   * A count that appears only in the failure report afterwards is a count that
+   * arrives too late to change the decision.
+   */
+  it('states what accepting will act on and what it will leave alone, before it runs', async () => {
+    const { page } = await listed(MERCADONA);
+
+    page.queue!.selectLoaded();
+
+    // Of the chain's queued rows only the one the ladder proposed a product for
+    // can be accepted as proposed; the rest carry no `itemId` to send.
+    expect(page.acceptable().map((entry) => entry.id)).toEqual(['entry-bread']);
+    expect(page.unproposed()).toBe(page.queue!.selectedCount() - 1);
+  });
+
+  it('names the action and the exact count in the confirmation', async () => {
+    const { fixture, page } = await listed(MERCADONA);
+
+    page.queue!.selectLoaded();
+    page.askAccept();
+    fixture.detectChanges();
+
+    expect(page.pending()).toMatchObject({
+      headingKey: 'harvest.entries.bulk.acceptConfirm.heading',
+      confirmKey: 'harvest.entries.bulk.accept',
+      count: 1,
+      leftAlone: page.queue!.selectedCount() - 1,
+    });
+  });
+
+  it('writes nothing until the confirmation is answered', async () => {
+    const { fixture, page, calls } = await listed(MERCADONA);
+
+    page.queue!.selectLoaded();
+    page.askReject();
+    fixture.detectChanges();
+    await drain();
+
+    expect(named(calls, 'rejectEntry')).toHaveLength(0);
+  });
+
+  it('rejects every selected row and takes them all out of the queue', async () => {
+    const { page, calls } = await listed(MERCADONA);
+
+    page.queue!.selectLoaded();
+    const wanted = page.queue!.items().map((entry) => entry.id);
+    page.askReject();
+    page.go(page.pending()!);
+    await drain();
+
+    expect(
+      named(calls, 'rejectEntry')
+        .map((args) => args[0])
+        .sort()
+    ).toEqual([...wanted].sort());
+    expect(page.queue!.items()).toEqual([]);
+    expect(page.report()?.succeeded).toBe(wanted.length);
+  });
+
+  /**
+   * The row's own proposal and nothing else, so a bulk accept is never one
+   * operator's choice applied to rows they did not look at.
+   */
+  it('accepts a proposed row with its own item, and leaves the rest alone', async () => {
+    const { page, calls } = await listed(MERCADONA);
+
+    page.queue!.selectLoaded();
+    page.askAccept();
+    page.go(page.pending()!);
+    await drain();
+
+    expect(named(calls, 'acceptEntry')).toEqual([
+      ['entry-bread', { itemId: 'item-bread' }],
+    ]);
+    expect(page.report()?.skipped.map((line) => line.name)).toEqual([
+      'Leche entera',
+      'LECHE ENTERA HACENDADO',
+    ]);
+    expect(page.report()?.failed).toEqual([]);
+  });
+});

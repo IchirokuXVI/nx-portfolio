@@ -522,7 +522,23 @@
     },
     "queue": {
       "tally": "{{remaining}} left, {{decided}} decided",
-      "skip": "Skip for now"
+      "skip": "Skip for now",
+      "view": {
+        "review": "One at a time",
+        "list": "As a list"
+      },
+      "select": "Select this row",
+      "selectAll": "Select all {{loaded}} loaded",
+      "clearSelection": "Clear the selection ({{count}})",
+      "loadMore": "Load more ({{loaded}} loaded)",
+      "bulk": {
+        "progress": "Working through {{done}} of {{total}}",
+        "stop": "Stop",
+        "stopped": "Stopped. The {{succeeded}} of {{total}} that went through are done, and stopping does not undo them.",
+        "finished": "{{succeeded}} of {{total}} went through.",
+        "refused": "These were refused and are still in the queue",
+        "leftAlone": "These were left alone and nothing was sent for them"
+      }
     },
     "runs": {
       "heading": "Harvest runs",
@@ -588,7 +604,7 @@
       },
       "export": {
         "action": "Export this run as a file",
-        "working": "Preparing the file\u2026",
+        "working": "Preparing the file…",
         "help": "The file holds the products this run was the last to observe, so a chain walked again since answers fewer of them. Export the newest run of a chain. It is a read, so it works whether or not this deployment is allowed to start runs: a machine that may crawl exports, and a cluster that may not imports.",
         "failed": "The export did not come back. Nothing was written and nothing was changed."
       },
@@ -636,6 +652,20 @@
         "provider": "Provider",
         "externalRef": "Provider reference",
         "coordinates": "Coordinates"
+      },
+      "bulk": {
+        "import": "Add them to the catalog",
+        "importing": "Adding {{done}} of {{total}}",
+        "reject": "Reject them",
+        "rejecting": "Rejecting {{done}} of {{total}}",
+        "importConfirm": {
+          "heading": "Add {{count}} places to the catalog?",
+          "body": "No chain is named for any of them, so the catalog works each one out from the brand the place carries. A place whose brand it cannot place is refused and named afterwards, and the rest still go through."
+        },
+        "rejectConfirm": {
+          "heading": "Reject {{count}} places?",
+          "body": "Each place stays as rejected, so no run offers it again."
+        }
       }
     },
     "entries": {
@@ -699,6 +729,26 @@
         "category": "Category",
         "defaultUnit": "Sold by",
         "submit": "Create it and bind the row"
+      },
+      "proposalBadge": {
+        "item": "A product was proposed",
+        "sibling": "Points at another row",
+        "none": "Nothing proposed"
+      },
+      "bulk": {
+        "accept": "Accept the proposals",
+        "accepting": "Accepting {{done}} of {{total}}",
+        "reject": "Reject them",
+        "rejecting": "Rejecting {{done}} of {{total}}",
+        "counts": "Accept {{count}} of {{selected}} picked. {{unproposed}} have no proposal and are left alone.",
+        "acceptConfirm": {
+          "heading": "Accept the proposals?",
+          "body": "Each of the {{count}} rows is bound to the product its own row proposed, and its prices are written. The {{unproposed}} with no proposal are left alone. This is one call per row and it can be stopped, but what has gone through stays through."
+        },
+        "rejectConfirm": {
+          "heading": "Reject {{count}} products?",
+          "body": "Each row stays as rejected, so no run asks about it again. You can find them later by asking for rejected rows."
+        }
       }
     },
     "imports": {
@@ -740,7 +790,7 @@
       "validUntil": "Valid until",
       "datesRequired": "The file carries a window, so both dates are needed. Change them freely; they apply to every product that states none of its own.",
       "import": "Start the import",
-      "importing": "Importing\u2026",
+      "importing": "Importing…",
       "started": "The import has started.",
       "openQueue": "Work through what it queued",
       "openRun": "Watch the run",
@@ -791,6 +841,23 @@
         "notBackfilled": "{{shop}} will point at {{location}}. This does not fill in what the last run skipped: the next run writes it.",
         "startRun": "Start a run",
         "submit": "Map it"
+      },
+      "bulk": {
+        "ignoring": "Ignoring {{done}} of {{total}}",
+        "unignoring": "Putting back {{done}} of {{total}}",
+        "unmapping": "Unmapping {{done}} of {{total}}",
+        "ignoreConfirm": {
+          "heading": "Ignore {{count}} shops?",
+          "body": "No run writes availability for an ignored shop. {{leftAlone}} of the picked rows are ignored already and are left alone."
+        },
+        "unignoreConfirm": {
+          "heading": "Put {{count}} shops back in the queue?",
+          "body": "Each one goes back to waiting to be mapped. {{leftAlone}} of the picked rows are not ignored and are left alone."
+        },
+        "unmapConfirm": {
+          "heading": "Unmap {{count}} shops?",
+          "body": "Each one stops pointing at a shop of ours, and the next run writes no availability for it until somebody maps it again. {{leftAlone}} of the picked rows are not mapped and are left alone."
+        }
       }
     }
   },
