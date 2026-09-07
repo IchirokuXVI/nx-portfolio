@@ -4,6 +4,7 @@ import {
   computed,
   inject,
   signal,
+  type Signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
@@ -82,6 +83,7 @@ interface PendingAction extends RowAction {
       [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
       [noteKey]="descriptor.note ?? null"
+      [noticeKeys]="notices()"
       [order]="store.order()"
       [rows]="rows()"
       [sorts]="descriptor.sorts ?? []"
@@ -228,6 +230,17 @@ export class ResourceListPage {
    */
   readonly namedActions: readonly NamedAction<ResourceRow>[] =
     this.descriptor.actions?.named?.() ?? [];
+
+  /**
+   * What this resource has to say about itself right now.
+   *
+   * A field for the reason {@link namedActions} is one: the factory calls
+   * `inject`, so it runs here and not inside a `computed` body. What it answers
+   * is itself a signal, so the sentences still follow whatever the resource is
+   * watching.
+   */
+  readonly notices: Signal<readonly string[]> =
+    this.descriptor.notices?.() ?? signal([]);
 
   /** Whether a row leads to a detail screen. The route factory agrees, by construction. */
   readonly canOpen = computed(() => hasDetailScreen(this.descriptor));

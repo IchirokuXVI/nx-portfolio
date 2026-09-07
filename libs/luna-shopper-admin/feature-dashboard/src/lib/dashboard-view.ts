@@ -240,6 +240,61 @@ export function waitingTiles(
   return tiles;
 }
 
+/**
+ * The postal codes nobody has answered yet (admin plan 0021, section 6).
+ *
+ * Not part of the dashboard document, and it does not want to be: it is one
+ * call, `postalCodeDiscovery.summary`, which the queue screen's banner reads as
+ * well. So it is built from the summary and appended to the tiles rather than
+ * folded into {@link waitingTiles}, which is pure over the document.
+ *
+ * It earns its place on that row because it is the only number on the screen
+ * that stands for people waiting on us. A run that failed is our problem. A
+ * postal code queued for three weeks is somebody opening velista and being told
+ * we have nothing for them.
+ *
+ * `null` where the summary did not answer, because a decoration that could not
+ * be read draws nothing rather than a zero that reads as good news.
+ */
+export function postalCodeWaitingTile(
+  summary: Wire.HarvestPostalCodeDiscoverySummaryView | null,
+  translate: Translate,
+  since: (value: string) => string
+): TileView | null {
+  if (summary === null) {
+    return null;
+  }
+
+  // The failures and the oldest wait are what turn a count into a decision, and
+  // neither is worth a tile of its own: a queue of three with one failure that
+  // has waited a month is one situation rather than three.
+  const parts: string[] = [];
+  if (summary.failed > 0) {
+    parts.push(
+      translate('dashboard.waiting.postalCodesFailed', {
+        count: summary.failed,
+      })
+    );
+  }
+  if (summary.oldestQueuedAt !== null) {
+    parts.push(
+      translate('dashboard.waiting.postalCodesOldest', {
+        since: since(summary.oldestQueuedAt),
+      })
+    );
+  }
+
+  return {
+    ...waiting(
+      'postalCodes',
+      translate('dashboard.waiting.postalCodes'),
+      summary.queued,
+      ['/', HARVEST_SEGMENT, 'postal-codes']
+    ),
+    caption: parts.length === 0 ? null : parts.join(' · '),
+  };
+}
+
 function waiting(
   key: string,
   label: string,

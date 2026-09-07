@@ -16,8 +16,16 @@ describe('harvestRoutes', () => {
     expect(branch.path).toBe(HARVEST_SEGMENT);
   });
 
+  /**
+   * `toStrictEqual`, and the difference matters here.
+   *
+   * `toEqual` treats a trailing `undefined` as absent, so a branch with children
+   * and no component of its own would slip past this list unnoticed. Admin plan
+   * 0021 adds exactly such a branch, and it is named below rather than allowed
+   * to disappear.
+   */
   it('has a screen for each subject', () => {
-    expect(children.map((route) => route.component)).toEqual([
+    expect(children.map((route) => route.component)).toStrictEqual([
       undefined,
       RunsPage,
       RunPage,
@@ -26,6 +34,26 @@ describe('harvestRoutes', () => {
       ImportUploadPage,
       ShopsQueuePage,
       SourcesPage,
+      // The postal codes resource: a branch of generated routes rather than one
+      // component (admin plan 0021).
+      undefined,
+    ]);
+  });
+
+  /**
+   * The one resource in this section (admin plan 0021).
+   *
+   * Its three routes come from its descriptor, so what is asserted is that the
+   * branch is here and carries them, not the shape `resourceRoutes` chose.
+   */
+  it('mounts the postal codes resource under the harvester', () => {
+    const branch = children.find((route) => route.path === 'postal-codes');
+
+    expect(branch).toBeDefined();
+    expect((branch?.children ?? []).map((route) => route.path)).toEqual([
+      '',
+      'new',
+      ':id',
     ]);
   });
 

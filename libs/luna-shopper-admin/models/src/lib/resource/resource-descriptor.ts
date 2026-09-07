@@ -1,4 +1,4 @@
-import type { Type } from '@angular/core';
+import type { Signal, Type } from '@angular/core';
 import type {
   EnumOption,
   FieldDescriptor,
@@ -254,6 +254,25 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * reading.
    */
   readonly formNote?: string;
+  /**
+   * Sentences the list has to say **right now**, as translation keys.
+   *
+   * {@link note} is what a resource always says, so it is a constant. This is
+   * what one says sometimes, so it is a signal and it is built in an injection
+   * context the way {@link gateway} is: a resource that only has something to
+   * say when a service answered a certain way has to read that service.
+   *
+   * Admin plan 0021 is what it exists for, and it needs two of them on one
+   * screen. A cluster with `HARVEST_ENABLED` false queues postal codes that
+   * nothing ever drains, and an operator watching a row sit at `QUEUED` for a
+   * week deserves to be told why. A decoration that comes from a second service
+   * can fail on its own, and a blank column with no sentence beside it reads as
+   * "nobody is waiting" rather than "we could not find out".
+   *
+   * Empty is the ordinary case, and a resource that never has anything extra to
+   * say declares none of this.
+   */
+  notices?(): Signal<readonly string[]>;
   readonly filters?: readonly FilterDescriptor[];
   /**
    * Filter parameters this list cannot be read without.

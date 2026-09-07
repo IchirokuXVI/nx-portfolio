@@ -63,6 +63,10 @@ export interface RowAction {
       <p class="note">{{ note | rokuT }}</p>
     }
 
+    @for (notice of noticeKeys(); track notice) {
+      <p class="notice" role="status">{{ notice | rokuT }}</p>
+    }
+
     @if (filters().length > 0 || sorts().length > 0) {
       <lib-resource-filters
         (filterChange)="filterChange.emit($event)"
@@ -343,6 +347,17 @@ export interface RowAction {
       color: var(--admin-ink-muted);
     }
 
+    /* A notice is something that is true today rather than always, so it is not
+       muted the way a permanent explanation is. A tinted box takes the wash and
+       the wash's ink, which is the rule the tokens file states. */
+    .notice {
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-status-attention);
+      border-radius: var(--admin-radius);
+      background: var(--admin-status-attention-wash);
+      color: var(--admin-status-attention-on-wash);
+    }
+
     .title.plain {
       font-weight: 600;
       color: var(--admin-ink);
@@ -471,6 +486,14 @@ export class ResourceList {
   readonly canOpen = input(true);
   /** A sentence above the list, as a key. For a screen whose shape needs explaining. */
   readonly noteKey = input<string | null>(null);
+  /**
+   * Sentences that are true right now, as keys, under the note.
+   *
+   * The note explains the screen and never changes. These say what the screen
+   * has just found out: that nothing is draining the queue it is showing, or
+   * that a column could not be filled in. Empty is the ordinary case.
+   */
+  readonly noticeKeys = input<readonly string[]>([]);
   readonly namedActions = input<readonly NamedAction<ResourceRow>[]>([]);
   /** The row something is happening to, so its controls stop taking clicks. */
   readonly busyRowId = input<string | null>(null);

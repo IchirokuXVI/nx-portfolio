@@ -6,6 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
@@ -295,10 +296,24 @@ type Place = Wire.HarvestDiscoveredPlaceView;
 })
 export class PlacesQueuePage {
   private readonly _service = inject(HARVEST_SERVICE);
+  private readonly _route = inject(ActivatedRoute);
 
   readonly shell = inject(HarvestShell);
 
   readonly supermarketId = signal('');
+
+  /**
+   * The postal code this queue was opened on, from the URL, or `''`.
+   *
+   * The postal code detail page links here filtered to one code (admin plan
+   * 0021, section 5), which backend plan 0097 section 9 added the filter for.
+   * Read once from the snapshot rather than watched: nothing on this screen
+   * changes it, and arriving with a different one is a fresh navigation.
+   */
+  readonly postalCode =
+    this._route.snapshot.queryParamMap.get('postalCode') ?? '';
+  private readonly _country =
+    this._route.snapshot.queryParamMap.get('country') ?? '';
 
   /** The bulk action waiting for an answer, or null when none is. */
   readonly pending = signal<PendingBulk | null>(null);
@@ -312,7 +327,12 @@ export class PlacesQueuePage {
         // Only the undecided ones. An imported or rejected place is not a
         // question any more, and a queue that offered it again would be asking
         // an operator to answer their own earlier answer.
-        const page = await this._service.listPlaces({ status: 'NEW', cursor });
+        const page = await this._service.listPlaces({
+          status: 'NEW',
+          cursor,
+          country: this._country === '' ? undefined : this._country,
+          postalCode: this.postalCode === '' ? undefined : this.postalCode,
+        });
         this.shell.observeReachable();
         return page;
       } catch (error) {

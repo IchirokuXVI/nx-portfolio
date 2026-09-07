@@ -231,11 +231,23 @@ describe('DashboardPage with a block that did not answer', () => {
     ).toBeNull();
   });
 
+  /**
+   * The postal code tile survives a missing harvest block, and that is right.
+   *
+   * It is not in the document at all (admin plan 0021, section 6): it is one
+   * call of its own, and a call that answered is a number worth showing whatever
+   * the dashboard route managed to assemble.
+   */
   it('keeps the numbers of every block that did answer', async () => {
     const fixture = await render(dashboardSeedWithout('harvest'));
     const keys = fixture.componentInstance.waiting().map((tile) => tile.key);
 
-    expect(keys).toEqual(['memberships', 'stale', 'loginFailures']);
+    expect(keys).toEqual([
+      'memberships',
+      'stale',
+      'loginFailures',
+      'postalCodes',
+    ]);
   });
 
   /** One notice per missing block, never two of the same on one page. */
@@ -251,9 +263,12 @@ describe('DashboardPage with a block that did not answer', () => {
       'dashboard.down.core',
       'dashboard.down.catalog',
     ]);
-    expect(fixture.componentInstance.waiting()).toEqual([]);
+    // The postal code tile is the one thing left, because it is the one number
+    // on this row that does not come out of the document.
+    expect(fixture.componentInstance.waiting().map((tile) => tile.key)).toEqual(
+      ['postalCodes']
+    );
     expect(fixture.componentInstance.activity()).toEqual([]);
-    expect(tiles(fixture)).toEqual([]);
   });
 });
 
