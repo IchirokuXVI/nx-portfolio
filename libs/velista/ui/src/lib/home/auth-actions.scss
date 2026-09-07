@@ -31,6 +31,22 @@
   font-size: var(--app-icon-md);
 }
 
+// Quiet, not disabled (plan 0071 D5). The control still takes the press and still
+// takes focus, so the ring and the cursor stay exactly as they are: the only thing
+// this says is that pressing it will explain rather than act.
+.held {
+  opacity: 0.5;
+}
+
+.held-message {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-align: center;
+  text-wrap: pretty;
+}
+
 .primary {
   background: var(--app-action-bg);
   color: var(--app-action-fg);

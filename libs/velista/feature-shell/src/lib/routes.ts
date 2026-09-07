@@ -7,7 +7,11 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
 import { BasketSocket, BasketStore } from '@portfolio/velista/data-access';
-import { SHEET_SEGMENT, sheetFallGuard } from '@portfolio/velista/platform';
+import {
+  RENDERS_WHILE_CONNECTING,
+  SHEET_SEGMENT,
+  sheetFallGuard,
+} from '@portfolio/velista/platform';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
   anonymousOnlyGuard,
@@ -877,6 +881,21 @@ export const AppShellRoutes: Route[] = [
             // Last, and the only empty path here. See the note on `children` above.
             path: '',
             canActivate: [anonymousOnlyGuard],
+            // **The one route that draws before the backend has answered** (plan 0071
+            // D4). Every other screen in this app needs the backend to say anything at
+            // all, so `AppLayout` holds the outlet closed until it has; this one is a
+            // designed page about what the product is, and holding it back would put a
+            // waiting screen in front of the app's front door, which is precisely the
+            // screen that must appear at once.
+            //
+            // The actions on it are held rather than the page being withheld, which is
+            // `AuthActions.held` and is the other half of D4.
+            //
+            // Angular's default `emptyOnly` data inheritance is what keeps this from
+            // spreading downwards: the two entry sheets below carry their own `data`,
+            // so neither inherits it and a deep link into one waits like anything else.
+            // That is the behaviour we want, because those screens create a group.
+            data: { [RENDERS_WHILE_CONNECTING]: true },
             loadComponent: () =>
               import('@portfolio/velista/feature-landing').then(
                 (m) => m.LandingPage

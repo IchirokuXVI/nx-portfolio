@@ -14,6 +14,7 @@ import {
 } from '@portfolio/velista/platform';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from './api-url';
+import { anonymous } from './auth/http-context';
 import { hasResponse } from './errors';
 
 /**
@@ -91,11 +92,17 @@ export class ConnectionRecovery {
    * The endpoint is unversioned and unguarded
    * (`libs/luna-shopper/platform/src/lib/health/health.module.ts:64`), so this costs
    * nothing and needs no token.
+   *
+   * It is sent with `SKIP_AUTH` for the reason `StartupProbe` is (plan 0071 D10):
+   * without it the interceptor refreshes the token first, so asking whether the
+   * backend is back costs two serial round trips, the first of which is a refresh
+   * sent at the exact moment the backend is least likely to answer.
    */
   async probe(): Promise<boolean> {
     try {
       await firstValueFrom(
         this._http.get(this._urls.gateway('/health/ready'), {
+          context: anonymous('connection-probe'),
           responseType: 'text',
         })
       );

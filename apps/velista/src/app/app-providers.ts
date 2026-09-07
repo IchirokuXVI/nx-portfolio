@@ -40,6 +40,7 @@ import {
   ShopApi,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
+  StartupProbe,
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
@@ -260,6 +261,19 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // was simply never constructed. `ENVIRONMENT_INITIALIZER` runs when the injector it
   // is declared on is created, which is true in both the mounted and standalone cases.
   provideEnvironmentInitializer(() => void inject(ConnectionRecovery)),
+
+  // Ask whether the backend is there, before the app acts on the answer (plan 0071).
+  // A listener again, and started here for the same reason as every other one on this
+  // list: nothing injects it, so without this line nothing would construct it and the
+  // app would go back to finding out it has no backend from whichever request the
+  // user's first tap happened to send.
+  //
+  // Deliberately **not** an app initializer, and not only for the injector reason above:
+  // waiting on the answer would delay the landing page too, which is precisely the
+  // screen that must appear at once. The gate is a cover decided during rendering, so
+  // the app starts, the router runs, and the locale guard settles the language while
+  // this is in flight (plan 0071 D2).
+  provideEnvironmentInitializer(() => void inject(StartupProbe)),
 
   // Start the update schedule (plan 0034, section 4). A listener again, and started
   // the same way and for the same reason: nothing injects it, so without this line

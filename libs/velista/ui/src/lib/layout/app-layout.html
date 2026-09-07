@@ -3,7 +3,28 @@
   plans. Until then this is just the frame every route renders into.
 -->
 <main class="app-main">
-  <router-outlet></router-outlet>
+  @if (rendersNow()) {
+    <router-outlet></router-outlet>
+  } @else {
+    <!--
+      The startup gate (plan 0071 D3). The outlet is **not created** while the app is
+      waiting for its first answer from the backend, rather than being covered: a page
+      constructed behind a screen runs its resolvers and sends its requests on behalf
+      of somebody who has just been told to wait, and on the landing page one of those
+      taps creates an account.
+
+      Landing is the one route that draws through this, and it says so itself in route
+      data rather than being named here.
+    -->
+    <lib-startup-screen
+      (retry)="retryConnection()"
+      [connecting]="'startup.connecting' | rokuT"
+      [retryLabel]="'startup.slow.retry' | rokuT"
+      [slow]="startupSlow()"
+      [slowBody]="'startup.slow.body' | rokuT"
+      [slowTitle]="'startup.slow.title' | rokuT"
+    />
+  }
 </main>
 
 @if (offline()) {
@@ -12,6 +33,9 @@
     here and not in the home page (plan 0003, section 3.1). Rendered over the outlet
     rather than instead of it, so the page behind keeps its scroll position and its
     component state for when the reload is deferred by an open dialog.
+
+    The opposite choice from the startup screen above, and deliberately so: here the
+    page below is already alive and worth preserving, and there it does not exist yet.
   -->
   <lib-connection-lost (reload)="reloadNow()" />
 }

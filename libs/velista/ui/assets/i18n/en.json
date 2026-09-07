@@ -137,6 +137,18 @@
       "reload": "Reload now"
     }
   },
+  "startup": {
+    "connecting": "Connecting",
+    "slow": {
+      "title": "This is taking longer than usual",
+      "body": "velista cannot reach the server yet. Keep waiting, or try again.",
+      "retry": "Try again"
+    },
+    "actions": {
+      "connecting": "Connecting. This will work in a moment.",
+      "slow": "velista cannot reach the server. Try again in a moment."
+    }
+  },
   "auth": {
     "back": "Back",
     "signIn": {

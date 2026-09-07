@@ -119,3 +119,79 @@ export class ErrorState {
 export class ConnectionLost {
   readonly reload = output<void>();
 }
+
+/**
+ * The seconds before the app knows whether it can reach the backend (plan 0071).
+ *
+ * The fourth whole screen state, and the one that comes first: the app used to start
+ * on a guess that it was online, draw a page, fire its requests and only then discover
+ * it had no backend, which reads as the app breaking rather than as the app waiting.
+ * `AppLayout` renders this **instead of** the outlet rather than over it, so the page
+ * behind is never constructed and its resolvers never run on behalf of somebody who
+ * has been told to wait (D3). `ConnectionLost` above is the opposite case and stays an
+ * overlay, because there the page below is already alive and worth preserving.
+ *
+ * ## There is no spinner, and that is the design
+ *
+ * A stalled spinner is the most common way an app says "I have frozen" when what it
+ * means is "I am waiting". After three seconds this says the true thing instead, in
+ * words, and offers a way to act on it.
+ *
+ * Being the only content in the outlet's place, nothing behind it is reachable by tab,
+ * so it needs no focus trap, which is the bug the overlay version of this would have
+ * had. Both messages live in one `role="status"` region, which announces politely
+ * rather than interrupting, and the three second change is text in place: it moves no
+ * focus.
+ *
+ * Its copy arrives as inputs like every other panel here, so this library still reads
+ * no keys of its own.
+ */
+@Component({
+  selector: 'lib-startup-screen',
+  imports: [BrandMark],
+  template: `
+    <div class="blocking">
+      <div class="panel">
+        <lib-brand-mark class="mark" />
+
+        <div aria-live="polite" class="status" role="status">
+          @if (slow()) {
+            <h2 class="title">{{ slowTitle() }}</h2>
+            <p class="body">{{ slowBody() }}</p>
+          } @else {
+            <p class="body">{{ connecting() }}</p>
+          }
+        </div>
+
+        @if (slow()) {
+          <button (click)="retry.emit()" class="action quiet" type="button">
+            {{ retryLabel() }}
+          </button>
+        }
+      </div>
+    </div>
+  `,
+  styleUrl: './state-panels.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class StartupScreen {
+  /** The one line shown while the wait is still ordinary. */
+  readonly connecting = input.required<string>();
+
+  /** The escape text and its button, which appear together or not at all. */
+  readonly slowTitle = input.required<string>();
+  readonly slowBody = input.required<string>();
+  readonly retryLabel = input.required<string>();
+
+  /**
+   * Whether the wait has gone on long enough to say so.
+   *
+   * Wall clock from the app starting rather than from the current attempt, which is
+   * `BackendReadiness.slow()`'s whole argument (D8): a per attempt timer resets on
+   * every retry, so this sentence would arrive late or never on exactly the connection
+   * that needs it.
+   */
+  readonly slow = input(false);
+
+  readonly retry = output<void>();
+}
