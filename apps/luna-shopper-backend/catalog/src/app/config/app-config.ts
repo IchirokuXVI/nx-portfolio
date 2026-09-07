@@ -6,6 +6,7 @@ import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 // far.
 import {
   DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
+  POSTAL_CODE_DERIVE_MAX_METRES_VAR,
   postalCodeDeriveMaxMetres,
 } from '@portfolio/luna-shopper/postal-codes';
 import * as Joi from 'joi';
@@ -40,7 +41,7 @@ export const LOG_LEVELS = [
 
 export const catalogValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3004),
-  POSTAL_CODE_DERIVE_MAX_METRES: Joi.number()
+  [POSTAL_CODE_DERIVE_MAX_METRES_VAR]: Joi.number()
     .positive()
     .default(DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES),
   NATS_URL: Joi.string().required(),
@@ -105,6 +106,8 @@ export const catalogConfiguration = registerAs(
     ),
     serviceActorIds: parseActorIds(process.env.SERVICE_ACTOR_IDS),
     logLevel: process.env.LOG_LEVEL as CatalogConfig['logLevel'],
-    postalCodeDeriveMaxMetres: postalCodeDeriveMaxMetres(),
+    postalCodeDeriveMaxMetres: postalCodeDeriveMaxMetres(
+      process.env[POSTAL_CODE_DERIVE_MAX_METRES_VAR]
+    ),
   })
 );

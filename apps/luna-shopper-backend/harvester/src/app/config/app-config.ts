@@ -2,6 +2,7 @@ import { registerAs } from '@nestjs/config';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import {
   DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
+  POSTAL_CODE_DERIVE_MAX_METRES_VAR,
   postalCodeDeriveMaxMetres,
 } from '@portfolio/luna-shopper/postal-codes';
 import * as Joi from 'joi';
@@ -103,7 +104,7 @@ export const harvesterValidationSchema = Joi.object({
    * cannot disagree about which code they are in. A deployment that tightens it
    * sets one variable in both services.
    */
-  POSTAL_CODE_DERIVE_MAX_METRES: Joi.number()
+  [POSTAL_CODE_DERIVE_MAX_METRES_VAR]: Joi.number()
     .positive()
     .default(DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES),
 
@@ -190,7 +191,9 @@ export const harvesterConfiguration = registerAs(
     discoveryPollSeconds: Number(
       process.env.HARVEST_DISCOVERY_POLL_SECONDS ?? 60
     ),
-    postalCodeDeriveMaxMetres: postalCodeDeriveMaxMetres(),
+    postalCodeDeriveMaxMetres: postalCodeDeriveMaxMetres(
+      process.env[POSTAL_CODE_DERIVE_MAX_METRES_VAR]
+    ),
     mercadonaBaseUrl: optional(process.env.MERCADONA_BASE_URL),
     overpassUrl: optional(process.env.OVERPASS_URL),
     nominatimUrl: optional(process.env.NOMINATIM_URL),
