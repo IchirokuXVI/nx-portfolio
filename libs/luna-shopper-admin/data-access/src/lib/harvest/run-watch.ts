@@ -19,14 +19,16 @@ import { HARVEST_SERVICE } from './harvest-service';
 /**
  * How often a watched run is read again.
  *
- * Backlog `0001` section 6.6's own phasing is "every couple of seconds", and two
- * is the number that phrase names. A full catalog discovery is eighteen minutes,
- * so this is roughly five hundred reads of one small row over a run, against a
- * gateway on the same machine as the operator. The cost of going slower is that
- * an abort looks like it did nothing for several seconds, which is the moment an
- * operator is most likely to press it again.
+ * Backlog `0001` section 6.6's own phrasing is "every couple of seconds", and
+ * the first build read that as two, which put roughly five hundred reads of one
+ * small row behind a single eighteen minute catalog discovery. Six was chosen
+ * over it as the point where the counters still move while somebody watches
+ * them, at a third of the requests. The interval can afford the slack because
+ * the actions an operator actually waits on do not wait for it: an abort and a
+ * revert both apply from their own reply, so the interval paces nothing but the
+ * passive counters and the finalization that follows an abort.
  */
-export const RUN_POLL_INTERVAL_MS = 2_000;
+export const RUN_POLL_INTERVAL_MS = 6_000;
 
 /**
  * One run, kept current by polling (plan 0006, section 2).
@@ -42,7 +44,7 @@ export const RUN_POLL_INTERVAL_MS = 2_000;
  *   stopped when it goes away.
  * - **Only while the tab is visible.** The same `document.visibilityState` gate
  *   `0003` uses for the keepalive, for the same reason: a backgrounded tab
- *   polling a route every two seconds for eighteen minutes is a request nobody
+ *   polling a route every few seconds for eighteen minutes is a request nobody
  *   is reading the answer to.
  * - **Never after a terminal status.** A finished run cannot change, so the
  *   first terminal read is the last read.
@@ -155,7 +157,7 @@ export class RunWatch {
    * Ask the run to stop.
    *
    * The answer is the run as the abort left it, so the screen updates from the
-   * reply rather than waiting up to two seconds for the next poll to notice. The
+   * reply rather than waiting out the interval for the next poll to notice. The
    * poll carries on afterwards, because the abort is graceful: the run flushes
    * what it has and finalizes, so the status the button produced is not
    * necessarily the last one.
