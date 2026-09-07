@@ -36,6 +36,7 @@ import {
   MembershipApi,
   REALTIME_CLIENT,
   RealtimeSocket,
+  SessionValidation,
   SHOP_SERVICE,
   ShopApi,
   SHOPPING_PROFILE_SERVICE,
@@ -274,6 +275,13 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // the app starts, the router runs, and the locale guard settles the language while
   // this is in flight (plan 0071 D2).
   provideEnvironmentInitializer(() => void inject(StartupProbe)),
+
+  // Prove the stored session names an account that still exists, once the probe
+  // above has found a backend to ask (its class comment holds the why). A listener
+  // again: nothing injects it, so without this line a deleted account's pair would
+  // sit in storage forever, booting every load into a signed-in app whose every
+  // request fails, with nothing that ever clears it.
+  provideEnvironmentInitializer(() => void inject(SessionValidation)),
 
   // Start the update schedule (plan 0034, section 4). A listener again, and started
   // the same way and for the same reason: nothing injects it, so without this line
