@@ -18,9 +18,28 @@
  */
 export const DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES = 5_000;
 
+/**
+ * The environment this library happens to be running in, read without naming
+ * `process`.
+ *
+ * This entry point is reachable from the browser: `@portfolio/velista/models`
+ * re-exports the GeoNames attribution from it, so velista and the shell compile
+ * every file here under an Angular tsconfig that carries no node types. A bare
+ * `process.env` therefore type checked in this library, which declares them,
+ * and failed both Angular builds with TS2591. Going through `globalThis` keeps
+ * one expression that is correct in a service and absent in a browser, which is
+ * what the default argument already meant.
+ */
+function environment(): Record<string, string | undefined> {
+  const host = globalThis as {
+    process?: { env?: Record<string, string | undefined> };
+  };
+  return host.process?.env ?? {};
+}
+
 /** The configured bound, or the default. Zero and nonsense both fall back. */
 export function postalCodeDeriveMaxMetres(
-  raw: string | undefined = process.env['POSTAL_CODE_DERIVE_MAX_METRES']
+  raw: string | undefined = environment()['POSTAL_CODE_DERIVE_MAX_METRES']
 ): number {
   const value = Number(raw);
   return Number.isFinite(value) && value > 0
