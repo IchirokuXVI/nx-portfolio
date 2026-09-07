@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   AdminBasketsController,
+  AdminListLinesController,
   AdminListsController,
+  AdminMembershipsController,
   AdminZonesController,
 } from './admin-core.controller';
 import {
@@ -58,20 +60,28 @@ function propertiesOf(schema: string): string[] {
   return Object.keys(found.properties ?? {});
 }
 
-/** Section 9, verbatim. Sixteen routes, and these are they. */
+/**
+ * Section 9, verbatim. Sixteen routes, and these are they.
+ *
+ * Two of them moved in admin plan 0017 and are listed where they moved to. The
+ * two collections were addressed under their parent, which meant neither could
+ * be read until the parent was named, so each is now a flat path taking its
+ * parent as an optional filter. Every route that addresses **one** row is
+ * untouched: a membership's address is genuinely the pair.
+ */
 const ADDED: ReadonlyArray<readonly [string, string]> = [
   ['patch', '/v1/admin/users/{id}'],
   ['patch', '/v1/admin/zones/{id}'],
   ['post', '/v1/admin/zones/{id}/deletion-mark'],
   ['delete', '/v1/admin/zones/{id}/deletion-mark'],
-  ['get', '/v1/admin/zones/{id}/members'],
+  ['get', '/v1/admin/memberships'],
   ['get', '/v1/admin/zones/{id}/members/{membershipId}'],
   ['patch', '/v1/admin/zones/{id}/members/{membershipId}'],
   ['post', '/v1/admin/zones/{id}/members/{membershipId}/approve'],
   ['post', '/v1/admin/zones/{id}/members/{membershipId}/reject'],
   ['patch', '/v1/admin/lists/{id}'],
   ['delete', '/v1/admin/lists/{id}'],
-  ['get', '/v1/admin/lists/{id}/lines'],
+  ['get', '/v1/admin/list-lines'],
   ['get', '/v1/admin/lists/{id}/lines/{lineId}'],
   ['patch', '/v1/admin/lists/{id}/lines/{lineId}'],
   ['post', '/v1/admin/lists/{id}/lines/{lineId}/approval'],
@@ -97,7 +107,9 @@ describe('an operator can change a row (plan 0077)', () => {
     it.each([
       ['AdminUsersController', AdminUsersController],
       ['AdminZonesController', AdminZonesController],
+      ['AdminMembershipsController', AdminMembershipsController],
       ['AdminListsController', AdminListsController],
+      ['AdminListLinesController', AdminListLinesController],
       ['AdminBasketsController', AdminBasketsController],
       ['AdminAdminsController', AdminAdminsController],
     ] as ReadonlyArray<readonly [string, object]>)(
@@ -153,8 +165,19 @@ describe('an operator can change a row (plan 0077)', () => {
 
     it('offers no way to create a list line', () => {
       // `createdByUserId` is not nullable and an operator is not a user, so a
-      // created line would be attributed to nobody (section 6.4).
+      // created line would be attributed to nobody (section 6.4). Neither the
+      // collection that moved nor the path it moved from creates one.
       expect(operation('post', '/v1/admin/lists/{id}/lines')).toBeUndefined();
+      expect(operation('post', '/v1/admin/list-lines')).toBeUndefined();
+    });
+
+    /**
+     * Admin plan 0017: the collections the flat routes replaced are gone, not
+     * kept beside them. Two ways to ask one question is the shape that drifts.
+     */
+    it('answers each collection at one path and not two', () => {
+      expect(operation('get', '/v1/admin/zones/{id}/members')).toBeUndefined();
+      expect(operation('get', '/v1/admin/lists/{id}/lines')).toBeUndefined();
     });
 
     it('leaves baskets read only, in full', () => {

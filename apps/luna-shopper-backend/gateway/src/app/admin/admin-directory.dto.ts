@@ -141,6 +141,35 @@ export class ListAdminZonesQueryDto extends PageQueryDto {
 }
 
 /** Shopping lists, by the zone they are in or the person who created them. */
+/**
+ * The zone filter on the membership collection (admin plan 0017).
+ *
+ * Optional, and that is the whole point of the route: an operator looking for
+ * one person's memberships does not know the households yet. Absent means every
+ * zone's, grouped by the zone they are in.
+ */
+export class ListAdminMembershipsQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The household to narrow to. Absent lists memberships from every zone.',
+  })
+  @IsOptional()
+  @IsUUID()
+  zoneId?: string;
+}
+
+/** The list filter on the line collection, optional for the same reason. */
+export class ListAdminListLinesQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'The list to narrow to. Absent lists lines from every list.',
+  })
+  @IsOptional()
+  @IsUUID()
+  listId?: string;
+}
+
 export class ListAdminListsQueryDto extends PageQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

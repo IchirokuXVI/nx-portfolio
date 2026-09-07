@@ -42,13 +42,20 @@ interface ZoneCursor {
 }
 
 /**
- * Where a page of memberships left off: **oldest** first, ties broken by id.
+ * Where a page of memberships left off: the zone, then **oldest** first, ties
+ * broken by id.
  *
- * The opposite direction from a zone page, and deliberately: the zone detail read
- * already lists its membership oldest first, so paging it the other way would put
- * one membership in two places depending on which screen fetched it.
+ * The direction is the opposite of a zone page, and deliberately: the zone
+ * detail read already lists its membership oldest first, so paging it the other
+ * way would put one membership in two places depending on which screen fetched
+ * it.
+ *
+ * The zone leads because the collection reads across zones when no zone is
+ * named (admin plan 0017, section 3.1). Inside one zone that first key is
+ * constant, so a scoped read pages exactly as it did before it was there.
  */
 interface MembershipCursor {
+  zone: string;
   value: string;
   id: string;
 }
@@ -223,7 +230,7 @@ export class AdminZoneService {
       ...toZoneRow(zone, approved, lists.length),
       joinCode: zone.joinCode,
       config: zone.config ?? {},
-      members: members.map(toMemberView),
+      members: members.map((member) => toMemberView(member, zone.name)),
       lists: lists.map(toZoneListView),
     };
   }
@@ -292,32 +299,47 @@ export class AdminZoneService {
   }
 
   /**
-   * A page of one zone's memberships (plan 0077, section 9).
+   * A page of memberships, from one zone or from every zone (plan 0077, section
+   * 9, widened by admin plan 0017).
    *
    * The zone detail read keeps its embedded `members` array, unchanged: the zone
    * screen renders its membership without a second call. This collection exists
-   * for the screens that edit one membership, which address a row directly rather
-   * than through its parent.
+   * for the screens that edit one membership, which address a row directly
+   * rather than through its parent.
    *
-   * Ordered oldest first, which is the order the detail read already uses, so a
-   * membership does not move between the two views of it.
+   * **`zoneId` is a filter and not an address.** An operator looking for one
+   * person's memberships does not know which households they are in, which is
+   * why they opened this screen, so a read with no zone lists every zone's.
+   * Ordered by the zone first and then oldest first, which inside one zone is
+   * the order the detail read already uses, so a membership does not move
+   * between the two views of it and a scoped page is what it always was.
+   *
+   * `requireZone` runs only when a zone is named: with none there is no parent
+   * to prove exists, and an unknown one is still a 404 rather than an empty
+   * page.
    */
   async listMemberships(
     req: ListAdminMembershipsRequest
   ): Promise<AdminMembershipPage> {
     await this.gate.requireAdmin(req);
-    await this.requireZone(req.zoneId);
+    if (req.zoneId !== undefined) {
+      await this.requireZone(req.zoneId);
+    }
 
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as MembershipCursor | undefined;
     const qb = this.memberships
       .createQueryBuilder('m')
-      .where('m."zoneId" = :zoneId', { zoneId: req.zoneId })
-      .orderBy('m."createdAt"', 'ASC')
+      .orderBy('m."zoneId"', 'ASC')
+      .addOrderBy('m."createdAt"', 'ASC')
       .addOrderBy('m.id', 'ASC')
       .take(limit + 1);
+    if (req.zoneId !== undefined) {
+      qb.andWhere('m."zoneId" = :zoneId', { zoneId: req.zoneId });
+    }
     if (cursor) {
-      qb.andWhere('(m."createdAt", m.id) > (:cv, :cid)', {
+      qb.andWhere('(m."zoneId", m."createdAt", m.id) > (:cz, :cv, :cid)', {
+        cz: cursor.zone,
         cv: cursor.value,
         cid: cursor.id,
       });
@@ -327,12 +349,17 @@ export class AdminZoneService {
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
+    const names = await this.zoneNames(page.map((row) => row.zoneId));
 
     return {
-      items: page.map(toMemberView),
+      items: page.map((row) => toMemberView(row, names.get(row.zoneId) ?? '')),
       nextCursor:
         hasMore && last
-          ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
+          ? encodeCursor({
+              zone: last.zoneId,
+              value: last.createdAt.toISOString(),
+              id: last.id,
+            })
           : null,
     };
   }
@@ -342,8 +369,10 @@ export class AdminZoneService {
     req: GetAdminMembershipRequest
   ): Promise<AdminZoneMemberView> {
     await this.gate.requireAdmin(req);
+    const zone = await this.requireZone(req.zoneId);
     return toMemberView(
-      await this.requireMembership(req.zoneId, req.membershipId)
+      await this.requireMembership(req.zoneId, req.membershipId),
+      zone.name
     );
   }
 
@@ -506,6 +535,28 @@ export class AdminZoneService {
     return membership;
   }
 
+  /**
+   * The names of the zones a page of rows belongs to.
+   *
+   * A second query rather than a join, for the reason
+   * {@link countApprovedMembers} is one: the rows come back as entities, so
+   * `createdAt` is a `Date` and the cursor is built from it rather than from a
+   * raw column whose case a driver may not preserve.
+   */
+  private async zoneNames(zoneIds: string[]): Promise<Map<string, string>> {
+    const unique = [...new Set(zoneIds)];
+    if (!unique.length) {
+      return new Map();
+    }
+    const rows = await this.zones
+      .createQueryBuilder('z')
+      .select('z.id', 'id')
+      .addSelect('z.name', 'name')
+      .where('z.id IN (:...ids)', { ids: unique })
+      .getRawMany<{ id: string; name: string }>();
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
   private async countApprovedMembers(
     zoneIds: string[]
   ): Promise<Map<string, number>> {
@@ -556,9 +607,14 @@ function toZoneRow(
   };
 }
 
-function toMemberView(membership: ZoneMembership): AdminZoneMemberView {
+function toMemberView(
+  membership: ZoneMembership,
+  zoneName: string
+): AdminZoneMemberView {
   return {
     membershipId: membership.id,
+    zoneId: membership.zoneId,
+    zoneName,
     userId: membership.userId,
     username: membership.username,
     role: membership.role,

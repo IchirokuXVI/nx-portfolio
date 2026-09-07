@@ -4,7 +4,10 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { ADMIN_API_CONFIG } from '@portfolio/luna-shopper-admin/models';
+import {
+  ADMIN_API_CONFIG,
+  compositeIdOf,
+} from '@portfolio/luna-shopper-admin/models';
 import { ApiUrl } from '../api-url';
 import { ResourceApiGateways } from './resource-api';
 
@@ -537,5 +540,109 @@ describe('a nested resource', () => {
 
     const page = await listing;
     expect(page.items[0]['zoneId']).toBe('z-from-the-server');
+  });
+});
+
+/**
+ * A flat collection whose rows are still addressed by a pair (admin plan 0017).
+ *
+ * Memberships and list lines. The collection takes its parent as an ordinary
+ * optional query parameter, so it reads with nothing set, and the rows come
+ * back carrying the parent themselves. That is what keeps every row openable
+ * with no filter to stamp from: the address is `(zoneId, membershipId)`, and
+ * both halves are on the row.
+ */
+describe('a flat collection with a nested member', () => {
+  let gateways: ResourceApiGateways;
+  let http: HttpTestingController;
+
+  const ZONE = 'z-1';
+  const MEMBERSHIP = 'm-1';
+  const MEMBERSHIPS = `${GATEWAY}/v1/admin/memberships`;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: ADMIN_API_CONFIG, useValue: { gatewayBaseUrl: GATEWAY } },
+        ApiUrl,
+        ResourceApiGateways,
+      ],
+    });
+
+    gateways = TestBed.inject(ResourceApiGateways);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  const gateway = () =>
+    gateways.for({
+      path: '/v1/admin/memberships',
+      memberPath: (id) => {
+        const [zoneId, membershipId] = id.split('~');
+        return zoneId === undefined || membershipId === undefined
+          ? null
+          : `/v1/admin/zones/${zoneId}/members/${membershipId}`;
+      },
+      key: ['zoneId', 'membershipId'],
+      idField: 'membershipId',
+    });
+
+  /**
+   * The whole point of the plan: no zone named is a real read, and the rows it
+   * answers with are openable because each one says which zone it is in.
+   */
+  it('reads with no parent named, and keeps every row addressable', async () => {
+    const listing = gateway().list({});
+    const request = http.expectOne(
+      (candidate) => candidate.url === MEMBERSHIPS
+    );
+
+    expect(request.request.method).toBe('GET');
+    expect(request.request.params.has('zoneId')).toBe(false);
+
+    request.flush({
+      items: [
+        { membershipId: MEMBERSHIP, zoneId: ZONE, zoneName: 'Kitchen' },
+        { membershipId: 'm-2', zoneId: 'z-2', zoneName: 'Allotment' },
+      ],
+      nextCursor: null,
+    });
+
+    const page = await listing;
+    expect(page.items.map((row) => row['zoneId'])).toEqual([ZONE, 'z-2']);
+    expect(compositeIdOf(page.items[1], ['zoneId', 'membershipId'])).toBe(
+      'z-2~m-2'
+    );
+  });
+
+  /** With a zone named it is the same read, narrowed by a query parameter. */
+  it('sends the parent as an ordinary filter when one is chosen', async () => {
+    const listing = gateway().list({ filters: { zoneId: ZONE } });
+    const request = http.expectOne(
+      (candidate) => candidate.url === MEMBERSHIPS
+    );
+
+    expect(request.request.params.get('zoneId')).toBe(ZONE);
+
+    request.flush({ items: [], nextCursor: null });
+    await listing;
+  });
+
+  /** One row is still under its zone, because there is no flat route to one. */
+  it('opens a row at the nested member URL', async () => {
+    const reading = gateway().read(`${ZONE}~${MEMBERSHIP}`);
+    const request = http.expectOne(
+      (candidate) =>
+        candidate.url ===
+        `${GATEWAY}/v1/admin/zones/${ZONE}/members/${MEMBERSHIP}`
+    );
+
+    expect(request.request.method).toBe('GET');
+    request.flush({ membershipId: MEMBERSHIP, zoneId: ZONE });
+
+    expect(await reading).toEqual({ membershipId: MEMBERSHIP, zoneId: ZONE });
   });
 });
