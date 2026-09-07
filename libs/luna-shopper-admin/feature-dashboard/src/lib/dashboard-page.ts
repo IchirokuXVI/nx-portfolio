@@ -683,7 +683,11 @@ export class DashboardPage {
       : null
   );
 
-  readonly errorKey = computed(() => gatewayErrorKey(this.store.failed()));
+  // Drawn only inside `store.empty()`, which the store reaches by failing. The
+  // fallback keeps the block from opening with a blank line if it ever does not.
+  readonly errorKey = computed(
+    () => gatewayErrorKey(this.store.failed()) ?? 'resource.error.unknown'
+  );
 
   /** Which blocks did not answer, in the order the sections draw them. */
   readonly missing = computed(() => {

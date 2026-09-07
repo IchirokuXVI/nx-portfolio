@@ -211,6 +211,39 @@ describe('the source shops queue', () => {
     expect(byHand?.matchedBy).toBe('MANUAL');
     expect(automatic?.mappedTo).toContain('Gran Capitán');
   });
+
+  /**
+   * A read that answered is not a failure, whatever it answered.
+   *
+   * `gatewayErrorKey` used to name the unknown failure for no failure at all,
+   * and this screen guards the banner on truthiness, so every chain drew "That
+   * did not work, and the server did not say why" over its own rows. It was
+   * loudest on a chain with no shops in the chosen state, where the banner and
+   * the empty sentence appeared together and contradicted each other.
+   */
+  it('says nothing went wrong when nothing went wrong', async () => {
+    const { page, fixture } = await opened();
+
+    expect(page.errorKey()).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'resource.error.unknown'
+    );
+  });
+
+  it('draws the empty state alone when the chain has no shop in that state', async () => {
+    const { page, fixture } = await opened();
+
+    page.chooseStatus({ target: { value: 'IGNORED' } } as unknown as Event);
+    await drain();
+    page.shops.set([]);
+    fixture.detectChanges();
+
+    expect(page.errorKey()).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('harvest.shops.empty');
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'resource.error.unknown'
+    );
+  });
 });
 
 describe('mapping a source shop', () => {

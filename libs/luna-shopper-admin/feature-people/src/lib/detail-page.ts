@@ -84,7 +84,9 @@ export abstract class DetailPage<T extends ResourceRow> {
     } catch (error) {
       this.row.set(null);
       this.errorKey.set(
-        gatewayErrorKey(error instanceof GatewayError ? error : null)
+        error instanceof GatewayError
+          ? gatewayErrorKey(error)
+          : 'resource.error.unknown'
       );
     } finally {
       this.loading.set(false);
@@ -140,7 +142,9 @@ export abstract class DetailPage<T extends ResourceRow> {
     } catch (error) {
       this.asking.set(null);
       this.actionErrorKey.set(
-        gatewayErrorKey(error instanceof GatewayError ? error : null)
+        error instanceof GatewayError
+          ? gatewayErrorKey(error)
+          : 'resource.error.unknown'
       );
     } finally {
       this.busy.set(false);

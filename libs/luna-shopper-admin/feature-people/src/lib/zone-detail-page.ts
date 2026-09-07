@@ -455,7 +455,9 @@ export class ZoneDetailPage extends DetailPage<ZoneRow> {
       await this.load();
     } catch (error) {
       this.actionErrorKey.set(
-        gatewayErrorKey(error instanceof GatewayError ? error : null)
+        error instanceof GatewayError
+          ? gatewayErrorKey(error)
+          : 'resource.error.unknown'
       );
     } finally {
       this.busy.set(false);

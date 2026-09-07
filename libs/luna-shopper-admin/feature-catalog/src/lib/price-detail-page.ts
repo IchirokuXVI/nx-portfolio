@@ -400,7 +400,9 @@ export class PriceDetailPage {
       this._effectiveRow.set(null);
       this._historyRows.set([]);
       this.errorKey.set(
-        gatewayErrorKey(error instanceof GatewayError ? error : null)
+        error instanceof GatewayError
+          ? gatewayErrorKey(error)
+          : 'resource.error.unknown'
       );
     } finally {
       this.loading.set(false);
@@ -439,7 +441,9 @@ export class PriceDetailPage {
     } catch (error) {
       this.removing.set(null);
       this.actionErrorKey.set(
-        gatewayErrorKey(error instanceof GatewayError ? error : null)
+        error instanceof GatewayError
+          ? gatewayErrorKey(error)
+          : 'resource.error.unknown'
       );
     } finally {
       this.busy.set(false);
