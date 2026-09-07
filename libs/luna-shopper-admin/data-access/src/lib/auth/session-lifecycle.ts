@@ -13,6 +13,7 @@ import {
   type AdminSession,
   type SignInFailure,
 } from '@portfolio/luna-shopper-admin/models';
+import { DeploymentStore } from '../deployment/deployment-store';
 import { ServerReachability } from '../health/server-reachability';
 import { SessionStorage } from './session-storage';
 import { SessionStore } from './session-store';
@@ -55,6 +56,32 @@ const ACTIVITY_RESOLUTION_MS = 1000;
  * promise everybody waiting on a password shares, and the two signals the
  * chrome renders.
  *
+ * ## The server that asks for no password
+ *
+ * A development deployment issues a token to anybody who asks (plan 0002,
+ * section 5), so an expired one there is not a session that ended: it is a
+ * token that can be replaced without asking anybody anything. This class does
+ * exactly that, and the overlay never appears.
+ *
+ * **The cover would be protecting nothing.** Its whole purpose is that somebody
+ * looking at an unattended screen cannot get back into it without the password.
+ * On a server that hands out a session for free, they can: a reload is enough.
+ * So the overlay there costs a click and buys no security, and the warning that
+ * precedes it announces a loss that cannot happen.
+ *
+ * It is still the server that decides this, never a build time flag, and the
+ * fallback is the overlay: a replacement that is refused raises it, with the
+ * button that `feature-auth` draws in place of the field. That is what a server
+ * changing its mind between two calls looks like, and it is the one thing that
+ * can tell somebody. There is no automatic retry behind it, because the button
+ * is one, and a cover that lifted itself while an operator was reading why it
+ * was there would be worse than the click.
+ *
+ * An outage is not this case and never reaches it. The token outlives a gateway
+ * restart, which is what a development backend does all day: the secret is the
+ * same and the same JWT still validates, so nothing expires. What expires is an
+ * idle session, and a server that is up answers the replacement.
+ *
  * **One `setTimeout`, never a poll.** Each decision names the instant to ask
  * again at. The exception a poll would exist for, a page the OS froze and thawed
  * with its timers unfired, is answered better by `visibilitychange`: coming back
@@ -68,8 +95,12 @@ export class SessionLifecycle {
   private readonly _document = inject(DOCUMENT);
   private readonly _reachability = inject(ServerReachability);
   private readonly _storage = inject(SessionStorage);
+  private readonly _deployments = inject(DeploymentStore);
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
+
+  /** The passwordless replacement that may be in flight, single-flight. */
+  private _replacing: Promise<boolean> | null = null;
   private _started = false;
   private _unwatch: (() => void) | null = null;
 
@@ -235,7 +266,11 @@ export class SessionLifecycle {
       return true;
     }
 
-    this.lock();
+    // Not `lock` directly: a server that asks for no password replaces the
+    // token instead, and this caller waits for that exactly as it would wait
+    // for a password. The push happens before anything awaited can resolve, so
+    // a replacement that succeeds immediately still finds this waiter.
+    this.expire();
     return new Promise<boolean>((resolve) => this._waiting.push(resolve));
   }
 
@@ -347,7 +382,10 @@ export class SessionLifecycle {
         void this.renew(session.expiresAt.getTime());
         return;
       case 'warn':
-        this._warning.set(true);
+        // Nothing to warn about on a server that replaces the token by itself.
+        // The sentence says the session is about to end and that anything the
+        // operator does keeps it, and neither half is true there.
+        this._warning.set(!this.passwordless());
         this.sleepUntil(decision.at);
         return;
       case 'wait':
@@ -356,7 +394,7 @@ export class SessionLifecycle {
         return;
       case 'expire':
         this._warning.set(false);
-        this.lock();
+        this.expire();
         return;
     }
   }
@@ -394,6 +432,75 @@ export class SessionLifecycle {
     );
   }
 
+  /**
+   * The token is dead. Ask for a password, or take a new one without asking.
+   *
+   * The username is captured here rather than in {@link lock}, because a
+   * refused replacement clears the held session on its way out and the overlay
+   * it falls back to must not lose the name it is asking about.
+   */
+  private expire(): void {
+    if (this._locked()) {
+      return;
+    }
+
+    this._lockedUsername.set(this._sessions.session()?.username ?? '');
+
+    if (this.passwordless()) {
+      this.stopTimer();
+      this._warning.set(false);
+      void this.replaceWithoutPassword();
+      return;
+    }
+
+    this.lock();
+  }
+
+  /**
+   * Take a fresh token from a server that asks for no password.
+   *
+   * Single-flight, because every request that 401s reaches this through
+   * {@link recover} and one dead token must cost one sign in. On success every
+   * waiter is released and the app is exactly where it was, which is the same
+   * outcome a typed password produces and reached without a screen.
+   *
+   * The one thing left uncovered is a request that never settles: the token is
+   * dead, the overlay is not up, and everything that 401s queues behind this
+   * promise rather than failing. That is the locked state without the picture
+   * of it, on a development server, and it ends when the request does.
+   */
+  private replaceWithoutPassword(): Promise<boolean> {
+    this._replacing ??= this._sessions
+      .signInForDevelopment()
+      .then((failure) => {
+        this._replacing = null;
+
+        if (failure !== null) {
+          // The server changed its mind between two calls. The overlay is the
+          // only thing that can say so, and on this deployment it offers a button
+          // rather than a field.
+          this.lock();
+          return false;
+        }
+
+        // Nobody interacted, and the clock is moved anyway. Left alone the
+        // fresh token would count as idle from birth and expire at a fifth of
+        // its life, replacing itself five times as often for a tab nobody is
+        // looking at. One renewal is the cheaper way to be wrong.
+        this._lastActivityAt = Date.now();
+        this.settle(true);
+        this.evaluate();
+        return true;
+      });
+
+    return this._replacing;
+  }
+
+  /** Whether this server hands out a session with no password. */
+  private passwordless(): boolean {
+    return this._deployments.devAutologin();
+  }
+
   /** Raise the overlay, once. */
   private lock(): void {
     if (this._locked()) {
@@ -401,7 +508,12 @@ export class SessionLifecycle {
     }
     this.stopTimer();
     this._warning.set(false);
-    this._lockedUsername.set(this._sessions.session()?.username ?? '');
+    // Only when there is one. A refused replacement has already cleared the
+    // session, and the name was captured before it was attempted.
+    const username = this._sessions.session()?.username;
+    if (username !== undefined) {
+      this._lockedUsername.set(username);
+    }
     this._locked.set(true);
   }
 
