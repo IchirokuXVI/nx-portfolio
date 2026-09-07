@@ -159,3 +159,133 @@ describe('the discovered places queue', () => {
     });
   });
 });
+
+/**
+ * Plan 0020. The places queue is the interesting one: the question it asks is
+ * whether two rows are one shop, and a list is a better answer to that than one
+ * row at a time is. The near duplicates panel stays in review for the cases
+ * where it is not, and the screen still opens in review.
+ */
+describe('the discovered places queue as a list', () => {
+  async function listed() {
+    const rendered = await render(PlacesQueuePage);
+    const toggles =
+      rendered.fixture.nativeElement.querySelectorAll('.views button');
+    toggles[1].click();
+    await drain();
+    rendered.fixture.detectChanges();
+    return { ...rendered, page: rendered.fixture.componentInstance };
+  }
+
+  it('opens one at a time, and reaches the list through the toggle', async () => {
+    const { fixture } = await render(PlacesQueuePage);
+
+    expect(fixture.nativeElement.querySelector('.rows')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.subject')).not.toBeNull();
+  });
+
+  it('draws one row per place, with a checkbox and the review view own columns', async () => {
+    const { fixture, page } = await listed();
+
+    const rows = fixture.nativeElement.querySelectorAll('.rows li');
+    expect(rows).toHaveLength(page.queue.items().length);
+    expect(rows[0].querySelector('input[type="checkbox"]')).not.toBeNull();
+    expect(rows[0].textContent).toContain(
+      page.queue.items()[0].name ?? page.queue.items()[0].externalRef
+    );
+  });
+
+  it('opens a clicked row one at a time, with that row in front', async () => {
+    const { fixture, page } = await listed();
+    const second = page.queue.items()[1];
+
+    fixture.nativeElement.querySelectorAll('.rows .cells')[1].click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.queue.current()?.id).toBe(second.id);
+    expect(fixture.nativeElement.querySelector('.subject')).not.toBeNull();
+  });
+
+  /**
+   * Section 4. Both calls take everything they need off the row, so both are
+   * offered; nothing else here is.
+   */
+  it('offers exactly import and reject', async () => {
+    const { fixture } = await listed();
+
+    const labels = [
+      ...fixture.nativeElement.querySelectorAll('.bulk button'),
+    ].map((node: Element) => node.textContent?.trim());
+
+    expect(labels).toEqual([
+      'harvest.places.bulk.import',
+      'harvest.places.bulk.reject',
+    ]);
+  });
+
+  it('names the action and the exact count in the confirmation', async () => {
+    const { fixture, page } = await listed();
+
+    page.queue.selectLoaded();
+    page.askReject();
+    fixture.detectChanges();
+
+    expect(page.pending()).toMatchObject({
+      headingKey: 'harvest.places.bulk.rejectConfirm.heading',
+      confirmKey: 'harvest.places.bulk.reject',
+      count: page.queue.selectedCount(),
+    });
+  });
+
+  it('writes nothing until the confirmation is answered', async () => {
+    const { fixture, page, calls } = await listed();
+
+    page.queue.selectLoaded();
+    page.askReject();
+    fixture.detectChanges();
+    await drain();
+
+    expect(named(calls, 'rejectPlace')).toHaveLength(0);
+  });
+
+  /**
+   * The empty body is section 4's rule: catalog resolves the chain from the
+   * place's own brand, so a chain typed for one place is never applied to the
+   * other hundred and ninety nine.
+   */
+  it('imports every selected place with no chain named', async () => {
+    const { page, calls } = await listed();
+
+    page.supermarketId.set('chain-7');
+    page.queue.selectLoaded();
+    const wanted = page.queue.items().map((place) => place.id);
+    page.askImport();
+    page.go(page.pending()!);
+    await drain();
+
+    expect(named(calls, 'importPlace')).toHaveLength(wanted.length);
+    for (const args of named(calls, 'importPlace')) {
+      expect(args[1]).toEqual({});
+    }
+    expect(page.queue.items()).toEqual([]);
+    expect(page.report()?.succeeded).toBe(wanted.length);
+  });
+
+  it('rejects every selected place and takes them out of the queue', async () => {
+    const { page, calls } = await listed();
+
+    page.queue.selectLoaded();
+    const wanted = page.queue.items().map((place) => place.id);
+    page.askReject();
+    page.go(page.pending()!);
+    await drain();
+
+    expect(
+      named(calls, 'rejectPlace')
+        .map((args) => args[0])
+        .sort()
+    ).toEqual([...wanted].sort());
+    expect(page.queue.items()).toEqual([]);
+  });
+});
