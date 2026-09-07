@@ -144,6 +144,25 @@ describe('ProfileStore', () => {
       expect(store.profile()).not.toBeNull();
       await second;
     });
+
+    it('shares one in-flight read between concurrent callers', async () => {
+      // `SessionValidation` asks when the startup gate lifts, and the dashboard asks
+      // as the page it uncovered renders, on the same tick. One request serves both.
+      const service = fakeAccount();
+      const { store } = setUp(service);
+
+      await Promise.all([store.load(), store.load()]);
+
+      expect(
+        service.calls.filter((c) => c.method === 'getProfile')
+      ).toHaveLength(1);
+
+      // A later call is a new read, which is what the retry line stands on.
+      await store.load();
+      expect(
+        service.calls.filter((c) => c.method === 'getProfile')
+      ).toHaveLength(2);
+    });
   });
 
   /**
