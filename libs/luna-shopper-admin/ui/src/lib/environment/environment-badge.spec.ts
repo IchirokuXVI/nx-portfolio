@@ -34,12 +34,13 @@ const text = (fixture: ComponentFixture<unknown>, selector: string) =>
 
 describe('EnvironmentBadge', () => {
   it.each<Deployment>(['production', 'staging', 'development'])(
-    'names the %s deployment',
+    'names the %s deployment, with no line about where the answer came from',
     async (deployment) => {
       const fixture = await render(deployment);
 
       expect(text(fixture, '.name')).toBe(`environment.${deployment}`);
-      expect(text(fixture, '.source')).toBe('environment.sourcedFromApi');
+      // The sourcing sentence is gone on purpose (admin plan 0024, section 1).
+      expect(fixture.nativeElement.querySelector('.source')).toBeNull();
     }
   );
 
@@ -53,7 +54,8 @@ describe('EnvironmentBadge', () => {
   /**
    * The one that matters most. A gateway that would not say must produce "unknown"
    * and an explanation, never a default that happens to be wrong in the one
-   * direction this feature exists to make impossible.
+   * direction this feature exists to make impossible. The explanation stays while
+   * the sourcing line went, because it describes a job that is not done yet.
    */
   it('says unknown, and says why, when the deployment could not be established', async () => {
     const fixture = await render(null);

@@ -17,8 +17,7 @@
     "development": "Development",
     "unknown": "Unknown",
     "checking": "Checking which environment answered…",
-    "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does.",
-    "sourcedFromApi": "Reported by the gateway this app is talking to, not by the build."
+    "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does."
   },
   "signIn": {
     "heading": "Sign in",
@@ -646,7 +645,7 @@
       "import": "Add to the catalog",
       "reject": "Not a shop we want",
       "why": "Nothing in the catalog matched this: neither its OpenStreetMap reference nor the same brand nearby. It is being offered rather than created.",
-      "supermarketId": "Chain identifier to file it under (optional)",
+      "supermarketId": "Chain to file it under (optional)",
       "near": {
         "heading": "Others of the same brand nearby",
         "none": "Nothing else of this brand is near it in the queue."
@@ -671,7 +670,8 @@
         "rejecting": "Rejecting {{done}} of {{total}}",
         "importConfirm": {
           "heading": "Add {{count}} places to the catalog?",
-          "body": "No chain is named for any of them, so the catalog works each one out from the brand the place carries. A place whose brand it cannot place is refused and named afterwards, and the rest still go through."
+          "body": "No chain is named for any of them, so the catalog works each one out from the brand the place carries. A place whose brand it cannot place is refused and named afterwards, and the rest still go through.",
+          "bodyChained": "Every one of them is filed under {{chain}}, whatever brand it carries. Clear the chain first if the catalog should work each place out from its own brand."
         },
         "rejectConfirm": {
           "heading": "Reject {{count}} places?",
