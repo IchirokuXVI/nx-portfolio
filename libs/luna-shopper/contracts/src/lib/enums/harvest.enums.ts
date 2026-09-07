@@ -229,4 +229,14 @@ export enum PostalCodeDiscoveryStatus {
   DONE = 'DONE',
   /** Out of attempts, left with its reason for backlog 0009 to show somebody. */
   FAILED = 'FAILED',
+  /**
+   * An operator added the code and asked for no run yet (plan 0097, section
+   * 6.1).
+   *
+   * A fifth value rather than a reuse of one of the four above, because every
+   * one of those is a claim about a run and this row has had none: `DONE` would
+   * say we looked and `FAILED` would say we tried. `claimNext` reads `QUEUED`
+   * alone, so a parked row is invisible to the worker until somebody queues it.
+   */
+  PARKED = 'PARKED',
 }

@@ -2,9 +2,11 @@ import {
   distanceMetres,
   type LatLon,
 } from '@portfolio/luna-shopper/osm-places';
-import { boundingBox } from '@portfolio/luna-shopper/postal-codes';
+import {
+  boundingBox,
+  postalCodeDeriveMaxMetres,
+} from '@portfolio/luna-shopper/postal-codes';
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { postalCodeDeriveMaxMetres } from '../../config/postal-code-derivation';
 
 /** One location the backfill may be able to answer. */
 interface LocationRow {

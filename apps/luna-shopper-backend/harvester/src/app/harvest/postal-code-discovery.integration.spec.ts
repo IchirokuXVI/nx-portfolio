@@ -237,4 +237,94 @@ describeIntegration('postal code discovery queue (real Postgres)', () => {
     expect(requeued.status).toBe('QUEUED');
     expect(await store.claimNext()).not.toBeNull();
   });
+
+  // --- What an operator may do to a row (plan 0097, section 6) --------------
+
+  it('parks a code an operator added without asking for a run', async () => {
+    await store.add(COUNTRY, '00011', false);
+    expect((await load('00011')).status).toBe('PARKED');
+
+    // A fifth status rather than a reuse of one of the four, because every one
+    // of those is a claim about a run and this row has had none. `claimNext`
+    // reads QUEUED alone, so the worker never sees it.
+    expect(await store.claimNext()).toBeNull();
+  });
+
+  it('makes a parked row claimable once somebody queues it', async () => {
+    await store.add(COUNTRY, '00012', false);
+    await store.requeue(await load('00012'));
+
+    const claimed = await claim();
+    expect(claimed.postalCode).toBe('00012');
+  });
+
+  it('writes over a DONE row the cooldown refuses', async () => {
+    await store.enqueue(COUNTRY, '00013', 30);
+    const claimed = await claim();
+    await store.markDone(claimed.id, '00000000-0000-4000-a000-000000000001');
+
+    // The announcement path is unchanged: a thousand users in one postcode
+    // still cost one run a month between them.
+    expect(await store.enqueue(COUNTRY, '00013', 30)).toBe(false);
+    expect((await load('00013')).status).toBe('DONE');
+
+    // The operator's button ignores the cooldown, which is the whole reason it
+    // exists: somebody who has just imported a chain wants to look again today.
+    await store.requeue(await load('00013'));
+    const requeued = await load('00013');
+    expect(requeued.status).toBe('QUEUED');
+    expect(requeued.attempts).toBe(0);
+    expect(requeued.error).toBeNull();
+  });
+
+  it('keeps requestedAt where it was when a row is requeued', async () => {
+    await store.enqueue(COUNTRY, '00014', 30);
+    const before = await load('00014');
+    await store.requeue(before);
+
+    // It records when the code was first asked about, and the claim orders by
+    // it, so a requeued row keeps its place rather than going to the back.
+    expect((await load('00014')).requestedAt).toEqual(before.requestedAt);
+  });
+
+  it('hides a dismissed row from the working set and keeps it in the table', async () => {
+    await store.enqueue(COUNTRY, '00015', 30);
+    const row = await load('00015');
+    await store.setDismissed(row.id, true);
+
+    expect((await load('00015')).dismissed).toBe(true);
+    const working = await repository.count({
+      where: { country: COUNTRY, dismissed: false },
+    });
+    expect(working).toBe(0);
+    // Nothing is deleted: the row is the record that we looked and what
+    // happened, and a requeue brings it back.
+    await store.requeue(await load('00015'));
+    expect((await load('00015')).dismissed).toBe(false);
+  });
+
+  it('keeps the name a run gave the code, and only for a code it holds', async () => {
+    await store.enqueue(COUNTRY, '00016', 30);
+    await store.recordPlaceName(COUNTRY, '00016', '00016, Nowhere');
+    expect((await load('00016')).placeName).toBe('00016, Nowhere');
+
+    // A run an admin spawned for a code nobody queued matches no row, which is
+    // normal rather than an error: the queue is demand driven and a run is not.
+    await expect(
+      store.recordPlaceName(COUNTRY, '00017', 'nobody asked')
+    ).resolves.toBeUndefined();
+  });
+
+  it('counts every status, including the ones nothing is in', async () => {
+    await store.enqueue(COUNTRY, '00018', 30);
+    await store.add(COUNTRY, '00019', false);
+
+    const { byStatus, oldestQueuedAt } = await store.summarize();
+
+    // The counts are over the whole table rather than this country's rows, so
+    // they are asserted as floors: another test's rows may be in there too.
+    expect(byStatus.QUEUED).toBeGreaterThanOrEqual(1);
+    expect(byStatus.PARKED).toBeGreaterThanOrEqual(1);
+    expect(oldestQueuedAt).toBeInstanceOf(Date);
+  });
 });

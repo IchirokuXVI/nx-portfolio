@@ -17,7 +17,10 @@ import {
   ADMIN_LIST_PATTERNS,
   ADMIN_MEMBERSHIP_PATTERNS,
   ADMIN_POSTAL_CODE_PATTERNS,
+  ADMIN_PROFILE_POSTAL_CODE_PATTERNS,
   ADMIN_ZONE_PATTERNS,
+  DEFAULT_POSTAL_CODE_COUNTRY,
+  POSTAL_CODE_PATTERNS,
   type AdminBasketDetailView,
   type AdminBasketPage,
   type AdminListDetailView,
@@ -34,9 +37,12 @@ import {
   type LineView,
   type ListView,
   type MembershipView,
+  type NearbyPostalCodesView,
+  type PostalCodeUsageListView,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
+import { DEFAULT_NEARBY_RADIUS_METRES } from '@portfolio/luna-shopper/postal-codes';
 import {
   ApiComposedResponse,
   ApiContractResponse,
@@ -49,6 +55,8 @@ import {
   ListAdminListsQueryDto,
   ListAdminPostalCodesQueryDto,
   ListAdminZonesQueryDto,
+  NearbyPostalCodesQueryDto,
+  PostalCodeUsageQueryDto,
 } from './admin-directory.dto';
 import {
   SetAdminLineApprovalDto,
@@ -692,6 +700,75 @@ export class AdminPostalCodesController {
         served: query.served,
         cursor: query.cursor,
         limit: query.limit,
+      }
+    );
+  }
+
+  /**
+   * The neighbours of one code (plan 0097, section 4).
+   *
+   * **This narrows what plan 0074 refused, and the reversal is written here
+   * rather than left implied by the route.** That plan declined to put a gateway
+   * route over `postalCode.nearby` because it would be "a geocoding service
+   * nobody asked for". What is added is not that: it is one admin gated route,
+   * behind the same guard as the listing above it, answering the neighbours of
+   * one code an operator is already looking at. `postalCode.nearest` stays
+   * service to service, because no screen asks it.
+   *
+   * The answer is centroid to centroid, so two adjacent codes whose centres sit
+   * further apart than the radius are neighbours in reality and not here. The
+   * contract says so, and the screen repeats it.
+   */
+  @Get(':postalCode/nearby')
+  @ApiContractResponse(POSTAL_CODE_PATTERNS.nearby)
+  @ApiProblemResponses({ body: true })
+  nearby(
+    @Param('postalCode') postalCode: string,
+    @Query() query: NearbyPostalCodesQueryDto
+  ): Promise<NearbyPostalCodesView> {
+    return this.nats.send<NearbyPostalCodesView>(POSTAL_CODE_PATTERNS.nearby, {
+      country: query.country ?? DEFAULT_POSTAL_CODE_COUNTRY,
+      postalCode,
+      radiusMetres: query.radiusMetres ?? DEFAULT_NEARBY_RADIUS_METRES,
+    });
+  }
+}
+
+/**
+ * How many profiles are waiting on a postal code (plan 0097, section 5).
+ *
+ * Core's, because core owns the answer: the code, its source and the suppressed
+ * flag are on `profile_postal_codes` and the owner is on `shopping_profiles`, so
+ * a distinct user count is one join inside one database and nothing crosses a
+ * service boundary.
+ *
+ * **A page of codes in one call**, because the queue screen decorates a page of
+ * rows and one call per row is a fan out. It is the shape
+ * {@link AdminUserNamesService} already uses to put usernames beside a page of
+ * zones, and it comes with plan 0074's rule: where the decoration fails, the
+ * screen renders the row without it and never fails the listing.
+ */
+@ApiTags('admin-core')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/profiles/postal-codes', version: '1' })
+export class AdminProfilePostalCodesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get('usage')
+  @ApiContractResponse(ADMIN_PROFILE_POSTAL_CODE_PATTERNS.usage)
+  @ApiProblemResponses({ body: true })
+  usage(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: PostalCodeUsageQueryDto
+  ): Promise<PostalCodeUsageListView> {
+    return this.nats.send<PostalCodeUsageListView>(
+      ADMIN_PROFILE_POSTAL_CODE_PATTERNS.usage,
+      {
+        ...adminCredential(admin),
+        country: query.country ?? DEFAULT_POSTAL_CODE_COUNTRY,
+        postalCodes: query.postalCodes,
       }
     );
   }

@@ -49,9 +49,13 @@ function client(
 describe('geocodePostalCode', () => {
   it('asks Nominatim for one result and returns the centre', async () => {
     const { fetchImpl, calls } = stubFetch([{ body: nominatim }]);
-    await expect(client(fetchImpl).geocodePostalCode('14013', 'es')).resolves.toEqual(
-      { lat: 37.8587, lon: -4.7863 }
-    );
+    await expect(
+      client(fetchImpl).geocodePostalCode('14013', 'es')
+    ).resolves.toEqual({
+      lat: 37.8587,
+      lon: -4.7863,
+      displayName: '14013, Córdoba, Andalucía, España',
+    });
     expect(calls[0].url).toContain('postalcode=14013');
     expect(calls[0].url).toContain('country=es');
     expect(calls[0].url).toContain('limit=1');

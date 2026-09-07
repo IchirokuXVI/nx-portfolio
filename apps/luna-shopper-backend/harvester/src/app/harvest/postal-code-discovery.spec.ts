@@ -6,8 +6,9 @@ import {
   type PostalCodeLocationCountsView,
 } from '@portfolio/luna-shopper/contracts';
 import { ForbiddenException } from '@portfolio/luna-shopper/platform';
+import type { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import type { PostalCodeDiscoveryRequest } from '../entities';
+import type { DiscoveredPlace, PostalCodeDiscoveryRequest } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import {
   ActiveRunExistsError,
@@ -44,6 +45,7 @@ function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
     discoveryCooldownDays: 30,
     discoveryMaxAttempts: 3,
     discoveryPollSeconds: 60,
+    postalCodeDeriveMaxMetres: 5000,
     mercadonaBaseUrl: undefined,
     overpassUrl: undefined,
     nominatimUrl: undefined,
@@ -65,6 +67,19 @@ function admin(): PlatformAdminService {
   } as unknown as PlatformAdminService;
 }
 
+/**
+ * A place repository that counts nothing.
+ *
+ * The enqueue half never reads it, and the listing's two grouped queries are
+ * asserted in their own describe below, where the rows are stated.
+ */
+function places(rows: unknown[][] = [[], []]): Repository<DiscoveredPlace> {
+  const answers = [...rows];
+  return {
+    query: jest.fn(async () => answers.shift() ?? []),
+  } as unknown as Repository<DiscoveredPlace>;
+}
+
 function row(
   overrides: Partial<PostalCodeDiscoveryRequest> = {}
 ): PostalCodeDiscoveryRequest {
@@ -80,6 +95,8 @@ function row(
     attempts: 1,
     runId: null,
     error: null,
+    placeName: null,
+    dismissed: false,
     createdAt: new Date('2026-09-01T09:00:00.000Z'),
     updatedAt: new Date('2026-09-01T09:00:00.000Z'),
     ...overrides,
@@ -101,6 +118,7 @@ describe('PostalCodeDiscoveryService (plan 0063)', () => {
     } as unknown as CatalogClient;
     const service = new PostalCodeDiscoveryService(
       store,
+      places(),
       catalog,
       admin(),
       configOf(config)
@@ -171,6 +189,7 @@ describe('PostalCodeDiscoveryService (plan 0063)', () => {
     } as unknown as CatalogClient;
     const service = new PostalCodeDiscoveryService(
       store,
+      places(),
       catalog,
       admin(),
       configOf(settings())

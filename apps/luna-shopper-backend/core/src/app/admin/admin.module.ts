@@ -7,6 +7,7 @@ import {
   GeneratedListLine,
   GeneratedListLineOrigin,
   ListLine,
+  ProfilePostalCode,
   ShoppingList,
   Zone,
   ZoneMembership,
@@ -14,6 +15,7 @@ import {
 import { ListsModule } from '../lists/lists.module';
 import { ZonesModule } from '../zones/zones.module';
 import { AdminListService } from './admin-list.service';
+import { AdminPostalCodeService } from './admin-postal-code.service';
 import { AdminZoneService } from './admin-zone.service';
 import { CoreAdminController } from './admin.controller';
 import { CoreDashboardService } from './dashboard.service';
@@ -44,6 +46,9 @@ import { CorePlatformAdminService } from './platform-admin.service';
       GeneratedList,
       GeneratedListLine,
       GeneratedListLineOrigin,
+      // Read only, and for counts alone: the demand behind a postal code (plan
+      // 0097, section 5).
+      ProfilePostalCode,
     ]),
     JwtModule.register({}),
     ZonesModule,
@@ -55,6 +60,7 @@ import { CorePlatformAdminService } from './platform-admin.service';
     CorePlatformAdminService,
     AdminZoneService,
     AdminListService,
+    AdminPostalCodeService,
     // The dashboard's core block (plan 0088), behind the same gate.
     CoreDashboardService,
   ],
