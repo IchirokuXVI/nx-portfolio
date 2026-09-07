@@ -891,9 +891,13 @@
       "lead": "One row per chain: which adapter fetches it, how hard, and whether it may be fetched at all. Workers and requests per second are the two settings that decide whether a crawl gets us blocked by a chain's storefront, so raise them one step at a time and watch what the failures count does.",
       "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
       "edit": "Change how it is fetched",
+      "new": "Add a chain source",
+      "create": "Create the source",
+      "exists": "That chain already has a source row. Change it in the list instead.",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "field": {
+        "chain": "Chain",
         "adapter": "Adapter",
         "workers": "Workers",
         "rate": "Requests per second",

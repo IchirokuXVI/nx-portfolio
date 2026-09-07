@@ -15,6 +15,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ChainNames } from './chain-names';
 import {
   applyControlBase,
   controlBaseProperties,
@@ -102,6 +103,15 @@ async function render() {
         },
       },
       DeploymentStore,
+      // The page asks this for the chain's name and shows the id where the
+      // answer is null, so one resolvable chain is enough to prove the wiring.
+      {
+        provide: ChainNames,
+        useValue: {
+          nameOf: (id: string) => (id === MERCADONA ? 'Mercadona' : id),
+          resolve: async () => undefined,
+        },
+      },
       // After the testing module, so this one wins.
       { provide: RokuTranslatorService, useValue: catalogueTranslator() },
     ],
@@ -144,6 +154,81 @@ describe('the chain sources screen, in English', () => {
     // Mercadona is seeded on and DEZA off, so both labels are on the screen.
     expect(text(fixture)).toContain('Enabled');
     expect(text(fixture)).toContain('Disabled');
+  });
+
+  /**
+   * The row is per chain and the chain's name belongs to catalog, so the page
+   * resolves it through {@link ChainNames} and a uuid on the screen means the
+   * lookup was never asked. A chain the lookup cannot name still shows its id,
+   * which is what the seeded rows this double does not know keep doing.
+   */
+  it('names the chain rather than printing its id', async () => {
+    const fixture = await render();
+
+    expect(text(fixture)).toContain('Mercadona');
+    expect(text(fixture)).not.toContain(MERCADONA);
+  });
+});
+
+describe('the chain sources screen, creating a row', () => {
+  const NEW_CHAIN = '99999999-9999-4999-8999-999999999999';
+
+  it('offers a create button, and the button opens the panel', async () => {
+    const fixture = await render();
+
+    const open: HTMLButtonElement =
+      fixture.nativeElement.querySelector('button.new');
+    expect(open).not.toBeNull();
+    expect(open.textContent).toContain('Add a chain source');
+
+    open.click();
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('lib-reference-picker')
+    ).not.toBeNull();
+    expect(text(fixture)).toContain('Create the source');
+  });
+
+  it('creates the row for the chosen chain and puts it first, disabled', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+
+    page.startCreate();
+    page.newChainId.set(NEW_CHAIN);
+    await page.create();
+    await drain();
+    fixture.detectChanges();
+
+    const [first] = page.sources();
+    expect(first.supermarketId).toBe(NEW_CHAIN);
+    // Created disabled, by the backend and on purpose: describing a chain and
+    // starting to fetch it are two decisions.
+    expect(first.enabled).toBe(false);
+    expect(page.creating()).toBe(false);
+  });
+
+  /**
+   * The backend route is an upsert, so a "create" for a chain that already has
+   * a row would silently rewrite it. The panel refuses instead: the button is
+   * disabled, the sentence says why, and calling through anyway writes nothing.
+   */
+  it('refuses a chain that already has a row', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+    const before = page.sources();
+
+    page.startCreate();
+    page.newChainId.set(MERCADONA);
+    fixture.detectChanges();
+
+    expect(text(fixture)).toContain('already has a source row');
+    const create: HTMLButtonElement =
+      fixture.nativeElement.querySelector('.controls .primary');
+    expect(create.disabled).toBe(true);
+
+    await page.create();
+    expect(page.sources()).toEqual(before);
   });
 });
 
