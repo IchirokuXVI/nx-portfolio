@@ -1,34 +1,34 @@
 # 0022 A section and the screens inside it
 
-The navigation is twenty two links in one wrapping row, and `0021` makes it twenty three. Every
-one of them is a peer of every other, so "Price policies" sits beside "Baskets" beside "Chain
-sources" with nothing to say that the first two are never opened in the same hour. An operator
-looking for the shops queue reads the whole row, because the row has no shape to skip through.
+The navigation is twenty three links in one wrapping row. Every one of them is a peer of every
+other, so "Price policies" sits beside "Baskets" beside "Chain sources" with nothing to say that
+the first two are never opened in the same hour. An operator looking for the shops queue reads
+the whole row, because the row has no shape to skip through.
 
 **This plan gives the navigation two levels.** Five sections on the first row, and on the second
-the screens inside whichever section the operator is in. It also splits the dashboard the same
-way: the screen the app opens to keeps the three things that are true of the whole system, and
-each section gets a dashboard of its own holding the numbers that belong to it.
+the screens inside whichever section the operator is in. A section is a real branch of the route
+table, so a screen's URL says which section it is in. It also splits the dashboard the same way:
+the screen the app opens to keeps the three things that are true of the whole system, and each
+section gets a dashboard of its own holding the numbers that belong to it.
 
 Depends on `0004` for the descriptor and the chrome, on `0006` for the harvester's hand written
-screens, and on `0016` for the dashboard it takes apart. It reads the same document `0016`
-reads, so **there is no backend work in this plan at all**: `GET /v1/admin/dashboard` already
-answers four blocks and a feed, and this puts each block on the screen that its section owns.
-
-`0021` is being built beside this. Section 8 is the whole of what the two owe each other.
+screens, on `0016` for the dashboard it takes apart, and on `0021` for the postal codes screen it
+moves into a section. It reads the same document `0016` reads, so **there is no backend work in
+this plan at all**: `GET /v1/admin/dashboard` already answers four blocks and a feed, and this
+puts each block on the screen that its section owns.
 
 ## 1. The five sections
 
-| Section    | Label     | Home        | Screens                                                                                                 |
-| ---------- | --------- | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `overview` | Overview  | `/`         | none                                                                                                    |
-| `catalog`  | Catalog   | `/catalog`  | Supermarkets, Shops, Price scopes, Products, Product groups, Prices, Price policies, Products in a shop |
-| `shoppers` | Shoppers  | `/shoppers` | Users, Zones, Memberships, Lists, List lines, Baskets                                                   |
-| `harvest`  | Harvester | `/harvest`  | Runs, Discovered places, Source products, Import a file, Source shops, Chain sources                    |
-| `admins`   | Admins    | `/admins`   | Admins                                                                                                  |
+| Section    | Label     | Segment    | Home        | Screens                                                                                                 |
+| ---------- | --------- | ---------- | ----------- | ------------------------------------------------------------------------------------------------------- |
+| `overview` | Overview  | none       | `/`         | none                                                                                                    |
+| `catalog`  | Catalog   | `catalog`  | `/catalog`  | Supermarkets, Shops, Price scopes, Products, Product groups, Prices, Price policies, Products in a shop |
+| `shoppers` | Shoppers  | `shoppers` | `/shoppers` | Users, Zones, Memberships, Lists, List lines, Baskets                                                   |
+| `harvest`  | Harvester | `harvest`  | `/harvest`  | Runs, Discovered places, Source products, Import a file, Source shops, Chain sources, Postal codes      |
+| `admins`   | Admins    | none       | `/admins`   | Admins                                                                                                  |
 
-Five is the number the first row can hold at a glance, and eight is the widest second row. Both
-fit on one line on a laptop, which is the only claim the split has to make good on.
+Five is the number the first row holds at a glance, and eight is the widest second row. Both fit
+on one line on a laptop, which is the only claim the split has to make good on.
 
 ### 1.1 Core is called Shoppers, and Auth is called Admins
 
@@ -48,78 +48,152 @@ are not used:
 
 **Admins** for the auth section by the same rule, and because the section is the admin account
 table and nothing else. The failed sign ins that auth also answers stay on the overview, where
-section 5 explains why.
+section 6 explains why.
 
 Both labels are one line each in `en.json` and the user can overrule either without touching
 anything else in this plan.
 
-### 1.2 The paths do not move
+### 1.2 The paths move, and two sections do not move at all
 
-A resource stays at `/items`, not `/catalog/items`. The section is a property of the link, not a
-prefix on the URL.
+A resource moves from `/items` to `/catalog/items`. The section is a branch of the route table,
+not a label sitting beside one.
 
-Moving them rewrites every link in the app that is built from a segment: `activityTarget`,
-every dashboard tile, every reference picker, `memberPath` on the two nested collections, the e2e
-suites, and `0021`'s `harvest/postal-codes` which is being written right now against the paths as
-they are. It also breaks every bookmark an operator has. What it buys is a URL that
-states its section, and nothing on the screen needs the URL to state it, because the app knows
-which section owns a screen from the same list it draws the navigation from.
+The alternative was a section that groups the navigation and leaves every path where it is. It is
+rejected on the reading it produces. An operator who lands on `/list-lines` from a link, a
+bookmark or the browser's own history cannot tell which of five sections drew that screen. The
+second row of the navigation becomes the only thing that says so, and it says so only while the
+tab is open. A URL is the one part of a screen that survives being sent to somebody, pasted into
+an issue, or reopened a week later.
 
-The harvester keeps the `harvest/` prefix it has, which it has for its own reason (`0006`) and
-not because it is a section. That the app is now mixed on this point is deliberate and stated
-here so nobody tidies it.
+The usual argument against moving is the cost of it. **There is no such cost here.** This app has
+one operator, they have said the bookmarks do not matter, and nothing outside the app links into
+it. Staging and production run the same app, and the only inbound link anybody has is the root.
 
-**A section home is a new path and must not collide with a resource segment.** `/catalog`,
-`/shoppers` and `/admins` collide with nothing today. `/admins` is the admins resource itself,
-which is the case section 4 covers: a section with one screen has no home of its own.
+Two of the five sections move nothing:
 
-## 2. How a screen says which section it is in
+- **Harvest** already owns `harvest/` and keeps it. `0006` gave it that prefix for its own
+  reasons, and this plan makes the reason general rather than particular to one section.
+- **Admins** has one screen, so a segment of its own puts the admins list at `/admins/admins`.
+  **A section with one screen has no segment**, and its link points straight at its only screen.
+  This is the same rule section 5 states about a section dashboard, from the same argument.
 
-Two optional fields and one list.
+So fourteen screens move: eight in the catalog and six in the shoppers section. Section 3 is the
+whole of what moving them touches.
+
+## 2. A section is a route branch
+
+`adminRoutes` today takes the resources, the hand written screens, and the home. It gains a shape
+that says which of those belong together:
 
 ```ts
-/** In `ShellLink` (ui) and in `ResourceDescriptor` (models). */
-readonly section?: string;
-```
-
-```ts
-/** In the app, beside `ADMIN_RESOURCES`. */
-export interface ShellSection {
+export interface AdminSection {
   readonly key: string;
-  /** A translation key. */
+  /** A translation key for the tab. */
   readonly label: string;
-  /** Where the section link goes. */
-  readonly home: string;
-  /** Whether `home` is matched exactly, per `AppShell`'s existing rule. */
-  readonly exact?: boolean;
+  /** The URL segment this section owns. Absent for a section with one screen. */
+  readonly segment?: string;
+  /** The screen at the section's own path. */
+  readonly home?: Type<unknown>;
+  /** Resources mounted under the segment, in navigation order. */
+  readonly resources?: readonly AnyResourceDescriptor[];
+  /** Hand written screens under the segment. */
+  readonly screens?: readonly Route[];
+  /** Navigation entries for those hand written screens. */
+  readonly links?: readonly ShellLink[];
 }
 
-export const ADMIN_SECTIONS: readonly ShellSection[] = [
-  /* the table in section 1 */
-];
+export function adminRoutes(sections: readonly AdminSection[], home?: Type<unknown>): Route[];
 ```
 
-The membership is on the screen and the order is in the app, because those are two different
-decisions with two different owners. A resource is declared in `feature-catalog`, and which
-section it belongs to is a fact about that resource that belongs beside it, which keeps
-`shell-links.ts`'s property intact: a screen and everything the navigation needs to draw it are
-added in one file. The order of the sections and what they are called is the app's, exactly as
-`ADMIN_RESOURCES`' order already is.
+A section builds one branch:
 
-**Optional in the type, required by a spec.** Making `section` required breaks every
-descriptor in every existing spec, which is a large diff to state a rule that a spec can state
-in four lines. `shell-sections.spec.ts` asserts, against the real `ADMIN_RESOURCES` and the real
-`SHELL_LINKS`:
+```ts
+{
+  path: section.segment ?? '',
+  children: [
+    ...(section.resources ?? []).flatMap(resourceRoutes),
+    ...(section.screens ?? []),
+    ...(section.home ? [{ path: '', pathMatch: 'full', component: section.home }] : []),
+  ],
+}
+```
 
-- Every descriptor and every link names a section.
-- Every section it names is declared in `ADMIN_SECTIONS`.
-- No section's `home` equals a resource's segment, unless that section has exactly one screen and
-  its home **is** that screen.
-- Every declared section has at least one screen or a home component of its own.
+`resourceRoutes` is unchanged, and that is the point: **a descriptor still knows only its own
+segment.** Where it is mounted is the section's business, exactly as `0021` already mounts
+`POSTAL_CODES` inside `harvestRoutes` and passes it through `resourceRoutes` untouched. That hand
+mount is the mechanism this plan makes general, so it stops being a special case and becomes how
+every resource is mounted.
 
-## 3. Drawing it
+`ADMIN_RESOURCES` and `SHELL_LINKS` are replaced by one `ADMIN_SECTIONS` in the app, holding the
+order, the labels, the segments and the members. The list stays the app's, for the reason
+`ResourceRegistry` already gives: it is the app that decides which screens exist.
 
-`AdminShellPage` keeps its job of putting the two lists together and gains one more: working out
+**Every mounted resource is registered.** `provideResources` is fed from the sections rather than
+from a second list, so a descriptor mounted in a section is in the registry. Today `POSTAL_CODES`
+is mounted and not registered, so a reference field pointing at postal codes finds nothing and has
+nothing to say about why. Nothing points at it yet, and the fix costs one line once the sections
+own both lists.
+
+`shell-sections.spec.ts` asserts, against the real `ADMIN_SECTIONS`:
+
+- Every section has at least one screen, counting its home.
+- A section with exactly one screen and no home has no segment.
+- No two sections share a segment, and no section's segment equals a resource segment mounted at
+  the root.
+- Every descriptor in the registry is mounted by exactly one section.
+
+## 3. Nothing builds a resource link from a segment
+
+Moving fourteen screens breaks every link that was built by hand from a resource's segment. There
+are seven such places today. The fix is the same one everywhere: **ask the registry where a
+resource lives**.
+
+```ts
+/** On `ResourceRegistry`. */
+pathOf(name: string): string[] | null;
+```
+
+It answers `['/', 'catalog', 'items']` for `items`, and `null` for a resource this app did not
+mount. The registry is the right owner because it is built from the same sections that declare
+the routes, so a path it answers is a path that exists. It already resolves a descriptor by name
+for the reference picker, and this is the same question asked about the URL instead of the rows.
+
+The seven places, and what each becomes:
+
+| Today                                                   | After                                     |
+| ------------------------------------------------------- | ----------------------------------------- |
+| `admin-shell-page.ts`, `` `/${descriptor.segment}` ``   | the registry, per section                 |
+| `zone-detail-page.ts`, `` `/${MEMBERSHIPS.segment}` ``  | `pathOf('memberships')`                   |
+| `list-detail-page.ts`, `` `/${LIST_LINES.segment}` ``   | `pathOf('list-lines')`                    |
+| `import-upload-page.ts`, `['/', 'price-scopes', 'new']` | `pathOf('price-scopes')`, then `'new'`    |
+| `dashboard-view.ts`, nine literal tile links            | a `PathOf` parameter, per section 7       |
+| `dashboard-page.ts`, the two harvester links            | unchanged, they use `HARVEST_SEGMENT`     |
+| `activity-target.ts`, its own `SEGMENTS` map            | the map keeps table to resource name only |
+
+The generic resource pages need nothing. `ResourceListPage` and `ResourceFormPage` build every hop
+with `relativeTo`, so a row link, a create link and the way back out of a form all follow the mount
+wherever it goes. That is fourteen screens' worth of navigation that moves for free, and it is
+why this change is seven places rather than seventy.
+
+**`activityTarget` gets better rather than only different.** Its `SEGMENTS` map is a second, hand
+written copy of the segment list, and it drifts silently the day a segment is renamed. After this
+it maps an audit table to a **resource name**, which is real knowledge that lives nowhere else
+(`shopping_lists` is the table and `lists` is the screen), and the path comes from the registry.
+It stays pure and takes the resolver as an argument, the way `dashboard-view.ts` already takes
+`Translate` and `NameChain`.
+
+A hand written screen keeps the constant pattern it has: `HARVEST_SEGMENT` from
+`harvest-paths.ts`, which every harvester link already builds from. The two sections that gain a
+segment export theirs the same way, for the same use.
+
+**One scan spec keeps it true.** `no-literal-resource-path.spec.ts`, in the spirit of velista's
+`no-unguarded-history-back.spec.ts`, reads the admin scope and the app and names any file that
+builds a router link from a bare resource segment. Without it the next screen written adds an
+eighth place by hand and nobody notices until a section moves again.
+
+## 4. Drawing it
+
+`AdminShellPage` keeps its job of putting the navigation together and gains one more: working out
 which section the current URL is in.
 
 ```ts
@@ -127,7 +201,7 @@ readonly sections = computed<readonly SectionView[]>(...)   // the first row
 readonly screens = computed<readonly ShellLink[]>(...)      // the second row
 ```
 
-The active section is the section of the longest link path that the current URL starts with. The
+The active section is the section whose link path is the longest prefix of the current URL. The
 longest, not the first, because `/harvest` and `/harvest/runs` are both prefixes of
 `/harvest/runs/abc` and only one of them is the screen. A URL matching no screen, which is the
 not found page, leaves both rows drawn and neither marked: the operator is somewhere the app does
@@ -135,15 +209,15 @@ not know about, and guessing a section for them is worse than admitting it.
 
 `AppShell` takes a second input, `screens`, and draws a second `nav` under the first when it is
 not empty. It reads them and knows nothing else, exactly as it does today with `links`. The
-existing `links` input becomes `sections`, and its exact matching rule moves onto `ShellSection`
-as `exact`, which is what `/` needs and only `/`.
+existing `links` input becomes `sections`, and its exact matching rule moves onto the section as
+`exact`, which is what `/` needs and only `/`.
 
 **A section with no second row draws no second row**, and the page does not shift under the
 operator when it appears: the second `nav` reserves its height. A row that pushes the page down
-by forty pixels on every third navigation is the sort of thing that makes a two level navigation
-feel worse than the flat one it replaced.
+by forty pixels on every third navigation makes a two level navigation feel worse than the flat
+one it replaced.
 
-### 3.1 On a phone
+### 4.1 On a phone
 
 `compact` already collapses the navigation behind one button. Open, it becomes the sections as a
 list, and the current section's screens indented under it. Only the current section expands: a
@@ -152,34 +226,30 @@ section taps it and gets its home.
 
 Following either level closes the menu, as today.
 
-### 3.2 A badge cannot hide inside a collapsed section
+### 4.2 A badge cannot hide inside a collapsed section
 
 `ShellLink.badge` exists and nothing sets one today (`0010` removed the last). The rule is stated
 now, before something sets one again: **a section's badge is the sum of its screens' badges**, and
 `null` only when every screen it holds answers `null`. A screen that answers `0` contributes `0`,
 which is the distinction `0010` section 4 drew and it survives the sum.
 
-Work waiting behind a link an operator can no longer see is the one way this plan can make the
-app worse. The sum is the answer to it.
+Work waiting behind a link an operator can no longer see is the one way this plan makes the app
+worse. The sum is the answer to it.
 
-## 4. Where a section link goes
+## 5. Where a section link goes
 
 To its home, which is either a dashboard of its own or, for a section with one screen, that
 screen.
 
-`adminRoutes` already takes an optional `home` for the empty path and already falls back to a
-redirect. Sections need the same idea one level down, so each of the three section homes is an
-ordinary route declared beside the screens it summarises, in the library that owns them:
-
-- `/catalog` from `feature-catalog`, beside `CATALOG_SECTION`.
-- `/shoppers` from `feature-people`.
-- `/harvest` from `feature-harvest`, at the empty path under the segment it already owns.
+The three section dashboards are ordinary routes at the empty path of their branch, declared in
+the library that owns the section: `/catalog` from `feature-catalog`, `/shoppers` from
+`feature-people`, `/harvest` from `feature-harvest`.
 
 The admins section has one screen and links straight at it. **A section with one screen gets no
 dashboard**, because a dashboard summarising one list is a click between the operator and the
 list, which is the whole of `0004`'s argument and it still holds at this level.
 
-## 5. The overview keeps three things
+## 6. The overview keeps three things
 
 The screen the app opens to answers what is true of the system, not what is true of one section.
 After this plan it holds, top to bottom:
@@ -195,10 +265,10 @@ dashboard, the catalog counts and the prices written chart go to the catalog das
 run in flight, the recent runs, the runs by status chart and the sources line go to the harvester
 dashboard.
 
-Those three are what stays because each of them is a question about the whole tool rather than
-about a part of it. Work waiting is every queue in the app in one place, which is the reason to
-open the app at all. Failed sign ins are a fact about the tool itself. Recent activity crosses all
-three trails by definition. A count of users is not any of those: it is the first line of the
+Those three are what stays because each is a question about the whole tool rather than about a
+part of it. Work waiting is every queue in the app in one place, which is the reason to open the
+app at all. Failed sign ins are a fact about the tool itself. Recent activity crosses all three
+audit trails by definition. A count of users is not any of those: it is the first line of the
 shoppers dashboard, and it was on the overview only because there was nowhere else for it.
 
 **The sign ins stay on the overview and do not move to the admins section.** They are two numbers
@@ -206,21 +276,20 @@ that are nearly always zero, and the value in them is that somebody sees them wi
 look. A screen an operator opens once a month is not that place. This is the one asymmetry in the
 split and it is on purpose.
 
-## 6. The three section dashboards
+## 7. The three section dashboards
 
 Each is a component in the library that owns its section, reading `DashboardStore` exactly as
 `DashboardPage` does. The store is `providedIn: 'root'` and already re-reads once a minute while
-the tab is visible, so a section dashboard subscribes to a document that is already being kept
-fresh and issues no request of its own.
+the tab is visible, so a section dashboard reads a document that is already being kept fresh and
+issues no request of its own.
 
 Every view function in `dashboard-view.ts` moves with the section that uses it, and none of them
-changes. This plan is a re-arrangement of components, not of the code that shapes their inputs.
-`peopleTiles`, `signUpsChart` and `zonesAndListsChart` go to `feature-people`. `catalogTiles` and
-`pricesWrittenChart` go to `feature-catalog`. `recentRunRows` and `runsByStatusChart` go to
-`feature-harvest`. `waitingTiles`, `loginFailureRows` and `activityRows` stay.
-
-Where a function is now used by two libraries it goes to `models` beside `weekDelta`, which is
-where the pure ones already live. Nothing is copied.
+changes except to take `PathOf` where it held a literal path. `peopleTiles`, `signUpsChart` and
+`zonesAndListsChart` go to `feature-people`. `catalogTiles` and `pricesWrittenChart` go to
+`feature-catalog`. `recentRunRows` and `runsByStatusChart` go to `feature-harvest`.
+`waitingTiles`, `loginFailureRows` and `activityRows` stay. Where a function is used by two
+libraries it goes to `models` beside `weekDelta`, which is where the pure ones already live.
+Nothing is copied.
 
 **Catalog** (`/catalog`): the catalog tiles, then the prices written chart. `catalog: null` draws
 `0016` section 5's notice in place of the whole page body rather than in place of a section,
@@ -230,17 +299,17 @@ because on this screen the block is the page.
 chart. `core: null` the same way.
 
 **Harvester** (`/harvest`): the run in flight with its progress bar, the last five runs, the runs
-by status chart, and the sources line. Plus `0021`'s postal codes card, per section 8. This is
-the one that keeps `0016`'s poll interval rule: while a run is in flight the store polls at
-`RUN_POLL_INTERVAL_MS`, and the rule moves onto this screen, so a run in flight speeds the poll
-up when somebody is watching it and not when they are reading the catalog. `harvest: null` the
-same way as the other two.
+by status chart, and the sources line. Plus `0021`'s postal codes card, per section 9. This is the
+one that keeps `0016`'s poll interval rule: while a run is in flight the store polls at
+`RUN_POLL_INTERVAL_MS`, and the rule moves onto this screen, so a run in flight speeds the poll up
+when somebody is watching it and not when they are reading the catalog. `harvest: null` the same
+way as the other two.
 
 A section dashboard whose block is `null` still draws its header and its notice. The operator
-opened a section and is told which service did not answer, which is `0016` section 5's
-copy, one screen further in.
+opened a section and is told which service did not answer, which is `0016` section 5's copy, one
+screen further in.
 
-## 7. Translations
+## 8. Translations
 
 One `shell.sections.*` object in `ui`'s `en.json`, five keys. The screen labels are the ones
 already there: a resource's label comes from its descriptor, and the harvester's from
@@ -251,14 +320,20 @@ under `dashboard.catalog.*`, `dashboard.shoppers.*` and `dashboard.harvest.*` wh
 owned by one screen, and left where it is where the overview still uses it. A section dashboard's
 heading is its section's label, so no new heading key is added.
 
-## 8. What this and `0021` owe each other
+## 9. What this and `0021` owe each other
 
-`0021` is being built now and touches three things this plan moves. All three are small and this
-is the whole list:
+`0021` is built and open in PR #277. It is not merged, so this plan is written against it and
+rebases onto it. Four things:
 
-- **Its screen names a section.** `harvest/postal-codes` is a harvester screen, which `0021`
-  section 1 already argues for its own reasons, so its `ShellLink` gains `section: 'harvest'` and
-  nothing else changes about it.
+- **Its screen does not move.** `harvest/postal-codes` is already inside the harvester's branch,
+  which is where this plan puts it.
+- **Its hand mount becomes the mechanism.** `0021` calls `resourceRoutes(POSTAL_CODES)` inside
+  `harvestRoutes` and explains in a comment why a resource is mounted somewhere other than the
+  app's flat list. After this plan that is how every resource is mounted, so the comment shortens
+  to a line and the special case is gone.
+- **Its descriptor joins the registry.** `POSTAL_CODES` is mounted and not registered today, per
+  section 2. Nothing points at it yet, so nothing is broken, and the sections fix it by owning
+  both lists.
 - **Its dashboard card lands on two screens, and that is not a duplicate.** `0021` section 6 puts
   a card on the dashboard: codes queued, codes failed, and the age of the oldest queued row. The
   **queued count is a work waiting tile on the overview**, because `0021` earns that place by
@@ -266,23 +341,29 @@ is the whole list:
   survives this split intact. The **card with all three numbers is on the harvester dashboard**,
   where the failures and the age belong beside the runs that produced them. One call either way:
   both read `postalCodeDiscovery.summary`, which is one request whichever screen is open.
-- **The banner is unmoved.** `0021` section 4.1's "harvesting is off in this deployment" banner
-  sits above the postal codes list, on the list, and this plan does not put it on a dashboard.
 
-Whichever of the two lands first, the other rebases onto it. If `0021` lands first, this plan
-moves its card and adds its section key. If this lands first, `0021` is written against the
-sections that exist. Neither is blocked by the other.
+`0021` section 4.1's "harvesting is off in this deployment" banner sits above the postal codes
+list, on the list, and this plan does not put it on a dashboard.
 
-## 9. Testing
+## 10. Testing
 
-- `AdminShellPage` draws the sections in `ADMIN_SECTIONS`' order and the current section's screens
-  in the registry's order.
+- `adminRoutes` mounts a section's resources under its segment, its hand written screens beside
+  them, and its home at the empty path of the branch.
+- A section with no segment mounts its screens at the root, and `/admins` still draws the admins
+  list.
+- Every route reachable before this plan is reachable after it, at the path the table in section 1
+  gives. `routes.spec.ts` asserts the whole list rather than a sample.
+- `shell-sections.spec.ts`: the four assertions of section 2, against the real `ADMIN_SECTIONS`.
+- `pathOf` answers the mounted path for every registered resource and `null` for a name nobody
+  mounted.
+- `no-literal-resource-path.spec.ts` names a file that builds a link from a bare segment, and
+  passes on the scope as this plan leaves it.
+- `activityTarget` maps each audit table of `0016` section 3.7 to a path through a resolver, and
+  answers `null` for a table with no screen and for a resolver that does not know the resource.
 - The active section is the longest matching link path: `/harvest/runs/abc` marks Harvester and
   `Runs`, not Harvester alone.
 - A URL matching no screen draws both rows and marks neither.
 - The overview link is active only on `/`.
-- A section with one screen links at that screen and has no home route.
-- `shell-sections.spec.ts`: the four assertions of section 2, against the real lists.
 - A section's badge is the sum of its screens', and `null` when every screen answers `null`.
 - Compact: the menu lists the sections, the current one expands, the others do not, and following
   either level closes it.
@@ -294,12 +375,17 @@ sections that exist. Neither is blocked by the other.
   the dashboard interval on every other screen.
 - Assert on component inputs, never on rendered interpolated text.
 
-## 10. Exit criteria
+## 11. Exit criteria
 
 - The first row holds five entries and fits on one line at 1280 pixels. The widest second row
   holds eight and fits on the same line.
-- Every screen reachable before this plan is reachable after it, at the same URL, in at most two
-  clicks from anywhere.
+- Every screen reachable before this plan is reachable after it, in at most two clicks from
+  anywhere, at the path section 1 gives.
+- A URL says which section drew the screen, for every screen except the four that section 1.2
+  keeps at the root.
+- No link in the app leads to a path that no longer exists. The scan spec and `routes.spec.ts`
+  are what prove it, and clicking every navigation entry against the compose stack is what
+  confirms it.
 - The overview holds work waiting, failed sign ins and recent activity, and nothing else.
 - Opening the catalog, the shoppers section or the harvester shows that section's numbers with no
   request beyond the one the store already makes.
@@ -308,11 +394,11 @@ sections that exist. Neither is blocked by the other.
   `feature-catalog`, `feature-people`, `feature-harvest`, `ui`, `models` and the app, and the app
   builds inside its budgets.
 
-## 11. Out of scope
+## 12. Out of scope
 
-- **Moving a resource's path under its section.** Section 1.2 says why, and the day a URL has to
-  state its section is the day to revisit it.
 - **A third level.** Eight screens in the widest section is a row, not a tree.
+- **Redirects from the old paths.** They double the route table to serve one operator who has said
+  the bookmarks do not matter, and each one outlives the reason it was added.
 - **Lists that read their filters from the URL**, which `0016` also left out and which is what
   lets a work waiting tile open a list already filtered.
 - **Making the sections configurable per operator**, or remembering which section was last open.
