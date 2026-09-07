@@ -153,6 +153,34 @@ export_service_ports() {
 # Services with their own database and their own committed migrations.
 MIGRATED_SERVICES=(auth core catalog harvester)
 
+# The operator the back office signs itself in as, with nobody typing anything
+# (plan 0071, section 8).
+#
+# `ADMIN_DEV_AUTOLOGIN` is on in every .env luna-slot.sh writes, and on its own
+# that switch does nothing useful: it tells the gateway to mint a token for the
+# admin this names, and auth refuses when no enabled admin carries that username.
+# A fresh slot has none, and the refusal is invisible from the browser, because
+# the back office swallows a declined autologin and draws the login screen with
+# nothing in the console. So the row is provisioned here, beside the migrations
+# that made the table, rather than left as a step a developer has to know about.
+#
+# The username has to agree with `ADMIN_DEV_AUTOLOGIN_USERNAME` in the generated
+# gateway and auth files; luna-slot.sh writes this same literal into both.
+DEV_ADMIN_USERNAME=dev-admin
+
+# There is no such thing as a passwordless admin row: `createAdmin` hashes what
+# it is given and enforces a floor of twelve characters, and weakening that for
+# a convenience would weaken it for the account that opens everything.
+#
+# So the password exists and nobody types it. Autologin never sends one, which is
+# the whole point; this value is here so the login *form* is still testable on a
+# slot, and so that turning the switch off is not the same as being locked out.
+# It is a constant rather than something random for that second reason: an
+# unguessable password on an account with no reset and no update is an account
+# that cannot be recovered. It protects a database that only ever listens on
+# localhost, and auth refuses to boot with autologin on against anything else.
+DEV_ADMIN_PASSWORD=dev-admin-password
+
 # --- configuration bootstrap ------------------------------------------------
 #
 # None of what a service needs to boot is committed: the eight .env files and the
@@ -305,6 +333,32 @@ bootstrap_config() {
   echo "    copy each from its .example sibling, or run luna-slot.sh 0 to rewrite all eight."
 }
 
+# Give the auth database the operator `ADMIN_DEV_AUTOLOGIN` names, if it has none.
+#
+# Idempotent by the command rather than by this script: `admin:ensure` leaves an
+# existing row exactly as it is, password and `disabledAt` included, so an `up`
+# on a slot somebody has been working in changes nothing.
+#
+# `node` directly rather than `nx run luna-shopper-backend-auth:admin:ensure`,
+# because the password is piped and nx does not forward stdin to a run-commands
+# target reliably. The entry point resolves AUTH_DB_URL from this slot's own
+# .env, which is the same file the migration above just used.
+#
+# A failure is reported and does not stop the stack, on the same reasoning as the
+# reference seed below: a database that came up and migrated is usable. The
+# warning says what breaks, because the symptom otherwise is a back office that
+# quietly shows a login screen it was supposed to skip.
+ensure_dev_admin() {
+  echo "==> making sure the development admin exists ($DEV_ADMIN_USERNAME)"
+  if ! printf '%s\n%s\n' "$DEV_ADMIN_PASSWORD" "$DEV_ADMIN_PASSWORD" |
+    node apps/luna-shopper-backend/auth/src/app/admin/cli/cli.js \
+      ensure "$DEV_ADMIN_USERNAME" 'Dev Admin'; then
+    echo "==> WARNING: could not create the development admin. The stack is up," >&2
+    echo "    but the back office will show the login screen instead of signing" >&2
+    echo "    itself in. Retry with: npx nx run luna-shopper-backend-auth:admin:list" >&2
+  fi
+}
+
 up() {
   # With -p this is scoped to that profile's own containers, so it never starts
   # the base stack and never migrates. See up_profile.
@@ -320,6 +374,8 @@ up() {
     echo "==> migrating $svc"
     npx nx run "luna-shopper-backend-$svc:migration:run"
   done
+
+  ensure_dev_admin
 
   # The reference catalog (plan 0067), on every up rather than once: it is the
   # data a developer expects to find already there, and it is idempotent by
