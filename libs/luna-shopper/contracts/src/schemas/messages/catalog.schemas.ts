@@ -69,12 +69,14 @@ export const CATALOG_SCHEMA_IDS = {
   priceScopeView: schemaId('catalog/PriceScopeView'),
   itemView: schemaId('catalog/ItemView'),
   supermarketItemView: schemaId('catalog/SupermarketItemView'),
+  adminSupermarketItemView: schemaId('catalog/AdminSupermarketItemView'),
   supermarketLocationItemView: schemaId('catalog/SupermarketLocationItemView'),
   supermarketPage: schemaId('catalog/SupermarketPage'),
   supermarketLocationPage: schemaId('catalog/SupermarketLocationPage'),
   priceScopePage: schemaId('catalog/PriceScopePage'),
   itemPage: schemaId('catalog/ItemPage'),
   supermarketItemPage: schemaId('catalog/SupermarketItemPage'),
+  adminSupermarketItemPage: schemaId('catalog/AdminSupermarketItemPage'),
   supermarketLocationItemPage: schemaId('catalog/SupermarketLocationItemPage'),
   createSupermarketRequest: schemaId('msg/supermarket.create/request'),
   updateSupermarketRequest: schemaId('msg/supermarket.update/request'),
@@ -390,38 +392,52 @@ const catalogSuggestResponse = object(
   ['suggestions']
 );
 
+// Stated once and used by both views below, so the admin view cannot drift
+// from the shopper's row by one forgotten property.
+const supermarketItemProperties = () => ({
+  id: nonEmptyString(),
+  itemId: nonEmptyString(),
+  priceScopeId: nonEmptyString(),
+  price: numberOrNull(),
+  currency: nullableString(),
+  unitPrice: numberOrNull(),
+  unitPriceLabel: nullableString(),
+  observedAt: nullableString(),
+  sourceKind: nullableSourceKind(),
+  stale: boolean(),
+  validUntil: nullableString(),
+  itemPriceId: nullableString(),
+  available: boolean(),
+});
+const SUPERMARKET_ITEM_REQUIRED = [
+  'id',
+  'itemId',
+  'priceScopeId',
+  'price',
+  'currency',
+  'unitPrice',
+  'unitPriceLabel',
+  'observedAt',
+  'sourceKind',
+  'stale',
+  'validUntil',
+  'itemPriceId',
+  'available',
+];
+
 const supermarketItemView = object(
   CATALOG_SCHEMA_IDS.supermarketItemView,
-  {
-    id: nonEmptyString(),
-    itemId: nonEmptyString(),
-    priceScopeId: nonEmptyString(),
-    price: numberOrNull(),
-    currency: nullableString(),
-    unitPrice: numberOrNull(),
-    unitPriceLabel: nullableString(),
-    observedAt: nullableString(),
-    sourceKind: nullableSourceKind(),
-    stale: boolean(),
-    validUntil: nullableString(),
-    itemPriceId: nullableString(),
-    available: boolean(),
-  },
-  [
-    'id',
-    'itemId',
-    'priceScopeId',
-    'price',
-    'currency',
-    'unitPrice',
-    'unitPriceLabel',
-    'observedAt',
-    'sourceKind',
-    'stale',
-    'validUntil',
-    'itemPriceId',
-    'available',
-  ]
+  supermarketItemProperties(),
+  SUPERMARKET_ITEM_REQUIRED
+);
+
+// The back office's row (admin plan 0023, section 3): the shopper's row plus
+// the product's name, joined on by `supermarketItem.adminList` and by nothing
+// else. A separate view because the shopper page is velista's contract.
+const adminSupermarketItemView = object(
+  CATALOG_SCHEMA_IDS.adminSupermarketItemView,
+  { ...supermarketItemProperties(), itemName: nullableLocalized() },
+  [...SUPERMARKET_ITEM_REQUIRED, 'itemName']
 );
 
 // --- Item prices and policies (plan 0080) ----------------------------------
@@ -559,6 +575,10 @@ const itemPage = paginated(
 const supermarketItemPage = paginated(
   CATALOG_SCHEMA_IDS.supermarketItemPage,
   CATALOG_SCHEMA_IDS.supermarketItemView
+);
+const adminSupermarketItemPage = paginated(
+  CATALOG_SCHEMA_IDS.adminSupermarketItemPage,
+  CATALOG_SCHEMA_IDS.adminSupermarketItemView
 );
 const priceScopePage = paginated(
   CATALOG_SCHEMA_IDS.priceScopePage,
@@ -1456,6 +1476,7 @@ export const catalogSchemas: JsonSchema[] = [
   catalogSuggestion,
   catalogSuggestResponse,
   supermarketItemView,
+  adminSupermarketItemView,
   supermarketLocationItemView,
   supermarketPage,
   supermarketLocationPage,
@@ -1464,6 +1485,7 @@ export const catalogSchemas: JsonSchema[] = [
   productGroupPage,
   productGroupOfferPage,
   supermarketItemPage,
+  adminSupermarketItemPage,
   supermarketLocationItemPage,
   createSupermarketRequest,
   updateSupermarketRequest,
@@ -1692,7 +1714,7 @@ export const catalogMessageContracts: Record<
   },
   [SUPERMARKET_ITEM_PATTERNS.adminList]: {
     request: CATALOG_SCHEMA_IDS.adminListSupermarketItemsRequest,
-    response: CATALOG_SCHEMA_IDS.supermarketItemPage,
+    response: CATALOG_SCHEMA_IDS.adminSupermarketItemPage,
   },
   [PRICE_SCOPE_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createPriceScopeRequest,

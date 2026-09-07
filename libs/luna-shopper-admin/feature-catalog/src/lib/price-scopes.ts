@@ -75,6 +75,9 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
       label: 'catalog.priceScopes.supermarketId',
       help: 'catalog.priceScopes.supermarketIdHelp',
       resource: 'supermarkets',
+      // Chains number a handful, so one cached resolve per distinct id names
+      // the column (admin plan 0023, section 4).
+      nameLookup: true,
       required: true,
       // `CreatePriceScopeDto` takes the chain and `UpdatePriceScopeDto` does
       // not, so a scope belongs to whichever chain it was made under and stays

@@ -2,7 +2,9 @@ import { inject } from '@angular/core';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import {
   compositeIdOf,
+  CONTENT_LOCALES,
   defineResource,
+  localizedTextValue,
   type ResourceGateway,
   type ResourceInput,
   type Wire,
@@ -18,7 +20,7 @@ import { PriceFormPage } from './price-form-page';
  * does not carry: the start of a window, which is the owner's field for a
  * price known to be temporary.
  */
-export type Price = Wire.CatalogSupermarketItemView & {
+export type Price = Wire.CatalogAdminSupermarketItemView & {
   readonly validFrom?: string | null;
 };
 
@@ -72,12 +74,16 @@ export const PRICES = defineResource<Price>({
   rowId: (row) => compositeIdOf(row, PRICE_KEY),
 
   /**
-   * A price row carries the product's id and not its name, and no admin read
-   * joins one on. Resolving a name per row would be a request per row, which a
-   * list cannot afford, so the list shows ids and the detail, which is one
-   * row, shows names.
+   * The product's name, which the admin read joins onto every row (admin plan
+   * 0023, section 3). Resolving it per row from here would be a request per
+   * row, which a list cannot afford, so the wire carries it; the id is the
+   * fallback for a row whose product is gone. Pure and synchronous on purpose:
+   * the compact card's heading cannot wait for a lookup.
    */
-  title: (row) => row.itemId,
+  title: (row) => {
+    const name = localizedTextValue(row.itemName, CONTENT_LOCALES);
+    return name === '' ? row.itemId : name;
+  },
 
   detail: PriceDetailPage,
   editor: PriceFormPage,
@@ -89,6 +95,10 @@ export const PRICES = defineResource<Price>({
       name: 'itemId',
       label: 'catalog.prices.itemId',
       resource: 'items',
+      // The name the admin read joined on (admin plan 0023, section 3): the
+      // cell shows it and links to the product, and falls back to the id when
+      // the join found nothing.
+      nameFrom: 'itemName',
       required: true,
       // Half of what the row *is*, and half of what the added row is about.
       editable: 'create',

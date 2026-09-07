@@ -1,4 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type {
   FieldDescriptor,
@@ -67,6 +68,8 @@ async function render(
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [ResourceList, RokuTranslatorTestingModule.forTesting()],
+    // A reference cell with somewhere to go renders a routerLink anchor.
+    providers: [provideRouter([])],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ResourceList);
@@ -87,6 +90,46 @@ async function render(
 
 const query = (fixture: ComponentFixture<ResourceList>, selector: string) =>
   fixture.nativeElement.querySelectorAll(selector) as NodeListOf<HTMLElement>;
+
+describe('a reference cell with somewhere to go (admin plan 0023)', () => {
+  const linked: ResourceRowView[] = [
+    {
+      id: 'a',
+      title: 'Bonpreu',
+      cells: {
+        name: { text: 'Bonpreu' },
+        websiteUrl: { text: '', key: 'resource.value.none' },
+        brand: {
+          text: 'Olive oil',
+          reference: { resource: 'product-groups', id: 'pg1' },
+          link: ['/', 'product-groups', 'pg1'],
+        },
+      },
+      row: { id: 'a' },
+    },
+  ];
+
+  /**
+   * A real anchor, not a styled button: named by the text it shows, in its own
+   * tab stop, and openable in a new tab, which is half the point of a link in
+   * a table.
+   */
+  it('draws the cell as an internal anchor', async () => {
+    const fixture = await render({ rows: linked });
+
+    const anchor = query(fixture, 'tbody td a')[0];
+    expect(anchor?.getAttribute('href')).toBe('/product-groups/pg1');
+    expect(anchor?.textContent?.trim()).toBe('Olive oil');
+    expect(anchor?.getAttribute('target')).toBeNull();
+  });
+
+  it('draws the same anchor on the card', async () => {
+    const fixture = await render({ rows: linked, compact: true });
+
+    const anchor = query(fixture, '.card a')[0];
+    expect(anchor?.getAttribute('href')).toBe('/product-groups/pg1');
+  });
+});
 
 describe('ResourceList layout', () => {
   it('draws a table above the breakpoint', async () => {

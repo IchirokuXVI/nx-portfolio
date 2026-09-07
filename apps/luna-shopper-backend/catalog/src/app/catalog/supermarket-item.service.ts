@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type {
   AdminListSupermarketItemsRequest,
+  AdminSupermarketItemPage,
   GetSupermarketItemRequest,
   ListSupermarketItemsByItemRequest,
   ListSupermarketItemsByLocationRequest,
@@ -17,7 +18,7 @@ import {
   encodeCursor,
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   Item,
   PriceScope,
@@ -185,7 +186,7 @@ export class SupermarketItemService {
    */
   async adminList(
     req: AdminListSupermarketItemsRequest
-  ): Promise<SupermarketItemPage> {
+  ): Promise<AdminSupermarketItemPage> {
     await this.admin.requireAdmin(req);
 
     const limit = clampPageSize(req.limit);
@@ -231,7 +232,25 @@ export class SupermarketItemService {
         ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
         : null;
 
-    return { items: list.map(toSupermarketItemView), nextCursor };
+    // The product's name, joined onto the admin read and only onto it (admin
+    // plan 0023, section 3): a page of prices is a page of distinct products,
+    // so resolving the name client side would cost a request per row. One
+    // batched read per page here instead, by distinct id. A price whose item
+    // is gone keeps a null name and the row still lists.
+    const itemIds = [...new Set(list.map((row) => row.itemId))];
+    const named =
+      itemIds.length === 0
+        ? []
+        : await this.items.find({ where: { id: In(itemIds) } });
+    const names = new Map(named.map((item) => [item.id, item.name]));
+
+    return {
+      items: list.map((row) => ({
+        ...toSupermarketItemView(row),
+        itemName: names.get(row.itemId) ?? null,
+      })),
+      nextCursor,
+    };
   }
 
   private async page(

@@ -20,6 +20,7 @@ import {
   type AdminDashboardRequest,
   type AdminListSupermarketItemsRequest,
   type AdminPostalCodePage,
+  type AdminSupermarketItemPage,
   type CountLocationsByPostalCodeRequest,
   type CreateItemRequest,
   type CreatePriceScopeRequest,
@@ -554,7 +555,7 @@ export class CatalogController {
   @MessagePattern(SUPERMARKET_ITEM_PATTERNS.adminList)
   adminListSupermarketItems(
     @Payload() req: AdminListSupermarketItemsRequest
-  ): Promise<SupermarketItemPage> {
+  ): Promise<AdminSupermarketItemPage> {
     return this.supermarketItems.adminList(req);
   }
 }

@@ -272,9 +272,12 @@ describe('SupermarketItemService.adminList', () => {
     const supermarketItems = {
       createQueryBuilder: jest.fn(() => qb),
     } as unknown as Repository<SupermarketItem>;
+    const items = {
+      find: jest.fn(async () => []),
+    } as unknown as Repository<Item>;
     const svc = new SupermarketItemService(
       supermarketItems,
-      {} as Repository<Item>,
+      items,
       {} as Repository<PriceScope>,
       {} as Repository<SupermarketLocation>,
       admin,
@@ -282,7 +285,7 @@ describe('SupermarketItemService.adminList', () => {
       // double. A write reaching it here would throw rather than pass quietly.
       fakeAudit([]).service
     );
-    return { svc, qb, admin };
+    return { svc, qb, items, admin };
   }
 
   it('is gated, unlike the three lists beside it', async () => {
@@ -326,5 +329,41 @@ describe('SupermarketItemService.adminList', () => {
     expect(qb.andWhere).toHaveBeenCalledWith('si."available" = :available', {
       available: false,
     });
+  });
+
+  /**
+   * Admin plan 0023, section 3: the product's name rides the admin read,
+   * because a page of prices is a page of distinct products and resolving a
+   * name per row from the client is the request storm plan 0004 refused. One
+   * batched read per page, by distinct id, and a price whose product is gone
+   * keeps a null name rather than losing the row.
+   */
+  it('joins the product name onto each row, one read per distinct product', async () => {
+    const { svc, qb, items } = build();
+    qb.getMany.mockResolvedValue([
+      storedRow({ id: 'si1', itemId: 'item-1' }),
+      storedRow({ id: 'si2', itemId: 'item-1' }),
+      storedRow({ id: 'si3', itemId: 'item-gone' }),
+    ]);
+    (items.find as jest.Mock).mockResolvedValue([
+      { id: 'item-1', name: { en: 'Whole milk' } },
+    ]);
+
+    const page = await svc.adminList({ userId: ADMIN });
+
+    expect(items.find).toHaveBeenCalledTimes(1);
+    const where = (items.find as jest.Mock).mock.calls[0][0].where;
+    expect(where.id.value).toEqual(['item-1', 'item-gone']);
+    expect(page.items.map((row) => row.itemName)).toEqual([
+      { en: 'Whole milk' },
+      { en: 'Whole milk' },
+      null,
+    ]);
+  });
+
+  it('asks for no product at all on an empty page', async () => {
+    const { svc, items } = build();
+    await svc.adminList({ userId: ADMIN });
+    expect(items.find).not.toHaveBeenCalled();
   });
 });

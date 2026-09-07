@@ -614,6 +614,19 @@ export interface SupermarketItemView {
 }
 
 /**
+ * The back office's row: {@link SupermarketItemView} with the product's name
+ * joined on (admin plan 0023, section 3).
+ *
+ * A separate view rather than a widened `SupermarketItemView`, because the
+ * shopper view is velista's contract and velista neither needs the name here
+ * nor wants a bigger page. Only `supermarketItem.adminList` answers with it.
+ */
+export interface AdminSupermarketItemView extends SupermarketItemView {
+  /** The product's name, joined on for the back office. Null when the join found nothing. */
+  itemName: LocalizedText | null;
+}
+
+/**
  * The value an `ADMIN` row recorded for one automated kind when it was inserted
  * (plan 0080, section 4.2).
  */
@@ -1527,6 +1540,8 @@ export type SupermarketLocationPage = Paginated<SupermarketLocationView>;
 export type ShopPage = Paginated<ShopView>;
 export type ItemPage = Paginated<ItemView>;
 export type SupermarketItemPage = Paginated<SupermarketItemView>;
+/** The admin listing's page: the same rows with the product's name joined on. */
+export type AdminSupermarketItemPage = Paginated<AdminSupermarketItemView>;
 export type ItemPricePage = Paginated<ItemPriceView>;
 export type PriceScopePage = Paginated<PriceScopeView>;
 export type SupermarketLocationItemPage =

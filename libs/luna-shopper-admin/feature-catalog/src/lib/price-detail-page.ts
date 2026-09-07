@@ -313,7 +313,7 @@ export class PriceDetailPage {
   private readonly _translate = inject(RokuTranslatorService);
   private readonly _gateways = inject(RESOURCE_GATEWAYS);
   private readonly _effective =
-    this._gateways.for<Wire.CatalogSupermarketItemView>(priceSource());
+    this._gateways.for<Wire.CatalogAdminSupermarketItemView>(priceSource());
   private readonly _rows =
     this._gateways.for<Wire.CatalogItemPriceView>(itemPriceSource());
 
@@ -330,7 +330,7 @@ export class PriceDetailPage {
   readonly removing = signal<PriceHistoryRow | null>(null);
 
   private readonly _effectiveRow =
-    signal<Wire.CatalogSupermarketItemView | null>(null);
+    signal<Wire.CatalogAdminSupermarketItemView | null>(null);
   private readonly _historyRows = signal<readonly Wire.CatalogItemPriceView[]>(
     []
   );
