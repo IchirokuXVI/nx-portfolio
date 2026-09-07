@@ -50,7 +50,10 @@ const me: AdminMe = {
 };
 
 const drain = async () => {
-  for (let i = 0; i < 6; i += 1) {
+  // Twelve rather than six: on a passwordless server the expiry runs a refusal,
+  // a sign in and a sign out before the overlay is raised, which is a longer
+  // promise chain than a password takes.
+  for (let i = 0; i < 12; i += 1) {
     await Promise.resolve();
   }
 };
@@ -75,10 +78,21 @@ async function render(reauthFailure?: unknown, { devAutologin = false } = {}) {
       }
       return session;
     },
+    // Refused the first time, always. On a passwordless server the lifecycle
+    // replaces the dead token by itself, so the only way this overlay is on a
+    // screen at all is a replacement the server would not make: a first call
+    // that succeeded would leave nothing to draw.
     signInForDevelopment: async () => {
       devSignIns();
-      if (reauthFailure !== undefined) {
-        throw reauthFailure;
+      if (devSignIns.mock.calls.length === 1 || reauthFailure !== undefined) {
+        throw (
+          reauthFailure ??
+          new GatewayError({
+            code: 'not_configured',
+            status: 501,
+            correlationId: 'cid',
+          })
+        );
       }
       return session;
     },
@@ -283,6 +297,12 @@ describe('ReauthOverlay', () => {
    * is an overlay with no way out except losing the work it exists to protect.
    */
   describe('on a server that signs in without a password', () => {
+    /**
+     * The overlay is the fallback here, not the ordinary path: the lifecycle
+     * replaces an expired token by itself and this screen never appears. What
+     * these assert is the shape it takes when the server refuses to replace
+     * one, which is the case that has to be able to tell somebody.
+     */
     it('asks for no password at all', async () => {
       const { fixture } = await render(undefined, { devAutologin: true });
 
@@ -310,9 +330,13 @@ describe('ReauthOverlay', () => {
         { devAutologin: true }
       );
 
+      // The refusal that raised the overlay, and nothing else yet.
+      expect(devSignIns).toHaveBeenCalledTimes(1);
+      expect(lifecycle.locked()).toBe(true);
+
       await submit(fixture);
 
-      expect(devSignIns).toHaveBeenCalledTimes(1);
+      expect(devSignIns).toHaveBeenCalledTimes(2);
       await expect(held).resolves.toBe(true);
       expect(lifecycle.locked()).toBe(false);
       expect(sessions.signedIn()).toBe(true);
