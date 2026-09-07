@@ -27,6 +27,7 @@ export {
 export {
   DEFAULT_NEARBY_RADIUS_METRES,
   DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
+  POSTAL_CODE_DERIVE_MAX_METRES_VAR,
   postalCodeDeriveMaxMetres,
 } from './lib/distances';
 export {

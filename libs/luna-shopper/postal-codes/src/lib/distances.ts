@@ -18,10 +18,30 @@
  */
 export const DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES = 5_000;
 
-/** The configured bound, or the default. Zero and nonsense both fall back. */
-export function postalCodeDeriveMaxMetres(
-  raw: string | undefined = process.env['POSTAL_CODE_DERIVE_MAX_METRES']
-): number {
+/**
+ * The one environment variable name both services read the bound from.
+ *
+ * Exported so catalog and the harvester cannot drift onto two spellings of the
+ * same key, which would recreate exactly the disagreement this file exists to
+ * prevent.
+ */
+export const POSTAL_CODE_DERIVE_MAX_METRES_VAR =
+  'POSTAL_CODE_DERIVE_MAX_METRES';
+
+/**
+ * The configured bound, or the default. Zero and nonsense both fall back.
+ *
+ * The caller passes the raw value in, usually
+ * `process.env[POSTAL_CODE_DERIVE_MAX_METRES_VAR]`, and the parameter is
+ * required so no caller can forget the environment silently. This library does
+ * not read it itself: the entry point is reachable from the browser
+ * (`@portfolio/velista/models` re-exports the GeoNames attribution from it), so
+ * velista and the shell compile every file here under an Angular tsconfig with
+ * no node types, and a `process.env` read in this file failed both builds with
+ * TS2591. Reading the environment is the service's job anyway; this file owns
+ * the rule, not the configuration.
+ */
+export function postalCodeDeriveMaxMetres(raw: string | undefined): number {
   const value = Number(raw);
   return Number.isFinite(value) && value > 0
     ? value

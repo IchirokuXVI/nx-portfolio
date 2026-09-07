@@ -4,6 +4,7 @@ import {
 } from '@portfolio/luna-shopper/osm-places';
 import {
   boundingBox,
+  POSTAL_CODE_DERIVE_MAX_METRES_VAR,
   postalCodeDeriveMaxMetres,
 } from '@portfolio/luna-shopper/postal-codes';
 import { MigrationInterface, QueryRunner } from 'typeorm';
@@ -115,7 +116,9 @@ export class DerivedPostalCodes1756500000000 implements MigrationInterface {
 export async function backfillDerivedPostalCodes(
   queryRunner: QueryRunner
 ): Promise<void> {
-  const maxDistanceMetres = postalCodeDeriveMaxMetres();
+  const maxDistanceMetres = postalCodeDeriveMaxMetres(
+    process.env[POSTAL_CODE_DERIVE_MAX_METRES_VAR]
+  );
 
   const locations: LocationRow[] = await queryRunner.query(`
     SELECT "id", "country", "latitude", "longitude"
