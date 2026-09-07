@@ -1,4 +1,7 @@
-import { DiscoveredPlaceStatus } from '@portfolio/luna-shopper/contracts';
+import {
+  DiscoveredPlaceStatus,
+  PostalCodeSource,
+} from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from './base.entity';
 
@@ -60,6 +63,28 @@ export class DiscoveredPlace extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   postalCode!: string | null;
+
+  /**
+   * Where {@link postalCode} came from (plan 0097, section 3), mirroring the
+   * column `SupermarketLocation` already carries.
+   *
+   * `SOURCE` is the `addr:postcode` tag, which about a third of places have.
+   * `DERIVED` is the nearest centroid, asked of catalog during the run and
+   * bounded by `POSTAL_CODE_DERIVE_MAX_METRES`. Null alongside a null code, so
+   * "we have no idea" stays expressible: a place whose nearest centroid is
+   * beyond the bound takes neither, because a wrong postcode is worse than none.
+   *
+   * It exists because the count of places **located in** a code would otherwise
+   * miss two thirds of them silently, and a panel that is wrong in the direction
+   * that looks like an answer is worse than an empty one.
+   */
+  @Column({
+    type: 'enum',
+    enum: PostalCodeSource,
+    enumName: 'discovered_place_postal_code_source',
+    nullable: true,
+  })
+  postalCodeSource!: PostalCodeSource | null;
 
   /**
    * ISO 3166-1 alpha-2, from the run's own `StoreDiscoveryInput` and not from an

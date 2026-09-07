@@ -151,20 +151,6 @@ export interface FilterChange {
       color: var(--admin-ink-muted);
     }
 
-    input,
-    select {
-      /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
-         smaller, which on a phone leaves the operator scrolled sideways. */
-      font: inherit;
-      font-size: 1rem;
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      color: var(--admin-ink);
-    }
-
     input:focus-visible,
     select:focus-visible {
       outline: 2px solid var(--admin-accent);

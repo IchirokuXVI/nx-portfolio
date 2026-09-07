@@ -4078,6 +4078,233 @@
         ]
       }
     },
+    "/v1/admin/catalog/postal-codes/{postalCode}/nearby": {
+      "get": {
+        "operationId": "AdminPostalCodesController_nearby_v1",
+        "parameters": [
+          {
+            "name": "postalCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO 3166-1 alpha-2. Defaults to es.",
+            "schema": {
+              "maxLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "name": "radiusMetres",
+            "required": false,
+            "in": "query",
+            "description": "Centroid to centroid, so two adjacent codes whose centres sit further apart than this are neighbours in reality and not in the answer. Defaults to the radius a profile widens by.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50000,
+              "default": 2000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `postalCode.nearby` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.NearbyPostalCodesView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/profiles/postal-codes/usage": {
+      "get": {
+        "operationId": "AdminProfilePostalCodesController_usage_v1",
+        "parameters": [
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO 3166-1 alpha-2. Defaults to es; every code in one request shares it.",
+            "schema": {
+              "maxLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCodes",
+            "required": true,
+            "in": "query",
+            "description": "The codes to count, which is one page of the queue. Every code asked about is in the answer, including the ones nobody uses: a screen decorating rows needs the zeros.",
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `adminProfilePostalCode.usage` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-core.PostalCodeUsageListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-core"
+        ]
+      }
+    },
     "/v1/zones": {
       "post": {
         "operationId": "ZoneController_create_v1",
@@ -17989,6 +18216,24 @@
                 "REJECTED"
               ]
             }
+          },
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO 3166-1 alpha-2. Pair it with `postalCode`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "The places located in this code, whichever run found them. It reads the place own postal code and never the run centre, so a run centred on 14013 does not put its Cordoba city neighbours in this answer.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -18295,6 +18540,476 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/postal-codes": {
+      "get": {
+        "operationId": "AdminHarvestPostalCodesController_list_v1",
+        "parameters": [
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO 3166-1 alpha-2.",
+            "schema": {
+              "maxLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "QUEUED",
+                "RUNNING",
+                "DONE",
+                "FAILED",
+                "PARKED"
+              ]
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Prefix match. A postal code is read left to right, so `140` means Cordoba city rather than every code with a 140 in the middle of it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dismissed",
+            "required": false,
+            "in": "query",
+            "description": "Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `postalCodeDiscovery.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHarvestPostalCodesController_add_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPostalCodeDiscoveryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `postalCodeDiscovery.add` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/postal-codes/summary": {
+      "get": {
+        "operationId": "AdminHarvestPostalCodesController_summary_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `postalCodeDiscovery.summary` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoverySummaryView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/postal-codes/{id}/requeue": {
+      "post": {
+        "operationId": "AdminHarvestPostalCodesController_requeue_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `postalCodeDiscovery.requeue` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/postal-codes/{id}/dismiss": {
+      "post": {
+        "operationId": "AdminHarvestPostalCodesController_dismiss_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `postalCodeDiscovery.dismiss` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestView"
                 }
               }
             }
@@ -21974,6 +22689,30 @@
           }
         }
       },
+      "AddPostalCodeDiscoveryDto": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "maxLength": 2,
+            "description": "ISO 3166-1 alpha-2."
+          },
+          "postalCode": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "A code catalog does not hold is refused with `postal_code_unknown`: the centroid table is the whole national list, so a code missing from it is a typo."
+          },
+          "discoverNow": {
+            "type": "boolean",
+            "description": "True queues it for the worker. False parks it, which is a row the worker never claims until somebody queues it."
+          }
+        },
+        "required": [
+          "country",
+          "postalCode",
+          "discoverNow"
+        ]
+      },
       "AcceptSourceEntryDto": {
         "type": "object",
         "properties": {
@@ -22909,6 +23648,64 @@
           "createdAt",
           "updatedAt",
           "ownerName"
+        ],
+        "additionalProperties": false
+      },
+      "admin-core.PostalCodeUsageListView": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "minLength": 1
+          },
+          "usage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-core.PostalCodeUsageView"
+            }
+          }
+        },
+        "required": [
+          "country",
+          "usage"
+        ],
+        "additionalProperties": false
+      },
+      "admin-core.PostalCodeUsageView": {
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mainProfiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nearbyProfiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "suppressedProfiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mainUsers": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nearbyUsers": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "postalCode",
+          "mainProfiles",
+          "nearbyProfiles",
+          "suppressedProfiles",
+          "mainUsers",
+          "nearbyUsers"
         ],
         "additionalProperties": false
       },
@@ -24496,6 +25293,35 @@
         "additionalProperties": false,
         "minProperties": 1
       },
+      "catalog.NearbyPostalCodesView": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "known": {
+            "type": "boolean"
+          },
+          "postalCodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.PostalCodeDistanceView"
+            }
+          }
+        },
+        "required": [
+          "country",
+          "postalCode",
+          "known",
+          "postalCodes"
+        ],
+        "additionalProperties": false
+      },
       "catalog.PostalCodeCoverageView": {
         "type": "object",
         "properties": {
@@ -24510,6 +25336,24 @@
         "required": [
           "postalCode",
           "served"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.PostalCodeDistanceView": {
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "distanceMetres": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "postalCode",
+          "distanceMetres"
         ],
         "additionalProperties": false
       },
@@ -25555,6 +26399,16 @@
           "OWNER",
           "REGISTERED",
           "GUEST"
+        ]
+      },
+      "enums.PostalCodeDiscoveryStatus": {
+        "type": "string",
+        "enum": [
+          "QUEUED",
+          "RUNNING",
+          "DONE",
+          "FAILED",
+          "PARKED"
         ]
       },
       "enums.PostalCodeSource": {
@@ -26761,6 +27615,34 @@
         ],
         "additionalProperties": false
       },
+      "harvest.DiscoveredPlaceCounts": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rejected": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "undecided": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "total",
+          "imported",
+          "rejected",
+          "undecided"
+        ],
+        "additionalProperties": false
+      },
       "harvest.DiscoveredPlaceGroup": {
         "type": "object",
         "properties": {
@@ -26907,6 +27789,16 @@
               "null"
             ]
           },
+          "postalCodeSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PostalCodeSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "country": {
             "type": [
               "string",
@@ -26962,6 +27854,7 @@
           "street",
           "city",
           "postalCode",
+          "postalCodeSource",
           "country",
           "website",
           "openingHours",
@@ -27224,6 +28117,164 @@
           "page",
           "name",
           "message"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PostalCodeDiscoveryRequestPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "harvest.PostalCodeDiscoveryRequestView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.PostalCodeDiscoveryStatus"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastAttemptedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discoveredAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nextAttemptAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "placeName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dismissed": {
+            "type": "boolean"
+          },
+          "foundByItsRuns": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceCounts"
+          },
+          "locatedInIt": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceCounts"
+          }
+        },
+        "required": [
+          "id",
+          "country",
+          "postalCode",
+          "status",
+          "requestedAt",
+          "lastAttemptedAt",
+          "discoveredAt",
+          "nextAttemptAt",
+          "attempts",
+          "runId",
+          "error",
+          "placeName",
+          "dismissed",
+          "foundByItsRuns",
+          "locatedInIt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PostalCodeDiscoverySummaryView": {
+        "type": "object",
+        "properties": {
+          "queued": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "running": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parked": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "oldestQueuedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "draining": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued",
+          "running",
+          "done",
+          "failed",
+          "parked",
+          "oldestQueuedAt",
+          "draining"
         ],
         "additionalProperties": false
       },
@@ -28487,6 +29538,8 @@
               "stale_quantity",
               "below_settled",
               "account_locked",
+              "postal_code_unknown",
+              "run_in_progress",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

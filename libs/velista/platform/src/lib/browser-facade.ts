@@ -201,6 +201,40 @@ export class BrowserFacade {
     return () => win.removeEventListener('storage', listener);
   }
 
+  /**
+   * Read a value stored for the life of this tab.
+   *
+   * `sessionStorage` rather than `localStorage`, and the difference is the whole
+   * reason this pair exists: it survives a reload of this document and dies with the
+   * tab, which is exactly the scope of "we already tried that" (plan 0072 D4). The
+   * same swallowing as {@link readStorage}, for the same reasons.
+   */
+  readSessionStorage(key: string): string | null {
+    try {
+      return this.window?.sessionStorage.getItem(key) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Persist a value for this tab. Silently does nothing when storage is unavailable. */
+  writeSessionStorage(key: string, value: string): void {
+    try {
+      this.window?.sessionStorage.setItem(key, value);
+    } catch {
+      // See writeStorage.
+    }
+  }
+
+  /** Remove a value stored for this tab. Silently does nothing without storage. */
+  removeSessionStorage(key: string): void {
+    try {
+      this.window?.sessionStorage.removeItem(key);
+    } catch {
+      // See writeStorage.
+    }
+  }
+
   /** Remove a persisted value. Silently does nothing when storage is unavailable. */
   removeStorage(key: string): void {
     try {

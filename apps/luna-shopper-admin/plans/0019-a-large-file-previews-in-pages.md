@@ -1,3 +1,5 @@
+> **PR:** [#270](https://github.com/IchirokuXVI/nx-portfolio/pull/270)
+
 # 0019 A large file previews in pages
 
 The import screen reads a document in the browser and draws every product in it before the operator

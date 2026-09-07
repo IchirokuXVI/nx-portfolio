@@ -10,6 +10,8 @@ import {
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   type AcceptSourceEntryRequest,
+  type AddPostalCodeDiscoveryRequest,
+  type AdminCredential,
   type AdminDashboardRequest,
   type AdminHarvestDashboard,
   type CreateItemFromSourceEntryRequest,
@@ -31,7 +33,10 @@ import {
   type ListSourceLocationsRequest,
   type ListSupermarketSourcesRequest,
   type MapSourceLocationRequest,
+  type PostalCodeDiscoveryIdRequest,
   type PostalCodeDiscoveryRequestPage,
+  type PostalCodeDiscoveryRequestView,
+  type PostalCodeDiscoverySummaryView,
   type PostalCodesAddedEvent,
   type SetSupermarketSourceEnabledRequest,
   type SourceCatalogEntryPage,
@@ -164,12 +169,54 @@ export class HarvestController {
     return this.discovery.considerAnnounced(event);
   }
 
-  /** The queue's rows, for backlog 0009. Platform admin gated like the rest. */
+  /** The queue's rows, for plan 0097. Platform admin gated like the rest. */
   @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.list)
   listDiscoveryRequests(
     @Payload() req: ListPostalCodeDiscoveryRequestsRequest
   ): Promise<PostalCodeDiscoveryRequestPage> {
     return this.discovery.list(req);
+  }
+
+  /**
+   * Counts by status and whether anything drains them (plan 0097, section 7.1).
+   * The listing's header and the dashboard card read the same subject.
+   */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.summary)
+  discoverySummary(
+    @Payload() req: AdminCredential
+  ): Promise<PostalCodeDiscoverySummaryView> {
+    return this.discovery.summary(req);
+  }
+
+  /**
+   * An operator adds one code (section 6.1).
+   *
+   * The one enqueue path that is not the `postalCode.added` event, and it is
+   * still not user facing: it is behind the operator gate like everything else
+   * in this file, so nobody outside the back office can spend our Nominatim
+   * budget.
+   */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.add)
+  addDiscoveryRequest(
+    @Payload() req: AddPostalCodeDiscoveryRequest
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.discovery.add(req);
+  }
+
+  /** Discover it again, ignoring the cooldown (section 6.2). */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.requeue)
+  requeueDiscoveryRequest(
+    @Payload() req: PostalCodeDiscoveryIdRequest
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.discovery.requeue(req);
+  }
+
+  /** Hide a code nobody can geocode from the working set (section 6.3). */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.dismiss)
+  dismissDiscoveryRequest(
+    @Payload() req: PostalCodeDiscoveryIdRequest
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.discovery.dismiss(req);
   }
 
   // --- Discovered places ---------------------------------------------------

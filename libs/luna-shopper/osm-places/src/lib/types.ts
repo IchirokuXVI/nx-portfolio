@@ -13,6 +13,21 @@ export interface LatLon {
   lon: number;
 }
 
+/**
+ * A geocoded postal code: its centre, and what Nominatim calls it.
+ *
+ * The name is `display_name` verbatim, "14013, Córdoba, Andalucía, España". It
+ * is kept because nothing else in this system stores a name for a postal code,
+ * and the answer is already in the response the centre came from, so keeping it
+ * costs no request (plan 0097, section 4).
+ *
+ * Null when the provider sent none. A caller that has to show something falls
+ * back to the code itself, which is what it had before.
+ */
+export interface GeocodedPostalCode extends LatLon {
+  displayName: string | null;
+}
+
 export interface DiscoveredPlace {
   provider: 'OSM';
   /** `node/1156230891`. Type included, because ids are unique only per type. */

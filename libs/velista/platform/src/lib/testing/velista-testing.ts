@@ -117,6 +117,12 @@ export function fakeBrowserFacade(
   storage: Map<string, string> = new Map(),
   overrides: Partial<BrowserFacade> = {}
 ): BrowserFacade {
+  // Its own `Map`, because `sessionStorage` is its own store: a spec that seeds the
+  // persisted token pair has not thereby said this tab already spent its one update
+  // attempt (plan 0072 D4). A spec that wants to read or seed it passes the three
+  // methods in `overrides`.
+  const session = new Map<string, string>();
+
   return {
     isBrowser: true,
     onLine: () => true,
@@ -130,6 +136,13 @@ export function fakeBrowserFacade(
     readStorage: (key: string) => storage.get(key) ?? null,
     writeStorage: (key: string, value: string) => void storage.set(key, value),
     removeStorage: (key: string) => void storage.delete(key),
+    readSessionStorage: (key: string) => session.get(key) ?? null,
+    writeSessionStorage: (key: string, value: string) =>
+      void session.set(key, value),
+    removeSessionStorage: (key: string) => void session.delete(key),
+    // A no-op, like the real facade under a server render. A spec that asserts on a
+    // reload passes a jest mock in `overrides`.
+    reload: () => undefined,
     watchStorage: (key: string, onChange: (value: string | null) => void) => {
       const watchers = watchersFor(storage);
       const forKey = watchers.get(key) ?? new Set();

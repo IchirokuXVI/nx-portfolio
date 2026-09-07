@@ -4,6 +4,7 @@ import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
+  POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PriceSourceKind,
   SUPERMARKET_ITEM_PATTERNS,
@@ -19,6 +20,8 @@ import {
   type ItemPage,
   type ItemPriceBatchEntry,
   type ItemView,
+  type NearbyPostalCodesView,
+  type NearestPostalCodeView,
   type PostalCodeLocationCountsView,
   type PriceScopeKind,
   type PriceScopePage,
@@ -156,6 +159,57 @@ export class CatalogClient {
     return this.send(SUPERMARKET_LOCATION_PATTERNS.countByPostalCode, {
       country,
       postalCodes,
+    });
+  }
+
+  /**
+   * Which postal code a point is in, if any centroid is close enough (plan
+   * 0097, section 3).
+   *
+   * Plan 0061 solved this once, for `SupermarketLocation`, and stopped at the
+   * service boundary: nothing in the harvester called it. A discovered place
+   * carries whatever `addr:postcode` OpenStreetMap had, which is about a third
+   * of them, so the count of places **located in** a code would otherwise miss
+   * two thirds of them silently.
+   *
+   * One call per untagged place, sequential, inside a run that already spends
+   * minutes on two rate limited HTTP requests. A batched subject for it would be
+   * a second contract to keep in step for no measured gain.
+   *
+   * Like the count above it, this carries no actor: it is a geography question
+   * over a shipped table and it names nobody.
+   */
+  resolveNearestPostalCode(
+    country: string,
+    latitude: number,
+    longitude: number,
+    maxDistanceMetres: number
+  ): Promise<NearestPostalCodeView> {
+    return this.send(POSTAL_CODE_PATTERNS.nearest, {
+      country,
+      latitude,
+      longitude,
+      maxDistanceMetres,
+    });
+  }
+
+  /**
+   * The neighbours of one code, and **whether we hold the code at all**.
+   *
+   * The harvester asks it for `known` rather than for the neighbours: adding a
+   * postal code by hand refuses a code catalog does not have, because the
+   * centroid table is the whole national list and a code missing from it is a
+   * typo (plan 0097, section 6.1).
+   */
+  nearbyPostalCodes(
+    country: string,
+    postalCode: string,
+    radiusMetres: number
+  ): Promise<NearbyPostalCodesView> {
+    return this.send(POSTAL_CODE_PATTERNS.nearby, {
+      country,
+      postalCode,
+      radiusMetres,
     });
   }
 

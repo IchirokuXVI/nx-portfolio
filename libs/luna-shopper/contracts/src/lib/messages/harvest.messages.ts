@@ -1,6 +1,7 @@
 import type { HarvestDocument } from '../../schemas/harvest-document';
 import type {
   ItemCategory,
+  PostalCodeSource,
   PriceSourceKind,
   UnitOfMeasure,
 } from '../enums/catalog.enums';
@@ -310,6 +311,19 @@ export interface DiscoveredPlaceView {
   city: string | null;
   postalCode: string | null;
   /**
+   * Where {@link postalCode} came from (plan 0097, section 3), mirroring the
+   * column `SupermarketLocation` already carries.
+   *
+   * `SOURCE` is the `addr:postcode` tag, which about a third of places have.
+   * `DERIVED` is the nearest centroid within the bound, asked of catalog during
+   * the run. Null alongside a null code, so "we have no idea" stays expressible:
+   * a place whose nearest centroid is beyond the bound takes neither.
+   *
+   * A guessed code has to say it was guessed wherever it is shown, because the
+   * counts of section 2 are counted on it.
+   */
+  postalCodeSource: PostalCodeSource | null;
+  /**
    * The country the run that found it was searching, not an OSM tag (plan 0061,
    * section 4). It reaches catalog on import, where it keys the centroid lookup
    * that fills the postcode two thirds of these places lack.
@@ -609,6 +623,18 @@ export interface ListDiscoveredPlacesRequest
   runId?: string;
   brandKey?: string;
   status?: DiscoveredPlaceStatus;
+  /**
+   * ISO 3166-1 alpha-2, lowercase. Paired with {@link postalCode}, which is only
+   * unique within a country.
+   */
+  country?: string;
+  /**
+   * The places **located in** this code, whichever run found them (plan 0097,
+   * section 9). It reads the place's own postal code and never the run's, so it
+   * answers the question a postal code detail screen asks: what would somebody
+   * living here be shown.
+   */
+  postalCode?: string;
 }
 
 /**
@@ -786,7 +812,33 @@ export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
  */
 export const POSTAL_CODE_DISCOVERY_PATTERNS = {
   list: 'postalCodeDiscovery.list',
+  /** Counts by status, the oldest waiting row, and whether anything drains. */
+  summary: 'postalCodeDiscovery.summary',
+  /** An operator adds a code, queued now or parked (plan 0097, section 6.1). */
+  add: 'postalCodeDiscovery.add',
+  /** Discover it again, ignoring the cooldown (section 6.2). */
+  requeue: 'postalCodeDiscovery.requeue',
+  /** Hide a code nobody can geocode from the working set (section 6.3). */
+  dismiss: 'postalCodeDiscovery.dismiss',
 } as const;
+
+/**
+ * How many places one postal code has to show for itself, split by what became
+ * of each (plan 0097, section 2).
+ *
+ * `total` is every row counted, and the three below it are the three
+ * `DiscoveredPlaceStatus` values, so they add up to it. One grouped query
+ * answers all four.
+ */
+export interface DiscoveredPlaceCounts {
+  total: number;
+  /** `IMPORTED`: an operator promoted it into a catalog location. */
+  imported: number;
+  /** `REJECTED`: an operator decided it is not a shop we want. */
+  rejected: number;
+  /** `NEW`: still waiting for somebody to decide. */
+  undecided: number;
+}
 
 /** One code the queue has been asked about, and what became of it. */
 export interface PostalCodeDiscoveryRequestView {
@@ -807,13 +859,80 @@ export interface PostalCodeDiscoveryRequestView {
   runId: string | null;
   /** Why the last attempt failed, kept on a FAILED row for a person to read. */
   error: string | null;
+  /**
+   * What Nominatim calls this code, kept at the `GEOCODE` stage of the first run
+   * (plan 0097, section 4).
+   *
+   * Null until a run has geocoded it. Nothing else in the system stores a name
+   * for a postal code, and an operator reading a list of bare numbers cannot
+   * tell Córdoba from Cáceres.
+   */
+  placeName: string | null;
+  /** Hidden from the working set by an operator (section 6.3). A requeue clears it. */
+  dismissed: boolean;
+  /** Places this code's own runs wrote, wherever they turned out to be. */
+  foundByItsRuns: DiscoveredPlaceCounts;
+  /** Places whose own postal code is this one, whichever run found them. */
+  locatedInIt: DiscoveredPlaceCounts;
 }
 
 export interface ListPostalCodeDiscoveryRequestsRequest
   extends PageQuery, AdminCredential {
   country?: string;
   status?: PostalCodeDiscoveryStatus;
+  /** Prefix match, which is how a person narrows a numeric code. */
+  postalCode?: string;
+  /**
+   * Absent means **not dismissed**, which is the working set (plan 0097,
+   * section 7). True lists the dismissed rows alone.
+   */
+  dismissed?: boolean;
 }
 
 export type PostalCodeDiscoveryRequestPage =
   Paginated<PostalCodeDiscoveryRequestView>;
+
+/**
+ * An operator adds a code by hand (plan 0097, section 6.1).
+ *
+ * One code per call. Adding twenty is twenty calls, under the partial failure
+ * rules `apps/luna-shopper-admin/plans/0020` already wrote for bulk work: a bulk
+ * endpoint is a transaction boundary and a timeout budget this service does not
+ * have and this screen does not need.
+ */
+export interface AddPostalCodeDiscoveryRequest extends AdminCredential {
+  /** ISO 3166-1 alpha-2, lowercase. */
+  country: string;
+  postalCode: string;
+  /**
+   * True inserts a `QUEUED` row, which is what an announcement already writes.
+   * False inserts a `PARKED` one, which the worker never claims.
+   */
+  discoverNow: boolean;
+}
+
+/** One queue row, by its id. */
+export interface PostalCodeDiscoveryIdRequest extends AdminCredential {
+  requestId: string;
+}
+
+/**
+ * The queue at a glance, for the listing's header and for the dashboard card of
+ * `apps/luna-shopper-admin/plans/0021` (plan 0097, section 7.1).
+ *
+ * `draining` is why this exists rather than being three counts on a screen. A
+ * queue that fills and never empties is the designed behaviour of a cluster with
+ * `HARVEST_ENABLED` false, and an operator pressing "discover again" there
+ * deserves to be told so instead of watching a row sit at `QUEUED` for a week.
+ */
+export interface PostalCodeDiscoverySummaryView {
+  queued: number;
+  running: number;
+  done: number;
+  failed: number;
+  parked: number;
+  /** The oldest QUEUED row's `requestedAt`, or null when nothing waits. */
+  oldestQueuedAt: string | null;
+  /** `HARVEST_ENABLED` in this deployment. False means nothing drains. */
+  draining: boolean;
+}

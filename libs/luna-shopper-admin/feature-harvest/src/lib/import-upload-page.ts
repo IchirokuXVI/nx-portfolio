@@ -2,11 +2,17 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
   inject,
   signal,
+  viewChild,
+  type OnDestroy,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
   RESOURCE_GATEWAYS,
@@ -27,6 +33,9 @@ import {
   importConflict,
   OFFICIAL_SOURCE_KINDS,
   parseHarvestDocument,
+  PREVIEW_PAGE,
+  previewMatches,
+  previewWindow,
   spawnBlockReason,
   type HarvestDocumentRead,
   type HarvestDocumentRejection,
@@ -43,6 +52,61 @@ import { HarvestShell } from './harvest-shell';
 
 /** How far the scope search walks looking for the chain's `NATIONAL` one. */
 const SCOPE_PAGE = 100;
+
+/**
+ * How long typing settles before the document is scanned.
+ *
+ * The same 250 ms the reference picker waits, and for the same reason: a word is
+ * typed in bursts, and the work belongs to the word rather than to the letter.
+ */
+const SEARCH_DELAY_MS = 250;
+
+/**
+ * Which sentence the tally says (plan 0019, section 3).
+ *
+ * Ten rather than four, because the four in the plan multiply out: the refusal
+ * filter and the cap are each on or off, and a sentence that says "showing 14 of
+ * 14" or leaves out that rows are hidden is the kind of half truth this line
+ * exists to prevent. A term matching nothing collapses both caps, which is why
+ * there are ten and not twelve.
+ */
+export type PreviewTallyKind =
+  | 'all'
+  | 'capped'
+  | 'matching'
+  | 'matchingCapped'
+  | 'none'
+  | 'refused'
+  | 'refusedCapped'
+  | 'refusedMatching'
+  | 'refusedMatchingCapped'
+  | 'refusedNone';
+
+/**
+ * The tally, as its sentence and the words that go in it.
+ *
+ * The counts are already grouped, because they are read rather than computed
+ * with, and `4,232` beside the chain and `4232` beside the list would be two
+ * numbers an operator has to check are the same one.
+ */
+export interface PreviewTally {
+  /**
+   * Everything here is a word the sentence interpolates, so the whole object is
+   * what the pipe is handed. The index signature is what lets it be, and it is
+   * why every count below is already a string.
+   */
+  readonly [word: string]: string;
+  readonly kind: PreviewTallyKind;
+  /** How many rows are drawn. */
+  readonly drawn: string;
+  /** How many products the term and the refusal filter left. */
+  readonly matched: string;
+  /** How many the document has, whatever is drawn. */
+  readonly total: string;
+  /** How many matched products are not drawn, for the "show more" control. */
+  readonly remaining: string;
+  readonly term: string;
+}
 
 /**
  * A harvest run that happened somewhere else, arriving as a file (admin plan
@@ -319,10 +383,36 @@ const SCOPE_PAGE = 100;
         <lib-harvest-notice [absent]="true" />
       }
 
+      <!-- The document is whole and the DOM is not (plan 0019). What the cap
+           governs is this @for and nothing else: the read document still holds
+           every product, and submit still sends the original bytes. -->
       <section class="preview">
         <h2>{{ 'harvest.imports.preview.heading' | rokuT }}</h2>
+
+        <div class="controls">
+          <label class="search">
+            <span>{{ 'harvest.imports.preview.search' | rokuT }}</span>
+            <input
+              (input)="onSearch($event)"
+              #search
+              name="previewSearch"
+              type="search"
+            />
+          </label>
+
+          @if (refusedOnly()) {
+            <button (click)="showWholeFile()" type="button">
+              {{ 'harvest.imports.preview.wholeFile' | rokuT }}
+            </button>
+          }
+        </div>
+
+        <p class="tally" role="status">
+          {{ 'harvest.imports.preview.tally.' + tally().kind | rokuT: tally() }}
+        </p>
+
         <ul class="products">
-          @for (product of document.products; track product.id) {
+          @for (product of window().rows; track product.id) {
             <li [class.blamed]="blamed().has(product.id)">
               <div class="identity">
                 <strong>{{ product.name }}</strong>
@@ -342,6 +432,18 @@ const SCOPE_PAGE = 100;
             </li>
           }
         </ul>
+
+        <!-- No "show all". A control whose purpose is to undo the cap is the cap
+             not existing, and an operator looking for one row has the search
+             box instead. -->
+        @if (window().hasMore) {
+          <button (click)="showMore()" class="more" type="button">
+            {{
+              'harvest.imports.preview.more'
+                | rokuT: { more: tally().remaining }
+            }}
+          </button>
+        }
       </section>
     }
   `,
@@ -397,7 +499,7 @@ const SCOPE_PAGE = 100;
     .hints {
       border-color: var(--admin-accent);
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     .hints ul {
@@ -460,7 +562,7 @@ const SCOPE_PAGE = 100;
     }
 
     .messages {
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .submit {
@@ -468,6 +570,34 @@ const SCOPE_PAGE = 100;
       flex-wrap: wrap;
       gap: var(--admin-space-3);
       align-items: center;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+      align-items: flex-end;
+    }
+
+    .search {
+      display: flex;
+      flex: 1 1 18rem;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+    }
+
+    .search > span {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .tally {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .more {
+      align-self: flex-start;
     }
 
     .products {
@@ -512,19 +642,6 @@ const SCOPE_PAGE = 100;
       color: var(--admin-accent);
     }
 
-    button,
-    input,
-    select {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      font-size: 1rem;
-      color: var(--admin-ink);
-    }
-
     button {
       cursor: pointer;
     }
@@ -550,8 +667,9 @@ const SCOPE_PAGE = 100;
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ImportUploadPage {
+export class ImportUploadPage implements OnDestroy {
   private readonly _service = inject(HARVEST_SERVICE);
+  private readonly _translate = inject(RokuTranslatorService);
   /**
    * The scopes of one chain, read for their `kind`.
    *
@@ -588,6 +706,24 @@ export class ImportUploadPage {
 
   /** What each of the three hints did, for the notice and for the specs. */
   readonly hints = signal<readonly HintResult[]>([]);
+
+  /**
+   * The three the preview holds, and nothing else on this screen moves (plan
+   * 0019, section 5).
+   *
+   * `term` is the settled term rather than what is in the box: it is written
+   * 250 ms after the last keystroke, so a four thousand row scan happens once
+   * per word rather than once per keystroke.
+   */
+  readonly term = signal('');
+  readonly shown = signal(PREVIEW_PAGE);
+  /** Whether the preview is narrowed to the rows the gateway objected to. */
+  readonly refusedOnly = signal(false);
+
+  /** The box itself, which is emptied when a new file is chosen. */
+  private readonly _search = viewChild<ElementRef<HTMLInputElement>>('search');
+
+  private _timer: ReturnType<typeof setTimeout> | null = null;
 
   readonly notice = computed(() => hintNotice(this.hints()));
 
@@ -637,6 +773,69 @@ export class ImportUploadPage {
   readonly blamed = computed(
     () => new Set(this.failures().map((row) => row.productId))
   );
+
+  /**
+   * The whole document, filtered, before the window is applied.
+   *
+   * In that order and not the other one: a term that matches row 3,000 has to
+   * return row 3,000 with the window still at its default, or the search is
+   * useless on the files that made it necessary.
+   */
+  readonly matches = computed(() =>
+    previewMatches(
+      this.read()?.products ?? [],
+      this.term(),
+      this.refusedOnly() ? this.blamed() : null
+    )
+  );
+
+  /** What is drawn, which is the first `shown` of what matched. */
+  readonly window = computed(() => previewWindow(this.matches(), this.shown()));
+
+  /**
+   * The one line above the list, and it is not decoration.
+   *
+   * A cap that does not say it is a cap is a file that looks shorter than it is,
+   * on the screen whose job is to show the operator what they are about to
+   * import. The counts are the document's rather than the window's, so the
+   * number beside the chain and the number here agree.
+   */
+  readonly tally = computed<PreviewTally>(() => {
+    const view = this.window();
+    const total = this.read()?.products.length ?? 0;
+    const term = this.term().trim();
+    const refused = this.refusedOnly();
+
+    const number = new Intl.NumberFormat(this._translate.locale());
+    const counts = {
+      drawn: number.format(view.rows.length),
+      matched: number.format(view.matched),
+      total: number.format(total),
+      remaining: number.format(view.remaining),
+      term,
+    };
+
+    if (view.matched === 0 && term !== '') {
+      return { kind: refused ? 'refusedNone' : 'none', ...counts };
+    }
+
+    const whole: PreviewTallyKind = refused ? 'refused' : 'all';
+    const searched: PreviewTallyKind = refused ? 'refusedMatching' : 'matching';
+    const capped: PreviewTallyKind = refused ? 'refusedCapped' : 'capped';
+    const searchedCapped: PreviewTallyKind = refused
+      ? 'refusedMatchingCapped'
+      : 'matchingCapped';
+
+    const kind = view.hasMore
+      ? term === ''
+        ? capped
+        : searchedCapped
+      : term === ''
+        ? whole
+        : searched;
+
+    return { kind, ...counts };
+  });
 
   readonly conflict = computed<ImportConflictNotice | null>(() => {
     const error = this.error();
@@ -713,6 +912,10 @@ export class ImportUploadPage {
     this.started.set('');
     this.validFrom.set('');
     this.validUntil.set('');
+    // The window, the term and the refusal filter all belong to the file that
+    // is going away: a position, a search and a complaint about a different
+    // document (plan 0019, section 4).
+    this.resetPreview();
 
     if (file === null) {
       return;
@@ -794,6 +997,61 @@ export class ImportUploadPage {
     // preselected exactly as it is when the operator picks the chain by hand.
     if (this.supermarketId() !== '' && this.priceScopeId() === '') {
       await this.refreshScopes();
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this._timer !== null) {
+      clearTimeout(this._timer);
+    }
+  }
+
+  /**
+   * A word typed in the search box, once it has settled.
+   *
+   * The window goes back to its first page on every change, because the page it
+   * was on was a position in a different list: an operator who pressed "show
+   * more" twice and then typed a word is not asking for the first 750 of what
+   * matched.
+   */
+  onSearch(event: Event): void {
+    const typed = (event.target as HTMLInputElement).value;
+
+    if (this._timer !== null) {
+      clearTimeout(this._timer);
+    }
+
+    this._timer = setTimeout(() => {
+      this.term.set(typed);
+      this.shown.set(PREVIEW_PAGE);
+    }, SEARCH_DELAY_MS);
+  }
+
+  /** Another page of rows. Pressing it repeatedly does reach the end of a file. */
+  showMore(): void {
+    this.shown.update((shown) => shown + PREVIEW_PAGE);
+  }
+
+  /** Back out of a refusal, to the whole document again. */
+  showWholeFile(): void {
+    this.refusedOnly.set(false);
+    this.shown.set(PREVIEW_PAGE);
+  }
+
+  /** The preview as a freshly opened file leaves it. */
+  resetPreview(): void {
+    if (this._timer !== null) {
+      clearTimeout(this._timer);
+      this._timer = null;
+    }
+
+    this.term.set('');
+    this.shown.set(PREVIEW_PAGE);
+    this.refusedOnly.set(false);
+
+    const box = this._search()?.nativeElement;
+    if (box !== undefined) {
+      box.value = '';
     }
   }
 
@@ -884,6 +1142,17 @@ export class ImportUploadPage {
     } catch (error) {
       const failure = toGatewayError(error);
       this.error.set(failure);
+      // A refusal is the one moment the operator is not browsing the document
+      // but reading a complaint about specific rows, so the preview follows them
+      // there (plan 0019, section 4). Under a cap the alternative is a promise
+      // the marking cannot keep: the row a message names is row 3,000 and the
+      // operator is looking at rows 1 to 250, all of them unmarked.
+      //
+      // Only for a refusal that names a product. A complaint about the producer
+      // block narrows the preview to nothing, which hides the document to say
+      // something that is not about it.
+      this.refusedOnly.set(this.failures().some((row) => row.productId !== ''));
+      this.shown.set(PREVIEW_PAGE);
       // The switch panel on the runs screen reads this, so a refusal seen here
       // explains the empty runs list over there rather than being learned twice.
       this.shell.observeSpawnRefusal(spawnBlockReason(failure));

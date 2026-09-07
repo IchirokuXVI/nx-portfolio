@@ -280,10 +280,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // nothing would ever construct it and the app would go on checking for a new
   // version exactly once per cold start.
   //
-  // Started in both run modes even though only one of them has a service worker. The
-  // service returns from its constructor without subscribing to anything when there
-  // is no enabled worker, so under the shell this costs one object, and keeping the
-  // line unconditional means there is no second place where the two modes disagree.
+  // Started in both run modes even though only one of them has a service worker,
+  // and started **here** rather than left to whatever injects it first, because a
+  // refusal can arrive on the boot probe and the watch that answers it has to be
+  // registered before that (plan 0072, section 3). With no enabled worker the service
+  // checks nothing and schedules nothing; what it keeps in that mode is the refusal
+  // watch, whose answer there is a plain reload (D6).
   provideEnvironmentInitializer(() => void inject(AppUpdates)),
 
   // Start listening for `beforeinstallprompt` (plan 0033 D1). Nothing injects this

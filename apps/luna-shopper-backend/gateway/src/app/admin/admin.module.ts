@@ -6,6 +6,7 @@ import {
   AdminBasketsController,
   AdminListsController,
   AdminPostalCodesController,
+  AdminProfilePostalCodesController,
   AdminZonesController,
 } from './admin-core.controller';
 import { AdminDashboardController } from './admin-dashboard.controller';
@@ -52,6 +53,8 @@ import { AdminUserNamesService } from './admin-user-names.service';
     AdminListsController,
     AdminBasketsController,
     AdminPostalCodesController,
+    // The demand behind a postal code, which is core's (plan 0097, section 5).
+    AdminProfilePostalCodesController,
   ],
   providers: [AdminJwtStrategy, AdminUserNamesService, AdminDashboardService],
 })

@@ -283,7 +283,7 @@ type Place = Wire.HarvestDiscoveredPlaceView;
 
     .bulk .danger {
       border-color: var(--admin-danger);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .bulk button:disabled {

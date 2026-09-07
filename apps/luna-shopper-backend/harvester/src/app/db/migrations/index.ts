@@ -6,6 +6,7 @@ import { HarvestRunReport1756600000000 } from './1756600000000-HarvestRunReport'
 import { LeafletImport1756700000000 } from './1756700000000-LeafletImport';
 import { RevertedRuns1756800000000 } from './1756800000000-RevertedRuns';
 import { OneSourceProduct1756900000000 } from './1756900000000-OneSourceProduct';
+import { PostalCodeQueueSurface1757000000000 } from './1757000000000-PostalCodeQueueSurface';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -24,4 +25,5 @@ export const HARVESTER_MIGRATIONS = [
   LeafletImport1756700000000,
   RevertedRuns1756800000000,
   OneSourceProduct1756900000000,
+  PostalCodeQueueSurface1757000000000,
 ];

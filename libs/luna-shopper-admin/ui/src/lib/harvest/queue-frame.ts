@@ -434,7 +434,7 @@ export interface QueueReport {
 
     .actions .danger {
       border-color: var(--admin-danger);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     button {

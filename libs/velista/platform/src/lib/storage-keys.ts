@@ -46,6 +46,17 @@ export const StorageKeys = {
   voiceSendOnSilence: `voice-send-on-silence:${APP_KEY}`,
   /** Whether the microphone reopens after a recording is sent. Off unless stored. */
   voiceKeepListening: `voice-keep-listening:${APP_KEY}`,
+  /**
+   * That this document already spent its one reload on a build the server refuses
+   * (plan 0072 D4).
+   *
+   * The only key here that lives in `sessionStorage`, and it has to: it must survive
+   * the reload it records and die with the tab. A deployment whose floor sits above
+   * its own newest build, or a cache serving the old bundle back, produces a real
+   * `VERSION_READY`, a reload and another refusal, and without this the pair repeats
+   * for as long as the tab is open.
+   */
+  updateAttempt: `update-attempt:${APP_KEY}`,
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
