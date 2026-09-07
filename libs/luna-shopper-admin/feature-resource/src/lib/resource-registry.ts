@@ -1,10 +1,8 @@
 import {
   inject,
   Injectable,
-  InjectionToken,
   Injector,
   runInInjectionContext,
-  type Provider,
 } from '@angular/core';
 import {
   idOf,
@@ -17,28 +15,18 @@ import type {
   ReferenceOption,
   ReferenceScope,
 } from '@portfolio/luna-shopper-admin/ui';
+import { ADMIN_SECTIONS } from './admin-section';
 
 /**
- * Every resource this app knows about.
+ * Finding a descriptor, working out where it is mounted, and building the
+ * gateway it names.
  *
- * The list is the app's, because it is the app that decides which screens
- * exist. A routed library that declared its own would make adding a resource a
- * change in two places, and a reference field pointing at a resource the app did
- * not mount would be a picker that finds nothing with nothing to say about why.
- */
-export const RESOURCE_DESCRIPTORS = new InjectionToken<
-  readonly AnyResourceDescriptor[]
->('RESOURCE_DESCRIPTORS', { providedIn: 'root', factory: () => [] });
-
-/** Name the resources this app has. */
-export function provideResources(
-  ...descriptors: readonly AnyResourceDescriptor[]
-): Provider {
-  return { provide: RESOURCE_DESCRIPTORS, useValue: descriptors };
-}
-
-/**
- * Finding a descriptor, and building the gateway it names.
+ * Read from {@link ADMIN_SECTIONS}, which is the same list the route table is
+ * built from, so a resource the app mounted is a resource this can find and a
+ * path this answers is a path that exists. It used to be read from a second
+ * list of descriptors beside the sections, and `POSTAL_CODES` is what that cost:
+ * mounted by `harvestRoutes` and registered nowhere, so a reference field
+ * pointing at it would have found nothing (admin plan 0022, section 2).
  *
  * `descriptor.gateway()` calls `inject`, so it has to run in an injection
  * context. A component calling it in a field initializer is already in one; this
@@ -47,17 +35,41 @@ export function provideResources(
  */
 @Injectable({ providedIn: 'root' })
 export class ResourceRegistry {
-  private readonly _descriptors = inject(RESOURCE_DESCRIPTORS);
+  private readonly _sections = inject(ADMIN_SECTIONS);
   private readonly _injector = inject(Injector);
 
-  /** Every resource, in the order the app named them. */
+  /** Every resource, section by section, in the order the app named them. */
   all(): readonly AnyResourceDescriptor[] {
-    return this._descriptors;
+    return this._sections.flatMap((section) => section.resources ?? []);
   }
 
   /** The resource with this name, or `undefined`. */
   byName(name: string): AnyResourceDescriptor | undefined {
-    return this._descriptors.find((descriptor) => descriptor.name === name);
+    return this.all().find((descriptor) => descriptor.name === name);
+  }
+
+  /**
+   * Where a resource's list lives, as a router link array.
+   *
+   * `['/', 'catalog', 'items']` for `items`, and `null` for a resource this app
+   * did not mount. Everything that used to build such a path out of
+   * `descriptor.segment` asks this instead: a segment says what a resource
+   * calls itself and says nothing at all about which section holds it.
+   */
+  pathOf(name: string): readonly string[] | null {
+    for (const section of this._sections) {
+      const found = (section.resources ?? []).find(
+        (descriptor) => descriptor.name === name
+      );
+
+      if (found !== undefined) {
+        return section.segment === undefined
+          ? ['/', found.segment]
+          : ['/', section.segment, found.segment];
+      }
+    }
+
+    return null;
   }
 
   /** The gateway for a resource, built in an injection context. */

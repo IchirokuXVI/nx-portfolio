@@ -14,7 +14,6 @@ import { compositeId, type Wire } from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
 import { DetailFacts, DetailFrame, type DetailFact } from './detail-frame';
 import { DetailPage, nameOrId } from './detail-page';
-import { MEMBERSHIPS } from './memberships';
 import { instant } from './people-format';
 import type { ZoneRow } from './people-seed';
 
@@ -359,7 +358,7 @@ export class ZoneDetailPage extends DetailPage<ZoneRow> {
   }
 
   openList(listId: string): void {
-    this.go(['/lists', listId]);
+    this.goToResource('lists', listId);
   }
 
   /**
@@ -369,10 +368,10 @@ export class ZoneDetailPage extends DetailPage<ZoneRow> {
    * for one, so both halves are in every URL that reaches it.
    */
   openMembership(zone: ZoneRow, member: Member): void {
-    this.go([
-      `/${MEMBERSHIPS.segment}`,
-      compositeId([zone.id, member.membershipId]),
-    ]);
+    this.goToResource(
+      'memberships',
+      compositeId([zone.id, member.membershipId])
+    );
   }
 
   /** The owner is already the owner. Everybody else can be handed the zone. */

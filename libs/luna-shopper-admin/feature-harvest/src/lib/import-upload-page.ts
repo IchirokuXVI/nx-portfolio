@@ -26,6 +26,7 @@ import {
 import {
   gatewayErrorKey,
   ResourceReferences,
+  ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   harvestFailures,
@@ -253,12 +254,19 @@ export interface PreviewTally {
             @if (noNationalScope()) {
               <p class="hint">
                 {{ 'harvest.imports.noNational' | rokuT }}
-                <a
-                  [queryParams]="{ supermarketId: supermarketId() }"
-                  [routerLink]="['/', 'price-scopes', 'new']"
-                  target="_blank"
-                  >{{ 'harvest.imports.createScope' | rokuT }}</a
-                >
+                <!-- Where the price scopes screen is, asked of the registry
+                     rather than written out: the resource moved into the catalog
+                     section and its segment never said which section held it
+                     (admin plan 0022, section 3). An app that did not mount it
+                     gets the sentence without the link. -->
+                @if (newScopeLink(); as link) {
+                  <a
+                    [queryParams]="{ supermarketId: supermarketId() }"
+                    [routerLink]="link"
+                    target="_blank"
+                    >{{ 'harvest.imports.createScope' | rokuT }}</a
+                  >
+                }
               </p>
               <button (click)="refreshScopes()" type="button">
                 {{ 'harvest.imports.refreshScopes' | rokuT }}
@@ -683,8 +691,16 @@ export class ImportUploadPage implements OnDestroy {
 
   readonly shell = inject(HarvestShell);
   readonly references = inject(ResourceReferences);
+  private readonly _registry = inject(ResourceRegistry);
 
   readonly kinds = OFFICIAL_SOURCE_KINDS;
+
+  /** The create form for a price scope, wherever the catalog section mounted it. */
+  newScopeLink(): readonly string[] | null {
+    const path = this._registry.pathOf('price-scopes');
+
+    return path === null ? null : [...path, 'new'];
+  }
 
   /** The document, held in memory and never stored. */
   readonly read = signal<HarvestDocumentRead | null>(null);

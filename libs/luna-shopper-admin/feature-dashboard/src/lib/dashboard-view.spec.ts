@@ -1,13 +1,9 @@
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
-import {
-  activityRows,
-  catalogTiles,
-  peopleTiles,
-  pricesWrittenChart,
-  runsByStatusChart,
-  waitingTiles,
-  type Translate,
-} from './dashboard-view';
+import type {
+  PathOf,
+  Translate,
+  Wire,
+} from '@portfolio/luna-shopper-admin/models';
+import { activityRows, waitingTiles } from './dashboard-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
@@ -18,6 +14,29 @@ const translate: Translate = (key, values) =>
         .join(',')})`;
 
 const nameChain = (id: string) => `chain:${id}`;
+
+/**
+ * The mount of admin plan 0022, as far as the overview reaches into it.
+ *
+ * A resolver rather than a segment map, which is the whole point: a tile knows
+ * which resource it opens and knows nothing about which section holds it.
+ */
+const pathOf: PathOf = (name) => {
+  const section: Record<string, string | undefined> = {
+    zones: 'shoppers',
+    lists: 'shoppers',
+    users: 'shoppers',
+    prices: 'catalog',
+    items: 'catalog',
+    'postal-codes': 'harvest',
+  };
+  const segment = section[name];
+
+  return segment === undefined ? null : ['/', segment, name];
+};
+
+/** An app that mounted none of them, which draws a tile with no link. */
+const nothing: PathOf = () => null;
 
 function days(...counts: readonly number[]): Wire.AdminDashboardDailyCount[] {
   return counts.map((count, index) => ({
@@ -99,16 +118,16 @@ function response(
 
 describe('waitingTiles', () => {
   it('counts the join requests and opens the zones', () => {
-    const [tile] = waitingTiles(response(), translate, nameChain);
+    const [tile] = waitingTiles(response(), translate, nameChain, pathOf);
 
     expect(tile.key).toBe('memberships');
     expect(tile.value).toBe(2);
-    expect(tile.link).toEqual(['/', 'zones']);
+    expect(tile.link).toEqual(['/', 'shoppers', 'zones']);
   });
 
   /** A queue with rows in it is the reason this screen exists. */
   it('puts a tile with rows in it in the attention tone', () => {
-    const tiles = waitingTiles(response(), translate, nameChain);
+    const tiles = waitingTiles(response(), translate, nameChain, pathOf);
     const memberships = tiles.find((tile) => tile.key === 'memberships');
     const places = tiles.find((tile) => tile.key === 'places');
 
@@ -137,7 +156,7 @@ describe('waitingTiles', () => {
       }),
     });
 
-    const keys = waitingTiles(document, translate, nameChain).map(
+    const keys = waitingTiles(document, translate, nameChain, pathOf).map(
       (tile) => tile.key
     );
 
@@ -157,7 +176,7 @@ describe('waitingTiles', () => {
         },
       }),
     });
-    const tile = waitingTiles(document, translate, nameChain).find(
+    const tile = waitingTiles(document, translate, nameChain, pathOf).find(
       (entry) => entry.key === 'entries-a'
     );
 
@@ -175,7 +194,7 @@ describe('waitingTiles', () => {
         },
       }),
     });
-    const tiles = waitingTiles(document, translate, nameChain);
+    const tiles = waitingTiles(document, translate, nameChain, pathOf);
     const entries = tiles.find((tile) => tile.key === 'entries-a');
     const shops = tiles.find((tile) => tile.key === 'shops-a');
     const places = tiles.find((tile) => tile.key === 'places');
@@ -187,18 +206,30 @@ describe('waitingTiles', () => {
     expect(places?.link).toEqual(['/', 'harvest', 'places']);
   });
 
-  it('sends the stale prices to the price list', () => {
-    const tile = waitingTiles(response(), translate, nameChain).find(
+  it('sends the stale prices to the price list, wherever it is mounted', () => {
+    const tile = waitingTiles(response(), translate, nameChain, pathOf).find(
       (entry) => entry.key === 'stale'
     );
 
     expect(tile?.value).toBe(61);
-    expect(tile?.link).toEqual(['/', 'prices']);
+    expect(tile?.link).toEqual(['/', 'catalog', 'prices']);
+  });
+
+  /**
+   * A tile whose screen this app did not mount keeps its number and loses its
+   * link, rather than pointing at a URL that answers the not found page.
+   */
+  it('draws an unlinked tile where the screen is not mounted', () => {
+    const tiles = waitingTiles(response(), translate, nameChain, nothing);
+    const stale = tiles.find((tile) => tile.key === 'stale');
+
+    expect(stale?.value).toBe(61);
+    expect(stale?.link).toBeNull();
   });
 
   /** The rows are further down this same page, so the tile opens nothing. */
   it('gives the failed sign ins no link', () => {
-    const tile = waitingTiles(response(), translate, nameChain).find(
+    const tile = waitingTiles(response(), translate, nameChain, pathOf).find(
       (entry) => entry.key === 'loginFailures'
     );
 
@@ -213,163 +244,11 @@ describe('waitingTiles', () => {
     const keys = waitingTiles(
       response({ harvest: null, core: null }),
       translate,
-      nameChain
+      nameChain,
+      pathOf
     ).map((tile) => tile.key);
 
     expect(keys).toEqual(['stale', 'loginFailures']);
-  });
-});
-
-describe('runsByStatusChart', () => {
-  it('draws every status in enum order whatever happened this month', () => {
-    const chart = runsByStatusChart(
-      harvest({
-        runs: {
-          byStatus: [{ status: 'COMPLETED', count: 4 }],
-          inWindow: 4,
-        },
-      }),
-      translate
-    );
-
-    expect(chart.bars.map((bar) => bar.key)).toEqual([
-      'PENDING',
-      'RUNNING',
-      'COMPLETED',
-      'FAILED',
-      'ABORTED',
-      'STALE',
-    ]);
-    expect(chart.bars.map((bar) => bar.values)).toEqual([
-      [0],
-      [0],
-      [4],
-      [0],
-      [0],
-      [0],
-    ]);
-  });
-
-  /** One series, so every bar is the first colour and none of them is identity. */
-  it('is one series', () => {
-    const chart = runsByStatusChart(harvest(), translate);
-
-    expect(chart.series).toHaveLength(1);
-    expect(chart.series[0].colour).toBe(1);
-  });
-});
-
-describe('pricesWrittenChart', () => {
-  const series = (
-    kind: Wire.EnumsPriceSourceKind,
-    ...counts: readonly number[]
-  ) => ({ sourceKind: kind, points: days(...counts) });
-
-  it('gives a kind the colour of its position in the enum, always', () => {
-    const chart = pricesWrittenChart(
-      catalog({
-        pricesWritten: [
-          series('OFFICIAL_API', 0, 0, 0),
-          series('OFFICIAL_WEB', 1, 2, 3),
-          series('OFFICIAL_LEAFLET', 0, 0, 0),
-          series('ADMIN', 4, 0, 0),
-          series('USER_RECEIPT', 0, 0, 0),
-          series('USER_REPORTED', 0, 0, 0),
-        ],
-      }),
-      translate
-    );
-
-    expect(chart.series.map((entry) => [entry.key, entry.colour])).toEqual([
-      ['OFFICIAL_WEB', 2],
-      ['ADMIN', 4],
-    ]);
-  });
-
-  it('leaves a kind that wrote nothing out of the drawing', () => {
-    const chart = pricesWrittenChart(
-      catalog({
-        pricesWritten: [
-          series('OFFICIAL_API', 1, 0, 0),
-          series('USER_RECEIPT', 0, 0, 0),
-        ],
-      }),
-      translate
-    );
-
-    expect(chart.series.map((entry) => entry.key)).toEqual(['OFFICIAL_API']);
-    expect(chart.bars.map((bar) => bar.values)).toEqual([[1], [0], [0]]);
-  });
-
-  it('draws one category per day of the window', () => {
-    const chart = pricesWrittenChart(
-      catalog({ pricesWritten: [series('OFFICIAL_API', 1, 2, 3)] }),
-      translate
-    );
-
-    expect(chart.bars.map((bar) => bar.key)).toEqual([
-      '2026-08-01',
-      '2026-08-02',
-      '2026-08-03',
-    ]);
-  });
-
-  /**
-   * Thirty ISO dates along an axis are unreadable, and the chart thins its
-   * labels rather than shortening them, which is the caller's job.
-   */
-  it('labels a day with whatever the caller formats it as', () => {
-    const chart = pricesWrittenChart(
-      catalog({ pricesWritten: [series('OFFICIAL_API', 1, 2, 3)] }),
-      translate,
-      (day) => `on ${day.slice(-2)}`
-    );
-
-    expect(chart.bars.map((bar) => bar.label)).toEqual([
-      'on 01',
-      'on 02',
-      'on 03',
-    ]);
-  });
-});
-
-describe('peopleTiles', () => {
-  it('carries the seven day delta and the sparkline on the users tile', () => {
-    const tiles = peopleTiles(
-      identity({ signUps: days(...Array.from({ length: 14 }, () => 1)) }),
-      core(),
-      translate
-    );
-    const users = tiles[0];
-
-    expect(users.key).toBe('users');
-    expect(users.delta?.value).toBe(0);
-    expect(users.trend).toHaveLength(14);
-  });
-
-  it('draws only what answered', () => {
-    expect(
-      peopleTiles(null, core(), translate).map((tile) => tile.key)
-    ).toEqual(['zones', 'lists', 'baskets']);
-    expect(
-      peopleTiles(identity(), null, translate).map((tile) => tile.key)
-    ).toEqual(['users']);
-  });
-});
-
-describe('catalogTiles', () => {
-  it('is five tiles, the last of which opens the price list', () => {
-    const tiles = catalogTiles(catalog(), translate);
-
-    expect(tiles.map((tile) => tile.key)).toEqual([
-      'supermarkets',
-      'locations',
-      'items',
-      'productGroups',
-      'supermarketItems',
-    ]);
-    expect(tiles[4].link).toEqual(['/', 'prices']);
-    expect(tiles[4].value).toBe(900);
   });
 });
 
@@ -392,10 +271,10 @@ describe('activityRows', () => {
     };
   }
 
-  it('opens a row this app has a screen for', () => {
-    const [row] = activityRows([entry()], translate, since, instant);
+  it('opens a row through the section that holds its screen', () => {
+    const [row] = activityRows([entry()], translate, since, instant, pathOf);
 
-    expect(row.link).toEqual(['/', 'zones', 'zone-1']);
+    expect(row.link).toEqual(['/', 'shoppers', 'zones', 'zone-1']);
     expect(row.who).toBe('Ichiroku');
   });
 
@@ -405,8 +284,15 @@ describe('activityRows', () => {
       [entry({ entity: 'list_lines', entityId: 'line-1' })],
       translate,
       since,
-      instant
+      instant,
+      pathOf
     );
+
+    expect(row.link).toBeNull();
+  });
+
+  it('leaves a row as text where the resolver does not know the resource', () => {
+    const [row] = activityRows([entry()], translate, since, instant, nothing);
 
     expect(row.link).toBeNull();
   });
@@ -420,7 +306,8 @@ describe('activityRows', () => {
       [entry({ actorKind: 'SERVICE', actorId: 'uuid', actorName: 'uuid' })],
       translate,
       since,
-      instant
+      instant,
+      pathOf
     );
 
     expect(row.who).toBe('dashboard.activity.service');
@@ -431,7 +318,8 @@ describe('activityRows', () => {
       [entry({ entity: 'admin_login_failures' })],
       translate,
       since,
-      instant
+      instant,
+      pathOf
     );
 
     expect(row.what).toContain('admin_login_failures');

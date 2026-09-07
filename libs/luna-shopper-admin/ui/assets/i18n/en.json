@@ -65,7 +65,15 @@
     "menu": "Menu",
     "navigation": "Sections",
     "waiting": "{{count}} waiting for a decision",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "screens": "Screens in this section",
+    "sections": {
+      "overview": "Overview",
+      "catalog": "Catalog",
+      "shoppers": "Shoppers",
+      "harvest": "Harvester",
+      "admins": "Admins"
+    }
   },
   "notFound": {
     "heading": "There is no such screen",
@@ -416,7 +424,7 @@
   },
   "harvest": {
     "nav": {
-      "runs": "Harvest runs",
+      "runs": "Runs",
       "places": "Discovered places",
       "entries": "Source products",
       "import": "Import a file",
@@ -1290,7 +1298,6 @@
     }
   },
   "dashboard": {
-    "nav": "Overview",
     "heading": "Overview",
     "measuredAt": "Taken {{when}}",
     "refresh": "Refresh",
@@ -1323,7 +1330,6 @@
       "postalCodesOldest": "oldest queued {{since}}"
     },
     "harvest": {
-      "heading": "The harvester",
       "running": "Running now",
       "noRun": "Nothing is running.",
       "openRun": "Open this run",
@@ -1333,24 +1339,7 @@
       "byStatusTitle": "Runs by status",
       "sources": "{{enabled}} of {{total}} chains enabled"
     },
-    "people": {
-      "heading": "People",
-      "users": "Users",
-      "usersCaption": "{{registered}} registered, {{temporary}} temporary, {{verified}} verified",
-      "zones": "Zones",
-      "zonesCaption": "{{active}} active of {{total}}",
-      "lists": "Lists",
-      "baskets": "Baskets",
-      "basketsCaption": "{{draft}} draft, {{completed}} completed",
-      "signUps": "Sign ups",
-      "signUpsTitle": "Sign ups per day",
-      "zonesSeries": "Zones",
-      "listsSeries": "Lists",
-      "zonesAndLists": "Zones and lists created per day",
-      "inLast7Days": "in the last 7 days"
-    },
     "catalog": {
-      "heading": "Catalog",
       "supermarkets": "Chains",
       "locations": "Shops",
       "items": "Products",
@@ -1397,6 +1386,21 @@
         "price_scopes": "a price scope",
         "price_policies": "a price policy"
       }
+    },
+    "shoppers": {
+      "users": "Users",
+      "usersCaption": "{{registered}} registered, {{temporary}} temporary, {{verified}} verified",
+      "zones": "Zones",
+      "zonesCaption": "{{active}} active of {{total}}",
+      "lists": "Lists",
+      "baskets": "Baskets",
+      "basketsCaption": "{{draft}} draft, {{completed}} completed",
+      "signUps": "Sign ups",
+      "signUpsTitle": "Sign ups per day",
+      "zonesSeries": "Zones",
+      "listsSeries": "Lists",
+      "zonesAndLists": "Zones and lists created per day",
+      "inLast7Days": "in the last 7 days"
     }
   }
 }

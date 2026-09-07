@@ -12,7 +12,10 @@ import {
   POSTAL_CODE_SERVICE,
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { gatewayErrorKey } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  gatewayErrorKey,
+  ResourceRegistry,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { formatInstant, formatSince } from './format-instant';
 import { HARVEST_SEGMENT } from './harvest-paths';
@@ -241,9 +244,14 @@ interface NearCode {
           >
             {{ 'harvest.postalCodes.detail.openPlaces' | rokuT }}
           </a>
-          <a routerLink="/locations">
-            {{ 'harvest.postalCodes.detail.openLocations' | rokuT }}
-          </a>
+          <!-- The shops list, wherever the catalog section mounted it. Its
+               segment says what the resource calls itself and nothing about
+               which section holds it (admin plan 0022, section 3). -->
+          @if (locationsLink(); as link) {
+            <a [routerLink]="link">
+              {{ 'harvest.postalCodes.detail.openLocations' | rokuT }}
+            </a>
+          }
         </div>
       }
     </section>
@@ -426,6 +434,12 @@ export class PostalCodeDetailPage {
   private readonly _postalCodes = inject(POSTAL_CODE_SERVICE);
   private readonly _route = inject(ActivatedRoute);
   private readonly _router = inject(Router);
+  private readonly _registry = inject(ResourceRegistry);
+
+  /** Where the shops list lives, or nothing where this app did not mount it. */
+  locationsLink(): readonly string[] | null {
+    return this._registry.pathOf('locations');
+  }
 
   readonly segment = HARVEST_SEGMENT;
 

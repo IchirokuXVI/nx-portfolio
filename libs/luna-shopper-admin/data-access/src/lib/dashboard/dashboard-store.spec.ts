@@ -118,12 +118,18 @@ describe('DashboardStore', () => {
   /**
    * Once a minute is the wrong cadence for a progress bar, so a run in flight
    * pulls the interval down to the one the run screen polls at.
+   *
+   * **Only for the screen that draws the run** (admin plan 0022, section 7). The
+   * fast poll used to follow the run wherever the operator was, so a run that
+   * started at midnight made a catalog dashboard re-read four times a minute to
+   * follow something it does not show.
    */
-  it('drops to the run interval while a run is in flight', async () => {
+  it('drops to the run interval while the open screen follows a run', async () => {
     const service = reader([document_({ harvest: { running: RUNNING } })]);
     const { store } = build(service);
 
     store.watch();
+    store.followRuns(true);
     await settle();
 
     expect(store.runInFlight()).toBe(true);
@@ -135,6 +141,35 @@ describe('DashboardStore', () => {
     store.stop();
   });
 
+  it('stays slow on a screen that does not draw the run', async () => {
+    const service = reader([document_({ harvest: { running: RUNNING } })]);
+    const { store } = build(service);
+
+    store.watch();
+    await settle();
+
+    expect(store.runInFlight()).toBe(true);
+    expect(store.interval()).toBe(DASHBOARD_POLL_INTERVAL_MS);
+
+    jest.advanceTimersByTime(RUN_POLL_INTERVAL_MS);
+    await settle();
+    expect(service.calls).toBe(1);
+    store.stop();
+  });
+
+  /** Leaving the screen puts it back, so the next one does not inherit it. */
+  it('forgets the follow when the screen goes', async () => {
+    const service = reader([document_({ harvest: { running: RUNNING } })]);
+    const { store } = build(service);
+
+    store.watch();
+    store.followRuns(true);
+    await settle();
+    store.stop();
+
+    expect(store.interval()).toBe(DASHBOARD_POLL_INTERVAL_MS);
+  });
+
   it('goes back to the slow interval when the run has finished', async () => {
     const service = reader([
       document_({ harvest: { running: RUNNING } }),
@@ -143,6 +178,7 @@ describe('DashboardStore', () => {
     const { store } = build(service);
 
     store.watch();
+    store.followRuns(true);
     await settle();
     jest.advanceTimersByTime(RUN_POLL_INTERVAL_MS);
     await settle();

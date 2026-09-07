@@ -23,6 +23,10 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
  * built around telling "expected" from "broken". Nothing here is expected, and
  * `harvesterDeployed` must not be consulted: both clusters run the harvester
  * now, so the document is the only thing that knows.
+ *
+ * In `ui` since admin plan 0022, because the overview is four screens now and
+ * each of them draws this. The copy it names is already in this library's
+ * catalogue, so nothing moved with it.
  */
 @Component({
   selector: 'lib-block-notice',

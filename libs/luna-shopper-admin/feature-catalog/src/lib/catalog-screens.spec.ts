@@ -13,6 +13,7 @@ import {
 import {
   adminRoutes,
   provideResources,
+  type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
 import { ITEMS } from './items';
@@ -57,13 +58,23 @@ const ALL = [
   LOCATION_ITEMS,
 ];
 
+/**
+ * The catalog's resources, mounted at the root rather than under `/catalog`.
+ *
+ * This file is about the screens, not about where the app hangs them: admin
+ * plan 0022's own mount is asserted in `shell-sections.spec.ts` and in the app's
+ * route spec, against the real sections. Leaving the segment off here keeps
+ * every URL below reading as the screen it opens.
+ */
+const SECTION: AdminSection = { key: 'catalog', label: '', resources: ALL };
+
 async function boot(url: string) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
       ServerReachability,
-      provideRouter(adminRoutes(ALL)),
+      provideRouter(adminRoutes([SECTION])),
       provideLocationMocks(),
       provideResources(...ALL),
       SessionStorage,
@@ -252,7 +263,9 @@ describe('the price form', () => {
 
     const notice = fixture.debugElement.query(By.directive(PriceScopeNotice));
     expect(notice).not.toBeNull();
-    expect((notice.componentInstance as PriceScopeNotice).scopeName()).toBeNull();
+    expect(
+      (notice.componentInstance as PriceScopeNotice).scopeName()
+    ).toBeNull();
   });
 
   /**

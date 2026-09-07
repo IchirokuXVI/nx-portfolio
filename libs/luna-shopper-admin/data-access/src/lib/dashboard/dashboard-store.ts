@@ -93,10 +93,29 @@ export class DashboardStore {
     return running !== null && !isTerminalRun(running);
   });
 
+  /**
+   * Whether the screen that is open draws the run in flight.
+   *
+   * The harvester's dashboard sets it and clears it on its own teardown (admin
+   * plan 0022, section 7). It exists because the fast poll used to follow the
+   * run and nothing else, so a run that started at midnight made every screen in
+   * the app re-read four times a minute, including a catalog dashboard that
+   * shows no run at all. A run in flight speeds the poll up when somebody is
+   * watching it, and not when they are reading something else.
+   */
+  private readonly _followingRuns = signal(false);
+
   /** How long until the next read, which is one of two numbers. */
   readonly interval = computed(() =>
-    this.runInFlight() ? RUN_POLL_INTERVAL_MS : DASHBOARD_POLL_INTERVAL_MS
+    this.runInFlight() && this._followingRuns()
+      ? RUN_POLL_INTERVAL_MS
+      : DASHBOARD_POLL_INTERVAL_MS
   );
+
+  /** Say whether the open screen is drawing the run in flight. */
+  followRuns(following: boolean): void {
+    this._followingRuns.set(following);
+  }
 
   /** Start reading, and keep reading. Called once, by the screen that owns this. */
   watch(): void {
@@ -111,6 +130,7 @@ export class DashboardStore {
   /** Stop reading. The screen's teardown calls this. */
   stop(): void {
     this._watching = false;
+    this._followingRuns.set(false);
     this._clearTimer();
     this._document.removeEventListener('visibilitychange', this._onVisibility);
   }
