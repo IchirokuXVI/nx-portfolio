@@ -3,7 +3,27 @@
   plans. Until then this is just the frame every route renders into.
 -->
 <main class="app-main">
-  @if (rendersNow()) {
+  @if (mustUpdate()) {
+    <!--
+      A build the deployment refuses (plan 0072 D1). First, and ahead of the startup
+      screen and the connection screen both: a refused build usually looks offline as
+      well, because every request it makes fails, and this is the screen that says why.
+
+      It covers landing too, unlike the startup gate above. Landing draws while
+      connecting because a front door in a tunnel is worth having, but all four of its
+      actions end in a request this server will not answer, so there is nothing here
+      worth showing.
+    -->
+    <lib-update-screen
+      (reload)="reloadForUpdate()"
+      [body]="'update.required.body' | rokuT"
+      [failedBody]="'update.failed.body' | rokuT"
+      [failedTitle]="'update.failed.title' | rokuT"
+      [reloadLabel]="'update.failed.reload' | rokuT"
+      [spent]="updateFailed()"
+      [title]="'update.required.title' | rokuT"
+    />
+  } @else if (rendersNow()) {
     <router-outlet></router-outlet>
   } @else {
     <!--
@@ -27,7 +47,7 @@
   }
 </main>
 
-@if (offline()) {
+@if (offline() && !mustUpdate()) {
   <!--
     Blocking, and shared by every page rather than owned by one, which is why it is
     here and not in the home page (plan 0003, section 3.1). Rendered over the outlet

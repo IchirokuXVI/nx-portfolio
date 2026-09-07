@@ -9,11 +9,13 @@ import { BrandMark } from '../brand/brand-mark';
 import { CopyIcon, OfflineIcon } from '../icons/icons';
 
 /**
- * The three whole-screen states: nothing yet, something broke, and no connection.
+ * The whole screen states: nothing yet, something broke, no connection, still
+ * connecting, and a build the server refuses.
  *
- * All three are shared by every page rather than owned by this one, which is why they
- * take their copy as inputs instead of reading `home.*` keys themselves. The home page
- * passes its own keys; a list page will pass different ones for the same components.
+ * All of them are shared by every page rather than owned by this one, which is why
+ * they take their copy as inputs instead of reading `home.*` keys themselves. The home
+ * page passes its own keys; a list page will pass different ones for the same
+ * components.
  */
 
 @Component({
@@ -194,4 +196,80 @@ export class StartupScreen {
   readonly slow = input(false);
 
   readonly retry = output<void>();
+}
+
+/**
+ * The build the deployment will not serve (plan 0072).
+ *
+ * The fifth whole screen state, and the one that comes before all the others. A
+ * refused build is wrong about everything: every request it makes comes back 426,
+ * which looks like being offline and is not, so this is drawn ahead of
+ * `ConnectionLost` and ahead of `StartupScreen` because it is the one that tells the
+ * truth about why nothing works. It replaces the app rather than covering it (D1 and
+ * D8), landing included: all four landing actions end in a request the server will
+ * not answer, so there is nothing worth showing behind it.
+ *
+ * ## The two faces, and no spinner between them
+ *
+ * The updating face says what is happening rather than apologising for it, and asks
+ * the user to do nothing, because there is nothing for them to do yet. There is no
+ * progress bar: the worker reports no download progress worth showing, and a bar that
+ * does not move is worse than a sentence.
+ *
+ * The dead end face is the honest end of that wait, and it is the only one with a
+ * button. Pressing it reloads once, bypassing the one attempt counter, because the
+ * counter exists to stop the app looping and this is a person choosing.
+ *
+ * Its copy arrives as inputs like every other panel here, so this library still reads
+ * no keys of its own.
+ */
+@Component({
+  selector: 'lib-update-screen',
+  imports: [BrandMark],
+  template: `
+    <div class="blocking">
+      <div class="panel">
+        <lib-brand-mark class="mark" />
+
+        <div aria-live="polite" class="status" role="status">
+          @if (spent()) {
+            <h2 class="title">{{ failedTitle() }}</h2>
+            <p class="body">{{ failedBody() }}</p>
+          } @else {
+            <h2 class="title">{{ title() }}</h2>
+            <p class="body">{{ body() }}</p>
+          }
+        </div>
+
+        @if (spent()) {
+          <button (click)="reload.emit()" class="action quiet" type="button">
+            {{ reloadLabel() }}
+          </button>
+        }
+      </div>
+    </div>
+  `,
+  styleUrl: './state-panels.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class UpdateScreen {
+  /** The updating face. It says what is happening and asks for nothing. */
+  readonly title = input.required<string>();
+  readonly body = input.required<string>();
+
+  /** The dead end face, which appears with its button or not at all. */
+  readonly failedTitle = input.required<string>();
+  readonly failedBody = input.required<string>();
+  readonly reloadLabel = input.required<string>();
+
+  /**
+   * Whether the app has given up on replacing itself.
+   *
+   * `AppUpdates.updateFailed()`, which covers all three dead ends in plan 0072: the
+   * worker found nothing newer, the version it found never arrived, or this document
+   * already spent its one reload.
+   */
+  readonly spent = input(false);
+
+  readonly reload = output<void>();
 }

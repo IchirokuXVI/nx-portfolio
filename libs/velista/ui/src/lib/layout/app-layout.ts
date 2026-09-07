@@ -7,6 +7,7 @@ import {
 import { RouterOutlet } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  AppUpdates,
   BackendReadiness,
   ConnectionState,
   ReloadBlocker,
@@ -14,7 +15,11 @@ import {
   ThemeStore,
 } from '@portfolio/velista/platform';
 import { AppUiModule } from '../app-ui-module';
-import { ConnectionLost, StartupScreen } from '../home/state-panels';
+import {
+  ConnectionLost,
+  StartupScreen,
+  UpdateScreen,
+} from '../home/state-panels';
 
 /**
  * The app's own root. Every route in this app renders inside it.
@@ -50,6 +55,7 @@ import { ConnectionLost, StartupScreen } from '../home/state-panels';
     RouterOutlet,
     ConnectionLost,
     StartupScreen,
+    UpdateScreen,
   ],
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss',
@@ -64,6 +70,7 @@ export class AppLayout {
   private readonly _readiness = inject(BackendReadiness);
   private readonly _gate = inject(StartupGate);
   private readonly _reload = inject(ReloadBlocker);
+  private readonly _updates = inject(AppUpdates);
 
   /**
    * Whether to cover the page with the connection screen.
@@ -74,8 +81,24 @@ export class AppLayout {
    */
   readonly offline = this._connection.offline;
 
-  /** See {@link StartupScreen}. Wall clock from the app starting, per D8. */
+  /** See {@link StartupScreen}. Wall clock from the app starting, per 0071 D8. */
   readonly startupSlow = this._readiness.slow;
+
+  /**
+   * Whether the deployment refuses this build (plan 0072).
+   *
+   * `state()` and not `wasReady()`, which is the opposite reading from the startup
+   * gate above and deliberately so. The gate is about starting and opens once, because
+   * closing it later would destroy a live page and whatever was typed into it. This is
+   * about a build that is wrong: a session that has been running for an hour is in
+   * exactly the same position as one that has just started, because both are refused
+   * on every request from here on, and there is no half typed field worth keeping in a
+   * form that cannot be submitted.
+   */
+  readonly mustUpdate = computed(() => this._readiness.state() === 'too-old');
+
+  /** Which of the update screen's two faces to draw. See {@link UpdateScreen}. */
+  readonly updateFailed = this._updates.updateFailed;
 
   /**
    * Whether the outlet may exist.
@@ -106,6 +129,18 @@ export class AppLayout {
    */
   reloadNow(): void {
     this._reload.reloadWhenIdle();
+  }
+
+  /**
+   * The Try again button on the dead end face.
+   *
+   * Straight through, blocking nothing and counting nothing (plan 0072 D7 and D4).
+   * The reason `reloadNow` above goes through `ReloadBlocker` does not apply here:
+   * the form it would protect cannot be submitted by a client every one of whose
+   * requests is refused.
+   */
+  reloadForUpdate(): void {
+    this._updates.reloadByHand();
   }
 
   /**
