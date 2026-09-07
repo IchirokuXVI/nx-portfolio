@@ -8,18 +8,26 @@ import type { GatewayError } from '@portfolio/luna-shopper-admin/data-access';
  * a body that did not reach this app intact, which is what a proxy answering
  * instead of the gateway looks like.
  *
- * The mapping is **total**. An unanticipated failure reaches the operator as a
- * sentence saying the server did not explain itself, rather than as an empty
- * screen or a blank banner.
+ * The mapping is **total** over failures. An unanticipated one reaches the
+ * operator as a sentence saying the server did not explain itself, rather than
+ * as an empty screen or a blank banner.
+ *
+ * **No failure is `null`, and it is not the unknown one.** Every screen that
+ * draws this key guards it on truthiness, so a string here for the state where
+ * nothing went wrong put "That did not work" over four working screens: the
+ * shops and sources queues, and the two queues behind `QueueFrame`. A caller
+ * that has already established a failure and only lost its type says so with
+ * `?? 'resource.error.unknown'`, which is one visible word at the call site
+ * rather than a default nothing can opt out of.
  *
  * There is no case for `unauthorized`. A 401 never gets this far: the
  * interceptor turns it into a token renewal, an overlay and a retry (plan 0003,
  * section 6), so a screen that showed a message about it would be describing
  * something the operator has already been asked about.
  */
-export function gatewayErrorKey(error: GatewayError | null): string {
+export function gatewayErrorKey(error: GatewayError | null): string | null {
   if (error === null) {
-    return 'resource.error.unknown';
+    return null;
   }
 
   switch (error.code) {

@@ -186,7 +186,11 @@ export class ResourceListPage {
     () => this.store.error() !== null && !this.failed()
   );
 
-  readonly errorKey = computed(() => gatewayErrorKey(this.store.error()));
+  // The list draws this only behind `failed()` or `moreFailed()`, so there is
+  // always an error by then. The fallback is for the type, not for a state.
+  readonly errorKey = computed(
+    () => gatewayErrorKey(this.store.error()) ?? 'resource.error.unknown'
+  );
 
   /**
    * The filters this list is waiting for, named in words, or `null`.
