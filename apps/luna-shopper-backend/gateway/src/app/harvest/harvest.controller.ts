@@ -19,6 +19,7 @@ import {
   HARVEST_PATTERNS,
   HARVEST_SCHEMA_IDS,
   HarvestRunMode,
+  POSTAL_CODE_DISCOVERY_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
@@ -29,6 +30,9 @@ import {
   type HarvestRunExportResult,
   type HarvestRunPage,
   type HarvestRunView,
+  type PostalCodeDiscoveryRequestPage,
+  type PostalCodeDiscoveryRequestView,
+  type PostalCodeDiscoverySummaryView,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
   type SourceEntryAcceptResult,
@@ -50,6 +54,7 @@ import {
 import { NatsClient } from '../messaging/nats-client';
 import {
   AcceptSourceEntryDto,
+  AddPostalCodeDiscoveryDto,
   CreateItemFromEntryDto,
   DiscoveredPlaceGroupQueryDto,
   DiscoveredPlaceListQueryDto,
@@ -57,6 +62,7 @@ import {
   ImportDiscoveredPlaceDto,
   ImportHarvestDocumentDto,
   MapSourceLocationDto,
+  PostalCodeDiscoveryListQueryDto,
   SetSourceEnabledDto,
   SourceEntryListQueryDto,
   SourceLocationListQueryDto,
@@ -660,6 +666,124 @@ export class AdminHarvestSourcesController {
     return this.nats.send<SupermarketSourceView>(
       SUPERMARKET_SOURCE_PATTERNS.setEnabled,
       { ...adminCredential(admin), supermarketId, enabled: dto.enabled }
+    );
+  }
+}
+
+/**
+ * The postal code discovery queue (plan 0097).
+ *
+ * Plan 0063 built the queue and a listing subject nothing consumed, so the only
+ * way to see whether a code had ever been looked at was to open the harvester's
+ * database. This is that surface.
+ *
+ * **Demand driven, and that is the point.** A code is in this list because a
+ * profile write announced it or because an operator typed it here. It is not the
+ * shipped centroid table, which is eleven thousand rows and lives at
+ * `admin/catalog/postal-codes`: a screen listing the whole country would bury
+ * the forty codes that matter under eleven thousand that do not.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/postal-codes', version: '1' })
+export class AdminHarvestPostalCodesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: PostalCodeDiscoveryListQueryDto
+  ): Promise<PostalCodeDiscoveryRequestPage> {
+    return this.nats.send<PostalCodeDiscoveryRequestPage>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.list,
+      {
+        ...adminCredential(admin),
+        country: query.country,
+        status: query.status,
+        postalCode: query.postalCode,
+        dismissed: query.dismissed,
+        cursor: query.cursor,
+        limit: query.limit,
+      }
+    );
+  }
+
+  /**
+   * Counts by status, the oldest waiting row, and whether anything drains it.
+   *
+   * `draining` is `HARVEST_ENABLED`, and it is here rather than on
+   * `GET /v1/admin/environment` because that route answers callers with no token
+   * at all (plan 0097, section 7.1).
+   */
+  @Get('summary')
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.summary)
+  summary(
+    @ActingAdmin() admin: CurrentAdmin
+  ): Promise<PostalCodeDiscoverySummaryView> {
+    return this.nats.send<PostalCodeDiscoverySummaryView>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.summary,
+      adminCredential(admin)
+    );
+  }
+
+  /**
+   * Add one code, queued now or parked (section 6.1).
+   *
+   * A code catalog does not hold is refused with `postal_code_unknown` and
+   * nothing is written: the harvester asks catalog before it inserts.
+   */
+  @Post()
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.add, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  add(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: AddPostalCodeDiscoveryDto
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.nats.send<PostalCodeDiscoveryRequestView>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.add,
+      { ...adminCredential(admin), ...dto }
+    );
+  }
+
+  /**
+   * Discover it again, inside the cooldown (section 6.2).
+   *
+   * **It queues, and it does not run.** The queue drains serially and one run
+   * exists at a time, so the answer says the row is waiting rather than working,
+   * and the screen repeats that instead of promising a run.
+   */
+  @Post(':id/requeue')
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.requeue, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ conflict: true })
+  requeue(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.nats.send<PostalCodeDiscoveryRequestView>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.requeue,
+      { ...adminCredential(admin), requestId: id }
+    );
+  }
+
+  /** Hide a code nobody can geocode. Nothing is deleted (section 6.3). */
+  @Post(':id/dismiss')
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.dismiss, {
+    status: HttpStatus.CREATED,
+  })
+  dismiss(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.nats.send<PostalCodeDiscoveryRequestView>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.dismiss,
+      { ...adminCredential(admin), requestId: id }
     );
   }
 }

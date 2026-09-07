@@ -679,6 +679,11 @@ HARVEST_DISCOVERY_RADIUS=5000
 HARVEST_DISCOVERY_COOLDOWN_DAYS=30
 HARVEST_DISCOVERY_MAX_ATTEMPTS=3
 HARVEST_DISCOVERY_POLL_SECONDS=60
+# The same key catalog reads, and deliberately the same value (plan 0097,
+# section 3): a store discovery run asks catalog for the nearest centroid of a
+# place OpenStreetMap did not tag, so the shop and the place it was imported from
+# would otherwise be able to land in different codes.
+POSTAL_CODE_DERIVE_MAX_METRES=5000
 # Empty means each client's own built in endpoint, which is what a real run wants.
 # Point one at a local recording to exercise the fetch path without leaving the
 # machine; the fixture backed tests never reach any of them.

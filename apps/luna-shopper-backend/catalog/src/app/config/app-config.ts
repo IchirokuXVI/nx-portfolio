@@ -1,10 +1,14 @@
 import { registerAs } from '@nestjs/config';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
-import * as Joi from 'joi';
+// The bound lives in the framework free library because the harvester derives a
+// discovered place's postcode by the same rule (plan 0097, section 3), and two
+// services deriving one code must not be able to disagree about how far is too
+// far.
 import {
   DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
   postalCodeDeriveMaxMetres,
-} from './postal-code-derivation';
+} from '@portfolio/luna-shopper/postal-codes';
+import * as Joi from 'joi';
 import { readKey } from './read-key';
 
 /**

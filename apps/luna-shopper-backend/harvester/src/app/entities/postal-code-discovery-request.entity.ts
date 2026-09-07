@@ -79,4 +79,31 @@ export class PostalCodeDiscoveryRequest extends BaseEntity {
    */
   @Column({ type: 'text', nullable: true })
   error!: string | null;
+
+  /**
+   * What Nominatim calls this code, kept at the `GEOCODE` stage (plan 0097,
+   * section 4).
+   *
+   * Nothing else in this system stores a name for a postal code:
+   * `postal_code_points` is a code and two coordinates, and an operator reading
+   * a list of bare numbers cannot tell Córdoba from Cáceres. The run already
+   * receives this and used to throw it away, so keeping it costs no request.
+   *
+   * Null until a run has geocoded the code, which is also why there is no
+   * backfill: filling it for the existing rows would mean geocoding them all.
+   */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  placeName!: string | null;
+
+  /**
+   * An operator hid this row from the working set (plan 0097, section 6.3).
+   *
+   * A code Nominatim cannot geocode usually means somebody typed a code that
+   * does not exist, and plan 0063 left the reason on the row for exactly this.
+   * **Nothing is deleted**: the row is the record that we looked and what
+   * happened, so it stays in the table, disappears from the default listing, and
+   * comes back when a requeue clears this.
+   */
+  @Column({ type: 'boolean', default: false })
+  dismissed!: boolean;
 }

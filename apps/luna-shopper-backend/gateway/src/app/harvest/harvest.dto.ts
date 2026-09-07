@@ -5,6 +5,7 @@ import {
   HarvestRunMode,
   HarvestRunStatus,
   ItemCategory,
+  PostalCodeDiscoveryStatus,
   PriceSourceKind,
   SourceEntryStatus,
   SourceLocationStatus,
@@ -13,7 +14,7 @@ import {
   type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -26,11 +27,23 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { asBoolean } from '../catalog/catalog.dto';
+
+/**
+ * What an operator may type into a postal code field.
+ *
+ * Letters and digits, because a Spanish code is five digits and a Dutch one is
+ * not, and nothing else at all: the queue listing puts the value straight into a
+ * `LIKE` prefix, and a `%` there would match every code, which reads as a filter
+ * that does nothing rather than one that found nothing.
+ */
+const POSTAL_CODE_PATTERN = /^[A-Za-z0-9 -]{1,16}$/;
 
 /**
  * The admin harvest surface's request bodies (plan 0038, section 7).
@@ -388,6 +401,23 @@ export class DiscoveredPlaceListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(DiscoveredPlaceStatus)
   status?: DiscoveredPlaceStatus;
+
+  @ApiPropertyOptional({
+    description: 'ISO 3166-1 alpha-2. Pair it with `postalCode`.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  country?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'The places located in this code, whichever run found them. It reads the place own postal code and never the run centre, so a run centred on 14013 does not put its Cordoba city neighbours in this answer.',
+  })
+  @IsOptional()
+  @Matches(POSTAL_CODE_PATTERN)
+  @MaxLength(16)
+  postalCode?: string;
 }
 
 export class DiscoveredPlaceGroupQueryDto {
@@ -465,4 +495,67 @@ export class SourceLocationListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(SourceLocationStatus)
   status?: SourceLocationStatus;
+}
+
+/** What the postal code queue screen filters on (plan 0097, section 7). */
+export class PostalCodeDiscoveryListQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({ maxLength: 2, description: 'ISO 3166-1 alpha-2.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  country?: string;
+
+  @ApiPropertyOptional({ enum: PostalCodeDiscoveryStatus })
+  @IsOptional()
+  @IsEnum(PostalCodeDiscoveryStatus)
+  status?: PostalCodeDiscoveryStatus;
+
+  @ApiPropertyOptional({
+    description:
+      'Prefix match. A postal code is read left to right, so `140` means Cordoba city rather than every code with a 140 in the middle of it.',
+  })
+  @IsOptional()
+  @Matches(POSTAL_CODE_PATTERN)
+  @MaxLength(16)
+  postalCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back.',
+  })
+  @IsOptional()
+  @Transform(asBoolean)
+  @IsBoolean()
+  dismissed?: boolean;
+}
+
+/**
+ * An operator adds one code (plan 0097, section 6.1).
+ *
+ * One code per call. Adding twenty is twenty calls, under the partial failure
+ * rules `apps/luna-shopper-admin/plans/0020` already wrote for bulk work: a bulk
+ * endpoint is a transaction boundary and a timeout budget this service does not
+ * have and this screen does not need.
+ */
+export class AddPostalCodeDiscoveryDto {
+  @ApiProperty({ maxLength: 2, description: 'ISO 3166-1 alpha-2.' })
+  @IsString()
+  @MaxLength(2)
+  country!: string;
+
+  @ApiProperty({
+    maxLength: 16,
+    description:
+      'A code catalog does not hold is refused with `postal_code_unknown`: the centroid table is the whole national list, so a code missing from it is a typo.',
+  })
+  @Matches(POSTAL_CODE_PATTERN)
+  @MaxLength(16)
+  postalCode!: string;
+
+  @ApiProperty({
+    description:
+      'True queues it for the worker. False parks it, which is a row the worker never claims until somebody queues it.',
+  })
+  @IsBoolean()
+  discoverNow!: boolean;
 }

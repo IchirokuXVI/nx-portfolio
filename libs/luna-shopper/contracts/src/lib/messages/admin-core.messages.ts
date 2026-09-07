@@ -574,3 +574,69 @@ export type AdminBasketPage = Paginated<AdminBasketView>;
 export interface GetAdminBasketRequest extends AdminCredential {
   basketId: string;
 }
+
+// --- Postal code demand (plan 0097, section 5) -------------------------------
+
+/**
+ * How many profiles are waiting on a postal code.
+ *
+ * **The one prioritisation signal**, and `plans/backlog/0009` said so. It lives
+ * here because core owns the answer: `profile_postal_codes` holds the code, the
+ * source and the suppressed flag, and `shopping_profiles` holds the `userId`, so
+ * a distinct user count is one join inside one database. Nothing crosses a
+ * service boundary, which is plan 0074 section 3's rule.
+ *
+ * Admin gated like every other subject in this file. It answers about codes and
+ * never about people: a count, never a profile, a name or an account id.
+ */
+export const ADMIN_PROFILE_POSTAL_CODE_PATTERNS = {
+  usage: 'adminProfilePostalCode.usage',
+} as const;
+
+export type AdminProfilePostalCodePattern =
+  (typeof ADMIN_PROFILE_POSTAL_CODE_PATTERNS)[keyof typeof ADMIN_PROFILE_POSTAL_CODE_PATTERNS];
+
+/**
+ * One postal code and who is waiting on it.
+ *
+ * **Main and near are counted apart because they are different facts.** A code
+ * twelve people typed is a place people shop. A code derived onto twelve
+ * profiles from a neighbour is a place we widened into, and importing a shop
+ * there serves them differently.
+ */
+export interface PostalCodeUsageView {
+  postalCode: string;
+  /** TYPED or DEVICE rows: the code is where this profile shops from. */
+  mainProfiles: number;
+  /** NEARBY rows that are not suppressed: the code was derived onto it. */
+  nearbyProfiles: number;
+  /** NEARBY rows the user removed. Not waiting on anything, and not nothing. */
+  suppressedProfiles: number;
+  /** Distinct owners of the profiles above, counted the same three ways. */
+  mainUsers: number;
+  nearbyUsers: number;
+}
+
+/**
+ * **A list of codes rather than one**, because the list screen decorates a page
+ * of rows and one call per row is a fan out. This is the shape
+ * `AdminUserNamesService` already uses to put usernames beside a page of zones,
+ * and the rule that comes with it is plan 0074's: where the decoration fails,
+ * the screen renders the row without it and never fails the listing.
+ */
+export interface PostalCodeUsageRequest extends AdminCredential {
+  /** ISO 3166-1 alpha-2, lowercase. Every code in one request shares it. */
+  country: string;
+  /** Up to one page of codes, answered in one round trip. */
+  postalCodes: string[];
+}
+
+/**
+ * One entry per code asked about, **including the ones nobody uses**: a screen
+ * decorating a page of rows needs the zeros, or a missing entry and a zero read
+ * the same and neither says which.
+ */
+export interface PostalCodeUsageListView {
+  country: string;
+  usage: PostalCodeUsageView[];
+}

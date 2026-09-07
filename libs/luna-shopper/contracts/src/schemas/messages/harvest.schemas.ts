@@ -73,6 +73,10 @@ export const HARVEST_SCHEMA_IDS = {
   postalCodeDiscoveryRequestView: schemaId(
     'harvest/PostalCodeDiscoveryRequestView'
   ),
+  discoveredPlaceCounts: schemaId('harvest/DiscoveredPlaceCounts'),
+  postalCodeDiscoverySummaryView: schemaId(
+    'harvest/PostalCodeDiscoverySummaryView'
+  ),
 
   harvestRunPage: schemaId('harvest/HarvestRunPage'),
   discoveredPlacePage: schemaId('harvest/DiscoveredPlacePage'),
@@ -105,6 +109,9 @@ export const HARVEST_SCHEMA_IDS = {
   listDiscoveryRequestsRequest: schemaId(
     'msg/postalCodeDiscovery.list/request'
   ),
+  discoverySummaryRequest: schemaId('msg/postalCodeDiscovery.summary/request'),
+  addDiscoveryRequest: schemaId('msg/postalCodeDiscovery.add/request'),
+  discoveryRequestIdRequest: schemaId('msg/postalCodeDiscovery.id/request'),
 } as const;
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
@@ -262,6 +269,11 @@ const discoveredPlaceView = object(
     street: nullableString(),
     city: nullableString(),
     postalCode: nullableString(),
+    // Where that code came from: the `addr:postcode` tag, or the nearest
+    // centroid within the bound, or neither (plan 0097, section 3).
+    postalCodeSource: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.postalCodeSource), { type: 'null' }],
+    },
     // The run's own country, not an OSM tag: it keys the centroid lookup that
     // fills the postcode on import (plan 0061, section 4).
     country: nullableString(),
@@ -286,6 +298,7 @@ const discoveredPlaceView = object(
     'street',
     'city',
     'postalCode',
+    'postalCodeSource',
     'country',
     'website',
     'openingHours',
@@ -511,6 +524,17 @@ const sourceLocationView = object(
  * they are separate columns because a success and a failure earn very different
  * waits: thirty days for "we looked", minutes for "try again" (section 4).
  */
+const discoveredPlaceCounts = object(
+  HARVEST_SCHEMA_IDS.discoveredPlaceCounts,
+  {
+    total: integer({ minimum: 0 }),
+    imported: integer({ minimum: 0 }),
+    rejected: integer({ minimum: 0 }),
+    undecided: integer({ minimum: 0 }),
+  },
+  ['total', 'imported', 'rejected', 'undecided']
+);
+
 const postalCodeDiscoveryRequestView = object(
   HARVEST_SCHEMA_IDS.postalCodeDiscoveryRequestView,
   {
@@ -525,6 +549,10 @@ const postalCodeDiscoveryRequestView = object(
     attempts: integer({ minimum: 0 }),
     runId: nullableString(),
     error: nullableString(),
+    placeName: nullableString(),
+    dismissed: boolean(),
+    foundByItsRuns: ref(HARVEST_SCHEMA_IDS.discoveredPlaceCounts),
+    locatedInIt: ref(HARVEST_SCHEMA_IDS.discoveredPlaceCounts),
   },
   [
     'id',
@@ -538,6 +566,36 @@ const postalCodeDiscoveryRequestView = object(
     'attempts',
     'runId',
     'error',
+    'placeName',
+    'dismissed',
+    'foundByItsRuns',
+    'locatedInIt',
+  ]
+);
+
+/**
+ * The queue at a glance (plan 0097, section 7.1). `draining` is the field that
+ * makes this worth a subject rather than three counts on a screen.
+ */
+const postalCodeDiscoverySummaryView = object(
+  HARVEST_SCHEMA_IDS.postalCodeDiscoverySummaryView,
+  {
+    queued: integer({ minimum: 0 }),
+    running: integer({ minimum: 0 }),
+    done: integer({ minimum: 0 }),
+    failed: integer({ minimum: 0 }),
+    parked: integer({ minimum: 0 }),
+    oldestQueuedAt: nullableString(),
+    draining: boolean(),
+  },
+  [
+    'queued',
+    'running',
+    'done',
+    'failed',
+    'parked',
+    'oldestQueuedAt',
+    'draining',
   ]
 );
 
@@ -633,6 +691,8 @@ const listPlacesRequest = object(
     runId: string(),
     brandKey: string(),
     status: ref(HARVEST_SCHEMA_IDS.discoveredPlaceStatus),
+    country: string(),
+    postalCode: string(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -789,11 +849,37 @@ const listDiscoveryRequestsRequest = object(
     ...adminCredentialProperties,
     country: string(),
     status: ref(HARVEST_SCHEMA_IDS.postalCodeDiscoveryStatus),
+    postalCode: string(),
+    dismissed: boolean(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
   },
   ['userId']
+);
+
+/** A read of counts, so it takes nothing but the operator's credential. */
+const discoverySummaryRequest = object(
+  HARVEST_SCHEMA_IDS.discoverySummaryRequest,
+  { ...adminCredentialProperties },
+  ['userId']
+);
+
+const addDiscoveryRequest = object(
+  HARVEST_SCHEMA_IDS.addDiscoveryRequest,
+  {
+    ...adminCredentialProperties,
+    country: nonEmptyString(),
+    postalCode: nonEmptyString(),
+    discoverNow: boolean(),
+  },
+  ['userId', 'country', 'postalCode', 'discoverNow']
+);
+
+const discoveryRequestIdRequest = object(
+  HARVEST_SCHEMA_IDS.discoveryRequestIdRequest,
+  { ...adminCredentialProperties, requestId: nonEmptyString() },
+  ['userId', 'requestId']
 );
 
 export const harvestSchemas: JsonSchema[] = [
@@ -837,7 +923,9 @@ export const harvestSchemas: JsonSchema[] = [
   sourceEntryPriceView,
   sourceEntryAcceptResult,
   sourceLocationView,
+  discoveredPlaceCounts,
   postalCodeDiscoveryRequestView,
+  postalCodeDiscoverySummaryView,
   harvestRunPage,
   discoveredPlacePage,
   sourceCatalogEntryPage,
@@ -864,6 +952,9 @@ export const harvestSchemas: JsonSchema[] = [
   setSourceEnabledRequest,
   listSourcesRequest,
   listDiscoveryRequestsRequest,
+  discoverySummaryRequest,
+  addDiscoveryRequest,
+  discoveryRequestIdRequest,
 ];
 
 export const harvestMessageContracts: Record<
@@ -965,5 +1056,23 @@ export const harvestMessageContracts: Record<
   [POSTAL_CODE_DISCOVERY_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listDiscoveryRequestsRequest,
     response: HARVEST_SCHEMA_IDS.postalCodeDiscoveryRequestPage,
+  },
+  [POSTAL_CODE_DISCOVERY_PATTERNS.summary]: {
+    request: HARVEST_SCHEMA_IDS.discoverySummaryRequest,
+    response: HARVEST_SCHEMA_IDS.postalCodeDiscoverySummaryView,
+  },
+  // The three writes all answer the row they touched, so the screen redraws it
+  // from the reply instead of listing again.
+  [POSTAL_CODE_DISCOVERY_PATTERNS.add]: {
+    request: HARVEST_SCHEMA_IDS.addDiscoveryRequest,
+    response: HARVEST_SCHEMA_IDS.postalCodeDiscoveryRequestView,
+  },
+  [POSTAL_CODE_DISCOVERY_PATTERNS.requeue]: {
+    request: HARVEST_SCHEMA_IDS.discoveryRequestIdRequest,
+    response: HARVEST_SCHEMA_IDS.postalCodeDiscoveryRequestView,
+  },
+  [POSTAL_CODE_DISCOVERY_PATTERNS.dismiss]: {
+    request: HARVEST_SCHEMA_IDS.discoveryRequestIdRequest,
+    response: HARVEST_SCHEMA_IDS.postalCodeDiscoveryRequestView,
   },
 };

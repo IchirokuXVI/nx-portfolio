@@ -87,10 +87,24 @@ describe('groupByBrand', () => {
 });
 
 describe('normalizeGeocode', () => {
-  it('reduces the postal code answer to a centre point', () => {
+  it('reduces the postal code answer to a centre point and its name', () => {
     expect(normalizeGeocode(nominatim)).toEqual({
       lat: 37.8587,
       lon: -4.7863,
+      displayName: '14013, Córdoba, Andalucía, España',
+    });
+  });
+
+  /**
+   * The name is kept where the bounding box is discarded, because the two are
+   * not alike (plan 0097, section 4): the box is a wrong search area, and the
+   * name is the only name this system will ever have for a postal code.
+   */
+  it('answers a null name when the provider sent none', () => {
+    expect(normalizeGeocode([{ lat: '37.8', lon: '-4.7' }])).toEqual({
+      lat: 37.8,
+      lon: -4.7,
+      displayName: null,
     });
   });
 
