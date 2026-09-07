@@ -3,6 +3,8 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  DEPLOYMENT_SERVICE,
+  DeploymentStore,
   GatewayError,
   ServerReachability,
   SESSION_SERVICE,
@@ -61,8 +63,9 @@ const drain = async () => {
  * service that refused both would leave nothing signed in and no overlay to
  * assert on.
  */
-async function render(reauthFailure?: unknown) {
+async function render(reauthFailure?: unknown, { devAutologin = false } = {}) {
   let signIns = 0;
+  const devSignIns = jest.fn();
 
   const service: SessionServiceI = {
     signIn: async () => {
@@ -72,7 +75,13 @@ async function render(reauthFailure?: unknown) {
       }
       return session;
     },
-    signInForDevelopment: async () => session,
+    signInForDevelopment: async () => {
+      devSignIns();
+      if (reauthFailure !== undefined) {
+        throw reauthFailure;
+      }
+      return session;
+    },
     // Refuses, which is what puts the overlay up rather than renewing quietly.
     refresh: async () => {
       throw new GatewayError({
@@ -92,6 +101,13 @@ async function render(reauthFailure?: unknown) {
       provideRouter([]),
       provideLocationMocks(),
       { provide: SESSION_SERVICE, useValue: service },
+      {
+        provide: DEPLOYMENT_SERVICE,
+        useValue: {
+          read: async () => ({ deployment: 'development', devAutologin }),
+        },
+      },
+      DeploymentStore,
       SessionStorage,
       SessionStore,
       SessionLifecycle,
@@ -100,6 +116,11 @@ async function render(reauthFailure?: unknown) {
 
   const sessions = TestBed.inject(SessionStore);
   const lifecycle = TestBed.inject(SessionLifecycle);
+
+  // The overlay reads the environment, so the read has to have settled before
+  // the component is drawn: an unsettled read answers "asks for a password",
+  // which is the safe default and the wrong one to assert against.
+  await TestBed.inject(DeploymentStore).load();
 
   await sessions.signIn('ops', 'ops');
   await drain();
@@ -111,7 +132,7 @@ async function render(reauthFailure?: unknown) {
   const fixture = TestBed.createComponent(ReauthOverlay);
   fixture.detectChanges();
 
-  return { fixture, sessions, lifecycle, held };
+  return { fixture, sessions, lifecycle, held, devSignIns };
 }
 
 const el = <T extends HTMLElement>(
@@ -251,6 +272,68 @@ describe('ReauthOverlay', () => {
       );
       await drain();
 
+      expect(lifecycle.locked()).toBe(true);
+    });
+  });
+
+  /**
+   * The dev admin has no password to type (plan 0002, section 5).
+   *
+   * A field it cannot fill would sit above a button that never enables, which
+   * is an overlay with no way out except losing the work it exists to protect.
+   */
+  describe('on a server that signs in without a password', () => {
+    it('asks for no password at all', async () => {
+      const { fixture } = await render(undefined, { devAutologin: true });
+
+      expect(el(fixture, 'input[type="password"]')).toBeNull();
+      expect(fixture.componentInstance.passwordless()).toBe(true);
+    });
+
+    it('leaves the button ready with an empty field', async () => {
+      const { fixture } = await render(undefined, { devAutologin: true });
+      const button = el<HTMLButtonElement>(fixture, 'button[type="submit"]');
+
+      expect(fixture.componentInstance.password()).toBe('');
+      expect(button?.disabled).toBe(false);
+    });
+
+    it('lands the cursor on the button instead', async () => {
+      const { fixture } = await render(undefined, { devAutologin: true });
+
+      expect(document.activeElement).toBe(el(fixture, 'button[type="submit"]'));
+    });
+
+    it('takes the passwordless session and comes down', async () => {
+      const { fixture, lifecycle, held, sessions, devSignIns } = await render(
+        undefined,
+        { devAutologin: true }
+      );
+
+      await submit(fixture);
+
+      expect(devSignIns).toHaveBeenCalledTimes(1);
+      await expect(held).resolves.toBe(true);
+      expect(lifecycle.locked()).toBe(false);
+      expect(sessions.signedIn()).toBe(true);
+    });
+
+    /** The server is entitled to change its mind, and the overlay stays up. */
+    it('says what went wrong when the server refuses', async () => {
+      const { fixture, lifecycle } = await render(
+        new GatewayError({
+          code: 'not_configured',
+          status: 501,
+          correlationId: 'cid',
+        }),
+        { devAutologin: true }
+      );
+
+      await submit(fixture);
+
+      expect(fixture.componentInstance.message()).toEqual({
+        key: 'signIn.error.notAvailable',
+      });
       expect(lifecycle.locked()).toBe(true);
     });
   });
