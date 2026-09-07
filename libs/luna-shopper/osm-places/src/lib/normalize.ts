@@ -1,4 +1,4 @@
-import type { DiscoveredPlace, LatLon } from './types';
+import type { DiscoveredPlace, GeocodedPostalCode, LatLon } from './types';
 
 /**
  * Overpass elements in, plain records out. Pure: no network and no clock.
@@ -136,14 +136,23 @@ export function normalizeElement(element: Json): DiscoveredPlace | null {
  * none of which is actually in 14013. "The stores I can shop at" is a radius
  * around a point, and the postcode's job is to pick the price scope instead.
  */
-export function normalizeGeocode(payload: Json): LatLon | null {
+export function normalizeGeocode(payload: Json): GeocodedPostalCode | null {
   const first = Array.isArray(payload) ? payload[0] : payload;
   if (!isRecord(first)) {
     return null;
   }
   const lat = readNumber(first['lat']);
   const lon = readNumber(first['lon']);
-  return lat !== null && lon !== null ? { lat, lon } : null;
+  if (lat === null || lon === null) {
+    return null;
+  }
+  // `display_name` is kept rather than discarded like the bounding box, because
+  // it answers a different question: the box is a wrong search area, and the
+  // name is the only name this system will ever have for the code (plan 0097,
+  // section 4).
+  const raw = first['display_name'];
+  const displayName = typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+  return { lat, lon, displayName };
 }
 
 /**

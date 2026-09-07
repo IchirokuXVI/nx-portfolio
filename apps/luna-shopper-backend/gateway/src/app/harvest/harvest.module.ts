@@ -4,6 +4,7 @@ import {
   AdminHarvestEntriesController,
   AdminHarvestImportsController,
   AdminHarvestPlacesController,
+  AdminHarvestPostalCodesController,
   AdminHarvestRunsController,
   AdminHarvestShopsController,
   AdminHarvestSourcesController,
@@ -25,6 +26,7 @@ import {
     // over two other tables and are gone.
     AdminHarvestImportsController,
     AdminHarvestPlacesController,
+    AdminHarvestPostalCodesController,
     AdminHarvestEntriesController,
     AdminHarvestShopsController,
     AdminHarvestSourcesController,

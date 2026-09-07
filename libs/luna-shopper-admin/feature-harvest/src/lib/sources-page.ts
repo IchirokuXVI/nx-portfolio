@@ -224,15 +224,16 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
       color: var(--admin-ink-muted);
     }
 
+    /* Wide enough that the row does not reflow when the label flips between
+       "Enabled" and "Disabled". The height is the global base's. */
     .toggle {
-      min-block-size: 2.75rem;
       min-inline-size: 7rem;
     }
 
     .toggle.on {
       border-color: var(--admin-accent);
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     dl {
@@ -274,8 +275,14 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
     }
 
     .primary {
+      border-color: transparent;
       background: var(--admin-accent);
+      font-weight: 600;
       color: var(--admin-accent-ink);
+    }
+
+    button {
+      cursor: pointer;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

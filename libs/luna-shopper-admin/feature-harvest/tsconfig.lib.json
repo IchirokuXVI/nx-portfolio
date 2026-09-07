@@ -11,6 +11,10 @@
   "exclude": [
     "src/**/*.spec.ts",
     "src/**/*.test.ts",
+    // A helper a spec imports, and never the app: it reads the app's stylesheet
+    // off the disk, so it belongs to the same half of the library as the specs
+    // that use it and is kept out of the browser compile with them.
+    "src/**/*.testing.ts",
     "jest.config.ts",
     "jest.config.cts",
     "src/test-setup.ts"

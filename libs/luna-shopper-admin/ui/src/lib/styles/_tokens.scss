@@ -37,6 +37,25 @@
   --admin-danger-ink: #ffffff;
   --admin-danger-wash: #fbeaeb;
 
+  // The ink for a **wash**, and the first of three (plan 0018, section 1.1).
+  //
+  // The rule, and it is the whole of it:
+  //
+  //   `-ink` goes on the matching solid colour and nowhere else. `-on-wash` goes
+  //   on the matching wash and nowhere else. A tinted box takes the wash and the
+  //   wash's ink. A filled control takes the solid and the solid's ink. Neither
+  //   ink is a general purpose foreground.
+  //
+  // It is written down because for a while there was no ink for a wash at all,
+  // so every author who wanted a tinted badge reached for the only ink the block
+  // offered and got white on a pale box: seventeen rules, at ratios from 1.14 to
+  // 1.16, which is not hard to read but invisible. `ink-on-wash.spec.ts` reads
+  // every component in the app and fails on the eighteenth.
+  //
+  // Danger on its own wash measures 5.62 to 1, and on the raised surface, where
+  // the four rules with no background of their own sit, 6.53 to 1.
+  --admin-danger-on-wash: var(--admin-danger);
+
   // What a chart draws a series in (plan 0015, section 2).
   //
   // Fixed across every environment, and deliberately not the accent. The accent is
@@ -79,6 +98,9 @@
   --admin-status-attention: #4a3aa7;
   --admin-status-attention-wash: #efedf9;
 
+  // The violet on its own wash, at 7.40 to 1. Same rule as the danger pair above.
+  --admin-status-attention-on-wash: var(--admin-status-attention);
+
   // The environment accent, and the reason this file exists (plan 0001, section 6).
   //
   // The resting value is the one for an environment the app could not establish:
@@ -88,6 +110,18 @@
   --admin-accent: #6b7280;
   --admin-accent-ink: #ffffff;
   --admin-accent-wash: #eeeff1;
+
+  // The accent's ink for a wash, and the one of the three that is not simply the
+  // solid colour. Same rule as the danger pair above.
+  //
+  // Every named deployment overrides this with its own accent, which reads on its
+  // own wash: 5.62 to 1 in production, 5.38 in staging, 5.99 in development. The
+  // resting grey does not, at 4.20, so the resting value is `--admin-ink-muted`'s
+  // grey instead, which measures 5.52 on the resting wash. A tinted badge in an
+  // environment the app could not establish is therefore readable and says
+  // nothing about which environment it is, which is what the resting accent is
+  // for everywhere else in this block.
+  --admin-accent-on-wash: #5c5f6b;
 }
 
 /// The per deployment accent, keyed off the attribute the app root stamps.
@@ -102,17 +136,20 @@
     --admin-accent: #b4232a;
     --admin-accent-ink: #ffffff;
     --admin-accent-wash: #fbeaeb;
+    --admin-accent-on-wash: var(--admin-accent);
   }
 
   &[data-deployment='staging'] {
     --admin-accent: #8a5a06;
     --admin-accent-ink: #ffffff;
     --admin-accent-wash: #fdf3e0;
+    --admin-accent-on-wash: var(--admin-accent);
   }
 
   &[data-deployment='development'] {
     --admin-accent: #1f5f8b;
     --admin-accent-ink: #ffffff;
     --admin-accent-wash: #e8f1f8;
+    --admin-accent-on-wash: var(--admin-accent);
   }
 }

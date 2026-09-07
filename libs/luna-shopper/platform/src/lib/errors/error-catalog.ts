@@ -86,6 +86,16 @@ export const ERROR_CATALOG: Record<
     en: 'This account is locked after too many failed sign in attempts. It unlocks on its own once the window passes, or sooner if an administrator clears it on the server.',
     es: 'Esta cuenta está bloqueada tras demasiados intentos fallidos de inicio de sesión. Se desbloquea sola cuando pase el periodo, o antes si un administrador la desbloquea en el servidor.',
   },
+  // Both of these are back office sentences, so they say what the operator does
+  // next rather than only that something failed (plan 0097, sections 6.1, 6.2).
+  [ERROR_CODES.POSTAL_CODE_UNKNOWN]: {
+    en: 'We do not hold that postal code, so it is probably a typo.',
+    es: 'No tenemos ese código postal, así que probablemente sea una errata.',
+  },
+  [ERROR_CODES.RUN_IN_PROGRESS]: {
+    en: 'This postal code is being discovered right now. Wait for that run to finish.',
+    es: 'Este código postal se está descubriendo ahora mismo. Espera a que termine esa ejecución.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

@@ -172,6 +172,29 @@ export class AccountLockedException extends DomainException {
 }
 
 /**
+ * The postal code is not one catalog holds (plan 0097, section 6.1).
+ *
+ * Thrown before the queue row is written, so a refused add leaves nothing
+ * behind: the gateway asks catalog once, and a code the shipped national table
+ * does not have is a typo rather than a coverage gap worth queueing.
+ */
+export class PostalCodeUnknownException extends DomainException {
+  readonly code = ERROR_CODES.POSTAL_CODE_UNKNOWN;
+}
+
+/**
+ * The queue row is `RUNNING`, and the write asked to change it (plan 0097,
+ * section 6.2).
+ *
+ * Its own class beside {@link ConflictException} so the screen can say "wait for
+ * the run" rather than the generic sentence. Requeueing a running row would
+ * clear the attempt count of an attempt that is still in progress.
+ */
+export class RunInProgressException extends DomainException {
+  readonly code = ERROR_CODES.RUN_IN_PROGRESS;
+}
+
+/**
  * The `details` key a {@link RateLimitedException} or an
  * {@link AccountLockedException} carries its wait under.
  */

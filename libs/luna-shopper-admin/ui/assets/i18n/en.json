@@ -754,7 +754,22 @@
         "lead": "One entry per product, with every complaint about it. Fix the file in the producer and drop it again: nothing on this screen edits the document."
       },
       "preview": {
-        "heading": "What would be imported"
+        "heading": "What would be imported",
+        "search": "Find a product in the file",
+        "more": "Show 250 more of the {{more}} not drawn",
+        "wholeFile": "Show the whole file again",
+        "tally": {
+          "all": "{{total}} products.",
+          "capped": "Showing the first {{drawn}} of {{total}} products.",
+          "matching": "{{matched}} products match \"{{term}}\", out of {{total}}.",
+          "matchingCapped": "Showing {{drawn}} of the {{matched}} products matching \"{{term}}\", out of {{total}}.",
+          "none": "No product matches \"{{term}}\".",
+          "refused": "Showing the {{matched}} refused products, out of {{total}}.",
+          "refusedCapped": "Showing {{drawn}} of the {{matched}} refused products, out of {{total}}.",
+          "refusedMatching": "{{matched}} refused products match \"{{term}}\", out of {{total}}.",
+          "refusedMatchingCapped": "Showing {{drawn}} of the {{matched}} refused products matching \"{{term}}\", out of {{total}}.",
+          "refusedNone": "No refused product matches \"{{term}}\"."
+        }
       }
     },
     "shops": {
@@ -791,6 +806,22 @@
         "notBackfilled": "{{shop}} will point at {{location}}. This does not fill in what the last run skipped: the next run writes it.",
         "startRun": "Start a run",
         "submit": "Map it"
+      }
+    },
+    "sources": {
+      "heading": "Chain sources",
+      "lead": "One row per chain: which adapter fetches it, how hard, and whether it may be fetched at all. Workers and requests per second are the two settings that decide whether a crawl gets us blocked by a chain's storefront, so raise them one step at a time and watch what the failures count does.",
+      "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
+      "edit": "Change how it is fetched",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "field": {
+        "adapter": "Adapter",
+        "workers": "Workers",
+        "rate": "Requests per second",
+        "lastRunAt": "Last run",
+        "lastSuccessAt": "Last success",
+        "failures": "Failures in a row"
       }
     }
   },

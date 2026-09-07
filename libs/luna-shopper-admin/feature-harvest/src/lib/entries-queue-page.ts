@@ -464,7 +464,7 @@ const SCOPE_PAGE = 100;
 
     .kind.OFFICIAL_LEAFLET {
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     .ean {
@@ -505,7 +505,7 @@ const SCOPE_PAGE = 100;
       padding: var(--admin-space-2) var(--admin-space-3);
       border-radius: var(--admin-radius);
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     dl {
@@ -559,19 +559,6 @@ const SCOPE_PAGE = 100;
       flex: 1 1 12rem;
       flex-direction: column;
       gap: var(--admin-space-1);
-    }
-
-    button,
-    input,
-    select {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      font-size: 1rem;
-      color: var(--admin-ink);
     }
 
     button {

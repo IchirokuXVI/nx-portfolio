@@ -99,6 +99,15 @@ export type AddLinesItemDto = {
 };
 
 /**
+ * `AddPostalCodeDiscoveryDto` in the gateway's OpenAPI document.
+ */
+export type AddPostalCodeDiscoveryDto = {
+  country: string;
+  postalCode: string;
+  discoverNow: boolean;
+};
+
+/**
  * `AddPostalCodeDto` in the gateway's OpenAPI document.
  */
 export type AddPostalCodeDto = {
@@ -433,6 +442,8 @@ export type ProblemDetails = {
     | 'stale_quantity'
     | 'below_settled'
     | 'account_locked'
+    | 'postal_code_unknown'
+    | 'run_in_progress'
     | 'internal';
   detail?: string;
   message: string;
@@ -1166,6 +1177,26 @@ export type AdminCoreAdminZoneRowView = {
 };
 
 /**
+ * `admin-core.PostalCodeUsageListView` in the gateway's OpenAPI document.
+ */
+export type AdminCorePostalCodeUsageListView = {
+  country: string;
+  usage: AdminCorePostalCodeUsageView[];
+};
+
+/**
+ * `admin-core.PostalCodeUsageView` in the gateway's OpenAPI document.
+ */
+export type AdminCorePostalCodeUsageView = {
+  postalCode: string;
+  mainProfiles: number;
+  nearbyProfiles: number;
+  suppressedProfiles: number;
+  mainUsers: number;
+  nearbyUsers: number;
+};
+
+/**
  * `admin-dashboard.AdminActivityEntry` in the gateway's OpenAPI document.
  */
 export type AdminDashboardAdminActivityEntry = {
@@ -1636,11 +1667,29 @@ export type CatalogLocalizedText = {
 };
 
 /**
+ * `catalog.NearbyPostalCodesView` in the gateway's OpenAPI document.
+ */
+export type CatalogNearbyPostalCodesView = {
+  country: string;
+  postalCode: string;
+  known: boolean;
+  postalCodes: CatalogPostalCodeDistanceView[];
+};
+
+/**
  * `catalog.PostalCodeCoverageView` in the gateway's OpenAPI document.
  */
 export type CatalogPostalCodeCoverageView = {
   postalCode: string;
   served: boolean;
+};
+
+/**
+ * `catalog.PostalCodeDistanceView` in the gateway's OpenAPI document.
+ */
+export type CatalogPostalCodeDistanceView = {
+  postalCode: string;
+  distanceMetres: number;
 };
 
 /**
@@ -2084,6 +2133,16 @@ export type EnumsOriginUnavailableReason =
 export type EnumsParticipantKind = 'OWNER' | 'REGISTERED' | 'GUEST';
 
 /**
+ * `enums.PostalCodeDiscoveryStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsPostalCodeDiscoveryStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'DONE'
+  | 'FAILED'
+  | 'PARKED';
+
+/**
  * `enums.PostalCodeSource` in the gateway's OpenAPI document.
  */
 export type EnumsPostalCodeSource = 'SOURCE' | 'DERIVED' | 'MANUAL';
@@ -2494,6 +2553,16 @@ export type GeneratedListGeneratedListView = {
 };
 
 /**
+ * `harvest.DiscoveredPlaceCounts` in the gateway's OpenAPI document.
+ */
+export type HarvestDiscoveredPlaceCounts = {
+  total: number;
+  imported: number;
+  rejected: number;
+  undecided: number;
+};
+
+/**
  * `harvest.DiscoveredPlaceGroup` in the gateway's OpenAPI document.
  */
 export type HarvestDiscoveredPlaceGroup = {
@@ -2538,6 +2607,7 @@ export type HarvestDiscoveredPlaceView = {
   street: string | null;
   city: string | null;
   postalCode: string | null;
+  postalCodeSource: EnumsPostalCodeSource | null;
   country: string | null;
   website: string | null;
   openingHours: string | null;
@@ -2616,6 +2686,50 @@ export type HarvestHarvestRunWarning = {
   page: number | null;
   name: string | null;
   message: string;
+};
+
+/**
+ * `harvest.PostalCodeDiscoveryRequestPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestPostalCodeDiscoveryRequestPage = {
+  items: HarvestPostalCodeDiscoveryRequestView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.PostalCodeDiscoveryRequestView` in the gateway's OpenAPI document.
+ */
+export type HarvestPostalCodeDiscoveryRequestView = {
+  id: string;
+  country: string;
+  postalCode: string;
+  status: EnumsPostalCodeDiscoveryStatus;
+  requestedAt: string;
+  lastAttemptedAt: string | null;
+  discoveredAt: string | null;
+  nextAttemptAt: string | null;
+  attempts: number;
+  runId: string | null;
+  error: string | null;
+  placeName: string | null;
+  dismissed: boolean;
+  foundByItsRuns: HarvestDiscoveredPlaceCounts;
+  locatedInIt: HarvestDiscoveredPlaceCounts;
+};
+
+/**
+ * `harvest.PostalCodeDiscoverySummaryView` in the gateway's OpenAPI document.
+ */
+export type HarvestPostalCodeDiscoverySummaryView = {
+  queued: number;
+  running: number;
+  done: number;
+  failed: number;
+  parked: number;
+  oldestQueuedAt: string | null;
+  draining: boolean;
 };
 
 /**
