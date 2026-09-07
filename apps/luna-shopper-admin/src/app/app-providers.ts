@@ -24,6 +24,8 @@ import {
   HEALTH_SERVICE,
   HealthApi,
   LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS,
+  POSTAL_CODE_SERVICE,
+  PostalCodeApi,
   RESOURCE_GATEWAYS,
   ResourceApiGateways,
   ServerReachability,
@@ -102,6 +104,11 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // these screens render at all for anybody not sitting in front of the compose
   // stack: the service is switched off in both clusters on purpose.
   provideService(HARVEST_SERVICE, HarvestApi),
+
+  // What catalog and core say about a postal code (admin plan 0021). Two
+  // backends behind one client, because the postal code screen is one subject
+  // asking three services and the third is the harvester above.
+  provideService(POSTAL_CODE_SERVICE, PostalCodeApi),
 
   // The one read the dashboard makes (admin plan 0016), bound here for the same
   // reason as the rest: it needs the `HttpClient` configured above.

@@ -39,6 +39,18 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       return 'resource.error.conflict';
     case 'validation_failed':
       return 'resource.error.validation';
+    case 'postal_code_unknown':
+      // A code that is not in the national centroid table, which means somebody
+      // typed it wrong (backend plan 0097, section 6.1). It is named apart from
+      // the generic validation sentence because it is the answer an operator
+      // adding a city's worth of codes gets most often, and "that code does not
+      // exist" is a typo they can fix while "the request was refused" is not.
+      return 'resource.error.postalCodeUnknown';
+    case 'run_in_progress':
+      // A row the harvester is working on right now. A conflict, but the useful
+      // half is which conflict: waiting for the run to finish is the whole of
+      // what the operator has to do.
+      return 'resource.error.runInProgress';
   }
 
   switch (error.status) {

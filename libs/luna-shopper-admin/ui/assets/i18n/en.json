@@ -157,7 +157,9 @@
       "validation": "Some of the values were refused. The details are beside the fields.",
       "unreachable": "The gateway did not answer. Check that the backend is running.",
       "unknown": "That did not work, and the server did not say why.",
-      "notAnObject": "Write a JSON object, in braces. A list or a bare value is not what this column holds."
+      "notAnObject": "Write a JSON object, in braces. A list or a bare value is not what this column holds.",
+      "postalCodeUnknown": "That postal code is not in the national table, so it is almost certainly a typo. Nothing was written.",
+      "runInProgress": "The harvester is working on that row right now. Wait for the run to finish and ask again."
     }
   },
   "catalog": {
@@ -419,7 +421,8 @@
       "entries": "Source products",
       "import": "Import a file",
       "shops": "Source shops",
-      "sources": "Chain sources"
+      "sources": "Chain sources",
+      "postalCodes": "Postal codes"
     },
     "match": {
       "EAN": "Barcode",
@@ -890,6 +893,99 @@
         "lastSuccessAt": "Last success",
         "failures": "Failures in a row"
       }
+    },
+    "postalCodes": {
+      "one": "Postal code",
+      "many": "Postal codes",
+      "status": {
+        "QUEUED": "Waiting for a run",
+        "RUNNING": "Being looked at",
+        "DONE": "Looked at",
+        "FAILED": "Failed",
+        "PARKED": "Parked"
+      },
+      "placeStatus": {
+        "NEW": "Undecided",
+        "IMPORTED": "Accepted",
+        "REJECTED": "Refused"
+      },
+      "field": {
+        "postalCode": "Postal code",
+        "placeName": "Name",
+        "status": "Status",
+        "lastLooked": "Last looked",
+        "found": "Places in this code",
+        "accepted": "Of those, accepted",
+        "waiting": "People waiting",
+        "attempts": "Attempts",
+        "requestedAt": "First asked about",
+        "discoveredAt": "Last looked",
+        "lastAttemptedAt": "Last attempted"
+      },
+      "filter": {
+        "postalCode": "Postal code starts with"
+      },
+      "action": {
+        "discoverAgain": "Queue another discovery"
+      },
+      "confirm": {
+        "discoverAgain": {
+          "heading": "Discover {{name}} again?",
+          "body": "This puts {{name}} back in the queue and ignores the thirty day wait, which is the only reason to press it. It fetches from a public service when its turn comes. The queue runs one code at a time, so the code is queued and not started.",
+          "confirm": "Queue it again"
+        }
+      },
+      "notice": {
+        "notDraining": "Harvesting is switched off in this deployment, so codes queue here and nothing runs them. Adding and queueing still works, and the backlog is picked up wherever harvesting is on.",
+        "demandUnavailable": "The people waiting column could not be read, so it is empty. An empty cell here does not mean nobody is waiting."
+      },
+      "add": {
+        "heading": "Add postal codes",
+        "lead": "Codes you add are looked at by the harvester, which finds the shops in them. A code that is not in the national table is refused, one code at a time, so you can see which one was wrong.",
+        "country": "Country",
+        "codes": "Postal codes",
+        "codesHelp": "One or many. Separate them with spaces, commas or new lines. Repeats are dropped.",
+        "discoverNow": "Discover places now",
+        "discoverNowHelp": "Off adds the code and queues no run, so it is tracked and costs nothing today.",
+        "submit": "Add {{count}} codes",
+        "cancel": "Cancel",
+        "progress": "Adding {{done}} of {{total}}",
+        "added": "Added {{added}} of {{total}}. The refused ones are still in the box, so you can fix them and press again."
+      },
+      "detail": {
+        "back": "Back to postal codes",
+        "queue": "What we did about it",
+        "lastRun": "Open the run that produced this",
+        "locatedInIt": "Places in this code",
+        "locatedInItSays": "Places whose own postal code is this one, whichever run found them. This is what a shopper here would be offered.",
+        "foundByItsRuns": "Places this code found",
+        "foundByItsRunsSays": "Places the runs for this code wrote, wherever they turned out to be. A run centred here reaches into the codes around it, so this counts the work the code caused.",
+        "near": "Codes near it",
+        "nearSays": "Measured centre to centre, so two codes that touch can be far apart here. A code that is missing from this list is not proof that it is far away: it may simply be outside the range we asked for.",
+        "notShipped": "This code is not in the national table at all, which usually means it does not exist. That is why we have no neighbours for it, and why a run for it would fail.",
+        "noNear": "No other code is within range of this one.",
+        "places": "What we found here",
+        "shops": "Shops in the catalog here: {{count}}",
+        "noPlaces": "No discovered place sits in this code.",
+        "derived": "Code guessed from the nearest centre",
+        "tagged": "Code taken from the map data",
+        "openPlaces": "Open the places queue for this code",
+        "openLocations": "Open the catalog shops",
+        "waiting": "Who is waiting"
+      },
+      "count": {
+        "total": "All",
+        "imported": "Accepted",
+        "rejected": "Refused",
+        "undecided": "Undecided"
+      },
+      "waiting": {
+        "mainProfiles": "Shopping profiles here",
+        "mainUsers": "People, counted once each",
+        "nearbyProfiles": "Profiles we widened into it",
+        "nearbyUsers": "People, counted once each",
+        "suppressed": "{{count}} profiles were offered this code and removed it. They are not waiting on it."
+      }
     }
   },
   "people": {
@@ -1221,7 +1317,10 @@
       "places": "Places found",
       "stalePrices": "Stale prices",
       "loginFailures": "Failed admin sign ins, last 24 hours",
-      "clear": "Nothing is waiting for a decision."
+      "clear": "Nothing is waiting for a decision.",
+      "postalCodes": "Postal codes waiting",
+      "postalCodesFailed": "{{count}} failed",
+      "postalCodesOldest": "oldest queued {{since}}"
     },
     "harvest": {
       "heading": "The harvester",

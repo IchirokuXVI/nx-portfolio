@@ -13,7 +13,10 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { DashboardStore } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  DashboardStore,
+  PostalCodeSummaryStore,
+} from '@portfolio/luna-shopper-admin/data-access';
 import {
   formatInstant,
   formatSince,
@@ -38,6 +41,7 @@ import {
   catalogTiles,
   loginFailureRows,
   peopleTiles,
+  postalCodeWaitingTile,
   pricesWrittenChart,
   recentRunRows,
   runsByStatusChart,
@@ -152,12 +156,20 @@ import {
                   />
                 </a>
               } @else {
-                <lib-stat-tile
-                  [label]="tile.label"
-                  [link]="tile.link ?? undefined"
-                  [tone]="tile.tone"
-                  [value]="tile.value"
-                />
+                <div class="captioned">
+                  <lib-stat-tile
+                    [label]="tile.label"
+                    [link]="tile.link ?? undefined"
+                    [tone]="tile.tone"
+                    [value]="tile.value"
+                  />
+                  <!-- Only the postal code tile carries one: how many failed
+                       and how long the oldest has waited are what turn a count
+                       into a decision (admin plan 0021, section 6). -->
+                  @if (tile.caption; as caption) {
+                    <p class="caption">{{ caption }}</p>
+                  }
+                </div>
               }
             }
           </div>
@@ -619,6 +631,7 @@ export class DashboardPage {
   private readonly _translate = inject(RokuTranslatorService);
   private readonly _references = inject(ResourceReferences);
   private readonly _viewport = inject(Viewport);
+  private readonly _postalCodes = inject(PostalCodeSummaryStore);
 
   readonly store = inject(DashboardStore);
   readonly document = this.store.document;
@@ -636,6 +649,11 @@ export class DashboardPage {
 
   constructor() {
     this.store.watch();
+    // The postal code queue's summary, which is not in the dashboard document
+    // and is one call beside it (admin plan 0021, section 6). Read once on
+    // arrival and again on a refresh; it changes when somebody adds a code or
+    // the worker drains one, neither of which happens while nobody is looking.
+    void this._postalCodes.load();
     // A component's teardown, which is the one that actually runs: a route's
     // providers injector is never destroyed, so a route scoped service's
     // `DestroyRef` would never fire and the poll would outlive this screen.
@@ -701,11 +719,27 @@ export class DashboardPage {
     );
   });
 
+  /**
+   * Everything waiting for a person, from the document plus one call beside it.
+   *
+   * The postal code tile is not in the document (admin plan 0021, section 6) and
+   * arrives on its own, so a dashboard whose harvest block is null still shows
+   * it and a summary that did not answer costs one tile rather than the row.
+   */
   readonly waiting = computed(() => {
     const document = this.document();
-    return document === null
-      ? []
-      : waitingTiles(document, this._text, (id) => this.chainName(id));
+    const tiles =
+      document === null
+        ? []
+        : waitingTiles(document, this._text, (id) => this.chainName(id));
+
+    const postalCodes = postalCodeWaitingTile(
+      this._postalCodes.summary(),
+      this._text,
+      (value) => formatSince(value, Date.now(), this._translate.locale())
+    );
+
+    return postalCodes === null ? tiles : [...tiles, postalCodes];
   });
 
   readonly running = computed(() => this.document()?.harvest?.running ?? null);
@@ -818,6 +852,10 @@ export class DashboardPage {
 
   refresh(): void {
     void this.store.load();
+    // The tile beside the document's, re-read by the same button. Forced,
+    // because the store answers a summary it already has and a refresh is the
+    // one place an operator is asking for a newer one.
+    void this._postalCodes.load(true);
   }
 
   /** Every chain the queues and the run in flight mention, in a stable order. */

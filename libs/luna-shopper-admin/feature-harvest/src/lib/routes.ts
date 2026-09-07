@@ -1,9 +1,11 @@
 import type { Route } from '@angular/router';
+import { resourceRoutes } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { ShellLink } from '@portfolio/luna-shopper-admin/ui';
 import { EntriesQueuePage } from './entries-queue-page';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { ImportUploadPage } from './import-upload-page';
 import { PlacesQueuePage } from './places-queue-page';
+import { POSTAL_CODES } from './postal-codes';
 import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
 import { ShopsQueuePage } from './shops-queue-page';
@@ -50,6 +52,19 @@ export function harvestRoutes(): Route[] {
         { path: 'imports/upload', component: ImportUploadPage },
         { path: 'shops', component: ShopsQueuePage },
         { path: 'sources', component: SourcesPage },
+        // The one screen in this section that **is** a resource (admin plan
+        // 0021). Its three routes are generated from its descriptor rather than
+        // written out here, because a list with a search box, a create form, a
+        // named action per row and a detail page is exactly the shape a
+        // descriptor is.
+        //
+        // Mounted here rather than in the app's resource list, so that it lives
+        // where an operator looks for it: every action on it starts a harvest
+        // run or reads what one produced, and its navigation entry is below with
+        // the rest of the section's. The property the registry gives a resource
+        // is kept the way this file already keeps it, by declaring the route and
+        // the link side by side.
+        ...resourceRoutes(POSTAL_CODES),
       ],
     },
   ];
@@ -83,4 +98,8 @@ export const HARVEST_LINKS: readonly ShellLink[] = [
   },
   { path: `/${HARVEST_SEGMENT}/shops`, label: 'harvest.nav.shops' },
   { path: `/${HARVEST_SEGMENT}/sources`, label: 'harvest.nav.sources' },
+  {
+    path: `/${HARVEST_SEGMENT}/${POSTAL_CODES.segment}`,
+    label: 'harvest.nav.postalCodes',
+  },
 ];
