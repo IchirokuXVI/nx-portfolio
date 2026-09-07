@@ -248,17 +248,44 @@ export class SessionLifecycle {
    * the overlay to render with the same copy the login screen uses.
    */
   async reauthenticate(password: string): Promise<SignInFailure | null> {
-    const failure = await this._sessions.signIn(
-      this._lockedUsername(),
-      password
+    return this.accept(
+      await this._sessions.signIn(this._lockedUsername(), password)
     );
+  }
+
+  /**
+   * The same way back in, on a server that asks for no password (plan 0002,
+   * section 5).
+   *
+   * A deployment with `ADMIN_DEV_AUTOLOGIN` on has an admin with no password to
+   * type, so the overlay there offers a button instead of a field. It is still
+   * the operator's act: the overlay goes up, covers the screen, and comes down
+   * only because somebody asked it to.
+   *
+   * The username is not sent, because the server picks the admin it issues a
+   * token for. On such a deployment that is the same admin the expired token
+   * belonged to, because the passwordless sign in is the only way one was
+   * issued.
+   */
+  async reauthenticateForDevelopment(): Promise<SignInFailure | null> {
+    return this.accept(await this._sessions.signInForDevelopment());
+  }
+
+  /**
+   * Take the overlay down, or say why it stays up.
+   *
+   * Shared by both ways back in, so a password and a passwordless token release
+   * the waiting requests through exactly the same steps.
+   */
+  private accept(failure: SignInFailure | null): SignInFailure | null {
     if (failure !== null) {
       return failure;
     }
 
     this._locked.set(false);
-    // Typing a password is interaction, and without recording it the renewed
-    // session would count as idle from birth and warn at a fifth of its life.
+    // Asking for the session back is interaction, and without recording it the
+    // renewed session would count as idle from birth and warn at a fifth of its
+    // life.
     this._lastActivityAt = Date.now();
     this.settle(true);
     this.evaluate();

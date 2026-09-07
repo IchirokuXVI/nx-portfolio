@@ -12,6 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  DeploymentStore,
   SessionLifecycle,
   SIGN_IN_PATH,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -49,6 +50,19 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
  * because `inert` is one attribute away from being removed by a future edit and
  * this is the half that fails loudly in a test.
  *
+ * ## The server that asks for no password
+ *
+ * A development deployment issues a token with no password (plan 0002, section
+ * 5), and its admin has none to type. Asking for one there is a field nobody
+ * can fill and a button that never enables, so the overlay drops both and
+ * offers the same "carry on" as a single control. It is the server that decides
+ * this, through the environment read, and never a build time flag: the client
+ * asks, and every way of not being told answers no.
+ *
+ * What does not change is the cover. The screen is still hidden, Escape still
+ * does nothing, and the session still comes back only because somebody asked
+ * for it.
+ *
  * ## The known limit
  *
  * The covered content is still in the DOM, and somebody with devtools can read
@@ -64,27 +78,36 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
   template: `
     <form (ngSubmit)="submit()" novalidate>
       <h2 id="reauth-heading">{{ 'session.reauth.heading' | rokuT }}</h2>
-      <p>{{ 'session.reauth.body' | rokuT: { name: username() } }}</p>
+      <p>
+        {{
+          (passwordless()
+            ? 'session.reauth.bodyPasswordless'
+            : 'session.reauth.body'
+          ) | rokuT: { name: username() }
+        }}
+      </p>
 
-      <label for="reauth-password">{{
-        'session.reauth.password' | rokuT
-      }}</label>
-      <input
-        [(ngModel)]="password"
-        [disabled]="busy()"
-        #passwordField
-        autocomplete="current-password"
-        id="reauth-password"
-        name="password"
-        required
-        type="password"
-      />
+      @if (!passwordless()) {
+        <label for="reauth-password">{{
+          'session.reauth.password' | rokuT
+        }}</label>
+        <input
+          [(ngModel)]="password"
+          [disabled]="busy()"
+          #passwordField
+          autocomplete="current-password"
+          id="reauth-password"
+          name="password"
+          required
+          type="password"
+        />
+      }
 
       @if (message(); as copy) {
         <p class="error" role="alert">{{ copy.key | rokuT: copy.args }}</p>
       }
 
-      <button [disabled]="busy() || password() === ''" type="submit">
+      <button [disabled]="busy() || !ready()" type="submit">
         {{
           (busy() ? 'session.reauth.submitting' : 'session.reauth.submit')
             | rokuT
@@ -214,14 +237,26 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
 })
 export class ReauthOverlay implements AfterViewInit {
   private readonly _lifecycle = inject(SessionLifecycle);
+  private readonly _deployments = inject(DeploymentStore);
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _router = inject(Router);
 
+  /** Absent on a server that asks for no password. */
   private readonly _passwordField =
-    viewChild.required<ElementRef<HTMLInputElement>>('passwordField');
+    viewChild<ElementRef<HTMLInputElement>>('passwordField');
 
   /** Who the expired token belonged to. Never asked for again: only the password is. */
   readonly username = this._lifecycle.lockedUsername;
+
+  /**
+   * Whether this server hands out a session with no password.
+   *
+   * The same signal the bootstrap read to skip the login screen, so the overlay
+   * cannot disagree with it. It is false while the environment read is in
+   * flight and false for every way of not being told, which is the safe
+   * direction: the worst case is a field on a screen that did not need one.
+   */
+  readonly passwordless = this._deployments.devAutologin;
 
   readonly password = signal('');
   readonly busy = signal(false);
@@ -237,24 +272,32 @@ export class ReauthOverlay implements AfterViewInit {
     return failure === null ? null : signInMessage(failure);
   });
 
+  /** Whether there is anything to submit. A passwordless server always has. */
+  readonly ready = computed(
+    () => this.passwordless() || this.password() !== ''
+  );
+
   ngAfterViewInit(): void {
-    // The cursor lands in the field that is being asked for. Without it focus is
-    // wherever the covered page left it, which is behind an `inert` subtree and
-    // therefore nowhere at all.
-    this._passwordField().nativeElement.focus();
+    // The cursor lands in the field that is being asked for, or on the button
+    // when nothing is. Without it focus is wherever the covered page left it,
+    // which is behind an `inert` subtree and therefore nowhere at all.
+    const field = this._passwordField()?.nativeElement;
+    (field ?? this.focusable()[0])?.focus();
   }
 
   async submit(): Promise<void> {
     // Guards a submit from the Enter key, which reaches here regardless of the
     // button's disabled state.
-    if (this.busy() || this.password() === '') {
+    if (this.busy() || !this.ready()) {
       return;
     }
 
     this.busy.set(true);
     this.failure.set(null);
 
-    const failure = await this._lifecycle.reauthenticate(this.password());
+    const failure = this.passwordless()
+      ? await this._lifecycle.reauthenticateForDevelopment()
+      : await this._lifecycle.reauthenticate(this.password());
 
     this.busy.set(false);
 
@@ -283,6 +326,13 @@ export class ReauthOverlay implements AfterViewInit {
     await this._router.navigateByUrl(`/${SIGN_IN_PATH}`);
   }
 
+  /** Everything a Tab can reach, in the order the browser would walk it. */
+  private focusable(): HTMLElement[] {
+    return Array.from(
+      this._host.nativeElement.querySelectorAll<HTMLElement>(FOCUSABLE)
+    );
+  }
+
   onKeydown(event: KeyboardEvent): void {
     // Escape does not dismiss this. There is nothing to go back to: the token is
     // gone either way, and a key that looked like a cancel would either lose the
@@ -296,9 +346,7 @@ export class ReauthOverlay implements AfterViewInit {
       return;
     }
 
-    const focusable = Array.from(
-      this._host.nativeElement.querySelectorAll<HTMLElement>(FOCUSABLE)
-    );
+    const focusable = this.focusable();
     if (focusable.length === 0) {
       return;
     }

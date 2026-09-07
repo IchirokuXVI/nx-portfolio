@@ -44,6 +44,7 @@
     "reauth": {
       "heading": "Session ended",
       "body": "Signed in as {{name}}. Enter the password to carry on. Nothing behind this has been lost, including anything half typed.",
+      "bodyPasswordless": "Signed in as {{name}}. This server signs you in without a password, so carry on. Nothing behind this has been lost, including anything half typed.",
       "password": "Password",
       "submit": "Carry on",
       "submitting": "Checking…",
