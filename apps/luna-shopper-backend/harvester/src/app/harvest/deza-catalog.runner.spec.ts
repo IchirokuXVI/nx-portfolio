@@ -114,6 +114,7 @@ function build(listing: FakeListing, shops: Partial<SourceLocation>[]): Built {
     setStage: jest.fn(async () => undefined),
     setTotalPlanned: jest.fn(async () => undefined),
     report: jest.fn(async () => undefined),
+    heartbeat: jest.fn(async () => undefined),
     flush: jest.fn(async () => undefined),
     setReport: jest.fn(async (value: Record<string, unknown>) => {
       Object.assign(report, value);
@@ -368,6 +369,25 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       { externalId: 'C1', printedName: 'SuperCash (Quemadas)' },
     ]);
     expect(report['shopsWritten']).toBe(1);
+  });
+
+  it('keeps the heartbeat moving while it enumerates', async () => {
+    listing = await startFakeListing(SECTIONS, cappedSection());
+    const { runner, context } = build(listing, []);
+
+    await runner.run(
+      context,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+
+    // A healthy enumeration writes no counter until the stage ends, so the
+    // heartbeat is the only thing telling the stale reaper the run is alive.
+    // One call per recorded row and one per finished query; the context
+    // throttles the actual writes.
+    expect(
+      (context.heartbeat as jest.Mock).mock.calls.length
+    ).toBeGreaterThanOrEqual(300);
   });
 
   it('puts every request of every worker through the one shared gate', async () => {
