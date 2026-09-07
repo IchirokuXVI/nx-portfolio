@@ -7,7 +7,10 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { AccountNotice } from '@portfolio/velista/data-access';
 import { APP_KEY } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  BackendReadiness,
+  provideVelistaTesting,
+} from '@portfolio/velista/platform';
 import { LandingPage } from './landing-page';
 
 /**
@@ -42,6 +45,14 @@ interface Options {
    * reports (plan 0015, section 5.7).
    */
   readonly accountDeleted?: boolean;
+  /**
+   * Whether the backend has answered (plan 0071, section 5.1).
+   *
+   * Defaults to true, so every spec that is about this screen rather than about the
+   * startup gate reads as it did before: the four ways in are ordinary controls. The
+   * gate's own specs pass false and assert that they are held.
+   */
+  readonly backendReady?: boolean;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -82,6 +93,13 @@ async function render(options: Options = {}): Promise<{
       },
     ],
   }).compileComponents();
+
+  // The startup answer, before the component is created. Held actions are the whole
+  // subject of section 5.1, and `connecting` is where `BackendReadiness` starts, so a
+  // spec that says nothing here would silently be testing the held screen.
+  if (options.backendReady !== false) {
+    TestBed.inject(BackendReadiness).reportReady();
+  }
 
   const notice = TestBed.inject(AccountNotice);
   if (options.accountDeleted === true) {
@@ -272,6 +290,61 @@ describe('LandingPage', () => {
       expect(fixture.componentInstance.pendingRoutes()).toEqual([
         'auth.google',
       ]);
+    });
+
+    /**
+     * Plan 0071, section 5.1. This is the one screen that draws before the app knows
+     * whether it can reach the backend, so it is the one place a control could act on
+     * a backend nobody has heard from, and the first of these four creates a group.
+     */
+    describe('while the backend has not answered', () => {
+      it('holds the four ways in without disabling them', async () => {
+        const { fixture, router } = await render({ backendReady: false });
+
+        const buttons = queryAll(
+          fixture,
+          'lib-auth-actions button'
+        ) as HTMLButtonElement[];
+
+        for (const button of buttons) {
+          expect(button.getAttribute('aria-disabled')).toBe('true');
+          // Held, not disabled: a disabled button swallows its own click, so the
+          // sentence explaining why could never be triggered by the press (D5).
+          expect(button.disabled).toBe(false);
+          button.click();
+        }
+
+        expect(router.navigate).not.toHaveBeenCalled();
+        expect(fixture.componentInstance.pendingRoutes()).toEqual([]);
+      });
+
+      // `!== 'ready'`, so an answered probe that could not reach the backend holds
+      // them too: the actions cannot work either way.
+      it('keeps holding them when the backend turns out to be unreachable', async () => {
+        const { fixture } = await render({ backendReady: false });
+
+        TestBed.inject(BackendReadiness).reportUnreachable();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.actionsHeld()).toBe(true);
+      });
+
+      it('lets go as soon as the backend answers', async () => {
+        const { fixture, router } = await render({ backendReady: false });
+
+        TestBed.inject(BackendReadiness).reportReady();
+        fixture.detectChanges();
+
+        const create = queryAll(
+          fixture,
+          'lib-auth-actions button'
+        )[0] as HTMLButtonElement;
+
+        expect(create.hasAttribute('aria-disabled')).toBe(false);
+        create.click();
+
+        expect(router.navigate).toHaveBeenCalled();
+      });
     });
 
     it('has an outlet for the sheet to render into', async () => {

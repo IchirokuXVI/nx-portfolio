@@ -1,3 +1,5 @@
+> **PR:** [#265](https://github.com/IchirokuXVI/nx-portfolio/pull/265)
+
 # 0071: the app waits until it can reach the backend
 
 > **The app finds out whether the backend is there by trying to use it.** There is no

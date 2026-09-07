@@ -74,6 +74,7 @@ export * from './lib/shops/shop-api';
 export * from './lib/shops/shop-memory';
 export * from './lib/shops/shop-service';
 export * from './lib/shops/shop-store';
+export * from './lib/startup-probe';
 export * from './lib/testing/store-doubles';
 export * from './lib/zones/static-group-data';
 export * from './lib/zones/static-zone-data';

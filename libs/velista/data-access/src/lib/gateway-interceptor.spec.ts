@@ -16,6 +16,7 @@ import {
 } from '@portfolio/velista/models';
 import {
   AppUpdates,
+  BackendReadiness,
   ConnectionState,
   provideFakeBrowserFacade,
   StorageKeys,
@@ -549,6 +550,40 @@ describe('gatewayInterceptor', () => {
       expect(error.code).toBe('client_too_old');
       expect(error.status).toBe(426);
       expect(checkNow).toHaveBeenCalled();
+    });
+
+    /**
+     * Plan 0071, section 4. `MinClientVersionGuard` is a global `APP_GUARD`, so the
+     * startup probe is refused like anything else, and this is how the gate learns
+     * about it without reading a status code of its own.
+     */
+    it('puts the app into too-old when the gateway refuses the build', async () => {
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush(
+          { code: 'client_too_old', correlationId: 'c1' },
+          { status: 426, statusText: 'Upgrade Required' }
+        );
+      await failure;
+
+      expect(TestBed.inject(BackendReadiness).state()).toBe('too-old');
+    });
+
+    // A header is the server saying this build is old, which is worth a background
+    // check. A refusal is the server saying it will not serve it, and only the second
+    // one is worth a screen.
+    it('does not put the app into too-old for an advertised floor alone', async () => {
+      const done = firstValue(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush({}, { headers: { 'x-min-client-version': '1.5.0' } });
+      await done;
+
+      expect(checkNow).toHaveBeenCalled();
+      expect(TestBed.inject(BackendReadiness).state()).not.toBe('too-old');
     });
 
     it('does not ask for an update on an ordinary failure', async () => {

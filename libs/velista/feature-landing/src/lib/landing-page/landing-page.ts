@@ -14,7 +14,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { AccountNotice } from '@portfolio/velista/data-access';
 import { APP_KEY, type PreviewLineVm } from '@portfolio/velista/models';
-import { sheetSegments } from '@portfolio/velista/platform';
+import { BackendReadiness, sheetSegments } from '@portfolio/velista/platform';
 import {
   AppBar,
   AppVersion,
@@ -62,6 +62,24 @@ export class LandingPage {
   private readonly _router = inject(Router);
   private readonly _t = inject(RokuTranslatorService);
   private readonly _notice = inject(AccountNotice);
+  private readonly _readiness = inject(BackendReadiness);
+
+  /**
+   * Whether the four ways in may act yet (plan 0071, section 5.1).
+   *
+   * `!== 'ready'`, so it covers `unreachable` as well as `connecting`, which is right:
+   * the actions cannot work either way. A connection lost mid session is a different
+   * thing again and still draws its own blocking screen over the top of this one.
+   *
+   * This page injects one platform signal and asks nothing else of it. The screen it
+   * would otherwise be waiting behind is not drawn here, because landing is the single
+   * route that renders while connecting: it is the front door, and a visitor who has
+   * just tapped a link deserves to see what the product is rather than a wait.
+   */
+  readonly actionsHeld = computed(() => this._readiness.state() !== 'ready');
+
+  /** See `BackendReadiness.slow`. Wall clock from the app starting, per D8. */
+  readonly startupSlow = this._readiness.slow;
 
   /**
    * The languages the header offers.

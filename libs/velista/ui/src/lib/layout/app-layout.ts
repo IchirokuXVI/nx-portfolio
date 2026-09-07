@@ -5,18 +5,22 @@ import {
   inject,
 } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BackendReadiness,
   ConnectionState,
   ReloadBlocker,
+  StartupGate,
   ThemeStore,
 } from '@portfolio/velista/platform';
 import { AppUiModule } from '../app-ui-module';
-import { ConnectionLost } from '../home/state-panels';
+import { ConnectionLost, StartupScreen } from '../home/state-panels';
 
 /**
  * The app's own root. Every route in this app renders inside it.
  *
- * Two jobs, both required by the extraction contract in plan 0001:
+ * Three jobs now, and the first two are required by the extraction contract in
+ * plan 0001:
  *
  * - **Item 1, the app owns its chrome.** Header, navigation and footer are drawn
  *   here, never by the portfolio shell, and nothing outside this host is styled.
@@ -24,6 +28,11 @@ import { ConnectionLost } from '../home/state-panels';
  * - **Item 4, its own theme tokens.** `.app-root` carries them instead of `:root`,
  *   so the shell's global styles and this app's tokens cannot leak into each other
  *   in either direction. On extraction that selector moves to `:root` unchanged.
+ * - **The startup gate** (plan 0071). Whether a page may render at all is applied
+ *   here and nowhere else, because this is the parent of every page and no page can
+ *   tell it anything before it has been created. What it applies is `StartupGate`'s
+ *   answer: the question involves reading the router, which rule D1 keeps out of this
+ *   library.
  *
  * The theme is a class on the same element that redefines the semantic layer and
  * nothing else (plan 0002, section 4). Which class that is comes from `ThemeStore`,
@@ -35,7 +44,13 @@ import { ConnectionLost } from '../home/state-panels';
  */
 @Component({
   selector: 'lib-app-layout',
-  imports: [AppUiModule, RouterOutlet, ConnectionLost],
+  imports: [
+    AppUiModule,
+    RokuTranslatorPipe,
+    RouterOutlet,
+    ConnectionLost,
+    StartupScreen,
+  ],
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -46,6 +61,8 @@ import { ConnectionLost } from '../home/state-panels';
 export class AppLayout {
   private readonly _theme = inject(ThemeStore);
   private readonly _connection = inject(ConnectionState);
+  private readonly _readiness = inject(BackendReadiness);
+  private readonly _gate = inject(StartupGate);
   private readonly _reload = inject(ReloadBlocker);
 
   /**
@@ -56,6 +73,29 @@ export class AppLayout {
    * (plan 0004, section 3).
    */
   readonly offline = this._connection.offline;
+
+  /** See {@link StartupScreen}. Wall clock from the app starting, per D8. */
+  readonly startupSlow = this._readiness.slow;
+
+  /**
+   * Whether the outlet may exist.
+   *
+   * **The cover holds the outlet rather than sitting over it** (D3). An overlay drawn
+   * over a live outlet leaves the page below constructed, so its resolvers run and its
+   * requests go out on behalf of somebody who has just been told to wait. `offline` is
+   * the opposite case and keeps its overlay, because there the page below is already
+   * alive and its half typed fields are worth preserving.
+   *
+   * The whole answer comes from `StartupGate`, including which route may draw while
+   * connecting. That reading is a router read, and rule D1 keeps every router read out
+   * of this library: see the service for what it decides and why it lives where it does.
+   */
+  readonly rendersNow = this._gate.rendersNow;
+
+  /** Somebody pressed Try again on the startup screen. */
+  retryConnection(): void {
+    this._readiness.requestRetry();
+  }
 
   /**
    * The quiet "Reload now" button.

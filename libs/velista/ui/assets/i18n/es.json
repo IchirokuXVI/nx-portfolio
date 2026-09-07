@@ -137,6 +137,18 @@
       "reload": "Recargar ahora"
     }
   },
+  "startup": {
+    "connecting": "Conectando",
+    "slow": {
+      "title": "Esto está tardando más de lo normal",
+      "body": "velista todavía no consigue conectar con el servidor. Espera un poco más o vuelve a intentarlo.",
+      "retry": "Reintentar"
+    },
+    "actions": {
+      "connecting": "Conectando. Podrás hacerlo en un momento.",
+      "slow": "velista no consigue conectar con el servidor. Inténtalo dentro de un momento."
+    }
+  },
   "auth": {
     "back": "Atrás",
     "signIn": {
