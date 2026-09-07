@@ -16,6 +16,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
+import { DeploymentStore } from '../deployment/deployment-store';
 import { GatewayError } from '../gateway-error';
 import { HEALTH_SERVICE, type HealthServiceI } from '../health/health-service';
 import { probeContext } from '../health/probe-http-context';
@@ -130,6 +131,7 @@ describe('adminAuthInterceptor', () => {
         ApiUrl,
         SessionStorage,
         SessionStore,
+        DeploymentStore,
         SessionLifecycle,
       ],
     });
