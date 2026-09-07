@@ -397,7 +397,7 @@ const SCOPE_PAGE = 100;
     .hints {
       border-color: var(--admin-accent);
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     .hints ul {
@@ -460,7 +460,7 @@ const SCOPE_PAGE = 100;
     }
 
     .messages {
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .submit {
@@ -510,19 +510,6 @@ const SCOPE_PAGE = 100;
 
     a {
       color: var(--admin-accent);
-    }
-
-    button,
-    input,
-    select {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      font-size: 1rem;
-      color: var(--admin-ink);
     }
 
     button {

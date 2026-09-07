@@ -157,7 +157,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 
     .actions .danger {
       border-color: var(--admin-danger);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     /* On a phone the bar leaves the flow, so it stays under the thumb however

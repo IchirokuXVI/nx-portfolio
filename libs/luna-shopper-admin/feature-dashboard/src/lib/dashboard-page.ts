@@ -463,7 +463,7 @@ import {
       border: 1px solid var(--admin-danger);
       border-radius: var(--admin-radius);
       background: var(--admin-danger-wash);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .failed {
@@ -516,7 +516,7 @@ import {
       gap: var(--admin-space-3);
       list-style: none;
       font-size: 0.8125rem;
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .running {
