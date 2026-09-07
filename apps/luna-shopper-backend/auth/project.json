@@ -144,6 +144,13 @@
         "command": "node apps/luna-shopper-backend/auth/src/app/admin/cli/cli.js create"
       }
     },
+    "admin:ensure": {
+      "// ": "The same, except that an existing admin is left exactly as it is rather than refused (plan 0071, section 8). This is what stack.sh runs on every up so a slot has the operator ADMIN_DEV_AUTOLOGIN names; run it by hand only to add that operator to a database that predates it. Note that nx does not forward a terminal to a run-commands target, so a person typing this wants `node apps/luna-shopper-backend/auth/src/app/admin/cli/cli.js ensure <username>` from the workspace root instead.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper-backend/auth/src/app/admin/cli/cli.js ensure"
+      }
+    },
     "admin:list": {
       "// ": "Username, display name, disabledAt and lastLoginAt. No secrets (plan 0071, section 6).",
       "executor": "nx:run-commands",

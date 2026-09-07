@@ -459,8 +459,13 @@ ENVIRONMENT_NAME=development
 # Sign the operator in with no password (plan 0071, section 8). Here and nowhere
 # else: auth refuses to boot with it on against a non local database, and
 # provision-release.ps1's counterpart refuses a deploy whose render mentions it.
-# Create the admin it names with nx run luna-shopper-backend-auth:admin:create.
-ADMIN_DEV_AUTOLOGIN=false
+#
+# The admin it names is created by stack.sh up, which every -Up runs, so there is
+# nothing to do by hand. The switch alone would not be enough: it tells the
+# gateway to mint a token for this username, and auth refuses when no enabled
+# admin carries it. Turn it off here and in auth's file together, or the login
+# asks auth for a token it will not mint.
+ADMIN_DEV_AUTOLOGIN=true
 ADMIN_DEV_AUTOLOGIN_USERNAME=dev-admin
 PORT=$gateway
 # Google sign in runs at the gateway (plan 0023), so the OAuth variables live
@@ -526,10 +531,12 @@ ADMIN_JWT_KID=dev-admin-1
 ADMIN_ACCESS_TOKEN_TTL=15m
 ADMIN_LOGIN_LOCKOUT_THRESHOLD=5
 ADMIN_LOGIN_LOCKOUT_WINDOW=15m
-# Off by default even locally, and the two values have to agree with the
+# On locally and nowhere else, and the two values have to agree with the
 # gateway's: turning it on there and leaving it off here is a login that asks
-# auth for a token it will refuse to mint.
-ADMIN_DEV_AUTOLOGIN=false
+# auth for a token it will refuse to mint. Auth is the half that refuses to boot
+# with it on against a non local database, which is what makes the local default
+# safe to state here rather than something each developer has to opt into.
+ADMIN_DEV_AUTOLOGIN=true
 ADMIN_DEV_AUTOLOGIN_USERNAME=dev-admin
 SMTP_HOST=localhost
 SMTP_PORT=$smtp

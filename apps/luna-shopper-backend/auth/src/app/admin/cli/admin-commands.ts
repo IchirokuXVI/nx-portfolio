@@ -78,6 +78,64 @@ export async function createAdmin(
   return { id: saved.id, username: saved.username };
 }
 
+/** What the ensure command prints, plus which of the two things it did. */
+export interface EnsuredAdmin extends CreatedAdmin {
+  created: boolean;
+}
+
+export interface EnsureAdminRequest {
+  username: string;
+  displayName?: string;
+  /**
+   * Asked for only when a row has to be written.
+   *
+   * A function rather than a string because the caller's way of producing one is
+   * to prompt, and an operator who typed `admin:ensure dev-admin` about an
+   * account that already exists should not be asked twice for a password that is
+   * then thrown away.
+   */
+  password: () => Promise<string>;
+}
+
+/**
+ * Create the operator only when it is missing, so a setup script can run on every
+ * `up` (plan 0071, section 8).
+ *
+ * `createAdmin` refuses a duplicate, which is right for a person typing the
+ * command and wrong for `stack.sh`, where the same slot is brought up again and
+ * again and the second run must not fail. So this asks first and does nothing
+ * when the row is there.
+ *
+ * **An existing row is never touched.** Not the password, not the display name,
+ * and above all not `disabledAt`: a developer who disabled the development admin
+ * disabled it on purpose, and an `up` that silently re-enabled it would take that
+ * decision back every few minutes. A disabled admin makes autologin fail loudly
+ * at the login route instead, which is the outcome that can be read.
+ */
+export async function ensureAdmin(
+  dataSource: DataSource,
+  req: EnsureAdminRequest
+): Promise<EnsuredAdmin> {
+  const username = req.username.trim();
+  if (!username) {
+    throw new Error('A username is required.');
+  }
+
+  const existing = await dataSource
+    .getRepository(AdminUser)
+    .findOne({ where: { username } });
+  if (existing) {
+    return { id: existing.id, username: existing.username, created: false };
+  }
+
+  const created = await createAdmin(dataSource, {
+    username,
+    password: await req.password(),
+    displayName: req.displayName,
+  });
+  return { ...created, created: true };
+}
+
 /** One row of the list command. No secrets, by construction rather than by care. */
 export interface ListedAdmin {
   username: string;

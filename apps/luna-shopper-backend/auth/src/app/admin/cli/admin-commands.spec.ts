@@ -2,6 +2,7 @@ import * as argon2 from 'argon2';
 import type { AdminUser } from '../../entities';
 import {
   createAdmin,
+  ensureAdmin,
   formatAdminList,
   listAdmins,
   MIN_ADMIN_PASSWORD_LENGTH,
@@ -96,6 +97,82 @@ describe('admin commands', () => {
         disabledAt: null,
         lastLoginAt: null,
       });
+    });
+  });
+
+  /**
+   * What `stack.sh up` runs on every slot, which is why the assertions are about
+   * repetition rather than about creating: the interesting cases are all the
+   * second run.
+   */
+  describe('ensure', () => {
+    it('creates the row when there is none', async () => {
+      const { dataSource, repo } = fakeDataSource();
+
+      const admin = await ensureAdmin(dataSource, {
+        username: 'dev-admin',
+        password: async () => 'a-long-enough-password',
+      });
+
+      expect(admin).toMatchObject({ username: 'dev-admin', created: true });
+      expect(repo.store).toHaveLength(1);
+    });
+
+    it('leaves an existing account alone rather than refusing', async () => {
+      // Everything about the stored row is deliberate: a developer who changed
+      // the password, renamed the account or disabled it did so on purpose, and
+      // an `up` a minute later must not undo any of the three.
+      const { dataSource, repo } = fakeDataSource([
+        {
+          id: 'a1',
+          username: 'dev-admin',
+          passwordHash: 'the-hash-it-already-had',
+          displayName: 'Renamed By Hand',
+          disabledAt: new Date('2026-01-01'),
+        } as AdminUser,
+      ]);
+
+      const admin = await ensureAdmin(dataSource, {
+        username: 'dev-admin',
+        displayName: 'Dev Admin',
+        password: async () => 'a-long-enough-password',
+      });
+
+      expect(admin).toEqual({
+        id: 'a1',
+        username: 'dev-admin',
+        created: false,
+      });
+      expect(repo.store).toHaveLength(1);
+      expect(repo.store[0]).toMatchObject({
+        passwordHash: 'the-hash-it-already-had',
+        displayName: 'Renamed By Hand',
+        disabledAt: new Date('2026-01-01'),
+      });
+    });
+
+    it('never asks for a password it will not use', async () => {
+      // The command prompts to produce one, so asking when the row is already
+      // there would make a script hang and a person answer for nothing.
+      const { dataSource } = fakeDataSource([
+        { id: 'a1', username: 'dev-admin' } as AdminUser,
+      ]);
+      const password = jest.fn(async () => 'a-long-enough-password');
+
+      await ensureAdmin(dataSource, { username: 'dev-admin', password });
+
+      expect(password).not.toHaveBeenCalled();
+    });
+
+    it('still enforces the length floor when it does create one', async () => {
+      const { dataSource } = fakeDataSource();
+
+      await expect(
+        ensureAdmin(dataSource, {
+          username: 'dev-admin',
+          password: async () => 'short',
+        })
+      ).rejects.toThrow(/at least/);
     });
   });
 
