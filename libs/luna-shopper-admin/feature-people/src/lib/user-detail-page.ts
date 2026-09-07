@@ -272,7 +272,7 @@ export class UserDetailPage extends DetailPage<UserRow> {
   }
 
   openZone(zone: UserZone): void {
-    this.go(['/zones', zone.id]);
+    this.goToResource('zones', zone.id);
   }
 
   askToResend(user: UserRow): void {

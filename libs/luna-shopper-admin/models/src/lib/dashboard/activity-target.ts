@@ -1,3 +1,5 @@
+import type { PathOf } from '../resource/resource-path';
+
 /**
  * An audit row, as much of it as a route can be built from.
  *
@@ -11,14 +13,22 @@ export interface ActivitySubject {
 }
 
 /**
- * The tables whose rows have a screen addressed by the row's own id.
+ * The tables whose rows have a screen, and which resource that screen is.
  *
- * The audit trail names a table and this app names a segment, and the two agree
- * only by accident: `shopping_lists` is at `/lists` and `item_prices` is at
- * `/prices`. So the mapping is written out rather than derived from the entity
- * name, and a table missing from it has no screen rather than a guessed one.
+ * The audit trail names a table and this app names a resource, and the two agree
+ * only by accident: `shopping_lists` is the table behind the `lists` screen and
+ * `item_prices` is the table behind `prices`. So the mapping is written out
+ * rather than derived, and a table missing from it has no screen rather than a
+ * guessed one.
+ *
+ * **A resource name, never a URL segment** (admin plan 0022, section 3). This
+ * used to be a second hand written copy of the segment list, which drifted
+ * silently the day a segment was renamed and broke outright the day the sections
+ * moved fourteen screens. Knowing that `shopping_lists` is the `lists` screen is
+ * real knowledge that lives nowhere else; knowing where the `lists` screen is
+ * mounted belongs to the registry, and comes in through {@link PathOf}.
  */
-const SEGMENTS: Readonly<Record<string, string | undefined>> = {
+const RESOURCE_NAMES: Readonly<Record<string, string | undefined>> = {
   zones: 'zones',
   shopping_lists: 'lists',
   users: 'users',
@@ -44,11 +54,21 @@ const SEGMENTS: Readonly<Record<string, string | undefined>> = {
  * and the audit row carries the uuid. There is nothing in the entry to reach the
  * parent's screen with either: `list_lines` would need the list and
  * `zone_memberships` the zone, and the trail records neither.
+ *
+ * The two other ways to be `null` are new and are the same answer for the same
+ * reason: a resolver that does not know the resource, which is an app that did
+ * not mount that screen, and an entry with no id.
  */
-export function activityTarget(entry: ActivitySubject): string[] | null {
-  const segment = SEGMENTS[entry.entity];
+export function activityTarget(
+  entry: ActivitySubject,
+  pathOf: PathOf
+): readonly string[] | null {
+  const resource = RESOURCE_NAMES[entry.entity];
+  if (resource === undefined || entry.entityId === '') {
+    return null;
+  }
 
-  return segment === undefined || entry.entityId === ''
-    ? null
-    : ['/', segment, entry.entityId];
+  const path = pathOf(resource);
+
+  return path === null ? null : [...path, entry.entityId];
 }

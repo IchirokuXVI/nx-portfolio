@@ -34,12 +34,7 @@ import {
   SessionBootstrap,
   SessionLifecycle,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { DASHBOARD_LINK } from '@portfolio/luna-shopper-admin/feature-dashboard';
-import { HARVEST_LINKS } from '@portfolio/luna-shopper-admin/feature-harvest';
-import {
-  provideResources,
-  provideShellLinks,
-} from '@portfolio/luna-shopper-admin/feature-resource';
+import { provideSections } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   ADMIN_API_CONFIG,
   ADMIN_APP_VERSION,
@@ -47,7 +42,7 @@ import {
 import { provideService } from '@portfolio/shared/data-access';
 import { environment } from '../environments/environment';
 import { DocumentTitle } from './document-title';
-import { ADMIN_RESOURCES } from './resources';
+import { ADMIN_SECTIONS } from './sections';
 import { LUNA_SHOPPER_ADMIN_TRANSLATION_PROVIDERS } from './translation-providers';
 
 /**
@@ -122,18 +117,13 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // without a backend is covered by an outage nobody asked for.
   provideService(HEALTH_SERVICE, HealthApi),
 
-  // Which resources this app has (plan 0004). The route table is built from the
-  // same list, so a resource cannot be reachable without a link or linked
-  // without a route, and a reference field pointing at one of them resolves
-  // through this rather than through a second registry.
-  provideResources(...ADMIN_RESOURCES),
-
-  // The screens that are not resources, so the navigation can reach them. A
-  // hand written screen has no descriptor for the registry to read, so it says
-  // it exists here instead, from the same library that declares its routes.
-  // The dashboard's entry is `leading`, so it is drawn in front of the
-  // resources rather than after them with the harvester's section.
-  provideShellLinks(DASHBOARD_LINK, ...HARVEST_LINKS),
+  // Which sections this app has, and through them which resources and which
+  // hand written screens (plan 0004, admin plan 0022). The route table is built
+  // from the same list, so a resource cannot be reachable without a link, linked
+  // without a route, or mounted without being registered, and a reference field
+  // pointing at one of them resolves through this rather than through a second
+  // registry.
+  provideSections(...ADMIN_SECTIONS),
 
   // Ask the server about itself, and take a passwordless session if it offers one
   // (plan 0002, section 5).

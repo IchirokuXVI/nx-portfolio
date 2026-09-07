@@ -1,11 +1,9 @@
 import type { Route } from '@angular/router';
-import { resourceRoutes } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { ShellLink } from '@portfolio/luna-shopper-admin/ui';
 import { EntriesQueuePage } from './entries-queue-page';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { ImportUploadPage } from './import-upload-page';
 import { PlacesQueuePage } from './places-queue-page';
-import { POSTAL_CODES } from './postal-codes';
 import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
 import { ShopsQueuePage } from './shops-queue-page';
@@ -16,6 +14,20 @@ export { HARVEST_SEGMENT };
 /**
  * The harvester's screens: the five of plan 0006, the queue admin plan 0011
  * added beside them, and the import.
+ *
+ * **Relative to the section, not to the app root** (admin plan 0022). The
+ * `harvest` segment is the section's, declared once beside the section's label
+ * and its dashboard, so these are the children of that branch rather than a
+ * branch of their own. `HARVEST_SEGMENT` is still exported, because a screen
+ * that links to another screen builds an absolute path and there is nothing
+ * generic to ask: a hand written screen has no descriptor for the registry to
+ * answer about.
+ *
+ * `POSTAL_CODES` is not here either. It is the one screen in this section that
+ * **is** a resource (admin plan 0021), and `0021` mounted it in this file with a
+ * comment about why one resource was mounted somewhere other than the app's flat
+ * list. There is no flat list any more, so the section mounts it exactly as
+ * every other section mounts its own, and the special case is gone.
  *
  * Written out rather than generated from descriptors, which is what the plan
  * says up front: a run is a process you start, watch and abort, and an import
@@ -37,36 +49,17 @@ export { HARVEST_SEGMENT };
  */
 export function harvestRoutes(): Route[] {
   return [
-    {
-      path: HARVEST_SEGMENT,
-      children: [
-        { path: '', pathMatch: 'full', redirectTo: 'runs' },
-        { path: 'runs', component: RunsPage },
-        { path: 'runs/:id', component: RunPage },
-        { path: 'places', component: PlacesQueuePage },
-        { path: 'entries', component: EntriesQueuePage },
-        // The two halves of a file (admin plan 0014, section 2): the document
-        // goes in at the first and everything it named that nobody has decided
-        // comes out at the queue above. Two screens rather than one, because an
-        // upload is a thing you do once and a queue is a thing you work through.
-        { path: 'imports/upload', component: ImportUploadPage },
-        { path: 'shops', component: ShopsQueuePage },
-        { path: 'sources', component: SourcesPage },
-        // The one screen in this section that **is** a resource (admin plan
-        // 0021). Its three routes are generated from its descriptor rather than
-        // written out here, because a list with a search box, a create form, a
-        // named action per row and a detail page is exactly the shape a
-        // descriptor is.
-        //
-        // Mounted here rather than in the app's resource list, so that it lives
-        // where an operator looks for it: every action on it starts a harvest
-        // run or reads what one produced, and its navigation entry is below with
-        // the rest of the section's. The property the registry gives a resource
-        // is kept the way this file already keeps it, by declaring the route and
-        // the link side by side.
-        ...resourceRoutes(POSTAL_CODES),
-      ],
-    },
+    { path: 'runs', component: RunsPage },
+    { path: 'runs/:id', component: RunPage },
+    { path: 'places', component: PlacesQueuePage },
+    { path: 'entries', component: EntriesQueuePage },
+    // The two halves of a file (admin plan 0014, section 2): the document
+    // goes in at the first and everything it named that nobody has decided
+    // comes out at the queue above. Two screens rather than one, because an
+    // upload is a thing you do once and a queue is a thing you work through.
+    { path: 'imports/upload', component: ImportUploadPage },
+    { path: 'shops', component: ShopsQueuePage },
+    { path: 'sources', component: SourcesPage },
   ];
 }
 
@@ -87,6 +80,11 @@ export function harvestRoutes(): Route[] {
  * over every source kind has no single number to show until a chain and two
  * filters are settled. A count that depended on three controls would be wrong
  * more often than it was right.
+ *
+ * The postal codes entry is gone from here and nothing was lost: it is a
+ * resource, so the section reads its label off its descriptor and draws it after
+ * these six. It was written out by hand only because there was nowhere else for
+ * a resource mounted under this segment to be named.
  */
 export const HARVEST_LINKS: readonly ShellLink[] = [
   { path: `/${HARVEST_SEGMENT}/runs`, label: 'harvest.nav.runs' },
@@ -98,8 +96,4 @@ export const HARVEST_LINKS: readonly ShellLink[] = [
   },
   { path: `/${HARVEST_SEGMENT}/shops`, label: 'harvest.nav.shops' },
   { path: `/${HARVEST_SEGMENT}/sources`, label: 'harvest.nav.sources' },
-  {
-    path: `/${HARVEST_SEGMENT}/${POSTAL_CODES.segment}`,
-    label: 'harvest.nav.postalCodes',
-  },
 ];

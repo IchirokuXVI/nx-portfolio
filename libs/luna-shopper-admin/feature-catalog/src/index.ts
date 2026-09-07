@@ -1,3 +1,5 @@
+export * from './lib/catalog-dashboard';
+export * from './lib/catalog-dashboard-view';
 export * from './lib/catalog-enums';
 export * from './lib/catalog-seed';
 export * from './lib/catalog-sources';

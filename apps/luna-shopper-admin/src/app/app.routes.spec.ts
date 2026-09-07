@@ -111,7 +111,7 @@ describe('appRoutes', () => {
   it('sends an unknown URL from a signed out operator to the login screen', async () => {
     const { router } = await boot(false);
 
-    await router.navigateByUrl('/catalog/products');
+    await router.navigateByUrl('/nowhere');
 
     expect(router.url).toBe('/sign-in');
   });
@@ -132,10 +132,71 @@ describe('appRoutes', () => {
   it('keeps an unknown URL from a signed in operator where it is', async () => {
     const { router } = await boot(true);
 
-    await router.navigateByUrl('/catalog/products');
+    await router.navigateByUrl('/nowhere');
 
-    expect(router.url).toBe('/catalog/products');
+    expect(router.url).toBe('/nowhere');
   });
+
+  /**
+   * Every screen reachable before admin plan 0022 is reachable after it, at the
+   * path section 1 of that plan gives. The whole list rather than a sample,
+   * because a URL that quietly stopped resolving would draw the not found page
+   * from inside the chrome and look like a screen that had not loaded yet.
+   */
+  it.each([
+    ['/', 'the overview'],
+    ['/catalog', 'the catalog dashboard'],
+    ['/catalog/supermarkets', 'the chains'],
+    ['/catalog/locations', 'the shops'],
+    ['/catalog/price-scopes', 'the price scopes'],
+    ['/catalog/items', 'the products'],
+    ['/catalog/product-groups', 'the product groups'],
+    ['/catalog/prices', 'the prices'],
+    ['/catalog/price-policies', 'the price policies'],
+    ['/catalog/location-items', 'the per shop rows'],
+    ['/shoppers', 'the shoppers dashboard'],
+    ['/shoppers/users', 'the users'],
+    ['/shoppers/zones', 'the zones'],
+    ['/shoppers/memberships', 'the memberships'],
+    ['/shoppers/lists', 'the lists'],
+    ['/shoppers/list-lines', 'the list lines'],
+    ['/shoppers/shopping-lists', 'the baskets'],
+    ['/harvest', 'the harvester dashboard'],
+    ['/harvest/runs', 'the runs'],
+    ['/harvest/places', 'the discovered places'],
+    ['/harvest/entries', 'the source products'],
+    ['/harvest/imports/upload', 'the import'],
+    ['/harvest/shops', 'the source shops'],
+    ['/harvest/sources', 'the chain sources'],
+    ['/harvest/postal-codes', 'the postal codes'],
+    ['/admins', 'the admins'],
+  ])('draws %s at its own URL', async (url) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(url);
+
+    expect(router.url).toBe(url);
+  });
+
+  /**
+   * The paths moved, and this is the half of that which is worth asserting: the
+   * old flat URL is not silently a second way in. `0022` section 12 rules out
+   * redirects from them, so each is an ordinary unknown URL now.
+   */
+  it.each(['/items', '/users', '/prices', '/shopping-lists'])(
+    'has no screen left at %s',
+    async (url) => {
+      const { router } = await boot(true);
+
+      await router.navigateByUrl(url);
+
+      // The not found page, which is a route inside the chrome rather than a
+      // redirect, so the URL stays where the operator typed it rather than
+      // bouncing anywhere. What proves it is not a screen is that the same URL
+      // is absent from the list above.
+      expect(router.url).toBe(url);
+    }
+  );
 
   /**
    * The loop guard. A reload onto the login screen with a session held must land

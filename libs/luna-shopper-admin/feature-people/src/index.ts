@@ -7,6 +7,8 @@ export * from './lib/list-detail-page';
 export * from './lib/list-lines';
 export * from './lib/lists';
 export * from './lib/memberships';
+export * from './lib/people-dashboard';
+export * from './lib/people-dashboard-view';
 export * from './lib/people-format';
 export * from './lib/people-seed';
 export * from './lib/user-detail-page';

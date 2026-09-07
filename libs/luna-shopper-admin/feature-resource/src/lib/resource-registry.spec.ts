@@ -2,11 +2,8 @@ import { inject } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
-import {
-  provideResources,
-  ResourceReferences,
-  ResourceRegistry,
-} from './resource-registry';
+import { provideResources, provideSections } from './admin-section';
+import { ResourceReferences, ResourceRegistry } from './resource-registry';
 
 interface Scope {
   id: string;
@@ -52,6 +49,21 @@ describe('ResourceRegistry', () => {
 
   it('has nothing to say about a resource the app did not mount', () => {
     expect(TestBed.inject(ResourceRegistry).byName('items')).toBeUndefined();
+  });
+
+  /**
+   * A resource mounted at the root, which is what `provideResources` makes and
+   * what this app was before it had sections.
+   */
+  it('answers where a resource with no section around it lives', () => {
+    expect(TestBed.inject(ResourceRegistry).pathOf('price-scopes')).toEqual([
+      '/',
+      'price-scopes',
+    ]);
+  });
+
+  it('has no path for a resource the app did not mount', () => {
+    expect(TestBed.inject(ResourceRegistry).pathOf('items')).toBeNull();
   });
 
   /**
@@ -122,5 +134,46 @@ describe('ResourceReferences', () => {
 
     await expect(references.search('items', 'x')).resolves.toEqual([]);
     await expect(references.resolve('items', 'x')).resolves.toBeNull();
+  });
+});
+
+/**
+ * Where a resource lives, once a section owns a segment (admin plan 0022,
+ * section 3).
+ *
+ * The registry is the right owner because it is built from the same sections
+ * that declare the routes, so a path it answers is a path that exists.
+ */
+describe('ResourceRegistry pathOf', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideSections(
+          {
+            key: 'catalog',
+            label: 'c',
+            segment: 'catalog',
+            resources: [scopes],
+          },
+          { key: 'admins', label: 'a', resources: [] }
+        ),
+      ],
+    });
+  });
+
+  it('names the section a resource is mounted in', () => {
+    expect(TestBed.inject(ResourceRegistry).pathOf('price-scopes')).toEqual([
+      '/',
+      'catalog',
+      'price-scopes',
+    ]);
+  });
+
+  it('registers every resource a section mounted', () => {
+    expect(
+      TestBed.inject(ResourceRegistry)
+        .all()
+        .map((descriptor) => descriptor.name)
+    ).toEqual(['price-scopes']);
   });
 });
