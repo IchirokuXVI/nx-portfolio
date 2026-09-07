@@ -754,7 +754,22 @@
         "lead": "One entry per product, with every complaint about it. Fix the file in the producer and drop it again: nothing on this screen edits the document."
       },
       "preview": {
-        "heading": "What would be imported"
+        "heading": "What would be imported",
+        "search": "Find a product in the file",
+        "more": "Show 250 more of the {{more}} not drawn",
+        "wholeFile": "Show the whole file again",
+        "tally": {
+          "all": "{{total}} products.",
+          "capped": "Showing the first {{drawn}} of {{total}} products.",
+          "matching": "{{matched}} products match \"{{term}}\", out of {{total}}.",
+          "matchingCapped": "Showing {{drawn}} of the {{matched}} products matching \"{{term}}\", out of {{total}}.",
+          "none": "No product matches \"{{term}}\".",
+          "refused": "Showing the {{matched}} refused products, out of {{total}}.",
+          "refusedCapped": "Showing {{drawn}} of the {{matched}} refused products, out of {{total}}.",
+          "refusedMatching": "{{matched}} refused products match \"{{term}}\", out of {{total}}.",
+          "refusedMatchingCapped": "Showing {{drawn}} of the {{matched}} refused products matching \"{{term}}\", out of {{total}}.",
+          "refusedNone": "No refused product matches \"{{term}}\"."
+        }
       }
     },
     "shops": {
