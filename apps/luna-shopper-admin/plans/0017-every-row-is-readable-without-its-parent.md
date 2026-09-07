@@ -1,3 +1,5 @@
+> **PR:** [#274](https://github.com/IchirokuXVI/nx-portfolio/pull/274)
+
 # 0017 Every row is readable without its parent
 
 Two lists in the back office refuse to draw anything until a parent is named. Memberships want a
