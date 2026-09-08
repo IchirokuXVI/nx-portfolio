@@ -98,3 +98,5 @@ docker/ddns/config/
 # npm cache, redirected into the workspace when installing inside the pinned build
 # container (see .github/actions/workspace).
 .npm
+
+apps/luna-shopper-backend/*/tools/out/
