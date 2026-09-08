@@ -17,6 +17,7 @@ import type {
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import type { PlatformAdminService } from './platform-admin.service';
+import { SourceEntryPriceWriter } from './source-entry-write';
 import { SourceEntryService } from './source-entry.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
 
@@ -176,6 +177,12 @@ function build(
     })),
   } as unknown as ConfigService;
 
+  // Plan 0100 moved the price write into its own collaborator, shared with the
+  // bulk replay. The real one is used here rather than a double, so every
+  // assertion below about which scopes were written and with which run keeps
+  // testing the thing it was written to test.
+  const priceWriter = new SourceEntryPriceWriter(catalog);
+
   const service = new SourceEntryService(
     entries,
     prices,
@@ -183,6 +190,7 @@ function build(
     catalog,
     sources,
     makeAdmin(),
+    priceWriter,
     config
   );
   // The English fetch is one HTTP request to a storefront, and nothing in a unit

@@ -21,8 +21,12 @@ import {
   type AdminListSupermarketItemsRequest,
   type AdminPostalCodePage,
   type AdminSupermarketItemPage,
+  type ApplyProductGroupAssignmentsRequest,
+  type ApplyProductGroupAssignmentsResult,
   type CountLocationsByPostalCodeRequest,
   type CreateItemRequest,
+  type CreateItemsRequest,
+  type CreateItemsResult,
   type CreatePriceScopeRequest,
   type CreateProductGroupRequest,
   type CreateSupermarketLocationRequest,
@@ -102,6 +106,7 @@ import { ItemService } from './item.service';
 import { PostalCodeService } from './postal-code.service';
 import { PricePolicyService } from './price-policy.service';
 import { PriceScopeService } from './price-scope.service';
+import { ProductGroupAssignmentService } from './product-group-assignment.service';
 import { ProductGroupService } from './product-group.service';
 import { ScopeResolverService } from './scope-resolver.service';
 import { SupermarketItemService } from './supermarket-item.service';
@@ -125,6 +130,7 @@ export class CatalogController {
     private readonly priceScopes: PriceScopeService,
     private readonly locationItems: SupermarketLocationItemService,
     private readonly productGroups: ProductGroupService,
+    private readonly groupAssignments: ProductGroupAssignmentService,
     private readonly scopeResolver: ScopeResolverService,
     private readonly postalCodes: PostalCodeService,
     private readonly itemPrices: ItemPriceService,
@@ -313,6 +319,15 @@ export class CatalogController {
     return this.items.findByEan(req);
   }
 
+  /**
+   * Several products in one transaction (plan 0100), for the bulk entry
+   * decisions that bind rows to every one of them in the step that follows.
+   */
+  @MessagePattern(ITEM_PATTERNS.createMany)
+  createItems(@Payload() req: CreateItemsRequest): Promise<CreateItemsResult> {
+    return this.items.createMany(req);
+  }
+
   // --- Product groups (plan 0048, section 1) -------------------------------
 
   @MessagePattern(PRODUCT_GROUP_PATTERNS.create)
@@ -348,6 +363,20 @@ export class CatalogController {
     @Payload() req: ListProductGroupsRequest
   ): Promise<ProductGroupPage> {
     return this.productGroups.list(req);
+  }
+
+  /**
+   * A whole curation session's group decisions, in one transaction (plan 0100).
+   *
+   * It answers rather than throws when the file is refused: the caller needs to
+   * know which operation failed which check, and an exception carries one
+   * message for a thousand rows.
+   */
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.applyAssignments)
+  applyGroupAssignments(
+    @Payload() req: ApplyProductGroupAssignmentsRequest
+  ): Promise<ApplyProductGroupAssignmentsResult> {
+    return this.groupAssignments.apply(req);
   }
 
   // --- Price scopes (plan 0038) --------------------------------------------

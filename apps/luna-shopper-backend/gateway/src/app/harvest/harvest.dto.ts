@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ADAPTER_KEYS,
+  BULK_DECISION_MAX_OPERATIONS,
   DiscoveredPlaceStatus,
   HarvestRunMode,
   HarvestRunStatus,
@@ -16,6 +17,8 @@ import {
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -289,6 +292,119 @@ export class CreateItemFromEntryDto {
   @IsOptional()
   @IsEnum(UnitOfMeasure)
   defaultUnit?: UnitOfMeasure;
+}
+
+/**
+ * The row as the decisions file saw it (plan 0100).
+ *
+ * Two fields, because two are enough: a row whose status has moved was decided
+ * by somebody else, and a row whose `lastSeenAt` has moved was observed again by
+ * a later run and may say something different from what was decided about.
+ */
+export class SourceEntryExpectationDto {
+  @ApiProperty({ enum: SourceEntryStatus })
+  @IsEnum(SourceEntryStatus)
+  status!: SourceEntryStatus;
+
+  @ApiProperty({
+    format: 'date-time',
+    description:
+      'Exactly the string the queue listing printed for this row. A row observed again since then fails the check.',
+  })
+  @IsDateString()
+  lastSeenAt!: string;
+}
+
+/**
+ * One decision of a decisions file (plan 0100).
+ *
+ * **One class for both kinds, with `kind` deciding which fields matter.** A
+ * discriminated union of two DTO classes is not something `class-validator`
+ * expresses without a custom decorator, and the combinations are checked in the
+ * harvester anyway, where they have to be: the gateway is one caller among
+ * several rather than a wall. What this class buys is the type of every field
+ * and the cap on the list.
+ */
+export class SourceEntryDecisionDto {
+  @ApiProperty({
+    enum: ['accept', 'createItem'],
+    description:
+      'accept binds the row to a product; createItem creates the product and binds the row to it. There is no bulk reject: junk is a person’s call.',
+  })
+  @IsIn(['accept', 'createItem'])
+  op!: 'accept' | 'createItem';
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  entryId!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'accept: a product the catalog already holds. Exactly one of this and itemRef.',
+  })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description:
+      'accept: a product a createItem of this same file creates, which is how a second row of the same product is bound before an id exists.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  itemRef?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description: 'createItem: this file’s own name for the product it creates.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  ref?: string;
+
+  @ApiPropertyOptional({
+    type: CreateItemFromEntryDto,
+    description:
+      'createItem: the product to create. Every field is optional, because the row already holds a default for each.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateItemFromEntryDto)
+  item?: CreateItemFromEntryDto;
+
+  @ApiProperty({ type: SourceEntryExpectationDto })
+  @ValidateNested()
+  @Type(() => SourceEntryExpectationDto)
+  expect!: SourceEntryExpectationDto;
+}
+
+export class ApplySourceEntryDecisionsDto {
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description:
+      'The curation session this file came out of. Provenance, echoed back in the answer so a report can be filed under it; the backend stores no run of its own for a decisions file.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  runId?: string;
+
+  @ApiProperty({
+    type: [SourceEntryDecisionDto],
+    maxItems: BULK_DECISION_MAX_OPERATIONS,
+    description:
+      'The whole file, applied in the order given. A longer file is refused rather than split: two chunks are two transactions, so the first can land while the second fails.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_DECISION_MAX_OPERATIONS)
+  @ValidateNested({ each: true })
+  @Type(() => SourceEntryDecisionDto)
+  operations!: SourceEntryDecisionDto[];
 }
 
 export class UpsertSupermarketSourceDto {

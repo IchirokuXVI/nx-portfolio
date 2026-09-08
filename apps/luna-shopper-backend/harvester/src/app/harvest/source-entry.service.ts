@@ -38,11 +38,9 @@ import type { HarvesterConfig } from '../config/app-config';
 import { HarvestRun, SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { buildHarvestDocument } from './harvest-export';
-import {
-  toItemPriceDetails,
-  toSourceCatalogEntryView,
-} from './harvest.mappers';
+import { toSourceCatalogEntryView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface EntryCursor {
@@ -106,6 +104,7 @@ export class SourceEntryService {
     private readonly catalog: CatalogClient,
     private readonly sources: SupermarketSourceService,
     private readonly admin: PlatformAdminService,
+    private readonly priceWriter: SourceEntryPriceWriter,
     private readonly config: ConfigService
   ) {}
 
@@ -387,72 +386,26 @@ export class SourceEntryService {
     return result.affected ?? 0;
   }
 
-  /** ACTIVE, bound, and MANUAL: a person decided, so the confidence is 1. */
+  /**
+   * ACTIVE, bound, and MANUAL: a person decided, so the confidence is 1.
+   *
+   * The fields it sets are {@link bindFields}, shared with the bulk replay of
+   * plan 0100 so that what "accepting a row" means to the database is stated
+   * once. This one saves through the repository; the bulk route saves through
+   * the entity manager of the transaction it is holding open.
+   */
   private async bind(
     entry: SourceCatalogEntry,
     itemId: string
   ): Promise<SourceCatalogEntry> {
-    entry.itemId = itemId;
-    entry.candidateEntryId = null;
-    entry.status = SourceEntryStatus.ACTIVE;
-    entry.matchedBy = ItemSourceMatch.MANUAL;
-    entry.confidence = 1;
-    entry.decidedAt = new Date();
-    // name, brand and sizeFormat are deliberately untouched. The item may be
-    // renamed to anything at all and the next run that produces this key still
-    // resolves through this row (D8).
-    const saved = await this.entries.save(entry);
+    const saved = await this.entries.save(bindFields(entry, itemId));
     saved.prices = entry.prices ?? [];
     return saved;
   }
 
-  /**
-   * Section 7's last paragraph: write the prices this row holds.
-   *
-   * One `catalog.addPrices` call per scope, each with **that scope's own run
-   * id** and the row's own `sourceKind`, so plan 0082 can take them back with
-   * the rest of that run's rows. An admin who accepts a Mercadona product on
-   * Tuesday gets the price Monday's walk saw, stamped with Monday's run.
-   *
-   * A row whose window has closed writes nothing: an expired price is not one
-   * anybody is charged, and inserting one only to have the resolver filter it
-   * out is work with a wrong row at the end of it. A row with no price at all
-   * writes nothing and says zero, which for a DEZA row is the truth rather than
-   * a failure.
-   */
-  private async writeRowPrices(entry: SourceCatalogEntry): Promise<number> {
-    if (!entry.itemId) {
-      return 0;
-    }
-    const now = new Date();
-    const open = (entry.prices ?? []).filter(
-      (price) => price.validUntil === null || price.validUntil > now
-    );
-    let written = 0;
-
-    for (const price of open) {
-      const result = await this.catalog.addPrices(
-        price.priceScopeId,
-        [
-          {
-            itemId: entry.itemId,
-            price: price.price === null ? null : Number(price.price),
-            currency: price.currency,
-            unitPrice:
-              price.unitPrice === null ? null : Number(price.unitPrice),
-            unitPriceLabel: price.unitPriceLabel,
-            validFrom: price.validFrom?.toISOString() ?? null,
-            validUntil: price.validUntil?.toISOString() ?? null,
-            observedAt: price.observedAt.toISOString(),
-            details: toItemPriceDetails(price.details ?? null),
-          },
-        ],
-        price.runId,
-        entry.sourceKind
-      );
-      written += result.inserted;
-    }
-    return written;
+  /** Section 7's last paragraph, in {@link SourceEntryPriceWriter}. */
+  private writeRowPrices(entry: SourceCatalogEntry): Promise<number> {
+    return this.priceWriter.write(entry);
   }
 
   /**

@@ -30,8 +30,27 @@ import { randomUUID } from 'node:crypto';
  * instead of being inherited.
  */
 
-/** Where the file import lives, and the one path with its own limit. */
+/** Where the file import lives, the largest body this gateway accepts. */
 export const IMPORT_UPLOAD_PATH = '/v1/admin/harvest/imports';
+
+/**
+ * The three bulk decision routes of plan 0100, which need a body of their own.
+ *
+ * **Without this the cap on those routes is unreachable.** A file of a thousand
+ * operations is a few hundred kilobytes, and the default limit is 100 KB, so
+ * every file anywhere near the documented maximum would be refused by the
+ * parser before the route ever counted its operations. The refusal would say
+ * the body was too large, which is true and useless: the operator's file is
+ * inside the limit the route publishes.
+ *
+ * Smaller than the import limit on purpose. A decisions file carries ids and
+ * short names, never the raw text of a leaflet page.
+ */
+export const BULK_DECISION_PATHS = [
+  '/v1/admin/harvest/entries/decisions',
+  '/v1/admin/catalog/items/batch',
+  '/v1/admin/catalog/product-groups/assignments',
+] as const;
 
 /**
  * Mount the parsers, largest path first.
@@ -42,6 +61,7 @@ export const IMPORT_UPLOAD_PATH = '/v1/admin/harvest/imports';
  */
 export function jsonBodyParsers(options: {
   importMaxBytes: number;
+  bulkMaxBytes: number;
   defaultMaxBytes: number;
 }): { path: string | null; handler: RequestHandler }[] {
   return [
@@ -49,6 +69,10 @@ export function jsonBodyParsers(options: {
       path: IMPORT_UPLOAD_PATH,
       handler: json({ limit: options.importMaxBytes }),
     },
+    ...BULK_DECISION_PATHS.map((path) => ({
+      path,
+      handler: json({ limit: options.bulkMaxBytes }),
+    })),
     { path: null, handler: json({ limit: options.defaultMaxBytes }) },
     {
       path: null,
@@ -67,6 +91,7 @@ export function jsonBodyParsers(options: {
  */
 export function bodyParserProblems(options: {
   importMaxBytes: number;
+  bulkMaxBytes: number;
   defaultMaxBytes: number;
 }): (error: unknown, req: Request, res: Response, next: NextFunction) => void {
   return (error, req, res, next) => {
@@ -76,8 +101,7 @@ export function bodyParserProblems(options: {
       return;
     }
 
-    const isImport = req.path?.startsWith(IMPORT_UPLOAD_PATH) === true;
-    const limit = isImport ? options.importMaxBytes : options.defaultMaxBytes;
+    const limit = limitFor(req.path ?? '', options);
     const detail =
       type === 'entity.too.large'
         ? `That body is too large. The limit on this route is ${describeBytes(limit)}.`
@@ -94,6 +118,30 @@ export function bodyParserProblems(options: {
     });
     res.status(problem.status).type(PROBLEM_JSON_CONTENT_TYPE).send(problem);
   };
+}
+
+/**
+ * Which limit the path that was refused actually had.
+ *
+ * The same order the parsers are mounted in, and it has to stay that way: a
+ * message naming a limit the route does not have sends the operator to trim a
+ * file that was never too big.
+ */
+function limitFor(
+  path: string,
+  options: {
+    importMaxBytes: number;
+    bulkMaxBytes: number;
+    defaultMaxBytes: number;
+  }
+): number {
+  if (path.startsWith(IMPORT_UPLOAD_PATH)) {
+    return options.importMaxBytes;
+  }
+  if (BULK_DECISION_PATHS.some((bulk) => path.startsWith(bulk))) {
+    return options.bulkMaxBytes;
+  }
+  return options.defaultMaxBytes;
 }
 
 /**

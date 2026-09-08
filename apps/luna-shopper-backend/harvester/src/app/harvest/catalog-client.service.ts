@@ -12,7 +12,9 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AddItemPriceBatchResult,
+  type CreateItemInput,
   type CreateItemRequest,
+  type CreateItemsResult,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
   type DeleteItemPricesByRunResult,
@@ -279,6 +281,31 @@ export class CatalogClient {
 
   createItem(input: Omit<CreateItemRequest, 'userId'>): Promise<ItemView> {
     return this.send(ITEM_PATTERNS.create, { userId: this.actor(), ...input });
+  }
+
+  /**
+   * Several products in one catalog transaction (plan 0100).
+   *
+   * The step a bulk decisions file needs: forty products are created or none
+   * are, because the binds that follow name every one of them. The answer holds
+   * one view per input, in the order they were sent.
+   */
+  createItems(items: CreateItemInput[]): Promise<CreateItemsResult> {
+    return this.send(ITEM_PATTERNS.createMany, {
+      userId: this.actor(),
+      items,
+    });
+  }
+
+  /**
+   * Delete a product, for the one caller that has to undo its own creation.
+   *
+   * A bulk decisions file whose binds fail after its products were created
+   * leaves those products bound by nothing, and the harvester is the only thing
+   * that knows they are orphans.
+   */
+  deleteItem(itemId: string): Promise<{ id: string }> {
+    return this.send(ITEM_PATTERNS.delete, { userId: this.actor(), itemId });
   }
 
   /**
