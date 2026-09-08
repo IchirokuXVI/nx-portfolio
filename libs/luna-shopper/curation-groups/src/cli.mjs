@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The decider CLI (plan 0001).
+ * The groups decider CLI (plan 0001).
  *
  * Invoked once per step, it keeps its state in a run directory and answers one
  * JSON object on stdout and nothing else, so the thing driving it holds no
@@ -9,7 +9,7 @@
  *
  *   node .../cli.mjs start --main-url <u> --rehearsal-url <u> --run-dir <dir>
  *   node .../cli.mjs next --run-dir <dir>
- *   node .../cli.mjs decide --run-dir <dir> --entry <id>   # decision on stdin
+ *   node .../cli.mjs decide --run-dir <dir> --item <id>   # decision on stdin
  *   node .../cli.mjs end --run-dir <dir>
  *   node .../cli.mjs apply --main-url <u> --file <decisions.jsonl>
  *
@@ -23,15 +23,15 @@ import { apply, decide, end, next, start } from './commands.mjs';
 const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply> [options]
 
   start   --main-url <u> --rehearsal-url <u> --run-dir <dir>
-          [--main-user <name>] [--main-password <p>] [--model <name>] [--chain <id>]
-          Verifies both admin logins, counts the queue, and answers
-          { runId, remaining, prompt }.
+          [--main-user <name>] [--main-password <p>] [--model <name>]
+          Verifies both admin logins, counts the ungrouped products, and
+          answers { runId, remaining, prompt }.
 
   next    --run-dir <dir> [--main-password <p>]
-          Answers one row: { entry, candidates, eanMatch, remaining },
+          Answers one product: { item, candidates, remaining },
           or { done: true }.
 
-  decide  --run-dir <dir> --entry <id> [--final] [--main-password <p>]
+  decide  --run-dir <dir> --item <id> [--final] [--main-password <p>]
           The model's JSON on stdin. Answers
           { accepted, retryable, decision, issues, remaining }.
           Without --final a reply that breaks the schema answers
@@ -42,8 +42,8 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply> [options]
 
   apply   --main-url <u> --file <decisions.jsonl>
           [--main-user <name>] [--main-password <p>] [--route <path>]
-          The replay: no model, no slot, one request that lands whole or not
-          at all.
+          The replay: no model, no slot, one transaction that lands whole or
+          not at all. Exits non zero when the server refused the file.
 `;
 
 export function parseArgs(argv) {
@@ -55,11 +55,11 @@ export function parseArgs(argv) {
       throw new Error(`Unexpected argument ${token}`);
     }
     const name = token.slice(2);
-    const next = rest[i + 1];
-    if (next === undefined || next.startsWith('--')) {
+    const value = rest[i + 1];
+    if (value === undefined || value.startsWith('--')) {
       options.flags[name] = true;
     } else {
-      options.flags[name] = next;
+      options.flags[name] = value;
       i += 1;
     }
   }
@@ -72,6 +72,10 @@ function required(flags, name) {
     throw new Error(`--${name} is required`);
   }
   return value;
+}
+
+function optional(flags, name) {
+  return typeof flags[name] === 'string' ? flags[name] : undefined;
 }
 
 function readStdin(fd = 0) {
@@ -90,24 +94,16 @@ export async function run(argv, { stdin = readStdin } = {}) {
       mainUrl: required(flags, 'main-url'),
       rehearsalUrl: required(flags, 'rehearsal-url'),
       runDir: required(flags, 'run-dir'),
-      mainUser:
-        typeof flags['main-user'] === 'string' ? flags['main-user'] : undefined,
-      mainPassword:
-        typeof flags['main-password'] === 'string'
-          ? flags['main-password']
-          : undefined,
+      mainUser: optional(flags, 'main-user'),
+      mainPassword: optional(flags, 'main-password'),
       model: typeof flags.model === 'string' ? flags.model : null,
-      chain: typeof flags.chain === 'string' ? flags.chain : null,
     });
   }
 
   if (command === 'next') {
     return next({
       runDir: required(flags, 'run-dir'),
-      mainPassword:
-        typeof flags['main-password'] === 'string'
-          ? flags['main-password']
-          : undefined,
+      mainPassword: optional(flags, 'main-password'),
     });
   }
 
@@ -121,13 +117,10 @@ export async function run(argv, { stdin = readStdin } = {}) {
     }
     return decide({
       runDir: required(flags, 'run-dir'),
-      entryId: required(flags, 'entry'),
+      itemId: required(flags, 'item'),
       input,
       final: flags.final === true,
-      mainPassword:
-        typeof flags['main-password'] === 'string'
-          ? flags['main-password']
-          : undefined,
+      mainPassword: optional(flags, 'main-password'),
     });
   }
 
@@ -142,12 +135,8 @@ export async function run(argv, { stdin = readStdin } = {}) {
     return apply({
       mainUrl: required(flags, 'main-url'),
       file: required(flags, 'file'),
-      mainUser:
-        typeof flags['main-user'] === 'string' ? flags['main-user'] : undefined,
-      mainPassword:
-        typeof flags['main-password'] === 'string'
-          ? flags['main-password']
-          : undefined,
+      mainUser: optional(flags, 'main-user'),
+      mainPassword: optional(flags, 'main-password'),
       ...(typeof flags.route === 'string' ? { route: flags.route } : {}),
     });
   }
@@ -164,8 +153,8 @@ if (invokedDirectly) {
       process.stdout.write(`${JSON.stringify(answer)}\n`);
       // Only `apply` carries a verdict, and a refused file is a 201 answer
       // rather than an error, so nothing else would tell a shell that the
-      // replay wrote nothing. The JSON is printed either way: it names the row
-      // that failed, which is what the operator needs.
+      // replay wrote nothing. The JSON is printed either way: it names the
+      // operation that failed, which is what the operator needs.
       if (answer?.applied === false) {
         process.exitCode = 2;
       }

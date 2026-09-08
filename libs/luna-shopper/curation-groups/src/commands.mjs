@@ -1,10 +1,12 @@
 /**
  * The five subcommands (plan 0001).
  *
- * Each one is invoked once, keeps nothing in memory between invocations, and
- * answers a single JSON object. Everything that has to survive a kill is in the
- * run directory. Nothing here calls a model: the caller does that, and hands
- * the answer to `decide` on stdin.
+ * The same contract as the suggestions decider, over a different domain: the
+ * products belonging to no group, decided into ASSIGN, CREATE_GROUP or REVIEW.
+ * Each subcommand is invoked once, keeps nothing in memory between invocations,
+ * and answers a single JSON object. Everything that has to survive a kill is in
+ * the run directory. Nothing here calls a model: the caller does that, and
+ * hands the answer to `decide` on stdin.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -15,14 +17,14 @@ import {
   issue,
   validateDecision,
 } from './decision.mjs';
-import { CANDIDATE_LIMIT, makeGateway, toCreateItemBody } from './gateway.mjs';
-import { buildEntryPacket, toCandidate } from './packet.mjs';
+import { CANDIDATE_LIMIT, makeGateway, toCreateGroupBody } from './gateway.mjs';
+import { buildItemPacket, toCandidate } from './packet.mjs';
 import {
   buildSystemPrompt,
-  chainName,
-  loadPrivateLabels,
+  itemName,
   loadVocabularies,
   normalizeName,
+  slugWords,
 } from './rules.mjs';
 import {
   appendDecision,
@@ -35,19 +37,20 @@ import {
 } from './run-dir.mjs';
 
 /**
- * The bulk route plan 0100 adds beside the per row queue routes.
+ * The catalog bulk route plan 0100 adds beside the per product update.
  *
  * `apply` is the only caller. The path lives in one constant because plan 0100
  * owns it and this library only replays into it; `--route` overrides it without
- * a code change if the two ever disagree before both have landed.
+ * a code change if the two ever disagree.
  */
-export const BULK_ENTRY_DECISIONS_PATH = '/v1/admin/harvest/entries/decisions';
+export const BULK_GROUP_ASSIGNMENTS_PATH =
+  '/v1/admin/catalog/product-groups/assignments';
 
 /** Plan 0100's cap. A larger file is refused, never chunked, because chunks break the promise. */
 export const MAX_OPERATIONS = 1000;
 
-/** How many rows one queue page holds. The plan asks for 10 to 20. */
-const QUEUE_PAGE = 20;
+/** How many products one listing page holds. The plan asks for 10 to 20. */
+const LISTING_PAGE = 20;
 
 /** The default session factory. Every test passes its own. */
 function defaultMakeSession(options) {
@@ -58,9 +61,9 @@ function normalizeUrl(url) {
   return String(url ?? '').replace(/\/+$/, '');
 }
 
-/** `ref-<entry id>`: one CREATE per entry, so the entry id is already unique. */
-function refFor(entryId) {
-  return `ref-${entryId}`;
+/** `ref-<item id>`: one CREATE_GROUP per product, so the id is already unique. */
+function refFor(id) {
+  return `ref-${id}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +71,7 @@ function refFor(entryId) {
 // ---------------------------------------------------------------------------
 
 /**
- * Verifies both logins, counts the queue, and answers the rules prompt.
+ * Verifies both logins, counts the ungrouped products, and answers the prompt.
  *
  * The two verifications come first and a failure stops here, before the caller
  * has spent a single model token on a run that could never have written
@@ -83,10 +86,8 @@ export async function start({
   rehearsalPassword,
   runDir,
   model = null,
-  chain = null,
   makeSession = defaultMakeSession,
   vocabularies = loadVocabularies(),
-  privateLabels = loadPrivateLabels(),
 }) {
   const main = makeGateway(
     makeSession({
@@ -108,39 +109,9 @@ export async function start({
   await main.session.verify();
   await rehearsal.session.verify();
 
-  const supermarkets = await main.listSupermarkets();
-  const chains = supermarkets
-    .filter((supermarket) => !chain || supermarket.id === chain)
-    .map((supermarket) => ({
-      supermarketId: supermarket.id,
-      name: chainName(supermarket),
-    }));
-
-  if (chains.length === 0) {
-    throw new Error(
-      chain
-        ? `No catalog supermarket answers to ${chain}.`
-        : 'The main catalog holds no supermarkets, so there is no queue to work.'
-    );
-  }
-
-  // One counting pass, so `remaining` means something from the first row on.
-  // The walk itself pages again from its own cursor; this pass keeps no cursor.
-  let total = 0;
-  for (const entry of chains) {
-    let cursor = undefined;
-    for (;;) {
-      const page = await main.queuePage(entry.supermarketId, {
-        cursor,
-        limit: 100,
-      });
-      total += page?.items?.length ?? 0;
-      cursor = page?.nextCursor ?? null;
-      if (!cursor) {
-        break;
-      }
-    }
-  }
+  // One counting pass, so `remaining` means something from the first product
+  // on. The walk itself pages again from its own cursor; this pass keeps none.
+  const total = await main.countUngrouped();
 
   const runId = randomUUID();
   createRun(runDir, {
@@ -149,8 +120,6 @@ export async function start({
     rehearsalUrl: normalizeUrl(rehearsalUrl),
     mainUser,
     model,
-    chains,
-    supermarkets,
     total,
   });
 
@@ -158,9 +127,8 @@ export async function start({
     runId,
     remaining: total,
     prompt: buildSystemPrompt({
-      categories: vocabularies.categories,
       units: vocabularies.units,
-      privateLabels,
+      unitFamilies: vocabularies.unitFamilies,
     }),
   };
 }
@@ -170,78 +138,64 @@ export async function start({
 // ---------------------------------------------------------------------------
 
 /**
- * The candidates for one entry, from both catalogs, merged and labeled.
+ * The groups one product might join, from both catalogs, merged and labeled.
  *
  * This runs at `next` time and never at prefetch time. The merge has to see
  * what the previous `decide` created, because the whole reason a rehearsal slot
- * exists is that the production search then answers this run's own twins. A
- * page of candidates computed in advance is the duplicate bug the toolchain was
- * built to kill.
+ * exists is that the search then answers this run's own groups. A page of
+ * candidates computed in advance is the duplicate the toolchain was built to
+ * kill, reborn one layer down.
+ *
+ * The search is the duplicate check as well as the candidate list: plan 0099
+ * held a directory in memory and compared against it, which does not survive
+ * thousands of groups. A group this run created is found the same way
+ * production finds one, through the `query` filter over names and synonyms.
  */
 export async function collectCandidates({
-  entry,
+  item,
   main,
   rehearsal,
   createdRefs,
+  query = null,
 }) {
-  const key = normalizeName(entry.name);
-  const refByItemId = new Map(
-    Object.entries(createdRefs ?? {}).map(([ref, itemId]) => [itemId, ref])
+  const key = query ?? normalizeName(itemName(item));
+  const refByGroupId = new Map(
+    Object.entries(createdRefs ?? {}).map(([ref, groupId]) => [groupId, ref])
   );
 
-  const [mainHits, mainEan, runHits, runEan] = await Promise.all([
-    main.searchItems(key),
-    main.findByEan(entry.ean),
-    rehearsal.searchItems(key),
-    rehearsal.findByEan(entry.ean),
+  const [mainHits, runHits] = await Promise.all([
+    main.searchGroups(key),
+    rehearsal.searchGroups(key),
   ]);
 
   const candidates = [];
-  const itemsById = new Map();
+  const groupsById = new Map();
+  const known = [];
 
-  for (const item of mainHits) {
-    itemsById.set(item.id, item);
-    candidates.push(toCandidate(item));
-  }
-  if (mainEan) {
-    itemsById.set(mainEan.id, mainEan);
-  }
-
-  // The item the ladder itself proposed, when it proposed one and the search
-  // did not surface it. It is the answer the queue is most often waiting on.
-  if (entry.itemId && !itemsById.has(entry.itemId)) {
-    const proposed = await main.getItem(entry.itemId);
-    if (proposed) {
-      itemsById.set(proposed.id, proposed);
-      candidates.unshift(toCandidate(proposed, { proposedByLadder: true }));
-    }
+  for (const group of mainHits) {
+    groupsById.set(group.id, group);
+    known.push(group);
+    candidates.push(toCandidate(group));
   }
 
-  // A rehearsal row this run did not create has no ref, so the model could not
-  // name it and a decision could not be replayed. A fresh slot holds no such
-  // row; skipping it is the safe answer if one ever appears.
-  const runItems = new Map();
-  for (const item of [...runHits, ...(runEan ? [runEan] : [])]) {
-    const ref = refByItemId.get(item.id);
+  // A rehearsal group this run did not create has no ref, so the model could
+  // not name it and a decision could not be replayed. A fresh slot holds no
+  // such row; skipping it is the safe answer if one ever appears.
+  const runGroups = new Map();
+  for (const group of runHits) {
+    const ref = refByGroupId.get(group.id);
     if (ref) {
-      runItems.set(item.id, { item, ref });
+      runGroups.set(ref, group);
+      known.push(group);
+      candidates.push(toCandidate(group, { origin: 'run', ref }));
     }
   }
-  for (const { item, ref } of runItems.values()) {
-    candidates.push(toCandidate(item, { origin: 'run', ref }));
-  }
-
-  const eanCandidate = mainEan
-    ? toCandidate(mainEan)
-    : runEan && refByItemId.has(runEan.id)
-      ? toCandidate(runEan, { origin: 'run', ref: refByItemId.get(runEan.id) })
-      : null;
 
   return {
     candidates: candidates.slice(0, CANDIDATE_LIMIT * 2),
-    eanMatch: eanCandidate,
-    itemsById,
-    runItems,
+    groupsById,
+    runGroups,
+    known,
   };
 }
 
@@ -250,13 +204,12 @@ export async function collectCandidates({
 // ---------------------------------------------------------------------------
 
 /**
- * Walks the queue to the first row this run has not decided, and answers it.
+ * Walks the ungrouped listing to the first product this run has not decided.
  *
- * The page is re-read on every call rather than cached across invocations. That
- * costs one request per row, which is nothing beside a model call, and it buys
- * two things: the row is as fresh as the answer about to be recorded against
- * it, and a `next` repeated after a crash answers the same row rather than
- * skipping one.
+ * A decided product is still ungrouped in the main catalog, because nothing is
+ * written there until `apply`. So the walk cannot rely on the listing shrinking
+ * and skips on the ids the run directory holds, which is also what makes a
+ * `next` repeated after a crash answer the same product rather than skip one.
  */
 export async function next({
   runDir,
@@ -269,53 +222,38 @@ export async function next({
     gateways ?? openGateways({ state, makeSession, mainPassword });
   const decided = new Set(state.decidedIds ?? []);
 
-  let chainIndex = state.chainIndex ?? 0;
-  const chains = state.chains.map((chain) => ({ ...chain }));
+  let cursor = state.cursor ?? undefined;
   let moved = false;
 
-  while (chainIndex < chains.length) {
-    const chain = chains[chainIndex];
-    const page = await main.queuePage(chain.supermarketId, {
-      cursor: chain.cursor ?? undefined,
-      limit: QUEUE_PAGE,
-    });
+  for (;;) {
+    const page = await main.ungroupedPage({ cursor, limit: LISTING_PAGE });
     const items = page?.items ?? [];
     const row = items.find((item) => !decided.has(item.id));
 
     if (row) {
       if (moved) {
-        writeState(runDir, { ...state, chains, chainIndex });
+        writeState(runDir, { ...state, cursor: cursor ?? null });
       }
-      const supermarket = supermarketOf(state, row);
-      const { candidates, eanMatch } = await collectCandidates({
-        entry: row,
+      const { candidates } = await collectCandidates({
+        item: row,
         main,
         rehearsal,
         createdRefs: state.createdRefs,
       });
-      const packet = buildEntryPacket({
-        entry: row,
-        supermarket,
-        candidates,
-        eanMatch,
-      });
       return {
-        ...packet,
+        ...buildItemPacket({ item: row, candidates }),
         remaining: Math.max(0, (state.total ?? 0) - decided.size),
       };
     }
 
     moved = true;
     if (page?.nextCursor) {
-      chain.cursor = page.nextCursor;
-    } else {
-      chain.exhausted = true;
-      chainIndex += 1;
+      cursor = page.nextCursor;
+      continue;
     }
+    writeState(runDir, { ...state, cursor: cursor ?? null, exhausted: true });
+    return { done: true, remaining: 0 };
   }
-
-  writeState(runDir, { ...state, chains, chainIndex });
-  return { done: true, remaining: 0 };
 }
 
 /**
@@ -345,15 +283,6 @@ function openGateways({ state, makeSession, mainPassword }) {
   };
 }
 
-/** The chain a row belongs to, from the list `start` recorded. */
-function supermarketOf(state, entry) {
-  return (
-    (state.supermarkets ?? []).find(
-      (supermarket) => supermarket.id === entry.supermarketId
-    ) ?? null
-  );
-}
-
 // ---------------------------------------------------------------------------
 // decide
 // ---------------------------------------------------------------------------
@@ -362,28 +291,29 @@ function supermarketOf(state, entry) {
  * Judges one answer and records it.
  *
  * A reply that does not even hold the right types answers `retryable: true` and
- * writes nothing, because the caller owns the retry (plan 0098's semantics, now
+ * writes nothing, because the caller owns the retry (plan 0099's semantics, now
  * one layer up). `final: true` says the caller has run out of retries, and the
- * row is then recorded as a REVIEW with the parse failure as its issue, which
- * is where the single file tool left such a row too.
+ * product is then recorded as a REVIEW with the parse failure as its issue.
  *
- * REVIEW writes nothing anywhere. Only a CREATE that survived every validator
- * reaches the rehearsal catalog, and nothing ever reaches the main one.
+ * REVIEW writes nothing anywhere. Only a CREATE_GROUP that survived every
+ * validator reaches the rehearsal catalog, and nothing ever reaches the main
+ * one.
  */
 export async function decide({
   runDir,
-  entryId,
+  itemId,
   input,
   final = false,
   mainPassword,
   makeSession = defaultMakeSession,
   gateways = null,
   vocabularies = loadVocabularies(),
-  privateLabels = loadPrivateLabels(),
 }) {
   const { state } = loadRun(runDir);
-  if ((state.decidedIds ?? []).includes(entryId)) {
-    throw new Error(`Entry ${entryId} is already in ${decisionsPath(runDir)}.`);
+  if ((state.decidedIds ?? []).includes(itemId)) {
+    throw new Error(
+      `Product ${itemId} is already in ${decisionsPath(runDir)}.`
+    );
   }
   const { main, rehearsal } =
     gateways ?? openGateways({ state, makeSession, mainPassword });
@@ -402,26 +332,23 @@ export async function decide({
     };
   }
 
-  const entry = await findEntry({ main, state, entryId });
-  if (!entry) {
+  const item = await findItem({ main, state, itemId });
+  if (!item) {
     throw new Error(
-      `Entry ${entryId} is not on the queue page the walk is standing on. It was decided or rejected elsewhere.`
+      `Product ${itemId} is not on the listing page the walk is standing on. It was grouped or deleted elsewhere.`
     );
   }
-  const supermarket = supermarketOf(state, entry);
 
-  // The optimistic check plan 0100 re-asserts on the server, read here at
-  // decide time. A stale file then dies on the server with zero writes.
-  const expect = {
-    status: entry.status ?? null,
-    lastSeenAt: entry.lastSeenAt ?? null,
-  };
+  // The optimistic check plan 0100's catalog route re-asserts on the server,
+  // read here at decide time. A stale file then dies on the server with zero
+  // writes rather than moving a product somebody has already sorted.
+  const expect = { productGroupId: item.productGroupId ?? null };
 
   if (!shape.ok) {
     return record({
       runDir,
       state,
-      entry,
+      item,
       expect,
       decision: 'REVIEW',
       proposedDecision: null,
@@ -437,6 +364,19 @@ export async function decide({
   // The model's own notes are reported and never decide anything. Only what the
   // library found for itself demotes a decision.
   const found = [];
+
+  // The listing asked for the ungrouped products, so a product carrying a group
+  // moved between the page and this call. Its `expect` would fail on the server
+  // and take the whole file with it, which is a worse way to learn it.
+  if (item.productGroupId) {
+    found.push(
+      issue(
+        'ALREADY_GROUPED',
+        `Somebody sorted this product into group ${item.productGroupId} since the walk read it.`
+      )
+    );
+  }
+
   if (proposal.confidence < CONFIDENCE_THRESHOLD) {
     found.push(
       issue(
@@ -446,67 +386,73 @@ export async function decide({
     );
   }
 
-  const { candidates, itemsById, runItems } = await collectCandidates({
-    entry,
+  const { candidates, groupsById, runGroups, known } = await collectCandidates({
+    item,
     main,
     rehearsal,
     createdRefs: state.createdRefs,
   });
 
-  let linkTarget = null;
-  let linkRef = null;
-  if (proposal.decision === 'LINK') {
-    if (proposal.itemId) {
-      linkTarget =
-        itemsById.get(proposal.itemId) ?? (await main.getItem(proposal.itemId));
-    } else if (proposal.itemRef) {
-      const created = [...runItems.values()].find(
-        (row) => row.ref === proposal.itemRef
-      );
-      linkTarget = created?.item ?? null;
-      linkRef = created ? proposal.itemRef : null;
-      if (!created) {
-        found.push(
-          issue(
-            'LINK_TARGET_MISSING',
-            `Ref ${proposal.itemRef} names no product this run created.`
-          )
-        );
-      }
+  let assignTarget = null;
+  let assignRef = null;
+  if (proposal.decision === 'ASSIGN') {
+    if (proposal.groupId) {
+      assignTarget =
+        groupsById.get(proposal.groupId) ??
+        (await main.getGroup(proposal.groupId));
+    } else if (proposal.groupRef) {
+      assignTarget = runGroups.get(proposal.groupRef) ?? null;
+      assignRef = assignTarget ? proposal.groupRef : null;
     }
   }
 
-  let eanOwner = null;
-  if (proposal.decision === 'CREATE' && proposal.item?.ean) {
-    eanOwner = await main.findByEan(proposal.item.ean);
+  // A slug is not a word the group listing searches, so a proposal's own slug
+  // is looked up as its words. It finds the group whose slug was made from its
+  // name, which is every group this toolchain creates. Catalog checks slug
+  // collisions again inside the transaction that would do the writing, so a
+  // collision this pass cannot see costs a refused file and never a duplicate.
+  const collisionPool = [...known];
+  if (proposal.decision === 'CREATE_GROUP') {
+    const words = slugWords(proposal.group.slug);
+    if (words && words !== normalizeName(itemName(item))) {
+      const bySlug = await collectCandidates({
+        item,
+        main,
+        rehearsal,
+        createdRefs: state.createdRefs,
+        query: words,
+      });
+      for (const group of bySlug.known) {
+        if (!collisionPool.some((held) => held.id === group.id)) {
+          collisionPool.push(group);
+        }
+      }
+    }
   }
 
   found.push(
     ...validateDecision({
       decision: proposal,
-      entry,
-      supermarket,
-      linkTarget,
-      eanOwner,
-      privateLabels,
-      categories: vocabularies.categories,
-      units: vocabularies.units,
+      item,
+      assignTarget,
+      known: collisionPool,
+      unitFamilies: vocabularies.unitFamilies,
     })
   );
 
   const outcome = found.length > 0 ? 'REVIEW' : proposal.decision;
 
-  if (outcome !== 'CREATE') {
+  if (outcome !== 'CREATE_GROUP') {
     return record({
       runDir,
       state,
-      entry,
+      item,
       expect,
       decision: outcome,
       proposedDecision:
         outcome === proposal.decision ? null : proposal.decision,
-      itemId: outcome === 'LINK' ? proposal.itemId : null,
-      itemRef: outcome === 'LINK' ? linkRef : null,
+      groupId: outcome === 'ASSIGN' ? proposal.groupId : null,
+      groupRef: outcome === 'ASSIGN' ? assignRef : null,
       confidence: proposal.confidence,
       issues: [...proposal.issues, ...found],
       reasoning: proposal.reasoning,
@@ -515,28 +461,30 @@ export async function decide({
     });
   }
 
-  // The rehearsal write. It is a plain catalog item create against the slot, so
-  // the next row's search sees this product the way production would.
-  const ref = refFor(entry.id);
-  let rehearsalItemId = null;
+  // The rehearsal write. It is a plain group create against the slot, so the
+  // next product's search sees this group the way production would.
+  const ref = refFor(item.id);
+  let rehearsalGroupId = null;
   const issues = [...proposal.issues, ...found];
   try {
-    const created = await rehearsal.createItem(toCreateItemBody(proposal.item));
-    rehearsalItemId = created?.id ?? null;
+    const created = await rehearsal.createGroup(
+      toCreateGroupBody(proposal.group)
+    );
+    rehearsalGroupId = created?.id ?? null;
   } catch (error) {
     issues.push(
       issue('REHEARSAL_WRITE_FAILED', String(error?.message ?? error))
     );
   }
 
-  if (!rehearsalItemId) {
+  if (!rehearsalGroupId) {
     return record({
       runDir,
       state,
-      entry,
+      item,
       expect,
       decision: 'REVIEW',
-      proposedDecision: 'CREATE',
+      proposedDecision: 'CREATE_GROUP',
       confidence: proposal.confidence,
       issues,
       reasoning: proposal.reasoning,
@@ -548,13 +496,13 @@ export async function decide({
   return record({
     runDir,
     state,
-    entry,
+    item,
     expect,
-    decision: 'CREATE',
+    decision: 'CREATE_GROUP',
     proposedDecision: null,
-    item: proposal.item,
+    group: proposal.group,
     ref,
-    rehearsalItemId,
+    rehearsalGroupId,
     confidence: proposal.confidence,
     issues,
     reasoning: proposal.reasoning,
@@ -563,33 +511,33 @@ export async function decide({
   });
 }
 
-/** The entry as the queue answers it now, found on the page the walk stands on. */
-async function findEntry({ main, state, entryId }) {
-  for (const chain of state.chains) {
-    const page = await main.queuePage(chain.supermarketId, {
-      cursor: chain.cursor ?? undefined,
-      limit: QUEUE_PAGE,
-    });
-    const row = (page?.items ?? []).find((item) => item.id === entryId);
-    if (row) {
-      return row;
-    }
+/** The product as the listing answers it now, on the page the walk stands on. */
+async function findItem({ main, state, itemId }) {
+  const page = await main.ungroupedPage({
+    cursor: state.cursor ?? undefined,
+    limit: LISTING_PAGE,
+  });
+  const row = (page?.items ?? []).find((item) => item.id === itemId);
+  if (row) {
+    return row;
   }
-  return null;
+  // The one place a single product is fetched by id: the page moved under the
+  // run, and refusing here would strand a decision the caller already paid for.
+  return main.getItem(itemId);
 }
 
 function record({
   runDir,
   state,
-  entry,
+  item,
   expect,
   decision,
   proposedDecision = null,
-  itemId = null,
-  itemRef = null,
-  item = null,
+  groupId = null,
+  groupRef = null,
+  group = null,
   ref = null,
-  rehearsalItemId = null,
+  rehearsalGroupId = null,
   confidence,
   issues,
   reasoning,
@@ -597,17 +545,16 @@ function record({
   remaining,
 }) {
   const row = {
-    entryId: entry.id,
-    entryName: entry.name,
-    supermarketId: entry.supermarketId,
+    itemId: item.id,
+    itemName: itemName(item),
     expect,
     decision,
     proposedDecision,
-    itemId,
-    itemRef,
-    item,
+    groupId,
+    groupRef,
+    group,
     ref,
-    rehearsalItemId,
+    rehearsalGroupId,
     confidence,
     issues,
     reasoning,
@@ -632,7 +579,7 @@ function record({
 export function end({ runDir, usage = null }) {
   const { state, header, records } = loadRun(runDir);
 
-  const counts = { LINK: 0, CREATE: 0, REVIEW: 0 };
+  const counts = { ASSIGN: 0, CREATE_GROUP: 0, REVIEW: 0 };
   for (const row of records) {
     counts[row.decision] = (counts[row.decision] ?? 0) + 1;
   }
@@ -648,11 +595,19 @@ export function end({ runDir, usage = null }) {
     decided: records.length,
     counts,
     usage,
+    groupsCreated: records
+      .filter((row) => row.decision === 'CREATE_GROUP')
+      .map((row) => ({
+        ref: row.ref,
+        slug: row.group?.slug ?? null,
+        nameEs: row.group?.nameEs ?? null,
+        referenceUnit: row.group?.referenceUnit ?? null,
+      })),
     reviews: records
       .filter((row) => row.decision === 'REVIEW')
       .map((row) => ({
-        entryId: row.entryId,
-        entryName: row.entryName,
+        itemId: row.itemId,
+        itemName: row.itemName,
         proposedDecision: row.proposedDecision,
         confidence: row.confidence,
         issues: row.issues,
@@ -669,23 +624,25 @@ export function end({ runDir, usage = null }) {
 /**
  * Replays a decisions file into the main catalog. No model, no slot.
  *
- * One request, so the file lands whole or not at all (plan 0100). A file the
- * server refuses leaves the queue exactly as it was, which is the point of
- * deciding and applying being two acts.
+ * One request, so the file lands whole or not at all (plan 0100). This one is
+ * truly all or nothing, unlike the entry decisions its sibling replays: groups
+ * and item membership live in one database, so there is no price shaped step
+ * outside the transaction and no exception to explain.
  *
- * **A refusal is a 201 answer, not an error.** The route reports which row
- * failed which check rather than throwing, because a problem document carries
- * one message for a thousand rows. So the verdict is `applied`, a boolean the
- * server decided, and this function passes it through beside `failedStep`,
- * `error` and `orphanedItemIds`. The CLI turns a false verdict into a non zero
- * exit, so a shell replaying a stale file is not told it succeeded.
+ * **A refusal is a 201 answer, not an error.** The route reports which
+ * operation failed which check rather than throwing, because a problem document
+ * carries one message for a thousand rows. So the verdict is `applied`, a
+ * boolean the server decided, and this function passes it through beside
+ * `error` and the ids each `ref` ended up naming. The CLI turns a false verdict
+ * into a non zero exit, so a shell replaying a stale file is not told it
+ * succeeded.
  */
 export async function apply({
   mainUrl,
   mainUser,
   mainPassword,
   file,
-  route = BULK_ENTRY_DECISIONS_PATH,
+  route = BULK_GROUP_ASSIGNMENTS_PATH,
   makeSession = defaultMakeSession,
   session = null,
 }) {
@@ -714,11 +671,9 @@ export async function apply({
       operations: 0,
       applied: true,
       appliedOperations: 0,
-      failedStep: null,
       error: null,
       results: [],
-      priceSkips: [],
-      orphanedItemIds: [],
+      createdGroups: [],
     };
   }
 
@@ -731,59 +686,64 @@ export async function apply({
       label: 'main',
     });
 
+  // The request carries no run id: catalog stores no run for a decisions file
+  // and the contract names no field for one. The report is where a session ties
+  // its writes back to itself.
   const answer = await admin.fetch(route, {
     method: 'POST',
-    body: { runId: header.runId, operations },
+    body: { operations },
   });
 
   const results = answer?.results ?? [];
   return {
-    runId: answer?.runId ?? header.runId,
+    runId: header.runId,
     operations: operations.length,
-    // The file level verdict, which is the server's and not a count. A refused
-    // file answers 201 with `applied: false`, so a caller reading only the
-    // status code, or only how many rows say `applied`, cannot tell a file that
-    // landed from one the first check threw out.
     applied: answer?.applied === true,
     appliedOperations: results.filter((result) => result.applied).length,
-    // Which of the four steps refused it, and why, when no single row was at
-    // fault. Without these an operator holding a refused file is told nothing.
-    failedStep: answer?.failedStep ?? null,
     error: answer?.error ?? null,
     results,
-    priceSkips: answer?.priceSkips ?? [],
-    // Products step two created that a step three failure could not delete.
-    // Unbound and nobody's, and reported rather than swallowed.
-    orphanedItemIds: answer?.orphanedItemIds ?? [],
+    createdGroups: answer?.createdGroups ?? [],
   };
 }
 
 /**
- * The operations plan 0100's route names, in the order they were decided.
+ * The operations plan 0100's catalog route names: every create, then every
+ * assignment.
  *
- * A REVIEW contributes none: it was never a decision, only a row handed back to
- * the queue. A LINK onto a product this run created carries `itemRef` rather
- * than an id, which the server resolves against the `createItem` that made it.
+ * The order is the contract, not a preference. An `assignItem` may name a group
+ * by `groupRef`, and a ref means nothing until the `createGroup` that declared
+ * it has been read, so the creates go first as one block.
+ *
+ * A CREATE_GROUP contributes both: the group, and the assignment of the product
+ * that caused it. Recording the create alone would leave that product ungrouped
+ * beside the group it was the reason for. A REVIEW contributes neither.
  */
 export function buildOperations(records) {
-  const operations = [];
+  const creates = [];
+  const assigns = [];
   for (const row of records) {
-    if (row.decision === 'CREATE') {
-      operations.push({
-        op: 'createItem',
-        entryId: row.entryId,
+    if (row.decision === 'CREATE_GROUP' && row.group) {
+      creates.push({
+        op: 'createGroup',
         ref: row.ref,
-        item: toCreateItemBody(row.item),
+        ...toCreateGroupBody(row.group),
+      });
+      assigns.push({
+        op: 'assignItem',
+        itemId: row.itemId,
+        groupRef: row.ref,
         expect: row.expect,
       });
-    } else if (row.decision === 'LINK') {
-      operations.push({
-        op: 'accept',
-        entryId: row.entryId,
-        ...(row.itemId ? { itemId: row.itemId } : { itemRef: row.itemRef }),
+    } else if (row.decision === 'ASSIGN') {
+      assigns.push({
+        op: 'assignItem',
+        itemId: row.itemId,
+        ...(row.groupId
+          ? { groupId: row.groupId }
+          : { groupRef: row.groupRef }),
         expect: row.expect,
       });
     }
   }
-  return operations;
+  return [...creates, ...assigns];
 }

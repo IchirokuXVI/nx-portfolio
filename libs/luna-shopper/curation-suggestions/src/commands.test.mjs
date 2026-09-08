@@ -693,11 +693,16 @@ test('apply sends one request and reports what the server answered', async () =>
     async fetch(path, init) {
       sent.push({ path, body: init.body });
       return {
+        runId: 'r1',
+        applied: true,
+        failedStep: null,
+        error: null,
         results: [
           { entryId: 'e1', applied: true },
           { entryId: 'e2', applied: true },
         ],
         priceSkips: [{ entryId: 'e2', reason: 'the price write failed' }],
+        orphanedItemIds: [],
       };
     },
   };
@@ -708,10 +713,74 @@ test('apply sends one request and reports what the server answered', async () =>
   assert.equal(sent[0].path, BULK_ENTRY_DECISIONS_PATH);
   assert.equal(sent[0].body.runId, 'r1');
   assert.equal(sent[0].body.operations.length, 2);
-  assert.equal(answer.applied, 2);
+  assert.equal(answer.applied, true);
+  assert.equal(answer.appliedOperations, 2);
   assert.deepEqual(answer.priceSkips, [
     { entryId: 'e2', reason: 'the price write failed' },
   ]);
+});
+
+/**
+ * The refusal path, which is a 201 answer and not an error.
+ *
+ * A stale file is the reason `expect` is recorded at decide time, so the shape
+ * a refusal comes back in is the one an operator reads most often. Reporting it
+ * as "0 of 2 applied" and nothing else would leave them with no idea which row
+ * moved under them or which check caught it.
+ */
+test('apply reports the step, the reason and the orphans of a refused file', async () => {
+  const dir = runDir();
+  const file = decisionsFile(dir, { runId: 'r1', mainUrl: MAIN_URL }, [
+    CREATE_ROW,
+    LINK_REF_ROW,
+  ]);
+  const session = {
+    async fetch() {
+      return {
+        runId: 'r1',
+        applied: false,
+        failedStep: 'VALIDATE',
+        error: 'one entry no longer matches what the file expected',
+        results: [
+          { entryId: 'e1', applied: false, error: null },
+          {
+            entryId: 'e2',
+            applied: false,
+            error: { code: 'EXPECT_MISMATCH', detail: 'lastSeenAt moved' },
+          },
+        ],
+        priceSkips: [],
+        orphanedItemIds: ['i-orphan'],
+      };
+    },
+  };
+
+  const answer = await apply({ mainUrl: MAIN_URL, file, session });
+
+  assert.equal(answer.applied, false);
+  assert.equal(answer.appliedOperations, 0);
+  assert.equal(answer.failedStep, 'VALIDATE');
+  assert.match(answer.error, /no longer matches/);
+  assert.deepEqual(answer.orphanedItemIds, ['i-orphan']);
+  assert.equal(answer.results[1].error.code, 'EXPECT_MISMATCH');
+});
+
+/** Nothing to send is not a refusal: no request, and the verdict is still true. */
+test('apply answers a decided verdict for a file holding only REVIEWs', async () => {
+  const dir = runDir();
+  const file = decisionsFile(dir, { runId: 'r1', mainUrl: MAIN_URL }, [
+    { ...CREATE_ROW, decision: 'REVIEW' },
+  ]);
+
+  const answer = await apply({
+    mainUrl: MAIN_URL,
+    file,
+    session: { fetch: () => assert.fail('sent') },
+  });
+
+  assert.equal(answer.applied, true);
+  assert.equal(answer.operations, 0);
+  assert.equal(answer.appliedOperations, 0);
 });
 
 test('apply refuses a file decided against another gateway', async () => {
@@ -740,12 +809,13 @@ test('apply ignores a trailing slash on either url', async () => {
   ]);
   const session = {
     async fetch() {
-      return { results: [{ entryId: 'e1', applied: true }] };
+      return { applied: true, results: [{ entryId: 'e1', applied: true }] };
     },
   };
 
   const answer = await apply({ mainUrl: `${MAIN_URL}/`, file, session });
-  assert.equal(answer.applied, 1);
+  assert.equal(answer.applied, true);
+  assert.equal(answer.appliedOperations, 1);
 });
 
 test('apply refuses a file with no header', async () => {
