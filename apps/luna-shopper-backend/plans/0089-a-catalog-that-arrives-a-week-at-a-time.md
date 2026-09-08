@@ -1,6 +1,8 @@
-> **PR:** [#239](https://github.com/IchirokuXVI/nx-portfolio/pull/239),
-> [#248](https://github.com/IchirokuXVI/nx-portfolio/pull/248) (the `REGION` rename
-> and the price granularity it settles)
+> **PR:** [#239](https://github.com/IchirokuXVI/nx-portfolio/pull/239) (the plan
+> and the research), [#248](https://github.com/IchirokuXVI/nx-portfolio/pull/248)
+> (the `REGION` rename and the price granularity it settles),
+> [#254](https://github.com/IchirokuXVI/nx-portfolio/pull/254) (the library, the
+> two runners and the store discovery dispatch)
 
 # 0089 A catalog that arrives a week at a time
 

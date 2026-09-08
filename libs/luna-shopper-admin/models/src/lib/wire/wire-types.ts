@@ -995,6 +995,7 @@ export type UpsertSupermarketSourceDto = {
     | 'mercadona-api'
     | 'deza-web'
     | 'carrefour-web'
+    | 'lidl-api'
     | 'osm-places'
     | 'manual';
   enabled?: boolean;
@@ -2101,6 +2102,7 @@ export type EnumsAdapterKey =
   | 'mercadona-api'
   | 'deza-web'
   | 'carrefour-web'
+  | 'lidl-api'
   | 'osm-places'
   | 'manual';
 

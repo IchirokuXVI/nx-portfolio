@@ -5,6 +5,7 @@ import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import type { RunContext } from './run-context';
 
@@ -31,7 +32,8 @@ export class CatalogDiscoveryRunner {
     private readonly mercadona: MercadonaCatalogRunner,
     private readonly deza: DezaCatalogRunner,
     private readonly carrefour: CarrefourCatalogRunner,
-    private readonly carrefourDetail: CarrefourDetailRunner
+    private readonly carrefourDetail: CarrefourDetailRunner,
+    private readonly lidl: LidlCatalogRunner
   ) {}
 
   // `async` so a refusal is a rejected promise rather than a synchronous throw
@@ -73,6 +75,11 @@ export class CatalogDiscoveryRunner {
         // two things an operator starts on purpose, never one that implies the
         // other.
         return input.detailBackfill ? this.carrefourDetail : this.carrefour;
+      case 'lidl-api':
+        // The one adapter that resolves its own price scopes, from the region
+        // map every product carries (plan 0089, section 4). The spawn refuses
+        // a run that names one, rather than writing 59 regions into it.
+        return this.lidl;
       default:
         throw new Error(
           `The adapter "${adapterKey}" has no catalog discovery. Set this ` +

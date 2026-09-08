@@ -1114,6 +1114,9 @@ POSTAL_CODE_DERIVE_MAX_METRES=5000
 MERCADONA_BASE_URL=
 OVERPASS_URL=
 NOMINATIM_URL=
+# The key LIDL ships in its own public store search bundle. Empty means the one
+# the library carries, which is the same string; set it when a 401 says it rotated.
+LIDL_STORES_API_KEY=
 PORT=${HARVESTER_PORT}
 EOF
   telemetry_env harvester

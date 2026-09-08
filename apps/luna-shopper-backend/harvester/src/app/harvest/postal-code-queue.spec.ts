@@ -17,7 +17,7 @@ import type { CatalogClient } from './catalog-client.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import type { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
-import { StoreDiscoveryRunner } from './store-discovery.runner';
+import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
 
 const ADMIN = 'owner-1';
 
@@ -427,9 +427,9 @@ describe('The postal code queue as a screen (plan 0097)', () => {
 
 // --- Section 3: a place takes the nearest centroid --------------------------
 
-describe('StoreDiscoveryRunner and the postal code it writes (plan 0097)', () => {
+describe('OsmStoreDiscoveryRunner and the postal code it writes (plan 0097)', () => {
   /**
-   * The runner is exercised through {@link StoreDiscoveryRunner.locate}, which
+   * The runner is exercised through {@link OsmStoreDiscoveryRunner.locate}, which
    * is private and reached here by name.
    *
    * The alternative is faking Nominatim and Overpass to reach three lines of
@@ -437,7 +437,7 @@ describe('StoreDiscoveryRunner and the postal code it writes (plan 0097)', () =>
    * being tested is about catalog rather than about either of them.
    */
   function locate(
-    runner: StoreDiscoveryRunner,
+    runner: OsmStoreDiscoveryRunner,
     place: { postalCode: string | null; latitude: number; longitude: number },
     country: string
   ) {
@@ -465,7 +465,7 @@ describe('StoreDiscoveryRunner and the postal code it writes (plan 0097)', () =>
     const catalog = { resolveNearestPostalCode } as unknown as CatalogClient;
     const recordPlaceName = jest.fn(async () => undefined);
     const queue = { recordPlaceName } as unknown as PostalCodeDiscoveryStore;
-    const runner = new StoreDiscoveryRunner(
+    const runner = new OsmStoreDiscoveryRunner(
       {} as unknown as Repository<DiscoveredPlace>,
       queue,
       catalog,
@@ -535,7 +535,7 @@ describe('StoreDiscoveryRunner and the postal code it writes (plan 0097)', () =>
         throw new Error('catalog is down');
       }),
     } as unknown as CatalogClient;
-    const runner = new StoreDiscoveryRunner(
+    const runner = new OsmStoreDiscoveryRunner(
       {} as unknown as Repository<DiscoveredPlace>,
       {} as unknown as PostalCodeDiscoveryStore,
       catalog,
