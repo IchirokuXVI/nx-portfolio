@@ -248,13 +248,13 @@ import { HarvestShell } from './harvest-shell';
     .status.RUNNING,
     .status.PENDING {
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     .status.FAILED,
     .status.STALE {
       background: var(--admin-danger-wash);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .state,
@@ -282,10 +282,11 @@ import { HarvestShell } from './harvest-shell';
       color: var(--admin-ink-muted);
     }
 
+    /* An outlined button on the raised surface, so it takes the danger colour
+       itself rather than the ink for the solid one, which is white. */
     .danger {
-      min-block-size: 2.75rem;
       border-color: var(--admin-danger);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     /* The import half (admin plan 0010, section 5). */
@@ -343,14 +344,6 @@ import { HarvestShell } from './harvest-shell';
     }
 
     .export button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      font-size: 1rem;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 
@@ -391,7 +384,7 @@ import { HarvestShell } from './harvest-shell';
       background: var(--admin-danger-wash);
       font-size: 0.75rem;
       text-transform: uppercase;
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

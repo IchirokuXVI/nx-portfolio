@@ -9,8 +9,27 @@
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --auto    configure for the lowest free one
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up      configure if needed, then start it all
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart bounce the services, keep the databases
-#   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down    stop it all
+#   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down    stop it all, and give the slot back
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list    every worktree's slot, and what is live
+#   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --unlock  drop a --keep-data lock
+#
+# --- a slot is borrowed, and an .env is yours --------------------------------
+#
+# --down gives the slot back: it stops everything, strips this slot's derived keys
+# out of the .env files it owns, and deletes the claim. So --up afterwards can
+# return a DIFFERENT number, because another worktree may have taken yours in
+# between. --restart bounces without releasing, and --down --keep-slot stops
+# everything and holds the number.
+#
+# Nothing else in those files is touched, on any run. A GEMINI_API_KEY pasted in
+# by hand, a HARVEST_ENABLED flipped on for a crawl, a MERCADONA_BASE_URL pointed
+# at a local recording: only the keys this script DERIVES from the slot are
+# rewritten, and everything else is kept exactly as it is on disk, blank values
+# included. See DERIVED_KEYS.
+#
+# --down --keep-data keeps this slot's volumes and LOCKS the slot, so --auto will
+# not hand those databases to the next worktree that asks. Naming the number takes
+# them on purpose; --unlock frees the number and leaves them.
 #
 # You almost never need --restart, and even less often --down. `nx serve` is
 # `@nx/js:node` with `watch` defaulting to true, so a change to a service or to a
@@ -100,6 +119,292 @@ MIN_AUTO_SLOT=1
 # assumption about who may call: CORS allows every slot regardless.
 DEFAULT_APP_SLOT=0
 
+# --- what a re-run is allowed to rewrite -------------------------------------
+#
+# Every .env below is rendered from a heredoc in write_config, and every one of
+# them is a file somebody may have edited by hand. Writing it with `cat >` throws
+# that edit away, which is how a pasted GEMINI_API_KEY, a HARVEST_ENABLED flipped
+# on for a crawl, or a MERCADONA_BASE_URL pointed at a local recording all
+# disappear the moment anybody moves the slot or re-runs --up. The values worth
+# keeping are exactly the ones nobody can regenerate.
+#
+# So the rendered text goes through merge_env on its way to disk, and only the
+# keys the SLOT decides are rewritten.
+#
+# DERIVED_KEYS is that set, per file. A new slot dependent key must be added
+# here. The list is INCLUSIVE, never an exception list: an exception list defaults
+# to rewriting, so a key nobody classified stays correct, while this defaults to
+# preserving, so a key nobody classified keeps a stale value. warn_foreign_ports
+# is the net under that, and it is the reason the trade is acceptable.
+#
+# Everything absent from it is preserved on purpose. SMTP_HOST=localhost is a host
+# and not a port. The AUTH_JWT_*_FILE and ADMIN_JWT_*_FILE paths are the same on
+# every slot. OTEL_ENABLED stays, because turning telemetry off is a choice
+# somebody made.
+#
+# The descriptor, .env.slot, is the exception to all of it: it is this script's
+# own bookkeeping, every value in it is derived, and the one choice it carries
+# across a re-run (LUNA_APP_SLOT) already has a function that reads it back. It is
+# generated whole, with no merge.
+declare -A DERIVED_KEYS=(
+  [shared]='NATS_URL REDIS_URL CORS_ORIGINS'
+  [gateway]='PORT APP_BASE_URL GOOGLE_CALLBACK_URL'
+  [realtime]='PORT'
+  [auth]='PORT AUTH_DB_URL SMTP_PORT MAIL_VERIFY_BASE_URL MAIL_RESET_BASE_URL GOOGLE_CALLBACK_URL'
+  [core]='PORT CORE_DB_URL'
+  [catalog]='PORT CATALOG_DB_URL'
+  [harvester]='PORT HARVESTER_DB_URL'
+  [assistant]='PORT GATEWAY_INTERNAL_URL'
+  [auth-test]='AUTH_DB_URL'
+  [core-test]='CORE_DB_URL'
+  [catalog-test]='CATALOG_DB_URL'
+  [harvester-test]='HARVESTER_DB_URL'
+)
+
+# The telemetry block is appended to every service file, and the collector it
+# names is this slot's. The rest of that block is a choice: OTEL_ENABLED and the
+# sampler argument are things somebody turns down, so they are preserved.
+TELEMETRY_DERIVED='OTEL_EXPORTER_OTLP_ENDPOINT'
+
+# How this run treats the keys it does not derive.
+#
+#   ''      keep whatever is on disk. The default.
+#   reset   put them back to the template default, except those named in
+#           KEEP_ENV. --reset-env, for when a preserved value is the thing that
+#           broke the stack.
+#   strip   leave the derived keys out of the file altogether and keep the rest.
+#           What a releasing --down writes: the file survives with its hand edits
+#           in it, and nothing left in it points at a slot this worktree has
+#           given back.
+MERGE_MODE=''
+KEEP_ENV=''
+
+# Every port this slot may legitimately name, the front end it redirects to
+# included. write_config fills it; warn_foreign_ports reads it.
+ALLOWED_PORTS=''
+
+# Merge the rendered template on stdin into $1, which need not exist yet. $2 is
+# the space separated list of keys this slot decides.
+#
+#   the key is                     the result
+#   -----------------------------  ------------------------------
+#   in $2                          the freshly computed value
+#   present in the file on disk    the value on disk, verbatim
+#   absent from the file on disk   the template default, inserted
+#
+# A key on disk that the template does not name is kept, appended under a marked
+# comment.
+#
+# A BLANK VALUE IS A VALUE. `GEMINI_API_KEY=` present and empty is a decision: it
+# means "use no key, answer 501, and do not ask me again". Ten keys ship blank for
+# that reason, MERCADONA_BASE_URL, OVERPASS_URL, MIN_CLIENT_VERSION and
+# VOICE_COMMENT_CONTENT_TYPES among them, where blank means "use the value built
+# into the code". So only a key that is genuinely ABSENT takes the template
+# default. Treating blank as absent overwrites a deliberate choice on every run.
+#
+# One risk comes with that, worth stating rather than hiding: if a key ever moves
+# from optional-and-blank to required-and-not-blank, a file that already holds the
+# blank keeps it and the service dies at boot. Every required key added so far
+# arrived as a NEW key, which the insert path covers. --reset-env is the repair,
+# and the boot failure names the variable.
+#
+# Parsing rules, stated because each one is a way to be silently wrong:
+#
+#   - only an uncommented `^[A-Za-z_][A-Za-z0-9_]*=` line counts as a key, so
+#     `# GEMINI_API_KEY=x` is a comment and that key is absent
+#   - the value is the rest of the line, verbatim, so quotes and a `#` inside a
+#     value survive
+#   - a key that appears twice keeps its FIRST value, which is what dotenv does
+#     when it reads the same file
+#   - multi line values are not supported. No file this script writes has one.
+merge_env() {
+  local target="$1" derived="${2:-}"
+
+  local disk="$target"
+  [[ -f "$disk" ]] || disk='/dev/null'
+
+  # Beside the target rather than in /tmp, so the rename is on one filesystem and
+  # a half written file can never be what a service reads.
+  local tmp="$target.luna-slot.tmp"
+
+  awk -v derived="$derived" -v keep="$KEEP_ENV" -v mode="$MERGE_MODE" '
+    BEGIN {
+      n = split(derived, a, /[ ,]+/)
+      for (i = 1; i <= n; i++) if (a[i] != "") is_derived[a[i]] = 1
+      n = split(keep, b, /[ ,]+/)
+      for (i = 1; i <= n; i++) if (b[i] != "") is_kept[b[i]] = 1
+    }
+
+    # Pass one: the file already on disk.
+    #
+    # Selected on FILENAME rather than the usual `FNR == NR`, because the file
+    # very often does not exist and /dev/null takes its place. With an empty first
+    # input FNR == NR stays true right through the second one, so the whole
+    # template is read as though it were already on disk and nothing is printed at
+    # all. The template is the only input given as `-`.
+    FILENAME != "-" {
+      if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+        eq = index($0, "=")
+        key = substr($0, 1, eq - 1)
+        if (!(key in on_disk)) {
+          on_disk[key] = substr($0, eq + 1)
+          order[++count] = key
+        }
+      }
+      next
+    }
+
+    # Pass two: the freshly rendered template. Its comments and blank lines are
+    # what the file looks like, so they are printed unconditionally.
+    {
+      if ($0 !~ /^[A-Za-z_][A-Za-z0-9_]*=/) { print; next }
+      eq = index($0, "=")
+      key = substr($0, 1, eq - 1)
+      in_template[key] = 1
+
+      if (key in is_derived) {
+        if (mode == "strip") next
+        print
+        next
+      }
+      if (mode == "reset" && !(key in is_kept)) { print; next }
+      if (key in on_disk) { print key "=" on_disk[key]; next }
+      print
+    }
+
+    END {
+      # A key on disk the template does not name is somebody addition, or a key
+      # this script used to write. Keeping it is the point; saying where it came
+      # from stops the next reader taking it for generated output.
+      for (i = 1; i <= count; i++) {
+        key = order[i]
+        if (key in in_template) continue
+        if (!said) {
+          print ""
+          print "# --- kept from the file that was here: keys this script does not write ---"
+          said = 1
+        }
+        print key "=" on_disk[key]
+      }
+    }
+  ' "$disk" - > "$tmp"
+
+  mv -f "$tmp" "$target"
+  warn_foreign_ports "$target" "$derived"
+}
+
+# The net under the inclusive DERIVED_KEYS list.
+#
+# A slot dependent key nobody added to that list keeps a stale port, and a stale
+# port is the worst failure this area has: a service pointed at another worktree's
+# database, which looks like working software until the data is wrong. This turns
+# it into one line of output.
+#
+# It changes nothing. `MERCADONA_BASE_URL=http://localhost:43000/recording` is a
+# legitimate hand edit, and no script can tell that apart from a forgotten key.
+warn_foreign_ports() {
+  local file="$1" derived="${2:-}"
+  [[ -f "$file" ]] || return 0
+
+  local line key value port
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+    key="${line%%=*}"
+    [[ " $derived " == *" $key "* ]] && continue
+    value="${line#*=}"
+    while IFS= read -r port; do
+      [[ -n "$port" ]] || continue
+      [[ " $ALLOWED_PORTS " == *" $port "* ]] && continue
+      echo "  WARNING: ${file#"$root/"} keeps ${key}, which names port ${port}." >&2
+      echo "           That is not this slot's. Either somebody meant it, or the" >&2
+      echo "           key belongs in DERIVED_KEYS. Nothing was changed." >&2
+    done < <(printf '%s\n' "$value" | grep -oE '\b4[23][0-9]{3}\b' | sort -u || true)
+  done < "$file"
+}
+
+# --- locks -------------------------------------------------------------------
+#
+# A lock and a claim are different things, and they are independent.
+#
+#   a CLAIM says a worktree is configured for this slot. It lives in .env.slot,
+#   inside the worktree, and a releasing --down deletes it.
+#   a LOCK says data on this slot is being kept on purpose. It outlives both.
+#
+# A slot can be locked and claimed at once, which is what `--down --keep-data
+# --keep-slot` produces. The only thing a lock changes is --auto, which skips it.
+# Everything else ignores it.
+#
+# It exists because --keep-data keeps this slot's volumes so somebody can look at
+# the result next session, and once --down releases the claim those volumes belong
+# to a number --auto will hand to the next worktree that asks, with nothing
+# telling it they are there.
+lock_dir() {
+  local dir
+  dir="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
+  [[ -n "$dir" ]] || return 1
+  # `git rev-parse` answers relatively when it can, and this script has already
+  # cd'd to the workspace root, so that is what a relative answer is relative to.
+  [[ "$dir" == /* || "$dir" =~ ^[A-Za-z]: ]] || dir="$root/$dir"
+  echo "$dir/luna-slot-locks"
+}
+
+# Why the locks live in the main .git directory and nowhere nearer.
+#
+# A lock has to outlive the descriptor, which --down deletes, and the worktree
+# itself, which is removed when a task ends. The volumes outlive both.
+# `git rev-parse --git-common-dir` resolves to the main .git directory from any
+# worktree, so every checkout reads the same one, and nothing there is committed.
+lock_file() {
+  local dir
+  dir="$(lock_dir)" || return 1
+  echo "$dir/$1"
+}
+
+write_lock() {
+  local slot="$1" file dir
+  dir="$(lock_dir)" || { echo "  could not locate the lock directory; no lock was written" >&2; return 0; }
+  file="$dir/$slot"
+  mkdir -p "$dir"
+  {
+    echo "# Written by luna-slot.sh --down --keep-data. Not committed: this lives in"
+    echo "# the main .git directory so it outlives the worktree that wrote it."
+    echo "# It keeps --auto off this slot. Nothing else reads it."
+    echo "worktree=$root"
+    echo "locked=$(date '+%Y-%m-%d %H:%M')"
+  } > "$file"
+}
+
+clear_lock() {
+  local file
+  file="$(lock_file "$1")" || return 0
+  rm -f "$file"
+}
+
+locked() {
+  local file
+  file="$(lock_file "$1")" || return 1
+  [[ -f "$file" ]]
+}
+
+# "<path>, since <date>", or nothing when the slot is not locked.
+lock_note() {
+  local file wt when
+  file="$(lock_file "$1")" || return 0
+  [[ -f "$file" ]] || return 0
+  wt="$(sed -n 's/^worktree=//p' "$file" | head -n 1)"
+  when="$(sed -n 's/^locked=//p' "$file" | head -n 1)"
+  echo "${wt:-an unnamed worktree}, since ${when:-an unrecorded date}"
+}
+
+# The volumes a locked slot is holding, so taking it can name them rather than
+# leave somebody to discover the databases are not empty. Compose names a volume
+# `<project>_<name>`, so they are addressable without reading the compose file.
+slot_volumes() {
+  local project
+  project="$(slot_project "$1")"
+  docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E "^${project}_" || true
+}
+
 usage() {
   cat >&2 <<'EOF'
 usage:
@@ -107,8 +412,9 @@ usage:
   luna-slot.sh --auto              configure it for the lowest free slot
   luna-slot.sh --up [<slot>]       configure if needed, then start everything
   luna-slot.sh --restart           bounce the services, keeping the databases
-  luna-slot.sh --down              stop the services and take the stack down
+  luna-slot.sh --down [--keep-slot]  stop it all, and give the slot back
   luna-slot.sh --list              every worktree's slot, and what is live
+  luna-slot.sh --unlock [<slot>]   drop a --keep-data lock, and nothing else
 
 Source changes need none of this: `nx serve` watches each service and the
 libraries it consumes and restarts that one process itself. --restart is for a
@@ -117,12 +423,29 @@ stack and its volumes alone so a restart never costs you the data.
 
 options:
   -p, --profile <name>   compose profile for --up / --down (e.g. observability)
-  --services a,b         limit --restart to these (default: all of them)
+  --services a,b         limit --up and --restart to these (default: all of
+                         them). The compose stack is always the whole of it.
   --app-slot <n>         which Angular slot the Google callback and the mail
                          links send a browser to (default 0). Only those; CORS
                          allows every Angular slot no matter what this says.
   --keep-data            --down stops the containers instead of removing them
-                         and their volumes, so the databases survive
+                         and their volumes, so the databases survive. It also
+                         LOCKS the slot, so --auto will not hand those databases
+                         to the next worktree that asks. Take it back by naming
+                         the number, or clear it with --unlock.
+  --keep-slot            with --down: stop everything but keep the claim and
+                         every value, so --up gets this same number back.
+                         Without it, --down gives the slot back and --up may
+                         hand you a different one. Slot 0 always behaves this
+                         way; nothing takes it.
+  --reset-env            put every key this script does not derive back to its
+                         shipped default. Preservation is what makes a hand
+                         edited GEMINI_API_KEY survive a re-run, and this is the
+                         repair for the first time a preserved value is the
+                         thing that broke the stack.
+  --keep-env A,B         with --reset-env, leave these keys alone. An error on
+                         its own: with nothing being reset there is nothing to
+                         keep.
   --timeout <secs>       how long --up waits for each service (default 180)
 
 The Angular slots are a separate numbering: any of them can call this backend,
@@ -132,6 +455,11 @@ and several can at the same time. Backend slot 3 does not imply front end slot 3
 compose stack up and waits on its healthchecks, runs the migrations, then serves
 all seven services. --down is its inverse, and by default it removes this slot's
 volumes, which is what `stack.sh down` has always meant here.
+
+A re-run never overwrites what you edited. Only the keys the SLOT decides are
+rewritten (DERIVED_KEYS names them); a pasted API key, a flipped switch or a base
+URL pointed at a local recording is kept exactly as it is on disk, and a key that
+is blank on purpose stays blank.
 EOF
 }
 
@@ -393,12 +721,20 @@ write_config() {
   SHELL_PORT="$(frontend_port shell "$app_slot")"
   VELISTA_PORT="$(frontend_port velista "$app_slot")"
 
+  # What warn_foreign_ports will accept in a preserved value: every port of this
+  # slot, plus the three the front end this slot redirects to listens on. Those
+  # three are a different numbering (see the header), so they have to be added
+  # rather than derived from this slot's number.
+  ALLOWED_PORTS="$(slot_ports "$slot" | tr '\n' ' ')${SHELL_PORT} ${VELISTA_PORT} $(frontend_port luna-shopper-admin "$app_slot")"
+
   local project
   project="$(slot_project "$slot")"
 
   local secrets="$root/apps/luna-shopper-backend/secrets"
   mkdir -p "$secrets" "$RUN_DIR"
-  if [[ ! -f "$secrets/jwt.key" ]]; then
+  # A releasing --down renders these same templates only to strip this slot's
+  # derived keys out of them. It is giving a slot back, so it generates nothing.
+  if [[ "$MERGE_MODE" != 'strip' && ! -f "$secrets/jwt.key" ]]; then
     require_openssl || return 1
     echo "generating a throwaway dev JWT keypair in apps/luna-shopper-backend/secrets ..."
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$secrets/jwt.key" 2>/dev/null
@@ -409,7 +745,7 @@ write_config() {
   # not verify on an admin route, which is a property two keys have and one key
   # with two audiences does not. Its own file, so a checkout that already has
   # jwt.key still gets one.
-  if [[ ! -f "$secrets/admin-jwt.key" ]]; then
+  if [[ "$MERGE_MODE" != 'strip' && ! -f "$secrets/admin-jwt.key" ]]; then
     require_openssl || return 1
     echo "generating a throwaway dev admin JWT keypair in apps/luna-shopper-backend/secrets ..."
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$secrets/admin-jwt.key" 2>/dev/null
@@ -433,6 +769,11 @@ write_config() {
   if [[ -f "$secrets/admin-jwt.pub" ]]; then chmod 0644 "$secrets/admin-jwt.pub"; fi
 
   # --- compose env-file ------------------------------------------------------
+  #
+  # Generated whole, with no merge: it is this script's own bookkeeping and every
+  # value in it is derived. A releasing --down is about to delete it, so strip
+  # mode does not write it at all.
+  if [[ "$MERGE_MODE" != 'strip' ]]; then
   cat > "$SLOT_ENV" <<EOF
 # Generated by luna-slot.sh for slot ${slot}. Git ignored. Pass to compose with
 #   docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot -f <compose> up -d
@@ -475,9 +816,10 @@ LUNA_CATALOG_PORT=${CATALOG_PORT}
 LUNA_HARVESTER_PORT=${HARVESTER_PORT}
 LUNA_ASSISTANT_PORT=${ASSISTANT_PORT}
 EOF
+  fi
 
   # --- shared service env ----------------------------------------------------
-  cat > "$root/apps/luna-shopper-backend/.env.luna-shopper-backend" <<EOF
+  merge_env "$root/apps/luna-shopper-backend/.env.luna-shopper-backend" "${DERIVED_KEYS[shared]}" <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 NATS_URL=nats://localhost:${NATS_PORT}
 REDIS_URL=redis://localhost:${REDIS_PORT}
@@ -518,7 +860,8 @@ EOF
   }
 
   # --- per service env -------------------------------------------------------
-  cat > "$root/apps/luna-shopper-backend/gateway/.env" <<EOF
+  {
+  cat <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
 # The operator trust root (plan 0071). Required, so a slot whose .env predates
@@ -529,9 +872,14 @@ ADMIN_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/admin-jwt.pub
 ENVIRONMENT_NAME=development
 # Sign the operator in with no password (plan 0071, section 8). ON here and
 # nowhere else: auth refuses to boot with it on against a non local database, and
-# provision-release.sh --check refuses a deploy whose render mentions it. Create
-# the admin it names with \`nx run luna-shopper-backend-auth:admin:create dev-admin\`.
-ADMIN_DEV_AUTOLOGIN=false
+# provision-release.sh --check refuses a deploy whose render mentions it.
+#
+# The admin it names is created by \`stack.sh up\`, which every --up runs, so
+# there is nothing to do by hand. The switch alone would not be enough: it tells
+# the gateway to mint a token for this username, and auth refuses when no enabled
+# admin carries it. Turn it off here and in auth's file together, or the login
+# asks auth for a token it will not mint.
+ADMIN_DEV_AUTOLOGIN=true
 ADMIN_DEV_AUTOLOGIN_USERNAME=dev-admin
 PORT=${GATEWAY_PORT}
 # Google sign in runs at the gateway (plan 0023), so the OAuth variables live
@@ -572,16 +920,20 @@ HARVESTER_FILE_IMPORT_MAX_BYTES=10485760
 # validated at boot, so a typo fails the process rather than retiring nobody.
 MIN_CLIENT_VERSION=
 EOF
-  telemetry_env gateway >> "$root/apps/luna-shopper-backend/gateway/.env"
+  telemetry_env gateway
+  } | merge_env "$root/apps/luna-shopper-backend/gateway/.env" "${DERIVED_KEYS[gateway]} $TELEMETRY_DERIVED"
 
-  cat > "$root/apps/luna-shopper-backend/realtime/.env" <<EOF
+  {
+  cat <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
 PORT=${REALTIME_PORT}
 EOF
-  telemetry_env realtime >> "$root/apps/luna-shopper-backend/realtime/.env"
+  telemetry_env realtime
+  } | merge_env "$root/apps/luna-shopper-backend/realtime/.env" "${DERIVED_KEYS[realtime]} $TELEMETRY_DERIVED"
 
-  cat > "$root/apps/luna-shopper-backend/auth/.env" <<EOF
+  {
+  cat <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 AUTH_DB_URL=postgres://luna_auth:luna_auth@localhost:${AUTH_DB_PORT}/luna_auth
 AUTH_JWT_PRIVATE_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.key
@@ -597,10 +949,12 @@ ADMIN_JWT_KID=dev-admin-1
 ADMIN_ACCESS_TOKEN_TTL=15m
 ADMIN_LOGIN_LOCKOUT_THRESHOLD=5
 ADMIN_LOGIN_LOCKOUT_WINDOW=15m
-# Off by default even locally, and the two values have to agree with the
+# On locally and nowhere else, and the two values have to agree with the
 # gateway's: turning it on there and leaving it off here is a login that asks
-# auth for a token it will refuse to mint.
-ADMIN_DEV_AUTOLOGIN=false
+# auth for a token it will refuse to mint. Auth is the half that refuses to boot
+# with it on against a non local database, which is what makes the local default
+# safe to state here rather than something each developer has to opt into.
+ADMIN_DEV_AUTOLOGIN=true
 ADMIN_DEV_AUTOLOGIN_USERNAME=dev-admin
 SMTP_HOST=localhost
 SMTP_PORT=${SMTP_PORT}
@@ -637,9 +991,11 @@ ORPHAN_REAPER_INTERVAL=1h
 ORPHAN_REAPER_BATCH=200
 PORT=${AUTH_PORT}
 EOF
-  telemetry_env auth >> "$root/apps/luna-shopper-backend/auth/.env"
+  telemetry_env auth
+  } | merge_env "$root/apps/luna-shopper-backend/auth/.env" "${DERIVED_KEYS[auth]} $TELEMETRY_DERIVED"
 
-  cat > "$root/apps/luna-shopper-backend/core/.env" <<EOF
+  {
+  cat <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 CORE_DB_URL=postgres://luna_core:luna_core@localhost:${CORE_DB_PORT}/luna_core
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
@@ -678,7 +1034,8 @@ PROFILE_NEARBY_RADIUS_BY_COUNTRY=
 # is a path worth being able to force by lowering this.
 PROFILE_LOCATION_MAX_DISTANCE_METRES=10000
 EOF
-  telemetry_env core >> "$root/apps/luna-shopper-backend/core/.env"
+  telemetry_env core
+  } | merge_env "$root/apps/luna-shopper-backend/core/.env" "${DERIVED_KEYS[core]} $TELEMETRY_DERIVED"
 
   # The uuid the harvester writes to catalog as (plan 0038, section 4.1). It has
   # to appear in BOTH files: catalog gates every write on its allowlist, and the
@@ -687,7 +1044,8 @@ EOF
   # recognise it in a log.
   local HARVESTER_ACTOR_ID='ac700000-0000-4000-a000-000000000001'
 
-  cat > "$root/apps/luna-shopper-backend/catalog/.env" <<EOF
+  {
+  cat <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 CATALOG_DB_URL=postgres://luna_catalog:luna_catalog@localhost:${CATALOG_DB_PORT}/luna_catalog
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
@@ -704,7 +1062,8 @@ SERVICE_ACTOR_IDS=${HARVESTER_ACTOR_ID}
 POSTAL_CODE_DERIVE_MAX_METRES=5000
 PORT=${CATALOG_PORT}
 EOF
-  telemetry_env catalog >> "$root/apps/luna-shopper-backend/catalog/.env"
+  telemetry_env catalog
+  } | merge_env "$root/apps/luna-shopper-backend/catalog/.env" "${DERIVED_KEYS[catalog]} $TELEMETRY_DERIVED"
 
   # The harvester (plan 0038). HARVEST_ENABLED is FALSE here, exactly as it is in
   # every cluster: bringing the service up is not the same decision as letting it
@@ -712,7 +1071,8 @@ EOF
   # read section 8.1 first. The chain you want is a second decision and it is not
   # in this file: turn its `supermarket_sources` row on from the back office
   # (plan 0083).
-  cat > "$root/apps/luna-shopper-backend/harvester/.env" <<EOF
+  {
+  cat <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 HARVESTER_DB_URL=postgres://luna_harvester:luna_harvester@localhost:${HARVESTER_DB_PORT}/luna_harvester
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
@@ -743,6 +1103,11 @@ HARVEST_DISCOVERY_RADIUS=5000
 HARVEST_DISCOVERY_COOLDOWN_DAYS=30
 HARVEST_DISCOVERY_MAX_ATTEMPTS=3
 HARVEST_DISCOVERY_POLL_SECONDS=60
+# The same key catalog reads, and deliberately the same value (plan 0097,
+# section 3): a store discovery run asks catalog for the nearest centroid of a
+# place OpenStreetMap did not tag, so the shop and the place it was imported from
+# would otherwise be able to land in different codes.
+POSTAL_CODE_DERIVE_MAX_METRES=5000
 # Empty means each client's own built in endpoint, which is what a real run wants.
 # Point one at a local recording to exercise the fetch path without leaving the
 # machine; the fixture backed tests never reach any of them.
@@ -754,7 +1119,8 @@ NOMINATIM_URL=
 LIDL_STORES_API_KEY=
 PORT=${HARVESTER_PORT}
 EOF
-  telemetry_env harvester >> "$root/apps/luna-shopper-backend/harvester/.env"
+  telemetry_env harvester
+  } | merge_env "$root/apps/luna-shopper-backend/harvester/.env" "${DERIVED_KEYS[harvester]} $TELEMETRY_DERIVED"
 
   # The assistant (plan 0039). No database url, because it has no database: rule
   # A1 says it reaches application data only through the API with the caller's
@@ -767,7 +1133,8 @@ EOF
   # reaching a model provider. Paste your own key in by hand when you want to
   # talk to it, and remember the free tier's limits are per Google Cloud project
   # rather than per user.
-  cat > "$root/apps/luna-shopper-backend/assistant/.env" <<EOF
+  {
+  cat <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 GATEWAY_INTERNAL_URL=http://localhost:${GATEWAY_PORT}
 GEMINI_API_KEY=
@@ -790,7 +1157,8 @@ ASSISTANT_RETRY_AFTER_FALLBACK=30
 ASSISTANT_PROVIDER_TIMEOUT_MS=30000
 PORT=${ASSISTANT_PORT}
 EOF
-  telemetry_env assistant >> "$root/apps/luna-shopper-backend/assistant/.env"
+  telemetry_env assistant
+  } | merge_env "$root/apps/luna-shopper-backend/assistant/.env" "${DERIVED_KEYS[assistant]} $TELEMETRY_DERIVED"
 
   # --- the test profile's databases ------------------------------------------
   #
@@ -803,27 +1171,31 @@ EOF
   # Generated here rather than copied from the committed `.env.test.example`
   # siblings, because those name slot 0's ports: on any other slot they point at
   # the wrong database, or at a port nothing is listening on.
-  cat > "$root/apps/luna-shopper-backend/auth/.env.test" <<EOF
+  merge_env "$root/apps/luna-shopper-backend/auth/.env.test" "${DERIVED_KEYS[auth-test]}" <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored. Run any db target with
 # LUNA_ENV=test to use it, after bringing the profile up:
 #   bash k8s/e2e/luna-shopper-backend/stack.sh -p test up
 AUTH_DB_URL=postgres://luna_auth:luna_auth@localhost:${AUTH_DB_TEST_PORT}/luna_auth_test
 EOF
 
-  cat > "$root/apps/luna-shopper-backend/core/.env.test" <<EOF
+  merge_env "$root/apps/luna-shopper-backend/core/.env.test" "${DERIVED_KEYS[core-test]}" <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored. See auth/.env.test.
 CORE_DB_URL=postgres://luna_core:luna_core@localhost:${CORE_DB_TEST_PORT}/luna_core_test
 EOF
 
-  cat > "$root/apps/luna-shopper-backend/catalog/.env.test" <<EOF
+  merge_env "$root/apps/luna-shopper-backend/catalog/.env.test" "${DERIVED_KEYS[catalog-test]}" <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored. See auth/.env.test.
 CATALOG_DB_URL=postgres://luna_catalog:luna_catalog@localhost:${CATALOG_DB_TEST_PORT}/luna_catalog_test
 EOF
 
-  cat > "$root/apps/luna-shopper-backend/harvester/.env.test" <<EOF
+  merge_env "$root/apps/luna-shopper-backend/harvester/.env.test" "${DERIVED_KEYS[harvester-test]}" <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored. See auth/.env.test.
 HARVESTER_DB_URL=postgres://luna_harvester:luna_harvester@localhost:${HARVESTER_DB_TEST_PORT}/luna_harvester_test
 EOF
+
+  # A releasing --down renders these same templates to strip the derived keys out
+  # of them, and has nothing to announce: the slot is being given back, not taken.
+  [[ "$MERGE_MODE" == 'strip' ]] && return 0
 
   cat <<EOF
 
@@ -868,23 +1240,53 @@ find_free_slot() {
     [[ -n "$wt" ]] || continue
     [[ "$(cd "$wt" 2>/dev/null && pwd)" == "$self" ]] && continue
     s="$(slot_of_worktree "$wt")"
-    [[ -n "$s" ]] && claimed[$s]=1
+    [[ -n "$s" ]] && claimed[$s]="$wt"
   done < <(worktree_paths)
 
-  local slot busy state
+  # Why each slot was passed over, kept so that running out can say so. The three
+  # causes have different fixes, and one message for all of them is not enough.
+  local -A why=()
+  local slot busy state port
   local -a ports
   for (( slot = MIN_AUTO_SLOT; slot <= MAX_SLOT; slot++ )); do
-    [[ -n "${claimed[$slot]:-}" ]] && continue
+    if [[ -n "${claimed[$slot]:-}" ]]; then
+      why[$slot]="claimed by ${claimed[$slot]}"
+      continue
+    fi
+    # A locked slot is holding databases somebody kept on purpose. Inheriting them
+    # is a decision, so --auto never makes it: naming the number is what does.
+    if locked "$slot"; then
+      why[$slot]="locked (databases kept) by $(lock_note "$slot")"
+      continue
+    fi
     mapfile -t ports < <(slot_ports "$slot")
     busy=0
-    while IFS=$'\t' read -r _ state; do
-      [[ "$state" == "closed" ]] || busy=1
+    while IFS=$'\t' read -r port state; do
+      if [[ "$state" != "closed" ]]; then
+        (( busy )) || why[$slot]="port ${port} is ${state}, and no checkout of this repository claims it"
+        busy=1
+      fi
     done < <(probe_ports "${ports[@]}")
     if (( ! busy )); then echo "$slot"; return 0; fi
   done
 
-  echo "no free Luna slot in ${MIN_AUTO_SLOT}..${MAX_SLOT}: every one is claimed by another worktree or has something listening on it" >&2
+  echo "no free Luna slot in ${MIN_AUTO_SLOT}..${MAX_SLOT}. Every one, and why:" >&2
+  for (( slot = MIN_AUTO_SLOT; slot <= MAX_SLOT; slot++ )); do
+    printf '  %-2s %s\n' "$slot" "${why[$slot]:-unavailable}" >&2
+  done
   echo "(slot 0 is the developer's own, and --auto never takes it)" >&2
+  echo >&2
+  echo "The three causes have different fixes:" >&2
+  echo "  claimed    that worktree still holds the number. --down in it gives the slot" >&2
+  echo "             back now; --down --keep-slot is what holds one on purpose." >&2
+  echo "  locked     its databases were kept deliberately. --up <n> takes the slot AND" >&2
+  echo "             those databases; --unlock <n> frees the number and leaves them." >&2
+  echo "  listening  something outside this repository has the port, so no --down" >&2
+  echo "             anywhere will free it." >&2
+  echo >&2
+  echo "STOP HERE AND ASK THE USER which slot to take. Do not improvise a port: a port" >&2
+  echo "outside the band is a collision with the software this scheme was moved away" >&2
+  echo "from, and it will not be found by --list." >&2
   return 1
 }
 
@@ -913,6 +1315,28 @@ current_app_slot() {
 service_port() {
   sed -n "s/^PORT=\([0-9]\+\)[[:space:]]*$/\1/p" \
     "$root/apps/luna-shopper-backend/$1/.env" 2>/dev/null | head -n 1
+}
+
+# The services a `--services a,b` names, or all of them when it names none.
+#
+# `--up` and `--restart` both take the list, so the parsing and the "unknown
+# service" refusal live here rather than in each of them. The second argument is
+# the name of an array in the caller.
+resolve_services() {
+  local csv="$1"
+  local -n _wanted="$2"
+  local svc
+
+  if [[ -z "$csv" ]]; then
+    _wanted=("${SERVICES[@]}")
+    return 0
+  fi
+
+  IFS=',' read -r -a _wanted <<< "$csv"
+  for svc in "${_wanted[@]}"; do
+    [[ " ${SERVICES[*]} " == *" $svc "* ]] || {
+      echo "unknown service '$svc'; known: ${SERVICES[*]}" >&2; return 2; }
+  done
 }
 
 # Start each named service in the background and collect the ports to wait on.
@@ -963,7 +1387,45 @@ wait_for_ports() {
 }
 
 up() {
-  local requested_slot="$1" profile="$2" timeout="$3" app_slot="$4"
+  local requested_slot="$1" profile="$2" timeout="$3" app_slot="$4" services_csv="$5"
+
+  # The compose stack is always the whole of it, because the databases are cheap
+  # beside the seven Node processes and a service started later would find its
+  # own missing. Only the services are narrowed, and a name that is not one of
+  # them is refused here, before anything is written or started.
+  local -a wanted=()
+  resolve_services "$services_csv" wanted || return $?
+
+  # --auto in a worktree that already holds a claim keeps that number rather than
+  # taking a fresh one. Taking a fresh one abandons whatever is still running on
+  # the old number, which is what stopped `--up --auto` being the one command an
+  # agent can always run.
+  if [[ "$requested_slot" == 'auto' ]]; then
+    if require_config; then
+      echo "==> this worktree already holds Luna Shopper slot ${LUNA_SLOT}; --auto keeps it."
+      requested_slot=''
+    else
+      requested_slot="$(find_free_slot)"
+    fi
+  fi
+
+  # Naming a locked slot takes it, and takes its databases with it. That is the
+  # point of the mechanism rather than an accident to be prevented: the lock only
+  # keeps --auto away, and typing the number is the confirmation. So this warns,
+  # says what it found, proceeds, and clears the lock.
+  if [[ -n "$requested_slot" ]] && locked "$requested_slot"; then
+    echo "==> Luna Shopper slot ${requested_slot} is locked by $(lock_note "$requested_slot")"
+    echo "    Its databases were kept on purpose, and this worktree is about to inherit them:"
+    local volume found=0
+    while IFS= read -r volume; do
+      [[ -n "$volume" ]] || continue
+      echo "      $volume"
+      found=1
+    done < <(slot_volumes "$requested_slot")
+    (( found )) || echo "      (docker names no volume for this slot; they may already be gone)"
+    echo "    Taking the slot clears the lock."
+    clear_lock "$requested_slot"
+  fi
 
   if [[ -n "$requested_slot" ]]; then
     write_config "$requested_slot" "${app_slot:-$(current_app_slot)}"
@@ -989,7 +1451,7 @@ up() {
   "${stack[@]}" up
 
   local -a ports=()
-  serve_services SERVICES ports || return 1
+  serve_services wanted ports || return 1
 
   echo "==> waiting up to ${timeout}s for the services to listen"
   if wait_for_ports "$timeout" "${ports[@]}"; then
@@ -1007,7 +1469,7 @@ up() {
   echo "timed out after ${timeout}s. These are not listening yet:" >&2
   local i=0
   while IFS=$'\t' read -r port state; do
-    [[ "$state" == "open" ]] || echo "  ${SERVICES[$i]} ($port): $state, see k8s/e2e/luna-shopper-backend/.run/${SERVICES[$i]}.log" >&2
+    [[ "$state" == "open" ]] || echo "  ${wanted[$i]} ($port): $state, see k8s/e2e/luna-shopper-backend/.run/${wanted[$i]}.log" >&2
     i=$(( i + 1 ))
   done < <(probe_ports "${ports[@]}")
   echo "The processes are still running; --down stops them." >&2
@@ -1064,15 +1526,7 @@ restart_services() {
 
   local -a wanted=()
   local svc port state
-  if [[ -n "$services_csv" ]]; then
-    IFS=',' read -r -a wanted <<< "$services_csv"
-    for svc in "${wanted[@]}"; do
-      [[ " ${SERVICES[*]} " == *" $svc "* ]] || {
-        echo "unknown service '$svc'; known: ${SERVICES[*]}" >&2; return 2; }
-    done
-  else
-    wanted=("${SERVICES[@]}")
-  fi
+  resolve_services "$services_csv" wanted || return $?
 
   echo "==> restarting on Luna slot $LUNA_SLOT: ${wanted[*]}"
   echo "    (the compose stack and its volumes are left alone)"
@@ -1162,8 +1616,37 @@ stop_services() {
   return $(( freed ? 0 : 1 ))
 }
 
+# Give the slot back: strip this slot's derived keys out of the files this script
+# owns, keeping everything else, then delete the claim.
+#
+# It rewrites rather than deleting single lines, so the comment blocks never end
+# up describing keys that are no longer in the file. It is merge_env again, in the
+# mode that omits the derived keys instead of computing them.
+#
+# The files themselves are NOT deleted. Deleting them throws away exactly the
+# GEMINI_API_KEY the merge exists to protect. What is removed is only what points
+# at a slot this worktree no longer holds, and the next --up puts it back through
+# the insert path: a key absent from the file takes the template default, and for
+# a derived key the template default is the freshly computed value.
+release_slot() {
+  echo "==> giving Luna Shopper slot $LUNA_SLOT back"
+
+  MERGE_MODE='strip'
+  write_config "$LUNA_SLOT" "$(current_app_slot)"
+  MERGE_MODE=''
+
+  rm -f "$SLOT_ENV"
+
+  echo "  the .env files kept every value that was not this slot's; the claim is gone."
+  echo "  --up now takes the lowest free slot, which may not be $LUNA_SLOT again."
+  echo "  --restart bounces without releasing, and --down --keep-slot holds the number."
+  echo "  The four .env.test files hold nothing but a derived connection string, so a"
+  echo "  LUNA_ENV=test db target fails until the next --up. That is the correct"
+  echo "  failure: the alternative is a test run against another worktree's database."
+}
+
 down() {
-  local profile="$1" keep_data="$2"
+  local profile="$1" keep_data="$2" keep_slot="$3"
 
   if ! require_config; then
     echo "this worktree has no slot configured, so there is nothing of its own to stop." >&2
@@ -1182,12 +1665,71 @@ down() {
     echo "==> stopping the compose stack, keeping its volumes"
     local -a compose=(docker compose --env-file "$SLOT_ENV" -f "$here/compose.yml")
     [[ -n "$profile" ]] && compose+=(--profile "$profile")
-    "${compose[@]}" stop
+    # Tolerated rather than fatal, because the lock below is the whole point of
+    # --keep-data and it must be written even when compose cannot be reached. A
+    # daemon that is down leaves the volumes exactly where they are, so a slot
+    # that failed to stop is if anything more in need of the lock, not less.
+    "${compose[@]}" stop || echo "  (compose could not stop the stack; the lock below is written anyway)" >&2
+
+    # The volumes are being kept on purpose, so the number they sit on stops being
+    # something --auto may hand to the next worktree that asks. The lock outlives
+    # the claim below and the worktree itself, which is why it is not written in
+    # either of them.
+    if (( LUNA_SLOT != 0 )); then
+      write_lock "$LUNA_SLOT"
+      echo "  slot $LUNA_SLOT is locked: --auto will not take it while its databases are kept."
+      echo "  Take it back by naming the number (--up $LUNA_SLOT), or clear it with --unlock $LUNA_SLOT."
+    fi
   else
     local -a stack=(bash "$here/stack.sh")
     [[ -n "$profile" ]] && stack+=(--profile "$profile")
-    "${stack[@]}" down
+    # Tolerated rather than fatal, for the same reason as the --keep-data branch
+    # above: giving the slot back is about the number, not about the containers.
+    # A docker daemon that is already down would otherwise abort --down before the
+    # release and leave the claim standing for good, which is the defect this
+    # whole verb exists to fix.
+    "${stack[@]}" down || echo "  (compose could not take the stack down; the slot is given back anyway)" >&2
   fi
+
+  # Slot 0 is the developer's own. Nothing takes it, so there is nothing to give
+  # back, and it behaves as though --keep-slot were given whether or not it was.
+  if (( LUNA_SLOT == 0 )); then
+    echo "  slot 0 is the developer's own: the claim and every .env are left alone."
+    return 0
+  fi
+  if [[ -n "$keep_slot" ]]; then
+    echo "  --keep-slot: this worktree still holds Luna Shopper slot $LUNA_SLOT, values and all."
+    return 0
+  fi
+
+  release_slot
+}
+
+# Drop a lock and touch nothing else. With no number it means this worktree's slot.
+#
+# Without it a lock ends only when somebody brings that slot up and inherits its
+# databases, so a lock nobody wants any more removes a slot from --auto for good.
+unlock() {
+  local slot="$1"
+
+  if [[ -z "$slot" ]]; then
+    if require_config; then
+      slot="$LUNA_SLOT"
+    else
+      echo "--unlock needs a slot number: this worktree claims none of its own." >&2
+      echo "Run --list to see which slots are locked." >&2
+      return 2
+    fi
+  fi
+
+  if ! locked "$slot"; then
+    echo "Luna Shopper slot $slot is not locked; nothing to do."
+    return 0
+  fi
+
+  clear_lock "$slot"
+  echo "unlocked Luna Shopper slot $slot. --auto can take it again."
+  echo "Its volumes are still there: whoever takes the slot next inherits them."
 }
 
 # --- list --------------------------------------------------------------------
@@ -1237,16 +1779,19 @@ list() {
   printf '  %-4s %-20s %-9s %-9s %-7s %-6s %s\n' \
     'SLOT' 'COMPOSE PROJECT' 'INFRA' 'SERVICES' 'OBSERV' 'TEST' 'CLAIMED BY'
 
-  local infra services observ testdb claim first line
+  local infra services observ testdb claim first line note
   for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
     infra="$(count_open infra_ports "$slot")"
     services="$(count_open service_ports "$slot")"
     observ="$(count_open observability_ports "$slot")"
     testdb="$(count_open test_db_ports "$slot")"
     claim="${claimed_by[$slot]:-}"
+    note="$(lock_note "$slot")"
 
-    # Nothing running and nobody configured for it: not worth a line.
-    if [[ -z "$claim" && "$infra" == 0/* && "$services" == 0/* \
+    # Nothing running, nobody configured for it, and no databases being kept: not
+    # worth a line. A lock is exactly the case where the slot looks free and is
+    # not, so it has to keep the row.
+    if [[ -z "$claim" && -z "$note" && "$infra" == 0/* && "$services" == 0/* \
           && "$observ" == 0/* && "$testdb" == 0/* ]]; then
       continue
     fi
@@ -1255,19 +1800,25 @@ list() {
       printf '  %-4s %-20s %-9s %-9s %-7s %-6s %s\n' \
         "$slot" "$(slot_project "$slot")" "$infra" "$services" "$observ" "$testdb" \
         '(no worktree claims it)'
-      continue
+    else
+      first=1
+      while IFS= read -r line; do
+        if (( first )); then
+          printf '  %-4s %-20s %-9s %-9s %-7s %-6s %s\n' \
+            "$slot" "$(slot_project "$slot")" "$infra" "$services" "$observ" "$testdb" "$line"
+          first=0
+        else
+          printf '  %-4s %-20s %-9s %-9s %-7s %-6s %s\n' '' '' '' '' '' '' "$line"
+        fi
+      done <<< "$claim"
     fi
 
-    first=1
-    while IFS= read -r line; do
-      if (( first )); then
-        printf '  %-4s %-20s %-9s %-9s %-7s %-6s %s\n' \
-          "$slot" "$(slot_project "$slot")" "$infra" "$services" "$observ" "$testdb" "$line"
-        first=0
-      else
-        printf '  %-4s %-20s %-9s %-9s %-7s %-6s %s\n' '' '' '' '' '' '' "$line"
-      fi
-    done <<< "$claim"
+    # A lock is independent of a claim, so it gets its own line under whichever
+    # rows the slot printed rather than a column it would share with one.
+    if [[ -n "$note" ]]; then
+      printf '  %-4s %-20s %-9s %-9s %-7s %-6s %s\n' '' '' '' '' '' '' \
+        "LOCKED, databases kept: $note"
+    fi
   done
 
   echo
@@ -1277,7 +1828,10 @@ list() {
   echo "  TEST      the four test-profile databases: opt in too, so 0/4 is normal"
   echo
   echo "A slot claimed with 0/9 infra is configured but not started: --up will take it."
-  echo "Slots 0..${MAX_SLOT} with neither a claim nor a listener are omitted."
+  echo "LOCKED means somebody kept that slot's databases with --down --keep-data. --auto"
+  echo "skips it; --up <n> takes it and the databases with it; --unlock <n> frees the"
+  echo "number and leaves them."
+  echo "Slots 0..${MAX_SLOT} with no claim, no lock and no listener are omitted."
 }
 
 # --- argument parsing --------------------------------------------------------
@@ -1288,6 +1842,8 @@ app_slot=''
 services_csv=''
 profile=''
 keep_data=''
+keep_slot=''
+reset_env=''
 timeout=180
 
 while (( $# )); do
@@ -1296,6 +1852,7 @@ while (( $# )); do
     --up) action='up'; shift ;;
     --restart) action='restart'; shift ;;
     --down) action='down'; shift ;;
+    --unlock) action='unlock'; shift ;;
     --services) services_csv="${2:-}"; shift 2 ;;
     --services=*) services_csv="${1#*=}"; shift ;;
     # --auto names the slot, not the verb, so `--up --auto` stays an --up.
@@ -1305,6 +1862,10 @@ while (( $# )); do
     --app-slot) app_slot="${2:-}"; shift 2 ;;
     --app-slot=*) app_slot="${1#*=}"; shift ;;
     --keep-data) keep_data=1; shift ;;
+    --keep-slot) keep_slot=1; shift ;;
+    --reset-env) reset_env=1; shift ;;
+    --keep-env) KEEP_ENV="${2:-}"; shift 2 ;;
+    --keep-env=*) KEEP_ENV="${1#*=}"; shift ;;
     --timeout) timeout="${2:-}"; shift 2 ;;
     --timeout=*) timeout="${1#*=}"; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -1326,15 +1887,28 @@ if [[ -n "$app_slot" && ! "$app_slot" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-if [[ "$slot_arg" == 'auto' ]]; then
+# --keep-env on its own reads like a promise this script does not keep: with
+# nothing being reset there is nothing for it to protect. An error rather than a
+# silent no-op, because the way people find out otherwise is by losing the value.
+if [[ -n "$KEEP_ENV" && -z "$reset_env" ]]; then
+  echo "--keep-env only means something with --reset-env: it names the keys a reset leaves alone." >&2
+  echo "Without a reset, every non-derived key is already kept." >&2
+  exit 2
+fi
+[[ -n "$reset_env" ]] && MERGE_MODE='reset'
+
+# --auto is resolved inside up(), which keeps a claim this worktree already holds
+# rather than abandoning it. Every other verb takes the lowest free slot outright.
+if [[ "$slot_arg" == 'auto' && "$action" != 'up' ]]; then
   slot_arg="$(find_free_slot)"
 fi
 
 case "${action:-}" in
   list) list ;;
-  down) down "$profile" "$keep_data" ;;
+  unlock) unlock "$slot_arg" ;;
+  down) down "$profile" "$keep_data" "$keep_slot" ;;
   restart) restart_services "$services_csv" "$timeout" ;;
-  up) up "$slot_arg" "$profile" "$timeout" "$app_slot" ;;
+  up) up "$slot_arg" "$profile" "$timeout" "$app_slot" "$services_csv" ;;
   # An --app-slot given on its own keeps the slot this worktree already has, and a
   # re-run with neither keeps the front end it was already pointed at.
   configure) write_config "$slot_arg" "${app_slot:-$(current_app_slot)}" ;;

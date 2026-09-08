@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="512" height="512" role="img" aria-label="Luna Shopper admin">
+  <title>Luna Shopper admin</title>
+  <!--
+    The back office mark, and deliberately not velista's. Velista is an amber tile
+    carrying a boat; this is an ink tile carrying a moon, so the two never read as
+    the same tab. The colours are the resting values of `--admin-ink` and
+    `--admin-surface`, written out because a static file cannot read a token.
+
+    The environment accent is absent on purpose. It is red in production, amber in
+    staging and blue in development, and which one this deployment is comes from the
+    API at runtime (plan 0001, section 6), so a favicon that wore it would be wrong
+    in two environments out of three.
+
+    `favicon.ico` beside this file is the same drawing rasterized at 16, 32 and 48
+    pixels. It is generated from this one, so a change here means regenerating it,
+    or the tab shows one mark and an older browser shows another.
+  -->
+  <rect width="24" height="24" rx="6.4" fill="#16171c" />
+  <!--
+    The crescent is one filled path: an arc of the outer disc, closed by a smaller
+    arc that curves back the other way. It carries no fill rule and no second shape,
+    so nothing about it depends on a renderer subtracting one circle from another.
+
+    It is fat on purpose. A thin crescent has a waist a few tenths of a pixel wide at
+    the 16 pixel size a tab strip actually draws, and that waist disappears.
+  -->
+  <path
+    d="M19.1 13.4A8 8 0 1 1 10.4 4.7 6.2 6.2 0 0 0 19.1 13.4Z"
+    fill="#f7f7f8"
+    transform="translate(1.9 0.35) scale(0.95)"
+  />
+</svg>

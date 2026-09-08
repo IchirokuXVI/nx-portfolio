@@ -31,7 +31,11 @@ const SPARK_HEIGHT = 40;
   imports: [NgTemplateOutlet, RouterLink],
   template: `
     @if (target(); as commands) {
-      <a [class]="'tile ' + tone()" [routerLink]="commands">
+      <a
+        [class]="'tile ' + tone()"
+        [queryParams]="queryParams()"
+        [routerLink]="commands"
+      >
         <ng-container [ngTemplateOutlet]="body" />
       </a>
     } @else {
@@ -49,6 +53,10 @@ const SPARK_HEIGHT = 40;
       </p>
 
       <p class="value">{{ valueText() }}</p>
+
+      @if (caption(); as line) {
+        <p class="note">{{ line }}</p>
+      }
 
       @if (delta(); as change) {
         <p class="delta">
@@ -119,6 +127,11 @@ const SPARK_HEIGHT = 40;
       line-height: 1.1;
     }
 
+    .note {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
     .delta {
       display: flex;
       flex-wrap: wrap;
@@ -158,6 +171,21 @@ export class StatTile {
   readonly trend = input<readonly number[] | undefined>(undefined);
   /** A `routerLink` array. With one the whole tile opens; without one it does not. */
   readonly link = input<readonly unknown[] | undefined>(undefined);
+  /**
+   * Query parameters for the anchor, for the one tile that opens a filtered
+   * screen. Meaningless without `link`, and ignored without one.
+   */
+  readonly queryParams = input<Readonly<Record<string, string>> | undefined>(
+    undefined
+  );
+  /**
+   * A line under the value, already translated (admin plan 0024, section 2).
+   *
+   * Inside the tile rather than a sibling under it, so the tile's box contains
+   * everything the tile says and a grid that stretches equal boxes shows equal
+   * looking cards.
+   */
+  readonly caption = input<string | undefined>(undefined);
   readonly tone = input<'quiet' | 'attention'>('quiet');
 
   protected readonly sparkWidth = SPARK_WIDTH;

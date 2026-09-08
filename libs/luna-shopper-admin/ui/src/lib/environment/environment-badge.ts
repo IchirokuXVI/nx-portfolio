@@ -18,6 +18,12 @@ import type { Deployment } from '@portfolio/luna-shopper-admin/models';
  * `undefined` and `null` are drawn differently on purpose. Still asking is a quiet
  * line; could not find out is a statement, because an operator who cannot see which
  * environment they are in needs to be told that rather than shown a default.
+ *
+ * A named deployment stands alone. There was a third line under it saying the
+ * answer came from the gateway rather than the build, written for the operator
+ * who needed to trust the badge before trusting the screen; it did that job, and
+ * a sentence read a hundred times a day that says nothing new after the first
+ * was dropped (admin plan 0024, section 1).
  */
 @Component({
   selector: 'lib-environment-badge',
@@ -32,8 +38,6 @@ import type { Deployment } from '@portfolio/luna-shopper-admin/models';
       </p>
       @if (deployment() === null) {
         <p class="unknown">{{ 'environment.unknownExplanation' | rokuT }}</p>
-      } @else {
-        <p class="source">{{ 'environment.sourcedFromApi' | rokuT }}</p>
       }
     }
   `,
@@ -66,7 +70,6 @@ import type { Deployment } from '@portfolio/luna-shopper-admin/models';
     }
 
     .checking,
-    .source,
     .unknown {
       margin-block-start: var(--admin-space-2);
       font-size: 0.875rem;

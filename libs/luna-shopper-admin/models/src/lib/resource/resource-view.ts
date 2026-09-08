@@ -34,6 +34,24 @@ export interface ResourceCell {
    * an English one, which is the flag plan 0038 section 11 asked for.
    */
   readonly missing?: readonly string[];
+  /**
+   * What a reference cell points at (admin plan 0023, section 2.1).
+   *
+   * Emitted for every reference field with an id, unconditionally: the id is
+   * on the row, so the cell always knows what it points at even when it cannot
+   * yet say what that is called. It carries no router commands, because
+   * {@link toCell} lives in `models` and must not know the route table; the
+   * list page derives {@link link} from the resource registry.
+   */
+  readonly reference?: { readonly resource: string; readonly id: string };
+  /**
+   * Router commands to the target's own screen, or absent.
+   *
+   * Filled by the **page**, never here: the registry knows where a resource is
+   * mounted and whether it has a detail screen, and this module knows neither.
+   * A name without a link is still an answer; a link to a 404 is not.
+   */
+  readonly link?: readonly string[];
 }
 
 /** A row, ready to render. */
@@ -123,11 +141,27 @@ export function toCell<T extends ResourceRow>(
         ? { text: value, href: value }
         : { text: String(value) };
 
-    // A uuid, drawn as a uuid. Resolving it to the target's name costs a request
-    // per row per column, which a list cannot afford; the picker in the form is
-    // where a reference is shown by name (plan 0004, section 6).
-    case 'reference':
-      return { text: String(value) };
+    // The target's name where the field says how to get one, and the id
+    // otherwise (admin plan 0023). `reference` rides along either way, so the
+    // page can derive a link; the id stays the fallback for a name that has
+    // not arrived yet and for a reference whose target is gone. Staying pure
+    // and synchronous is why the lookup route overlays names outside this
+    // function rather than teaching it to wait.
+    case 'reference': {
+      const id = String(value);
+      const reference = { resource: field.resource, id };
+      if (field.nameFrom !== undefined) {
+        const name = row[field.nameFrom];
+        const text = localizedTextValue(name, options.contentLocales);
+        if (text !== '') {
+          const missing = missingLocales(name, options.contentLocales);
+          return missing.length === 0
+            ? { text, reference }
+            : { text, missing, reference };
+        }
+      }
+      return { text: id, reference };
+    }
 
     // Printed rather than described. There is nothing this app knows about the
     // shape, so the only honest cell is the value itself, on one line: a cell

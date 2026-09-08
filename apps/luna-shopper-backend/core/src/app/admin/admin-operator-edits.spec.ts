@@ -315,6 +315,53 @@ describe('AdminZoneService writes through the service that owns the invariant', 
     const page = await service.listMemberships({ ...CREDENTIAL, zoneId: 'z1' });
 
     expect(page.items.map((m) => m.membershipId)).toEqual(['m1', 'm2']);
+    // The zone is on every row, because the collection is also read with none
+    // named and the row's address is the pair (admin plan 0017).
+    expect(page.items.map((m) => m.zoneId)).toEqual(['z1', 'z1']);
+  });
+
+  /**
+   * Admin plan 0017: a zone that was named has to exist, and a zone that was
+   * not is not a missing one. The repository here holds no zone at all, so the
+   * two reads differ only in whether they asked about one.
+   */
+  it('proves a named zone exists, and asks about none when none is named', async () => {
+    const service = makeZoneService({
+      zone: null,
+      memberships: [membershipRow({ id: 'm1' })],
+    });
+
+    await expect(
+      service.listMemberships({ ...CREDENTIAL, zoneId: 'z-gone' })
+    ).rejects.toThrow(/Zone not found/);
+
+    const page = await service.listMemberships({ ...CREDENTIAL });
+    expect(page.items.map((m) => m.membershipId)).toEqual(['m1']);
+  });
+});
+
+describe('AdminListService reads lines with or without their list', () => {
+  it('carries the list on every row, so a row read across lists opens', async () => {
+    const service = makeListService({
+      lines: [lineRow({ id: 'n1' }), lineRow({ id: 'n2' })],
+    });
+
+    const page = await service.listLines({ ...CREDENTIAL, listId: 'l1' });
+
+    expect(page.items.map((line) => line.id)).toEqual(['n1', 'n2']);
+    expect(page.items.map((line) => line.listId)).toEqual(['l1', 'l1']);
+  });
+
+  /** A named list has to exist; an absent one is not a missing list. */
+  it('proves a named list exists, and asks about none when none is named', async () => {
+    const service = makeListService({ list: null, lines: [lineRow()] });
+
+    await expect(
+      service.listLines({ ...CREDENTIAL, listId: 'l-gone' })
+    ).rejects.toThrow(/List not found/);
+
+    const page = await service.listLines({ ...CREDENTIAL });
+    expect(page.items.map((line) => line.id)).toEqual(['n1']);
   });
 });
 

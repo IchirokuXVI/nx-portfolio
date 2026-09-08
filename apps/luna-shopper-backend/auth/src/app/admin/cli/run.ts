@@ -1,5 +1,10 @@
 import type { DataSource } from 'typeorm';
-import { createAdmin, formatAdminList, listAdmins } from './admin-commands';
+import {
+  createAdmin,
+  ensureAdmin,
+  formatAdminList,
+  listAdmins,
+} from './admin-commands';
 import { ask, askNewPassword, closePrompt } from './prompt';
 
 /**
@@ -15,6 +20,7 @@ import { ask, askNewPassword, closePrompt } from './prompt';
 
 const USAGE = `Usage:
   admin:create <username> [display name]   create an operator, prompting for the password
+  admin:ensure <username> [display name]   the same, but do nothing if it exists
   admin:list                               list operators (no secrets)
 
 There is no update and no delete, and no route for any of the three. Changing an
@@ -46,6 +52,25 @@ export async function runAdminCli(
           displayName,
         });
         console.log(`Created admin '${created.username}' (${created.id}).`);
+        break;
+      }
+      case 'ensure':
+      case 'admin:ensure': {
+        // What `stack.sh` runs on every `up`, so it has to be safe to repeat and
+        // must not prompt for a password it will not use. The password rule is
+        // the create command's: never from the command line.
+        const username = rest[0] ?? (await ask('Username: '));
+        const displayName = rest.slice(1).join(' ') || undefined;
+        const admin = await ensureAdmin(dataSource, {
+          username,
+          displayName,
+          password: askNewPassword,
+        });
+        console.log(
+          admin.created
+            ? `Created admin '${admin.username}' (${admin.id}).`
+            : `Admin '${admin.username}' already exists; left untouched.`
+        );
         break;
       }
       case 'list':

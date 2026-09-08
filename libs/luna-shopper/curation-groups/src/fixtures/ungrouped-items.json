@@ -1,0 +1,80 @@
+{
+  "items": [
+    {
+      "id": "22222222-2222-4222-8222-222222222201",
+      "name": {
+        "es": "Leche semidesnatada Hacendado 1 L",
+        "en": "Hacendado semi-skimmed milk 1 L"
+      },
+      "brand": "Hacendado",
+      "imageUrl": null,
+      "sku": null,
+      "ean": "8480000000201",
+      "unitSize": 1,
+      "category": "DAIRY",
+      "defaultUnit": "LITER",
+      "productGroupId": null
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222202",
+      "name": {
+        "es": "Arroz redondo SOS 1 kg",
+        "en": "SOS round rice 1 kg"
+      },
+      "brand": "SOS",
+      "imageUrl": null,
+      "sku": null,
+      "ean": "8480000000202",
+      "unitSize": 1,
+      "category": "PANTRY",
+      "defaultUnit": "KILOGRAM",
+      "productGroupId": null
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222203",
+      "name": {
+        "es": "Bebida de avena Hacendado 1 L",
+        "en": "Hacendado oat drink 1 L"
+      },
+      "brand": "Hacendado",
+      "imageUrl": null,
+      "sku": null,
+      "ean": "8480000000203",
+      "unitSize": 1,
+      "category": "BEVERAGES",
+      "defaultUnit": "LITER",
+      "productGroupId": null
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222204",
+      "name": {
+        "es": "Aceite de oliva virgen extra Carbonell 1 L",
+        "en": "Carbonell extra virgin olive oil 1 L"
+      },
+      "brand": "Carbonell",
+      "imageUrl": null,
+      "sku": null,
+      "ean": "8480000000204",
+      "unitSize": 1,
+      "category": "PANTRY",
+      "defaultUnit": "LITER",
+      "productGroupId": null
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222205",
+      "name": {
+        "es": "Queso rallado Hacendado 200 g",
+        "en": "Hacendado grated cheese 200 g"
+      },
+      "brand": "Hacendado",
+      "imageUrl": null,
+      "sku": null,
+      "ean": "8480000000205",
+      "unitSize": 200,
+      "category": "DAIRY",
+      "defaultUnit": "GRAM",
+      "productGroupId": null
+    }
+  ],
+  "nextCursor": null
+}

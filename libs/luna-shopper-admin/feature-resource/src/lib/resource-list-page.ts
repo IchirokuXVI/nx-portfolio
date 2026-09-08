@@ -2,8 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
+  type Signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
@@ -17,6 +20,8 @@ import {
   type FieldDescriptor,
   type FilterDescriptor,
   type NamedAction,
+  type ReferenceField,
+  type ResourceCell,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import {
@@ -26,7 +31,7 @@ import {
   type RowAction,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
-import { ResourceReferences } from './resource-registry';
+import { ResourceReferences, ResourceRegistry } from './resource-registry';
 import { RESOURCE_DESCRIPTOR } from './resource-route-data';
 
 /** A named action waiting on an answer, and what it would be done to. */
@@ -82,6 +87,7 @@ interface PendingAction extends RowAction {
       [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
       [noteKey]="descriptor.note ?? null"
+      [noticeKeys]="notices()"
       [order]="store.order()"
       [rows]="rows()"
       [sorts]="descriptor.sorts ?? []"
@@ -130,6 +136,9 @@ export class ResourceListPage {
   /** How a reference filter finds the resource it points at. */
   readonly references = inject(ResourceReferences);
 
+  /** Where a reference cell's target lives, for the link it draws. */
+  private readonly _registry = inject(ResourceRegistry);
+
   /**
    * The resource this screen is for, from route `data`.
    *
@@ -168,14 +177,30 @@ export class ResourceListPage {
     this._fields(this.descriptor.list.compact)
   );
 
+  /**
+   * The names the lookup has answered, by `resource:id` (admin plan 0023,
+   * section 4.2).
+   *
+   * A resolve that answered `null` records the id itself, so a dangling
+   * reference stays an id on screen and is never asked about twice. Until an
+   * answer lands the cell shows the id, not a spinner: the id is true, arrives
+   * with the row, and keeps the table from reflowing twice per page.
+   */
+  private readonly _names = signal<ReadonlyMap<string, string>>(new Map());
+
+  /** Every key already sent to the lookup, answered or still in flight. */
+  private readonly _asked = new Set<string>();
+
   readonly rows = computed(() => {
     const options = {
       locale: this._translator.locale(),
       contentLocales: CONTENT_LOCALES,
     };
-    return this.store
-      .rows()
-      .map((row) => toRowView(this.descriptor, row, options));
+    const names = this._names();
+    return this.store.rows().map((row) => {
+      const view = toRowView(this.descriptor, row, options);
+      return { ...view, cells: this._decorate(view.cells, names) };
+    });
   });
 
   /** The whole screen failed, with nothing else to draw. */
@@ -186,7 +211,11 @@ export class ResourceListPage {
     () => this.store.error() !== null && !this.failed()
   );
 
-  readonly errorKey = computed(() => gatewayErrorKey(this.store.error()));
+  // The list draws this only behind `failed()` or `moreFailed()`, so there is
+  // always an error by then. The fallback is for the type, not for a state.
+  readonly errorKey = computed(
+    () => gatewayErrorKey(this.store.error()) ?? 'resource.error.unknown'
+  );
 
   /**
    * The filters this list is waiting for, named in words, or `null`.
@@ -225,11 +254,30 @@ export class ResourceListPage {
   readonly namedActions: readonly NamedAction<ResourceRow>[] =
     this.descriptor.actions?.named?.() ?? [];
 
+  /**
+   * What this resource has to say about itself right now.
+   *
+   * A field for the reason {@link namedActions} is one: the factory calls
+   * `inject`, so it runs here and not inside a `computed` body. What it answers
+   * is itself a signal, so the sentences still follow whatever the resource is
+   * watching.
+   */
+  readonly notices: Signal<readonly string[]> =
+    this.descriptor.notices?.() ?? signal([]);
+
   /** Whether a row leads to a detail screen. The route factory agrees, by construction. */
   readonly canOpen = computed(() => hasDetailScreen(this.descriptor));
 
   constructor() {
     void this.store.load();
+
+    // The lookup names, filled as rows arrive (admin plan 0023, section 4.2).
+    // Loading more rows resolves only the ids the set has not seen. `untracked`,
+    // because the resolution writes the signal the rows computed reads.
+    effect(() => {
+      const rows = this.store.rows();
+      untracked(() => void this._resolveNames(rows));
+    });
   }
 
   open(id: string): void {
@@ -297,5 +345,124 @@ export class ResourceListPage {
     return names
       .map((name) => fieldOf(this.descriptor, name))
       .filter((field): field is FieldDescriptor => field !== undefined);
+  }
+
+  /**
+   * A row's cells, with what only this page knows laid over them (admin plan
+   * 0023, section 2).
+   *
+   * `toCell` is pure and synchronous, so the two things that are neither
+   * happen here: the link, which needs the registry, and the looked up name,
+   * which needs a request. Cells without a reference pass through untouched.
+   */
+  private _decorate(
+    cells: Readonly<Record<string, ResourceCell>>,
+    names: ReadonlyMap<string, string>
+  ): Readonly<Record<string, ResourceCell>> {
+    const next: Record<string, ResourceCell> = {};
+    for (const [name, cell] of Object.entries(cells)) {
+      next[name] = this._decorateCell(name, cell, names);
+    }
+    return next;
+  }
+
+  private _decorateCell(
+    name: string,
+    cell: ResourceCell,
+    names: ReadonlyMap<string, string>
+  ): ResourceCell {
+    const reference = cell.reference;
+    if (reference === undefined) {
+      return cell;
+    }
+
+    let decorated = cell;
+
+    const field = fieldOf(this.descriptor, name);
+    if (field?.kind === 'reference' && field.nameLookup === true) {
+      const known = names.get(`${reference.resource}:${reference.id}`);
+      if (known !== undefined && known !== decorated.text) {
+        decorated = { ...decorated, text: known };
+      }
+    }
+
+    const link = this._linkTo(reference);
+    if (link !== null) {
+      decorated = { ...decorated, link };
+    }
+
+    return decorated;
+  }
+
+  /**
+   * Where a reference leads, asked of the registry and never typed (admin plan
+   * 0023, section 2.2): the target descriptor's registered location decides the
+   * URL, so a section move carries every cell link with it.
+   *
+   * A target with no detail screen gets no link, by the same test the row's
+   * own click uses: a name without a link is still an answer, and a link to a
+   * 404 is not.
+   */
+  private _linkTo(reference: {
+    readonly resource: string;
+    readonly id: string;
+  }): readonly string[] | null {
+    const target = this._registry.byName(reference.resource);
+    if (target === undefined || !hasDetailScreen(target)) {
+      return null;
+    }
+
+    const path = this._registry.pathOf(reference.resource);
+    return path === null ? null : [...path, reference.id];
+  }
+
+  /**
+   * One resolve per distinct id the descriptor asked to look up (admin plan
+   * 0023, section 4.2). The set is marked before the request goes out, so a
+   * page loaded while one is in flight does not ask about the same id again.
+   */
+  private async _resolveNames(rows: readonly ResourceRow[]): Promise<void> {
+    const fields = this.descriptor.fields.filter(
+      (field: FieldDescriptor): field is ReferenceField<ResourceRow> =>
+        field.kind === 'reference' && field.nameLookup === true
+    );
+    if (fields.length === 0) {
+      return;
+    }
+
+    const wanted: { resource: string; id: string; key: string }[] = [];
+    for (const field of fields) {
+      for (const row of rows) {
+        const id = row[field.name];
+        if (typeof id !== 'string' || id === '') {
+          continue;
+        }
+        const key = `${field.resource}:${id}`;
+        if (!this._asked.has(key)) {
+          this._asked.add(key);
+          wanted.push({ resource: field.resource, id, key });
+        }
+      }
+    }
+    if (wanted.length === 0) {
+      return;
+    }
+
+    const resolved = await Promise.all(
+      wanted.map(async (entry) => {
+        const option = await this.references.resolve(entry.resource, entry.id);
+        // Null records the id itself as the name: a dangling reference stays
+        // an id on screen and is never asked about twice.
+        return [entry.key, option?.title ?? entry.id] as const;
+      })
+    );
+
+    this._names.update((names) => {
+      const next = new Map(names);
+      for (const [key, title] of resolved) {
+        next.set(key, title);
+      }
+      return next;
+    });
   }
 }

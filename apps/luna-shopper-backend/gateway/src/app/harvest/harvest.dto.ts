@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ADAPTER_KEYS,
+  BULK_DECISION_MAX_OPERATIONS,
   DiscoveredPlaceStatus,
   HarvestRunMode,
   HarvestRunStatus,
   ItemCategory,
+  PostalCodeDiscoveryStatus,
   PriceSourceKind,
   SourceEntryStatus,
   SourceLocationStatus,
@@ -13,8 +15,10 @@ import {
   type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -26,11 +30,23 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { asBoolean } from '../catalog/catalog.dto';
+
+/**
+ * What an operator may type into a postal code field.
+ *
+ * Letters and digits, because a Spanish code is five digits and a Dutch one is
+ * not, and nothing else at all: the queue listing puts the value straight into a
+ * `LIKE` prefix, and a `%` there would match every code, which reads as a filter
+ * that does nothing rather than one that found nothing.
+ */
+const POSTAL_CODE_PATTERN = /^[A-Za-z0-9 -]{1,16}$/;
 
 /**
  * The admin harvest surface's request bodies (plan 0038, section 7).
@@ -279,6 +295,119 @@ export class CreateItemFromEntryDto {
   defaultUnit?: UnitOfMeasure;
 }
 
+/**
+ * The row as the decisions file saw it (plan 0100).
+ *
+ * Two fields, because two are enough: a row whose status has moved was decided
+ * by somebody else, and a row whose `lastSeenAt` has moved was observed again by
+ * a later run and may say something different from what was decided about.
+ */
+export class SourceEntryExpectationDto {
+  @ApiProperty({ enum: SourceEntryStatus })
+  @IsEnum(SourceEntryStatus)
+  status!: SourceEntryStatus;
+
+  @ApiProperty({
+    format: 'date-time',
+    description:
+      'Exactly the string the queue listing printed for this row. A row observed again since then fails the check.',
+  })
+  @IsDateString()
+  lastSeenAt!: string;
+}
+
+/**
+ * One decision of a decisions file (plan 0100).
+ *
+ * **One class for both kinds, with `kind` deciding which fields matter.** A
+ * discriminated union of two DTO classes is not something `class-validator`
+ * expresses without a custom decorator, and the combinations are checked in the
+ * harvester anyway, where they have to be: the gateway is one caller among
+ * several rather than a wall. What this class buys is the type of every field
+ * and the cap on the list.
+ */
+export class SourceEntryDecisionDto {
+  @ApiProperty({
+    enum: ['accept', 'createItem'],
+    description:
+      'accept binds the row to a product; createItem creates the product and binds the row to it. There is no bulk reject: junk is a person’s call.',
+  })
+  @IsIn(['accept', 'createItem'])
+  op!: 'accept' | 'createItem';
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  entryId!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'accept: a product the catalog already holds. Exactly one of this and itemRef.',
+  })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description:
+      'accept: a product a createItem of this same file creates, which is how a second row of the same product is bound before an id exists.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  itemRef?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description: 'createItem: this file’s own name for the product it creates.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  ref?: string;
+
+  @ApiPropertyOptional({
+    type: CreateItemFromEntryDto,
+    description:
+      'createItem: the product to create. Every field is optional, because the row already holds a default for each.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateItemFromEntryDto)
+  item?: CreateItemFromEntryDto;
+
+  @ApiProperty({ type: SourceEntryExpectationDto })
+  @ValidateNested()
+  @Type(() => SourceEntryExpectationDto)
+  expect!: SourceEntryExpectationDto;
+}
+
+export class ApplySourceEntryDecisionsDto {
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description:
+      'The curation session this file came out of. Provenance, echoed back in the answer so a report can be filed under it; the backend stores no run of its own for a decisions file.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  runId?: string;
+
+  @ApiProperty({
+    type: [SourceEntryDecisionDto],
+    maxItems: BULK_DECISION_MAX_OPERATIONS,
+    description:
+      'The whole file, applied in the order given. A longer file is refused rather than split: two chunks are two transactions, so the first can land while the second fails.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_DECISION_MAX_OPERATIONS)
+  @ValidateNested({ each: true })
+  @Type(() => SourceEntryDecisionDto)
+  operations!: SourceEntryDecisionDto[];
+}
+
 export class UpsertSupermarketSourceDto {
   @ApiProperty({ enum: ADAPTER_KEYS })
   @IsIn([...ADAPTER_KEYS])
@@ -389,6 +518,23 @@ export class DiscoveredPlaceListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(DiscoveredPlaceStatus)
   status?: DiscoveredPlaceStatus;
+
+  @ApiPropertyOptional({
+    description: 'ISO 3166-1 alpha-2. Pair it with `postalCode`.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  country?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'The places located in this code, whichever run found them. It reads the place own postal code and never the run centre, so a run centred on 14013 does not put its Cordoba city neighbours in this answer.',
+  })
+  @IsOptional()
+  @Matches(POSTAL_CODE_PATTERN)
+  @MaxLength(16)
+  postalCode?: string;
 }
 
 export class DiscoveredPlaceGroupQueryDto {
@@ -466,4 +612,67 @@ export class SourceLocationListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(SourceLocationStatus)
   status?: SourceLocationStatus;
+}
+
+/** What the postal code queue screen filters on (plan 0097, section 7). */
+export class PostalCodeDiscoveryListQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({ maxLength: 2, description: 'ISO 3166-1 alpha-2.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  country?: string;
+
+  @ApiPropertyOptional({ enum: PostalCodeDiscoveryStatus })
+  @IsOptional()
+  @IsEnum(PostalCodeDiscoveryStatus)
+  status?: PostalCodeDiscoveryStatus;
+
+  @ApiPropertyOptional({
+    description:
+      'Prefix match. A postal code is read left to right, so `140` means Cordoba city rather than every code with a 140 in the middle of it.',
+  })
+  @IsOptional()
+  @Matches(POSTAL_CODE_PATTERN)
+  @MaxLength(16)
+  postalCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back.',
+  })
+  @IsOptional()
+  @Transform(asBoolean)
+  @IsBoolean()
+  dismissed?: boolean;
+}
+
+/**
+ * An operator adds one code (plan 0097, section 6.1).
+ *
+ * One code per call. Adding twenty is twenty calls, under the partial failure
+ * rules `apps/luna-shopper-admin/plans/0020` already wrote for bulk work: a bulk
+ * endpoint is a transaction boundary and a timeout budget this service does not
+ * have and this screen does not need.
+ */
+export class AddPostalCodeDiscoveryDto {
+  @ApiProperty({ maxLength: 2, description: 'ISO 3166-1 alpha-2.' })
+  @IsString()
+  @MaxLength(2)
+  country!: string;
+
+  @ApiProperty({
+    maxLength: 16,
+    description:
+      'A code catalog does not hold is refused with `postal_code_unknown`: the centroid table is the whole national list, so a code missing from it is a typo.',
+  })
+  @Matches(POSTAL_CODE_PATTERN)
+  @MaxLength(16)
+  postalCode!: string;
+
+  @ApiProperty({
+    description:
+      'True queues it for the worker. False parks it, which is a row the worker never claims until somebody queues it.',
+  })
+  @IsBoolean()
+  discoverNow!: boolean;
 }

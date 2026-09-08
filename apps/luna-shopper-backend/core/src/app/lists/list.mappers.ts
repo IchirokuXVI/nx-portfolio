@@ -143,6 +143,16 @@ export function toLineView(
 export function toLineSettlementView(
   settlement: LineSettlement
 ): LineSettlementView {
+  if (settlement.lineId === null || settlement.listId === null) {
+    // A **waiting settlement** (plan 0093, section 2) is a purchase made before
+    // the basket line reached any list, so it has no zone line to be a fact
+    // about and no list to be served on. Every read that reaches this mapper
+    // selects by one or the other, so getting here means a row escaped section
+    // 2.2, and that is the one way a guest's purchase could be named to a
+    // household that never received the line. It throws rather than inventing an
+    // id, because a wrong id here is a purchase attributed to the wrong home.
+    throw new Error('A settlement with no zone line cannot be served');
+  }
   return {
     id: settlement.id,
     lineId: settlement.lineId,

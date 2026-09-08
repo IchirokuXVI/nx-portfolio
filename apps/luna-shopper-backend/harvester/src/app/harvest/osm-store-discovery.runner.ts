@@ -1,11 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DiscoveredPlaceStatus } from '@portfolio/luna-shopper/contracts';
+import {
+  DiscoveredPlaceStatus,
+  PostalCodeSource,
+} from '@portfolio/luna-shopper/contracts';
 import { OsmPlacesClient } from '@portfolio/luna-shopper/osm-places';
 import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { DiscoveredPlace } from '../entities';
+import { CatalogClient } from './catalog-client.service';
+import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import type { RunContext } from './run-context';
 import type {
   StoreDiscoveryInput,
@@ -43,6 +48,8 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
   constructor(
     @InjectRepository(DiscoveredPlace)
     private readonly places: Repository<DiscoveredPlace>,
+    private readonly queue: PostalCodeDiscoveryStore,
+    private readonly catalog: CatalogClient,
     private readonly config: ConfigService
   ) {}
 
@@ -71,6 +78,21 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
       );
     }
 
+    // The name Nominatim gave the code, kept rather than discarded (plan 0097,
+    // section 4). Nothing else in this system stores a name for a postal code,
+    // and an operator reading a list of bare numbers cannot tell Córdoba from
+    // Cáceres. It costs no request, because the answer is already here.
+    //
+    // It matches no row when an admin spawned this run for a code nobody
+    // queued, which is normal: the queue is demand driven and a run is not.
+    if (centre.displayName) {
+      await this.queue.recordPlaceName(
+        input.country.trim().toLowerCase(),
+        input.postalCode,
+        centre.displayName
+      );
+    }
+
     await context.setStage(
       'OVERPASS',
       `Searching ${input.radiusMetres} m around ${centre.lat}, ${centre.lon}`
@@ -93,6 +115,7 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
       if (context.signal.aborted) {
         break;
       }
+      const located = await this.locate(place, country, settings);
       const existing = await this.places.findOne({
         where: { provider: place.provider, externalRef: place.externalRef },
       });
@@ -108,7 +131,8 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
         existing.longitude = place.longitude;
         existing.street = place.street;
         existing.city = place.city;
-        existing.postalCode = place.postalCode;
+        existing.postalCode = located.postalCode;
+        existing.postalCodeSource = located.postalCodeSource;
         existing.country = country;
         existing.website = place.website;
         existing.openingHours = place.openingHours;
@@ -132,7 +156,8 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
           longitude: place.longitude,
           street: place.street,
           city: place.city,
-          postalCode: place.postalCode,
+          postalCode: located.postalCode,
+          postalCodeSource: located.postalCodeSource,
           country,
           website: place.website,
           openingHours: place.openingHours,
@@ -146,5 +171,61 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
     }
 
     await context.flush();
+  }
+
+  /**
+   * The place's postal code, and where it came from (plan 0097, section 3).
+   *
+   * `addr:postcode` wins whenever OpenStreetMap has one, because a source value
+   * is never overridden by a guess. About a third of places have it, so the rest
+   * ask catalog for the nearest centroid, bounded by the same
+   * `POSTAL_CODE_DERIVE_MAX_METRES` plan 0061 bounds a location's own derivation
+   * with.
+   *
+   * **A place beyond the bound keeps both columns null**, which is the honest
+   * answer: a wrong postcode is worse than none, because it puts the shop in
+   * somebody else's list.
+   *
+   * A failure asking catalog leaves the place with no code rather than failing
+   * the run. One untagged address is not worth losing an eighteen minute walk
+   * over, and the next run of this code fills it in.
+   */
+  private async locate(
+    place: { postalCode: string | null; latitude: number; longitude: number },
+    country: string,
+    settings: HarvesterConfig
+  ): Promise<{
+    postalCode: string | null;
+    postalCodeSource: PostalCodeSource | null;
+  }> {
+    if (place.postalCode) {
+      return {
+        postalCode: place.postalCode,
+        postalCodeSource: PostalCodeSource.SOURCE,
+      };
+    }
+    if (!country) {
+      return { postalCode: null, postalCodeSource: null };
+    }
+    try {
+      const { nearest } = await this.catalog.resolveNearestPostalCode(
+        country,
+        place.latitude,
+        place.longitude,
+        settings.postalCodeDeriveMaxMetres
+      );
+      return nearest
+        ? {
+            postalCode: nearest.postalCode,
+            postalCodeSource: PostalCodeSource.DERIVED,
+          }
+        : { postalCode: null, postalCodeSource: null };
+    } catch (error) {
+      this.logger.warn(
+        `Could not derive a postal code for a place in ${country}: ` +
+          `${String(error)}`
+      );
+      return { postalCode: null, postalCodeSource: null };
+    }
   }
 }

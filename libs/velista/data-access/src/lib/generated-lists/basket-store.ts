@@ -9,10 +9,8 @@ import {
   basketTakesLines,
   outstanding,
   type BasketAddLineRequest,
-  type BasketBindResult,
   type BasketLine,
   type BasketLineOrigins,
-  type BasketLineTarget,
   type BasketLoad,
   type BasketOriginQuantityRequest,
   type BasketOriginQuantityResult,
@@ -21,8 +19,11 @@ import {
   type BasketSettleRequest,
   type BasketSettleResult,
   type BasketShareLink,
+  type BasketSplitRequest,
+  type BasketSplitResult,
   type BasketView,
   type CatalogSuggestion,
+  type LineApprovalStatus,
 } from '@portfolio/velista/models';
 import { GatewayError, hasResponse } from '../errors';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
@@ -38,6 +39,19 @@ import { BasketSocket } from './basket-socket';
  * on the same reasoning and the same order of delay.
  */
 const REFRESH_DEBOUNCE_MS = 1500;
+
+/**
+ * What the page's live region says about a split (velista `0069`, section 4).
+ *
+ * The two facts and not the sentence, because the sentence is an interpolated
+ * key and this library holds no translator: the page hands both to the pipe.
+ */
+export interface BasketSplitSaid {
+  /** The line's own words, which every row of the split shares. */
+  content: string;
+  /** How many rows the act left standing. Never less than two. */
+  rows: number;
+}
 
 /**
  * The names on a batch of origins, candidates or targets, keyed by list id.
@@ -123,6 +137,8 @@ export class BasketStore {
   private readonly _busyLines = signal<ReadonlySet<string>>(new Set());
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
   private readonly _lastAdded = signal<BasketLine | null>(null);
+  /** See {@link lastSplit}. Cleared by an add, and cleared with the basket. */
+  private readonly _lastSplit = signal<BasketSplitSaid | null>(null);
   /** Whether an add is in flight, so the composer's button can wait on it. */
   private readonly _adding = signal(false);
   /** See {@link pendingTargets}. Session local, and cleared with the basket. */
@@ -331,6 +347,19 @@ export class BasketStore {
   readonly lastAdded = this._lastAdded.asReadonly();
 
   /**
+   * The most recent split, for the same live region (velista `0069`, section 4).
+   *
+   * The **same** region as {@link lastAdded} rather than one of its own, which is
+   * why the two clear each other: there is one thing to say about this basket at
+   * a time, and a second region would talk over the first while somebody is
+   * standing in an aisle. Whichever happened last is the one that is set.
+   *
+   * Null when a split left one row, which is a sibling folded back into the row
+   * it came from. Nothing was split, so nothing is announced.
+   */
+  readonly lastSplit = this._lastSplit.asReadonly();
+
+  /**
    * Whether this reader may see zone data, as the **server** decided on the last
    * read (backend `0051`, section 5.2).
    *
@@ -361,12 +390,13 @@ export class BasketStore {
   });
 
   /**
-   * Lines whose bound zone line is waiting for its list to approve it.
+   * Lines whose newly raised zone line is waiting for its list to approve it.
    *
    * **A stopgap for a backend gap, and session local.** `GeneratedListLineOriginView`
-   * carries no approval state, so after a reload the row cannot say a bound line is
+   * carries no approval state, so after a reload the row cannot say a raised line is
    * waiting (velista `0056`, section 5.1). What this holds is what *this* session's
-   * own bind was told, which is exactly the case where somebody is standing there
+   * own write was told, through the origin the units sheet's write answers with
+   * (velista `0068`), which is exactly the case where somebody is standing there
    * waiting to be told something, and is honestly empty everywhere else rather than
    * guessing. When the view carries the state the row reads the line instead and this
    * goes.
@@ -464,6 +494,7 @@ export class BasketStore {
     this._present.set([]);
     this._busyLines.set(new Set());
     this._lastAdded.set(null);
+    this._lastSplit.set(null);
     this._adding.set(false);
     // Both stopgaps are about **this** basket and this session, so they go with it.
     // Carrying either into the next basket would caption its rows with a household
@@ -539,16 +570,67 @@ export class BasketStore {
   }
 
   /**
-   * Swap a line's pick to another of its options.
+   * Give units of a line to other products, which splits it (velista `0069`).
    *
    * Available to everybody, guests included: the options are catalog products and
-   * never zone data (backend `0051`, section 6.1).
+   * never zone data (backend `0051`, section 6.1). It replaces `setPick`, which
+   * this store carried until velista `0069`: moving every outstanding unit to one
+   * other product is this call with one share.
+   *
+   * ## The order the four collections are applied in
+   *
+   * Merged rows first, then created ones, then the original, then the removals.
+   * The first three are all merges by id and could be in any order; the removals
+   * are last **on purpose**, because a row that a merge folded away is a row the
+   * survivor has just been raised for, and dropping it first would take the units
+   * off the screen for a frame before the row that now holds them was redrawn.
+   *
+   * The caller is answered the whole result rather than the line, because the
+   * sheet has to know whether its **own** row is among the removals: a sheet about
+   * a line that is gone dismisses itself, and it cannot read that from a line.
    */
-  async setPick(lineId: string, itemId: string): Promise<BasketLine | null> {
+  async splitLine(
+    lineId: string,
+    body: BasketSplitRequest
+  ): Promise<BasketSplitResult | null> {
     return this._write(lineId, async (id) => {
-      const line = await this._service.setPick(id, lineId, itemId);
-      this.apply(line);
-      return line;
+      const result = await this._service.splitLine(id, lineId, body);
+
+      for (const row of result.merged) {
+        this.apply(row);
+      }
+      for (const row of result.created) {
+        this._insert(row);
+      }
+      this.apply(result.line);
+      for (const gone of result.removed) {
+        this.drop(gone);
+      }
+
+      // One sentence for the whole act, rather than one per sibling: a polite
+      // region reads whatever the node last held, so three appends would say
+      // "added" three times and never say what happened (section 4).
+      //
+      // Counted as the rows this act left standing rather than as the length of
+      // any one collection, because the original appears in two of them: it is
+      // `line`, and when a share folded it away it is `line` **and** a member of
+      // `removed`. A set minus the removals is the only reading that is right in
+      // both directions, including the one that folds a sibling back and leaves
+      // one row, which says nothing because nothing was split.
+      const standing = new Set(
+        [...result.merged, ...result.created, result.line].map((row) => row.id)
+      );
+      for (const gone of result.removed) {
+        standing.delete(gone);
+      }
+      this._lastSplit.set(
+        standing.size > 1
+          ? { content: result.line.content, rows: standing.size }
+          : null
+      );
+      this._lastAdded.set(null);
+
+      return result;
     });
   }
 
@@ -612,7 +694,7 @@ export class BasketStore {
   }
 
   /**
-   * Put a line on the end of the basket, from wherever it came.
+   * Put a line in the basket, from wherever it came.
    *
    * **Idempotent by id**, which is not decoration: the add answers a line and the
    * basket's own room broadcasts the same one, so the person who typed it appends it
@@ -624,23 +706,71 @@ export class BasketStore {
    * that arrives second may know less than the copy already on screen.
    */
   append(line: BasketLine): void {
+    if (!this._insert(line)) {
+      return;
+    }
+    // Set only for a line that was genuinely new, so the announcement follows what
+    // changed on screen rather than what arrived on the wire. A split announces its
+    // own sentence, so the two clear each other: one region says whatever happened
+    // last (velista `0069`, section 4).
+    this._lastAdded.set(line);
+    this._lastSplit.set(null);
+  }
+
+  /**
+   * Put a line in the basket **at its own position**, or merge it if it is held.
+   *
+   * True when the line was genuinely new, which is what tells {@link append} it has
+   * something to announce.
+   *
+   * By position and not on the end, and that is what makes a split's siblings land
+   * under the row they came from (velista `0069`, section 4). The server gives each
+   * one the midpoint between the original and the next line, so ordering by that
+   * number puts them where the shopper is looking with no client rule about which
+   * row they belong to. For an ordinary add it is the same act as appending, since
+   * an added line takes a position past everything already held.
+   */
+  private _insert(line: BasketLine): boolean {
     const held = this._basket();
     if (held === null) {
-      // Nothing to append to. The read that is on its way carries this line, so
+      // Nothing to insert into. The read that is on its way carries this line, so
       // dropping it here costs nothing and inventing a basket around it would put a
       // one line screen in front of somebody for a moment.
-      return;
+      return false;
     }
 
     if (held.lines.some((row) => row.id === line.id)) {
       this.apply(line);
-      return;
+      return false;
     }
 
-    this._basket.set({ ...held, lines: [...held.lines, line] });
-    // Set only for a line that was genuinely new, so the announcement follows what
-    // changed on screen rather than what arrived on the wire.
-    this._lastAdded.set(line);
+    const at = held.lines.findIndex((row) => row.position > line.position);
+    const lines =
+      at === -1
+        ? [...held.lines, line]
+        : [...held.lines.slice(0, at), line, ...held.lines.slice(at)];
+    this._basket.set({ ...held, lines });
+    return true;
+  }
+
+  /**
+   * Take a line off the basket, by id.
+   *
+   * The one way a row leaves this store without a refetch, and it exists because a
+   * split can fold one away: moving every unit of a sibling back to the product that
+   * already has a row leaves the sibling holding nothing, so the server deletes it
+   * and names it in `removed` (backend `0094`, section 5).
+   *
+   * Silent for an id the basket does not hold, which is the ordinary case rather
+   * than an error: the answer names every row that went, and a second phone may
+   * already have refetched without it.
+   */
+  drop(lineId: string): void {
+    this._basket.update((basket) =>
+      basket === null
+        ? basket
+        : { ...basket, lines: basket.lines.filter((row) => row.id !== lineId) }
+    );
   }
 
   /**
@@ -726,8 +856,10 @@ export class BasketStore {
 
     try {
       const answer = await this._service.getLineOrigins(id, lineId);
+      // All three collections, because the row caption has to name a list this
+      // basket has never touched the moment somebody raises one of them.
       this.rememberListNames(
-        namesOf([...answer.origins, ...answer.candidates])
+        namesOf([...answer.origins, ...answer.candidates, ...answer.others])
       );
       return answer;
     } catch (error) {
@@ -745,6 +877,11 @@ export class BasketStore {
    *
    * The origin that comes back is remembered by name, because an **adopted** list is
    * exactly the one the basket read does not name.
+   *
+   * It is also what records the line as waiting: a raise creates or adopts a zone
+   * line under that list's own approval rule, and the answered origin's
+   * `approvalStatus` is the only thing that says so (velista `0068`, section 1). See
+   * {@link pendingTargets} for why the row cannot read it off the line.
    */
   async setOriginQuantity(
     lineId: string,
@@ -755,59 +892,25 @@ export class BasketStore {
       this.apply(result.line);
       if (result.origin !== null) {
         this.rememberListNames(namesOf([result.origin]));
+        this._recordApproval(lineId, result.origin.approvalStatus);
       }
       return result;
     });
   }
 
   /**
-   * The lists this line could be sent to (velista `0056`).
+   * Remember that a line's newly raised list has not agreed to it yet.
    *
-   * A read, like {@link loadLineOrigins}, and every target is remembered by name for
-   * the same reason: the list somebody sends a line to is very often not one the run
-   * drew from, so the basket read cannot name it and the row would caption an origin
-   * with nothing after it.
+   * One way only: a second list that accepts the line straight away does not clear
+   * the caption the first one earned, because both origins are real and one of them
+   * is still waiting. A fresh basket read is what forgets it, which is
+   * {@link pendingTargets}' session local rule intact.
    */
-  async loadLineTargets(
-    lineId: string
-  ): Promise<readonly BasketLineTarget[] | null> {
-    const id = this._id;
-    if (id === null) {
-      return null;
+  private _recordApproval(lineId: string, status: LineApprovalStatus): void {
+    if (status !== 'PENDING') {
+      return;
     }
-
-    try {
-      const targets = await this._service.getLineTargets(id, lineId);
-      this.rememberListNames(namesOf(targets));
-      return targets;
-    } catch (error) {
-      this._fail(id, error);
-      return null;
-    }
-  }
-
-  /**
-   * Send a line to a shopping list (velista `0056`).
-   *
-   * Through {@link _write}, and the answer's line is folded in, which is what turns
-   * the send control off: a bound line has a `targetListId` and cannot be sent twice.
-   *
-   * `pendingApproval` is recorded in {@link pendingTargets} rather than read off the
-   * line afterwards, because no field of the line carries it. See that signal for
-   * what that costs and when it can go.
-   */
-  async bindLine(
-    lineId: string,
-    listId: string
-  ): Promise<BasketBindResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.bindLine(id, lineId, listId);
-      this.apply(result.line);
-      if (result.pendingApproval) {
-        this._pendingTargets.update((held) => new Set(held).add(lineId));
-      }
-      return result;
-    });
+    this._pendingTargets.update((held) => new Set(held).add(lineId));
   }
 
   /**

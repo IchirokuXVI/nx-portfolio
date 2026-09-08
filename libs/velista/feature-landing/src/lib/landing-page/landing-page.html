@@ -27,11 +27,21 @@
 
   <div class="spacer"></div>
 
+  <!--
+    Held while the app cannot reach the backend (plan 0071, section 5.1). This is the
+    one screen that draws before the startup probe has answered, so it is also the one
+    place where a control could act on a backend nobody has heard from yet, and the
+    first of these four creates an account.
+  -->
   <lib-auth-actions
     (continueWithGoogle)="continueWithGoogle()"
     (createZone)="createZone()"
     (joinZone)="joinZone()"
     (signInWithEmail)="signInWithEmail()"
+    [connectingMessage]="'startup.actions.connecting' | rokuT"
+    [held]="actionsHeld()"
+    [slow]="startupSlow()"
+    [slowMessage]="'startup.actions.slow' | rokuT"
   />
 
   <!--

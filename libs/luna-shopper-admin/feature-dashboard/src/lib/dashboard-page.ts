@@ -5,7 +5,6 @@ import {
   DestroyRef,
   effect,
   inject,
-  signal,
   untracked,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -13,59 +12,51 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { DashboardStore } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  DashboardStore,
+  PostalCodeSummaryStore,
+} from '@portfolio/luna-shopper-admin/data-access';
+import {
+  ChainNames,
   formatInstant,
   formatSince,
-  HARVEST_SEGMENT,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   gatewayErrorKey,
-  ResourceReferences,
+  ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { runProgress } from '@portfolio/luna-shopper-admin/models';
-import {
-  BarChart,
-  LineChart,
-  RunProgressView,
-  RunRowView,
-  StatTile,
-  Viewport,
-} from '@portfolio/luna-shopper-admin/ui';
-import { BlockNotice } from './block-notice';
+import { StatTile, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import {
   activityRows,
-  catalogTiles,
   loginFailureRows,
-  peopleTiles,
-  pricesWrittenChart,
-  recentRunRows,
-  runsByStatusChart,
-  signUpsChart,
+  postalCodeWaitingTile,
   waitingTiles,
-  zonesAndListsChart,
 } from './dashboard-view';
 
 /**
- * The screen the app opens to (admin plan 0016).
+ * The screen the app opens to (admin plan 0016, narrowed by admin plan 0022).
  *
  * `0004` refused a landing page because an operator opens this tool to change a
  * specific thing and a page in front of that is a click between them and it.
  * That is an argument against an empty landing page and it stands. This one
- * answers, on arrival and in one screen, the questions an operator otherwise
- * opens six screens to answer: is anything waiting for a decision, did last
- * night's run finish, how many people are here this week compared with last, did
- * somebody try to guess an admin password.
+ * answers, on arrival, what the operator came to find out.
  *
- * The order of the sections is the order of what an operator does with it. What
- * needs a decision, then what is running, then how the product is doing, then
- * what changed.
+ * **Three things, and each is a question about the whole tool rather than about
+ * one part of it.** Work waiting is every queue in the app in one place, which
+ * is the reason to open the app at all. Failed sign ins are a fact about the
+ * tool itself. Recent activity crosses all three audit trails by definition. A
+ * count of users is none of those: it is the first line of the shoppers
+ * dashboard, and it was here only because there was nowhere else for it.
+ *
+ * **The sign ins stay here and do not move to the admins section.** They are two
+ * numbers that are nearly always zero, and the value in them is that somebody
+ * sees them without going to look. A screen an operator opens once a month is
+ * not that place. This is the one asymmetry in the split and it is on purpose.
  *
  * **One read.** There is no per block request and no per chart request: the
  * store holds the whole document and a block that did not answer arrives as
- * `null` in it. Each section draws its own notice in that case and the rest of
- * the page draws, because three blocks of true numbers are worth more than an
- * error page produced by the fourth.
+ * `null` in it. The section dashboards read the same document, so opening one of
+ * them costs no request at all.
  *
  * **`harvesterDeployed` is deliberately not consulted.** That helper says
  * production and staging do not run the harvester, and both do now, so the
@@ -73,16 +64,7 @@ import {
  */
 @Component({
   selector: 'lib-dashboard-page',
-  imports: [
-    RouterLink,
-    RokuTranslatorPipe,
-    BarChart,
-    BlockNotice,
-    LineChart,
-    RunProgressView,
-    RunRowView,
-    StatTile,
-  ],
+  imports: [RouterLink, RokuTranslatorPipe, StatTile],
   template: `
     <header class="head">
       <div class="titles">
@@ -128,8 +110,8 @@ import {
         <h2>{{ 'dashboard.waiting.heading' | rokuT }}</h2>
 
         <!-- Which services did not answer, so a short row of tiles is not read
-             as "nothing is waiting". The notice itself, with its retry, is in
-             the section the block belongs to, once (section 5). -->
+             as "nothing is waiting". The retry beside it is on the section
+             dashboard that block belongs to, once (section 5). -->
         @if (missing().length > 0) {
           <ul class="missing">
             @for (block of missing(); track block) {
@@ -139,26 +121,20 @@ import {
         }
 
         @if (waiting().length > 0) {
+          <!-- The tile is the grid item, so the grid stretches every one to
+               the row and equal boxes look like equal cards (admin plan 0024,
+               section 2). The caption and the query parameters ride on the
+               tile's own inputs, which is what let the wrappers go. -->
           <div class="tiles">
             @for (tile of waiting(); track tile.key) {
-              @if (tile.query; as query) {
-                <!-- The one queue that reads a chain from the query string,
-                     which a routerLink array cannot carry on its own. -->
-                <a [queryParams]="query" [routerLink]="tile.link" class="wrap">
-                  <lib-stat-tile
-                    [label]="tile.label"
-                    [tone]="tile.tone"
-                    [value]="tile.value"
-                  />
-                </a>
-              } @else {
-                <lib-stat-tile
-                  [label]="tile.label"
-                  [link]="tile.link ?? undefined"
-                  [tone]="tile.tone"
-                  [value]="tile.value"
-                />
-              }
+              <lib-stat-tile
+                [caption]="tile.caption ?? undefined"
+                [label]="tile.label"
+                [link]="tile.link ?? undefined"
+                [queryParams]="tile.query ?? undefined"
+                [tone]="tile.tone"
+                [value]="tile.value"
+              />
             }
           </div>
         } @else if (missing().length === 0) {
@@ -166,148 +142,8 @@ import {
         }
       </section>
 
-      <section class="block">
-        <h2>{{ 'dashboard.harvest.heading' | rokuT }}</h2>
-
-        @if (doc.harvest; as harvest) {
-          @if (running(); as run) {
-            <div class="running">
-              <h3>{{ 'dashboard.harvest.running' | rokuT }}</h3>
-              <p class="what">
-                {{ 'harvest.mode.' + run.mode | rokuT }}
-                @if (run.supermarketId; as chain) {
-                  <span class="chain">{{ chainName(chain) }}</span>
-                }
-              </p>
-              <lib-run-progress [progress]="progress(run)" [run]="run" />
-              <a [routerLink]="runLink(run.id)">{{
-                'dashboard.harvest.openRun' | rokuT
-              }}</a>
-            </div>
-          } @else {
-            <p class="state">{{ 'dashboard.harvest.noRun' | rokuT }}</p>
-          }
-
-          <h3>{{ 'dashboard.harvest.recent' | rokuT }}</h3>
-          @if (recentRuns().length === 0) {
-            <p class="state">{{ 'dashboard.harvest.noRuns' | rokuT }}</p>
-          } @else {
-            <ul class="runs">
-              @for (row of recentRuns(); track row.id) {
-                <li><lib-run-row [link]="runLink(row.id)" [row]="row" /></li>
-              }
-            </ul>
-          }
-
-          <lib-bar-chart
-            [bars]="runsByStatus().bars"
-            [series]="runsByStatus().series"
-            [title]="text('dashboard.harvest.byStatusTitle')"
-          />
-
-          <a [routerLink]="sourcesLink()" class="sources">
-            {{
-              'dashboard.harvest.sources'
-                | rokuT
-                  : {
-                      enabled: harvest.sources.enabled,
-                      total: harvest.sources.total,
-                    }
-            }}
-          </a>
-        } @else {
-          <lib-block-notice
-            (retry)="refresh()"
-            [heading]="'dashboard.down.harvest'"
-          />
-        }
-      </section>
-
-      <section class="block">
-        <h2>{{ 'dashboard.people.heading' | rokuT }}</h2>
-
-        @if (doc.identity === null) {
-          <lib-block-notice
-            (retry)="refresh()"
-            [heading]="'dashboard.down.identity'"
-          />
-        }
-        @if (doc.core === null) {
-          <lib-block-notice
-            (retry)="refresh()"
-            [heading]="'dashboard.down.core'"
-          />
-        }
-
-        @if (people().length > 0) {
-          <div class="tiles">
-            @for (tile of people(); track tile.key) {
-              <div class="captioned">
-                <lib-stat-tile
-                  [delta]="tile.delta ?? undefined"
-                  [label]="tile.label"
-                  [link]="tile.link ?? undefined"
-                  [tone]="tile.tone"
-                  [trend]="tile.trend ?? undefined"
-                  [value]="tile.value"
-                />
-                @if (tile.caption; as caption) {
-                  <p class="caption">{{ caption }}</p>
-                }
-              </div>
-            }
-          </div>
-        }
-
-        @if (signUps(); as series) {
-          <lib-line-chart
-            [series]="series"
-            [title]="text('dashboard.people.signUpsTitle')"
-          />
-        }
-        @if (zonesAndLists(); as series) {
-          <lib-line-chart
-            [series]="series"
-            [title]="text('dashboard.people.zonesAndLists')"
-          />
-        }
-      </section>
-
-      <section class="block">
-        <h2>{{ 'dashboard.catalog.heading' | rokuT }}</h2>
-
-        @if (doc.catalog === null) {
-          <lib-block-notice
-            (retry)="refresh()"
-            [heading]="'dashboard.down.catalog'"
-          />
-        } @else {
-          <div class="tiles">
-            @for (tile of catalog(); track tile.key) {
-              <div class="captioned">
-                <lib-stat-tile
-                  [label]="tile.label"
-                  [link]="tile.link ?? undefined"
-                  [tone]="tile.tone"
-                  [value]="tile.value"
-                />
-                @if (tile.caption; as caption) {
-                  <p class="caption">{{ caption }}</p>
-                }
-              </div>
-            }
-          </div>
-
-          <lib-bar-chart
-            [bars]="pricesWritten().bars"
-            [series]="pricesWritten().series"
-            [title]="text('dashboard.catalog.pricesWritten')"
-          />
-        }
-      </section>
-
-      <!-- Skipped entirely when auth did not answer. The notice for that is in
-           the people section above, once, rather than twice on one page. -->
+      <!-- Skipped entirely when auth did not answer, which the row above already
+           says. -->
       @if (doc.identity; as identity) {
         <section class="block">
           <h2>{{ 'dashboard.signIns.heading' | rokuT }}</h2>
@@ -445,15 +281,8 @@ import {
       font-weight: 700;
     }
 
-    h3 {
-      font-size: 0.9375rem;
-      font-weight: 700;
-    }
-
     .taken,
-    .caption,
-    .state,
-    .chain {
+    .state {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
@@ -463,7 +292,7 @@ import {
       border: 1px solid var(--admin-danger);
       border-radius: var(--admin-radius);
       background: var(--admin-danger-wash);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .failed {
@@ -492,18 +321,6 @@ import {
       gap: var(--admin-space-3);
     }
 
-    .captioned {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-    }
-
-    .wrap {
-      display: block;
-      color: inherit;
-      text-decoration: none;
-    }
-
     .state {
       padding: var(--admin-space-4);
       border: 1px dashed var(--admin-border);
@@ -516,34 +333,7 @@ import {
       gap: var(--admin-space-3);
       list-style: none;
       font-size: 0.8125rem;
-      color: var(--admin-danger-ink);
-    }
-
-    .running {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-3);
-      align-items: flex-start;
-      padding: var(--admin-space-4);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-    }
-
-    .what {
-      font-weight: 700;
-    }
-
-    .chain {
-      margin-inline-start: var(--admin-space-2);
-      font-weight: 400;
-    }
-
-    .runs {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-2);
-      list-style: none;
+      color: var(--admin-danger-on-wash);
     }
 
     /* A table wider than the page scrolls inside its own box, so the page never
@@ -617,25 +407,22 @@ import {
 })
 export class DashboardPage {
   private readonly _translate = inject(RokuTranslatorService);
-  private readonly _references = inject(ResourceReferences);
+  private readonly _registry = inject(ResourceRegistry);
+  private readonly _chains = inject(ChainNames);
   private readonly _viewport = inject(Viewport);
+  private readonly _postalCodes = inject(PostalCodeSummaryStore);
 
   readonly store = inject(DashboardStore);
   readonly document = this.store.document;
   readonly compact = this._viewport.compact;
 
-  /**
-   * The chains the queues name, once the reference has answered.
-   *
-   * Resolved after the document arrives rather than joined into it: the gateway
-   * sends ids because a queue is per chain and the chain's name belongs to
-   * catalog, and this app already resolves supermarkets for the sources screen.
-   * A chain the reference cannot name shows its id (plan 0007, section 4).
-   */
-  private readonly _chains = signal<ReadonlyMap<string, string>>(new Map());
-
   constructor() {
     this.store.watch();
+    // The postal code queue's summary, which is not in the dashboard document
+    // and is one call beside it (admin plan 0021, section 6). Read once on
+    // arrival and again on a refresh; it changes when somebody adds a code or
+    // the worker drains one, neither of which happens while nobody is looking.
+    void this._postalCodes.load();
     // A component's teardown, which is the one that actually runs: a route's
     // providers injector is never destroyed, so a route scoped service's
     // `DestroyRef` would never fire and the poll would outlive this screen.
@@ -646,7 +433,7 @@ export class DashboardPage {
     // writes the signal this effect would otherwise depend on.
     effect(() => {
       const ids = this._chainIds();
-      untracked(() => void this._resolveChains(ids));
+      untracked(() => void this._chains.resolve(ids));
     });
   }
 
@@ -683,9 +470,13 @@ export class DashboardPage {
       : null
   );
 
-  readonly errorKey = computed(() => gatewayErrorKey(this.store.failed()));
+  // Drawn only inside `store.empty()`, which the store reaches by failing. The
+  // fallback keeps the block from opening with a blank line if it ever does not.
+  readonly errorKey = computed(
+    () => gatewayErrorKey(this.store.failed()) ?? 'resource.error.unknown'
+  );
 
-  /** Which blocks did not answer, in the order the sections draw them. */
+  /** Which blocks did not answer, in the order the document names them. */
   readonly missing = computed(() => {
     const document = this.document();
     if (document === null) {
@@ -697,58 +488,33 @@ export class DashboardPage {
     );
   });
 
+  /**
+   * Everything waiting for a person, from the document plus one call beside it.
+   *
+   * The postal code tile is not in the document (admin plan 0021, section 6) and
+   * arrives on its own, so a dashboard whose harvest block is null still shows
+   * it and a summary that did not answer costs one tile rather than the row.
+   */
   readonly waiting = computed(() => {
     const document = this.document();
-    return document === null
-      ? []
-      : waitingTiles(document, this._text, (id) => this.chainName(id));
-  });
+    const tiles =
+      document === null
+        ? []
+        : waitingTiles(
+            document,
+            this._text,
+            (id) => this.chainName(id),
+            this._pathOf
+          );
 
-  readonly running = computed(() => this.document()?.harvest?.running ?? null);
+    const postalCodes = postalCodeWaitingTile(
+      this._postalCodes.summary(),
+      this._text,
+      (value) => formatSince(value, Date.now(), this._translate.locale()),
+      this._pathOf
+    );
 
-  readonly recentRuns = computed(() => {
-    const harvest = this.document()?.harvest ?? null;
-    return harvest === null
-      ? []
-      : recentRunRows(harvest.recent, (value) =>
-          formatInstant(value, this._translate.locale())
-        );
-  });
-
-  readonly runsByStatus = computed(() => {
-    const harvest = this.document()?.harvest ?? null;
-    return harvest === null
-      ? { bars: [], series: [] }
-      : runsByStatusChart(harvest, this._text);
-  });
-
-  readonly people = computed(() => {
-    const document = this.document();
-    return document === null
-      ? []
-      : peopleTiles(document.identity, document.core, this._text);
-  });
-
-  readonly signUps = computed(() => {
-    const identity = this.document()?.identity ?? null;
-    return identity === null ? null : signUpsChart(identity, this._text);
-  });
-
-  readonly zonesAndLists = computed(() => {
-    const core = this.document()?.core ?? null;
-    return core === null ? null : zonesAndListsChart(core, this._text);
-  });
-
-  readonly catalog = computed(() => {
-    const catalog = this.document()?.catalog ?? null;
-    return catalog === null ? [] : catalogTiles(catalog, this._text);
-  });
-
-  readonly pricesWritten = computed(() => {
-    const catalog = this.document()?.catalog ?? null;
-    return catalog === null
-      ? { bars: [], series: [] }
-      : pricesWrittenChart(catalog, this._text, (day) => this._day(day));
+    return postalCodes === null ? tiles : [...tiles, postalCodes];
   });
 
   readonly failures = computed(() => {
@@ -772,7 +538,8 @@ export class DashboardPage {
       document.activity,
       this._text,
       (value) => formatSince(value, now, locale),
-      (value) => formatInstant(value, locale)
+      (value) => formatInstant(value, locale),
+      this._pathOf
     );
   });
 
@@ -781,91 +548,37 @@ export class DashboardPage {
     return this._text(key);
   }
 
-  /**
-   * A day of the window as a short label, with `Intl` and never with `DatePipe`.
-   *
-   * The wire carries `YYYY-MM-DD` and thirty of those along an axis are
-   * unreadable. Parsed at noon UTC rather than at midnight, so a viewer west of
-   * Greenwich is not shown the day before.
-   */
-  private _day(day: string): string {
-    return new Intl.DateTimeFormat(this._translate.locale(), {
-      month: 'short',
-      day: 'numeric',
-      timeZone: 'UTC',
-    }).format(new Date(`${day}T12:00:00.000Z`));
-  }
-
-  /** How far a run has got, which is the run screen's own arithmetic. */
-  readonly progress = runProgress;
-
   /** The chain's name, or its id where the reference could not name it. */
   chainName(supermarketId: string): string {
-    return this._chains().get(supermarketId) ?? supermarketId;
-  }
-
-  runLink(id: string): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'runs', id];
-  }
-
-  sourcesLink(): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'sources'];
+    return this._chains.nameOf(supermarketId);
   }
 
   refresh(): void {
     void this.store.load();
+    // The tile beside the document's, re-read by the same button. Forced,
+    // because the store answers a summary it already has and a refresh is the
+    // one place an operator is asking for a newer one.
+    void this._postalCodes.load(true);
   }
 
-  /** Every chain the queues and the run in flight mention, in a stable order. */
+  /** Every chain the queues mention, in a stable order. */
   private readonly _chainIds = computed<readonly string[]>(() => {
     const harvest = this.document()?.harvest ?? null;
     if (harvest === null) {
       return [];
     }
 
-    const running = harvest.running?.supermarketId ?? null;
     return [
       ...new Set([
         ...harvest.queues.entries.map((queue) => queue.supermarketId),
         ...harvest.queues.shops.map((queue) => queue.supermarketId),
-        ...(running === null ? [] : [running]),
       ]),
     ].sort();
   });
 
-  /**
-   * Name the chains this screen has not named yet.
-   *
-   * One read per chain, of which there are a handful, and only for an id the map
-   * does not hold: the document is re-read every minute and the chains do not
-   * change between polls. A failure costs a name rather than the screen, because
-   * `resolve` answers `null` for a reference that outlived what it points at and
-   * the tile then shows the id (plan 0007, section 4).
-   */
-  private async _resolveChains(ids: readonly string[]): Promise<void> {
-    const known = this._chains();
-    const wanted = ids.filter((id) => !known.has(id));
-    if (wanted.length === 0) {
-      return;
-    }
-
-    const resolved = await Promise.all(
-      wanted.map(
-        async (id) =>
-          [id, await this._references.resolve('supermarkets', id)] as const
-      )
-    );
-
-    this._chains.update((names) => {
-      const next = new Map(names);
-      for (const [id, option] of resolved) {
-        if (option !== null) {
-          next.set(id, option.title);
-        }
-      }
-      return next;
-    });
-  }
+  /** Where a resource is mounted, which is the section's business and not this screen's. */
+  private readonly _pathOf = (name: string): readonly string[] | null =>
+    this._registry.pathOf(name);
 
   /**
    * The translator, as the plain function the selectors take.

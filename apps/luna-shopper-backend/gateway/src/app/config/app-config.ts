@@ -73,6 +73,21 @@ export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
 export const DEFAULT_IMPORT_MAX_BYTES = 10 * 1024 * 1024;
 
 /**
+ * The body a bulk decision file may have (plan 0100).
+ *
+ * Sized from the cap those routes publish: a thousand operations of ids, a
+ * short name and an `expect` is a few hundred kilobytes, so 2 MB clears the
+ * largest legal file with room to spare and still refuses anything that is not
+ * one. It is not the import limit, because a decisions file carries ids and
+ * names rather than the raw text of a leaflet page.
+ *
+ * **The two caps move together.** Raising the operation count without raising
+ * this makes the published maximum unreachable, and the operator is told their
+ * body is too large for a file the route says it accepts.
+ */
+export const DEFAULT_BULK_DECISION_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
  * 100 KB, the cap on every other JSON body, which is Express's own default
  * stated rather than inherited.
  *

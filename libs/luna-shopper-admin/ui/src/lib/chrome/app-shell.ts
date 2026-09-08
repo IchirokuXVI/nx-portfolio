@@ -10,23 +10,24 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import type { Deployment } from '@portfolio/luna-shopper-admin/models';
 import { EnvironmentBadge } from '../environment/environment-badge';
 
-/** One entry in the navigation. */
+/** One entry in the navigation, on either row. */
 export interface ShellLink {
   /** The route to go to, relative to the app root. */
   readonly path: string;
   /** A translation key. */
   readonly label: string;
   /**
-   * Whether this entry belongs in front of the resources rather than after
-   * them (admin plan 0016).
+   * Whether this entry is the current page only on exactly its own path.
    *
-   * The bespoke screens are a section at the end of the navigation, which is
-   * where a group of them belongs. The dashboard is not one of that group: it
-   * is the screen the app opens to, so it sits first, above everything it
-   * summarises. `AdminShellPage` is what reads this, because it is what puts the
-   * two lists together.
+   * Prefix matching is what keeps `/harvest/runs` marked on `/harvest/runs/abc`,
+   * and it is also what would leave a link to `/` marked on every screen in the
+   * app, since every URL starts with a slash. So the overview asks for this and
+   * nothing else does (admin plan 0022, section 4). It used to be the shell's own
+   * rule, written as a comparison against `/`; it is on the entry now, because a
+   * section is a route branch and the shell has no business knowing which branch
+   * happens to be the root.
    */
-  readonly leading?: boolean;
+  readonly exact?: boolean;
   /**
    * How much work is waiting behind this link, when it is the sort of screen
    * that has an answer to that.
@@ -54,6 +55,12 @@ export interface ShellLink {
  * only on the login page, which is the point of `0001`'s unauthenticated read:
  * an operator has to know which database they are about to change before they
  * change it, not only before they sign in.
+ *
+ * **The navigation has two rows** since admin plan 0022: the sections, and the
+ * screens inside whichever section the operator is in. This component draws both
+ * and works out neither. Which section is current is a question about the URL,
+ * and `AdminShellPage` answers it, exactly as it already answers which resources
+ * exist.
  *
  * Navigation collapses on a phone, from an input rather than a media query, for
  * the same reason the list's layout does: a switch a spec cannot set is a switch
@@ -97,17 +104,17 @@ export interface ShellLink {
 
       @if (!compact() || open()) {
         <nav [attr.aria-label]="'shell.navigation' | rokuT" id="shell-nav">
-          <ul>
-            @for (link of links(); track link.path) {
+          <ul [class.stack]="compact()" class="sections">
+            @for (section of sections(); track section.path) {
               <li>
                 <a
                   (click)="close()"
-                  [routerLink]="link.path"
-                  [routerLinkActiveOptions]="{ exact: link.path === '/' }"
+                  [routerLink]="section.path"
+                  [routerLinkActiveOptions]="{ exact: section.exact === true }"
                   routerLinkActive="current"
                 >
-                  {{ link.label | rokuT }}
-                  @if (link.badge?.(); as waiting) {
+                  {{ section.label | rokuT }}
+                  @if (section.badge?.(); as waiting) {
                     <span
                       [attr.aria-label]="
                         'shell.waiting' | rokuT: { count: waiting }
@@ -117,10 +124,74 @@ export interface ShellLink {
                     >
                   }
                 </a>
+
+                <!-- On a phone the second row is the current section's screens,
+                     indented under it, and only the current one opens: a menu
+                     that lists twenty three links has not solved anything
+                     (admin plan 0022, section 4.1). -->
+                @if (
+                  compact() &&
+                  section.path === current() &&
+                  screens().length > 0
+                ) {
+                  <ul class="inside">
+                    @for (screen of screens(); track screen.path) {
+                      <li>
+                        <a
+                          (click)="close()"
+                          [routerLink]="screen.path"
+                          routerLinkActive="current"
+                        >
+                          {{ screen.label | rokuT }}
+                          @if (screen.badge?.(); as waiting) {
+                            <span
+                              [attr.aria-label]="
+                                'shell.waiting' | rokuT: { count: waiting }
+                              "
+                              class="badge"
+                              >{{ waiting }}</span
+                            >
+                          }
+                        </a>
+                      </li>
+                    }
+                  </ul>
+                }
               </li>
             }
           </ul>
         </nav>
+      }
+
+      <!-- The second row on a wide screen. The box is always there and keeps its
+           height whether or not it holds anything, because a row that appears on
+           every third navigation and pushes the page down by forty pixels makes
+           a two level navigation feel worse than the flat one it replaced. -->
+      @if (!compact()) {
+        <div class="second">
+          @if (screens().length > 0) {
+            <nav [attr.aria-label]="'shell.screens' | rokuT">
+              <ul class="screens">
+                @for (screen of screens(); track screen.path) {
+                  <li>
+                    <a [routerLink]="screen.path" routerLinkActive="current">
+                      {{ screen.label | rokuT }}
+                      @if (screen.badge?.(); as waiting) {
+                        <span
+                          [attr.aria-label]="
+                            'shell.waiting' | rokuT: { count: waiting }
+                          "
+                          class="badge"
+                          >{{ waiting }}</span
+                        >
+                      }
+                    </a>
+                  </li>
+                }
+              </ul>
+            </nav>
+          }
+        </div>
       }
     </header>
 
@@ -170,6 +241,37 @@ export interface ShellLink {
       gap: var(--admin-space-1);
       padding: 0 var(--admin-space-4) var(--admin-space-3);
       list-style: none;
+    }
+
+    /* On a phone the sections are a list, one per line. Wrapped into rows they
+       read as a broken row rather than as a level, because the open section's
+       screens sit between one row and the next. */
+    nav ul.sections.stack {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    /* The current section's screens on a phone, one under the other and
+       indented, so the menu reads as two levels rather than as one long list. */
+    nav ul.inside {
+      flex-direction: column;
+      padding: var(--admin-space-1) 0 var(--admin-space-2) var(--admin-space-4);
+    }
+
+    nav ul.inside a {
+      font-weight: 400;
+    }
+
+    /* The second row's box, which is here whether or not there is a row to put
+       in it. A row that appears on some navigations and not others would move
+       the page under the operator by its own height every time. */
+    .second {
+      min-block-size: calc(2.75rem + var(--admin-space-3));
+    }
+
+    .second a {
+      font-size: 0.9375rem;
+      font-weight: 500;
     }
 
     nav a {
@@ -229,16 +331,33 @@ export interface ShellLink {
 })
 export class AppShell {
   /**
-   * The navigation, in the order it is drawn.
+   * The first row: the sections, in the order they are drawn.
    *
-   * A link to `/` is matched **exactly** and every other link is matched by
-   * prefix. Prefix matching is what makes `/harvest/runs` stay highlighted on
-   * `/harvest/runs/abc`, and it is also what would leave a link to `/` marked as
-   * the current page on every screen in the app, since every URL starts with a
-   * slash. Only that one path needs the exception, so only that one path gets
-   * it.
+   * Every entry is matched by prefix unless it asks for `exact`, which is what
+   * keeps a section marked while the operator is on a screen inside it and what
+   * stops the overview being marked everywhere.
    */
-  readonly links = input.required<readonly ShellLink[]>();
+  readonly sections = input.required<readonly ShellLink[]>();
+  /**
+   * The second row: the screens inside the section the operator is in.
+   *
+   * Empty for a section that has only its own home, which is the overview and
+   * the admins section. The box the row sits in is drawn either way.
+   */
+  readonly screens = input<readonly ShellLink[]>([]);
+  /**
+   * Which section those screens belong to, as its path.
+   *
+   * Only the collapsed menu needs it, where the screens are indented under
+   * their own section rather than drawn in a row of their own. `routerLinkActive`
+   * answers the same question for the highlight, and cannot answer this one: it
+   * settles in a content hook, so a structural block reading it renders a pass
+   * behind the highlight beside it.
+   *
+   * Told, not worked out. `AdminShellPage` decides which section a URL is in,
+   * exactly as it decides which screens exist.
+   */
+  readonly current = input<string | null>(null);
   /** `null` when the environment could not be established, `undefined` while asking. */
   readonly deployment = input.required<Deployment | null | undefined>();
   /** What to call the operator. */

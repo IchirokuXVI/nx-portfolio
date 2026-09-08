@@ -15,9 +15,9 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ProfileService } from '../profiles/profile.service';
 import { GeneratedListService } from './generated-list.service';
 import {
-  ACTIVE_OVERLAP_SQL,
   CANDIDATE_LINES_SQL,
   CANDIDATE_LINE_ITEMS_SQL,
+  LIVE_OVERLAP_SQL,
   WRITABLE_LISTS_SQL,
 } from './generated-list.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
@@ -134,7 +134,7 @@ function build(options: {
         (line.itemIds ?? []).map((itemId) => ({ lineId: line.id, itemId }))
       );
     }
-    if (sql === ACTIVE_OVERLAP_SQL) {
+    if (sql === LIVE_OVERLAP_SQL) {
       return Object.entries(overlaps).map(([lineId, generatedListId]) => ({
         lineId,
         generatedListId,

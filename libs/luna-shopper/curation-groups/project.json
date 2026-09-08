@@ -1,0 +1,20 @@
+{
+  "name": "luna-shopper/curation-groups",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/curation-groups/src",
+  "projectType": "library",
+  "tags": [],
+  "implicitDependencies": ["luna-shopper-backend-gateway"],
+  "targets": {
+    "test": {
+      "//": "Plain ESM with zero npm dependencies, so the tests are Node's own runner rather than jest. The glob is quoted because Node expands it itself; a shell that expanded it first would answer a different set of files on Windows than on Linux.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --test \"libs/luna-shopper/curation-groups/src/**/*.test.mjs\""
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

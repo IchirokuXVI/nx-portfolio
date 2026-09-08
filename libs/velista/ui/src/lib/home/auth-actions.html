@@ -1,10 +1,27 @@
 <div class="actions">
-  <button (click)="createZone.emit()" class="button primary" type="button">
+  <!--
+    `aria-disabled` and never `disabled`, on all four (plan 0071 D5). A disabled button
+    swallows its own click, so the sentence below could never be triggered by the
+    control the user actually pressed.
+  -->
+  <button
+    (click)="act('createZone')"
+    [attr.aria-disabled]="held() ? 'true' : null"
+    [class.held]="held()"
+    class="button primary"
+    type="button"
+  >
     <lib-plus-icon class="glyph" />
     {{ 'home.action.createZone' | rokuT }}
   </button>
 
-  <button (click)="joinZone.emit()" class="button secondary" type="button">
+  <button
+    (click)="act('joinZone')"
+    [attr.aria-disabled]="held() ? 'true' : null"
+    [class.held]="held()"
+    class="button secondary"
+    type="button"
+  >
     <lib-join-code-icon class="glyph" />
     {{ 'home.action.joinCode' | rokuT }}
   </button>
@@ -18,7 +35,9 @@
   </div>
 
   <button
-    (click)="continueWithGoogle.emit()"
+    (click)="act('google')"
+    [attr.aria-disabled]="held() ? 'true' : null"
+    [class.held]="held()"
     class="button google"
     type="button"
   >
@@ -26,7 +45,22 @@
     {{ 'home.action.google' | rokuT }}
   </button>
 
-  <button (click)="signInWithEmail.emit()" class="button link" type="button">
+  <button
+    (click)="act('email')"
+    [attr.aria-disabled]="held() ? 'true' : null"
+    [class.held]="held()"
+    class="button link"
+    type="button"
+  >
     {{ 'home.action.emailSignIn' | rokuT }}
   </button>
+
+  <!--
+    A live region rather than a label on the buttons, so a screen reader announces the
+    sentence when it appears rather than only when focus reaches a control. Polite: it
+    is an explanation, not an interruption.
+  -->
+  @if (message(); as sentence) {
+    <p aria-live="polite" class="held-message" role="status">{{ sentence }}</p>
+  }
 </div>

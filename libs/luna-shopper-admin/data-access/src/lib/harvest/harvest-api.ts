@@ -13,6 +13,7 @@ import type {
   PageQuery,
   PlaceGroupQuery,
   PlaceQuery,
+  PostalCodeQuery,
   RunQuery,
   ShopQuery,
   SourceEntryAcceptResult,
@@ -207,6 +208,32 @@ export class HarvestApi implements HarvestServiceI {
 
   unignoreShop(id: string): Promise<Wire.HarvestSourceLocationView> {
     return this._send('post', `${ROOT}/shops/${segment(id)}/unignore`, {
+      body: {},
+    });
+  }
+
+  listPostalCodes(
+    query: PostalCodeQuery
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestPage> {
+    return this._send('get', `${ROOT}/postal-codes`, {
+      params: toParams(query),
+    });
+  }
+
+  postalCodeSummary(): Promise<Wire.HarvestPostalCodeDiscoverySummaryView> {
+    return this._send('get', `${ROOT}/postal-codes/summary`);
+  }
+
+  addPostalCode(
+    input: Wire.AddPostalCodeDiscoveryDto
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestView> {
+    return this._send('post', `${ROOT}/postal-codes`, { body: input });
+  }
+
+  requeuePostalCode(
+    id: string
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestView> {
+    return this._send('post', `${ROOT}/postal-codes/${segment(id)}/requeue`, {
       body: {},
     });
   }

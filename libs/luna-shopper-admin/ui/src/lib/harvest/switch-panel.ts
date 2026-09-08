@@ -96,12 +96,12 @@ import type { HarvestSwitch } from '@portfolio/luna-shopper-admin/models';
 
     .state.on {
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     .state.off {
       background: var(--admin-danger-wash);
-      color: var(--admin-danger-ink);
+      color: var(--admin-danger-on-wash);
     }
 
     .state.unknown {

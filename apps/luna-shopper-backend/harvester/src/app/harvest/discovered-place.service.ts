@@ -74,6 +74,20 @@ export class DiscoveredPlaceService {
     if (req.status) {
       qb.andWhere('p.status = :status', { status: req.status });
     }
+    // The places **located in** a code, which is what the postal code detail
+    // screen's panel asks for (plan 0097, section 9). It reads the place's own
+    // postal code and never the run's: a run centred on 14013 writes places in
+    // four other codes, and those belong to those codes.
+    if (req.country) {
+      qb.andWhere('lower(p.country) = :country', {
+        country: req.country.trim().toLowerCase(),
+      });
+    }
+    if (req.postalCode) {
+      qb.andWhere('p."postalCode" = :postalCode', {
+        postalCode: req.postalCode.trim(),
+      });
+    }
     if (cursor) {
       qb.andWhere('(p."lastSeenAt", p.id) < (:cv, :cid)', {
         cv: cursor.value,

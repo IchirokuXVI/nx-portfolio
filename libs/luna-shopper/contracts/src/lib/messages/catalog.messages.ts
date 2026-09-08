@@ -1,4 +1,5 @@
 import type {
+  BulkOperationErrorCode,
   ItemCategory,
   PostalCodeSource,
   PriceScopeKind,
@@ -135,7 +136,29 @@ export const ITEM_PATTERNS = {
   searchOffers: 'item.searchOffers',
   /** EAN is unique when present, so this is a lookup, not a search (plan 0038). */
   findByEan: 'item.findByEan',
+  /**
+   * Several products in one transaction, all or nothing (plan 0100).
+   *
+   * The step `sourceEntry.applyDecisions` needs: a decisions file that creates
+   * forty products must create forty or none, because the binds that follow name
+   * every one of them and a half filled catalog leaves the operator to work out
+   * which half. Exposed as an ordinary admin route beside
+   * {@link ITEM_PATTERNS.create} rather than hidden behind the harvester, since
+   * nothing about it is the harvester's.
+   */
+  createMany: 'item.createMany',
 } as const;
+
+/**
+ * How many operations one bulk decision request may carry (plan 0100).
+ *
+ * **A larger file is refused, never split.** Chunking is the one thing that
+ * cannot be done here: two chunks are two transactions, so the first can land
+ * and the second fail, which is exactly the half worked queue these routes
+ * exist to prevent. A thousand rows is far more than one curation session
+ * produces and small enough to validate and write inside one request.
+ */
+export const BULK_DECISION_MAX_OPERATIONS = 1000;
 
 /**
  * Product groups (plan 0048, section 1): "milk as a thing you can buy", which is
@@ -152,6 +175,19 @@ export const PRODUCT_GROUP_PATTERNS = {
   delete: 'productGroup.delete',
   get: 'productGroup.get',
   list: 'productGroup.list',
+  /**
+   * A whole shelf, sorted in one transaction (plan 0100).
+   *
+   * The replay half of the groups decider: create the groups a curation session
+   * invented, then move every product it sorted into one, all or nothing. Truly
+   * all or nothing, unlike the entry decisions this mirrors: groups and item
+   * membership live in one database, so there is no price shaped step outside
+   * the transaction and no exception to explain.
+   *
+   * **It is still owner curation.** A person or a delegate of theirs decided
+   * every one of these assignments offline; nothing here classifies anything.
+   */
+  applyAssignments: 'productGroup.applyAssignments',
 } as const;
 
 /**
@@ -614,6 +650,19 @@ export interface SupermarketItemView {
 }
 
 /**
+ * The back office's row: {@link SupermarketItemView} with the product's name
+ * joined on (admin plan 0023, section 3).
+ *
+ * A separate view rather than a widened `SupermarketItemView`, because the
+ * shopper view is velista's contract and velista neither needs the name here
+ * nor wants a bigger page. Only `supermarketItem.adminList` answers with it.
+ */
+export interface AdminSupermarketItemView extends SupermarketItemView {
+  /** The product's name, joined on for the back office. Null when the join found nothing. */
+  itemName: LocalizedText | null;
+}
+
+/**
  * The value an `ADMIN` row recorded for one automated kind when it was inserted
  * (plan 0080, section 4.2).
  */
@@ -960,6 +1009,27 @@ export interface CreateItemRequest extends AdminCredential {
   productGroupId?: string | null;
 }
 
+/** One product of a {@link CreateItemsRequest}: a create with no credential. */
+export type CreateItemInput = Omit<CreateItemRequest, 'userId'>;
+
+/**
+ * Create several products in one transaction (plan 0100).
+ *
+ * Capped at {@link BULK_DECISION_MAX_OPERATIONS}, and a longer list is refused
+ * rather than split. The answer holds one `ItemView` per input **in the
+ * order the request named them**, which is how a caller that invented its own
+ * reference for each product finds the real id of each: catalog knows nothing
+ * about those references and does not need to.
+ */
+export interface CreateItemsRequest extends AdminCredential {
+  items: CreateItemInput[];
+}
+
+export interface CreateItemsResult {
+  /** One per requested product, in the requested order. */
+  items: ItemView[];
+}
+
 export interface UpdateItemRequest extends AdminCredential {
   itemId: string;
   name?: LocalizedText;
@@ -1105,6 +1175,89 @@ export interface UpdateProductGroupRequest extends AdminCredential {
 
 export interface ProductGroupIdRequest extends AdminCredential {
   productGroupId: string;
+}
+
+// --- Bulk group assignment (plan 0100) --------------------------------------
+
+/**
+ * Create a group this request goes on to sort products into.
+ *
+ * `ref` is the caller's own name for it, unique within the request. It exists
+ * because an `assignItem` written at decide time cannot name an id the database
+ * has not issued yet.
+ */
+export interface CreateProductGroupOperation {
+  op: 'createGroup';
+  ref: string;
+  name: LocalizedText;
+  slug: string;
+  referenceUnit: UnitOfMeasure;
+  synonyms?: LocalizedSynonyms;
+}
+
+/**
+ * Move one product into a group, either one catalog already holds (`groupId`)
+ * or one this same request creates (`groupRef`). Exactly one of the two.
+ *
+ * `expect` is the optimistic check the decisions file recorded when it decided:
+ * the product's `productGroupId` as it was then, which for a curation session
+ * working the ungrouped products is null. A product somebody has sorted in the
+ * meantime fails it, and fails the whole request with it, because the session
+ * decided about a product that no longer looks the way it looked.
+ */
+export interface AssignItemToGroupOperation {
+  op: 'assignItem';
+  itemId: string;
+  groupId?: string;
+  groupRef?: string;
+  expect: { productGroupId: string | null };
+}
+
+export type ProductGroupAssignmentOperation =
+  | CreateProductGroupOperation
+  | AssignItemToGroupOperation;
+
+/**
+ * A whole curation session's group decisions, in one transaction (plan 0100).
+ *
+ * Capped at {@link BULK_DECISION_MAX_OPERATIONS}. Every check runs inside the
+ * transaction that would do the writing, so a slug that collides and a product
+ * somebody else has sorted are caught by the same read that the writes would
+ * have raced with.
+ */
+export interface ApplyProductGroupAssignmentsRequest extends AdminCredential {
+  operations: ProductGroupAssignmentOperation[];
+}
+
+/** Why one operation of a bulk request was refused. */
+export interface BulkOperationError {
+  code: BulkOperationErrorCode;
+  detail: string;
+}
+
+export interface ProductGroupAssignmentOutcome {
+  op: ProductGroupAssignmentOperation['op'];
+  /** The `ref` a `createGroup` named, or null for an `assignItem`. */
+  ref: string | null;
+  /** The product an `assignItem` named, or null for a `createGroup`. */
+  itemId: string | null;
+  /** The group the operation created or assigned to, when it applied. */
+  groupId: string | null;
+  applied: boolean;
+  error: BulkOperationError | null;
+}
+
+/**
+ * What the request did, and nothing in between: either every operation applied
+ * or none did.
+ */
+export interface ApplyProductGroupAssignmentsResult {
+  applied: boolean;
+  /** Why the request was refused as a whole, when no single operation was at fault. */
+  error: string | null;
+  results: ProductGroupAssignmentOutcome[];
+  /** The id each `createGroup` reference ended up naming. */
+  createdGroups: { ref: string; groupId: string }[];
 }
 
 export interface ListProductGroupsRequest extends PageQuery {
@@ -1527,6 +1680,8 @@ export type SupermarketLocationPage = Paginated<SupermarketLocationView>;
 export type ShopPage = Paginated<ShopView>;
 export type ItemPage = Paginated<ItemView>;
 export type SupermarketItemPage = Paginated<SupermarketItemView>;
+/** The admin listing's page: the same rows with the product's name joined on. */
+export type AdminSupermarketItemPage = Paginated<AdminSupermarketItemView>;
 export type ItemPricePage = Paginated<ItemPriceView>;
 export type PriceScopePage = Paginated<PriceScopeView>;
 export type SupermarketLocationItemPage =

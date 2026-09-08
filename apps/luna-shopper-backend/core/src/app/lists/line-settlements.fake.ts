@@ -111,12 +111,28 @@ export function fakeLineSettlements(
         );
       },
       async find({ where }) {
-        return rows.filter(
-          (row) =>
-            (where.lineId === undefined || row.lineId === where.lineId) &&
-            (where.generatedListLineId === undefined ||
-              row.generatedListLineId === where.generatedListLineId) &&
-            standing(row, where)
+        return (
+          rows
+            .map((row, index) => ({ row, index }))
+            .filter(
+              (entry) =>
+                (where.lineId === undefined ||
+                  entry.row.lineId === where.lineId) &&
+                (where.generatedListLineId === undefined ||
+                  entry.row.generatedListLineId ===
+                    where.generatedListLineId) &&
+                standing(entry.row, where)
+            )
+            // Oldest first, with the insertion order breaking a tie, which is
+            // what both callers ask for and what the real index answers. It
+            // matters to re-homing (plan 0093, section 3), where the order of two
+            // purchases decides which list gets which units.
+            .sort((a, b) => {
+              const at = a.row.settledAt?.getTime() ?? 0;
+              const bt = b.row.settledAt?.getTime() ?? 0;
+              return at - bt || a.index - b.index;
+            })
+            .map((entry) => entry.row)
         );
       },
     },

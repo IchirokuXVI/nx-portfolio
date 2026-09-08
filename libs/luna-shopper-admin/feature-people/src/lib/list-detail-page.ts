@@ -3,7 +3,6 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import { compositeId } from '@portfolio/luna-shopper-admin/models';
 import { DetailFacts, DetailFrame, type DetailFact } from './detail-frame';
 import { DetailPage } from './detail-page';
-import { LIST_LINES } from './list-lines';
 import { instant } from './people-format';
 import type { ListRow } from './people-seed';
 
@@ -218,7 +217,7 @@ export class ListDetailPage extends DetailPage<ListRow> {
    * so both halves are in every URL that reaches it.
    */
   openLine(list: ListRow, line: { readonly id: string }): void {
-    this.go([`/${LIST_LINES.segment}`, compositeId([list.id, line.id])]);
+    this.goToResource('list-lines', compositeId([list.id, line.id]));
   }
 
   yesNo(value: boolean): string {

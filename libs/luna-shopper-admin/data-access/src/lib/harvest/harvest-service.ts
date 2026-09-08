@@ -140,6 +140,59 @@ export interface HarvestServiceI {
   ignoreShop(id: string): Promise<Wire.HarvestSourceLocationView>;
   unignoreShop(id: string): Promise<Wire.HarvestSourceLocationView>;
 
+  /**
+   * The postal codes somebody asked about, newest request first (backend plan
+   * 0097, section 7).
+   *
+   * **Demand driven, and that is the point.** A code is in this list because a
+   * profile write announced it or because an operator typed it here, so a code
+   * nobody lives in never appears. The shipped centroid table is a different
+   * question and a different route: eleven thousand rows at
+   * `/v1/admin/catalog/postal-codes`, which would bury the forty that matter.
+   */
+  listPostalCodes(
+    query: PostalCodeQuery
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestPage>;
+
+  /**
+   * The queue at a glance, for the listing's banner and the dashboard card.
+   *
+   * `draining` is the reason this is one call rather than three counts: a queue
+   * that fills and never empties is the designed behaviour of a cluster with
+   * `HARVEST_ENABLED` false, and an operator pressing "discover again" there
+   * deserves to be told so.
+   */
+  postalCodeSummary(): Promise<Wire.HarvestPostalCodeDiscoverySummaryView>;
+
+  /**
+   * Add one code, queued now or parked (backend plan 0097, section 6.1).
+   *
+   * One code per call, on purpose: a bulk endpoint is a transaction boundary and
+   * a timeout budget the harvester does not have. Adding a city is twelve calls
+   * from the browser, under plan 0020's partial failure rules.
+   *
+   * A code catalog does not hold is refused with `postal_code_unknown`, which
+   * means somebody typed it wrong, and nothing is written.
+   */
+  addPostalCode(
+    input: Wire.AddPostalCodeDiscoveryDto
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestView>;
+
+  /**
+   * Look at it again, inside the thirty day cooldown.
+   *
+   * Ignoring the cooldown is the whole reason it exists: an announcement refuses
+   * a `DONE` row for thirty days by design, and an operator who has just
+   * imported a chain wants to look again today.
+   *
+   * **It queues, and it does not run.** The queue drains one run at a time, so
+   * the answer says the row is waiting rather than working. A `RUNNING` row is
+   * refused with `run_in_progress`.
+   */
+  requeuePostalCode(
+    id: string
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestView>;
+
   listSources(query: PageQuery): Promise<Wire.HarvestSupermarketSourcePage>;
   readSource(supermarketId: string): Promise<Wire.HarvestSupermarketSourceView>;
   upsertSource(
@@ -175,6 +228,17 @@ export interface PlaceQuery extends PageQuery {
   readonly runId?: string;
   readonly brandKey?: string;
   readonly status?: string;
+  /**
+   * Where a place sits, rather than which run found it (backend plan 0097,
+   * section 9).
+   *
+   * The two are different questions and both are asked: a run centred on one
+   * code writes places in the codes around it. `postalCode` is paired with
+   * `country`, and a place whose own code was **derived** from the nearest
+   * centroid matches it the same way a tagged one does.
+   */
+  readonly country?: string;
+  readonly postalCode?: string;
 }
 
 export interface PlaceGroupQuery {
@@ -237,6 +301,23 @@ export type ImportHarvestDocumentInput = Wire.ImportHarvestDocumentDto;
  * mapping only means anything inside one chain, so there is no route that
  * answers "every source's shops" and no screen that could use one.
  */
+/**
+ * The discovery queue, narrowed (backend plan 0097, section 7).
+ *
+ * `postalCode` is a **prefix** match, which is how a person narrows a numeric
+ * code: `140` means Cordoba city rather than every code with a 140 in the
+ * middle of it.
+ *
+ * `dismissed` absent is the working set, which is the codes nobody has put
+ * aside. True lists the dismissed ones alone, so one can be found and undone.
+ */
+export interface PostalCodeQuery extends PageQuery {
+  readonly country?: string;
+  readonly status?: Wire.EnumsPostalCodeDiscoveryStatus;
+  readonly postalCode?: string;
+  readonly dismissed?: boolean;
+}
+
 export interface ShopQuery extends PageQuery {
   readonly supermarketId: string;
   readonly status?: Wire.EnumsSourceLocationStatus;

@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  DeploymentStore,
   ServerReachability,
   SESSION_SERVICE,
   SessionLifecycle,
@@ -58,6 +59,7 @@ async function render() {
       { provide: SESSION_SERVICE, useValue: service },
       SessionStorage,
       SessionStore,
+      DeploymentStore,
       SessionLifecycle,
     ],
   }).compileComponents();

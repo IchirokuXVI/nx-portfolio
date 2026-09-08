@@ -5,10 +5,8 @@ import {
   SIGN_IN_PATH,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { SignInPage } from '@portfolio/luna-shopper-admin/feature-auth';
-import { DashboardPage } from '@portfolio/luna-shopper-admin/feature-dashboard';
-import { harvestRoutes } from '@portfolio/luna-shopper-admin/feature-harvest';
 import { adminRoutes } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ADMIN_RESOURCES } from './resources';
+import { ADMIN_SECTIONS } from './sections';
 
 /**
  * The route table, served from this app's own origin.
@@ -55,17 +53,16 @@ export const appRoutes: Route[] = [
     // in and cannot tell the difference.
     path: '',
     canActivate: [requireSession],
-    // The resources, then the screens that are not resources (plan 0006), then
-    // the screen the empty path draws (admin plan 0016). The harvester's are
+    // One branch per section (admin plan 0022), each holding its resources, its
+    // hand written screens and the screen at its own path. The harvester's are
     // hand written because a run is a process and a review queue is a decision,
     // and neither is a row with a form; they still sit inside this branch, so
     // the session guard covers them and the chrome draws around them exactly as
     // it does around a list.
     //
-    // The third argument replaces the redirect to the first resource. `0004`
-    // refused a landing page in front of the thing an operator came to change,
-    // and that refusal was about an empty one: this page answers, on arrival,
-    // the questions six screens otherwise answer.
-    children: adminRoutes(ADMIN_RESOURCES, harvestRoutes(), DashboardPage),
+    // The overview is a section like the others: no segment, no screens, and a
+    // home at the empty path. `0004` refused a landing page in front of the
+    // thing an operator came to change, and that refusal was about an empty one.
+    children: adminRoutes(ADMIN_SECTIONS),
   },
 ];

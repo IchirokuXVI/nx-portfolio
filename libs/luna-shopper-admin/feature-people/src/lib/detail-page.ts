@@ -6,6 +6,7 @@ import {
   gatewayErrorKey,
   RESOURCE_DESCRIPTOR,
   RESOURCE_ID_PARAM,
+  ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { ResourceRow } from '@portfolio/luna-shopper-admin/models';
 
@@ -42,6 +43,7 @@ export abstract class DetailPage<T extends ResourceRow> {
   protected readonly route = inject(ActivatedRoute);
   protected readonly router = inject(Router);
   protected readonly translator = inject(RokuTranslatorService);
+  protected readonly registry = inject(ResourceRegistry);
 
   /** The resource this screen is for, from route `data`, as the list page reads it. */
   readonly descriptor = this.route.snapshot.data[RESOURCE_DESCRIPTOR];
@@ -84,7 +86,9 @@ export abstract class DetailPage<T extends ResourceRow> {
     } catch (error) {
       this.row.set(null);
       this.errorKey.set(
-        gatewayErrorKey(error instanceof GatewayError ? error : null)
+        error instanceof GatewayError
+          ? gatewayErrorKey(error)
+          : 'resource.error.unknown'
       );
     } finally {
       this.loading.set(false);
@@ -140,7 +144,9 @@ export abstract class DetailPage<T extends ResourceRow> {
     } catch (error) {
       this.asking.set(null);
       this.actionErrorKey.set(
-        gatewayErrorKey(error instanceof GatewayError ? error : null)
+        error instanceof GatewayError
+          ? gatewayErrorKey(error)
+          : 'resource.error.unknown'
       );
     } finally {
       this.busy.set(false);
@@ -150,6 +156,27 @@ export abstract class DetailPage<T extends ResourceRow> {
   /** Go somewhere else in the back office, by absolute path. */
   go(segments: readonly string[]): void {
     void this.router.navigate(segments);
+  }
+
+  /**
+   * Go to another resource's screen, naming the resource rather than its path.
+   *
+   * A path built by hand out of `descriptor.segment` was right until admin plan
+   * 0022 mounted every resource under a section, and is a link to the not found
+   * page after it. A segment says what a resource calls itself and says nothing
+   * about which section holds it, so the registry answers where it is: it is
+   * built from the same sections that declare the routes.
+   *
+   * A resource this app did not mount goes nowhere at all, which is what an
+   * unreachable screen deserves and is better than a navigation that lands on
+   * the not found page.
+   */
+  goToResource(name: string, ...rest: readonly string[]): void {
+    const path = this.registry.pathOf(name);
+
+    if (path !== null) {
+      void this.router.navigate([...path, ...rest]);
+    }
   }
 }
 

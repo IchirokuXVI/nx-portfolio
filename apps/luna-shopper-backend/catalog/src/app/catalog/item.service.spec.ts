@@ -1,10 +1,12 @@
 import {
   ItemCategory,
   UnitOfMeasure,
+  type CreateItemInput,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 // `Item` is a value here, not just a type: the audit double keys on the entity
@@ -310,5 +312,102 @@ describe('ItemService', () => {
     await expect(
       service.get({ userId: 'reader', itemId: 'missing' })
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // --- Several products in one transaction (plan 0100) ---------------------
+
+  describe('createMany', () => {
+    function milk(overrides: Partial<CreateItemInput> = {}): CreateItemInput {
+      return {
+        name: { es: 'Leche' },
+        category: ItemCategory.DAIRY,
+        defaultUnit: UnitOfMeasure.LITER,
+        ...overrides,
+      };
+    }
+
+    function batchItems() {
+      let next = 1;
+      return {
+        create: jest.fn((row) => row),
+        save: jest.fn(async (row) => ({ id: `i-${next++}`, ...row })),
+      } as unknown as Repository<Item>;
+    }
+
+    it('is gated to the platform admin, and writes nothing for anybody else', async () => {
+      const items = batchItems();
+      const { service } = build({ items });
+
+      await expect(
+        service.createMany({ userId: 'intruder', items: [milk()] })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(items.save).not.toHaveBeenCalled();
+    });
+
+    it('creates every product in one transaction, in the order asked for', async () => {
+      const items = batchItems();
+      const { service, audit } = build({ items });
+      // One transaction for the whole file, not one per product: forty calls
+      // would be forty transactions, so the thirty seventh failing would leave
+      // thirty six products nothing points at.
+      const opened = jest.spyOn(audit.service, 'write');
+
+      const result = await service.createMany({
+        userId: ADMIN,
+        items: [milk({ name: { es: 'Leche' } }), milk({ name: { es: 'Pan' } })],
+      });
+
+      expect(result.items.map((row) => row.name)).toEqual([
+        { es: 'Leche' },
+        { es: 'Pan' },
+      ]);
+      expect(opened).toHaveBeenCalledTimes(1);
+      expect(audit.recorded).toHaveLength(2);
+    });
+
+    it('announces the products it created straight into a group', async () => {
+      const items = batchItems();
+      const { service, events } = build({ items });
+
+      await service.createMany({
+        userId: ADMIN,
+        items: [milk({ productGroupId: 'g-1' }), milk()],
+      });
+
+      // Plan 0070: a household subscribed to Milk should get a milk the catalog
+      // has only just heard of, and no second write is coming that would say so.
+      expect(events.itemGroupChanged).toHaveBeenCalledTimes(1);
+      expect(events.itemGroupChanged).toHaveBeenCalledWith('i-1', null, 'g-1');
+    });
+
+    it('refuses an empty list and one over the cap, before it writes anything', async () => {
+      const items = batchItems();
+      const { service } = build({ items });
+
+      await expect(
+        service.createMany({ userId: ADMIN, items: [] })
+      ).rejects.toBeInstanceOf(ValidationException);
+
+      await expect(
+        service.createMany({
+          userId: ADMIN,
+          items: Array.from({ length: 1001 }, () => milk()),
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
+      expect(items.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses a list that names one EAN twice, naming the barcode', async () => {
+      const items = batchItems();
+      const { service } = build({ items });
+
+      await expect(
+        service.createMany({
+          userId: ADMIN,
+          items: [milk({ ean: '8480000123456' }), milk({ ean: '8480000123456' })],
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
+      expect(items.save).not.toHaveBeenCalled();
+    });
   });
 });

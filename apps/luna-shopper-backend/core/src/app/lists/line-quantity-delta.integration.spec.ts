@@ -41,6 +41,12 @@ import { ListAccessService } from './list-access.service';
  * **A batch that fails partway writes nothing at all** (section 6.1). All or
  * nothing is a property of the transaction, so the rollback is Postgres's to
  * perform and this is where it can be observed.
+ *
+ * **Two adds of one name produce one line** (plan 0091, section 3.2). The same
+ * argument as the delta, one table up: what is asserted is that the list row was
+ * locked, and a mock has no row and no lock. Without it both adds read a list
+ * that does not hold the name and both create, which is the duplicate the plan
+ * exists to prevent.
  */
 describeIntegration('the quantity delta and the batch (real Postgres)', () => {
   let dataSource: DataSource;
@@ -170,6 +176,84 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     return running;
   }
 
+  /**
+   * The same, on the **list** row, which is what an add holds (plan 0091).
+   *
+   * A separate helper rather than an argument to the one above, because the two
+   * lock different tables for different reasons: a delta locks the line it is
+   * about to write, and an add locks the list it is about to read, since the row
+   * it might write does not exist yet.
+   */
+  async function whileTheListIsHeld<T>(run: () => Promise<T>): Promise<T> {
+    const runner = dataSource.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction();
+    await runner.query(
+      'SELECT id FROM shopping_lists WHERE id = $1 FOR UPDATE',
+      [ids.list]
+    );
+
+    const running = run();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await runner.commitTransaction();
+    await runner.release();
+    return running;
+  }
+
+  it('makes one line out of two concurrent adds of one name', async () => {
+    const results = await whileTheListIsHeld(() =>
+      Promise.all([
+        lines.add({
+          userId: ids.owner,
+          listId: ids.list,
+          content: 'Milk',
+          quantity: 1,
+        }),
+        lines.add({
+          userId: ids.owner,
+          listId: ids.list,
+          content: 'milk',
+          quantity: 2,
+        }),
+      ])
+    );
+
+    // One row at three, whichever of the two got there first. Without the lock
+    // both read a list holding no milk and both create, and the household ends
+    // up with two Milks for one thing they buy.
+    const stored = await dataSource
+      .getRepository(ListLine)
+      .find({ where: { listId: ids.list } });
+    expect(stored).toHaveLength(1);
+    expect(stored[0].quantity).toBe(3);
+    // One of them created and the other raised, and the answer says which.
+    expect(results.filter((result) => result.merged)).toHaveLength(1);
+    expect(results[0].line.id).toBe(results[1].line.id);
+  });
+
+  it('raises the line an earlier batch created rather than adding beside it', async () => {
+    await lines.addMany({
+      userId: ids.owner,
+      listId: ids.list,
+      items: [{ content: 'Jamón', quantity: 1 }],
+    });
+
+    const result = await lines.add({
+      userId: ids.owner,
+      listId: ids.list,
+      content: 'jamon',
+      quantity: 2,
+    });
+
+    expect(result.merged).toBe(true);
+    expect(result.line.quantity).toBe(3);
+    expect(
+      await dataSource
+        .getRepository(ListLine)
+        .count({ where: { listId: ids.list } })
+    ).toBe(1);
+  });
+
   it('lands both of two concurrent additions to one line', async () => {
     const line = await seedLine(1);
 
@@ -214,13 +298,13 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
       content: `item ${index}`,
     }));
 
-    const views = await lines.addMany({
+    const results = await lines.addMany({
       userId: ids.owner,
       listId: ids.list,
       items,
     });
 
-    expect(views.map((view) => view.content)).toEqual(
+    expect(results.map((result) => result.line.content)).toEqual(
       items.map((item) => item.content)
     );
     const stored = await dataSource
@@ -235,10 +319,12 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
   });
 
   it('writes nothing at all when one item of a batch is refused', async () => {
-    // The refusal comes from inside the transaction, on the fifth item, which is
-    // the case a per item result array would have had to describe. It cannot
-    // arise through the gateway, where every item is validated at the edge, and
-    // that is exactly why the response is all or nothing (section 6.1).
+    // The fifth item is refused, which is the case a per item result array would
+    // have had to describe. It cannot arise through the gateway, where every item
+    // is validated at the edge, and that is exactly why the response is all or
+    // nothing (section 6.1). The quantities are checked before the transaction
+    // opens since plan 0091, so this now proves the earlier of two guarantees:
+    // nothing was written, rather than everything written was rolled back.
     await expect(
       lines.addMany({
         userId: ids.owner,

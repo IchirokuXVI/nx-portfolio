@@ -303,7 +303,7 @@ services:
   # Those belong in each service's own apps/luna-shopper-backend/<svc>/.env, not
   # the shared file: the SDK starts before Nest and reads process.env, and Nx
   # loads a project's own .env while nothing loads the shared one. luna-slot.sh
-  # and luna-slot.ps1 write them there for you, on this slot's ports.
+  # writes them there for you, on this slot's ports.
   #
   # Being able to watch a trace cross the broker on a laptop is most of this
   # plan's practical value: it turns "the list page feels slow" into a picture

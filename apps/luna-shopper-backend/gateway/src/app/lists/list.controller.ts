@@ -29,6 +29,7 @@ import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
+  type AddLineResult,
   type CommentAudioView,
   type CommentPage,
   type CommentView,
@@ -289,8 +290,8 @@ export class ListsController {
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Body() dto: AddLineDto
-  ): Promise<LineView> {
-    return this.nats.send<LineView>(LINE_PATTERNS.add, {
+  ): Promise<AddLineResult> {
+    return this.nats.send<AddLineResult>(LINE_PATTERNS.add, {
       userId: user.userId,
       listId: id,
       content: dto.content,
@@ -320,8 +321,8 @@ export class ListsController {
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Body() dto: AddLinesDto
-  ): Promise<LineView[]> {
-    return this.nats.send<LineView[]>(LINE_PATTERNS.addMany, {
+  ): Promise<AddLineResult[]> {
+    return this.nats.send<AddLineResult[]>(LINE_PATTERNS.addMany, {
       userId: user.userId,
       listId: id,
       items: dto.items,

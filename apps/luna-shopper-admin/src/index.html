@@ -10,7 +10,14 @@
     <title>Luna Shopper admin</title>
     <base href="/" />
     <meta content="width=device-width, initial-scale=1" name="viewport" />
-    <link href="favicon.ico" rel="icon" type="image/x-icon" />
+    <!--
+      Two icons for one mark, both generated from `public/favicon.svg`. A browser
+      that understands an SVG icon takes the vector and scales it to whatever the
+      tab strip asks for; every other one falls back to the `.ico`, which carries
+      16, 32 and 48 pixel bitmaps of the same drawing.
+    -->
+    <link href="favicon.ico" rel="icon" sizes="16x16 32x32 48x48" />
+    <link href="favicon.svg" rel="icon" type="image/svg+xml" />
     <!--
       No manifest and no apple touch icon, unlike velista's document. This app is
       not installable and has no service worker (plan 0001, section 4).

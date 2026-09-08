@@ -2,10 +2,8 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
   BasketAddLineRequest,
-  BasketBindResult,
   BasketLine,
   BasketLineOrigins,
-  BasketLineTarget,
   BasketLinkPreview,
   BasketOriginQuantityRequest,
   BasketOriginQuantityResult,
@@ -15,6 +13,8 @@ import type {
   BasketSettleRequest,
   BasketSettleResult,
   BasketShareLink,
+  BasketSplitRequest,
+  BasketSplitResult,
   BasketView,
   CatalogSuggestion,
 } from '@portfolio/velista/models';
@@ -22,16 +22,15 @@ import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { anonymous, operation } from '../auth/http-context';
 import {
-  toBasketBindResult,
   toBasketLine,
   toBasketLineOrigins,
-  toBasketLineTarget,
   toBasketLinkPreview,
   toBasketOriginQuantityResult,
   toBasketParticipant,
   toBasketSession,
   toBasketSettleResult,
   toBasketShareLink,
+  toBasketSplitResult,
   toBasketView,
 } from '../mapping/basket-mappers';
 import { toCatalogSuggestion } from '../mapping/mappers';
@@ -211,16 +210,32 @@ export class BasketApi implements BasketServiceI {
     return required(toBasketLineOrigins(body), 'basket.origins');
   }
 
-  /** Set what one list contributes to this line (velista `0055`). */
+  /**
+   * Set what one list contributes to this line (velista `0055`).
+   *
+   * The zone line is **omitted rather than sent undefined** when there is none,
+   * which is `addLine`'s rule and matters for the same reason: the gateway validates
+   * `lineId` as a uuid, so a key present and empty is a refusal where an absent one
+   * is the create branch that raising a list with no such line depends on.
+   */
   async setOriginQuantity(
     generatedListId: string,
     lineId: string,
     body: BasketOriginQuantityRequest
   ): Promise<BasketOriginQuantityResult> {
+    const request: Record<string, unknown> = {
+      listId: body.listId,
+      quantity: body.quantity,
+      from: body.from,
+    };
+    if (body.lineId !== undefined) {
+      request['lineId'] = body.lineId;
+    }
+
     const answer = await firstValueFrom(
       this._http.post<unknown>(
         `${this._line(generatedListId, lineId)}/origins`,
-        body,
+        request,
         this._participantOptions(generatedListId, 'basket.setOriginQuantity')
       )
     );
@@ -231,58 +246,36 @@ export class BasketApi implements BasketServiceI {
     );
   }
 
-  /** The lists this line could be sent to (velista `0056`). */
-  async getLineTargets(
-    generatedListId: string,
-    lineId: string
-  ): Promise<readonly BasketLineTarget[]> {
-    const body = await firstValueFrom(
-      this._http.get<unknown>(
-        `${this._line(generatedListId, lineId)}/targets`,
-        this._participantOptions(generatedListId, 'basket.targets')
-      )
-    );
-
-    return isRecord(body) ? mapArray(body['targets'], toBasketLineTarget) : [];
-  }
-
   /**
-   * Send this line to a shopping list (velista `0056`).
+   * Give units of a line to other products, which splits the line.
    *
-   * The path is `target` and the read beside it is `targets`, which is the ordinary
-   * singular and plural rather than a typo: one is the list of candidates and the
-   * other is the one that was chosen.
+   * `…/products` and not `…/pick`, which this replaces: moving every outstanding
+   * unit to one other product is this write with one share, and two routes would
+   * be two rules about which product a settlement records.
+   *
+   * The shares are copied rather than passed through, because the caller's array
+   * is a signal's value on a live pane and this request is asynchronous.
    */
-  async bindLine(
+  async splitLine(
     generatedListId: string,
     lineId: string,
-    listId: string
-  ): Promise<BasketBindResult> {
+    body: BasketSplitRequest
+  ): Promise<BasketSplitResult> {
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/target`,
-        { listId },
-        this._participantOptions(generatedListId, 'basket.bindLine')
+        `${this._line(generatedListId, lineId)}/products`,
+        {
+          from: body.from,
+          shares: body.shares.map((share) => ({
+            itemId: share.itemId,
+            quantity: share.quantity,
+          })),
+        },
+        this._participantOptions(generatedListId, 'basket.splitLine')
       )
     );
 
-    return required(toBasketBindResult(answer), 'basket.bindLine');
-  }
-
-  async setPick(
-    generatedListId: string,
-    lineId: string,
-    itemId: string
-  ): Promise<BasketLine> {
-    const body = await firstValueFrom(
-      this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/pick`,
-        { itemId },
-        this._participantOptions(generatedListId, 'basket.setPick')
-      )
-    );
-
-    return required(toBasketLine(body), 'basket.setPick');
+    return required(toBasketSplitResult(answer), 'basket.splitLine');
   }
 
   /**

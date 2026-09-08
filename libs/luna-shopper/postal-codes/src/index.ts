@@ -25,6 +25,12 @@ export {
   containsPoint,
 } from './lib/bounding-box';
 export {
+  DEFAULT_NEARBY_RADIUS_METRES,
+  DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
+  POSTAL_CODE_DERIVE_MAX_METRES_VAR,
+  postalCodeDeriveMaxMetres,
+} from './lib/distances';
+export {
   COORDINATE_DECIMALS,
   decodeDataset,
   parseGeoNamesExport,

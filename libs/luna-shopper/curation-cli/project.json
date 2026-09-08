@@ -1,0 +1,24 @@
+{
+  "name": "luna-shopper/curation-cli",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/curation-cli/src",
+  "projectType": "library",
+  "tags": [],
+  "//": "The deciders are spawned as child processes by path, so Nx cannot see them; a change to one has to mark this project affected. Both are listed, so a third implementation added to decider.mjs belongs here too.",
+  "implicitDependencies": [
+    "luna-shopper/curation-suggestions",
+    "luna-shopper/curation-groups"
+  ],
+  "targets": {
+    "test": {
+      "//": "Plain ESM with zero npm dependencies, so the tests are Node's own runner rather than jest. The glob is quoted because Node expands it itself; a shell that expanded it first would answer a different set of files on Windows than on Linux.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --test \"libs/luna-shopper/curation-cli/src/**/*.test.mjs\""
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

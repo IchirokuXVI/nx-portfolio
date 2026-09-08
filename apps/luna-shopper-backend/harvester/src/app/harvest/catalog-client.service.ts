@@ -4,6 +4,7 @@ import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
+  POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PriceSourceKind,
   SUPERMARKET_ITEM_PATTERNS,
@@ -11,7 +12,9 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AddItemPriceBatchResult,
+  type CreateItemInput,
   type CreateItemRequest,
+  type CreateItemsResult,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
   type DeleteItemPricesByRunResult,
@@ -20,6 +23,8 @@ import {
   type ItemPriceBatchEntry,
   type ItemView,
   type LocalizedText,
+  type NearbyPostalCodesView,
+  type NearestPostalCodeView,
   type PostalCodeLocationCountsView,
   type PriceScopeKind,
   type PriceScopePage,
@@ -161,6 +166,57 @@ export class CatalogClient {
   }
 
   /**
+   * Which postal code a point is in, if any centroid is close enough (plan
+   * 0097, section 3).
+   *
+   * Plan 0061 solved this once, for `SupermarketLocation`, and stopped at the
+   * service boundary: nothing in the harvester called it. A discovered place
+   * carries whatever `addr:postcode` OpenStreetMap had, which is about a third
+   * of them, so the count of places **located in** a code would otherwise miss
+   * two thirds of them silently.
+   *
+   * One call per untagged place, sequential, inside a run that already spends
+   * minutes on two rate limited HTTP requests. A batched subject for it would be
+   * a second contract to keep in step for no measured gain.
+   *
+   * Like the count above it, this carries no actor: it is a geography question
+   * over a shipped table and it names nobody.
+   */
+  resolveNearestPostalCode(
+    country: string,
+    latitude: number,
+    longitude: number,
+    maxDistanceMetres: number
+  ): Promise<NearestPostalCodeView> {
+    return this.send(POSTAL_CODE_PATTERNS.nearest, {
+      country,
+      latitude,
+      longitude,
+      maxDistanceMetres,
+    });
+  }
+
+  /**
+   * The neighbours of one code, and **whether we hold the code at all**.
+   *
+   * The harvester asks it for `known` rather than for the neighbours: adding a
+   * postal code by hand refuses a code catalog does not have, because the
+   * centroid table is the whole national list and a code missing from it is a
+   * typo (plan 0097, section 6.1).
+   */
+  nearbyPostalCodes(
+    country: string,
+    postalCode: string,
+    radiusMetres: number
+  ): Promise<NearbyPostalCodesView> {
+    return this.send(POSTAL_CODE_PATTERNS.nearby, {
+      country,
+      postalCode,
+      radiusMetres,
+    });
+  }
+
+  /**
    * A chain's shops. The default name match of plan 0084, section 6 compares a
    * source's printed shop name against these labels and addresses, and
    * `sourceLocation.map` checks that the location a person picked really belongs
@@ -236,6 +292,31 @@ export class CatalogClient {
 
   createItem(input: Omit<CreateItemRequest, 'userId'>): Promise<ItemView> {
     return this.send(ITEM_PATTERNS.create, { userId: this.actor(), ...input });
+  }
+
+  /**
+   * Several products in one catalog transaction (plan 0100).
+   *
+   * The step a bulk decisions file needs: forty products are created or none
+   * are, because the binds that follow name every one of them. The answer holds
+   * one view per input, in the order they were sent.
+   */
+  createItems(items: CreateItemInput[]): Promise<CreateItemsResult> {
+    return this.send(ITEM_PATTERNS.createMany, {
+      userId: this.actor(),
+      items,
+    });
+  }
+
+  /**
+   * Delete a product, for the one caller that has to undo its own creation.
+   *
+   * A bulk decisions file whose binds fail after its products were created
+   * leaves those products bound by nothing, and the harvester is the only thing
+   * that knows they are orphans.
+   */
+  deleteItem(itemId: string): Promise<{ id: string }> {
+    return this.send(ITEM_PATTERNS.delete, { userId: this.actor(), itemId });
   }
 
   /**

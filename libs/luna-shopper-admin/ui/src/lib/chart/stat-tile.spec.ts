@@ -97,6 +97,32 @@ describe('StatTile', () => {
     expect(one(linked, '.chevron')).not.toBeNull();
   });
 
+  /**
+   * Admin plan 0024, section 2. The caption used to be a sibling paragraph in a
+   * wrapper around the tile, so the tile's box ended above its neighbour's; it
+   * is inside the box now, and the wrappers are gone.
+   */
+  it('draws the caption inside the tile only when it is given one', async () => {
+    const plain = await render({ value: 5 });
+    expect(one(plain, '.note')).toBeNull();
+
+    const captioned = await render({ value: 5, caption: '3 failed' });
+    expect(one(captioned, '.tile .note')?.textContent?.trim()).toBe('3 failed');
+  });
+
+  /** The whole reason the `.wrap` anchor around the tile existed, taken over. */
+  it('carries query parameters on its own anchor', async () => {
+    const fixture = await render({
+      value: 5,
+      link: ['/harvest', 'entries'],
+      queryParams: { supermarketId: 'chain-7' },
+    });
+
+    expect(one(fixture, 'a.tile')?.getAttribute('href')).toBe(
+      '/harvest/entries?supermarketId=chain-7'
+    );
+  });
+
   it('wears the attention wash only when it is asked to', async () => {
     const quiet = await render({ value: 0 });
     expect(one(quiet, '.tile')?.classList.contains('attention')).toBe(false);

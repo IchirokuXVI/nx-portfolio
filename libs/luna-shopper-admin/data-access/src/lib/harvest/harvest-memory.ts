@@ -4,6 +4,7 @@ import { GatewayError } from '../gateway-error';
 import {
   DISCOVERED_PLACE_SEED,
   HARVEST_RUN_SEED,
+  POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
   SUPERMARKET_SOURCE_SEED,
@@ -17,6 +18,7 @@ import type {
   PageQuery,
   PlaceGroupQuery,
   PlaceQuery,
+  PostalCodeQuery,
   RunQuery,
   ShopQuery,
   SourceEntryAcceptResult,
@@ -55,6 +57,8 @@ export class HarvestMemory implements HarvestServiceI {
   );
   private readonly _shops: Wire.HarvestSourceLocationView[] =
     clone(SOURCE_LOCATION_SEED);
+  private readonly _postalCodes: Wire.HarvestPostalCodeDiscoveryRequestView[] =
+    clone(POSTAL_CODE_DISCOVERY_SEED);
 
   private _nextId = 1;
 
@@ -205,7 +209,10 @@ export class HarvestMemory implements HarvestServiceI {
       (place) =>
         (query.runId === undefined || place.runId === query.runId) &&
         (query.brandKey === undefined || place.brandKey === query.brandKey) &&
-        (query.status === undefined || place.status === query.status)
+        (query.status === undefined || place.status === query.status) &&
+        (query.country === undefined || place.country === query.country) &&
+        (query.postalCode === undefined ||
+          place.postalCode === query.postalCode)
     );
 
     return page(matching, query);
@@ -542,6 +549,136 @@ export class HarvestMemory implements HarvestServiceI {
     return { ...shop };
   }
 
+  /**
+   * The queue, narrowed the three ways the route narrows it.
+   *
+   * `postalCode` is a prefix rather than an equality, because that is what the
+   * route does and a screen tested against an equality here would look right and
+   * be wrong against the real one.
+   */
+  async listPostalCodes(
+    query: PostalCodeQuery
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestPage> {
+    const wanted = query.dismissed === true;
+    const rows = this._postalCodes.filter(
+      (row) =>
+        row.dismissed === wanted &&
+        (query.country === undefined || row.country === query.country) &&
+        (query.status === undefined || row.status === query.status) &&
+        (query.postalCode === undefined ||
+          row.postalCode.startsWith(query.postalCode))
+    );
+
+    return page(rows, query);
+  }
+
+  /**
+   * The queue at a glance.
+   *
+   * `draining` is **true** here, because the in-memory service is what a
+   * developer with nothing listening sees and a permanent "nothing drains this"
+   * banner over a working screen would be a lie about the seed. The banner's own
+   * spec supplies a false one rather than reading it from here.
+   */
+  async postalCodeSummary(): Promise<Wire.HarvestPostalCodeDiscoverySummaryView> {
+    const working = this._postalCodes.filter((row) => !row.dismissed);
+    const count = (status: Wire.EnumsPostalCodeDiscoveryStatus): number =>
+      working.filter((row) => row.status === status).length;
+
+    const queued = working
+      .filter((row) => row.status === 'QUEUED')
+      .map((row) => row.requestedAt)
+      .sort();
+
+    return {
+      queued: queued.length,
+      running: count('RUNNING'),
+      done: count('DONE'),
+      failed: count('FAILED'),
+      parked: count('PARKED'),
+      oldestQueuedAt: queued[0] ?? null,
+      draining: true,
+    };
+  }
+
+  /**
+   * Add one code.
+   *
+   * The refusal is modelled as well as the write, because it is the common
+   * answer rather than an edge: a code catalog does not hold is a typo, and the
+   * screen names it per code. Anything that is not five digits stands in for
+   * that here, since this fake holds no centroid table to check against.
+   */
+  async addPostalCode(
+    input: Wire.AddPostalCodeDiscoveryDto
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestView> {
+    if (!/^\d{5}$/.test(input.postalCode)) {
+      throw new GatewayError({
+        code: 'postal_code_unknown',
+        status: 400,
+        correlationId: '',
+      });
+    }
+
+    const existing = this._postalCodes.find(
+      (row) =>
+        row.country === input.country && row.postalCode === input.postalCode
+    );
+    if (existing !== undefined) {
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: '',
+      });
+    }
+
+    const row: Wire.HarvestPostalCodeDiscoveryRequestView = {
+      id: `postal-${input.postalCode}`,
+      country: input.country,
+      postalCode: input.postalCode,
+      status: input.discoverNow ? 'QUEUED' : 'PARKED',
+      requestedAt: new Date().toISOString(),
+      lastAttemptedAt: null,
+      discoveredAt: null,
+      nextAttemptAt: null,
+      attempts: 0,
+      runId: null,
+      error: null,
+      placeName: null,
+      dismissed: false,
+      foundByItsRuns: { total: 0, imported: 0, rejected: 0, undecided: 0 },
+      locatedInIt: { total: 0, imported: 0, rejected: 0, undecided: 0 },
+    };
+    this._postalCodes.unshift(row);
+    return { ...row };
+  }
+
+  /**
+   * Queue it again, past the cooldown, and take back a dismissal.
+   *
+   * Refused on a `RUNNING` row the way the real one is, so the screen's conflict
+   * branch is reachable with nothing listening.
+   */
+  async requeuePostalCode(
+    id: string
+  ): Promise<Wire.HarvestPostalCodeDiscoveryRequestView> {
+    const row = this._postalCode(id);
+    if (row.status === 'RUNNING') {
+      throw new GatewayError({
+        code: 'run_in_progress',
+        status: 409,
+        correlationId: '',
+      });
+    }
+
+    row.status = 'QUEUED';
+    row.attempts = 0;
+    row.nextAttemptAt = null;
+    row.error = null;
+    row.dismissed = false;
+    return { ...row };
+  }
+
   async listSources(
     query: PageQuery
   ): Promise<Wire.HarvestSupermarketSourcePage> {
@@ -665,6 +802,14 @@ export class HarvestMemory implements HarvestServiceI {
     entry.matchedBy = 'MANUAL';
     entry.confidence = 1;
     entry.decidedAt = new Date().toISOString();
+  }
+
+  private _postalCode(id: string): Wire.HarvestPostalCodeDiscoveryRequestView {
+    const row = this._postalCodes.find((candidate) => candidate.id === id);
+    if (row === undefined) {
+      throw notFound();
+    }
+    return row;
   }
 
   private _shop(id: string): Wire.HarvestSourceLocationView {

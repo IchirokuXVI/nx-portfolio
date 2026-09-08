@@ -5,6 +5,8 @@ import {
   type AdminMe,
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
+import { DEPLOYMENT_SERVICE } from '../deployment/deployment-service';
+import { DeploymentStore } from '../deployment/deployment-store';
 import { GatewayError } from '../gateway-error';
 import { ServerReachability } from '../health/server-reachability';
 import { SessionLifecycle } from './session-lifecycle';
@@ -54,11 +56,26 @@ function issue(): AdminSession {
 }
 
 /** What the server did, per test. */
-const control = { refreshes: 0, refreshFails: false };
+const control = {
+  refreshes: 0,
+  refreshFails: false,
+  devSignIns: 0,
+  devSignInFails: false,
+};
 
 const service: SessionServiceI = {
   signIn: async () => issue(),
-  signInForDevelopment: async () => issue(),
+  signInForDevelopment: async () => {
+    control.devSignIns += 1;
+    if (control.devSignInFails) {
+      throw new GatewayError({
+        code: 'not_configured',
+        status: 501,
+        correlationId: 'cid',
+      });
+    }
+    return issue();
+  },
   refresh: async () => {
     control.refreshes += 1;
     if (control.refreshFails) {
@@ -124,6 +141,8 @@ describe('SessionLifecycle', () => {
     localStorage.clear();
     control.refreshes = 0;
     control.refreshFails = false;
+    control.devSignIns = 0;
+    control.devSignInFails = false;
     setVisibility('visible');
 
     TestBed.configureTestingModule({
@@ -132,6 +151,7 @@ describe('SessionLifecycle', () => {
         { provide: SESSION_SERVICE, useValue: service },
         SessionStorage,
         SessionStore,
+        DeploymentStore,
         SessionLifecycle,
       ],
     });
@@ -562,6 +582,121 @@ describe('SessionLifecycle', () => {
   });
 
   /**
+   * A server that asks for no password (plan 0002, section 5).
+   *
+   * The overlay is a way to get a password from somebody. Where there is no
+   * password it protects nothing, because anybody looking at the screen can
+   * have a token by reloading, so an expired session is replaced rather than
+   * covered and the operator sees no screen at all.
+   *
+   * Its own TestBed, because the fact comes from the environment read and the
+   * store answers `false` for every way of not having been told, which is what
+   * every other test in this file is asserting against.
+   */
+  describe('on a server that signs in without a password', () => {
+    let passwordless: SessionLifecycle;
+    let store: SessionStore;
+
+    beforeEach(async () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          ServerReachability,
+          { provide: SESSION_SERVICE, useValue: service },
+          {
+            provide: DEPLOYMENT_SERVICE,
+            useValue: {
+              read: async () => ({
+                deployment: 'development',
+                devAutologin: true,
+              }),
+            },
+          },
+          SessionStorage,
+          SessionStore,
+          DeploymentStore,
+          SessionLifecycle,
+        ],
+      });
+
+      store = TestBed.inject(SessionStore);
+      passwordless = TestBed.inject(SessionLifecycle);
+
+      // The read has to have settled before the token dies, exactly as it has
+      // in the app: the bootstrap awaits it before anything renders.
+      await TestBed.inject(DeploymentStore).load();
+      await store.signIn('ops', 'ops');
+      await drain();
+      passwordless.start();
+    });
+
+    afterEach(() => passwordless.stop());
+
+    it('replaces the expired token instead of covering the screen', async () => {
+      const before = store.token();
+
+      await advance(LIFETIME);
+
+      expect(passwordless.locked()).toBe(false);
+      expect(control.devSignIns).toBe(1);
+      expect(store.signedIn()).toBe(true);
+      expect(store.token()).not.toBe(before);
+    });
+
+    /**
+     * The sentence says the session is about to end and that anything the
+     * operator does keeps it. Neither half is true here.
+     */
+    it('never warns that the session is about to end', async () => {
+      await advance(WARN_AT);
+
+      expect(passwordless.warning()).toBe(false);
+      expect(passwordless.locked()).toBe(false);
+    });
+
+    /** Section 6: the queued request is released, and nothing was drawn. */
+    it('releases a request that 401d, with no overlay', async () => {
+      control.refreshFails = true;
+
+      const held = passwordless.recover();
+      await drain();
+
+      await expect(held).resolves.toBe(true);
+      expect(passwordless.locked()).toBe(false);
+      expect(control.devSignIns).toBe(1);
+    });
+
+    /** One dead token, one sign in, however many requests failed on it. */
+    it('replaces the token once for several failed requests', async () => {
+      control.refreshFails = true;
+
+      const held = [
+        passwordless.recover(),
+        passwordless.recover(),
+        passwordless.recover(),
+      ];
+      await drain();
+
+      await expect(Promise.all(held)).resolves.toEqual([true, true, true]);
+      expect(control.devSignIns).toBe(1);
+    });
+
+    /**
+     * The server changed its mind between two calls. The overlay is the only
+     * thing that can say so, and it must still know who it is asking about:
+     * the refusal clears the held session on its way out.
+     */
+    it('falls back to the overlay when the replacement is refused', async () => {
+      control.devSignInFails = true;
+
+      await advance(LIFETIME);
+
+      expect(passwordless.locked()).toBe(true);
+      expect(passwordless.lockedUsername()).toBe('ops');
+    });
+  });
+
+  /**
    * The policy is a token so a spec can drive the whole keepalive in
    * milliseconds and the app can change its mind in one line.
    */
@@ -579,6 +714,7 @@ describe('SessionLifecycle', () => {
         },
         SessionStorage,
         SessionStore,
+        DeploymentStore,
         SessionLifecycle,
       ],
     });

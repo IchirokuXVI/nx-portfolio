@@ -35,6 +35,7 @@ import { ShopsQueuePage } from './shops-queue-page';
  */
 
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const CARREFOUR = '22222222-2222-4222-8222-222222222222';
 
 const drain = async () => {
   for (let i = 0; i < 12; i++) {
@@ -210,6 +211,42 @@ describe('the source shops queue', () => {
     expect(automatic?.matchedBy).toBe('NAME_SIZE');
     expect(byHand?.matchedBy).toBe('MANUAL');
     expect(automatic?.mappedTo).toContain('Gran Capitán');
+  });
+
+  /**
+   * A read that answered is not a failure, whatever it answered.
+   *
+   * `gatewayErrorKey` used to name the unknown failure for no failure at all,
+   * and this screen guards the banner on truthiness, so every chain drew "That
+   * did not work, and the server did not say why" over its own rows. It was
+   * loudest on a chain with no shops in the chosen state, where the banner and
+   * the empty sentence appeared together and contradicted each other.
+   */
+  it('says nothing went wrong when nothing went wrong', async () => {
+    const { page, fixture } = await opened();
+
+    expect(page.errorKey()).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'resource.error.unknown'
+    );
+  });
+
+  it('draws the empty state alone when the chain has no shop in that state', async () => {
+    const { page, fixture } = await render();
+
+    // Carrefour's one seeded row is `UNMAPPED`, so asking for its ignored ones
+    // is a read that answers nothing rather than a read that went wrong.
+    page.chooseChain(CARREFOUR);
+    await drain();
+    page.chooseStatus({ target: { value: 'IGNORED' } } as unknown as Event);
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.errorKey()).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('harvest.shops.empty');
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'resource.error.unknown'
+    );
   });
 });
 
@@ -410,5 +447,230 @@ describe('the locations picker', () => {
     });
 
     expect(seen[0].filters).toEqual({ supermarketId: MERCADONA });
+  });
+});
+
+/**
+ * Plan 0020. The screen that already was a list gains the review view, the
+ * checkbox and the bulk runner, and stops showing a hundred rows of a chain
+ * that has more.
+ */
+describe('the source shops queue as a list and one at a time', () => {
+  const listOf = (fixture: ComponentFixture<ShopsQueuePage>): Element[] => [
+    ...fixture.nativeElement.querySelectorAll('.rows li'),
+  ];
+
+  it('opens as a list, which is the view it has always had', async () => {
+    const { fixture } = await opened();
+
+    expect(listOf(fixture).length).toBeGreaterThan(0);
+    expect(fixture.nativeElement.querySelector('.subject')).toBeNull();
+  });
+
+  it('draws a checkbox and the columns it already had on every row', async () => {
+    const { fixture } = await opened();
+    const [first] = listOf(fixture);
+
+    expect(first.querySelector('input[type="checkbox"]')).not.toBeNull();
+    expect(first.textContent).toContain('T1');
+    expect(first.textContent).toContain('Ronda del Marrubial');
+    // The match rule is a column and not a detail: a row the automatic match
+    // bound and a row a person bound differ in nothing else.
+    expect(first.textContent).toContain('harvest.match.NAME_SIZE');
+  });
+
+  it('opens a clicked row one at a time, with that row in front', async () => {
+    const { fixture, page } = await opened();
+    const second = page.rows()[1];
+
+    listOf(fixture)[1].querySelector<HTMLButtonElement>('.cells')?.click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.current()?.id).toBe(second.id);
+    expect(fixture.nativeElement.querySelector('.subject')).not.toBeNull();
+  });
+
+  /**
+   * Section 4: a bulk action is offered only where the row already carries
+   * everything the call needs. Mapping needs a location the operator picks for
+   * that particular row, so it is not one of them and stays in the review view.
+   */
+  it('offers exactly ignore, stop ignoring and unmap over a selection', async () => {
+    const { fixture, page } = await opened();
+
+    page.queue?.selectLoaded();
+    fixture.detectChanges();
+
+    const labels = [
+      ...fixture.nativeElement.querySelectorAll('.bulk button'),
+    ].map((node: Element) => node.textContent?.trim());
+
+    expect(labels).toEqual([
+      'harvest.shops.action.ignore',
+      'harvest.shops.action.unignore',
+      'harvest.shops.action.unmap',
+    ]);
+  });
+
+  it('names the action and the exact count before it runs', async () => {
+    const { fixture, page } = await opened();
+
+    page.queue?.selectLoaded();
+    page.askIgnore();
+    fixture.detectChanges();
+
+    const dialog = dialogOf(fixture);
+    expect(dialog.headingKey()).toBe(
+      'harvest.shops.bulk.ignoreConfirm.heading'
+    );
+    expect(dialog.bodyArgs()).toEqual({
+      count: page.rows().length,
+      leftAlone: 0,
+    });
+  });
+
+  it('writes nothing until the confirmation is answered', async () => {
+    const { fixture, page, calls } = await opened();
+
+    page.queue?.selectLoaded();
+    page.askIgnore();
+    fixture.detectChanges();
+    await drain();
+
+    expect(named(calls, 'ignoreShop')).toHaveLength(0);
+  });
+
+  it('ignores every selected row and takes them out of the default filter', async () => {
+    const { fixture, page, calls } = await opened();
+
+    page.queue?.selectLoaded();
+    const wanted = page.rows().map((row) => row.id);
+    page.askIgnore();
+    page.go(page.pending()!);
+    await drain();
+    fixture.detectChanges();
+
+    expect(
+      named(calls, 'ignoreShop')
+        .map((args) => args[0])
+        .sort()
+    ).toEqual([...wanted].sort());
+    expect(page.rows()).toEqual([]);
+    expect(page.report()?.succeeded).toBe(wanted.length);
+    expect(page.report()?.failed).toEqual([]);
+  });
+
+  /**
+   * The selection is allowed to hold rows an action cannot be applied to, and
+   * those are never attempted rather than attempted and refused.
+   */
+  it('leaves a row that is already ignored alone, and says so by name', async () => {
+    const { fixture, page, calls } = await opened();
+
+    page.chooseStatus({ target: { value: '' } } as unknown as Event);
+    await drain();
+    fixture.detectChanges();
+
+    page.queue?.selectLoaded();
+    page.askUnignore();
+    page.go(page.pending()!);
+    await drain();
+
+    const report = page.report();
+    expect(named(calls, 'unignoreShop')).toHaveLength(1);
+    expect(report?.skipped.map((line) => line.name)).toContain(
+      'Ronda del Marrubial'
+    );
+    expect(report?.failed).toEqual([]);
+  });
+});
+
+/**
+ * Section 1.1. The screen used to read one page of a hundred and never look at
+ * the cursor, so a chain with more than a hundred source locations showed a
+ * hundred of them with nothing on the screen saying so.
+ */
+describe('a chain with more shops than one page', () => {
+  const MANY = 150;
+
+  function paged(): HarvestServiceI {
+    const shops = Array.from({ length: MANY }, (_, at) => ({
+      id: `shop-${at}`,
+      supermarketId: MERCADONA,
+      externalId: `T${at}`,
+      printedName: `Shop ${at}`,
+      supermarketLocationId: null,
+      status: 'UNMAPPED' as const,
+      matchedBy: 'NAME_SIZE' as const,
+      firstSeenAt: '2026-08-28T08:00:00.000Z',
+      lastSeenAt: '2026-08-30T08:00:00.000Z',
+      firstRunId: null,
+      lastRunId: null,
+    }));
+
+    return {
+      listShops: async (query: { cursor?: string; limit?: number }) => {
+        const from = Number(query.cursor ?? '0');
+        const next = from + (query.limit ?? 25);
+        return {
+          items: shops.slice(from, next),
+          nextCursor: next < shops.length ? String(next) : null,
+        };
+      },
+    } as unknown as HarvestServiceI;
+  }
+
+  async function many() {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ShopsQueuePage, RokuTranslatorTestingModule.forTesting()],
+      providers: [
+        ServerReachability,
+        provideRouter([]),
+        provideLocationMocks(),
+        provideResources(SUPERMARKETS, LOCATIONS),
+        { provide: HARVEST_SERVICE, useValue: paged() },
+        {
+          provide: DEPLOYMENT_SERVICE,
+          useValue: {
+            read: async () => ({
+              deployment: 'development',
+              devAutologin: false,
+            }),
+          },
+        },
+        DeploymentStore,
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ShopsQueuePage);
+    fixture.detectChanges();
+    await drain();
+
+    fixture.componentInstance.chooseChain(MERCADONA);
+    await drain();
+    fixture.detectChanges();
+
+    return { fixture, page: fixture.componentInstance };
+  }
+
+  it('says there are more rather than stopping silently', async () => {
+    const { fixture, page } = await many();
+
+    expect(page.rows().length).toBeLessThan(MANY);
+    expect(page.queue?.canLoadMore()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.more')).not.toBeNull();
+  });
+
+  it('reads the next page when the button asks for it', async () => {
+    const { fixture, page } = await many();
+    const first = page.rows().length;
+
+    fixture.nativeElement.querySelector('.more').click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.rows().length).toBeGreaterThan(first);
   });
 });

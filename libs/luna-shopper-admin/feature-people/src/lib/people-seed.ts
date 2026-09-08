@@ -46,20 +46,34 @@ export type BasketRow = Wire.AdminCoreAdminBasketDetailView;
 export type AdminRow = Wire.AdminAuthAdminIdentityView;
 
 /**
- * One membership, carrying the zone that addressed it.
+ * One membership, which carries the zone it is in.
  *
- * `AdminZoneMemberView` does not, because the URL that answered it already
- * named one, and a row that came out of `/zones/{id}/members` has no other way
- * back to itself: it is addressed by the pair. The gateway puts the value back
- * on (see `ResourceSource.pathParams`) and this type says so.
+ * The wire type holds `zoneId` and `zoneName` itself since plan 0017, because
+ * the collection is read across zones and the row's address is the pair
+ * `(zoneId, membershipId)`. The intersection this alias used to declare said
+ * the same thing twice.
  */
-export type MembershipRow = Wire.AdminCoreAdminZoneMemberView & {
-  readonly zoneId: string;
+export type MembershipRow = Wire.AdminCoreAdminZoneMemberView;
+
+/** One list line, which carries its list, for the same reason. */
+export type ListLineRow = Wire.AdminCoreAdminListLineView;
+
+/**
+ * A zone as the fixture writes one: its members without the household repeated
+ * on each of them.
+ *
+ * The server does repeat it, and so does {@link ZONE_SEED}. What is written by
+ * hand here is the part a person can get wrong, and a member carrying a zone id
+ * that is not its zone's is exactly that. The stamp below is the only place the
+ * two are joined, so they cannot disagree.
+ */
+type ZoneSeedInput = Omit<ZoneRow, 'members'> & {
+  readonly members: readonly Omit<MembershipRow, 'zoneId' | 'zoneName'>[];
 };
 
-/** One list line, carrying the list that addressed it, for the same reason. */
-export type ListLineRow = Wire.AdminCoreAdminListLineView & {
-  readonly listId: string;
+/** A list as the fixture writes one, for the same reason. */
+type ListSeedInput = Omit<ListRow, 'lines'> & {
+  readonly lines: readonly Omit<ListLineRow, 'listId' | 'listName'>[];
 };
 
 export const USER_SEED: readonly UserRow[] = [
@@ -115,7 +129,7 @@ export const USER_SEED: readonly UserRow[] = [
   },
 ];
 
-export const ZONE_SEED: readonly ZoneRow[] = [
+const ZONE_ROWS: readonly ZoneSeedInput[] = [
   {
     id: KITCHEN,
     name: 'Kitchen',
@@ -189,7 +203,7 @@ export const ZONE_SEED: readonly ZoneRow[] = [
   },
 ];
 
-export const LIST_SEED: readonly ListRow[] = [
+const LIST_ROWS: readonly ListSeedInput[] = [
   {
     id: 'l-kitchen-weekly',
     zoneId: KITCHEN,
@@ -304,6 +318,33 @@ export const BASKET_SEED: readonly BasketRow[] = [
 ];
 
 /**
+ * The zones, with the household stamped onto each of their members.
+ *
+ * The server sends it there too: the zone detail read and the membership
+ * collection both answer `AdminZoneMemberView`, and since plan 0017 that view
+ * carries `zoneId` and `zoneName`, because a membership read across zones is
+ * addressed by the pair and read by the household's name.
+ */
+export const ZONE_SEED: readonly ZoneRow[] = ZONE_ROWS.map((zone) => ({
+  ...zone,
+  members: zone.members.map((member) => ({
+    ...member,
+    zoneId: zone.id,
+    zoneName: zone.name,
+  })),
+}));
+
+/** The lists, with the list stamped onto each of their lines. */
+export const LIST_SEED: readonly ListRow[] = LIST_ROWS.map((list) => ({
+  ...list,
+  lines: list.lines.map((line) => ({
+    ...line,
+    listId: list.id,
+    listName: list.name,
+  })),
+}));
+
+/**
  * The same memberships as the zones above, as the collection serves them.
  *
  * Derived rather than typed out again, so the two cannot drift: a zone's detail
@@ -311,12 +352,12 @@ export const BASKET_SEED: readonly BasketRow[] = [
  * household, in a fixture whose whole job is to be believable.
  */
 export const MEMBERSHIP_SEED: readonly MembershipRow[] = ZONE_SEED.flatMap(
-  (zone) => zone.members.map((member) => ({ ...member, zoneId: zone.id }))
+  (zone) => zone.members
 );
 
 /** The same lines as the lists above, as the collection serves them. */
 export const LIST_LINE_SEED: readonly ListLineRow[] = LIST_SEED.flatMap(
-  (list) => list.lines.map((line) => ({ ...line, listId: list.id }))
+  (list) => list.lines
 );
 
 export const ADMIN_SEED: readonly AdminRow[] = [

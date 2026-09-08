@@ -1,0 +1,91 @@
+{
+  "22222222-2222-4222-8222-222222222201": {
+    "id": "msg_clean_assign",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "thinking",
+        "thinking": "The directory already holds semi-skimmed milk, and brand never splits a group."
+      },
+      {
+        "type": "text",
+        "text": "{\"decision\":\"ASSIGN\",\"groupId\":\"11111111-1111-4111-8111-111111111101\",\"confidence\":0.97,\"issues\":[],\"reasoning\":\"Hacendado semi-skimmed milk is the same purchase as the existing semi-skimmed milk group.\"}"
+      }
+    ],
+    "usage": {
+      "input_tokens": 120,
+      "output_tokens": 60,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 1800
+    }
+  },
+  "22222222-2222-4222-8222-222222222202": {
+    "id": "msg_clean_create",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "```json\n{\"decision\":\"CREATE_GROUP\",\"group\":{\"nameEs\":\"Arroz redondo\",\"nameEn\":\"Round rice\",\"slug\":\"arroz-redondo\",\"referenceUnit\":\"KILOGRAM\",\"synonyms\":{\"es\":[\"arroz\"],\"en\":[\"rice\"]}},\"confidence\":0.94,\"issues\":[],\"reasoning\":\"No group covers round rice, which is its own purchase and not interchangeable with long grain.\"}\n```"
+      }
+    ],
+    "usage": {
+      "input_tokens": 130,
+      "output_tokens": 90,
+      "cache_read_input_tokens": 1800,
+      "cache_creation_input_tokens": 0
+    }
+  },
+  "22222222-2222-4222-8222-222222222203": {
+    "id": "msg_low_confidence",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"decision\":\"ASSIGN\",\"groupId\":\"11111111-1111-4111-8111-111111111101\",\"confidence\":0.62,\"issues\":[{\"code\":\"NOT_DAIRY_MILK\",\"detail\":\"An oat drink may or may not be the same purchase as cow milk.\"}],\"reasoning\":\"A shopper buying oat drink might not accept semi-skimmed milk instead.\"}"
+      }
+    ],
+    "usage": {
+      "input_tokens": 125,
+      "output_tokens": 70,
+      "cache_read_input_tokens": 1800,
+      "cache_creation_input_tokens": 200
+    }
+  },
+  "22222222-2222-4222-8222-222222222204": {
+    "id": "msg_duplicate_group",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"decision\":\"CREATE_GROUP\",\"group\":{\"nameEs\":\"Aceite de oliva virgen extra\",\"nameEn\":\"Extra virgin olive oil\",\"slug\":\"aceite-oliva-virgen-extra\",\"referenceUnit\":\"LITER\",\"synonyms\":{\"es\":[],\"en\":[]}},\"confidence\":0.95,\"issues\":[],\"reasoning\":\"Extra virgin olive oil is its own purchase.\"}"
+      }
+    ],
+    "usage": {
+      "input_tokens": 140,
+      "output_tokens": 85,
+      "cache_read_input_tokens": 2000,
+      "cache_creation_input_tokens": 0
+    }
+  },
+  "22222222-2222-4222-8222-222222222205": {
+    "id": "msg_unit_family_mismatch",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"decision\":\"ASSIGN\",\"groupId\":\"11111111-1111-4111-8111-111111111101\",\"confidence\":0.93,\"issues\":[],\"reasoning\":\"Grated cheese sits beside the milk on the dairy shelf.\"}"
+      }
+    ],
+    "usage": {
+      "input_tokens": 135,
+      "output_tokens": 55,
+      "cache_read_input_tokens": 2000,
+      "cache_creation_input_tokens": 0
+    }
+  }
+}

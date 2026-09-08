@@ -93,3 +93,28 @@ export enum ItemCategory {
   PERSONAL_CARE = 'PERSONAL_CARE',
   OTHER = 'OTHER',
 }
+
+/**
+ * Why one operation of a bulk decision request was refused (plan 0100).
+ *
+ * Shared by both bulk routes, because the two kinds of decision they replay
+ * fail the same handful of ways: a row that moved since the file was written, a
+ * reference to something the file never created, and the same subject named
+ * twice. A tool reads the code, and an operator reads the detail beside it.
+ */
+export enum BulkOperationErrorCode {
+  /** The row the operation names is gone. */
+  NOT_FOUND = 'NOT_FOUND',
+  /** The row is no longer waiting for a decision. */
+  NOT_PENDING = 'NOT_PENDING',
+  /** The row moved since the file was written, so `expect` no longer holds. */
+  EXPECT_MISMATCH = 'EXPECT_MISMATCH',
+  /** Two operations name the same subject, so the file contradicts itself. */
+  DUPLICATE_SUBJECT = 'DUPLICATE_SUBJECT',
+  /** A reference this request never creates, or one it creates twice. */
+  UNKNOWN_REFERENCE = 'UNKNOWN_REFERENCE',
+  /** The operation names neither of two required alternatives, or both. */
+  MALFORMED_OPERATION = 'MALFORMED_OPERATION',
+  /** Another row already holds the identifier this one would take. */
+  ALREADY_TAKEN = 'ALREADY_TAKEN',
+}

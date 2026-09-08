@@ -99,6 +99,15 @@ export type AddLinesItemDto = {
 };
 
 /**
+ * `AddPostalCodeDiscoveryDto` in the gateway's OpenAPI document.
+ */
+export type AddPostalCodeDiscoveryDto = {
+  country: string;
+  postalCode: string;
+  discoverNow: boolean;
+};
+
+/**
  * `AddPostalCodeDto` in the gateway's OpenAPI document.
  */
 export type AddPostalCodeDto = {
@@ -115,6 +124,21 @@ export type AddPostalCodeDto = {
 export type AdminLoginDto = {
   username: string;
   password: string;
+};
+
+/**
+ * `ApplyProductGroupAssignmentsDto` in the gateway's OpenAPI document.
+ */
+export type ApplyProductGroupAssignmentsDto = {
+  operations: ProductGroupAssignmentDto[];
+};
+
+/**
+ * `ApplySourceEntryDecisionsDto` in the gateway's OpenAPI document.
+ */
+export type ApplySourceEntryDecisionsDto = {
+  runId?: string;
+  operations: SourceEntryDecisionDto[];
 };
 
 /**
@@ -140,13 +164,6 @@ export type AssistantTurnDto = {
 export type AvailabilityEntryDto = {
   itemId: string;
   available: boolean;
-};
-
-/**
- * `BindGeneratedListLineDto` in the gateway's OpenAPI document.
- */
-export type BindGeneratedListLineDto = {
-  listId: string;
 };
 
 /**
@@ -209,6 +226,13 @@ export type CreateItemFromEntryDto = {
     | 'PERSONAL_CARE'
     | 'OTHER';
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
+};
+
+/**
+ * `CreateItemsDto` in the gateway's OpenAPI document.
+ */
+export type CreateItemsDto = {
+  items: CreateItemDto[];
 };
 
 /**
@@ -306,6 +330,14 @@ export type ForgotPasswordDto = {
  */
 export type GeneratedListAllocationDto = {
   listId: string;
+  quantity: number;
+};
+
+/**
+ * `GeneratedListLineShareDto` in the gateway's OpenAPI document.
+ */
+export type GeneratedListLineShareDto = {
+  itemId: string;
   quantity: number;
 };
 
@@ -432,6 +464,8 @@ export type ProblemDetails = {
     | 'stale_quantity'
     | 'below_settled'
     | 'account_locked'
+    | 'postal_code_unknown'
+    | 'run_in_progress'
     | 'internal';
   detail?: string;
   message: string;
@@ -440,6 +474,35 @@ export type ProblemDetails = {
     [key: string]: string[];
   };
   retryAfterSeconds?: number;
+};
+
+/**
+ * `ProductGroupAssignmentDto` in the gateway's OpenAPI document.
+ */
+export type ProductGroupAssignmentDto = {
+  op: 'createGroup' | 'assignItem';
+  ref?: string;
+  name?: LocalizedTextDto;
+  slug?: string;
+  referenceUnit?:
+    | 'UNIT'
+    | 'GRAM'
+    | 'KILOGRAM'
+    | 'MILLILITER'
+    | 'LITER'
+    | 'PACK';
+  synonyms?: LocalizedSynonymsDto;
+  itemId?: string;
+  groupId?: string;
+  groupRef?: string;
+  expect?: ProductGroupExpectationDto;
+};
+
+/**
+ * `ProductGroupExpectationDto` in the gateway's OpenAPI document.
+ */
+export type ProductGroupExpectationDto = {
+  productGroupId: string | null;
 };
 
 /**
@@ -566,16 +629,9 @@ export type SetGeneratedListLineOutstandingDto = {
  */
 export type SetGeneratedListOriginQuantityDto = {
   listId: string;
-  lineId: string;
+  lineId?: string;
   quantity: number;
   from: number;
-};
-
-/**
- * `SetGeneratedListPickDto` in the gateway's OpenAPI document.
- */
-export type SetGeneratedListPickDto = {
-  itemId: string;
 };
 
 /**
@@ -663,6 +719,27 @@ export type SettleLineDto = {
 export type SettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
 
 /**
+ * `SourceEntryDecisionDto` in the gateway's OpenAPI document.
+ */
+export type SourceEntryDecisionDto = {
+  op: 'accept' | 'createItem';
+  entryId: string;
+  itemId?: string;
+  itemRef?: string;
+  ref?: string;
+  item?: CreateItemFromEntryDto;
+  expect: SourceEntryExpectationDto;
+};
+
+/**
+ * `SourceEntryExpectationDto` in the gateway's OpenAPI document.
+ */
+export type SourceEntryExpectationDto = {
+  status: 'ACTIVE' | 'CANDIDATE' | 'UNRESOLVED' | 'REJECTED';
+  lastSeenAt: string;
+};
+
+/**
  * `SpawnHarvestRunDto` in the gateway's OpenAPI document.
  */
 export type SpawnHarvestRunDto = {
@@ -674,6 +751,14 @@ export type SpawnHarvestRunDto = {
   radiusMetres?: number;
   brandKeys?: string[];
   detailBackfill?: boolean;
+};
+
+/**
+ * `SplitGeneratedListLineDto` in the gateway's OpenAPI document.
+ */
+export type SplitGeneratedListLineDto = {
+  from: number;
+  shares: GeneratedListLineShareDto[];
 };
 
 /**
@@ -1048,6 +1133,8 @@ export type AdminCoreAdminListLinePage = {
  */
 export type AdminCoreAdminListLineView = {
   id: string;
+  listId: string;
+  listName: string;
   content: string;
   quantity: number;
   approvalStatus: EnumsLineApprovalStatus;
@@ -1127,6 +1214,8 @@ export type AdminCoreAdminZoneListView = {
  */
 export type AdminCoreAdminZoneMemberView = {
   membershipId: string;
+  zoneId: string;
+  zoneName: string;
   userId: string;
   username: string;
   role: EnumsZoneRole;
@@ -1158,6 +1247,26 @@ export type AdminCoreAdminZoneRowView = {
   createdAt: string;
   updatedAt: string;
   ownerName: string | null;
+};
+
+/**
+ * `admin-core.PostalCodeUsageListView` in the gateway's OpenAPI document.
+ */
+export type AdminCorePostalCodeUsageListView = {
+  country: string;
+  usage: AdminCorePostalCodeUsageView[];
+};
+
+/**
+ * `admin-core.PostalCodeUsageView` in the gateway's OpenAPI document.
+ */
+export type AdminCorePostalCodeUsageView = {
+  postalCode: string;
+  mainProfiles: number;
+  nearbyProfiles: number;
+  suppressedProfiles: number;
+  mainUsers: number;
+  nearbyUsers: number;
 };
 
 /**
@@ -1482,6 +1591,44 @@ export type CatalogAdminPostalCodeView = {
 };
 
 /**
+ * `catalog.AdminSupermarketItemPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogAdminSupermarketItemPage = {
+  items: CatalogAdminSupermarketItemView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.AdminSupermarketItemView` in the gateway's OpenAPI document.
+ */
+export type CatalogAdminSupermarketItemView = {
+  id: string;
+  itemId: string;
+  priceScopeId: string;
+  price: number | null;
+  currency: string | null;
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  observedAt: string | null;
+  sourceKind: EnumsPriceSourceKind | null;
+  stale: boolean;
+  validUntil: string | null;
+  itemPriceId: string | null;
+  available: boolean;
+  itemName: CatalogLocalizedText | null;
+};
+
+/**
+ * `catalog.BulkOperationError` in the gateway's OpenAPI document.
+ */
+export type CatalogBulkOperationError = {
+  code: EnumsBulkOperationErrorCode;
+  detail: string;
+};
+
+/**
  * `catalog.CatalogScopeView` in the gateway's OpenAPI document.
  */
 export type CatalogCatalogScopeView = {
@@ -1631,11 +1778,29 @@ export type CatalogLocalizedText = {
 };
 
 /**
+ * `catalog.NearbyPostalCodesView` in the gateway's OpenAPI document.
+ */
+export type CatalogNearbyPostalCodesView = {
+  country: string;
+  postalCode: string;
+  known: boolean;
+  postalCodes: CatalogPostalCodeDistanceView[];
+};
+
+/**
  * `catalog.PostalCodeCoverageView` in the gateway's OpenAPI document.
  */
 export type CatalogPostalCodeCoverageView = {
   postalCode: string;
   served: boolean;
+};
+
+/**
+ * `catalog.PostalCodeDistanceView` in the gateway's OpenAPI document.
+ */
+export type CatalogPostalCodeDistanceView = {
+  postalCode: string;
+  distanceMetres: number;
 };
 
 /**
@@ -1674,6 +1839,18 @@ export type CatalogPriceScopeView = {
   kind: EnumsPriceScopeKind;
   externalKey: string | null;
   label: CatalogLocalizedText | null;
+};
+
+/**
+ * `catalog.ProductGroupAssignmentOutcome` in the gateway's OpenAPI document.
+ */
+export type CatalogProductGroupAssignmentOutcome = {
+  op: 'createGroup' | 'assignItem';
+  ref: string | null;
+  itemId: string | null;
+  groupId: string | null;
+  applied: boolean;
+  error: CatalogBulkOperationError | null;
 };
 
 /**
@@ -1935,6 +2112,18 @@ export type EnumsAdapterKey =
 export type EnumsAuthProvider = 'GOOGLE' | 'EMAIL';
 
 /**
+ * `enums.BulkOperationErrorCode` in the gateway's OpenAPI document.
+ */
+export type EnumsBulkOperationErrorCode =
+  | 'NOT_FOUND'
+  | 'NOT_PENDING'
+  | 'EXPECT_MISMATCH'
+  | 'DUPLICATE_SUBJECT'
+  | 'UNKNOWN_REFERENCE'
+  | 'MALFORMED_OPERATION'
+  | 'ALREADY_TAKEN';
+
+/**
  * `enums.CommentTranscription` in the gateway's OpenAPI document.
  */
 export type EnumsCommentTranscription =
@@ -2070,6 +2259,7 @@ export type EnumsMergeRequestStatus =
  */
 export type EnumsOriginUnavailableReason =
   | 'CLAIMED'
+  | 'REJECTED'
   | 'NOT_APPROVED'
   | 'SETTLED';
 
@@ -2077,6 +2267,16 @@ export type EnumsOriginUnavailableReason =
  * `enums.ParticipantKind` in the gateway's OpenAPI document.
  */
 export type EnumsParticipantKind = 'OWNER' | 'REGISTERED' | 'GUEST';
+
+/**
+ * `enums.PostalCodeDiscoveryStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsPostalCodeDiscoveryStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'DONE'
+  | 'FAILED'
+  | 'PARKED';
 
 /**
  * `enums.PostalCodeSource` in the gateway's OpenAPI document.
@@ -2237,17 +2437,8 @@ export type GeneratedListSharingLineOriginDetail = {
   listQuantity: number;
   settledHere: number;
   writable: boolean;
-};
-
-/**
- * `generated-list-sharing.LineTarget` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingLineTarget = {
-  listId: string;
-  zoneId: string;
-  listName: string | null;
-  zoneName: string | null;
   fromRun: boolean;
+  approvalStatus: EnumsLineApprovalStatus;
 };
 
 /**
@@ -2257,6 +2448,17 @@ export type GeneratedListSharingLinkPreview = {
   joinable: boolean;
   name?: string | null;
   participantCount?: number;
+};
+
+/**
+ * `generated-list-sharing.ListRef` in the gateway's OpenAPI document.
+ */
+export type GeneratedListSharingListRef = {
+  listId: string;
+  zoneId: string;
+  listName: string | null;
+  zoneName: string | null;
+  fromRun: boolean;
 };
 
 /**
@@ -2272,6 +2474,7 @@ export type GeneratedListSharingOriginCandidate = {
   content: string;
   matchedOnText: boolean;
   unavailable?: EnumsOriginUnavailableReason;
+  fromRun: boolean;
 };
 
 /**
@@ -2372,6 +2575,16 @@ export type GeneratedListSharingSourceName = {
   listId: string;
   name: string;
   zoneName: string | null;
+};
+
+/**
+ * `generated-list-sharing.SplitLineResult` in the gateway's OpenAPI document.
+ */
+export type GeneratedListSharingSplitLineResult = {
+  line: GeneratedListSharingBasketLineView;
+  created: GeneratedListSharingBasketLineView[];
+  merged: GeneratedListSharingBasketLineView[];
+  removed: string[];
 };
 
 /**
@@ -2476,6 +2689,16 @@ export type GeneratedListGeneratedListView = {
 };
 
 /**
+ * `harvest.DiscoveredPlaceCounts` in the gateway's OpenAPI document.
+ */
+export type HarvestDiscoveredPlaceCounts = {
+  total: number;
+  imported: number;
+  rejected: number;
+  undecided: number;
+};
+
+/**
  * `harvest.DiscoveredPlaceGroup` in the gateway's OpenAPI document.
  */
 export type HarvestDiscoveredPlaceGroup = {
@@ -2520,6 +2743,7 @@ export type HarvestDiscoveredPlaceView = {
   street: string | null;
   city: string | null;
   postalCode: string | null;
+  postalCodeSource: EnumsPostalCodeSource | null;
   country: string | null;
   website: string | null;
   openingHours: string | null;
@@ -2601,6 +2825,50 @@ export type HarvestHarvestRunWarning = {
 };
 
 /**
+ * `harvest.PostalCodeDiscoveryRequestPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestPostalCodeDiscoveryRequestPage = {
+  items: HarvestPostalCodeDiscoveryRequestView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.PostalCodeDiscoveryRequestView` in the gateway's OpenAPI document.
+ */
+export type HarvestPostalCodeDiscoveryRequestView = {
+  id: string;
+  country: string;
+  postalCode: string;
+  status: EnumsPostalCodeDiscoveryStatus;
+  requestedAt: string;
+  lastAttemptedAt: string | null;
+  discoveredAt: string | null;
+  nextAttemptAt: string | null;
+  attempts: number;
+  runId: string | null;
+  error: string | null;
+  placeName: string | null;
+  dismissed: boolean;
+  foundByItsRuns: HarvestDiscoveredPlaceCounts;
+  locatedInIt: HarvestDiscoveredPlaceCounts;
+};
+
+/**
+ * `harvest.PostalCodeDiscoverySummaryView` in the gateway's OpenAPI document.
+ */
+export type HarvestPostalCodeDiscoverySummaryView = {
+  queued: number;
+  running: number;
+  done: number;
+  failed: number;
+  parked: number;
+  oldestQueuedAt: string | null;
+  draining: boolean;
+};
+
+/**
  * `harvest.SourceCatalogEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2649,6 +2917,28 @@ export type HarvestSourceEntryAcceptResult = {
   entry: HarvestSourceCatalogEntryView;
   pricesWritten: number;
   createdItem: CatalogItemView | null;
+};
+
+/**
+ * `harvest.SourceEntryDecisionOutcome` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceEntryDecisionOutcome = {
+  op: 'accept' | 'createItem';
+  entryId: string;
+  ref: string | null;
+  applied: boolean;
+  itemId: string | null;
+  pricesWritten: number;
+  error: CatalogBulkOperationError | null;
+};
+
+/**
+ * `harvest.SourceEntryPriceSkip` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceEntryPriceSkip = {
+  entryId: string;
+  itemId: string;
+  reason: string;
 };
 
 /**
@@ -2724,6 +3014,19 @@ export type HarvestSupermarketSourceView = {
   lastSuccessAt: string | null;
   consecutiveFailures: number;
 };
+
+/**
+ * `list.AddLineResult` in the gateway's OpenAPI document.
+ */
+export type ListAddLineResult = {
+  line: ListLineView;
+  merged: boolean;
+};
+
+/**
+ * `list.AddLineResultList` in the gateway's OpenAPI document.
+ */
+export type ListAddLineResultList = ListAddLineResult[];
 
 /**
  * `list.CommentPage` in the gateway's OpenAPI document.
@@ -2826,11 +3129,6 @@ export type ListLineView = {
 };
 
 /**
- * `list.LineViewList` in the gateway's OpenAPI document.
- */
-export type ListLineViewList = ListLineView[];
-
-/**
  * `list.ListAccessEntry` in the gateway's OpenAPI document.
  */
 export type ListListAccessEntry = {
@@ -2926,18 +3224,6 @@ export type MsgAssistantTurnResponse = {
 };
 
 /**
- * `msg.generatedList.bindLine.response` in the gateway's OpenAPI document.
- */
-export type MsgGeneratedListBindLineResponse = {
-  line: GeneratedListSharingBasketLineView;
-  listId: string;
-  zoneId: string;
-  createdLineId: string;
-  quantity: number;
-  pendingApproval: boolean;
-};
-
-/**
  * `msg.generatedList.lineOrigins.response` in the gateway's OpenAPI document.
  */
 export type MsgGeneratedListLineOriginsResponse = {
@@ -2945,15 +3231,7 @@ export type MsgGeneratedListLineOriginsResponse = {
   lineId: string;
   origins: GeneratedListSharingLineOriginDetail[];
   candidates: GeneratedListSharingOriginCandidate[];
-};
-
-/**
- * `msg.generatedList.lineTargets.response` in the gateway's OpenAPI document.
- */
-export type MsgGeneratedListLineTargetsResponse = {
-  generatedListId: string;
-  lineId: string;
-  targets: GeneratedListSharingLineTarget[];
+  others: GeneratedListSharingListRef[];
 };
 
 /**
@@ -2980,6 +3258,13 @@ export type MsgGeneratedListShareLinkRevokeResponse = {
 };
 
 /**
+ * `msg.item.createMany.response` in the gateway's OpenAPI document.
+ */
+export type MsgItemCreateManyResponse = {
+  items: CatalogItemView[];
+};
+
+/**
  * `msg.item.getMany.response` in the gateway's OpenAPI document.
  */
 export type MsgItemGetManyResponse = {
@@ -2992,6 +3277,32 @@ export type MsgItemGetManyResponse = {
 export type MsgListHoldingItemResponse = {
   lists: ListListHoldingItemView[];
   hasMore: boolean;
+};
+
+/**
+ * `msg.productGroup.applyAssignments.response` in the gateway's OpenAPI document.
+ */
+export type MsgProductGroupApplyAssignmentsResponse = {
+  applied: boolean;
+  error: string | null;
+  results: CatalogProductGroupAssignmentOutcome[];
+  createdGroups: {
+    ref: string;
+    groupId: string;
+  }[];
+};
+
+/**
+ * `msg.sourceEntry.applyDecisions.response` in the gateway's OpenAPI document.
+ */
+export type MsgSourceEntryApplyDecisionsResponse = {
+  runId: string | null;
+  applied: boolean;
+  failedStep: 'VALIDATE' | 'CREATE_ITEMS' | 'BIND' | null;
+  error: string | null;
+  results: HarvestSourceEntryDecisionOutcome[];
+  priceSkips: HarvestSourceEntryPriceSkip[];
+  orphanedItemIds: string[];
 };
 
 /**

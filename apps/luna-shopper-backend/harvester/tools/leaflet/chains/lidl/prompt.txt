@@ -1,0 +1,259 @@
+You are reading ONE page of a Spanish supermarket promotional leaflet (folleto)
+from the chain LIDL.
+
+Return ONLY a JSON array of the product offers advertised on this page.
+No prose, no explanation, no markdown code fence. Just the array.
+
+The array elements are rows that will be imported into a product catalog, so
+every element MUST have exactly these keys:
+
+{
+  "name": "product description as printed, without the price",
+  "brand": "manufacturer brand, or null",
+  "unitSize": 0.0,
+  "sizeFormat": "kg" | "g" | "l" | "ml" | "ud" | "m" | null,
+  "price": 0.00,
+  "unitPrice": 0.00,
+  "unitPriceLabel": "the comparison figure, prefixed, or null",
+  "category": "PRODUCE",
+  "categoryPath": ["BANNER HEADLINE AS PRINTED"],
+  "leaflet": {
+    "format": "the pack as printed, or null",
+    "basis": "unit" | "pack" | "kg" | "l",
+    "wasPrice": 0.00,
+    "loyalty": false,
+    "promotion": null
+  }
+}
+
+"category" MUST be one of exactly these values, and nothing else:
+PRODUCE, DAIRY, BAKERY, MEAT, SEAFOOD, FROZEN, BEVERAGES, SNACKS, PANTRY,
+HOUSEHOLD, PERSONAL_CARE, OTHER.
+Choose the one that fits the product itself. Cleaning products, laundry,
+kitchen roll, foil and pet food are HOUSEHOLD. Shampoo, soap, razors, nappies
+and toothpaste are PERSONAL_CARE. Wine, beer, water, juice and soft drinks are
+BEVERAGES. Crisps, biscuits, sweets and chocolate are SNACKS. Tinned food,
+pasta, rice, oil, sauces, coffee and sugar are PANTRY. Use OTHER only when
+none of the twelve fits, for example a pot plant.
+
+"leaflet.promotion" is either null or an object:
+
+{
+  "type": "price_drop" | "second_unit_discount" | "multibuy_unit_price"
+        | "multibuy_total" | "n_for_m" | "buy_n_get_free" | "pack_bonus",
+  "rawText": "the offer wording exactly as the leaflet prints it",
+  "requiredQuantity": 0,
+  "effectiveUnitPrice": 0.00,
+  "totalPrice": 0.00,
+  "singleUnitPrice": 0.00
+}
+
+"rawText" is required whenever "promotion" is not null. A promotion with no
+wording is dropped by the builder.
+
+HOW THIS LEAFLET IS LAID OUT
+
+The page is tall and narrow, cut into full bleed colour panels, one product
+tile to a panel, two to eight tiles a page. A tile is a product name in bold,
+a few lines of small text under it (the size, then the comparison figures),
+and one very large number set straight into the panel with no badge around it.
+That number is the price. Its colour follows the panel: yellow on red or blue,
+red on yellow or white. A small word runs vertically up the left edge of it.
+
+Rules, in order of importance:
+
+1. TWO DECIMAL SEPARATORS, ON THE SAME TILE.
+   The big number uses a PERIOD: 3.09, 0.99, 12.99. Everything smaller uses a
+   COMMA: 5,70 €/kg, La ud sale a 0,66 €. Read each as printed. Never
+   normalise one family to the other, and never read 1.29 as 129.
+   A trailing dash means no cents: 1.- is 1.00, 7.- is 7.00, and in a
+   comparison figure 29,- €/kg is 29.00.
+
+2. "CON LIDL PLUS" IS THE LOYALTY BADGE, AND THE TILE STILL STATES A PRICE
+   ANYONE PAYS.
+   A yellow flag reading "Con Lidl Plus -NN%" beside the blue "Lidl Plus" logo
+   means the big number is the app price. A smaller struck through number to
+   its right is the shelf price, which is what a shopper without the app pays,
+   and that is the number this reading records:
+     - "price"            -> the struck through number, the shelf price.
+     - "leaflet.wasPrice" -> null. The struck number is today's price for a
+                             non member, not a former price.
+     - "unitPrice"        -> the FIRST comparison figure, the struck one,
+                             because it is the one that goes with "price".
+     - "leaflet.loyalty"  -> false, and "promotion" stays null.
+   Set "leaflet.loyalty" to true ONLY when a "Con Lidl Plus" tile prints no
+   struck through number at all. Then the leaflet states no price a non member
+   can pay, and the builder is right to record no price.
+
+3. A DISCOUNT FLAG WITHOUT THE LIDL PLUS LOGO IS A CUT FOR EVERYBODY.
+   A plain "-NN%" flag, a red "Bajada permanente" flag, or an "Oferta" flag,
+   each with a struck through number beside the price:
+     - "price"            -> the big number.
+     - "leaflet.wasPrice" -> the struck through number.
+     - "unitPrice"        -> the SECOND comparison figure, the unstruck one.
+     - promotion type     -> "price_drop", with the flag's own words in
+                             "rawText".
+   "Superprecio" with no struck number beside it is a slogan. Leave "promotion"
+   and "wasPrice" null.
+   THE LIDL PLUS LOGO IS THE ONLY THING THAT SEPARATES RULE 2 FROM RULE 3.
+   Reading a Lidl Plus tile as a price drop inverts the offer.
+
+4. THE VERTICAL WORD BESIDE THE PRICE IS THE BASIS. Decide "leaflet.basis" in
+   this order and stop at the first line that matches:
+     - The word is "kg", or a yellow tag reads "Precio por kg"   -> "kg"
+     - The word is "l"                                           -> "l"
+     - The word is "pack", or the size names a multipack or a tray sold
+       together: "3 x 370 g", "12 x 100 g", "Pack 3", "Bandeja"  -> "pack"
+     - Anything else, including "ud", "1 kg", "500 g",
+       "aprox. 300 g" and "2ª ud"                                -> "unit"
+   A 1 kg bag of bananas is "unit", because the price buys that one bag. Only a
+   price genuinely quoted per kilo, which is loose produce sold "A granel" or a
+   sack tagged "Precio por kg", is "kg".
+
+5. THE COMPARISON FIGURES SIT IN THE PRODUCT'S OWN TEXT, NOT IN A BADGE.
+   They follow the size: "5,70 €/kg", "3,63 €/l", "2,03 €/100 g",
+   "1 ud 7,48 €/kg / 2 uds 5,62 €/kg", "1 a 2 uds 3,75 €/100 g /
+   3 uds 2,75 €/100 g".
+   When TWO are printed either side of a slash, the first is struck through and
+   belongs to the struck number, the second belongs to the big number. Rules 2
+   and 3 say which of the two you want. When ONE is printed it belongs to the
+   big number.
+   Put the number you chose in "unitPrice", and in "unitPriceLabel" put the
+   printed text with the basis word spelled out in front of it, because the
+   builder reads the basis from that word and does not know the abbreviations:
+     "5,70 €/kg"           -> "KILO 5,70 €/kg"
+     "3,63 €/l"            -> "LITRO 3,63 €/l"
+     "2,03 €/100 g"        -> "100 g 2,03 €/100 g"
+     "1,45 €/100 ml"       -> "100 ml 1,45 €/100 ml"
+     "La ud sale a 0,66 €" -> "UNIDAD 0,66 €"
+   Copy the printed figure after the prefix exactly, comma and all. When the
+   leaflet misprints its own basis, copy the misprint: "13,99 €/g" on a 350 g
+   pack becomes "KILO 13,99 €/g".
+   A comparison figure is never the product price.
+
+6. "unitSize" AND "sizeFormat" ARE THE SIZE AS A NUMBER AND ITS OWN TOKEN.
+   Read them from the size the leaflet prints and keep the leaflet's own unit
+   rather than converting it:
+     "500 g"          -> unitSize 500,  sizeFormat "g"
+     "Aprox. 400 g"   -> unitSize 400,  sizeFormat "g"
+     "1 kg"           -> unitSize 1,    sizeFormat "kg"
+     "300 ml"         -> unitSize 300,  sizeFormat "ml"
+     "1,5 L"          -> unitSize 1.5,  sizeFormat "l"
+     "lata 33 cl"     -> unitSize 330,  sizeFormat "ml"
+     "3 x 370 g"      -> unitSize 1110, sizeFormat "g"
+     "12 x 100 g"     -> unitSize 1200, sizeFormat "g"
+     "Manojo 3 ud"    -> unitSize 3,    sizeFormat "ud"
+     "10 uds. 415 g"  -> unitSize 415,  sizeFormat "g"
+     "A granel"       -> unitSize null, sizeFormat null
+   Centilitres are the one conversion you make: 1 cl is 10 ml. A multipack
+   states its TOTAL content, so three cartons of 370 g are 1110 g.
+   When a tile prints several sizes for several variants ("50 / 51 / 57 g",
+   "37 / 45 g"), set both to null and keep the printed string in
+   "leaflet.format". When the page prints no size at all, set both to null.
+   Never guess a size from the photograph.
+
+7. "price" IS ALWAYS WHAT ONE UNIT COSTS, in whatever basis rule 4 chose.
+   On a plain tile that is the big number. On a Lidl Plus tile it is the struck
+   shelf price, by rule 2. On a conditional promotion it is the single unit
+   price, by rule 8.
+
+8. THE TWO CONDITIONAL PROMOTIONS THIS LEAFLET PRINTS.
+   a) SECOND UNIT. A flag reads "-NN% 2ª ud", the vertical word beside the
+      price is "2ª ud", and a smaller "1 ud" with a number to the right of the
+      price is what one unit costs on its own.
+        type              "second_unit_discount"
+        rawText           "-50% 2ª ud"
+        requiredQuantity  2
+        effectiveUnitPrice  null
+        singleUnitPrice   the "1 ud" number
+        price             the "1 ud" number, because that is what a shopper
+                          buying one is charged
+        leaflet.wasPrice  null
+      Do not put the second unit's number in "price". Do not average the two.
+   b) MULTIBUY TOTAL. "Llévate N por X.-", with "La ud sale a Y €" in a flag
+      and "1 ud sale a Z" running vertically beside the price.
+        type              "multibuy_total"
+        rawText           "Llévate 3 por 2.-"
+        requiredQuantity  N
+        totalPrice        X
+        effectiveUnitPrice  Y
+        singleUnitPrice   Z
+        price             Z
+      Read every one of those numbers off the page. Never divide X by N.
+
+9. WHAT IS NOT A PROMOTION. This is the second most common trap after rule 2.
+   - "Pack 3", "Pack 12" in a yellow tag on the photograph name the pack size.
+     The size the tile states already counts them.
+   - "Por tiempo limitado", in a yellow diamond, dates the offer.
+   - "Origen España", "Categoría: I.", "Precio por kg", "3 kg", the GGN, MSC,
+     ASC, Bienestar Animal and Sabor del Año logos, the "Nº1 CALIDAD PRECIO"
+     seal, and the "Karlos Arguiñano" and "Joseba Arguiñano" signatures are
+     provenance, not offers.
+   - An asterisk after the price points at the page footer, "Artículos
+     limitados hasta fin de existencias". It is a stock caveat.
+   - Flashes printed on the packaging in the photograph ("5x50g", "Formato
+     familiar", "NUEVO") belong to the manufacturer's pack, not to LIDL's
+     offer.
+   - The blue "¡Dobla tus puntos Lidl! x2" band across the foot of the page
+     offers points, not a price. It is not a tile.
+   Leave "promotion" null for every one of these.
+
+10. Any other promotion wording maps like this:
+    - "2 X 1" or "3 X 2" naming a saving  -> "n_for_m"
+    - "LLEVANDO 3, GRATIS 1"              -> "buy_n_get_free"
+    - "COMPRANDO 12 UNIDADES"             -> "multibuy_unit_price"
+    - "+50% GRATIS", "3+1 GRATIS"         -> "pack_bonus"
+    Wording with no old price and no quantity, such as "Vale la pena" or
+    "Récord en ahorro", is a slogan. Leave "promotion" null.
+
+11. "categoryPath" IS THE BANNER HEADLINE AT THE TOP OF THE PAGE, copied as
+    printed on one line, for example ["Elige la mejor fruta"],
+    ["Yo elijo ahorrar con el mejor pescado fresco"], ["Prepara el mejor
+    bocadillo"]. Give every product on the page the same path.
+    Use an EMPTY ARRAY when:
+      - the page prints no banner at all, which is roughly half the pages,
+        because LIDL spreads one banner across two pages and only the left page
+        carries it; or
+      - the banner names no product family but the leaflet, the chain, the app
+        or a saving: "Batimos el récord del ahorro", "Récord en ofertas",
+        "Récord en precios imbatibles", "Bajadas permanentes", "Súper finde",
+        "Tus otras marcas de siempre", "¡Los Nº1 de la semana!", "Elige ahorrar
+        después de vacaciones", "Vale la pena".
+    Never invent a department the page does not print.
+
+12. Ignore store adverts, app pages, the basket price comparison against
+    another supermarket, social media icons, web addresses and legal small
+    print. A page that is only an advert returns an empty array, even when it
+    prints large numbers. Only include products that carry a price.
+    Text printed on the product packaging in the photograph is not the product
+    name; use the caption set in the leaflet's own bold text. When the caption
+    opens with a brand in capitals ("KANIA", "CHEF SELECT", "MILBONA",
+    "REALVALLE", "HARIBO"), that is "brand" and the rest is "name". When the
+    caption is nothing but that brand, put it in both. When the caption is a
+    slash separated list of several brands ("SNICKERS / MARS / TWIX / BOUNTY",
+    "MALTESERS / M&M'S"), the list is the "name" and "brand" is null: the tile
+    prices whichever of them the shopper picks.
+
+13. Use null for anything the page does not state. Do not invent values and do
+    not compute a value the page does not print. Never divide one printed
+    number by another to produce a price.
+
+WHY THREE OF THESE FIELDS MATTER MORE THAN THE REST
+
+The reading is turned into a HarvestDocument (backend plan 0086, section 6.1)
+by the shared build-document.mjs, which calls the shared to-harvest-document.mjs.
+That script decides which number on a tile a shopper actually pays for one unit,
+and it reads exactly three things to decide:
+
+- "leaflet.loyalty". True means the tile states no price at all, because a card
+  price is not the price a non member pays. In this leaflet that is rare, and
+  rule 2 says why: a LIDL tile usually prints the shelf price beside the app
+  price, so the shelf price is what you record and loyalty stays false.
+- "leaflet.promotion.type" and "leaflet.promotion.singleUnitPrice". For a second
+  unit or a multibuy, the big number is not what one unit costs. The single
+  unit price is, and without it the tile states no price.
+- "leaflet.basis". A "kg" or "l" basis is a price per weight or volume, so it
+  becomes a unit price and the product gets no till price.
+
+Get those three right even when you are unsure about the rest. A wrong price is
+worse than a missing one.

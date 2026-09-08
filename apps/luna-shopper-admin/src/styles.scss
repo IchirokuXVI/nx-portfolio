@@ -25,3 +25,30 @@ app-luna-shopper-admin-root {
   @include tokens.admin-root;
   @include tokens.admin-deployments;
 }
+
+// What a control looks like, once, for every screen (plan 0018, section 2).
+//
+// A global element selector still matches an element inside a component with
+// emulated encapsulation, which is what makes this the right home: one rule,
+// every screen, including the ones nobody has written yet. It lived in four
+// components as four copies of the same eight declarations, and the screens that
+// did not copy it drew browser chrome instead: a `<select>` the browser styled,
+// an `<input>` 21 pixels tall beside a 44 pixel picker, a grey system button.
+//
+// Modifiers stay in the components. `.primary`, `.danger` and `.toggle.on` are
+// each about one screen's meaning rather than about what a control looks like,
+// and a screen is the only place that knows which of its buttons is the one.
+button,
+input,
+select {
+  min-block-size: 2.75rem;
+  padding: var(--admin-space-2) var(--admin-space-3);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface-raised);
+  /* 1rem exactly: iOS Safari zooms the viewport on focus for anything smaller,
+     which on a phone leaves the operator scrolled sideways. */
+  font: inherit;
+  font-size: 1rem;
+  color: var(--admin-ink);
+}

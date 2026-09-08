@@ -23,6 +23,9 @@ import {
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type AdminSupermarketItemPage,
+  type ApplyProductGroupAssignmentsResult,
+  type CreateItemsResult,
   type ItemPage,
   type ItemPricePage,
   type ItemPriceView,
@@ -35,7 +38,6 @@ import {
   type ProductGroupView,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityResult,
-  type SupermarketItemPage,
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
@@ -59,7 +61,9 @@ import {
 } from './catalog-admin.dto';
 import {
   AddItemPriceDto,
+  ApplyProductGroupAssignmentsDto,
   CreateItemDto,
+  CreateItemsDto,
   CreatePriceScopeDto,
   CreateProductGroupDto,
   CreateSupermarketDto,
@@ -317,6 +321,32 @@ export class AdminCatalogItemsController {
   }
 
   /**
+   * Several products in one transaction, all or nothing (plan 0100).
+   *
+   * The step a bulk decisions file needs before it can bind anything: forty
+   * products are created or none are, because the binds that follow name every
+   * one of them. Exposed here as an ordinary admin route rather than hidden
+   * behind the harvester, since nothing about it is the harvester's.
+   *
+   * A list over the cap is answered 400 and never split: two chunks are two
+   * transactions, so the first can land while the second fails.
+   */
+  @Post('batch')
+  @ApiContractResponse(ITEM_PATTERNS.createMany, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  createMany(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: CreateItemsDto
+  ): Promise<CreateItemsResult> {
+    return this.nats.send<CreateItemsResult>(ITEM_PATTERNS.createMany, {
+      ...adminCredential(admin),
+      items: dto.items,
+    });
+  }
+
+  /**
    * The product table, unscoped (plan 0073, section 4).
    *
    * **It names no price scopes, so every price field comes back null**, and that
@@ -413,6 +443,33 @@ export class AdminCatalogProductGroupsController {
       ...adminCredential(admin),
       ...dto,
     });
+  }
+
+  /**
+   * A whole curation session's group decisions, in one transaction (plan 0100).
+   *
+   * Create the groups the session invented, then move every product it sorted
+   * into one, all or nothing. Truly all or nothing, unlike the entry decisions
+   * this mirrors: groups and item membership live in one database, so there is
+   * no price shaped step outside the transaction.
+   *
+   * **A refused request answers 201 with `applied: false`**, for the same reason
+   * the entry decisions route does: the caller needs to know which operation
+   * failed which check, and a problem document carries one message.
+   */
+  @Post('assignments')
+  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.applyAssignments, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  applyAssignments(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: ApplyProductGroupAssignmentsDto
+  ): Promise<ApplyProductGroupAssignmentsResult> {
+    return this.nats.send<ApplyProductGroupAssignmentsResult>(
+      PRODUCT_GROUP_PATTERNS.applyAssignments,
+      { ...adminCredential(admin), operations: dto.operations }
+    );
   }
 
   @Get()
@@ -512,8 +569,8 @@ export class AdminCatalogSupermarketItemsController {
   list(
     @ActingAdmin() admin: CurrentAdmin,
     @Query() query: AdminListSupermarketItemsQueryDto
-  ): Promise<SupermarketItemPage> {
-    return this.nats.send<SupermarketItemPage>(
+  ): Promise<AdminSupermarketItemPage> {
+    return this.nats.send<AdminSupermarketItemPage>(
       SUPERMARKET_ITEM_PATTERNS.adminList,
       {
         ...adminCredential(admin),

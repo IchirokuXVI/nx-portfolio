@@ -17,8 +17,7 @@
     "development": "Development",
     "unknown": "Unknown",
     "checking": "Checking which environment answered…",
-    "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does.",
-    "sourcedFromApi": "Reported by the gateway this app is talking to, not by the build."
+    "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does."
   },
   "signIn": {
     "heading": "Sign in",
@@ -44,6 +43,7 @@
     "reauth": {
       "heading": "Session ended",
       "body": "Signed in as {{name}}. Enter the password to carry on. Nothing behind this has been lost, including anything half typed.",
+      "bodyPasswordless": "Signed in as {{name}}. This server signs you in without a password, so carry on. Nothing behind this has been lost, including anything half typed.",
       "password": "Password",
       "submit": "Carry on",
       "submitting": "Checking…",
@@ -64,7 +64,15 @@
     "menu": "Menu",
     "navigation": "Sections",
     "waiting": "{{count}} waiting for a decision",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "screens": "Screens in this section",
+    "sections": {
+      "overview": "Overview",
+      "catalog": "Catalog",
+      "shoppers": "Shoppers",
+      "harvest": "Harvester",
+      "admins": "Admins"
+    }
   },
   "notFound": {
     "heading": "There is no such screen",
@@ -156,7 +164,9 @@
       "validation": "Some of the values were refused. The details are beside the fields.",
       "unreachable": "The gateway did not answer. Check that the backend is running.",
       "unknown": "That did not work, and the server did not say why.",
-      "notAnObject": "Write a JSON object, in braces. A list or a bare value is not what this column holds."
+      "notAnObject": "Write a JSON object, in braces. A list or a bare value is not what this column holds.",
+      "postalCodeUnknown": "That postal code is not in the national table, so it is almost certainly a typo. Nothing was written.",
+      "runInProgress": "The harvester is working on that row right now. Wait for the run to finish and ask again."
     }
   },
   "catalog": {
@@ -413,12 +423,13 @@
   },
   "harvest": {
     "nav": {
-      "runs": "Harvest runs",
+      "runs": "Runs",
       "places": "Discovered places",
       "entries": "Source products",
       "import": "Import a file",
       "shops": "Source shops",
-      "sources": "Chain sources"
+      "sources": "Chain sources",
+      "postalCodes": "Postal codes"
     },
     "match": {
       "EAN": "Barcode",
@@ -521,7 +532,23 @@
     },
     "queue": {
       "tally": "{{remaining}} left, {{decided}} decided",
-      "skip": "Skip for now"
+      "skip": "Skip for now",
+      "view": {
+        "review": "One at a time",
+        "list": "As a list"
+      },
+      "select": "Select this row",
+      "selectAll": "Select all {{loaded}} loaded",
+      "clearSelection": "Clear the selection ({{count}})",
+      "loadMore": "Load more ({{loaded}} loaded)",
+      "bulk": {
+        "progress": "Working through {{done}} of {{total}}",
+        "stop": "Stop",
+        "stopped": "Stopped. The {{succeeded}} of {{total}} that went through are done, and stopping does not undo them.",
+        "finished": "{{succeeded}} of {{total}} went through.",
+        "refused": "These were refused and are still in the queue",
+        "leftAlone": "These were left alone and nothing was sent for them"
+      }
     },
     "runs": {
       "heading": "Harvest runs",
@@ -587,7 +614,7 @@
       },
       "export": {
         "action": "Export this run as a file",
-        "working": "Preparing the file\u2026",
+        "working": "Preparing the file…",
         "help": "The file holds the products this run was the last to observe, so a chain walked again since answers fewer of them. Export the newest run of a chain. It is a read, so it works whether or not this deployment is allowed to start runs: a machine that may crawl exports, and a cluster that may not imports.",
         "failed": "The export did not come back. Nothing was written and nothing was changed."
       },
@@ -618,7 +645,7 @@
       "import": "Add to the catalog",
       "reject": "Not a shop we want",
       "why": "Nothing in the catalog matched this: neither its OpenStreetMap reference nor the same brand nearby. It is being offered rather than created.",
-      "supermarketId": "Chain identifier to file it under (optional)",
+      "supermarketId": "Chain to file it under (optional)",
       "near": {
         "heading": "Others of the same brand nearby",
         "none": "Nothing else of this brand is near it in the queue."
@@ -635,6 +662,21 @@
         "provider": "Provider",
         "externalRef": "Provider reference",
         "coordinates": "Coordinates"
+      },
+      "bulk": {
+        "import": "Add them to the catalog",
+        "importing": "Adding {{done}} of {{total}}",
+        "reject": "Reject them",
+        "rejecting": "Rejecting {{done}} of {{total}}",
+        "importConfirm": {
+          "heading": "Add {{count}} places to the catalog?",
+          "body": "No chain is named for any of them, so the catalog works each one out from the brand the place carries. A place whose brand it cannot place is refused and named afterwards, and the rest still go through.",
+          "bodyChained": "Every one of them is filed under {{chain}}, whatever brand it carries. Clear the chain first if the catalog should work each place out from its own brand."
+        },
+        "rejectConfirm": {
+          "heading": "Reject {{count}} places?",
+          "body": "Each place stays as rejected, so no run offers it again."
+        }
       }
     },
     "entries": {
@@ -698,6 +740,26 @@
         "category": "Category",
         "defaultUnit": "Sold by",
         "submit": "Create it and bind the row"
+      },
+      "proposalBadge": {
+        "item": "A product was proposed",
+        "sibling": "Points at another row",
+        "none": "Nothing proposed"
+      },
+      "bulk": {
+        "accept": "Accept the proposals",
+        "accepting": "Accepting {{done}} of {{total}}",
+        "reject": "Reject them",
+        "rejecting": "Rejecting {{done}} of {{total}}",
+        "counts": "Accept {{count}} of {{selected}} picked. {{unproposed}} have no proposal and are left alone.",
+        "acceptConfirm": {
+          "heading": "Accept the proposals?",
+          "body": "Each of the {{count}} rows is bound to the product its own row proposed, and its prices are written. The {{unproposed}} with no proposal are left alone. This is one call per row and it can be stopped, but what has gone through stays through."
+        },
+        "rejectConfirm": {
+          "heading": "Reject {{count}} products?",
+          "body": "Each row stays as rejected, so no run asks about it again. You can find them later by asking for rejected rows."
+        }
       }
     },
     "imports": {
@@ -739,7 +801,7 @@
       "validUntil": "Valid until",
       "datesRequired": "The file carries a window, so both dates are needed. Change them freely; they apply to every product that states none of its own.",
       "import": "Start the import",
-      "importing": "Importing\u2026",
+      "importing": "Importing…",
       "started": "The import has started.",
       "openQueue": "Work through what it queued",
       "openRun": "Watch the run",
@@ -753,7 +815,22 @@
         "lead": "One entry per product, with every complaint about it. Fix the file in the producer and drop it again: nothing on this screen edits the document."
       },
       "preview": {
-        "heading": "What would be imported"
+        "heading": "What would be imported",
+        "search": "Find a product in the file",
+        "more": "Show 250 more of the {{more}} not drawn",
+        "wholeFile": "Show the whole file again",
+        "tally": {
+          "all": "{{total}} products.",
+          "capped": "Showing the first {{drawn}} of {{total}} products.",
+          "matching": "{{matched}} products match \"{{term}}\", out of {{total}}.",
+          "matchingCapped": "Showing {{drawn}} of the {{matched}} products matching \"{{term}}\", out of {{total}}.",
+          "none": "No product matches \"{{term}}\".",
+          "refused": "Showing the {{matched}} refused products, out of {{total}}.",
+          "refusedCapped": "Showing {{drawn}} of the {{matched}} refused products, out of {{total}}.",
+          "refusedMatching": "{{matched}} refused products match \"{{term}}\", out of {{total}}.",
+          "refusedMatchingCapped": "Showing {{drawn}} of the {{matched}} refused products matching \"{{term}}\", out of {{total}}.",
+          "refusedNone": "No refused product matches \"{{term}}\"."
+        }
       }
     },
     "shops": {
@@ -790,6 +867,136 @@
         "notBackfilled": "{{shop}} will point at {{location}}. This does not fill in what the last run skipped: the next run writes it.",
         "startRun": "Start a run",
         "submit": "Map it"
+      },
+      "bulk": {
+        "ignoring": "Ignoring {{done}} of {{total}}",
+        "unignoring": "Putting back {{done}} of {{total}}",
+        "unmapping": "Unmapping {{done}} of {{total}}",
+        "ignoreConfirm": {
+          "heading": "Ignore {{count}} shops?",
+          "body": "No run writes availability for an ignored shop. {{leftAlone}} of the picked rows are ignored already and are left alone."
+        },
+        "unignoreConfirm": {
+          "heading": "Put {{count}} shops back in the queue?",
+          "body": "Each one goes back to waiting to be mapped. {{leftAlone}} of the picked rows are not ignored and are left alone."
+        },
+        "unmapConfirm": {
+          "heading": "Unmap {{count}} shops?",
+          "body": "Each one stops pointing at a shop of ours, and the next run writes no availability for it until somebody maps it again. {{leftAlone}} of the picked rows are not mapped and are left alone."
+        }
+      }
+    },
+    "sources": {
+      "heading": "Chain sources",
+      "lead": "One row per chain: which adapter fetches it, how hard, and whether it may be fetched at all. Workers and requests per second are the two settings that decide whether a crawl gets us blocked by a chain's storefront, so raise them one step at a time and watch what the failures count does.",
+      "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
+      "edit": "Change how it is fetched",
+      "new": "Add a chain source",
+      "create": "Create the source",
+      "exists": "That chain already has a source row. Change it in the list instead.",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "field": {
+        "chain": "Chain",
+        "adapter": "Adapter",
+        "workers": "Workers",
+        "rate": "Requests per second",
+        "lastRunAt": "Last run",
+        "lastSuccessAt": "Last success",
+        "failures": "Failures in a row"
+      }
+    },
+    "postalCodes": {
+      "one": "Postal code",
+      "many": "Postal codes",
+      "status": {
+        "QUEUED": "Waiting for a run",
+        "RUNNING": "Being looked at",
+        "DONE": "Looked at",
+        "FAILED": "Failed",
+        "PARKED": "Parked"
+      },
+      "placeStatus": {
+        "NEW": "Undecided",
+        "IMPORTED": "Accepted",
+        "REJECTED": "Refused"
+      },
+      "field": {
+        "postalCode": "Postal code",
+        "placeName": "Name",
+        "status": "Status",
+        "lastLooked": "Last looked",
+        "found": "Places in this code",
+        "accepted": "Of those, accepted",
+        "waiting": "People waiting",
+        "attempts": "Attempts",
+        "requestedAt": "First asked about",
+        "discoveredAt": "Last looked",
+        "lastAttemptedAt": "Last attempted"
+      },
+      "filter": {
+        "postalCode": "Postal code starts with"
+      },
+      "action": {
+        "discoverAgain": "Queue another discovery"
+      },
+      "confirm": {
+        "discoverAgain": {
+          "heading": "Discover {{name}} again?",
+          "body": "This puts {{name}} back in the queue and ignores the thirty day wait, which is the only reason to press it. It fetches from a public service when its turn comes. The queue runs one code at a time, so the code is queued and not started.",
+          "confirm": "Queue it again"
+        }
+      },
+      "notice": {
+        "notDraining": "Harvesting is switched off in this deployment, so codes queue here and nothing runs them. Adding and queueing still works, and the backlog is picked up wherever harvesting is on.",
+        "demandUnavailable": "The people waiting column could not be read, so it is empty. An empty cell here does not mean nobody is waiting."
+      },
+      "add": {
+        "heading": "Add postal codes",
+        "lead": "Codes you add are looked at by the harvester, which finds the shops in them. A code that is not in the national table is refused, one code at a time, so you can see which one was wrong.",
+        "country": "Country",
+        "codes": "Postal codes",
+        "codesHelp": "One or many. Separate them with spaces, commas or new lines. Repeats are dropped.",
+        "discoverNow": "Discover places now",
+        "discoverNowHelp": "Off adds the code and queues no run, so it is tracked and costs nothing today.",
+        "submit": "Add {{count}} codes",
+        "cancel": "Cancel",
+        "progress": "Adding {{done}} of {{total}}",
+        "added": "Added {{added}} of {{total}}. The refused ones are still in the box, so you can fix them and press again."
+      },
+      "detail": {
+        "back": "Back to postal codes",
+        "queue": "What we did about it",
+        "lastRun": "Open the run that produced this",
+        "locatedInIt": "Places in this code",
+        "locatedInItSays": "Places whose own postal code is this one, whichever run found them. This is what a shopper here would be offered.",
+        "foundByItsRuns": "Places this code found",
+        "foundByItsRunsSays": "Places the runs for this code wrote, wherever they turned out to be. A run centred here reaches into the codes around it, so this counts the work the code caused.",
+        "near": "Codes near it",
+        "nearSays": "Measured centre to centre, so two codes that touch can be far apart here. A code that is missing from this list is not proof that it is far away: it may simply be outside the range we asked for.",
+        "notShipped": "This code is not in the national table at all, which usually means it does not exist. That is why we have no neighbours for it, and why a run for it would fail.",
+        "noNear": "No other code is within range of this one.",
+        "places": "What we found here",
+        "shops": "Shops in the catalog here: {{count}}",
+        "noPlaces": "No discovered place sits in this code.",
+        "derived": "Code guessed from the nearest centre",
+        "tagged": "Code taken from the map data",
+        "openPlaces": "Open the places queue for this code",
+        "openLocations": "Open the catalog shops",
+        "waiting": "Who is waiting"
+      },
+      "count": {
+        "total": "All",
+        "imported": "Accepted",
+        "rejected": "Refused",
+        "undecided": "Undecided"
+      },
+      "waiting": {
+        "mainProfiles": "Shopping profiles here",
+        "mainUsers": "People, counted once each",
+        "nearbyProfiles": "Profiles we widened into it",
+        "nearbyUsers": "People, counted once each",
+        "suppressed": "{{count}} profiles were offered this code and removed it. They are not waiting on it."
       }
     }
   },
@@ -1014,8 +1221,10 @@
       "one": "membership",
       "many": "Memberships",
       "membershipId": "Identifier",
-      "zoneId": "Zone",
+      "zoneId": "Zone identifier",
       "zoneIdHelp": "Fixed here. A membership is one person in one zone; somebody joining a second zone gets a second membership.",
+      "zoneName": "Zone",
+      "zoneNameHelp": "The household this membership is in. It is on the row, so this list reads with no zone chosen and every row still says which one it belongs to.",
       "userId": "Person",
       "userIdHelp": "Fixed here. It says whose membership this is, and nothing transfers one between accounts.",
       "username": "Name in this zone",
@@ -1059,8 +1268,10 @@
       "one": "line",
       "many": "List lines",
       "id": "Identifier",
-      "listId": "List",
+      "listId": "List identifier",
       "listIdHelp": "Fixed here. A line belongs to the list it was written on, and nothing moves one between lists.",
+      "listName": "List",
+      "listNameHelp": "The list this line was written on. It is on the row, so this list reads with no list chosen and every row still says which one it is from.",
       "content": "What it says",
       "quantity": "How many",
       "approvalStatus": "Approval",
@@ -1091,7 +1302,6 @@
     }
   },
   "dashboard": {
-    "nav": "Overview",
     "heading": "Overview",
     "measuredAt": "Taken {{when}}",
     "refresh": "Refresh",
@@ -1118,10 +1328,12 @@
       "places": "Places found",
       "stalePrices": "Stale prices",
       "loginFailures": "Failed admin sign ins, last 24 hours",
-      "clear": "Nothing is waiting for a decision."
+      "clear": "Nothing is waiting for a decision.",
+      "postalCodes": "Postal codes waiting",
+      "postalCodesFailed": "{{count}} failed",
+      "postalCodesOldest": "oldest queued {{since}}"
     },
     "harvest": {
-      "heading": "The harvester",
       "running": "Running now",
       "noRun": "Nothing is running.",
       "openRun": "Open this run",
@@ -1131,24 +1343,7 @@
       "byStatusTitle": "Runs by status",
       "sources": "{{enabled}} of {{total}} chains enabled"
     },
-    "people": {
-      "heading": "People",
-      "users": "Users",
-      "usersCaption": "{{registered}} registered, {{temporary}} temporary, {{verified}} verified",
-      "zones": "Zones",
-      "zonesCaption": "{{active}} active of {{total}}",
-      "lists": "Lists",
-      "baskets": "Baskets",
-      "basketsCaption": "{{draft}} draft, {{completed}} completed",
-      "signUps": "Sign ups",
-      "signUpsTitle": "Sign ups per day",
-      "zonesSeries": "Zones",
-      "listsSeries": "Lists",
-      "zonesAndLists": "Zones and lists created per day",
-      "inLast7Days": "in the last 7 days"
-    },
     "catalog": {
-      "heading": "Catalog",
       "supermarkets": "Chains",
       "locations": "Shops",
       "items": "Products",
@@ -1195,6 +1390,21 @@
         "price_scopes": "a price scope",
         "price_policies": "a price policy"
       }
+    },
+    "shoppers": {
+      "users": "Users",
+      "usersCaption": "{{registered}} registered, {{temporary}} temporary, {{verified}} verified",
+      "zones": "Zones",
+      "zonesCaption": "{{active}} active of {{total}}",
+      "lists": "Lists",
+      "baskets": "Baskets",
+      "basketsCaption": "{{draft}} draft, {{completed}} completed",
+      "signUps": "Sign ups",
+      "signUpsTitle": "Sign ups per day",
+      "zonesSeries": "Zones",
+      "listsSeries": "Lists",
+      "zonesAndLists": "Zones and lists created per day",
+      "inLast7Days": "in the last 7 days"
     }
   }
 }

@@ -55,6 +55,12 @@ jobs:
       - name: The runtime manifest check's own tests
         run: node --test apps/luna-shopper-backend/tools/ci/assert-runtime-manifest.test.mjs
 
+      # The leaflet finder (`tools/leaflets/`) is plain node with no Nx project,
+      # so `nx affected` never sees it. Its tests read fixtures and touch no
+      # network; under a second.
+      - name: The leaflet finder's own tests
+        run: node --test tools/leaflets/find-leaflets.test.mjs
+
       # `manifest-check` joins lint and test here (k8s plan 0009). It is the one
       # target in this job that is not free: it depends on `prune`, so an affected
       # Luna Shopper service is built and its lockfile pruned before the check

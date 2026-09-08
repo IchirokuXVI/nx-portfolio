@@ -85,6 +85,27 @@ export const ERROR_CODES = {
    * already failed against themselves.
    */
   ACCOUNT_LOCKED: 'account_locked',
+  /**
+   * The postal code named is not one catalog holds (plan 0097, section 6.1).
+   *
+   * Its own code rather than a plain {@link VALIDATION_FAILED}, because the
+   * operator's next step is particular and the screen has to be able to say it:
+   * the centroid table is the whole national list, so a code missing from it is
+   * a typo rather than a gap in our coverage. Accepting one would buy four
+   * failed Nominatim attempts and a `FAILED` queue row that reads like an
+   * outage.
+   */
+  POSTAL_CODE_UNKNOWN: 'postal_code_unknown',
+  /**
+   * The row is already being worked on (plan 0097, section 6.2).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the screen says
+   * something specific and useful: wait for the run that is happening, rather
+   * than change anything about the request. It is refused rather than queued
+   * because a `RUNNING` row has a run against it and requeueing would clear the
+   * attempt count of an attempt still in progress.
+   */
+  RUN_IN_PROGRESS: 'run_in_progress',
   INTERNAL: 'internal',
 } as const;
 
@@ -141,5 +162,12 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // stays apart from `rate_limited` at the status level as well as the code
   // level so a proxy or a log reader sees the difference too.
   [ERROR_CODES.ACCOUNT_LOCKED]: HttpStatus.LOCKED,
+  // 400 rather than 404. A 404 on a create route reads as "no such route", and
+  // what is wrong here is a value in the body: the code does not exist in the
+  // shipped national table, which is a typo (plan 0097, section 6.1).
+  [ERROR_CODES.POSTAL_CODE_UNKNOWN]: HttpStatus.BAD_REQUEST,
+  // 409 for the ordinary reason: the request was well formed and the caller is
+  // allowed to make it, and what refuses it is the state of the row.
+  [ERROR_CODES.RUN_IN_PROGRESS]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

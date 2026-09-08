@@ -1,15 +1,24 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { UserKind } from '@portfolio/luna-shopper/contracts';
-import { PageQueryDto } from '@portfolio/luna-shopper/platform';
-import { Transform } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  DEFAULT_POSTAL_CODE_COUNTRY,
+  UserKind,
+} from '@portfolio/luna-shopper/contracts';
+import { PageQueryDto } from '@portfolio/luna-shopper/platform';
+import { DEFAULT_NEARBY_RADIUS_METRES } from '@portfolio/luna-shopper/postal-codes';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { IsUuidOrNone, referenceFilterDescription } from './reference-none';
 
@@ -132,6 +141,35 @@ export class ListAdminZonesQueryDto extends PageQueryDto {
 }
 
 /** Shopping lists, by the zone they are in or the person who created them. */
+/**
+ * The zone filter on the membership collection (admin plan 0017).
+ *
+ * Optional, and that is the whole point of the route: an operator looking for
+ * one person's memberships does not know the households yet. Absent means every
+ * zone's, grouped by the zone they are in.
+ */
+export class ListAdminMembershipsQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The household to narrow to. Absent lists memberships from every zone.',
+  })
+  @IsOptional()
+  @IsUUID()
+  zoneId?: string;
+}
+
+/** The list filter on the line collection, optional for the same reason. */
+export class ListAdminListLinesQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'The list to narrow to. Absent lists lines from every list.',
+  })
+  @IsOptional()
+  @IsUUID()
+  listId?: string;
+}
+
 export class ListAdminListsQueryDto extends PageQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
@@ -192,6 +230,82 @@ export class ListAdminPostalCodesQueryDto extends PageQueryDto {
   @Transform(asBoolean)
   @IsBoolean()
   served?: boolean;
+}
+
+/**
+ * The neighbours of one code (plan 0097, section 4).
+ *
+ * The code itself is a path parameter, because the route is about that code;
+ * these two only say how the neighbours are measured.
+ */
+export class NearbyPostalCodesQueryDto {
+  @ApiPropertyOptional({
+    maxLength: 2,
+    description: `ISO 3166-1 alpha-2. Defaults to ${DEFAULT_POSTAL_CODE_COUNTRY}.`,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  country?: string;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 50000,
+    default: DEFAULT_NEARBY_RADIUS_METRES,
+    description:
+      'Centroid to centroid, so two adjacent codes whose centres sit further apart than this are neighbours in reality and not in the answer. Defaults to the radius a profile widens by.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50_000)
+  radiusMetres?: number;
+}
+
+/**
+ * The demand behind a page of postal codes (plan 0097, section 5).
+ *
+ * A list rather than one code, because the queue screen decorates a page of rows
+ * and one call per row is a fan out.
+ */
+export class PostalCodeUsageQueryDto {
+  @ApiPropertyOptional({
+    maxLength: 2,
+    description: `ISO 3166-1 alpha-2. Defaults to ${DEFAULT_POSTAL_CODE_COUNTRY}; every code in one request shares it.`,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  country?: string;
+
+  @ApiProperty({
+    type: [String],
+    maxItems: 100,
+    description:
+      'The codes to count, which is one page of the queue. Every code asked about is in the answer, including the ones nobody uses: a screen decorating rows needs the zeros.',
+  })
+  @Transform(asStringArray)
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(16, { each: true })
+  postalCodes!: string[];
+}
+
+/**
+ * One repeated query parameter or one comma separated value, both into an array.
+ *
+ * A browser sends `postalCodes=14013&postalCodes=14014`, and a person testing
+ * the route by hand writes `postalCodes=14013,14014`. Reading both costs four
+ * lines and saves an operator a confusing 400.
+ */
+function asStringArray({ value }: { value: unknown }): string[] {
+  const raw = Array.isArray(value) ? value : [value];
+  return raw
+    .flatMap((entry) => (typeof entry === 'string' ? entry.split(',') : []))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 /** The locale of the confirmation mail an operator resends on somebody's behalf. */

@@ -1,0 +1,47 @@
+{
+  "items": [
+    {
+      "id": "22222222-2222-4222-8222-222222222201",
+      "name": {
+        "es": "Leche semidesnatada Hacendado 1 L",
+        "en": "Hacendado semi-skimmed milk 1 L"
+      },
+      "brand": "Hacendado",
+      "imageUrl": null,
+      "sku": null,
+      "ean": "8480000000201",
+      "unitSize": 1,
+      "category": "DAIRY",
+      "defaultUnit": "LITER",
+      "productGroupId": null
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222202",
+      "name": { "es": "Arroz redondo SOS 1 kg", "en": "SOS round rice 1 kg" },
+      "brand": "SOS",
+      "imageUrl": null,
+      "sku": null,
+      "ean": "8480000000202",
+      "unitSize": 1,
+      "category": "PANTRY",
+      "defaultUnit": "KILOGRAM",
+      "productGroupId": null
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222203",
+      "name": {
+        "es": "Bebida de avena Hacendado 1 L",
+        "en": "Hacendado oat drink 1 L"
+      },
+      "brand": "Hacendado",
+      "imageUrl": null,
+      "sku": null,
+      "ean": "8480000000203",
+      "unitSize": 1,
+      "category": "BEVERAGES",
+      "defaultUnit": "LITER",
+      "productGroupId": null
+    }
+  ],
+  "nextCursor": "cursor-items-page-2"
+}

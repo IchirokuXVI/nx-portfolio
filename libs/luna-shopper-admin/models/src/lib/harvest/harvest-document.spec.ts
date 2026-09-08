@@ -4,6 +4,10 @@ import {
   hintNotice,
   importConflict,
   parseHarvestDocument,
+  PREVIEW_PAGE,
+  previewMatches,
+  previewWindow,
+  type HarvestProductRow,
   type HintResult,
 } from './harvest-document';
 
@@ -352,5 +356,139 @@ describe('importConflict', () => {
 
   it('is nothing at all for any other refusal', () => {
     expect(importConflict({ status: 400, detail: 'imported' })).toBeNull();
+  });
+});
+
+/**
+ * The preview cap and the search over it (admin plan 0019).
+ *
+ * Two pure functions and a table of inputs, which is why they live in this file
+ * rather than in the component: the decision they make is about a document, and
+ * a mounted component would test Angular's `@for` on the way to testing it.
+ */
+const row = (over: Partial<HarvestProductRow> = {}): HarvestProductRow => ({
+  id: 'p-1',
+  externalId: '',
+  name: '',
+  brand: '',
+  ean: '',
+  size: '',
+  price: '',
+  unitPrice: '',
+  validFrom: '',
+  validUntil: '',
+  categoryPath: '',
+  ...over,
+});
+
+/** A file of `count` products, numbered so any one of them can be named. */
+const many = (count: number): readonly HarvestProductRow[] =>
+  Array.from({ length: count }, (_, index) =>
+    row({ id: `p-${index}`, name: `Product ${index}` })
+  );
+
+describe('previewWindow', () => {
+  it('draws the first page of a large file and says how many are left', () => {
+    const view = previewWindow(many(4232), PREVIEW_PAGE);
+
+    expect(view.rows).toHaveLength(250);
+    expect(view.rows[0].id).toBe('p-0');
+    expect(view.matched).toBe(4232);
+    expect(view.hasMore).toBe(true);
+    expect(view.remaining).toBe(3982);
+  });
+
+  it('draws a second page once the operator has asked for one', () => {
+    const view = previewWindow(many(4232), PREVIEW_PAGE * 2);
+
+    expect(view.rows).toHaveLength(500);
+    expect(view.remaining).toBe(3732);
+  });
+
+  /** A leaflet. Nobody sees a control at all, which is the point of the cap. */
+  it('draws a small file whole and offers nothing', () => {
+    const view = previewWindow(many(40), PREVIEW_PAGE);
+
+    expect(view.rows).toHaveLength(40);
+    expect(view.hasMore).toBe(false);
+    expect(view.remaining).toBe(0);
+  });
+
+  it('reports nothing rather than failing over nothing', () => {
+    expect(previewWindow([], PREVIEW_PAGE)).toEqual({
+      rows: [],
+      matched: 0,
+      hasMore: false,
+      remaining: 0,
+    });
+  });
+});
+
+describe('previewMatches', () => {
+  const catalogue = [
+    row({ id: 'p-1', name: 'Jamón Serrano', brand: 'Hacendado' }),
+    row({ id: 'p-2', name: 'Leche entera', brand: 'Pascual', size: '1 L' }),
+    row({ id: 'p-3', name: 'Nocilla', ean: '8480000123456' }),
+  ];
+
+  it('leaves everything alone when nothing is typed', () => {
+    expect(previewMatches(catalogue, '', null)).toHaveLength(3);
+    expect(previewMatches(catalogue, '   ', null)).toHaveLength(3);
+  });
+
+  it('matches on the name, the brand, the size and the barcode', () => {
+    expect(previewMatches(catalogue, 'nocilla', null)).toEqual([catalogue[2]]);
+    expect(previewMatches(catalogue, 'pascual', null)).toEqual([catalogue[1]]);
+    expect(previewMatches(catalogue, '1 L', null)).toEqual([catalogue[1]]);
+    expect(previewMatches(catalogue, '84800001', null)).toEqual([catalogue[2]]);
+  });
+
+  it('folds the case', () => {
+    expect(previewMatches(catalogue, 'LECHE', null)).toEqual([catalogue[1]]);
+  });
+
+  /**
+   * Both ways, and neither is optional in this catalogue. An operator typing
+   * `jamon` who is not shown `Jamón Serrano` concludes the file does not have it.
+   */
+  it('folds the accents in both directions', () => {
+    expect(previewMatches(catalogue, 'jamon', null)).toEqual([catalogue[0]]);
+    expect(previewMatches(catalogue, 'Jamón', null)).toEqual([catalogue[0]]);
+  });
+
+  it('does not match across the gap between two fields', () => {
+    expect(previewMatches(catalogue, 'entera pascual', null)).toEqual([]);
+  });
+
+  /**
+   * The whole file first, then the window. Filtering the drawn rows instead
+   * would leave this product unreachable until "show more" had been pressed
+   * eleven times.
+   */
+  it('finds a product past the cap with the window still at its default', () => {
+    const products = [...many(3000), row({ id: 'late', name: 'Nocilla' })];
+    const matched = previewMatches(products, 'nocilla', null);
+
+    expect(previewWindow(matched, PREVIEW_PAGE)).toEqual({
+      rows: [products[3000]],
+      matched: 1,
+      hasMore: false,
+      remaining: 0,
+    });
+  });
+
+  it('narrows to the refused rows, and a term narrows further', () => {
+    const refused = new Set(['p-1', 'p-2']);
+
+    expect(previewMatches(catalogue, '', refused)).toEqual([
+      catalogue[0],
+      catalogue[1],
+    ]);
+    expect(previewMatches(catalogue, 'leche', refused)).toEqual([catalogue[1]]);
+    expect(previewMatches(catalogue, 'nocilla', refused)).toEqual([]);
+  });
+
+  it('returns nothing for a term nothing matches', () => {
+    expect(previewMatches(catalogue, 'chorizo', null)).toEqual([]);
   });
 });

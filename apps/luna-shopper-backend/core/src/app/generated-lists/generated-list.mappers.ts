@@ -100,6 +100,14 @@ export function toBasketLineView(
     options: GeneratedListLineOption[];
     /** What the newest settle on this line said, or null if there has been none. */
     lastOutcome?: SettlementOutcome | null;
+    /**
+     * Units bought before this line reached any list (plan 0093, section 2.2).
+     *
+     * Defaulted to zero rather than made required, because that is the answer
+     * for every line that has never been settled off a list, which is nearly all
+     * of them.
+     */
+    waitingSettled?: number;
   },
   seesZoneData: boolean
 ): GeneratedListBasketLineView {
@@ -121,6 +129,10 @@ export function toBasketLineView(
     // amount exactly as a purchase does, so a row without this would caption a
     // shop that had none as somebody who bought it.
     lastOutcome: children.lastOutcome ?? null,
+    // Above the redaction, deliberately (plan 0093, section 2.2): it counts this
+    // basket's own purchases and names no list, so a guest is told it too. It is
+    // the number the screen needs to say what a list is about to receive.
+    waitingSettled: children.waitingSettled ?? 0,
   };
 
   if (!seesZoneData) {

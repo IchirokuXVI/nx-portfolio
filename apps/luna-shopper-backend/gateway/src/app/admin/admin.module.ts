@@ -4,8 +4,11 @@ import { MessagingModule } from '../messaging/messaging.module';
 import { AdminAuthController } from './admin-auth.controller';
 import {
   AdminBasketsController,
+  AdminListLinesController,
   AdminListsController,
+  AdminMembershipsController,
   AdminPostalCodesController,
+  AdminProfilePostalCodesController,
   AdminZonesController,
 } from './admin-core.controller';
 import { AdminDashboardController } from './admin-dashboard.controller';
@@ -49,9 +52,13 @@ import { AdminUserNamesService } from './admin-user-names.service';
     AdminUsersController,
     AdminAdminsController,
     AdminZonesController,
+    AdminMembershipsController,
     AdminListsController,
+    AdminListLinesController,
     AdminBasketsController,
     AdminPostalCodesController,
+    // The demand behind a postal code, which is core's (plan 0097, section 5).
+    AdminProfilePostalCodesController,
   ],
   providers: [AdminJwtStrategy, AdminUserNamesService, AdminDashboardService],
 })

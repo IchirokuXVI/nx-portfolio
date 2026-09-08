@@ -292,21 +292,31 @@ const SCOPED_ADAPTER = 'mercadona-api';
       color: var(--admin-ink-muted);
     }
 
+    button {
+      cursor: pointer;
+    }
+
+    /* Which button this is, and nothing about what a button looks like. The
+       height, the padding and the corners come from the global base. */
     .primary {
-      min-block-size: 2.75rem;
+      border-color: transparent;
       background: var(--admin-accent);
+      font-weight: 600;
       color: var(--admin-accent-ink);
     }
 
     /* The way to the upload, which is a link and not a button because it goes
        to a screen rather than doing something. It still looks like the primary
-       action, because on that mode it is the only one there is. */
+       action, because on that mode it is the only one there is.
+
+       An anchor is not a control, so the base does not reach it and the four
+       declarations it shares with one are written out here. */
     a.primary {
       display: inline-flex;
       align-items: center;
+      min-block-size: 2.75rem;
       padding: var(--admin-space-2) var(--admin-space-3);
       border-radius: var(--admin-radius);
-      font-weight: 600;
       text-decoration: none;
     }
 

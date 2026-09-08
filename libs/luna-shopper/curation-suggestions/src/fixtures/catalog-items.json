@@ -1,0 +1,50 @@
+[
+  {
+    "id": "item-milk",
+    "name": { "es": "Leche semidesnatada", "en": "Semi skimmed milk" },
+    "brand": "Hacendado",
+    "imageUrl": null,
+    "sku": null,
+    "ean": null,
+    "unitSize": 1,
+    "category": "DAIRY",
+    "defaultUnit": "LITER",
+    "productGroupId": null
+  },
+  {
+    "id": "item-oil",
+    "name": { "es": "Aceite de oliva", "en": "Olive oil" },
+    "brand": "Hacendado",
+    "imageUrl": null,
+    "sku": null,
+    "ean": null,
+    "unitSize": 1,
+    "category": "PANTRY",
+    "defaultUnit": "LITER",
+    "productGroupId": null
+  },
+  {
+    "id": "item-bread",
+    "name": { "es": "Pan de molde blanco", "en": "White sliced bread" },
+    "brand": "Bimbo",
+    "imageUrl": null,
+    "sku": null,
+    "ean": "8410376012347",
+    "unitSize": 0.46,
+    "category": "BAKERY",
+    "defaultUnit": "KILOGRAM",
+    "productGroupId": null
+  },
+  {
+    "id": "item-ifa-milk",
+    "name": { "es": "Leche entera" },
+    "brand": "Ifa Unnia",
+    "imageUrl": null,
+    "sku": null,
+    "ean": null,
+    "unitSize": 1,
+    "category": "DAIRY",
+    "defaultUnit": "LITER",
+    "productGroupId": null
+  }
+]

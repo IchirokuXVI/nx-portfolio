@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DiscoveredPlaceStatus,
+  PostalCodeSource,
   PriceScopeKind,
   type PriceScopeView,
 } from '@portfolio/luna-shopper/contracts';
@@ -197,6 +198,9 @@ export class LidlStoreDiscoveryRunner implements StoreDiscoveryRunner {
       street: store.street,
       city: store.city,
       postalCode: store.postalCode,
+      // The chain states it on every store record, so it is a source value in
+      // plan 0097's sense: never a guess, and never overridden by one.
+      postalCodeSource: store.postalCode ? PostalCodeSource.SOURCE : null,
       country: run.country,
       website: null,
       openingHours: store.openingHours,

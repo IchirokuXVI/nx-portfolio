@@ -9,7 +9,12 @@ import {
   dashboardSeedWithout,
   type DashboardDocument,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { provideResources } from '@portfolio/luna-shopper-admin/feature-resource';
+import { provideSections } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  defineResource,
+  type AnyResourceDescriptor,
+  type ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
 import {
   BarChart,
   LineChart,
@@ -17,13 +22,60 @@ import {
   RunRowView,
   StatTile,
 } from '@portfolio/luna-shopper-admin/ui';
-import { BlockNotice } from './block-notice';
 import { DashboardPage } from './dashboard-page';
 
 /** The chains the seed's queues name, so a spec can assert a link on one. */
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
 const CARREFOUR = '22222222-2222-4222-8222-222222222222';
 const DEZA = '33333333-3333-4333-8333-333333333333';
+
+interface Row extends ResourceRow {
+  id: string;
+}
+
+/**
+ * A descriptor with nothing behind it.
+ *
+ * The tiles ask the registry where a resource is mounted, so the sections have
+ * to be real even though no gateway is ever called: a resolver that answered
+ * `null` everywhere would prove the tiles draw and prove nothing about where
+ * they go.
+ */
+function descriptor(name: string): AnyResourceDescriptor {
+  return defineResource<Row>({
+    name,
+    segment: name,
+    labels: { one: `${name}.one`, many: `${name}.many` },
+    title: (row) => row.id,
+    fields: [],
+    list: { columns: [], compact: [] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  });
+}
+
+/** The mount of admin plan 0022, as far as the overview's links reach into it. */
+const SECTIONS = [
+  {
+    key: 'catalog',
+    label: 'shell.sections.catalog',
+    segment: 'catalog',
+    resources: [descriptor('prices')],
+  },
+  {
+    key: 'shoppers',
+    label: 'shell.sections.shoppers',
+    segment: 'shoppers',
+    resources: [descriptor('zones')],
+  },
+  {
+    key: 'harvest',
+    label: 'shell.sections.harvest',
+    segment: 'harvest',
+    resources: [descriptor('postal-codes')],
+  },
+];
 
 /** Let every pending microtask settle. `whenStable` hangs on a polling store. */
 async function settle(fixture: ComponentFixture<DashboardPage>): Promise<void> {
@@ -42,10 +94,10 @@ async function render(
     providers: [
       provideRouter([]),
       provideLocationMocks(),
-      // No descriptors, so a chain resolves to nothing and shows its id, which
-      // is the state plan 0007 section 4 describes and the one a spec can have
-      // without a gateway.
-      provideResources(),
+      // The sections are real and their gateways are not, so a chain resolves
+      // to nothing and shows its id, which is the state plan 0007 section 4
+      // describes and the one a spec can have without a backend.
+      provideSections(...SECTIONS),
       { provide: DASHBOARD_SERVICE, useValue: { read: async () => document } },
     ],
   }).compileComponents();
@@ -62,12 +114,6 @@ function tiles(fixture: ComponentFixture<DashboardPage>): StatTile[] {
     .map((node) => node.componentInstance as StatTile);
 }
 
-function notices(fixture: ComponentFixture<DashboardPage>): string[] {
-  return fixture.debugElement
-    .queryAll(By.directive(BlockNotice))
-    .map((node) => (node.componentInstance as BlockNotice).heading());
-}
-
 afterEach(() => TestBed.resetTestingModule());
 
 /**
@@ -79,7 +125,11 @@ afterEach(() => TestBed.resetTestingModule());
  * count exists on `value()` and nowhere in the DOM.
  */
 describe('DashboardPage against the seed', () => {
-  it('draws every section', async () => {
+  /**
+   * Three things, and each is a question about the whole tool rather than about
+   * one part of it (admin plan 0022, section 6).
+   */
+  it('draws work waiting, the sign ins and the feed, and nothing else', async () => {
     const fixture = await render();
     const headings = fixture.debugElement
       .queryAll(By.css('h2'))
@@ -87,13 +137,29 @@ describe('DashboardPage against the seed', () => {
 
     expect(headings).toEqual([
       'dashboard.waiting.heading',
-      'dashboard.harvest.heading',
-      'dashboard.people.heading',
-      'dashboard.catalog.heading',
       'dashboard.signIns.heading',
       'dashboard.activity.heading',
     ]);
-    expect(notices(fixture)).toEqual([]);
+  });
+
+  /**
+   * The counts and the charts went to the section that owns them. A count of
+   * users was here only because there was nowhere else for it.
+   */
+  it('draws no chart at all', async () => {
+    const fixture = await render();
+
+    expect(fixture.debugElement.queryAll(By.directive(LineChart))).toEqual([]);
+    expect(fixture.debugElement.queryAll(By.directive(BarChart))).toEqual([]);
+  });
+
+  it('draws no run and no recent runs', async () => {
+    const fixture = await render();
+
+    expect(
+      fixture.debugElement.query(By.directive(RunProgressView))
+    ).toBeNull();
+    expect(fixture.debugElement.queryAll(By.directive(RunRowView))).toEqual([]);
   });
 
   it('carries the seeded counts on the work waiting tiles', async () => {
@@ -110,13 +176,17 @@ describe('DashboardPage against the seed', () => {
     expect(byKey.get('loginFailures')?.value).toBe(2);
   });
 
+  /**
+   * A resource tile goes wherever its section mounted the screen, and a hand
+   * written screen keeps the segment constant it has always built from.
+   */
   it('links each of them where the work is done', async () => {
     const fixture = await render();
     const byKey = new Map(
       fixture.componentInstance.waiting().map((tile) => [tile.key, tile])
     );
 
-    expect(byKey.get('memberships')?.link).toEqual(['/', 'zones']);
+    expect(byKey.get('memberships')?.link).toEqual(['/', 'shoppers', 'zones']);
     expect(byKey.get(`entries-${MERCADONA}`)?.link).toEqual([
       '/',
       'harvest',
@@ -131,7 +201,12 @@ describe('DashboardPage against the seed', () => {
       'shops',
     ]);
     expect(byKey.get('places')?.link).toEqual(['/', 'harvest', 'places']);
-    expect(byKey.get('stale')?.link).toEqual(['/', 'prices']);
+    expect(byKey.get('stale')?.link).toEqual(['/', 'catalog', 'prices']);
+    expect(byKey.get('postalCodes')?.link).toEqual([
+      '/',
+      'harvest',
+      'postal-codes',
+    ]);
     expect(byKey.get('loginFailures')?.link).toBeNull();
   });
 
@@ -144,41 +219,24 @@ describe('DashboardPage against the seed', () => {
     expect(keys).not.toContain(`shops-${CARREFOUR}`);
   });
 
-  it('draws a progress bar for the run in flight', async () => {
-    const fixture = await render();
-    const progress = fixture.debugElement.query(By.directive(RunProgressView));
-
-    expect(progress).not.toBeNull();
-    expect((progress.componentInstance as RunProgressView).run().status).toBe(
-      'RUNNING'
-    );
-  });
-
-  it('links the five recent runs to their own screens', async () => {
-    const fixture = await render();
-    const rows = fixture.debugElement
-      .queryAll(By.directive(RunRowView))
-      .map((node) => node.componentInstance as RunRowView);
-
-    expect(rows).toHaveLength(5);
-    expect(rows[0].link()).toEqual(['/', 'harvest', 'runs', rows[0].row().id]);
-  });
-
-  it('draws the two line charts and the two bar charts', async () => {
-    const fixture = await render();
-
-    expect(fixture.debugElement.queryAll(By.directive(LineChart))).toHaveLength(
-      2
-    );
-    expect(fixture.debugElement.queryAll(By.directive(BarChart))).toHaveLength(
-      2
-    );
-  });
-
   it('draws the twenty rows of the feed', async () => {
     const fixture = await render();
 
     expect(fixture.componentInstance.activity()).toHaveLength(20);
+  });
+
+  /** A feed row opens at wherever its section mounted the screen. */
+  it('opens a feed row through the section that holds it', async () => {
+    const fixture = await render();
+    const opened = fixture.componentInstance
+      .activity()
+      .map((row) => row.link)
+      .filter((link): link is readonly string[] => link !== null);
+
+    expect(opened.length).toBeGreaterThan(0);
+    for (const link of opened) {
+      expect(['catalog', 'shoppers']).toContain(link[1]);
+    }
   });
 
   /** A chain the reference cannot name shows its id (plan 0007, section 4). */
@@ -194,6 +252,30 @@ describe('DashboardPage against the seed', () => {
     expect(fixture.componentInstance.measured()?.exact).not.toBe('');
   });
 
+  /**
+   * Admin plan 0024, section 2. The caption is the tile's own input rather
+   * than a sibling paragraph in a wrapper, and the query-carrying tile keeps
+   * its filter on its own anchor, so both wrappers are gone and the tile is
+   * the grid item.
+   */
+  it('hands the caption to the tile and keeps the chain on the query string', async () => {
+    const fixture = await render();
+
+    const captioned = tiles(fixture).filter(
+      (tile) => tile.caption() !== undefined
+    );
+    expect(captioned).toHaveLength(1);
+    expect(captioned[0].label()).toBe('dashboard.waiting.postalCodes');
+
+    const entries = fixture.debugElement.query(
+      By.css(`a.tile[href="/harvest/entries?supermarketId=${MERCADONA}"]`)
+    );
+    expect(entries).not.toBeNull();
+
+    expect(fixture.debugElement.query(By.css('.captioned'))).toBeNull();
+    expect(fixture.debugElement.query(By.css('.wrap'))).toBeNull();
+  });
+
   /** Every tile is a link except the one whose rows are on this same page. */
   it('opens every tile that has somewhere to go', async () => {
     const fixture = await render();
@@ -201,59 +283,77 @@ describe('DashboardPage against the seed', () => {
 
     expect(anchors.length).toBeGreaterThan(0);
   });
+
+  /**
+   * The overview does not draw the run in flight, so it does not ask for the
+   * fast poll. A run that started at midnight used to make every screen in the
+   * app re-read four times a minute.
+   */
+  it('leaves the store on the slow interval', async () => {
+    const fixture = await render();
+
+    expect(fixture.componentInstance.store.runInFlight()).toBe(true);
+    expect(fixture.componentInstance.store.interval()).toBe(60_000);
+  });
 });
 
 /**
  * A block that did not answer (plan 0016, section 5).
  *
- * `harvesterDeployed` is deliberately not consulted: it says production and
- * staging do not run the harvester, and both do now, so the document is the only
- * thing that knows.
+ * The notice with its retry is on the section dashboard the block belongs to.
+ * What the overview draws is a line naming the service, so a short row of tiles
+ * is not read as "nothing is waiting".
  */
 describe('DashboardPage with a block that did not answer', () => {
-  it('draws the harvester notice and every other section', async () => {
+  it('names the service that did not answer beside the tiles', async () => {
     const fixture = await render(dashboardSeedWithout('harvest'));
-    const headings = fixture.debugElement
-      .queryAll(By.css('h2'))
+    const missing = fixture.debugElement
+      .queryAll(By.css('.missing li'))
       .map((node) => (node.nativeElement as HTMLElement).textContent?.trim());
 
-    expect(notices(fixture)).toEqual(['dashboard.down.harvest']);
-    expect(headings).toEqual([
-      'dashboard.waiting.heading',
-      'dashboard.harvest.heading',
-      'dashboard.people.heading',
-      'dashboard.catalog.heading',
-      'dashboard.signIns.heading',
-      'dashboard.activity.heading',
-    ]);
-    expect(
-      fixture.debugElement.query(By.directive(RunProgressView))
-    ).toBeNull();
+    expect(missing).toEqual(['dashboard.down.harvest']);
   });
 
+  /**
+   * The postal code tile survives a missing harvest block, and that is right.
+   *
+   * It is not in the document at all (admin plan 0021, section 6): it is one
+   * call of its own, and a call that answered is a number worth showing whatever
+   * the dashboard route managed to assemble.
+   */
   it('keeps the numbers of every block that did answer', async () => {
     const fixture = await render(dashboardSeedWithout('harvest'));
     const keys = fixture.componentInstance.waiting().map((tile) => tile.key);
 
-    expect(keys).toEqual(['memberships', 'stale', 'loginFailures']);
+    expect(keys).toEqual([
+      'memberships',
+      'stale',
+      'loginFailures',
+      'postalCodes',
+    ]);
   });
 
-  /** One notice per missing block, never two of the same on one page. */
-  it('draws four notices when every block is missing, and an empty feed', async () => {
+  it('names all four when every block is missing, and draws an empty feed', async () => {
     const fixture = await render({
       ...dashboardSeedWithout('identity', 'core', 'catalog', 'harvest'),
       activity: [],
     });
+    const missing = fixture.debugElement
+      .queryAll(By.css('.missing li'))
+      .map((node) => (node.nativeElement as HTMLElement).textContent?.trim());
 
-    expect(notices(fixture)).toEqual([
-      'dashboard.down.harvest',
+    expect(missing).toEqual([
       'dashboard.down.identity',
       'dashboard.down.core',
       'dashboard.down.catalog',
+      'dashboard.down.harvest',
     ]);
-    expect(fixture.componentInstance.waiting()).toEqual([]);
+    // The postal code tile is the one thing left, because it is the one number
+    // on this row that does not come out of the document.
+    expect(fixture.componentInstance.waiting().map((tile) => tile.key)).toEqual(
+      ['postalCodes']
+    );
     expect(fixture.componentInstance.activity()).toEqual([]);
-    expect(tiles(fixture)).toEqual([]);
   });
 });
 
@@ -269,7 +369,7 @@ describe('DashboardPage with nothing to draw', () => {
       providers: [
         provideRouter([]),
         provideLocationMocks(),
-        provideResources(),
+        provideSections(...SECTIONS),
         {
           provide: DASHBOARD_SERVICE,
           useValue: {

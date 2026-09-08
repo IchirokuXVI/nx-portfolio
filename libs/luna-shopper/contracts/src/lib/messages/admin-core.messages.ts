@@ -212,9 +212,22 @@ export interface AdminZoneView {
   updatedAt: string;
 }
 
-/** One membership, as a zone's detail screen shows it. */
+/**
+ * One membership, as a zone's detail screen and the flat collection show it.
+ *
+ * **The zone is on the row** (admin plan 0017, section 2), because the
+ * collection is readable with no zone named and a membership is addressed by
+ * the pair `(zoneId, membershipId)`. A row that left its zone to the URL had no
+ * address of its own once the URL stopped naming one. The **name** is here for
+ * the reason `AdminListView` carries `zoneName`: across zones, the household is
+ * the fact that tells two rows apart.
+ */
 export interface AdminZoneMemberView {
   membershipId: string;
+  /** The zone this membership is in, on the row rather than in the URL. */
+  zoneId: string;
+  /** That zone's name, joined so a cross zone listing reads. */
+  zoneName: string;
   userId: string;
   /** The per zone name, which is the only personal field a membership holds. */
   username: string;
@@ -359,10 +372,17 @@ export interface SetAdminZoneDeletionMarkRequest extends AdminCredential {
   marked: boolean;
 }
 
-/** A page of one zone's memberships (plan 0077, section 9). */
+/**
+ * A page of memberships, from one zone or from every zone (plan 0077, section
+ * 9, widened by admin plan 0017).
+ *
+ * `zoneId` is an ordinary filter rather than an address. An operator looking
+ * for one person's memberships does not know the households yet, which is why
+ * they came to this screen, so leaving it unset lists every zone's.
+ */
 export interface ListAdminMembershipsRequest
   extends AdminCredential, PageQuery {
-  zoneId: string;
+  zoneId?: string;
 }
 
 export type AdminMembershipPage = Paginated<AdminZoneMemberView>;
@@ -418,9 +438,19 @@ export interface AdminListView {
   updatedAt: string;
 }
 
-/** One line, on the list detail read and nowhere else. */
+/**
+ * One line, on the list detail read and on the flat collection.
+ *
+ * The list is on the row for the reason the zone is on a membership (admin plan
+ * 0017, section 2): the collection is readable with no list named, and a line
+ * is addressed by the pair `(listId, id)`.
+ */
 export interface AdminListLineView {
   id: string;
+  /** The list this line is on, on the row rather than in the URL. */
+  listId: string;
+  /** That list's name, joined so a cross list listing reads. */
+  listName: string;
   content: string;
   quantity: number;
   approvalStatus: LineApprovalStatus;
@@ -469,9 +499,15 @@ export interface AdminListIdRequest extends AdminCredential {
   listId: string;
 }
 
-/** A page of one list's lines (plan 0077, section 9). */
+/**
+ * A page of list lines, from one list or from every list (plan 0077, section 9,
+ * widened by admin plan 0017).
+ *
+ * `listId` is an ordinary filter rather than an address, for the reason
+ * {@link ListAdminMembershipsRequest.zoneId} is one.
+ */
 export interface ListAdminListLinesRequest extends AdminCredential, PageQuery {
-  listId: string;
+  listId?: string;
 }
 
 export type AdminListLinePage = Paginated<AdminListLineView>;
@@ -573,4 +609,70 @@ export type AdminBasketPage = Paginated<AdminBasketView>;
 
 export interface GetAdminBasketRequest extends AdminCredential {
   basketId: string;
+}
+
+// --- Postal code demand (plan 0097, section 5) -------------------------------
+
+/**
+ * How many profiles are waiting on a postal code.
+ *
+ * **The one prioritisation signal**, and `plans/backlog/0009` said so. It lives
+ * here because core owns the answer: `profile_postal_codes` holds the code, the
+ * source and the suppressed flag, and `shopping_profiles` holds the `userId`, so
+ * a distinct user count is one join inside one database. Nothing crosses a
+ * service boundary, which is plan 0074 section 3's rule.
+ *
+ * Admin gated like every other subject in this file. It answers about codes and
+ * never about people: a count, never a profile, a name or an account id.
+ */
+export const ADMIN_PROFILE_POSTAL_CODE_PATTERNS = {
+  usage: 'adminProfilePostalCode.usage',
+} as const;
+
+export type AdminProfilePostalCodePattern =
+  (typeof ADMIN_PROFILE_POSTAL_CODE_PATTERNS)[keyof typeof ADMIN_PROFILE_POSTAL_CODE_PATTERNS];
+
+/**
+ * One postal code and who is waiting on it.
+ *
+ * **Main and near are counted apart because they are different facts.** A code
+ * twelve people typed is a place people shop. A code derived onto twelve
+ * profiles from a neighbour is a place we widened into, and importing a shop
+ * there serves them differently.
+ */
+export interface PostalCodeUsageView {
+  postalCode: string;
+  /** TYPED or DEVICE rows: the code is where this profile shops from. */
+  mainProfiles: number;
+  /** NEARBY rows that are not suppressed: the code was derived onto it. */
+  nearbyProfiles: number;
+  /** NEARBY rows the user removed. Not waiting on anything, and not nothing. */
+  suppressedProfiles: number;
+  /** Distinct owners of the profiles above, counted the same three ways. */
+  mainUsers: number;
+  nearbyUsers: number;
+}
+
+/**
+ * **A list of codes rather than one**, because the list screen decorates a page
+ * of rows and one call per row is a fan out. This is the shape
+ * `AdminUserNamesService` already uses to put usernames beside a page of zones,
+ * and the rule that comes with it is plan 0074's: where the decoration fails,
+ * the screen renders the row without it and never fails the listing.
+ */
+export interface PostalCodeUsageRequest extends AdminCredential {
+  /** ISO 3166-1 alpha-2, lowercase. Every code in one request shares it. */
+  country: string;
+  /** Up to one page of codes, answered in one round trip. */
+  postalCodes: string[];
+}
+
+/**
+ * One entry per code asked about, **including the ones nobody uses**: a screen
+ * decorating a page of rows needs the zeros, or a missing entry and a zero read
+ * the same and neither says which.
+ */
+export interface PostalCodeUsageListView {
+  country: string;
+  usage: PostalCodeUsageView[];
 }

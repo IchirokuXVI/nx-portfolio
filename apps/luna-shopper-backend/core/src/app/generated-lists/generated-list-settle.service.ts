@@ -33,10 +33,7 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import {
-  toLineItemSet,
-  type LineItemSet,
-} from '../lists/line-item-set';
+import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
@@ -291,6 +288,50 @@ export class GeneratedListSettleService {
         });
       }
 
+      if (eligible.length === 0) {
+        // **The purchase is written anyway, attached to the basket line alone**
+        // (plan 0093, section 2.1). This branch used to write no row at all, on
+        // the reasoning that a settlement is a zone fact (plan 0047, section
+        // 3.1) and there was no zone line for it to be a fact about.
+        //
+        // That was right about the fact and wrong about the record. Somebody
+        // adds "batteries" in the shop, buys four, and sends the line to the
+        // flat's list at home: the flat used to get a line asking for nothing
+        // and a history saying batteries were never bought. The shopper bought
+        // them **for** that household, which is why they sent the line there,
+        // and the row is re-homed onto the list the moment the line reaches one
+        // ({@link WaitingSettlementService.rehome}).
+        //
+        // One row per act rather than per origin, because there is no origin:
+        // `BOUGHT` carries the units this settle asked for, and `NOT_AVAILABLE`
+        // carries none, being an outcome rather than a quantity.
+        //
+        // It is not added to `written`, and that is section 2.2 rather than an
+        // omission: a settlement ref names a line and a list, and this row names
+        // neither. What the shopper is told is `waitingSettled` on the line.
+        await settlements.save(
+          settlements.create({
+            // The pair that makes it a waiting row, null together
+            // (`ck_line_settlements_home`).
+            lineId: null,
+            listId: null,
+            itemId,
+            outcome: req.outcome,
+            quantity: req.outcome === SettlementOutcome.BOUGHT ? units : 0,
+            settledByUserId: null,
+            settledByParticipantId: req.participantId,
+            settledAt: now,
+            revertedAt: null,
+            revertedByParticipantId: null,
+            // The only thing it belongs to, which is why
+            // `ck_line_settlements_waiting_basket` requires it.
+            generatedListLineId: line.id,
+            pricePaidCents: null,
+            supermarketLocationId: null,
+          })
+        );
+      }
+
       // NOT_AVAILABLE closes the outstanding amount rather than settling units
       // (plan 0051, section 6.1): it is an outcome, not a quantity.
       //
@@ -301,12 +342,6 @@ export class GeneratedListSettleService {
       // stays outstanding forever, and every settle on it writes nothing at all.
       // No such line existed before plan 0055, because every line came from the
       // run; section 3 creates them by the dozen.
-      //
-      // No `LineSettlement` is written on that branch, and that is correct
-      // rather than a shortcut: a settlement is a **zone fact** (plan 0047,
-      // section 3.1), and there is no zone line for this purchase to be a fact
-      // about. Nothing enters any household's consumption history until plan
-      // `0058` binds the line to a list.
       const advance =
         req.outcome === SettlementOutcome.NOT_AVAILABLE
           ? outstanding

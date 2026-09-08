@@ -4,10 +4,10 @@ import { ListsModule } from '../lists/lists.module';
 import { ProfileService } from '../profiles/profile.service';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
-import { GeneratedListBindService } from './generated-list-bind.service';
 import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListService } from './generated-list.service';
 import { GeneratedListsModule } from './generated-lists.module';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * The wiring, which is the one thing about this module that nothing else here
@@ -55,13 +55,14 @@ describe('GeneratedListsModule wiring', () => {
     expect(exportsOf(ProfilesModule)).toContain(ProfileService);
   });
 
-  it('provides the bind service, which the sharing controller injects', () => {
-    // Plan 0058's two message patterns are declared on a controller that takes
-    // this in its constructor, so a missing provider is core refusing to start
-    // rather than a route that answers wrongly. That is the right failure and it
-    // is still one worth catching in a second rather than in CI's stack.
+  it('provides the waiting settlements, which two origin inserts inject', () => {
+    // Plan 0092 section 4.3's seam. It does nothing until plan 0093 fills it,
+    // and it is injected by the two services that insert an origin row, so a
+    // missing provider is core refusing to start rather than a route that
+    // answers wrongly. That is the right failure and it is still one worth
+    // catching in a second rather than in CI's stack.
     expect(providersOf(GeneratedListsModule)).toContain(
-      GeneratedListBindService
+      WaitingSettlementService
     );
   });
 

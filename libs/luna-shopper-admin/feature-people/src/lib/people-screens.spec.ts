@@ -72,7 +72,12 @@ async function boot(url: string, directory?: DirectoryServiceI) {
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
       ServerReachability,
-      provideRouter(adminRoutes(ALL)),
+      // Mounted at the root rather than under `/shoppers`: this file is about
+      // the screens, and admin plan 0022's own mount is asserted against the
+      // real sections in the app.
+      provideRouter(
+        adminRoutes([{ key: 'shoppers', label: '', resources: ALL }])
+      ),
       provideLocationMocks(),
       provideResources(...ALL),
       SessionStorage,

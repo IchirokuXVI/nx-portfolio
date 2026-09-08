@@ -11,21 +11,22 @@
  */
 
 export {
-  NOMINATIM_URL,
-  OSM_ATTRIBUTION,
-  OVERPASS_URL,
-  OsmHttpError,
-  OsmPlacesClient,
-} from './lib/osm-places.client';
-export {
   distanceMetres,
   groupByBrand,
   normalizeElement,
   normalizeGeocode,
   normalizeOverpassResponse,
 } from './lib/normalize';
+export {
+  NOMINATIM_URL,
+  OSM_ATTRIBUTION,
+  OVERPASS_URL,
+  OsmHttpError,
+  OsmPlacesClient,
+} from './lib/osm-places.client';
 export type {
   DiscoveredPlace,
+  GeocodedPostalCode,
   LatLon,
   OsmPlacesClientOptions,
 } from './lib/types';

@@ -82,6 +82,9 @@ export class ProfileStore {
   private readonly _state = signal<ProfileLoad>('loading');
   private readonly _error = signal<unknown>(null);
 
+  /** The one read in flight, shared by every caller that asks while it runs. */
+  private _loading: Promise<void> | null = null;
+
   /** The profile, or null until one has been read. */
   readonly profile = this._profile.asReadonly();
 
@@ -139,15 +142,29 @@ export class ProfileStore {
   /**
    * Read the profile.
    *
-   * Called by the account screen and by nothing else, which is the whole point of the
-   * name coming off the token pair: no other screen in the app spends a request to
-   * learn something it already knows.
+   * Three callers: the account screen, the dashboard's confirm-your-email card, and
+   * `SessionValidation` at startup. No other screen spends a request on it, which is
+   * the whole point of the name coming off the token pair: everything else already
+   * knows what it needs.
+   *
+   * Single flight, because two of those callers ask on the same tick: validation fires
+   * when the startup gate lifts, and the dashboard's constructor runs as the page it
+   * uncovered renders. Whichever asks second joins the request the first started
+   * rather than sending `/v1/account/me` twice per cold load.
    *
    * A second call while a profile is already held does not blank it. Re-reading is how
    * the retry line on a failed screen works, and a screen that emptied itself first
    * would flash between the name it has and the name it is about to have again.
    */
-  async load(): Promise<void> {
+  load(): Promise<void> {
+    this._loading ??= this._performLoad().finally(() => {
+      this._loading = null;
+    });
+
+    return this._loading;
+  }
+
+  private async _performLoad(): Promise<void> {
     if (this._profile() === null) {
       this._state.set('loading');
     }
