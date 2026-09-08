@@ -1,3 +1,5 @@
+> **PR:** [#287](https://github.com/IchirokuXVI/nx-portfolio/pull/287)
+
 # 0098 A model works the entry queue
 
 ## Where this starts
