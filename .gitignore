@@ -59,6 +59,10 @@ tools/dev/.run/
 apps/shell/.env
 apps/velista/.env
 apps/luna-shopper-admin/.env
+# The decision log and the report tools/catalog/review-entries.mjs writes, one
+# pair per run (plan 0098). They name products and hold model reasoning; the
+# tool is the record, not its output.
+tools/catalog/out/
 # Jest JSON summaries and per service logs from the stack targets (plan 0015);
 # CI reads them to prove the infra-backed suites actually executed, then uploads
 # them as failure artifacts. Nothing here is worth committing.
