@@ -1,3 +1,5 @@
+> **PR:** [#292](https://github.com/IchirokuXVI/nx-portfolio/pull/292)
+
 # 0001 A decider that owns the queue walk
 
 Part of the curation toolchain: `curation-auth` (sessions), this decider,
