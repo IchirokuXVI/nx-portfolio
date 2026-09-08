@@ -1,6 +1,7 @@
 import { normalizeGeocode, normalizeOverpassResponse } from './normalize';
 import type {
   DiscoveredPlace,
+  GeocodedPostalCode,
   LatLon,
   OsmPlacesClientOptions,
 } from './types';
@@ -76,7 +77,7 @@ export class OsmPlacesClient {
   async geocodePostalCode(
     postalCode: string,
     country = 'es'
-  ): Promise<LatLon | null> {
+  ): Promise<GeocodedPostalCode | null> {
     const query = new URLSearchParams({
       postalcode: postalCode,
       country,

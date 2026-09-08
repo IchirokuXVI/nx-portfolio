@@ -314,6 +314,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       street: 'Calle Mayor 14',
       city: 'Madrid',
       postalCode: '28013',
+      postalCodeSource: 'SOURCE',
       country: 'ES',
       website: 'https://www.dia.es',
       openingHours: 'Mo-Sa 09:00-21:30',
@@ -336,6 +337,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       street: 'Calle Mayor 16',
       city: 'Madrid',
       postalCode: '28013',
+      postalCodeSource: 'SOURCE',
       country: 'ES',
       website: null,
       openingHours: null,
@@ -358,6 +360,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       street: 'Gran Via 30',
       city: 'Madrid',
       postalCode: null,
+      postalCodeSource: null,
       country: 'ES',
       website: null,
       openingHours: 'Mo-Su 08:00-22:00',
@@ -813,5 +816,154 @@ export const SUPERMARKET_SOURCE_SEED: readonly Wire.HarvestSupermarketSourceView
       lastRunAt: null,
       lastSuccessAt: null,
       consecutiveFailures: 0,
+    },
+  ];
+
+/**
+ * How many places a code has to show for itself, in one line.
+ *
+ * The two counts of backend plan 0097 section 2 are four numbers each, and the
+ * three below `total` add up to it. Writing them out twelve times would be
+ * twelve chances to write a set that does not add up.
+ */
+function counts(
+  imported: number,
+  rejected: number,
+  undecided: number
+): Wire.HarvestDiscoveredPlaceCounts {
+  return {
+    total: imported + rejected + undecided,
+    imported,
+    rejected,
+    undecided,
+  };
+}
+
+/**
+ * The postal codes somebody asked about (backend plan 0097).
+ *
+ * Every status the queue has, because the three reasons velista tells a user it
+ * has no supermarkets for their postal code are exactly what this list exists to
+ * tell apart: a code nobody looked at, a code we looked at and failed on, and a
+ * code that produced places nobody imported. There is a row for each of those,
+ * plus one that went well and one somebody parked.
+ *
+ * The two count pairs **disagree** on the first row, on purpose. A run centred
+ * on 14013 with a three kilometre radius writes places in the codes around it,
+ * so what its own runs found is not what sits inside it, and a seed where the
+ * two always matched would hide the whole reason there are two of them.
+ */
+export const POSTAL_CODE_DISCOVERY_SEED: readonly Wire.HarvestPostalCodeDiscoveryRequestView[] =
+  [
+    {
+      id: 'postal-14013',
+      country: 'es',
+      postalCode: '14013',
+      status: 'DONE',
+      requestedAt: '2026-08-14T08:12:00.000Z',
+      lastAttemptedAt: '2026-08-14T08:14:22.000Z',
+      discoveredAt: '2026-08-14T08:16:40.000Z',
+      nextAttemptAt: null,
+      attempts: 1,
+      runId: 'run-2',
+      error: null,
+      placeName: 'Córdoba, Andalucía, España',
+      dismissed: false,
+      foundByItsRuns: counts(4, 2, 11),
+      locatedInIt: counts(3, 1, 6),
+    },
+    {
+      // Nobody has looked yet, and the status column says so rather than the
+      // empty "last looked" cell beside it.
+      id: 'postal-28013',
+      country: 'es',
+      postalCode: '28013',
+      status: 'QUEUED',
+      requestedAt: '2026-09-05T19:40:11.000Z',
+      lastAttemptedAt: null,
+      discoveredAt: null,
+      nextAttemptAt: null,
+      attempts: 0,
+      runId: null,
+      error: null,
+      placeName: null,
+      dismissed: false,
+      foundByItsRuns: counts(0, 0, 0),
+      locatedInIt: counts(0, 0, 0),
+    },
+    {
+      id: 'postal-41001',
+      country: 'es',
+      postalCode: '41001',
+      status: 'RUNNING',
+      requestedAt: '2026-09-06T07:02:00.000Z',
+      lastAttemptedAt: '2026-09-06T07:03:10.000Z',
+      discoveredAt: null,
+      nextAttemptAt: null,
+      attempts: 1,
+      runId: 'run-1',
+      error: null,
+      placeName: 'Sevilla, Andalucía, España',
+      dismissed: false,
+      foundByItsRuns: counts(0, 0, 0),
+      locatedInIt: counts(0, 0, 2),
+    },
+    {
+      // Looked at, failed, and the reason is on the row for a person to read.
+      // This is the row an operator is hunting for after velista told somebody
+      // there was nothing for them.
+      id: 'postal-14900',
+      country: 'es',
+      postalCode: '14900',
+      status: 'FAILED',
+      requestedAt: '2026-08-29T11:20:00.000Z',
+      lastAttemptedAt: '2026-09-02T11:20:00.000Z',
+      discoveredAt: null,
+      nextAttemptAt: '2026-09-08T11:20:00.000Z',
+      attempts: 3,
+      runId: null,
+      error: 'Nominatim answered no result for 14900',
+      placeName: null,
+      dismissed: false,
+      foundByItsRuns: counts(0, 0, 0),
+      locatedInIt: counts(0, 0, 0),
+    },
+    {
+      // Tracked without spending a run on it. The worker never claims a parked
+      // row, so it waits here until somebody presses discover again.
+      id: 'postal-08001',
+      country: 'es',
+      postalCode: '08001',
+      status: 'PARKED',
+      requestedAt: '2026-09-01T16:00:00.000Z',
+      lastAttemptedAt: null,
+      discoveredAt: null,
+      nextAttemptAt: null,
+      attempts: 0,
+      runId: null,
+      error: null,
+      placeName: null,
+      dismissed: false,
+      foundByItsRuns: counts(0, 0, 0),
+      locatedInIt: counts(0, 0, 0),
+    },
+    {
+      // Put aside, so it is absent from the working set until it is asked for
+      // by name. Nothing is deleted: the row is the record that we looked.
+      id: 'postal-99999',
+      country: 'es',
+      postalCode: '99999',
+      status: 'FAILED',
+      requestedAt: '2026-07-02T09:00:00.000Z',
+      lastAttemptedAt: '2026-07-06T09:00:00.000Z',
+      discoveredAt: null,
+      nextAttemptAt: null,
+      attempts: 4,
+      runId: null,
+      error: 'Nominatim answered no result for 99999',
+      placeName: null,
+      dismissed: true,
+      foundByItsRuns: counts(0, 0, 0),
+      locatedInIt: counts(0, 0, 0),
     },
   ];

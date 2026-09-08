@@ -329,9 +329,19 @@
       What arrived, said once. A single polite region rather than one per line, so
       four people adding at the same time collapse into one sentence instead of
       talking over each other for the length of a trip (section 8).
+
+      A split says its own sentence here rather than in a region of its own, and
+      the store is what keeps the two from both being set: there is one thing to
+      say about this basket at a time, and a second region would talk over the
+      first while somebody is standing in an aisle (velista 0069, section 4).
     -->
     <p aria-live="polite" class="visually-hidden">
-      @if (announcement(); as content) {
+      @if (splitAnnouncement(); as split) {
+        {{
+          'basket.product.split'
+            | rokuT: { name: split.content, count: split.rows }
+        }}
+      } @else if (announcement(); as content) {
         {{ 'basket.added.announced' | rokuT: { content } }}
       }
     </p>

@@ -2,9 +2,12 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ADMIN_AUTH_PATTERNS,
+  ADMIN_DASHBOARD_PATTERNS,
   ADMIN_USER_PATTERNS,
   type AdminAuthTokens,
+  type AdminDashboardRequest,
   type AdminDevAutologinRequest,
+  type AdminIdentityDashboard,
   type AdminIdentityListView,
   type AdminIdentityView,
   type AdminLoginRequest,
@@ -26,6 +29,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { AdminDirectoryService } from './admin-directory.service';
 import { AdminIdentityService } from './admin-identity.service';
+import { AuthDashboardService } from './dashboard.service';
 
 /**
  * The operator surface on the broker (plan 0071, section 5).
@@ -55,8 +59,21 @@ import { AdminIdentityService } from './admin-identity.service';
 export class AdminController {
   constructor(
     private readonly admins: AdminIdentityService,
-    private readonly directory: AdminDirectoryService
+    private readonly directory: AdminDirectoryService,
+    private readonly dashboard: AuthDashboardService
   ) {}
+
+  /**
+   * Auth's block of the back office dashboard (plan 0088). Gated like every
+   * handler below it: the service verifies the forwarded operator token before
+   * it counts a single row.
+   */
+  @MessagePattern(ADMIN_DASHBOARD_PATTERNS.identity)
+  identityDashboard(
+    @Payload() req: AdminDashboardRequest
+  ): Promise<AdminIdentityDashboard> {
+    return this.dashboard.dashboard(req);
+  }
 
   @MessagePattern(ADMIN_AUTH_PATTERNS.login)
   login(@Payload() req: AdminLoginRequest): Promise<AdminAuthTokens> {

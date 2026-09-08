@@ -7,7 +7,11 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
 import { BasketSocket, BasketStore } from '@portfolio/velista/data-access';
-import { SHEET_SEGMENT, sheetFallGuard } from '@portfolio/velista/platform';
+import {
+  RENDERS_WHILE_CONNECTING,
+  SHEET_SEGMENT,
+  sheetFallGuard,
+} from '@portfolio/velista/platform';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
   anonymousOnlyGuard,
@@ -746,24 +750,20 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.SettleSheet
                   ),
               }),
-              // The two sheets a line's settle sheet leads on to, and they are
-              // children of the **basket** rather than of it: a sheet has no
-              // children, so the only place a sheet over a sheet can be declared is
-              // beside the one it was opened from. Each names the settle sheet's URL
-              // as what it dismisses onto, which is what keeps one gesture one
-              // screen back.
+              // The sheet a line's settle sheet leads on to, and it is a child of the
+              // **basket** rather than of it: a sheet has no children, so the only
+              // place a sheet over a sheet can be declared is beside the one it was
+              // opened from. It names the settle sheet's URL as what it dismisses
+              // onto, which is what keeps one gesture one screen back.
+              //
+              // There were two, and `lines/:lineId/list` is gone (velista `0068`):
+              // the send sheet offered every list once, to an added line, as a name
+              // to tap, and this one offers every list a number, for every line.
               sheet({
                 path: 'lines/:lineId/units',
                 loadComponent: () =>
                   import('@portfolio/velista/feature-shopping-lists').then(
                     (m) => m.LineUnitsSheet
-                  ),
-              }),
-              sheet({
-                path: 'lines/:lineId/list',
-                loadComponent: () =>
-                  import('@portfolio/velista/feature-shopping-lists').then(
-                    (m) => m.LineListSheet
                   ),
               }),
               sheet({
@@ -881,6 +881,21 @@ export const AppShellRoutes: Route[] = [
             // Last, and the only empty path here. See the note on `children` above.
             path: '',
             canActivate: [anonymousOnlyGuard],
+            // **The one route that draws before the backend has answered** (plan 0071
+            // D4). Every other screen in this app needs the backend to say anything at
+            // all, so `AppLayout` holds the outlet closed until it has; this one is a
+            // designed page about what the product is, and holding it back would put a
+            // waiting screen in front of the app's front door, which is precisely the
+            // screen that must appear at once.
+            //
+            // The actions on it are held rather than the page being withheld, which is
+            // `AuthActions.held` and is the other half of D4.
+            //
+            // Angular's default `emptyOnly` data inheritance is what keeps this from
+            // spreading downwards: the two entry sheets below carry their own `data`,
+            // so neither inherits it and a deep link into one waits like anything else.
+            // That is the behaviour we want, because those screens create a group.
+            data: { [RENDERS_WHILE_CONNECTING]: true },
             loadComponent: () =>
               import('@portfolio/velista/feature-landing').then(
                 (m) => m.LandingPage

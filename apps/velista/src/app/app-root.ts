@@ -42,13 +42,18 @@ import { RouterOutlet } from '@angular/router';
   // "Get shopping list" then sat directly under the last paragraph rather than at the
   // foot of the screen (plan 0013 D3, the mode split).
   //
-  // So the standalone root states the same two declarations the shell's root does.
-  // Nothing else about it is shared, and this is the whole of what the mounted build
-  // was borrowing.
+  // So the standalone root states the same two declarations the shell's root does,
+  // except for the unit. Nothing else about it is shared, and this is the whole of what
+  // the mounted build was borrowing.
+  //
+  // The unit is `svh` and not the shell's `dvh`, because this is the document the
+  // installed app runs, and that is where Chrome on Android grows the dynamic viewport
+  // into the strip its navigation bar is drawn over without reporting the strip through
+  // `env(safe-area-inset-bottom)`. `AppLayout`'s stylesheet carries the full account.
   styles: `
     :host {
       display: flex;
-      min-block-size: 100dvh;
+      min-block-size: 100svh;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

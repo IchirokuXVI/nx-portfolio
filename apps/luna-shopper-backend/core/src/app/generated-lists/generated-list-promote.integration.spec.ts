@@ -32,6 +32,7 @@ import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { fakeLineClaims } from './line-claims.fake';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * A line sent to a list keeps its products, against real Postgres (plan 0065).
@@ -153,6 +154,12 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
       zoneLines,
       claims.service,
       undefined as never,
+      // Plan 0092's seam, filled by plan 0093. Real rather than stubbed,
+      // because `promote` calls it after every origin insert and no line in this
+      // file has a waiting purchase for it to place.
+      new WaitingSettlementService(claims.service, {
+        emit: jest.fn(),
+      } as never),
       { emitToUsers: jest.fn(), emit: jest.fn() } as never
     );
 

@@ -192,18 +192,16 @@ function build(options: {
   const entries = {
     // The ingest reads every row of the chain; the availability pass reads the
     // ACTIVE ones of this source kind, which is a `where` this fake honours.
-    find: jest.fn(
-      async (query?: { where?: Partial<SourceCatalogEntry> }) => {
-        const all = [...stored, ...saved.filter((row) => !stored.includes(row))];
-        const where = query?.where ?? {};
-        return all.filter(
-          (row) =>
-            (where.status === undefined || row.status === where.status) &&
-            (where.sourceKind === undefined ||
-              row.sourceKind === where.sourceKind)
-        );
-      }
-    ),
+    find: jest.fn(async (query?: { where?: Partial<SourceCatalogEntry> }) => {
+      const all = [...stored, ...saved.filter((row) => !stored.includes(row))];
+      const where = query?.where ?? {};
+      return all.filter(
+        (row) =>
+          (where.status === undefined || row.status === where.status) &&
+          (where.sourceKind === undefined ||
+            row.sourceKind === where.sourceKind)
+      );
+    }),
     create: jest.fn((row: SourceCatalogEntry) => {
       created += 1;
       return { id: `new-${created}`, ...row };
@@ -217,7 +215,9 @@ function build(options: {
   } as unknown as Repository<SourceCatalogEntry>;
 
   const priceUpsert = jest.fn(async () => undefined);
-  const prices = { upsert: priceUpsert } as unknown as Repository<SourceEntryPrice>;
+  const prices = {
+    upsert: priceUpsert,
+  } as unknown as Repository<SourceEntryPrice>;
 
   const catalog = {
     searchItems: jest.fn(async () => ({
@@ -236,6 +236,7 @@ function build(options: {
     setStage: jest.fn(async () => undefined),
     setTotalPlanned: jest.fn(async () => undefined),
     report: jest.fn(async () => undefined),
+    heartbeat: jest.fn(async () => undefined),
     flush: jest.fn(async () => undefined),
   } as unknown as RunContext;
 
@@ -303,7 +304,11 @@ describe('MercadonaCatalogRunner (plan 0086)', () => {
       ],
     });
 
-    await runner.run(context, { supermarketId: CHAIN, priceScopeId: SCOPE }, source());
+    await runner.run(
+      context,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source()
+    );
 
     expect(saved.map((row) => row.externalId).sort()).toEqual(WALKED);
     expect(catalog.addPrices).toHaveBeenCalledTimes(1);
@@ -312,7 +317,28 @@ describe('MercadonaCatalogRunner (plan 0086)', () => {
     // fuzzy row is never owed a price.
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ itemId: 'item-oil', price: 8.75 });
-    expect(catalog.addPrices.mock.calls[0][3]).toBe(PriceSourceKind.OFFICIAL_API);
+    expect(catalog.addPrices.mock.calls[0][3]).toBe(
+      PriceSourceKind.OFFICIAL_API
+    );
+  });
+
+  it('keeps the heartbeat moving while it walks the tree', async () => {
+    const { fetchImpl } = stubFetch({});
+    restore = withFetch(fetchImpl);
+    const { runner, context } = build({});
+
+    await runner.run(
+      context,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source()
+    );
+
+    // The walk reports no counter until the detail phase, so at a low owner set
+    // rate the heartbeat is what tells the stale reaper the walk is alive. One
+    // call per walked product; the context throttles the actual writes.
+    expect(
+      (context.heartbeat as jest.Mock).mock.calls.length
+    ).toBeGreaterThanOrEqual(WALKED.length);
   });
 
   it('says a tracked product the walk did not list is not stocked', async () => {
@@ -340,7 +366,11 @@ describe('MercadonaCatalogRunner (plan 0086)', () => {
       ],
     });
 
-    await runner.run(context, { supermarketId: CHAIN, priceScopeId: SCOPE }, source());
+    await runner.run(
+      context,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source()
+    );
 
     const written = catalog.setAvailability.mock.calls[0][1] as {
       itemId: string;
@@ -388,7 +418,11 @@ describe('MercadonaCatalogRunner (plan 0086)', () => {
       ],
     });
 
-    await runner.run(context, { supermarketId: CHAIN, priceScopeId: SCOPE }, source());
+    await runner.run(
+      context,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source()
+    );
 
     // What it did fetch is kept: prices already fetched are valid data.
     expect(saved.length).toBeGreaterThan(0);

@@ -595,6 +595,25 @@ export interface AddLineRequest {
   productGroupId?: string;
 }
 
+/**
+ * What an add did (plan 0091, section 4).
+ *
+ * A zone list holds one line per normalized name, so an add either created a
+ * line or raised one that was already there, and the two are not the same news.
+ * A caller that has to say something about it, the assistant reading its answer
+ * back to a person, cannot tell from the line alone: a merged line comes back
+ * looking exactly like a line that already existed, because it is one.
+ *
+ * `merged` is the whole of the difference. The line is the line as it now
+ * stands either way, so a client that only draws it upserts by id and needs to
+ * read no flag.
+ */
+export interface AddLineResult {
+  line: LineView;
+  /** True when the add raised an existing line instead of creating one. */
+  merged: boolean;
+}
+
 /** One line of a {@link AddLinesRequest} batch (plan 0040, section 6.5). */
 export interface AddLinesItem {
   content: string;
@@ -607,18 +626,21 @@ export interface AddLinesItem {
  * Add up to {@link LINE_BATCH_MAX_ITEMS} lines in one transaction (plan 0040,
  * section 6).
  *
- * **All or nothing**, and the response is the created lines in request order.
- * Nothing that can fail for one item can succeed for its neighbour: access is a
- * property of the list and the caller, the approval rules are a property of their
- * permissions and the list's `autoApproveLines`, and the per item bounds have
- * already produced a 400 for the whole request at the gateway. So a per item
- * result envelope would be a new response idiom describing a partial failure the
- * design cannot produce.
+ * **All or nothing**, and the response is one {@link AddLineResult} per item in
+ * request order. Nothing that can fail for one item can succeed for its
+ * neighbour: access is a property of the list and the caller, the approval rules
+ * are a property of their permissions and the list's `autoApproveLines`, and the
+ * per item bounds have already produced a 400 for the whole request at the
+ * gateway. So a per item result envelope would be a new response idiom describing
+ * a partial failure the design cannot produce, and `merged` is a report about a
+ * write that succeeded rather than one that did not.
  *
- * **It adds, and it does not merge** (section 6.3). Two items naming the same
- * thing produce two lines: merging is a decision about a person's intention, and
- * the caller pasting a list may well have meant two entries. The upsert rule
- * belongs to the assistant, which is where it lives.
+ * **It merges, per item** (plan 0091, section 2). Two items naming one thing fold
+ * into one line at the summed quantity, and both slots of the answer name that
+ * line. Plan 0040 section 6.3 decided the other way, on the argument that a
+ * person pasting a list may have meant two entries; plan 0091 reverses it,
+ * because a list that holds one line per name cannot hold two of them however
+ * they arrived.
  */
 export interface AddLinesRequest {
   userId: string;

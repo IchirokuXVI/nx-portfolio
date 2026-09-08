@@ -215,7 +215,7 @@ describeIntegration('catalog search (real Postgres)', () => {
     const scopeA = await scopes.save(
       scopes.create({
         supermarketId: chain.id,
-        kind: PriceScopeKind.WAREHOUSE,
+        kind: PriceScopeKind.REGION,
         externalKey: 'a',
         label: null,
       })
@@ -223,7 +223,7 @@ describeIntegration('catalog search (real Postgres)', () => {
     const scopeB = await scopes.save(
       scopes.create({
         supermarketId: chain.id,
-        kind: PriceScopeKind.WAREHOUSE,
+        kind: PriceScopeKind.REGION,
         externalKey: 'b',
         label: null,
       })

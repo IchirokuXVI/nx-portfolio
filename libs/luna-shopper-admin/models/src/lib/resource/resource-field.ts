@@ -178,6 +178,30 @@ export interface ReferenceField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'reference';
   /** The `name` of the resource being pointed at. */
   readonly resource: string;
+  /**
+   * The row property that carries the target's name, for a read that joins it
+   * on (admin plan 0023, section 3).
+   *
+   * The property holds a localized text, and the cell renders it exactly as a
+   * `localized-text` field would: through the content locales, with the missing
+   * locale markers, falling back to the id when the text is empty or the
+   * property is null. Display only, like {@link FieldBase.read}: the form still
+   * writes `name`.
+   *
+   * Mutually exclusive with {@link nameLookup}. A field that declares neither
+   * keeps its id, and that is the guard against the request storm plan 0004
+   * refused: nothing resolves unless a descriptor asked.
+   */
+  readonly nameFrom?: FieldName<T>;
+  /**
+   * The name is resolved once per distinct id through the reference lookup and
+   * cached for the life of the screen (admin plan 0023, section 4).
+   *
+   * For a **small** target only: a chain, a group. A page repeating the same
+   * few ids costs a handful of requests. For a large target such as a product
+   * the answer is {@link nameFrom} and a backend join, never the lookup.
+   */
+  readonly nameLookup?: true;
 }
 
 /** A `jsonb` column with one string per locale. */

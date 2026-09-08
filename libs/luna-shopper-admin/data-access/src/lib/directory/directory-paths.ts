@@ -15,51 +15,45 @@ export const ADMIN_LISTS_PATH = '/v1/admin/lists';
 export const ADMIN_BASKETS_PATH = '/v1/admin/baskets';
 
 /**
- * The two nested collections plan 0077 added, written as their shape.
+ * The two flat collections admin plan 0017 put memberships and lines on.
  *
- * Neither is a URL: `{zoneId}` and `{listId}` are the halves the caller
- * supplies, and the four functions below are how one is actually built. They are
- * constants anyway because the in-memory gateway keys a table by
- * `ResourceSource.path`, so each resource needs a name of its own there, and a
- * name that says what the real routes look like is the one worth having.
+ * Both are ordinary URLs with an ordinary optional query parameter, `zoneId`
+ * and `listId`. They replace the nested collections plan 0077 declared as
+ * templates, which could not be read at all until the parent was named: an
+ * operator looking for one person's memberships does not know the household
+ * yet, which is why they came to the screen.
  *
- * There is no flat route for either. A membership is read, changed and acted on
- * under its zone, and a line under its list, which is why both resources declare
- * a `memberPath` as well as a `collectionPath`.
+ * **Only the collection moved.** One membership is still read, changed and
+ * acted on under its zone, and one line under its list, which is why both
+ * resources still declare a `memberPath`. What makes that work with no parent
+ * in the URL is that the rows carry theirs: `zoneId` with `zoneName`, `listId`
+ * with `listName`.
  */
-export const ADMIN_ZONE_MEMBERS_PATH = '/v1/admin/zones/{zoneId}/members';
-export const ADMIN_LIST_LINES_PATH = '/v1/admin/lists/{listId}/lines';
+export const ADMIN_MEMBERSHIPS_PATH = '/v1/admin/memberships';
+export const ADMIN_LIST_LINES_PATH = '/v1/admin/list-lines';
 
 /**
  * The pair a membership is addressed by.
  *
- * `AdminZoneMemberView` does not carry its zone, because the URL that answered
- * it already named one. The gateway puts the value back on the row (see
- * `ResourceSource.pathParams`), and this is the key that reads it.
+ * There is no flat route to one membership: every route that reaches one names
+ * the zone first, so the address is the pair, and `AdminZoneMemberView` carries
+ * `zoneId` so a row read across zones still has one.
  */
 export const MEMBERSHIP_KEY = ['zoneId', 'membershipId'] as const;
 
 /** The pair a list line is addressed by, for the same reason. */
 export const LIST_LINE_KEY = ['listId', 'id'] as const;
 
-/** One zone's membership. */
-export function zoneMembersPath(zoneId: string): string {
-  return `${ADMIN_ZONES_PATH}/${segment(zoneId)}/members`;
-}
-
 /** One membership. */
 export function zoneMemberPath(zoneId: string, membershipId: string): string {
-  return `${zoneMembersPath(zoneId)}/${segment(membershipId)}`;
-}
-
-/** One list's lines. */
-export function listLinesPath(listId: string): string {
-  return `${ADMIN_LISTS_PATH}/${segment(listId)}/lines`;
+  return `${ADMIN_ZONES_PATH}/${segment(zoneId)}/members/${segment(
+    membershipId
+  )}`;
 }
 
 /** One line. */
 export function listLinePath(listId: string, lineId: string): string {
-  return `${listLinesPath(listId)}/${segment(lineId)}`;
+  return `${ADMIN_LISTS_PATH}/${segment(listId)}/lines/${segment(lineId)}`;
 }
 
 /** One path segment, from a value that arrived as data. */

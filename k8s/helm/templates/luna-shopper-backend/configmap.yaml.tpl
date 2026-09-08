@@ -155,6 +155,9 @@ part of the render and would trip that very check.
   HARVEST_DISCOVERY_POLL_SECONDS: {{ $harvest.discoveryPollSeconds | default 60 | quote }}
   OVERPASS_URL: {{ $harvest.overpassUrl | default "" | quote }}
   NOMINATIM_URL: {{ $harvest.nominatimUrl | default "" | quote }}
+  # Public, and shipped in LIDL's own store search bundle (plan 0089, section
+  # 10). Empty means the value the library carries; a 401 means it rotated.
+  LIDL_STORES_API_KEY: {{ $harvest.lidlStoresApiKey | default "" | quote }}
   # --- The assistant (plan 0039) ---------------------------------------------
   #
   # GATEWAY_INTERNAL_URL is where the assistant calls the app's own API on the

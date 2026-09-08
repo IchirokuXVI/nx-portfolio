@@ -5,6 +5,12 @@ import type { RunContext } from './run-context';
 export interface CatalogDiscoveryInput {
   supermarketId: string;
   priceScopeId?: string;
+  /**
+   * Read product pages for the EAN instead of crawling the assortment (plan
+   * 0090, section 12.1). `carrefour-web` only, and refused at the spawn for
+   * every other adapter.
+   */
+  detailBackfill?: boolean;
 }
 
 /**

@@ -7,7 +7,11 @@
 }
 
 body {
-  min-height: 100dvh;
+  // `svh` and not `dvh`, for the reason `AppLayout`'s stylesheet gives at length:
+  // in an installed app Chrome on Android grows the dynamic viewport into the strip
+  // the system navigation bar is drawn over, and the app cannot use that strip. The
+  // small viewport is the one that is always visible.
+  min-height: 100svh;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
     Arial, 'Noto Sans', 'Liberation Sans', sans-serif, 'Apple Color Emoji',

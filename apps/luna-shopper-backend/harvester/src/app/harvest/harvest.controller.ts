@@ -1,6 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  ADMIN_DASHBOARD_PATTERNS,
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
@@ -9,6 +10,12 @@ import {
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   type AcceptSourceEntryRequest,
+  type AddPostalCodeDiscoveryRequest,
+  type AdminCredential,
+  type AdminDashboardRequest,
+  type AdminHarvestDashboard,
+  type ApplySourceEntryDecisionsRequest,
+  type ApplySourceEntryDecisionsResult,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
@@ -28,7 +35,10 @@ import {
   type ListSourceLocationsRequest,
   type ListSupermarketSourcesRequest,
   type MapSourceLocationRequest,
+  type PostalCodeDiscoveryIdRequest,
   type PostalCodeDiscoveryRequestPage,
+  type PostalCodeDiscoveryRequestView,
+  type PostalCodeDiscoverySummaryView,
   type PostalCodesAddedEvent,
   type SetSupermarketSourceEnabledRequest,
   type SourceCatalogEntryPage,
@@ -44,9 +54,11 @@ import {
   type SupermarketSourceView,
   type UpsertSupermarketSourceRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { HarvestDashboardService } from './dashboard.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
+import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntryService } from './source-entry.service';
 import { SourceLocationService } from './source-location.service';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -70,10 +82,26 @@ export class HarvestController {
     private readonly runs: HarvestRunService,
     private readonly places: DiscoveredPlaceService,
     private readonly entries: SourceEntryService,
+    private readonly entryBatch: SourceEntryBatchService,
     private readonly shops: SourceLocationService,
     private readonly sources: SupermarketSourceService,
-    private readonly discovery: PostalCodeDiscoveryService
+    private readonly discovery: PostalCodeDiscoveryService,
+    private readonly dashboard: HarvestDashboardService
   ) {}
+
+  // --- The back office dashboard -------------------------------------------
+
+  /**
+   * The harvester's block of the back office dashboard (plan 0088). Gated like
+   * every other subject here: this service answers nothing without an operator
+   * token.
+   */
+  @MessagePattern(ADMIN_DASHBOARD_PATTERNS.harvest)
+  harvestDashboard(
+    @Payload() req: AdminDashboardRequest
+  ): Promise<AdminHarvestDashboard> {
+    return this.dashboard.dashboard(req);
+  }
 
   // --- Runs ----------------------------------------------------------------
 
@@ -145,12 +173,54 @@ export class HarvestController {
     return this.discovery.considerAnnounced(event);
   }
 
-  /** The queue's rows, for backlog 0009. Platform admin gated like the rest. */
+  /** The queue's rows, for plan 0097. Platform admin gated like the rest. */
   @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.list)
   listDiscoveryRequests(
     @Payload() req: ListPostalCodeDiscoveryRequestsRequest
   ): Promise<PostalCodeDiscoveryRequestPage> {
     return this.discovery.list(req);
+  }
+
+  /**
+   * Counts by status and whether anything drains them (plan 0097, section 7.1).
+   * The listing's header and the dashboard card read the same subject.
+   */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.summary)
+  discoverySummary(
+    @Payload() req: AdminCredential
+  ): Promise<PostalCodeDiscoverySummaryView> {
+    return this.discovery.summary(req);
+  }
+
+  /**
+   * An operator adds one code (section 6.1).
+   *
+   * The one enqueue path that is not the `postalCode.added` event, and it is
+   * still not user facing: it is behind the operator gate like everything else
+   * in this file, so nobody outside the back office can spend our Nominatim
+   * budget.
+   */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.add)
+  addDiscoveryRequest(
+    @Payload() req: AddPostalCodeDiscoveryRequest
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.discovery.add(req);
+  }
+
+  /** Discover it again, ignoring the cooldown (section 6.2). */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.requeue)
+  requeueDiscoveryRequest(
+    @Payload() req: PostalCodeDiscoveryIdRequest
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.discovery.requeue(req);
+  }
+
+  /** Hide a code nobody can geocode from the working set (section 6.3). */
+  @MessagePattern(POSTAL_CODE_DISCOVERY_PATTERNS.dismiss)
+  dismissDiscoveryRequest(
+    @Payload() req: PostalCodeDiscoveryIdRequest
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.discovery.dismiss(req);
   }
 
   // --- Discovered places ---------------------------------------------------
@@ -217,6 +287,20 @@ export class HarvestController {
     @Payload() req: CreateItemFromSourceEntryRequest
   ): Promise<SourceEntryAcceptResult> {
     return this.entries.createItem(req);
+  }
+
+  /**
+   * A whole decisions file, in one call, all or nothing (plan 0100).
+   *
+   * It answers rather than throws when the file is refused: the caller needs to
+   * know which row failed which check, and an exception carries one message for
+   * a thousand rows.
+   */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.applyDecisions)
+  applyEntryDecisions(
+    @Payload() req: ApplySourceEntryDecisionsRequest
+  ): Promise<ApplySourceEntryDecisionsResult> {
+    return this.entryBatch.applyDecisions(req);
   }
 
   /** Not a product he tracks. The next run that observes the key asks nobody. */

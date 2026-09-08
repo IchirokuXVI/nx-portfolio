@@ -46,7 +46,7 @@ apps/luna-shopper-backend/*/.env
 apps/luna-shopper-backend/*/.env.test
 # pg_dump snapshots written by luna-shopper-backend:db:snapshot (plan 0013, section 3.2).
 apps/luna-shopper-backend/.snapshots/
-# Per worktree compose slot file written by luna-slot.sh / luna-slot.ps1, and the
+# Per worktree compose slot file written by luna-slot.sh, and the
 # logs and pid files of the services its --up started.
 k8s/e2e/luna-shopper-backend/.env.slot
 k8s/e2e/luna-shopper-backend/.run/
@@ -59,6 +59,10 @@ tools/dev/.run/
 apps/shell/.env
 apps/velista/.env
 apps/luna-shopper-admin/.env
+# The decision log and the report tools/catalog/review-entries.mjs writes, one
+# pair per run (plan 0098). They name products and hold model reasoning; the
+# tool is the record, not its output.
+tools/catalog/out/
 # Jest JSON summaries and per service logs from the stack targets (plan 0015);
 # CI reads them to prove the infra-backed suites actually executed, then uploads
 # them as failure artifacts. Nothing here is worth committing.
@@ -94,3 +98,5 @@ docker/ddns/config/
 # npm cache, redirected into the workspace when installing inside the pinned build
 # container (see .github/actions/workspace).
 .npm
+
+apps/luna-shopper-backend/*/tools/out/

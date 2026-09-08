@@ -163,8 +163,77 @@ describe('toCell', () => {
     });
   });
 
-  it('draws a reference as the id it is, since resolving it costs a request', () => {
-    expect(cellFor('priceScopeId')).toEqual({ text: 'ps_1' });
+  /**
+   * The id is on the row, so the cell always knows what it points at even when
+   * it cannot yet say what that is called (admin plan 0023, section 2.1). The
+   * link is deliberately absent: it needs the route table, which this module
+   * must not know, so the list page derives it from the registry.
+   */
+  it('draws a reference as its id and carries what it points at', () => {
+    expect(cellFor('priceScopeId')).toEqual({
+      text: 'ps_1',
+      reference: { resource: 'price-scopes', id: 'ps_1' },
+    });
+  });
+});
+
+/**
+ * A reference whose name rides the row (admin plan 0023, section 2.4): the
+ * backend joined the target's name on, and the cell renders it exactly as a
+ * `localized-text` field would, id as the fallback.
+ */
+describe('a reference that names its target from the row', () => {
+  interface PriceRow {
+    id: string;
+    itemId: string;
+    itemName: Record<string, string> | null;
+  }
+
+  const named = defineResource<PriceRow>({
+    name: 'prices',
+    segment: 'prices',
+    labels: { one: 'prices.one', many: 'prices.many' },
+    title: (entry) => entry.itemId,
+    fields: [
+      {
+        kind: 'reference',
+        name: 'itemId',
+        label: 'prices.item',
+        resource: 'items',
+        nameFrom: 'itemName',
+      },
+    ],
+    list: { columns: ['itemId'], compact: ['itemId'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  });
+
+  const cellOf = (itemName: Record<string, string> | null) =>
+    toRowView(named, { id: 'si1', itemId: 'it_1', itemName }, options).cells[
+      'itemId'
+    ];
+
+  it('renders the joined name through the content locales', () => {
+    expect(cellOf({ en: 'Whole milk', es: 'Leche entera' })).toEqual({
+      text: 'Whole milk',
+      reference: { resource: 'items', id: 'it_1' },
+    });
+  });
+
+  it('marks the locales the name is still waiting for', () => {
+    expect(cellOf({ es: 'Leche entera' })).toEqual({
+      text: 'Leche entera',
+      missing: ['en'],
+      reference: { resource: 'items', id: 'it_1' },
+    });
+  });
+
+  it('falls back to the id when the join found nothing', () => {
+    expect(cellOf(null)).toEqual({
+      text: 'it_1',
+      reference: { resource: 'items', id: 'it_1' },
+    });
   });
 });
 

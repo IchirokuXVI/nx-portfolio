@@ -33,10 +33,7 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import {
-  toLineItemSet,
-  type LineItemSet,
-} from '../lists/line-item-set';
+import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
@@ -154,13 +151,30 @@ export class GeneratedListReopenService {
         order: { settledAt: 'ASC', id: 'ASC' },
       });
 
+      // **Waiting rows are reverted and nothing else** (plan 0093, section 4).
+      // A settle made before this line reached any list wrote a row attached to
+      // the basket line alone, and taking that back is one column: there is no
+      // zone line to restore units to, no list to name and no household to tell.
+      // Marked here, ahead of the loop, so the loop below reasons about origins
+      // only and never has to hold a `null` line id.
+      const waiting: LineSettlement[] = [];
+      const homed: LineSettlement[] = [];
+      for (const settlement of standing) {
+        (settlement.lineId === null ? waiting : homed).push(settlement);
+      }
+      for (const settlement of waiting) {
+        settlement.revertedAt = now;
+        settlement.revertedByParticipantId = req.participantId;
+        await settlements.save(settlement);
+      }
+
       // The room each touched list's news goes to, in one query rather than one
       // per settlement. The settle path takes this off the provenance row it is
       // already holding; this loop walks settlements, which record the list they
       // landed on and not the zone, so it is read here instead.
       const zones = await this.zonesOf(
         manager,
-        standing.map((settlement) => settlement.listId)
+        homed.map((settlement) => settlement.listId as string)
       );
 
       // **Grouped by the origin they landed on, not walked one at a time.** One
@@ -170,12 +184,12 @@ export class GeneratedListReopenService {
       // whole call leaves it, and a skipped origin is counted once rather than
       // once per settle it swallowed.
       const byOrigin = new Map<string, LineSettlement[]>();
-      for (const settlement of standing) {
-        const rows = byOrigin.get(settlement.lineId);
+      for (const settlement of homed) {
+        const rows = byOrigin.get(settlement.lineId as string);
         if (rows) {
           rows.push(settlement);
         } else {
-          byOrigin.set(settlement.lineId, [settlement]);
+          byOrigin.set(settlement.lineId as string, [settlement]);
         }
       }
 

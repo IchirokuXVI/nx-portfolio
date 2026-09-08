@@ -92,7 +92,11 @@
       "@portfolio/luna-shopper/contracts": [
         "./libs/luna-shopper/contracts/src/index.ts"
       ],
+      "@portfolio/luna-shopper/carrefour": [
+        "./libs/luna-shopper/carrefour/src/index.ts"
+      ],
       "@portfolio/luna-shopper/deza": ["./libs/luna-shopper/deza/src/index.ts"],
+      "@portfolio/luna-shopper/lidl": ["./libs/luna-shopper/lidl/src/index.ts"],
       "@portfolio/luna-shopper/mercadona": [
         "./libs/luna-shopper/mercadona/src/index.ts"
       ],
@@ -171,6 +175,9 @@
       ],
       "@portfolio/luna-shopper-admin/feature-resource": [
         "./libs/luna-shopper-admin/feature-resource/src/index.ts"
+      ],
+      "@portfolio/luna-shopper-admin/feature-dashboard": [
+        "./libs/luna-shopper-admin/feature-dashboard/src/index.ts"
       ],
       "@portfolio/luna-shopper-admin/feature-catalog": [
         "./libs/luna-shopper-admin/feature-catalog/src/index.ts"

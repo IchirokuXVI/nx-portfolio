@@ -37,7 +37,12 @@ async function render(
       provideRouter([]),
       {
         provide: DeploymentStore,
-        useValue: { deployment: signal(deployment).asReadonly() },
+        useValue: {
+          deployment: signal(deployment).asReadonly(),
+          // The re-authentication overlay reads it, to decide whether there is
+          // a password to ask for.
+          devAutologin: signal(false).asReadonly(),
+        },
       },
       {
         provide: SessionLifecycle,

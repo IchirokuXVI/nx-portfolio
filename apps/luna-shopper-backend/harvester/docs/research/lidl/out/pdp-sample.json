@@ -1,0 +1,1214 @@
+[
+  {
+    "productId": 11119744,
+    "title": "Parkside Botella isotérmica / Vaso isotérmico",
+    "category": "NonFood",
+    "eans": [
+      "4054599387246",
+      "4054599387253"
+    ],
+    "ians": [
+      "514336"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 4.49,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 2,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-17T12:08:53.237Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Tienda de bricolaje y jardín/Taller y ferretería",
+    "pdp": true
+  },
+  {
+    "productId": 11004648,
+    "title": "Dummymarke Planta verde",
+    "category": "P+F",
+    "eans": [
+      "4335619420113"
+    ],
+    "ians": [
+      "162160"
+    ],
+    "eanKind": "ean13",
+    "packaging": "Ud",
+    "price": 6.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Flores y plantas/Flores y plantas",
+    "pdp": true
+  },
+  {
+    "productId": 11115865,
+    "title": "Parkside Puntas / Puntas y destornillador",
+    "category": "NonFood",
+    "eans": [
+      "4054599335063",
+      "4054599335070"
+    ],
+    "ians": [
+      "538252"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 1.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 2,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-12T09:44:05.939Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "storeStartDate": 1788127200,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Tienda de bricolaje y jardín/Taller y ferretería",
+    "pdp": true
+  },
+  {
+    "productId": 11109684,
+    "title": "Livarno Bombillas LED",
+    "category": "NonFood",
+    "eans": [
+      "4054599295954",
+      "4054599295961",
+      "4054599295978",
+      "4054599295985",
+      "4054599295992"
+    ],
+    "ians": [
+      "515222"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 1.49,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 2,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-12T09:44:06.210Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "storeStartDate": 1785794400,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Vivir y amueblar/Iluminación",
+    "pdp": true
+  },
+  {
+    "productId": 11110606,
+    "title": "Parkside Masilla/ Adhesivo / Pintura / Renovador / Cemento cola",
+    "category": "NonFood",
+    "eans": [
+      "4054599420691"
+    ],
+    "ians": [
+      "517304"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 1.79,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 2,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-20T09:17:39.011Z",
+    "endDate": "2026-09-13T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": false,
+      "storeStartDate": 1789077600,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Tienda de bricolaje y jardín/Construcción y renovación",
+    "pdp": true
+  },
+  {
+    "productId": 11003492,
+    "title": "Sansevieria",
+    "category": "P+F",
+    "eans": [
+      "4056489135388"
+    ],
+    "ians": [
+      "147559"
+    ],
+    "eanKind": "ean13",
+    "packaging": "Ud",
+    "price": 9.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Flores y plantas/Flores y plantas",
+    "pdp": true
+  },
+  {
+    "productId": 11003678,
+    "title": "Monstera",
+    "category": "P+F",
+    "eans": [
+      "4056489202479"
+    ],
+    "ians": [
+      "150290"
+    ],
+    "eanKind": "ean13",
+    "packaging": "Ud",
+    "price": 7.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Flores y plantas/Flores y plantas",
+    "pdp": true
+  },
+  {
+    "productId": 11150912,
+    "title": "Piña",
+    "category": "F+V",
+    "eans": [],
+    "ians": [
+      "80610"
+    ],
+    "eanKind": "none",
+    "packaging": "1 kg",
+    "price": 1.19,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-30T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Frutas y hortalizas/Fruta",
+    "pdp": true
+  },
+  {
+    "productId": 11003693,
+    "title": "Queso crema cottage",
+    "category": "Food",
+    "eans": [
+      "4056489204336",
+      "4056489204343"
+    ],
+    "ians": [
+      "150444"
+    ],
+    "eanKind": "ean13",
+    "packaging": "400 g",
+    "price": 1.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Queso",
+    "pdp": true
+  },
+  {
+    "productId": 11138170,
+    "title": "FLORALYS Papel higiénico húmedo",
+    "category": "Food",
+    "eans": [],
+    "ians": [
+      "5712471"
+    ],
+    "eanKind": "none",
+    "packaging": "Paquete",
+    "price": 1.49,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-30T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Presupuesto/Papel higiénico",
+    "pdp": true
+  },
+  {
+    "productId": 11030814,
+    "title": "Cactus",
+    "category": "P+F",
+    "eans": [
+      "4056489972839"
+    ],
+    "ians": [
+      "935050"
+    ],
+    "eanKind": "ean13",
+    "packaging": "Ud",
+    "price": 12.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Flores y plantas/Flores y plantas",
+    "pdp": true
+  },
+  {
+    "productId": 11139153,
+    "title": "OPTISANA Vitamina B12",
+    "category": "Food",
+    "eans": [
+      "4335619152229"
+    ],
+    "ians": [
+      "5721035"
+    ],
+    "eanKind": "ean13",
+    "packaging": "Paquete",
+    "price": 3.09,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-31T10:50:21.195Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Productos de droguería y cuidado personal/Vitaminas y nutrición deportiva",
+    "pdp": true
+  },
+  {
+    "productId": 11139029,
+    "title": "COSHIDA PURE TASTE Guiso de pollo y atún",
+    "category": "Food",
+    "eans": [
+      "4335619106499"
+    ],
+    "ians": [
+      "5720257"
+    ],
+    "eanKind": "ean13",
+    "packaging": "6x70 g",
+    "price": 3.49,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-31T10:50:21.215Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Artículos para mascotas/Comida para gatos",
+    "pdp": true
+  },
+  {
+    "productId": 11115658,
+    "title": "Freeway Cola",
+    "category": "Food",
+    "eans": [
+      "4335619208650"
+    ],
+    "ians": [
+      "5721470"
+    ],
+    "eanKind": "ean13",
+    "packaging": "18x33 cl",
+    "price": 4.89,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Bebidas/Refrescos",
+    "pdp": true
+  },
+  {
+    "productId": 11138902,
+    "title": "chef select Pizza de pollo",
+    "category": "Food",
+    "eans": [
+      "4335619026421"
+    ],
+    "ians": [
+      "5719569"
+    ],
+    "eanKind": "ean13",
+    "packaging": "430 g",
+    "price": 2.65,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-31T08:23:00.548Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "showStoreAvailability": false,
+      "showStoreAvailabilityPreview": false,
+      "store": true,
+      "storeStartDate": 1788127200,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Platos precocinados/Platos preparados refrigerados",
+    "pdp": true
+  },
+  {
+    "productId": 11110512,
+    "title": "Sensiplast Protectores de gel",
+    "category": "NonFood",
+    "eans": [
+      "4250527629598",
+      "4250527629611",
+      "4250527629635",
+      "4250527629659"
+    ],
+    "ians": [
+      "514765"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 2.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 2,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-20T09:17:38.475Z",
+    "endDate": "2026-09-13T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": false,
+      "storeStartDate": 1788732000,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Deporte y ocio/Salud y bienestar",
+    "pdp": true
+  },
+  {
+    "productId": 11104941,
+    "title": "Ryneczek Lidla Ramo de tulipanes",
+    "category": "P+F",
+    "eans": [
+      "20285982"
+    ],
+    "ians": [
+      "69754"
+    ],
+    "eanKind": "short",
+    "packaging": "Ud",
+    "price": 2.99,
+    "regionCount": 59,
+    "priceIdCount": 3,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-03-24T15:48:03.964Z",
+    "endDate": "2026-12-31T22:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Flores y plantas/Flores y plantas",
+    "pdp": true
+  },
+  {
+    "productId": 11034097,
+    "title": "Aceite de girasol",
+    "category": "Food",
+    "eans": [
+      "8410270027041"
+    ],
+    "ians": [
+      "5711254"
+    ],
+    "eanKind": "ean13",
+    "packaging": "5 / l",
+    "price": 9.95,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-30T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Aceites, especias y salsas/Aceites y grasas",
+    "pdp": true
+  },
+  {
+    "productId": 11150632,
+    "title": "Ocean Sea Filete de abadejo de alaska",
+    "category": "Food",
+    "eans": [
+      "4335619303188"
+    ],
+    "ians": [
+      "76887"
+    ],
+    "eanKind": "ean13",
+    "packaging": "960 g",
+    "price": 6.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-30T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "storeStartDate": 1788127200,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Alimentos congelados/Pescado y marisco congelados",
+    "pdp": true
+  },
+  {
+    "productId": 11251924,
+    "title": "Yogur natural",
+    "category": "Food",
+    "eans": [
+      "8410500001360"
+    ],
+    "ians": [
+      "1023844"
+    ],
+    "eanKind": "ean13",
+    "packaging": "8x120 g",
+    "price": 1.7,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": null,
+    "pdp": true
+  },
+  {
+    "productId": 11110506,
+    "title": "Sensiplast Calzador / Pinzas de agarre",
+    "category": "NonFood",
+    "eans": [
+      "4054599323633",
+      "4054599323640"
+    ],
+    "ians": [
+      "514753"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 3.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 2,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-20T09:17:38.401Z",
+    "endDate": "2026-09-13T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": false,
+      "storeStartDate": 1788732000,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Deporte y ocio/Salud y bienestar",
+    "pdp": true
+  },
+  {
+    "productId": 11116613,
+    "title": "Livarno Marco de fotos para collage",
+    "category": "NonFood",
+    "eans": [
+      "4052916975725",
+      "4052916975732",
+      "4052916975749",
+      "4052916975756"
+    ],
+    "ians": [
+      "494740"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 6.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 2,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-20T09:17:38.183Z",
+    "endDate": "2026-09-13T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": false,
+      "storeStartDate": 1789077600,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Vivir y amueblar/Decoración",
+    "pdp": true
+  },
+  {
+    "productId": 11109964,
+    "title": "W5 Alfombrilla escurreplatos",
+    "category": "NonFood",
+    "eans": [
+      "4054599364056"
+    ],
+    "ians": [
+      "515859"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 1.79,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 2,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-20T09:17:39.107Z",
+    "endDate": "2026-09-13T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": false,
+      "storeStartDate": 1789077600,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Cocina y hogar/Limpieza del hogar",
+    "pdp": true
+  },
+  {
+    "productId": 11000193,
+    "title": "Fairy",
+    "category": "Food",
+    "eans": [
+      "8700216479004"
+    ],
+    "ians": [
+      "1007612"
+    ],
+    "eanKind": "ean13",
+    "packaging": "2,5 / l",
+    "price": 9.49,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-31T11:07:11.220Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": null,
+    "pdp": true
+  },
+  {
+    "productId": 11208742,
+    "title": "Bellarom Café Espresso en grano",
+    "category": "Food",
+    "eans": [
+      "20688981"
+    ],
+    "ians": [
+      "114529"
+    ],
+    "eanKind": "short",
+    "packaging": "1,2 kg",
+    "price": 10.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Café, té y cacao",
+    "pdp": true
+  },
+  {
+    "productId": 11110633,
+    "title": "Livarno Puntos de luz LED",
+    "category": "NonFood",
+    "eans": [
+      "4054599389066",
+      "4054599389073"
+    ],
+    "ians": [
+      "516580"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 3.79,
+    "regionCount": 59,
+    "priceIdCount": 3,
+    "distinctPrices": 3,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-20T09:17:39.806Z",
+    "endDate": "2026-09-13T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": false,
+      "storeStartDate": 1789077600,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Vivir y amueblar/Iluminación",
+    "pdp": true
+  },
+  {
+    "productId": 11139813,
+    "title": "BELBAKE Azúcar blanco",
+    "category": "Food",
+    "eans": [
+      "4056489200598"
+    ],
+    "ians": [
+      "5902844"
+    ],
+    "eanKind": "ean13",
+    "packaging": "2 kg",
+    "price": 1.49,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-30T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "storeStartDate": 1788127200,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Reservas de alimentos/Ingredientes para repostería",
+    "pdp": true
+  },
+  {
+    "productId": 11137707,
+    "title": "W5 Bayeta de microfibra pequeña",
+    "category": "Food",
+    "eans": [
+      "20946067"
+    ],
+    "ians": [
+      "5706073"
+    ],
+    "eanKind": "short",
+    "packaging": "3 uds",
+    "price": 1.39,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-30T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Presupuesto/Papel higiénico",
+    "pdp": true
+  },
+  {
+    "productId": 11005707,
+    "title": "Nescafe Descafeinado",
+    "category": "Food",
+    "eans": [
+      "8445292015387",
+      "8445292015929"
+    ],
+    "ians": [
+      "177690"
+    ],
+    "eanKind": "ean13",
+    "packaging": "2x200 g",
+    "price": 12.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Café, té y cacao",
+    "pdp": true
+  },
+  {
+    "productId": 11237069,
+    "title": "Bon Gelati Helado crujiente XXL de fresa",
+    "category": "Food",
+    "eans": [
+      "4335619343856"
+    ],
+    "ians": [
+      "1009870"
+    ],
+    "eanKind": "ean13",
+    "packaging": "8x 100 ml",
+    "price": 4.69,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Alimentos congelados/Helado",
+    "pdp": true
+  },
+  {
+    "productId": 11671792,
+    "title": "Vela aromática",
+    "category": "Food",
+    "eans": [
+      "8412129048092"
+    ],
+    "ians": [
+      "5724102"
+    ],
+    "eanKind": "ean13",
+    "packaging": "Ud",
+    "price": 3.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Vivir y amueblar/Decoración",
+    "pdp": true
+  },
+  {
+    "productId": 11120150,
+    "title": "Esmara Gafas de lectura con LEDs",
+    "category": "NonFood",
+    "eans": [
+      "4054599320298",
+      "4054599320298",
+      "4054599320298",
+      "4054599320298",
+      "4054599320342",
+      "4054599320342",
+      "4054599320342",
+      "4054599320342",
+      "4054599320397",
+      "4054599320397",
+      "4054599320397",
+      "4054599320397",
+      "4054599320397",
+      "4054599320441",
+      "4054599320441",
+      "4054599320441",
+      "4054599320441"
+    ],
+    "ians": [
+      "517184"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 3.99,
+    "regionCount": 59,
+    "priceIdCount": 1,
+    "distinctPrices": 1,
+    "unpricedRegions": 0,
+    "startDate": "2026-08-20T09:17:37.780Z",
+    "endDate": "2026-09-13T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": false,
+      "storeStartDate": 1788732000,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Moda y accesorios/Moda femenina",
+    "pdp": true
+  },
+  {
+    "productId": 11082059,
+    "title": "chef select Pizza carbonara",
+    "category": "Food",
+    "eans": [
+      "4056489872047"
+    ],
+    "ians": [
+      "5718279"
+    ],
+    "eanKind": "ean13",
+    "packaging": "430 g",
+    "price": 2.69,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-31T08:23:00.453Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "showStoreAvailability": false,
+      "showStoreAvailabilityPreview": false,
+      "store": true,
+      "storeStartDate": 1788127200,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Platos precocinados/Platos preparados refrigerados",
+    "pdp": true
+  },
+  {
+    "productId": 11116870,
+    "title": "Parkside Soporte para jardinera",
+    "category": "NonFood",
+    "eans": [
+      "4054599116679",
+      "4054599116686"
+    ],
+    "ians": [
+      "496489"
+    ],
+    "eanKind": "ean13",
+    "packaging": null,
+    "price": 1.79,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-12T09:44:05.629Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "showStoreAvailability": true,
+      "showStoreAvailabilityPreview": true,
+      "store": true,
+      "storeStartDate": 1788127200,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Tienda de bricolaje y jardín/Flores, plantas y accesorios para plantas",
+    "pdp": true
+  },
+  {
+    "productId": 11139437,
+    "title": "--- Papilla de crema de arroz",
+    "category": "Food",
+    "eans": [
+      "8410175073792"
+    ],
+    "ians": [
+      "5722484"
+    ],
+    "eanKind": "ean13",
+    "packaging": "220 g",
+    "price": 2.17,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Bebés y niños/Alimentos para bebés y leche en polvo",
+    "pdp": true
+  },
+  {
+    "productId": 11671796,
+    "title": "Difusor de fragancia",
+    "category": "Food",
+    "eans": [
+      "8412129048122"
+    ],
+    "ians": [
+      "5724106"
+    ],
+    "eanKind": "ean13",
+    "packaging": "50 ml",
+    "price": 2.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Vivir y amueblar/Decoración",
+    "pdp": true
+  },
+  {
+    "productId": 11149348,
+    "title": "GRILLMEISTER Encendedor",
+    "category": "Food",
+    "eans": [
+      "20554996"
+    ],
+    "ians": [
+      "60553"
+    ],
+    "eanKind": "short",
+    "packaging": "1stueck",
+    "price": 1.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-31T10:50:21.279Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Cocina y hogar/Parrilla y accesorios",
+    "pdp": true
+  },
+  {
+    "productId": 11006541,
+    "title": "Galletas de mantequilla con chocolate",
+    "category": "Food",
+    "eans": [
+      "20199784",
+      "20199807"
+    ],
+    "ians": [
+      "19242"
+    ],
+    "eanKind": "short",
+    "packaging": null,
+    "price": null,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 0,
+    "unpricedRegions": 59,
+    "startDate": null,
+    "endDate": null,
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "storeStartDate": 1788472800,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Dulces y aperitivos/Galletas y pasteles",
+    "pdp": true
+  },
+  {
+    "productId": 11002903,
+    "title": "Mister Choc Barritas de chocolate",
+    "category": "Food",
+    "eans": [
+      "20224349"
+    ],
+    "ians": [
+      "139915"
+    ],
+    "eanKind": "short",
+    "packaging": "3x 100 g",
+    "price": 2.89,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-09-03T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Dulces y aperitivos/Productos de chocolate",
+    "pdp": true
+  },
+  {
+    "productId": 11001445,
+    "title": "MILBONA Mozzarella rallada",
+    "category": "Food",
+    "eans": [
+      "4056489326625"
+    ],
+    "ians": [
+      "122300"
+    ],
+    "eanKind": "ean13",
+    "packaging": "500 g",
+    "price": 2.99,
+    "regionCount": 59,
+    "priceIdCount": 2,
+    "distinctPrices": 1,
+    "unpricedRegions": 5,
+    "startDate": "2026-08-30T22:00Z",
+    "endDate": "2026-09-06T21:59:59Z",
+    "storeFacts": {
+      "inStoreCampaign": false,
+      "online": false,
+      "retail": true,
+      "store": true,
+      "storeStartDate": 1788127200,
+      "warehouses": []
+    },
+    "wonCategory": "Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Queso",
+    "pdp": true
+  }
+]

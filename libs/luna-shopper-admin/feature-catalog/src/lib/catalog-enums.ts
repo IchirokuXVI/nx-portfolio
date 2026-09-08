@@ -43,15 +43,15 @@ export const UNIT_OF_MEASURE_OPTIONS: readonly EnumOption[] = [
 /**
  * How wide a price scope is.
  *
- * The reason the price screen exists in the shape it does. A `WAREHOUSE` scope
- * is one price shared by every shop that warehouse serves, so a chain with an
- * automated source has far fewer scopes than shops; a chain with none gets one
+ * The reason the price screen exists in the shape it does. A `REGION` scope is
+ * one price shared by every shop in a group the chain defines, so a chain with an
+ * automated source has far fewer scopes than shops. A chain with none gets one
  * `STORE` scope per shop, which is what makes a hand typed price work with no
  * special case anywhere.
  */
 export const PRICE_SCOPE_KIND_OPTIONS: readonly EnumOption[] = [
   { value: 'NATIONAL', label: 'catalog.priceScopeKind.NATIONAL' },
-  { value: 'WAREHOUSE', label: 'catalog.priceScopeKind.WAREHOUSE' },
+  { value: 'REGION', label: 'catalog.priceScopeKind.REGION' },
   { value: 'POSTAL_CODE', label: 'catalog.priceScopeKind.POSTAL_CODE' },
   { value: 'STORE', label: 'catalog.priceScopeKind.STORE' },
 ];

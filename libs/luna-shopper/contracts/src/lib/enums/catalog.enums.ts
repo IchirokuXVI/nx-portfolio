@@ -15,18 +15,26 @@ export enum UnitOfMeasure {
 }
 
 /**
- * The scope a price applies to (plan 0038, section 5.1).
+ * The scope a price applies to (plan 0038, section 5.1; renamed by plan 0089).
  *
- * A chain that publishes one price per warehouse needs one row per warehouse, not
- * one per store: Mercadona answered identically for three warehouses across a 25
- * product sample, so keying prices on the store wrote twelve identical rows for
+ * A chain that publishes one price for a group of shops needs one row per group,
+ * not one per store: Mercadona answered identically for three warehouses across a
+ * 25 product sample, so keying prices on the store wrote twelve identical rows for
  * one city. A chain with no obtainable data instead gets one STORE scope per
  * location and hand entered prices. Both are the same shape, which is why nothing
  * downstream branches on the chain.
  */
 export enum PriceScopeKind {
   NATIONAL = 'NATIONAL',
-  WAREHOUSE = 'WAREHOUSE',
+  /**
+   * A grouping the chain defines and names itself, whatever it calls it.
+   *
+   * Mercadona calls it a warehouse and keys it `4661`. LIDL calls it an offer
+   * region and keys it `26`. Neither is a postal code and neither is a shop, and
+   * the two behave identically here, so they are one kind. This value was
+   * `WAREHOUSE` until plan 0089 found the second chain that needed it.
+   */
+  REGION = 'REGION',
   POSTAL_CODE = 'POSTAL_CODE',
   STORE = 'STORE',
 }
@@ -84,4 +92,29 @@ export enum ItemCategory {
   HOUSEHOLD = 'HOUSEHOLD',
   PERSONAL_CARE = 'PERSONAL_CARE',
   OTHER = 'OTHER',
+}
+
+/**
+ * Why one operation of a bulk decision request was refused (plan 0100).
+ *
+ * Shared by both bulk routes, because the two kinds of decision they replay
+ * fail the same handful of ways: a row that moved since the file was written, a
+ * reference to something the file never created, and the same subject named
+ * twice. A tool reads the code, and an operator reads the detail beside it.
+ */
+export enum BulkOperationErrorCode {
+  /** The row the operation names is gone. */
+  NOT_FOUND = 'NOT_FOUND',
+  /** The row is no longer waiting for a decision. */
+  NOT_PENDING = 'NOT_PENDING',
+  /** The row moved since the file was written, so `expect` no longer holds. */
+  EXPECT_MISMATCH = 'EXPECT_MISMATCH',
+  /** Two operations name the same subject, so the file contradicts itself. */
+  DUPLICATE_SUBJECT = 'DUPLICATE_SUBJECT',
+  /** A reference this request never creates, or one it creates twice. */
+  UNKNOWN_REFERENCE = 'UNKNOWN_REFERENCE',
+  /** The operation names neither of two required alternatives, or both. */
+  MALFORMED_OPERATION = 'MALFORMED_OPERATION',
+  /** Another row already holds the identifier this one would take. */
+  ALREADY_TAKEN = 'ALREADY_TAKEN',
 }

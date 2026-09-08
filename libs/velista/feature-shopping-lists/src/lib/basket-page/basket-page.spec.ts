@@ -11,6 +11,7 @@ import {
   GatewayError,
   GeneratedListStore,
   SessionStore,
+  type BasketSplitSaid,
 } from '@portfolio/velista/data-access';
 import type {
   BasketAddLineRequest,
@@ -56,6 +57,8 @@ interface FakeStore {
   readonly participants: WritableSignal<readonly BasketParticipant[]>;
   readonly takesLines: WritableSignal<boolean>;
   readonly lastAdded: WritableSignal<BasketLine | null>;
+  /** The most recent split, which shares the add's region (velista `0069`). */
+  readonly lastSplit: WritableSignal<BasketSplitSaid | null>;
   readonly opened: string[];
   /** Every add the page asked for, in order, so a spec can read what it sent. */
   readonly added: BasketAddLineRequest[];
@@ -186,6 +189,7 @@ async function render(options: Options = {}): Promise<{
     participants: signal(options.participants ?? []),
     takesLines: signal(options.takesLines ?? true),
     lastAdded: signal<BasketLine | null>(null),
+    lastSplit: signal<BasketSplitSaid | null>(null),
     opened: [],
     added: [],
     searched: [],
@@ -264,6 +268,7 @@ async function render(options: Options = {}): Promise<{
           takesLines: store.takesLines,
           adding: signal(false),
           lastAdded: store.lastAdded,
+          lastSplit: store.lastSplit,
           open: (id: string) => {
             store.opened.push(id);
             return Promise.resolve();
@@ -601,6 +606,19 @@ describe('the basket header, live', () => {
       expect(
         query(fixture, '.composer-dock [aria-live]')?.textContent?.trim()
       ).not.toBe('');
+    });
+
+    it('announces a split once, in the same region the add uses', async () => {
+      const { fixture, store } = await render();
+
+      store.lastSplit.set({ content: 'Milk', rows: 2 });
+      fixture.detectChanges();
+
+      // The same node, because there is one thing to say about this basket at a
+      // time: a second region would talk over the first (velista `0069`).
+      expect(
+        query(fixture, '.composer-dock [aria-live]')?.textContent?.trim()
+      ).toContain('basket.product.split');
     });
 
     describe('the typeahead', () => {

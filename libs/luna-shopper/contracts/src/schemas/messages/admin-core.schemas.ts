@@ -2,6 +2,7 @@ import {
   ADMIN_BASKET_PATTERNS,
   ADMIN_LIST_PATTERNS,
   ADMIN_MEMBERSHIP_PATTERNS,
+  ADMIN_PROFILE_POSTAL_CODE_PATTERNS,
   ADMIN_ZONE_PATTERNS,
 } from '../../lib/messages/admin-core.messages';
 import {
@@ -75,6 +76,9 @@ export const ADMIN_CORE_SCHEMA_IDS = {
   getListRequest: schemaId('msg/adminList.get/request'),
   listBasketsRequest: schemaId('msg/adminBasket.list/request'),
   getBasketRequest: schemaId('msg/adminBasket.get/request'),
+  postalCodeUsageView: schemaId('admin-core/PostalCodeUsageView'),
+  postalCodeUsageListView: schemaId('admin-core/PostalCodeUsageListView'),
+  postalCodeUsageRequest: schemaId('msg/adminProfilePostalCode.usage/request'),
 } as const;
 
 const timestamps = {
@@ -110,13 +114,24 @@ const zoneMemberView = object(
   ADMIN_CORE_SCHEMA_IDS.zoneMemberView,
   {
     membershipId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    zoneName: nonEmptyString(),
     userId: nonEmptyString(),
     username: nonEmptyString(),
     role: ref(ENUM_IDS.zoneRole),
     status: ref(ENUM_IDS.membershipStatus),
     createdAt: string({ format: 'date-time' }),
   },
-  ['membershipId', 'userId', 'username', 'role', 'status', 'createdAt']
+  [
+    'membershipId',
+    'zoneId',
+    'zoneName',
+    'userId',
+    'username',
+    'role',
+    'status',
+    'createdAt',
+  ]
 );
 
 const zoneListView = object(
@@ -193,6 +208,8 @@ const listLineView = object(
   ADMIN_CORE_SCHEMA_IDS.listLineView,
   {
     id: nonEmptyString(),
+    listId: nonEmptyString(),
+    listName: nonEmptyString(),
     content: string(),
     quantity: integer(),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
@@ -201,6 +218,8 @@ const listLineView = object(
   },
   [
     'id',
+    'listId',
+    'listName',
     'content',
     'quantity',
     'approvalStatus',
@@ -382,6 +401,8 @@ const setDeletionMarkRequest = object(
   ['userId', 'zoneId', 'marked']
 );
 
+// `zoneId` is a filter here and not an address (admin plan 0017): a read with
+// none lists every zone's memberships, grouped by the zone they are in.
 const listMembershipsRequest = object(
   ADMIN_CORE_SCHEMA_IDS.listMembershipsRequest,
   {
@@ -391,7 +412,7 @@ const listMembershipsRequest = object(
     limit: integer({ minimum: 1 }),
     order: string(),
   },
-  ['userId', 'zoneId']
+  ['userId']
 );
 
 // Role and per zone name. `status` is deliberately absent: it moves along a
@@ -421,6 +442,8 @@ const updateAdminListRequest = object(
   ['userId', 'listId']
 );
 
+// `listId` is a filter here and not an address, for the reason `zoneId` is one
+// above.
 const listLinesRequest = object(
   ADMIN_CORE_SCHEMA_IDS.listLinesRequest,
   {
@@ -430,7 +453,7 @@ const listLinesRequest = object(
     limit: integer({ minimum: 1 }),
     order: string(),
   },
-  ['userId', 'listId']
+  ['userId']
 );
 
 const lineIdRequest = object(
@@ -471,6 +494,52 @@ const setLineApprovalRequest = object(
   ['userId', 'listId', 'lineId', 'status']
 );
 
+/**
+ * One postal code and who is waiting on it (plan 0097, section 5).
+ *
+ * Six counts and no identities. The screen prioritises a queue with them, and
+ * the codes come from the harvester's rows, so nothing here names a profile, a
+ * user or an account.
+ */
+const postalCodeUsageView = object(
+  ADMIN_CORE_SCHEMA_IDS.postalCodeUsageView,
+  {
+    postalCode: nonEmptyString(),
+    mainProfiles: integer({ minimum: 0 }),
+    nearbyProfiles: integer({ minimum: 0 }),
+    suppressedProfiles: integer({ minimum: 0 }),
+    mainUsers: integer({ minimum: 0 }),
+    nearbyUsers: integer({ minimum: 0 }),
+  },
+  [
+    'postalCode',
+    'mainProfiles',
+    'nearbyProfiles',
+    'suppressedProfiles',
+    'mainUsers',
+    'nearbyUsers',
+  ]
+);
+
+const postalCodeUsageListView = object(
+  ADMIN_CORE_SCHEMA_IDS.postalCodeUsageListView,
+  {
+    country: nonEmptyString(),
+    usage: array(ref(ADMIN_CORE_SCHEMA_IDS.postalCodeUsageView)),
+  },
+  ['country', 'usage']
+);
+
+const postalCodeUsageRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.postalCodeUsageRequest,
+  {
+    ...adminCredentialProperties,
+    country: nonEmptyString(),
+    postalCodes: array(nonEmptyString()),
+  },
+  ['userId', 'country', 'postalCodes']
+);
+
 export const adminCoreSchemas: JsonSchema[] = [
   zoneView,
   zoneMemberView,
@@ -505,6 +574,9 @@ export const adminCoreSchemas: JsonSchema[] = [
   lineIdRequest,
   updateLineRequest,
   setLineApprovalRequest,
+  postalCodeUsageView,
+  postalCodeUsageListView,
+  postalCodeUsageRequest,
 ];
 
 export const adminCoreMessageContracts: Record<
@@ -616,5 +688,9 @@ export const adminCoreMessageContracts: Record<
   [ADMIN_LIST_PATTERNS.deleteLine]: {
     request: ADMIN_CORE_SCHEMA_IDS.lineIdRequest,
     response: COMMON_IDS.idResult,
+  },
+  [ADMIN_PROFILE_POSTAL_CODE_PATTERNS.usage]: {
+    request: ADMIN_CORE_SCHEMA_IDS.postalCodeUsageRequest,
+    response: ADMIN_CORE_SCHEMA_IDS.postalCodeUsageListView,
   },
 };

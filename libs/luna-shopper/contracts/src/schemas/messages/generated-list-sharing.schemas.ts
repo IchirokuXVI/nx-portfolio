@@ -87,7 +87,12 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
     'generated-list-sharing/BasketScopeLocationView'
   ),
   basketRequest: schemaId('msg/generatedList.basket.get/request'),
-  setPickRequest: schemaId('msg/generatedList.setPick/request'),
+  /** Units for products other than a line's own, which splits the line. */
+  splitLineRequest: schemaId('msg/generatedList.splitLine/request'),
+  /** One product of a split, and how many units go to it. */
+  lineShare: schemaId('generated-list-sharing/LineShare'),
+  /** The four collections a split answers with (plan 0094, section 6). */
+  splitLineResult: schemaId('generated-list-sharing/SplitLineResult'),
   /** Put a line in the basket as any live participant (plan 0055, section 3). */
   addLineRequest: schemaId('msg/generatedList.basket.addLine/request'),
   /** Where a search inside this basket is priced (plan 0055, section 5.1). */
@@ -102,6 +107,8 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   lineOriginDetail: schemaId('generated-list-sharing/LineOriginDetail'),
   /** A list holding the same thing that is not an origin yet (section 3.2). */
   originCandidate: schemaId('generated-list-sharing/OriginCandidate'),
+  /** A list in scope holding no matching line (plan 0092, section 3). */
+  listRef: schemaId('generated-list-sharing/ListRef'),
   lineOriginsRequest: schemaId('msg/generatedList.lineOrigins/request'),
   lineOriginsResult: schemaId('msg/generatedList.lineOrigins/response'),
   setOriginQuantityRequest: schemaId(
@@ -110,12 +117,6 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   setOriginQuantityResult: schemaId(
     'msg/generatedList.setOriginQuantity/response'
   ),
-  /** One list a basket line may be sent to (plan 0058, section 3). */
-  lineTarget: schemaId('generated-list-sharing/LineTarget'),
-  lineTargetsRequest: schemaId('msg/generatedList.lineTargets/request'),
-  lineTargetsResult: schemaId('msg/generatedList.lineTargets/response'),
-  bindLineRequest: schemaId('msg/generatedList.bindLine/request'),
-  bindLineResult: schemaId('msg/generatedList.bindLine/response'),
 } as const;
 
 const shareLinkView = object(
@@ -549,6 +550,13 @@ const lineOriginDetail = object(
     listQuantity: integer({ minimum: 0 }),
     settledHere: integer({ minimum: 0 }),
     writable: boolean(),
+    // The same fact on every row of all three collections (plan 0092, section
+    // 3): the client draws the run's own lists first and the server sorts
+    // nothing.
+    fromRun: boolean(),
+    // One field on every origin rather than one flag on a bind result, which is
+    // what it always was: a row can say the household has not agreed yet.
+    approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
   },
   [
     'originId',
@@ -561,6 +569,8 @@ const lineOriginDetail = object(
     'listQuantity',
     'settledHere',
     'writable',
+    'fromRun',
+    'approvalStatus',
   ]
 );
 
@@ -583,6 +593,7 @@ const originCandidate = object(
     content: string(),
     matchedOnText: boolean(),
     unavailable: ref(ENUM_IDS.originUnavailableReason),
+    fromRun: boolean(),
   },
   [
     'listId',
@@ -593,9 +604,38 @@ const originCandidate = object(
     'listQuantity',
     'content',
     'matchedOnText',
+    'fromRun',
   ]
 );
 
+/**
+ * A list in scope holding no matching line (plan 0092, section 3).
+ *
+ * **No quantity**, and that is the shape rather than an omission: the list asks
+ * for none of this, so every row here stands at zero until somebody raises it,
+ * and raising it is what creates the line.
+ */
+const listRef = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.listRef,
+  {
+    listId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    listName: nullableString(),
+    zoneName: nullableString(),
+    fromRun: boolean(),
+  },
+  ['listId', 'zoneId', 'listName', 'zoneName', 'fromRun']
+);
+
+/**
+ * The three collections, which partition the lists this reader may write (plan
+ * 0092, section 3).
+ *
+ * A list is an origin, or it holds a matching line and is a candidate, or it
+ * holds nothing matching and is an other. All three are answered for **any**
+ * line, so an added line nobody has sent anywhere answers two empty collections
+ * and every writable list.
+ */
 const lineOriginsResult = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginsResult,
   {
@@ -603,8 +643,9 @@ const lineOriginsResult = object(
     lineId: nonEmptyString(),
     origins: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginDetail)),
     candidates: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.originCandidate)),
+    others: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.listRef)),
   },
-  ['generatedListId', 'lineId', 'origins', 'candidates']
+  ['generatedListId', 'lineId', 'origins', 'candidates', 'others']
 );
 
 /**
@@ -685,15 +726,57 @@ const basketRequest = object(
   ['generatedListId', 'participantId']
 );
 
-const setPickRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.setPickRequest,
+const lineShare = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.lineShare,
+  {
+    itemId: nonEmptyString(),
+    quantity: integer({
+      minimum: 0,
+      maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    }),
+  },
+  ['itemId', 'quantity']
+);
+
+/**
+ * Give units of a line to other products (plan 0094, section 2).
+ *
+ * `from` is required and is the whole of the stale guard: the balance is never
+ * typed, so a request that started from a number the line no longer has is
+ * refused rather than landing on units somebody else has already moved.
+ *
+ * A share of **zero** is allowed through here and folded out by the service
+ * before anything else, which is section 2.1: a client that draws a stepper per
+ * option sends every option it drew, and refusing the untouched ones would make
+ * an ordinary screen build a request by hand.
+ */
+const splitLineRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineRequest,
   {
     generatedListId: nonEmptyString(),
     lineId: nonEmptyString(),
     participantId: nonEmptyString(),
-    itemId: nonEmptyString(),
+    from: integer({ minimum: 0, maximum: GENERATED_LIST_LIMITS.maxQuantity }),
+    shares: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.lineShare)),
   },
-  ['generatedListId', 'lineId', 'participantId', 'itemId']
+  ['generatedListId', 'lineId', 'participantId', 'from', 'shares']
+);
+
+/**
+ * What a split did (plan 0094, section 6).
+ *
+ * Four collections rather than a whole basket, so the client redraws the rows it
+ * was told about and draws nothing it was not.
+ */
+const splitLineResult = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineResult,
+  {
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+    created: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView)),
+    merged: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView)),
+    removed: array(nonEmptyString()),
+  },
+  ['line', 'created', 'merged', 'removed']
 );
 
 /**
@@ -863,12 +946,16 @@ const reopenResult = object(
 );
 
 /**
- * Set one list's contribution (plan 0057, section 5).
+ * Set one list's contribution (plan 0057 section 5, plan 0092 section 4).
  *
  * `quantity` may be zero, which is what takes the list off the line, and `from`
- * may be zero, which is what an adoption always sends. Neither is a floor
- * expressed here: the real floor is per origin and per basket, and only the
- * service can know it.
+ * may be zero, which is what an adoption and a creation always send. Neither is
+ * a floor expressed here: the real floor is per origin and per basket, and only
+ * the service can know it.
+ *
+ * `sourceLineId` is **optional**, and its absence is the creation case: a list
+ * holding no matching line has nothing for the client to name, so the write
+ * creates the line through the ordinary add (section 4.2).
  */
 const setOriginQuantityRequest = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginQuantityRequest,
@@ -886,100 +973,9 @@ const setOriginQuantityRequest = object(
     'lineId',
     'participantId',
     'sourceListId',
-    'sourceLineId',
     'quantity',
     'from',
   ]
-);
-
-/**
- * Which lists an added basket line may be sent to (plan 0058, section 3).
- *
- * The same three fields {@link lineOriginsRequest} carries, and declared
- * separately for the reason that one is: they address the same line and mean
- * different things to it, so a shared schema would make two gestures look like
- * one message with a flag.
- */
-const lineTargetsRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.lineTargetsRequest,
-  {
-    generatedListId: nonEmptyString(),
-    lineId: nonEmptyString(),
-    participantId: nonEmptyString(),
-  },
-  ['generatedListId', 'lineId', 'participantId']
-);
-
-/**
- * One list that may receive the line (plan 0058, section 3).
- *
- * `fromRun` is a fact and not a rank: the server says which lists the basket was
- * composed from and the client draws those first. Sorting here would be sorting
- * for a screen this service has never seen.
- */
-const lineTarget = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.lineTarget,
-  {
-    listId: nonEmptyString(),
-    zoneId: nonEmptyString(),
-    listName: nullableString(),
-    zoneName: nullableString(),
-    fromRun: boolean(),
-  },
-  ['listId', 'zoneId', 'listName', 'zoneName', 'fromRun']
-);
-
-const lineTargetsResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.lineTargetsResult,
-  {
-    generatedListId: nonEmptyString(),
-    lineId: nonEmptyString(),
-    targets: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.lineTarget)),
-  },
-  ['generatedListId', 'lineId', 'targets']
-);
-
-/**
- * Send an added basket line to a shopping list (plan 0058, section 4).
- *
- * **No quantity**, which is the one thing worth saying about the shape: the zone
- * line is created with what is outstanding on the basket line and the server
- * computes it (section 4.1), so a client cannot ask a household for four
- * batteries three of which are already in the cupboard.
- */
-const bindLineRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.bindLineRequest,
-  {
-    generatedListId: nonEmptyString(),
-    lineId: nonEmptyString(),
-    participantId: nonEmptyString(),
-    listId: nonEmptyString(),
-  },
-  ['generatedListId', 'lineId', 'participantId', 'listId']
-);
-
-/**
- * What binding did (plan 0058, section 4).
- *
- * `pendingApproval` is section 4.3 and is the field the screen is really waiting
- * for: an add does not approve itself, so a reader who is not told will believe
- * their line landed on a household's list when it is waiting to be agreed to.
- *
- * `quantity` may be zero, and that is section 4.1 rather than a degenerate case:
- * a line bound after its units were bought leaves the household knowing about
- * the thing and not currently needing any.
- */
-const bindLineResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.bindLineResult,
-  {
-    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
-    listId: nonEmptyString(),
-    zoneId: nonEmptyString(),
-    createdLineId: nonEmptyString(),
-    quantity: integer({ minimum: 0 }),
-    pendingApproval: boolean(),
-  },
-  ['line', 'listId', 'zoneId', 'createdLineId', 'quantity', 'pendingApproval']
 );
 
 export const generatedListSharingSchemas: JsonSchema[] = [
@@ -1017,22 +1013,20 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   sourceName,
   lineMovedEvent,
   basketRequest,
-  setPickRequest,
+  lineShare,
+  splitLineRequest,
+  splitLineResult,
   addLineRequest,
   basketScope,
   lineAddedEvent,
   lineOriginDetail,
   originCandidate,
+  listRef,
   lineOriginsRequest,
   lineOriginsResult,
   setOriginQuantityRequest,
   setOriginQuantityResult,
   setOutstandingRequest,
-  lineTarget,
-  lineTargetsRequest,
-  lineTargetsResult,
-  bindLineRequest,
-  bindLineResult,
 ];
 
 export const generatedListSharingMessageContracts: Record<
@@ -1100,11 +1094,12 @@ export const generatedListSharingMessageContracts: Record<
     // `skippedCount: 0` and no settlement refs, which is true of it.
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.settleResult,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.setPick]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.setPickRequest,
-    // The same shape a settle answers with, and for the same reason: both move
-    // one line, and the screen updates one row from either.
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView,
+  [GENERATED_LIST_SHARING_PATTERNS.splitLine]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineRequest,
+    // Deliberately **not** one line, which is what the pick this replaced
+    // answered with: a split makes rows and can fold rows away, so an answer of
+    // one line would leave the screen redrawing a basket it was not told about.
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineResult,
   },
   [GENERATED_LIST_SHARING_PATTERNS.addLine]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.addLineRequest,
@@ -1126,16 +1121,5 @@ export const generatedListSharingMessageContracts: Record<
     // Deliberately **not** the settle result (plan 0057, section 6): no
     // settlement refs and no skip report, because this bought nothing.
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginQuantityResult,
-  },
-  [GENERATED_LIST_SHARING_PATTERNS.lineTargets]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.lineTargetsRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.lineTargetsResult,
-  },
-  [GENERATED_LIST_SHARING_PATTERNS.bindLine]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.bindLineRequest,
-    // Not the basket line alone (plan 0058, section 4.3). The line is what the
-    // screen redraws, but whether the household has to agree to it first is a
-    // decision the server took and only the server can report.
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.bindLineResult,
   },
 };

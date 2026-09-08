@@ -467,6 +467,73 @@ describe('HarvestRunService.spawn', () => {
     ).rejects.toBeInstanceOf(ValidationException);
   });
 
+  it('refuses a LIDL walk that names a price scope', async () => {
+    // The opposite rule to Mercadona's, and it has to be a refusal (plan 0089,
+    // section 8): the chain publishes a price for each of its 59 regions and
+    // the run creates one scope per region, so a scope on the request would
+    // write every region's price into that one. A wrong number, not a missing
+    // one.
+    const { service } = build({ source: { adapterKey: 'lidl-api' } });
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeId: 'a-scope',
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('starts a LIDL walk with no scope at all', async () => {
+    const { service, store } = build({ source: { adapterKey: 'lidl-api' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        priceScopeId: null,
+      })
+    );
+  });
+
+  it('starts a store discovery for a chain that names its own shops', async () => {
+    // It takes no postal code and no radius: the chain names all 730 of its
+    // shops in three requests, so there is nothing to centre on (plan 0089,
+    // section 9). The run belongs to that chain, so it carries its id.
+    const { service, store } = build({ source: { adapterKey: 'lidl-api' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        supermarketId: SUPERMARKET,
+      })
+    );
+  });
+
+  it('refuses a store discovery for a chain whose shops it cannot read', async () => {
+    // Mercadona publishes no store list, so a run naming it is still a radius
+    // over OpenStreetMap and still needs a centre.
+    const { service } = build({ source: { adapterKey: 'mercadona-api' } });
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        supermarketId: SUPERMARKET,
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
   it('refuses a mercadona walk with no scope to write the prices for', async () => {
     // The walk fetches a price for every one of 4,232 products (plan 0086, D4),
     // so it needs somewhere to put them. This is the sentence a REFRESH used.

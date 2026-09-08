@@ -1,5 +1,10 @@
 import { registerAs } from '@nestjs/config';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
+import {
+  DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
+  POSTAL_CODE_DERIVE_MAX_METRES_VAR,
+  postalCodeDeriveMaxMetres,
+} from '@portfolio/luna-shopper/postal-codes';
 import * as Joi from 'joi';
 import { readKey } from './read-key';
 
@@ -89,7 +94,37 @@ export const harvesterValidationSchema = Joi.object({
   /** How often the drain worker looks for a due row. */
   HARVEST_DISCOVERY_POLL_SECONDS: Joi.number().integer().min(5).default(60),
 
+  /**
+   * How far a discovered place's coordinates may be from a postal code centroid
+   * before the run declines to guess one (plan 0097, section 3).
+   *
+   * **The same name and the same default as catalog's**, because it is the same
+   * decision: plan 0061 bounds a location's derivation with it, and a place is
+   * derived here by the same rule so that a shop and the place it came from
+   * cannot disagree about which code they are in. A deployment that tightens it
+   * sets one variable in both services.
+   */
+  [POSTAL_CODE_DERIVE_MAX_METRES_VAR]: Joi.number()
+    .positive()
+    .default(DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES),
+
   MERCADONA_BASE_URL: Joi.string().allow('').default(''),
+  /**
+   * The key LIDL's public store search bundle ships (plan 0089, section 10).
+   *
+   * **It is configuration and not a secret.** It is the same fixed string every
+   * browser sends, so it is defaulted rather than required, and a 401 from the
+   * store service is the signal that the chain rotated it. Set this to the new
+   * value when that happens.
+   *
+   * **Do not scrape it out of the bundle at run time.** That turns one brittle
+   * dependency into two, and the failure is then silent rather than a 401 with
+   * a name on it.
+   *
+   * It is the one thing about LIDL that is an environment variable. The per
+   * chain switch, the base URLs and the rate are all rows (plan 0083).
+   */
+  LIDL_STORES_API_KEY: Joi.string().allow('').default(''),
   OVERPASS_URL: Joi.string().allow('').default(''),
   NOMINATIM_URL: Joi.string().allow('').default(''),
 
@@ -118,7 +153,11 @@ export interface HarvesterConfig {
   discoveryCooldownDays: number;
   discoveryMaxAttempts: number;
   discoveryPollSeconds: number;
+  /** The bound catalog derives with too, read from the same variable name. */
+  postalCodeDeriveMaxMetres: number;
   mercadonaBaseUrl: string | undefined;
+  /** Empty falls back to the public key the library ships. */
+  lidlStoresApiKey: string | undefined;
   overpassUrl: string | undefined;
   nominatimUrl: string | undefined;
 }
@@ -170,7 +209,11 @@ export const harvesterConfiguration = registerAs(
     discoveryPollSeconds: Number(
       process.env.HARVEST_DISCOVERY_POLL_SECONDS ?? 60
     ),
+    postalCodeDeriveMaxMetres: postalCodeDeriveMaxMetres(
+      process.env[POSTAL_CODE_DERIVE_MAX_METRES_VAR]
+    ),
     mercadonaBaseUrl: optional(process.env.MERCADONA_BASE_URL),
+    lidlStoresApiKey: optional(process.env.LIDL_STORES_API_KEY),
     overpassUrl: optional(process.env.OVERPASS_URL),
     nominatimUrl: optional(process.env.NOMINATIM_URL),
   })

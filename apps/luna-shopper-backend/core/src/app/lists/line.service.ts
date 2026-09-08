@@ -14,6 +14,7 @@ import {
   SettlementOutcome,
   type AddLineQuantityRequest,
   type AddLineRequest,
+  type AddLineResult,
   type AddLinesItem,
   type AddLinesRequest,
   type DeleteLineRequest,
@@ -55,6 +56,7 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../generated-lists/line-claim.service';
 import { itemSetHash } from './item-set-hash';
+import { normalizeContent } from './line-content';
 import {
   EMPTY_LINE_ITEM_SET,
   toLineItemSet,
@@ -542,15 +544,33 @@ export class LineService {
    * it is a settlement now: whether the group agreed to buy a thing and whether
    * somebody has been to the shop are different questions, and auto approving the
    * first answers nothing about the second.
+   *
+   * ## It may raise a line instead of creating one (plan 0091)
+   *
+   * **A zone list holds one line per normalized name.** Adding a name the list
+   * already carries raises that line's quantity by the amount added and creates
+   * nothing, so a household never ends up with two Milks, two quantities and two
+   * things to delete for one thing they buy. The fold is
+   * {@link normalizeContent}, shared with the generation run so the two agree,
+   * and it is conservative: "milk" and "whole milk" stay two lines.
+   *
+   * What a merge does and refuses to do is {@link raiseForAdd}, and which line it
+   * lands on is {@link findMergeTarget}. The answer says which of the two
+   * happened, because a caller reading it back to a person cannot tell from the
+   * line alone.
    */
-  async add(req: AddLineRequest): Promise<LineView> {
+  async add(req: AddLineRequest): Promise<AddLineResult> {
     const { list, permissions } = await this.listAccess.requireAccess(
       req.listId,
       req.userId,
       ListPermission.WRITE
     );
-    const max = await this.maxPosition(this.lines, req.listId);
     const itemIds = this.validateItemIds(req.itemIds ?? []);
+    // Validated out here rather than inside {@link newLine}, because the merge
+    // path needs the same number and never builds a row to put it on. The bound
+    // is on what the request asked for; what a merge does to a line already near
+    // the ceiling is {@link raiseForAdd}'s cap.
+    const quantity = this.validateQuantity(req.quantity ?? 1);
     const approval = {
       decides: permissions.has(ListPermission.DECIDE),
       autoApproves: list.autoApproveLines,
@@ -560,31 +580,55 @@ export class LineService {
     // line be created with different products than the suggestion the person
     // actually tapped said it would add.
     const productGroupId = req.productGroupId ?? null;
-    const row = this.newLine(
-      req,
-      req.listId,
-      req.userId,
-      max + 1,
-      approval,
-      productGroupId
-    );
-
-    // A free text line is still one insert and no transaction, which matters
-    // because it is the busiest write in the product and it is what most adds
-    // still are (velista 0043, section 6: free text stays first class). A line
-    // that arrives with products needs the row and its set to land together, so
-    // that path, and only that path, opens a transaction.
     const source =
       productGroupId === null ? LineItemSource.USER : LineItemSource.GROUP;
-    const saved =
-      itemIds.length === 0
-        ? await this.lines.save(this.lines.create(row))
-        : await this.dataSource.transaction(async (manager) => {
-            const repo = manager.getRepository(ListLine);
-            const line = await repo.save(repo.create(row));
-            await this.writeItemSet(manager, line.id, itemIds, source);
-            return line;
-          });
+
+    // Every add opens a transaction now, and a free text one no longer gets the
+    // single insert it used to (velista 0043, section 6). The lock is why: an add
+    // reads the list to decide whether the name is already on it, and two phones
+    // typing "milk" in the same second would otherwise both read no match and
+    // both create (plan 0091, section 3.2). The row lock is on the **list**, so
+    // it serializes adds to one list and nothing else.
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      await this.lockList(manager, req.listId);
+
+      const target = await this.findMergeTarget(manager, req.listId, [
+        req.content,
+      ]);
+      const existing = target.get(normalizeContent(req.content));
+      if (existing !== undefined) {
+        return {
+          merged: true as const,
+          written: await this.raiseForAdd(manager, existing, quantity),
+        };
+      }
+
+      const repo = manager.getRepository(ListLine);
+      const position = (await this.maxPosition(repo, req.listId)) + 1;
+      const line = await repo.save(
+        repo.create(
+          this.newLine(
+            { ...req, quantity },
+            req.listId,
+            req.userId,
+            position,
+            approval,
+            productGroupId
+          )
+        )
+      );
+      if (itemIds.length > 0) {
+        await this.writeItemSet(manager, line.id, itemIds, source);
+      }
+      return { merged: false as const, line };
+    });
+
+    if (outcome.merged) {
+      // A merge is an update of a line that was already on the screen, so it
+      // announces itself as one. `line.added` would put a second row in front of
+      // every client that is drawing the first.
+      return { line: this.announce(list, outcome.written), merged: true };
+    }
 
     // Everything on a subscribed line came from the group at this moment, and
     // nothing on a hand made one ever did, so the pair needs no read.
@@ -598,12 +642,15 @@ export class LineService {
     this.emit(
       RealtimeEvent.LineAdded,
       list.zoneId,
-      saved,
+      outcome.line,
       items,
       NO_LINE_SETTLEMENTS,
       NO_LINE_CLAIM
     );
-    return toLineView(saved, items, NO_LINE_SETTLEMENTS, NO_LINE_CLAIM);
+    return {
+      line: toLineView(outcome.line, items, NO_LINE_SETTLEMENTS, NO_LINE_CLAIM),
+      merged: false,
+    };
   }
 
   /**
@@ -621,16 +668,18 @@ export class LineService {
    * either. So one transaction, and `LineView[]` in request order, which is the
    * shape `reorder` already established for a batch write on this resource.
    *
-   * **It adds, and it does not merge** (section 6.3). Two items naming the same
-   * thing produce two lines: merging would put "asking for milk twice should
-   * change a number" into core, where it does not belong, and where it would then
-   * apply to somebody pasting a list who may well have meant two entries.
+   * **It merges, per item, and it folds duplicates inside the batch** (plan 0091,
+   * section 2). Section 6.3 decided the other way, on the argument that somebody
+   * pasting a list may have meant two entries; the list rule now says a list
+   * holds one line per normalized name, and a rule the batch could walk through
+   * would not be one. Two items naming one thing therefore produce one line at
+   * the summed quantity, and both slots of the answer name it.
    *
    * **The permission set is resolved once** and applies to every item, which is
    * right because it is one adder and one list, and it is most of the point:
    * fifty adds is otherwise fifty resolutions of one unchanging answer.
    */
-  async addMany(req: AddLinesRequest): Promise<LineView[]> {
+  async addMany(req: AddLinesRequest): Promise<AddLineResult[]> {
     const items = req.items ?? [];
     if (items.length === 0) {
       throw new ValidationException('at least one line is required', {
@@ -655,22 +704,74 @@ export class LineService {
     };
 
     // Validated before the transaction opens, so a bad reference in the tenth
-    // item refuses the request rather than rolling back nine good writes.
+    // item refuses the request rather than rolling back nine good writes. The
+    // quantities go the same way, and for the same reason.
     const itemSets = items.map((item) =>
       this.validateItemIds(item.itemIds ?? [])
     );
+    const quantities = items.map((item) =>
+      this.validateQuantity(item.quantity ?? 1)
+    );
+    const keys = items.map((item) => normalizeContent(item.content));
 
-    const saved = await this.dataSource.transaction(async (manager) => {
+    const written = await this.dataSource.transaction(async (manager) => {
+      // The same lock a single add takes, for the same reason and once for the
+      // whole batch (plan 0091, section 3.2).
+      await this.lockList(manager, req.listId);
       const repo = manager.getRepository(ListLine);
-      // One MAX(position) for the whole batch, then an increment per item, so the
-      // lines land in the order they were given (section 6.2).
+      const targets = await this.findMergeTarget(manager, req.listId, keys);
+
+      // Planned before anything is written, because a line this batch creates is
+      // a merge target for a later item in the same batch, and its quantity has
+      // to be the sum before the row is inserted rather than an insert followed
+      // by an update of a row nobody has seen yet.
+      const creations: { key: string; index: number; quantity: number }[] = [];
+      const raises = new Map<string, { line: ListLine; delta: number }>();
+      const byKey = new Map<string, number>();
+      const slots: ({ created: number } | { raised: string })[] = [];
+      for (const [index, key] of keys.entries()) {
+        const target = targets.get(key);
+        if (target) {
+          const raise = raises.get(target.id) ?? { line: target, delta: 0 };
+          raise.delta += quantities[index];
+          raises.set(target.id, raise);
+          slots.push({ raised: target.id });
+          continue;
+        }
+        const planned = byKey.get(key);
+        if (planned !== undefined) {
+          creations[planned].quantity += quantities[index];
+          slots.push({ created: planned });
+          continue;
+        }
+        byKey.set(key, creations.length);
+        slots.push({ created: creations.length });
+        creations.push({ key, index, quantity: quantities[index] });
+      }
+
+      // One MAX(position) for the whole batch, then an increment per created
+      // line, so the lines land in the order they were given (section 6.2).
       let position = await this.maxPosition(repo, req.listId);
-      const rows: ListLine[] = [];
-      for (const [index, item] of items.entries()) {
+      const created: ListLine[] = [];
+      for (const creation of creations) {
         position += 1;
         const line = await repo.save(
           repo.create(
-            this.newLine(item, req.listId, req.userId, position, approval, null)
+            this.newLine(
+              // The **first** item that named this thing supplies the content
+              // and the products; a later duplicate contributes its quantity and
+              // nothing else, which is the merge rule applied to a line this
+              // batch is creating rather than one it found.
+              {
+                ...items[creation.index],
+                quantity: this.capQuantity(creation.quantity),
+              },
+              req.listId,
+              req.userId,
+              position,
+              approval,
+              null
+            )
           )
         );
         // Always `USER` here: a batch is a paste, an import or the assistant,
@@ -679,38 +780,66 @@ export class LineService {
         await this.writeItemSet(
           manager,
           line.id,
-          itemSets[index],
+          itemSets[creation.index],
           LineItemSource.USER
         );
-        rows.push(line);
+        created.push(line);
       }
-      return rows;
+
+      const raised = new Map<string, WrittenLine>();
+      for (const [lineId, raise] of raises) {
+        raised.set(
+          lineId,
+          await this.raiseForAdd(manager, raise.line, raise.delta)
+        );
+      }
+      return { creations, created, slots, raised };
     });
 
-    // N `LineAdded` events in request order, after the commit, and deliberately
-    // not one batch event: a new event type is a type every client has to learn,
-    // and velista, the realtime service and the list rooms all already handle
-    // `line.added` correctly, so a client that has never heard of this plan gets
-    // a correct list. The burst is exactly the fan out the N separate requests it
-    // replaces would have produced anyway.
-    for (const [index, row] of saved.entries()) {
+    // N events after the commit, and deliberately not one batch event: a new
+    // event type is a type every client has to learn, and velista, the realtime
+    // service and the list rooms all already handle these two correctly, so a
+    // client that has never heard of this plan gets a correct list. The burst is
+    // exactly the fan out the N separate requests it replaces would have
+    // produced anyway. A created line announces `line.added` and a raised one
+    // `line.updated`, which is what each of them is.
+    const views = new Map<string, LineView>();
+    for (const [index, row] of written.created.entries()) {
+      const items = {
+        itemIds: itemSets[written.creations[index].index],
+        groupItemIds: [],
+      };
       this.emit(
         RealtimeEvent.LineAdded,
         list.zoneId,
         row,
-        { itemIds: itemSets[index], groupItemIds: [] },
+        items,
         NO_LINE_SETTLEMENTS,
         NO_LINE_CLAIM
       );
+      views.set(
+        row.id,
+        toLineView(row, items, NO_LINE_SETTLEMENTS, NO_LINE_CLAIM)
+      );
     }
-    return saved.map((row, index) =>
-      toLineView(
-        row,
-        { itemIds: itemSets[index], groupItemIds: [] },
-        NO_LINE_SETTLEMENTS,
-        NO_LINE_CLAIM
-      )
-    );
+    for (const [lineId, entry] of written.raised) {
+      views.set(lineId, this.announce(list, entry));
+    }
+
+    // One result per item, in request order. Two items that folded into one line
+    // answer with that same line twice, and the second of them says `merged`.
+    const seen = new Set<number>();
+    return written.slots.map((slot) => {
+      if ('raised' in slot) {
+        return { line: views.get(slot.raised) as LineView, merged: true };
+      }
+      const merged = seen.has(slot.created);
+      seen.add(slot.created);
+      return {
+        line: views.get(written.created[slot.created].id) as LineView,
+        merged,
+      };
+    });
   }
 
   /**
@@ -747,6 +876,156 @@ export class LineService {
       approvedByUserId: approval.decides ? userId : null,
       version: 1,
     };
+  }
+
+  /**
+   * Hold the list's own row for the rest of the transaction (plan 0091, section
+   * 3.2), which is what serializes adds to one list.
+   *
+   * An add reads the list to decide whether the name is already on it, so two
+   * adds of "milk" that overlap would both read no match and both create. A
+   * unique index on the normalized name would be the stronger answer and cannot
+   * be written: the fold is `String.prototype.normalize` and locale case folding,
+   * neither of which Postgres can promise to compute identically or to keep
+   * computing identically across upgrades, and an index expression has to be
+   * immutable. One lock on one row per add costs nothing at a household's scale.
+   *
+   * The list was already read by `requireAccess` before the transaction opened,
+   * so a miss here means it was deleted in between rather than never existed.
+   */
+  private async lockList(
+    manager: EntityManager,
+    listId: string
+  ): Promise<ShoppingList> {
+    const list = await manager.getRepository(ShoppingList).findOne({
+      where: { id: listId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!list) {
+      throw new NotFoundException('List not found');
+    }
+    return list;
+  }
+
+  /**
+   * The line each of these names would merge into, locked and ready to be
+   * raised (plan 0091, sections 1 and 3.1).
+   *
+   * ## The fold happens here rather than in the query
+   *
+   * There is no `WHERE` clause that means {@link normalizeContent}, for the
+   * reason {@link lockList} gives, so the list's lines are read and folded in
+   * application code. That is a read of one household list rather than of a
+   * table, it asks for four columns, and it happens under a lock that has
+   * already made this add the only one running on this list.
+   *
+   * ## Earliest by position wins, and a rejected line is not a target
+   *
+   * A list can already hold two lines of one name, because plan 0091 section 5
+   * migrates nothing: summing them would have to pick a survivor and take the
+   * loser's settlements, comments and products with it. So the next add lands on
+   * the earliest of them and the household deletes the other when it notices.
+   *
+   * A `REJECTED` line is skipped, because a rejection is a decision the household
+   * made. Asking for the same thing again is a new request that they get to
+   * decide again, and merging into the rejected line would instead raise a
+   * quantity on a line the list will never buy.
+   */
+  private async findMergeTarget(
+    manager: EntityManager,
+    listId: string,
+    contents: readonly string[]
+  ): Promise<Map<string, ListLine>> {
+    const wanted = new Set(
+      contents.map((content) => normalizeContent(content))
+    );
+    const targets = new Map<string, ListLine>();
+    if (wanted.size === 0) {
+      return targets;
+    }
+
+    const repo = manager.getRepository(ListLine);
+    const candidates = await repo.find({
+      where: { listId },
+      select: {
+        id: true,
+        content: true,
+        approvalStatus: true,
+        position: true,
+      },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+
+    const ids = new Map<string, string>();
+    for (const candidate of candidates) {
+      if (candidate.approvalStatus === LineApprovalStatus.REJECTED) {
+        continue;
+      }
+      const key = normalizeContent(candidate.content);
+      if (wanted.has(key) && !ids.has(key)) {
+        ids.set(key, candidate.id);
+      }
+    }
+
+    // Read again, whole and locked. The rows above were four columns of a row
+    // this transaction is about to write, and a raise needs the entity itself.
+    for (const [key, id] of ids) {
+      const line = await repo.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (line) {
+        targets.set(key, line);
+      }
+    }
+    return targets;
+  }
+
+  /**
+   * Raise a line by what an add asked for (plan 0091, section 3).
+   *
+   * ## It is not an edit, and deliberately does not reach the edit's machinery
+   *
+   * {@link authorizeEdit} is not asked, because the caller already holds `WRITE`
+   * on the list and that is what an add needs. Routing a merge through the edit
+   * check instead would refuse a plain writer adding "milk" to a list whose Milk
+   * line is approved, which is a refusal of an ordinary add for a reason no
+   * screen could explain: they did not ask to change a number, they asked for
+   * milk.
+   *
+   * {@link reopenAfterEdit} is not called either, so a pending line stays
+   * pending and an approved one stays approved (plan 0047, section 7: a quantity
+   * change never re-triggers approval). The household agreed to buy this thing;
+   * somebody asking for more of it has not changed what they agreed to.
+   *
+   * ## What it leaves alone
+   *
+   * The request's `itemIds` and `productGroupId` are ignored. Somebody who types
+   * "milk" onto a list whose Milk names eleven products has said nothing about
+   * products, and writing the request's set over the line's, or into it, would
+   * put products in a household's list on the strength of a name (plan 0065,
+   * section 3). The merged line keeps its own.
+   *
+   * ## The ceiling clamps rather than refuses
+   *
+   * A line already at {@link LINE_QUANTITY_MAX} stays there instead of the add
+   * being refused whole. An add is a request for a thing, not a request to write
+   * a number, so the failure a caller would get from {@link validateQuantity}
+   * here would be about an arithmetic result they never named.
+   */
+  private async raiseForAdd(
+    manager: EntityManager,
+    line: ListLine,
+    added: number
+  ): Promise<WrittenLine> {
+    line.quantity = this.capQuantity(line.quantity + added);
+    line.version += 1;
+    return this.writeEdit(manager, line);
+  }
+
+  /** A quantity held under the ceiling, for the sums only a merge produces. */
+  private capQuantity(quantity: number): number {
+    return Math.min(quantity, LINE_QUANTITY_MAX);
   }
 
   /** The highest position on a list, or zero when it holds no lines. */

@@ -51,14 +51,14 @@ export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
   {
     id: 'ps_mercadona_4661',
     supermarketId: MERCADONA,
-    kind: 'WAREHOUSE',
+    kind: 'REGION',
     externalKey: '4661',
     label: { en: 'Córdoba warehouse', es: 'Almacén de Córdoba' },
   },
   {
     id: 'ps_mercadona_3421',
     supermarketId: MERCADONA,
-    kind: 'WAREHOUSE',
+    kind: 'REGION',
     externalKey: '3421',
     label: null,
   },
@@ -244,10 +244,11 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
  * obvious derivation disagrees with the source on 110 of 4,232 products, so the
  * seed does not derive it either.
  */
-export const PRICE_SEED: readonly Wire.CatalogSupermarketItemView[] = [
+export const PRICE_SEED: readonly Wire.CatalogAdminSupermarketItemView[] = [
   {
     id: 'si_milk_4661',
     itemId: 'it_milk_1l',
+    itemName: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
     priceScopeId: 'ps_mercadona_4661',
     price: 0.89,
     currency: 'EUR',
@@ -264,6 +265,10 @@ export const PRICE_SEED: readonly Wire.CatalogSupermarketItemView[] = [
   {
     id: 'si_oil_4661',
     itemId: 'it_olive_oil_1l',
+    itemName: {
+      en: 'Extra virgin olive oil 1 L',
+      es: 'Aceite de oliva virgen extra 1 L',
+    },
     priceScopeId: 'ps_mercadona_4661',
     price: 8.45,
     currency: 'EUR',
@@ -280,6 +285,7 @@ export const PRICE_SEED: readonly Wire.CatalogSupermarketItemView[] = [
   {
     id: 'si_milk_consum',
     itemId: 'it_milk_1l',
+    itemName: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
     priceScopeId: 'ps_consum_centro',
     price: 1.05,
     currency: 'EUR',

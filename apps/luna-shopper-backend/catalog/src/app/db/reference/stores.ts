@@ -10,7 +10,7 @@ import type { ReferenceStore } from './types';
  * harvester can read, so every price they carry came off a till receipt and
  * always will until someone writes a source for them.
  *
- * Mercadona is deliberately absent. It already exists, with a WAREHOUSE scope
+ * Mercadona is deliberately absent. It already exists, with a REGION scope
  * per warehouse, and the reference catalog attaches to what the harvest created
  * rather than creating a second Mercadona beside it.
  */

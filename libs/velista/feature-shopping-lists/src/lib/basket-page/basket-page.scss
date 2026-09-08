@@ -9,11 +9,14 @@
 // inset between the two, `.app-main`'s bottom safe area. Mounted in the shell the
 // percentage does resolve and is already at least this, so the minimum never binds.
 // The list page's host says the same thing for the same reason.
+//
+// `svh` and not `dvh`: the app is sized in the small viewport everywhere, and
+// `AppLayout`'s stylesheet says why.
 :host {
   display: flex;
   flex-direction: column;
   block-size: 100%;
-  min-block-size: calc(100dvh - var(--app-safe-bottom));
+  min-block-size: calc(100svh - var(--app-safe-bottom));
 }
 
 .page {

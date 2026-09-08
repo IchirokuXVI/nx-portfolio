@@ -60,6 +60,12 @@ function build(options: {
   maxPosition?: number;
   /** Make the nth save (1 based) throw, for the batch that fails partway. */
   failAtSave?: number;
+  /**
+   * What the list already holds, which an add now reads to decide whether the
+   * name it was given is on it already (plan 0091). The one line above by
+   * default, so an add of anything else creates.
+   */
+  existing?: ListLine[];
 }): Harness {
   const list = {
     id: LIST_ID,
@@ -91,6 +97,10 @@ function build(options: {
 
   const lineRepo = {
     findOne: async () => line,
+    // Plan 0091: every add reads the list's lines under the list's lock, folds
+    // their content and merges into a match rather than creating a second line
+    // of one name.
+    find: async () => options.existing ?? [line],
     create: (data: Partial<ListLine>) => ({ ...data }),
     save: async (row: Partial<ListLine>) => {
       if (
@@ -425,14 +435,18 @@ describe('line.addMany (plan 0040, section 6)', () => {
   it('writes every line in request order, on consecutive positions', async () => {
     const w = build({ permissions: WRITER, maxPosition: 4 });
 
-    const views = await w.service.addMany({
+    const results = await w.service.addMany({
       userId: SHOPPER,
       listId: LIST_ID,
       items: ten,
     });
 
-    expect(views.map((view) => view.content)).toEqual(
+    expect(results.map((result) => result.line.content)).toEqual(
       ten.map((item) => item.content)
+    );
+    // Ten names, none of them already on the list, so ten creations.
+    expect(results.map((result) => result.merged)).toEqual(
+      ten.map(() => false)
     );
     // One MAX(position) for the whole batch, then an increment per item, so they
     // land in the order they were given (section 6.2).
@@ -458,19 +472,43 @@ describe('line.addMany (plan 0040, section 6)', () => {
     );
   });
 
-  it('adds two lines for the same thing named twice, and does not merge', async () => {
-    // Section 6.3: merging is a decision about a person's intention, and somebody
-    // pasting a list may well have meant two entries. The upsert rule belongs to
-    // the assistant, which is where it lives.
+  it('folds a thing named twice into one line at the summed quantity', async () => {
+    // Plan 0091 section 2 reverses section 6.3: a list that holds one line per
+    // normalized name cannot hold two of them because they arrived together.
     const w = build({ permissions: WRITER });
 
-    const views = await w.service.addMany({
+    const results = await w.service.addMany({
       userId: SHOPPER,
       listId: LIST_ID,
-      items: [{ content: 'leche' }, { content: 'leche' }],
+      items: [
+        { content: 'leche', quantity: 2 },
+        { content: 'Leche', quantity: 3 },
+      ],
     });
 
-    expect(views).toHaveLength(2);
+    // One row written, at five, and both slots of the answer name it. The second
+    // says `merged`, because the first is the one that created the line.
+    expect(w.saved).toHaveLength(1);
+    expect(w.saved[0].quantity).toBe(5);
+    expect(results).toHaveLength(2);
+    expect(results[0].line.id).toBe(results[1].line.id);
+    expect(results.map((result) => result.merged)).toEqual([false, true]);
+    expect(w.events).toHaveLength(1);
+    expect(w.events[0].event).toBe(RealtimeEvent.LineAdded);
+  });
+
+  it('raises a line the list already holds, and announces it as an update', async () => {
+    const w = build({ permissions: WRITER, quantity: 3 });
+
+    const results = await w.service.addMany({
+      userId: SHOPPER,
+      listId: LIST_ID,
+      items: [{ content: 'tinned TOMATOES', quantity: 2 }],
+    });
+
+    expect(results[0].merged).toBe(true);
+    expect(results[0].line.quantity).toBe(5);
+    expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineUpdated]);
   });
 
   it('refuses a caller who cannot write the list, and writes nothing', async () => {
@@ -529,13 +567,13 @@ describe('line.addMany (plan 0040, section 6)', () => {
     // the household has not needed it yet.
     const w = build({ permissions: WRITER });
 
-    const views = await w.service.addMany({
+    const results = await w.service.addMany({
       userId: SHOPPER,
       listId: LIST_ID,
       items: [{ content: 'pan', quantity: 0 }],
     });
 
-    expect(views[0].quantity).toBe(0);
+    expect(results[0].line.quantity).toBe(0);
   });
 
   describe('the approval rules are the ones a single add runs (section 6.2)', () => {
@@ -544,13 +582,13 @@ describe('line.addMany (plan 0040, section 6)', () => {
         permissions: [ListPermission.WRITE, ListPermission.DECIDE],
       });
 
-      const views = await w.service.addMany({
+      const results = await w.service.addMany({
         userId: SHOPPER,
         listId: LIST_ID,
         items: [{ content: 'leche' }, { content: 'pan' }],
       });
 
-      for (const view of views) {
+      for (const { line: view } of results) {
         expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
         expect(view.approvedByUserId).toBe(SHOPPER);
         // Agreeing to buy a thing says nothing about whether anybody has been to
@@ -562,13 +600,13 @@ describe('line.addMany (plan 0040, section 6)', () => {
     it('leaves them pending for a writer on a list that does not auto approve', async () => {
       const w = build({ permissions: WRITER });
 
-      const views = await w.service.addMany({
+      const results = await w.service.addMany({
         userId: SHOPPER,
         listId: LIST_ID,
         items: [{ content: 'leche' }, { content: 'pan' }],
       });
 
-      for (const view of views) {
+      for (const { line: view } of results) {
         expect(view.approvalStatus).toBe(LineApprovalStatus.PENDING);
         expect(view.approvedByUserId).toBeNull();
       }
@@ -579,14 +617,14 @@ describe('line.addMany (plan 0040, section 6)', () => {
       // the honest record of that.
       const w = build({ permissions: WRITER, autoApproveLines: true });
 
-      const views = await w.service.addMany({
+      const results = await w.service.addMany({
         userId: SHOPPER,
         listId: LIST_ID,
         items: [{ content: 'leche' }],
       });
 
-      expect(views[0].approvalStatus).toBe(LineApprovalStatus.APPROVED);
-      expect(views[0].approvedByUserId).toBeNull();
+      expect(results[0].line.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+      expect(results[0].line.approvedByUserId).toBeNull();
     });
   });
 });

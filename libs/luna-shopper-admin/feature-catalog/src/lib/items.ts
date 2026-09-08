@@ -106,6 +106,10 @@ export const ITEMS = defineResource<Item>({
       label: 'catalog.items.productGroupId',
       help: 'catalog.items.productGroupIdHelp',
       resource: 'product-groups',
+      // Groups number dozens, and a page of products repeats the same few ids,
+      // so one cached resolve per distinct id names the column (admin plan
+      // 0023, section 4). A null group keeps its "None" cell untouched.
+      nameLookup: true,
       nullable: true,
     },
     {

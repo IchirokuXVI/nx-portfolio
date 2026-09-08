@@ -4,7 +4,6 @@ import {
   DIRECTORY_SERVICE,
   LIST_LINE_KEY,
   listLinePath,
-  listLinesPath,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
@@ -34,6 +33,11 @@ export const LINE_APPROVAL_OPTIONS = [
  * The list detail screen still draws every line, because reading what a
  * household wrote down is what that screen is for. This is the other question:
  * correct **this** line's wording or its quantity.
+ *
+ * The list is a filter and not a question: opening this screen with none
+ * chosen lists every list's lines, grouped by the list they are on, because the
+ * list is the thing somebody hunting for what one person wrote does not know
+ * yet (plan 0017).
  *
  * What is deliberately missing, and why:
  *
@@ -81,6 +85,14 @@ export const LIST_LINES = defineResource<ListLine>({
       help: 'people.lines.listIdHelp',
     },
     {
+      // The list by name, because a reference column draws the uuid it holds.
+      kind: 'text',
+      name: 'listName',
+      label: 'people.lines.listName',
+      help: 'people.lines.listNameHelp',
+      editable: false,
+    },
+    {
       kind: 'text',
       name: 'content',
       label: 'people.lines.content',
@@ -122,10 +134,11 @@ export const LIST_LINES = defineResource<ListLine>({
   ],
 
   list: {
-    columns: ['content', 'quantity', 'approvalStatus', 'createdAt'],
+    columns: ['listName', 'content', 'quantity', 'approvalStatus', 'createdAt'],
     // The card is titled with what the line says, so what belongs under it is
-    // how many and whether it counts yet.
-    compact: ['quantity', 'approvalStatus'],
+    // which list it is on and whether it counts yet. Across lists the first is
+    // what tells two identical lines apart.
+    compact: ['listName', 'approvalStatus'],
   },
 
   note: 'people.lines.note',
@@ -139,8 +152,6 @@ export const LIST_LINES = defineResource<ListLine>({
       resource: 'lists',
     },
   ],
-
-  requires: ['listId'],
 
   actions: {
     edit: true,
@@ -179,23 +190,17 @@ export const LIST_LINES = defineResource<ListLine>({
 
   gateway: () =>
     inject(RESOURCE_GATEWAYS).for<ListLine>({
-      // Not a URL, and never used as one: both halves below build the real
-      // path. It is the name this resource's in-memory table goes under.
+      // A plain path with a plain query parameter, so `listId` needs no
+      // `pathParams` (plan 0017, section 4).
       path: ADMIN_LIST_LINES_PATH,
-      collectionPath: (values) => {
-        const listId = values['listId'];
-        return typeof listId === 'string' && listId !== ''
-          ? listLinesPath(listId)
-          : null;
-      },
+      // One line is still under its list. There is no flat route to one, so the
+      // address stays the pair.
       memberPath: (id) => {
         const parts = compositeParts(id, LIST_LINE_KEY);
         return parts === null
           ? null
           : listLinePath(parts['listId'], parts['id']);
       },
-      // In the path, and therefore not also in the query string or the body.
-      pathParams: ['listId'],
       key: [...LIST_LINE_KEY],
       seed: LIST_LINE_SEED,
     }),

@@ -36,10 +36,12 @@ import {
   MembershipApi,
   REALTIME_CLIENT,
   RealtimeSocket,
+  SessionValidation,
   SHOP_SERVICE,
   ShopApi,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
+  StartupProbe,
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
@@ -261,15 +263,37 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // is declared on is created, which is true in both the mounted and standalone cases.
   provideEnvironmentInitializer(() => void inject(ConnectionRecovery)),
 
+  // Ask whether the backend is there, before the app acts on the answer (plan 0071).
+  // A listener again, and started here for the same reason as every other one on this
+  // list: nothing injects it, so without this line nothing would construct it and the
+  // app would go back to finding out it has no backend from whichever request the
+  // user's first tap happened to send.
+  //
+  // Deliberately **not** an app initializer, and not only for the injector reason above:
+  // waiting on the answer would delay the landing page too, which is precisely the
+  // screen that must appear at once. The gate is a cover decided during rendering, so
+  // the app starts, the router runs, and the locale guard settles the language while
+  // this is in flight (plan 0071 D2).
+  provideEnvironmentInitializer(() => void inject(StartupProbe)),
+
+  // Prove the stored session names an account that still exists, once the probe
+  // above has found a backend to ask (its class comment holds the why). A listener
+  // again: nothing injects it, so without this line a deleted account's pair would
+  // sit in storage forever, booting every load into a signed-in app whose every
+  // request fails, with nothing that ever clears it.
+  provideEnvironmentInitializer(() => void inject(SessionValidation)),
+
   // Start the update schedule (plan 0034, section 4). A listener again, and started
   // the same way and for the same reason: nothing injects it, so without this line
   // nothing would ever construct it and the app would go on checking for a new
   // version exactly once per cold start.
   //
-  // Started in both run modes even though only one of them has a service worker. The
-  // service returns from its constructor without subscribing to anything when there
-  // is no enabled worker, so under the shell this costs one object, and keeping the
-  // line unconditional means there is no second place where the two modes disagree.
+  // Started in both run modes even though only one of them has a service worker,
+  // and started **here** rather than left to whatever injects it first, because a
+  // refusal can arrive on the boot probe and the watch that answers it has to be
+  // registered before that (plan 0072, section 3). With no enabled worker the service
+  // checks nothing and schedules nothing; what it keeps in that mode is the refusal
+  // watch, whose answer there is a plain reload (D6).
   provideEnvironmentInitializer(() => void inject(AppUpdates)),
 
   // Start listening for `beforeinstallprompt` (plan 0033 D1). Nothing injects this

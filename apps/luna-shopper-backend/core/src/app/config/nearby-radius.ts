@@ -1,23 +1,12 @@
 /**
- * How far around a postal code its neighbours are looked for (plan 0062,
- * section 4).
+ * The per country widening radius (plan 0062, section 4).
  *
- * **Two kilometres, as configuration, from the first commit, and per country
- * even though only one country exists.** The value that makes sense in central
- * Madrid and the one that makes sense in rural Córdoba are unlikely to be the
- * same number, and a constant would have to be found and changed in a service
- * before anybody could find that out.
- *
- * Worth knowing before tuning it: two kilometres around a dense urban centroid
- * may pull in several codes and around a rural one may pull in none, leaving that
- * user with exactly the code they typed and a screen that looks broken to them
- * and correct to us. Once plan 0060's table is loaded the distribution is a
- * twenty line script over real data rather than a guess, and it may argue for
- * "the nearest N codes, capped by distance" instead of a pure radius — which is
- * `PROFILE_LIMITS.maxNearbyPerPostalCode` beside this, and a change to the
- * recompute's body and to nothing else.
+ * The default itself lives in `@portfolio/luna-shopper/postal-codes`, because
+ * the back office's neighbours route needs the same number and the gateway
+ * cannot import a constant out of this service (plan 0097, section 4). What
+ * stays here is the per country parsing, which is core's alone.
  */
-export const DEFAULT_NEARBY_RADIUS_METRES = 2000;
+export { DEFAULT_NEARBY_RADIUS_METRES } from '@portfolio/luna-shopper/postal-codes';
 
 /** The radius per country, and the fallback for one nobody listed. */
 export interface NearbyRadiusConfig {

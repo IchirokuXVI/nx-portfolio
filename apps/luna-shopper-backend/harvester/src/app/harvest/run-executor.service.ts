@@ -112,12 +112,20 @@ export class RunExecutor implements OnApplicationShutdown {
       }
 
       switch (run.mode) {
+        // The source is passed and may be null: it is what the discovery
+        // dispatches on (plan 0089, section 9), and a run started by the postal
+        // code queue names no chain at all.
         case HarvestRunMode.STORE_DISCOVERY:
-          await this.storeDiscovery.run(context, {
-            postalCode: String(run.input['postalCode'] ?? ''),
-            country: String(run.input['country'] ?? 'es'),
-            radiusMetres: Number(run.input['radiusMetres'] ?? 3000),
-          });
+          await this.storeDiscovery.run(
+            context,
+            {
+              postalCode: String(run.input['postalCode'] ?? ''),
+              country: String(run.input['country'] ?? 'es'),
+              radiusMetres: Number(run.input['radiusMetres'] ?? 3000),
+              supermarketId: run.supermarketId ?? undefined,
+            },
+            source
+          );
           break;
         case HarvestRunMode.CATALOG_DISCOVERY:
           await this.catalogDiscovery.run(
@@ -125,6 +133,9 @@ export class RunExecutor implements OnApplicationShutdown {
             {
               supermarketId: run.supermarketId as string,
               priceScopeId: run.priceScopeId ?? undefined,
+              // Plan 0090, section 12.1. The spawn already refused it for
+              // every adapter that has no product page to read.
+              detailBackfill: run.input['detailBackfill'] === true,
             },
             requireSource(source)
           );

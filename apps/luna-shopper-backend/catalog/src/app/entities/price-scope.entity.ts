@@ -11,7 +11,8 @@ import { Supermarket } from './supermarket.entity';
  *
  * This is what stops Mercadona writing twelve identical rows for Córdoba: it
  * publishes one price per warehouse, so the price belongs to the warehouse and
- * gets one `WAREHOUSE` scope with `externalKey = '4661'`. A chain with no
+ * gets one `REGION` scope with `externalKey = '4661'`. LIDL groups its shops into
+ * 59 offer regions and gets 59 `REGION` scopes keyed the same way. A chain with no
  * obtainable data gets one `STORE` scope per location and hand entered prices,
  * and needs no special case anywhere.
  */
@@ -33,8 +34,8 @@ export class PriceScope extends BaseEntity {
 
   /**
    * The source's own key for the scope. **varchar and never an integer**: the
-   * warehouse key comes back in two shapes, a numeric code (`4661`) and a city
-   * slug (`mad3`), and both are real answers from the same endpoint.
+   * Mercadona warehouse key comes back in two shapes, a numeric code (`4661`) and
+   * a city slug (`mad3`), and both are real answers from the same endpoint.
    */
   @Column({ type: 'varchar', nullable: true })
   externalKey!: string | null;

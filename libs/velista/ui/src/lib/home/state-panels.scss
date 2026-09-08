@@ -40,6 +40,16 @@
   margin-top: var(--app-space-2);
 }
 
+// The startup screen's live region. It holds one line before the wait is worth
+// mentioning and two afterwards, and the swap must not shift the mark above it, so it
+// keeps the panel's own spacing rather than collapsing to the height of its contents.
+.status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--app-space-3);
+}
+
 .action {
   display: flex;
   align-items: center;

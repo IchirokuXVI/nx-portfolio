@@ -15,7 +15,11 @@ import {
   isOlderThan,
   MIN_CLIENT_VERSION_HEADER,
 } from '@portfolio/velista/models';
-import { AppUpdates, ConnectionState } from '@portfolio/velista/platform';
+import {
+  AppUpdates,
+  BackendReadiness,
+  ConnectionState,
+} from '@portfolio/velista/platform';
 import {
   catchError,
   from,
@@ -65,6 +69,7 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
   const i18n = inject(RokuTranslatorService);
   const connection = inject(ConnectionState);
   const updates = inject(AppUpdates);
+  const readiness = inject(BackendReadiness);
   const version = inject(APP_VERSION);
 
   // Stamped here rather than in `decorate`, and that is the one header that is.
@@ -135,7 +140,7 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
     // argument for it. `tap` re-throws, so the error a caller sees is unchanged.
     tap({
       next: (event) => noticeAdvertisedFloor(event, updates, version),
-      error: (error: unknown) => noticeRefusal(error, updates),
+      error: (error: unknown) => noticeRefusal(error, updates, readiness),
     })
   );
 };
@@ -171,13 +176,29 @@ function noticeAdvertisedFloor(
 /**
  * A refusal aimed at the build rather than at the request or the user.
  *
- * The same reaction as an advertised floor, and no more than that: `checkNow` may
- * find nothing, in which case the app keeps running on what it has and the error
- * travels on to the caller to be rendered like any other.
+ * Two reactions, and no more than that: `checkNow` may find nothing, in which case the
+ * app keeps running on what it has and the error travels on to the caller to be
+ * rendered like any other.
+ *
+ * The second is the startup gate (plan 0071, section 4). `MinClientVersionGuard` is a
+ * global `APP_GUARD` on the gateway, so it runs for `/health/*` as well and the boot
+ * probe comes back refused like anything else. That is how `BackendReadiness` reaches
+ * `too-old` without the probe having to read a status code of its own, and it is why
+ * this is the only place the state is written from an HTTP answer.
+ *
+ * **Only the refusal, never the advertised floor.** A header is the server saying this
+ * build is old, which is worth a background check and nothing else; a refusal is the
+ * server saying it will not serve it, and only the second one is worth a screen.
+ * `noticeAdvertisedFloor` above is deliberately unchanged.
  */
-function noticeRefusal(error: unknown, updates: AppUpdates): void {
+function noticeRefusal(
+  error: unknown,
+  updates: AppUpdates,
+  readiness: BackendReadiness
+): void {
   if (error instanceof GatewayError && error.code === 'client_too_old') {
     updates.checkNow();
+    readiness.reportTooOld();
   }
 }
 

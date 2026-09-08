@@ -7,18 +7,24 @@ import { RunsPage } from './runs-page';
 import { ShopsQueuePage } from './shops-queue-page';
 import { SourcesPage } from './sources-page';
 
-const [branch] = harvestRoutes();
-const children = branch.children ?? [];
-const pathsOf = () => children.map((route) => route.path);
+const routes = harvestRoutes();
+const pathsOf = () => routes.map((route) => route.path);
 
 describe('harvestRoutes', () => {
-  it('mounts everything under one segment', () => {
-    expect(branch.path).toBe(HARVEST_SEGMENT);
+  /**
+   * The segment belongs to the section now (admin plan 0022), so these are the
+   * children of that branch rather than a branch of their own. `HARVEST_SEGMENT`
+   * is still what a screen linking to another screen builds from, which is why
+   * the constant stays and only the wrapper went.
+   */
+  it('is relative to the section, and names its segment nowhere', () => {
+    for (const path of pathsOf()) {
+      expect(path?.startsWith(HARVEST_SEGMENT)).toBe(false);
+    }
   });
 
   it('has a screen for each subject', () => {
-    expect(children.map((route) => route.component)).toEqual([
-      undefined,
+    expect(routes.map((route) => route.component)).toStrictEqual([
       RunsPage,
       RunPage,
       PlacesQueuePage,
@@ -27,6 +33,19 @@ describe('harvestRoutes', () => {
       ShopsQueuePage,
       SourcesPage,
     ]);
+  });
+
+  /**
+   * `0021` mounted the postal codes resource in this file, with a comment about
+   * why one resource was mounted somewhere other than the app's flat list. There
+   * is no flat list any more: the section mounts it exactly as every other
+   * section mounts its own, so this file has no resource in it at all.
+   */
+  it('mounts no resource of its own', () => {
+    expect(pathsOf()).not.toContain('postal-codes');
+    for (const route of routes) {
+      expect(route.children).toBeUndefined();
+    }
   });
 
   /**
@@ -59,16 +78,18 @@ describe('harvestRoutes', () => {
    * generic machinery does not fit.
    */
   it('sends a run id to the run screen and not to a form', () => {
-    const run = children.find((route) => route.path === 'runs/:id');
+    const run = routes.find((route) => route.path === 'runs/:id');
 
     expect(run?.component).toBe(RunPage);
   });
 
-  it('lands on the runs screen', () => {
-    const empty = children.find((route) => route.path === '');
-
-    expect(empty?.redirectTo).toBe('runs');
-    expect(empty?.pathMatch).toBe('full');
+  /**
+   * The section's dashboard is what the empty path draws now, and the section
+   * declares it, so the redirect to the runs list is gone. A redirect here would
+   * be declared before that home and would win.
+   */
+  it('claims the empty path for nothing', () => {
+    expect(pathsOf()).not.toContain('');
   });
 
   /**
@@ -107,16 +128,26 @@ describe('HARVEST_LINKS', () => {
   /**
    * Every screen an operator can open, and only those. `runs/:id` has no entry,
    * because a navigation link to a route with a parameter has nothing to put in
-   * it, and the empty redirect is not a screen.
+   * it.
    */
   it('links every screen except the one reached from a list', () => {
     const linked = new Set(HARVEST_LINKS.map((link) => link.path));
-    const screens = pathsOf().filter(
-      (path) => path !== '' && path !== 'runs/:id'
-    );
+    const screens = pathsOf().filter((path) => path !== 'runs/:id');
 
     expect(screens.map((path) => `/${HARVEST_SEGMENT}/${path}`).sort()).toEqual(
       [...linked].sort()
+    );
+  });
+
+  /**
+   * The postal codes entry is gone and nothing was lost: it is a resource, so
+   * the section reads its label off its descriptor and draws it after these six.
+   * It was written out by hand only because there was nowhere else for a
+   * resource mounted under this segment to be named.
+   */
+  it('names no resource of its own', () => {
+    expect(HARVEST_LINKS.map((link) => link.label)).not.toContain(
+      'harvest.nav.postalCodes'
     );
   });
 

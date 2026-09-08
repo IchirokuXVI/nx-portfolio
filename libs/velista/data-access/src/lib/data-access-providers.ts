@@ -6,6 +6,7 @@ import { AssistantMemory } from './assistant/assistant-memory';
 import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
+import { SessionValidation } from './auth/session-validation';
 import { TokenStore } from './auth/token-store';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
@@ -26,6 +27,7 @@ import { PresenceStore } from './presence/presence-store';
 import { ShoppingProfileMemory } from './profiles/shopping-profile-memory';
 import { ShoppingProfileStore } from './profiles/shopping-profile-store';
 import { ShopMemory } from './shops/shop-memory';
+import { StartupProbe } from './startup-probe';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
 
@@ -134,6 +136,19 @@ import { ZoneStore } from './zones/zone-store';
  * for it by name, which is the whole of its use today, backend `0039` being unbuilt.
  * `AssistantApi` stays out, like every other real transport.
  *
+ * `StartupProbe` (plan 0071) joins for `ConnectionRecovery`'s reason exactly, and the
+ * two are a pair: one asks whether the backend is there before the app acts, the other
+ * asks whether it has come back. Listing it here makes it **available**, which is the
+ * library's business; `app-providers.ts` constructs it with an environment initializer,
+ * which is what makes it *running*.
+ *
+ * `SessionValidation` joins for `StartupProbe`'s reason exactly: it is a listener,
+ * nothing injects it, and listing it here makes it **available** while the environment
+ * initializer in `app-providers.ts` makes it *running*. It is the third of the startup
+ * pair's kind: the probe asks whether the backend is there, `ConnectionRecovery` asks
+ * whether it has come back, and this asks whether the stored session still names an
+ * account.
+ *
  * `ShopMemory` (plan 0059) joins for `AccountMemory`'s reason exactly and for no
  * stronger one. `ShopStore` is deliberately **not** here, and it is the first store in
  * this library that is not: everything it holds is about the screen that is open, a
@@ -170,4 +185,6 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   GeneratedListStore,
   BasketSessionStore,
   BasketStore,
+  StartupProbe,
+  SessionValidation,
 ];

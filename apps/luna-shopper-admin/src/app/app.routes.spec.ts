@@ -16,7 +16,6 @@ import {
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
 import { appRoutes } from './app.routes';
-import { ADMIN_RESOURCES } from './resources';
 
 /**
  * The two branches and the guards that pair them (plan 0002, then 0004).
@@ -27,15 +26,24 @@ import { ADMIN_RESOURCES } from './resources';
  * a white tab in a browser and a hang in jest — and this is precisely the pair
  * of routes where that mistake is available.
  *
- * Since `0004` the guarded branch is the chrome and the resources under it, so
- * a signed in operator asking for `/` lands on the first resource rather than on
- * a landing page. The guard is on the branch and not on its children, which is
- * what keeps an unknown URL from a signed out operator going to the login
- * screen rather than to a "no such screen" page they could not act on anyway.
+ * Since `0004` the guarded branch is the chrome and the resources under it, and
+ * since admin plan `0016` a signed in operator asking for `/` stays on `/`,
+ * which is the dashboard. It used to redirect to the first resource, because
+ * `0004` refused an empty landing page; the screen that answers the questions
+ * six screens otherwise answer is what replaced that redirect. The guard is on
+ * the branch and not on its children, which is what keeps an unknown URL from a
+ * signed out operator going to the login screen rather than to a "no such
+ * screen" page they could not act on anyway.
  */
 
-/** Where `/` settles for a signed in operator: the app's first resource. */
-const FIRST_SCREEN = `/${ADMIN_RESOURCES[0].segment}`;
+/**
+ * Where `/` settles for a signed in operator: nowhere, because `/` is the
+ * dashboard.
+ *
+ * A constant rather than the literal at three call sites, so the day this app
+ * opens somewhere else the change is one line here.
+ */
+const HOME = '/';
 
 const session: AdminSession = {
   adminId: 'adm_1',
@@ -103,17 +111,17 @@ describe('appRoutes', () => {
   it('sends an unknown URL from a signed out operator to the login screen', async () => {
     const { router } = await boot(false);
 
-    await router.navigateByUrl('/catalog/products');
+    await router.navigateByUrl('/nowhere');
 
     expect(router.url).toBe('/sign-in');
   });
 
-  it('lets an operator with a session reach the first screen', async () => {
+  it('lets an operator with a session reach the screen the app opens to', async () => {
     const { router } = await boot(true);
 
     await router.navigateByUrl('/');
 
-    expect(router.url).toBe(FIRST_SCREEN);
+    expect(router.url).toBe(HOME);
   });
 
   /**
@@ -124,21 +132,82 @@ describe('appRoutes', () => {
   it('keeps an unknown URL from a signed in operator where it is', async () => {
     const { router } = await boot(true);
 
-    await router.navigateByUrl('/catalog/products');
+    await router.navigateByUrl('/nowhere');
 
-    expect(router.url).toBe('/catalog/products');
+    expect(router.url).toBe('/nowhere');
   });
 
   /**
+   * Every screen reachable before admin plan 0022 is reachable after it, at the
+   * path section 1 of that plan gives. The whole list rather than a sample,
+   * because a URL that quietly stopped resolving would draw the not found page
+   * from inside the chrome and look like a screen that had not loaded yet.
+   */
+  it.each([
+    ['/', 'the overview'],
+    ['/catalog', 'the catalog dashboard'],
+    ['/catalog/supermarkets', 'the chains'],
+    ['/catalog/locations', 'the shops'],
+    ['/catalog/price-scopes', 'the price scopes'],
+    ['/catalog/items', 'the products'],
+    ['/catalog/product-groups', 'the product groups'],
+    ['/catalog/prices', 'the prices'],
+    ['/catalog/price-policies', 'the price policies'],
+    ['/catalog/location-items', 'the per shop rows'],
+    ['/shoppers', 'the shoppers dashboard'],
+    ['/shoppers/users', 'the users'],
+    ['/shoppers/zones', 'the zones'],
+    ['/shoppers/memberships', 'the memberships'],
+    ['/shoppers/lists', 'the lists'],
+    ['/shoppers/list-lines', 'the list lines'],
+    ['/shoppers/shopping-lists', 'the baskets'],
+    ['/harvest', 'the harvester dashboard'],
+    ['/harvest/runs', 'the runs'],
+    ['/harvest/places', 'the discovered places'],
+    ['/harvest/entries', 'the source products'],
+    ['/harvest/imports/upload', 'the import'],
+    ['/harvest/shops', 'the source shops'],
+    ['/harvest/sources', 'the chain sources'],
+    ['/harvest/postal-codes', 'the postal codes'],
+    ['/admins', 'the admins'],
+  ])('draws %s at its own URL', async (url) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(url);
+
+    expect(router.url).toBe(url);
+  });
+
+  /**
+   * The paths moved, and this is the half of that which is worth asserting: the
+   * old flat URL is not silently a second way in. `0022` section 12 rules out
+   * redirects from them, so each is an ordinary unknown URL now.
+   */
+  it.each(['/items', '/users', '/prices', '/shopping-lists'])(
+    'has no screen left at %s',
+    async (url) => {
+      const { router } = await boot(true);
+
+      await router.navigateByUrl(url);
+
+      // The not found page, which is a route inside the chrome rather than a
+      // redirect, so the URL stays where the operator typed it rather than
+      // bouncing anywhere. What proves it is not a screen is that the same URL
+      // is absent from the list above.
+      expect(router.url).toBe(url);
+    }
+  );
+
+  /**
    * The loop guard. A reload onto the login screen with a session held must land
-   * on the first screen and *stop*, rather than bounce between the two.
+   * on the dashboard and *stop*, rather than bounce between the two.
    */
   it('sends an operator who already has a session away from the login screen', async () => {
     const { router } = await boot(true);
 
     await router.navigateByUrl('/sign-in');
 
-    expect(router.url).toBe(FIRST_SCREEN);
+    expect(router.url).toBe(HOME);
   });
 
   /**
@@ -153,7 +222,7 @@ describe('appRoutes', () => {
   it('sends the operator back to the login screen once the session is gone', async () => {
     const signedIn = await boot(true);
     await signedIn.router.navigateByUrl('/');
-    expect(signedIn.router.url).toBe(FIRST_SCREEN);
+    expect(signedIn.router.url).toBe(HOME);
 
     signedIn.sessions.signOut();
 

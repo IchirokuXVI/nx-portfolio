@@ -12,9 +12,13 @@ import {
   toGatewayError,
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { gatewayErrorKey } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  gatewayErrorKey,
+  ResourceReferences,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
-import { HarvestNotice } from '@portfolio/luna-shopper-admin/ui';
+import { HarvestNotice, ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
+import { ChainNames } from './chain-names';
 import { formatInstant } from './format-instant';
 import { HarvestShell } from './harvest-shell';
 
@@ -49,7 +53,7 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
  */
 @Component({
   selector: 'lib-sources-page',
-  imports: [FormsModule, RokuTranslatorPipe, HarvestNotice],
+  imports: [FormsModule, RokuTranslatorPipe, HarvestNotice, ReferencePicker],
   template: `
     <header>
       <h1>{{ 'harvest.sources.heading' | rokuT }}</h1>
@@ -60,18 +64,84 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
       <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
     } @else if (loading()) {
       <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
-    } @else if (sources().length === 0) {
-      <p class="state">{{ 'harvest.sources.empty' | rokuT }}</p>
     } @else {
       @if (errorKey(); as key) {
         <p class="failure" role="alert">{{ key | rokuT }}</p>
       }
 
-      <ul class="sources">
+      @if (creating()) {
+        <div class="create">
+          <div class="field">
+            <span>{{ 'harvest.sources.field.chain' | rokuT }}</span>
+            <lib-reference-picker
+              (valueChange)="newChainId.set($event)"
+              [controlId]="'source-chain'"
+              [lookup]="references"
+              [resource]="'supermarkets'"
+              [value]="newChainId()"
+            />
+          </div>
+
+          @if (duplicate()) {
+            <p class="hint">{{ 'harvest.sources.exists' | rokuT }}</p>
+          }
+
+          <div class="edit">
+            <label>
+              <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
+              <select [(ngModel)]="adapterKey" name="adapterKey">
+                @for (option of adapters; track option) {
+                  <option [value]="option">{{ option }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>{{ 'harvest.sources.field.workers' | rokuT }}</span>
+              <input
+                [(ngModel)]="workers"
+                min="1"
+                name="workers"
+                type="number"
+              />
+            </label>
+            <label>
+              <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
+              <input [(ngModel)]="rate" min="1" name="rate" type="number" />
+            </label>
+
+            <div class="controls">
+              <button
+                (click)="create()"
+                [disabled]="
+                  newChainId() === '' || duplicate() || busyId() !== null
+                "
+                class="primary"
+                type="button"
+              >
+                {{ 'harvest.sources.create' | rokuT }}
+              </button>
+              <button (click)="creating.set(false)" type="button">
+                {{ 'resource.action.cancel' | rokuT }}
+              </button>
+            </div>
+          </div>
+        </div>
+      } @else {
+        <div>
+          <button (click)="startCreate()" class="new" type="button">
+            {{ 'harvest.sources.new' | rokuT }}
+          </button>
+        </div>
+      }
+
+      @if (sources().length === 0) {
+        <p class="state">{{ 'harvest.sources.empty' | rokuT }}</p>
+      } @else {
+        <ul class="sources">
         @for (source of sources(); track source.id) {
           <li>
             <div class="row">
-              <span class="chain">{{ source.supermarketId }}</span>
+              <span class="chain">{{ names.nameOf(source.supermarketId) }}</span>
               <span class="adapter">{{ source.adapterKey }}</span>
 
               <button
@@ -154,7 +224,8 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
             }
           </li>
         }
-      </ul>
+        </ul>
+      }
     }
   `,
   styles: `
@@ -224,15 +295,16 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
       color: var(--admin-ink-muted);
     }
 
+    /* Wide enough that the row does not reflow when the label flips between
+       "Enabled" and "Disabled". The height is the global base's. */
     .toggle {
-      min-block-size: 2.75rem;
       min-inline-size: 7rem;
     }
 
     .toggle.on {
       border-color: var(--admin-accent);
       background: var(--admin-accent-wash);
-      color: var(--admin-accent-ink);
+      color: var(--admin-accent-on-wash);
     }
 
     dl {
@@ -245,6 +317,30 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
       font-size: 0.75rem;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+      color: var(--admin-ink-muted);
+    }
+
+    .create {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-3);
+      align-items: stretch;
+      padding: var(--admin-space-4);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+      max-inline-size: 24rem;
+    }
+
+    .field > span,
+    .hint {
+      font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
 
@@ -274,8 +370,14 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
     }
 
     .primary {
+      border-color: transparent;
       background: var(--admin-accent);
+      font-weight: 600;
       color: var(--admin-accent-ink);
+    }
+
+    button {
+      cursor: pointer;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -284,6 +386,10 @@ export class SourcesPage {
   private readonly _service = inject(HARVEST_SERVICE);
 
   readonly shell = inject(HarvestShell);
+  /** Answers the create panel's chain picker, by descriptor name. */
+  readonly references = inject(ResourceReferences);
+  /** Names the chain each row is about, so the list does not read as uuids. */
+  readonly names = inject(ChainNames);
 
   readonly adapters = ADAPTERS;
 
@@ -293,6 +399,19 @@ export class SourcesPage {
   /** The chain a write is in flight for, so only its own control is disabled. */
   readonly busyId = signal<string | null>(null);
   readonly editing = signal<string | null>(null);
+
+  /** Whether the create panel is open. Opening it closes any row edit. */
+  readonly creating = signal(false);
+  /** The chain the create panel points at, or empty until one is chosen. */
+  readonly newChainId = signal('');
+  /**
+   * Whether the chosen chain already has a row. The backend route is an upsert,
+   * so a create for such a chain would silently rewrite a configuration nobody
+   * was looking at. The panel refuses it and points at the list instead.
+   */
+  readonly duplicate = computed(() =>
+    this.sources().some((row) => row.supermarketId === this.newChainId())
+  );
 
   readonly adapterKey = signal<Wire.EnumsAdapterKey>('manual');
   readonly workers = signal(1);
@@ -317,6 +436,9 @@ export class SourcesPage {
     try {
       const page = await this._service.listSources({ limit: 50 });
       this.sources.set(page.items);
+      // Fired and not awaited: a name arriving late redraws one span, and a
+      // lookup failure costs a name rather than the screen.
+      void this.names.resolve(page.items.map((row) => row.supermarketId));
       this.shell.observeReachable();
     } catch (error) {
       this.error.set(toGatewayError(error));
@@ -327,10 +449,57 @@ export class SourcesPage {
   }
 
   edit(source: Source): void {
+    this.creating.set(false);
     this.editing.set(source.supermarketId);
     this.adapterKey.set(source.adapterKey);
     this.workers.set(source.workers);
     this.rate.set(source.maxRequestsPerSecond);
+  }
+
+  /** Open the create panel, with the backend's own defaults in the fields. */
+  startCreate(): void {
+    this.editing.set(null);
+    this.creating.set(true);
+    this.newChainId.set('');
+    this.adapterKey.set('manual');
+    this.workers.set(4);
+    this.rate.set(4);
+  }
+
+  /**
+   * Describe a chain that has no row yet.
+   *
+   * The row is created **disabled**, by the backend and on purpose: describing
+   * a chain and starting to fetch it are two decisions, and the second one is
+   * the toggle on the row this panel adds to the list. `config` is not sent, so
+   * the backend's empty default stands; the form does not edit it, for the
+   * reason `save` gives.
+   */
+  async create(): Promise<void> {
+    const chainId = this.newChainId();
+    if (chainId === '' || this.duplicate()) {
+      return;
+    }
+
+    this.busyId.set(chainId);
+    this.error.set(null);
+
+    try {
+      const created = await this._service.upsertSource(chainId, {
+        adapterKey: this.adapterKey(),
+        workers: this.workers(),
+        maxRequestsPerSecond: this.rate(),
+      });
+      // First, which is where the server's newest first ordering would put it
+      // on the next load.
+      this.sources.update((rows) => [created, ...rows]);
+      void this.names.resolve([created.supermarketId]);
+      this.creating.set(false);
+    } catch (error) {
+      this.error.set(toGatewayError(error));
+    } finally {
+      this.busyId.set(null);
+    }
   }
 
   /**

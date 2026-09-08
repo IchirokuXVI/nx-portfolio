@@ -927,6 +927,62 @@
         ]
       }
     },
+    "/v1/admin/dashboard": {
+      "get": {
+        "operationId": "AdminDashboardController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The four dashboard blocks and the merged activity feed. A block is null when that service did not answer, and the response is still 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin.AdminDashboardResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-dashboard"
+        ]
+      }
+    },
     "/v1/admin/users": {
       "get": {
         "operationId": "AdminUsersController_list_v1",
@@ -2442,91 +2498,6 @@
         ]
       }
     },
-    "/v1/admin/zones/{id}/members": {
-      "get": {
-        "operationId": "AdminZonesController_listMembers_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `adminMembership.list` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/admin-core.AdminMembershipPage"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "admin-core"
-        ]
-      }
-    },
     "/v1/admin/zones/{id}/members/{membershipId}": {
       "get": {
         "operationId": "AdminZonesController_getMember_v1",
@@ -2907,6 +2878,93 @@
         ]
       }
     },
+    "/v1/admin/memberships": {
+      "get": {
+        "operationId": "AdminMembershipsController_list_v1",
+        "parameters": [
+          {
+            "name": "zoneId",
+            "required": false,
+            "in": "query",
+            "description": "The household to narrow to. Absent lists memberships from every zone.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `adminMembership.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-core.AdminMembershipPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-core"
+        ]
+      }
+    },
     "/v1/admin/lists": {
       "get": {
         "operationId": "AdminListsController_list_v1",
@@ -3199,91 +3257,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/common.IdResult"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "admin-core"
-        ]
-      }
-    },
-    "/v1/admin/lists/{id}/lines": {
-      "get": {
-        "operationId": "AdminListsController_listLines_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `adminList.listLines` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/admin-core.AdminListLinePage"
                 }
               }
             }
@@ -3737,6 +3710,93 @@
         ]
       }
     },
+    "/v1/admin/list-lines": {
+      "get": {
+        "operationId": "AdminListLinesController_list_v1",
+        "parameters": [
+          {
+            "name": "listId",
+            "required": false,
+            "in": "query",
+            "description": "The list to narrow to. Absent lists lines from every list.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `adminList.listLines` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-core.AdminListLinePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-core"
+        ]
+      }
+    },
     "/v1/admin/baskets": {
       "get": {
         "operationId": "AdminBasketsController_list_v1",
@@ -4019,6 +4079,233 @@
         ],
         "tags": [
           "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/postal-codes/{postalCode}/nearby": {
+      "get": {
+        "operationId": "AdminPostalCodesController_nearby_v1",
+        "parameters": [
+          {
+            "name": "postalCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO 3166-1 alpha-2. Defaults to es.",
+            "schema": {
+              "maxLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "name": "radiusMetres",
+            "required": false,
+            "in": "query",
+            "description": "Centroid to centroid, so two adjacent codes whose centres sit further apart than this are neighbours in reality and not in the answer. Defaults to the radius a profile widens by.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50000,
+              "default": 2000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `postalCode.nearby` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.NearbyPostalCodesView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/profiles/postal-codes/usage": {
+      "get": {
+        "operationId": "AdminProfilePostalCodesController_usage_v1",
+        "parameters": [
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO 3166-1 alpha-2. Defaults to es; every code in one request shares it.",
+            "schema": {
+              "maxLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCodes",
+            "required": true,
+            "in": "query",
+            "description": "The codes to count, which is one page of the queue. Every code asked about is in the answer, including the ones nobody uses: a screen decorating rows needs the zeros.",
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `adminProfilePostalCode.usage` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-core.PostalCodeUsageListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-core"
         ]
       }
     },
@@ -6333,7 +6620,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineView"
+                  "$ref": "#/components/schemas/list.AddLineResult"
                 }
               }
             }
@@ -6438,7 +6725,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineViewList"
+                  "$ref": "#/components/schemas/list.AddLineResultList"
                 }
               }
             }
@@ -10837,9 +11124,9 @@
         ]
       }
     },
-    "/v1/generated-lists/{id}/lines/{lineId}/pick": {
+    "/v1/generated-lists/{id}/lines/{lineId}/products": {
       "post": {
-        "operationId": "GeneratedListParticipantController_setPick_v1",
+        "operationId": "GeneratedListParticipantController_splitLine_v1",
         "parameters": [
           {
             "name": "id",
@@ -10863,18 +11150,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetGeneratedListPickDto"
+                "$ref": "#/components/schemas/SplitGeneratedListLineDto"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "The `generatedList.setPick` contract response.",
+            "description": "The `generatedList.splitLine` contract response.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+                  "$ref": "#/components/schemas/generated-list-sharing.SplitLineResult"
                 }
               }
             }
@@ -10901,6 +11188,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11379,192 +11676,6 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/{id}/lines/{lineId}/targets": {
-      "get": {
-        "operationId": "GeneratedListParticipantController_lineTargets_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "lineId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.lineTargets` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/msg.generatedList.lineTargets.response"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/{id}/lines/{lineId}/target": {
-      "post": {
-        "operationId": "GeneratedListParticipantController_bindLine_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "lineId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BindGeneratedListLineDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "The `generatedList.bindLine` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/msg.generatedList.bindLine.response"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15254,6 +15365,112 @@
         ]
       }
     },
+    "/v1/admin/catalog/items/batch": {
+      "post": {
+        "operationId": "AdminCatalogItemsController_createMany_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `item.createMany` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.item.createMany.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/items/{id}": {
       "get": {
         "operationId": "AdminCatalogItemsController_get_v1",
@@ -15727,6 +15944,102 @@
         ]
       }
     },
+    "/v1/admin/catalog/product-groups/assignments": {
+      "post": {
+        "operationId": "AdminCatalogProductGroupsController_applyAssignments_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyProductGroupAssignmentsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `productGroup.applyAssignments` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.productGroup.applyAssignments.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/product-groups/{id}": {
       "get": {
         "operationId": "AdminCatalogProductGroupsController_get_v1",
@@ -16085,7 +16398,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/catalog.SupermarketItemPage"
+                  "$ref": "#/components/schemas/catalog.AdminSupermarketItemPage"
                 }
               }
             }
@@ -18109,6 +18422,24 @@
                 "REJECTED"
               ]
             }
+          },
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO 3166-1 alpha-2. Pair it with `postalCode`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "The places located in this code, whichever run found them. It reads the place own postal code and never the run centre, so a run centred on 14013 does not put its Cordoba city neighbours in this answer.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -18415,6 +18746,476 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/postal-codes": {
+      "get": {
+        "operationId": "AdminHarvestPostalCodesController_list_v1",
+        "parameters": [
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO 3166-1 alpha-2.",
+            "schema": {
+              "maxLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "QUEUED",
+                "RUNNING",
+                "DONE",
+                "FAILED",
+                "PARKED"
+              ]
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Prefix match. A postal code is read left to right, so `140` means Cordoba city rather than every code with a 140 in the middle of it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dismissed",
+            "required": false,
+            "in": "query",
+            "description": "Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `postalCodeDiscovery.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHarvestPostalCodesController_add_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPostalCodeDiscoveryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `postalCodeDiscovery.add` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/postal-codes/summary": {
+      "get": {
+        "operationId": "AdminHarvestPostalCodesController_summary_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `postalCodeDiscovery.summary` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoverySummaryView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/postal-codes/{id}/requeue": {
+      "post": {
+        "operationId": "AdminHarvestPostalCodesController_requeue_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `postalCodeDiscovery.requeue` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/postal-codes/{id}/dismiss": {
+      "post": {
+        "operationId": "AdminHarvestPostalCodesController_dismiss_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `postalCodeDiscovery.dismiss` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestView"
                 }
               }
             }
@@ -18788,6 +19589,102 @@
           },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/entries/decisions": {
+      "post": {
+        "operationId": "AdminHarvestEntriesController_applyDecisions_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplySourceEntryDecisionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `sourceEntry.applyDecisions` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.sourceEntry.applyDecisions.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21169,17 +22066,47 @@
           "content"
         ]
       },
-      "SetGeneratedListPickDto": {
+      "GeneratedListLineShareDto": {
         "type": "object",
         "properties": {
           "itemId": {
             "type": "string",
             "format": "uuid",
-            "description": "The product to buy instead. Must be one of the line’s own options, which the service checks: the options are the line’s set rather than the whole catalog."
+            "description": "The product these units go to. Must be one of the line’s own options, and never the product the line already names: that one is the balance."
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "How many units go to this product. Zero is folded out rather than refused, so a screen drawing a stepper per option can send every option it drew."
           }
         },
         "required": [
-          "itemId"
+          "itemId",
+          "quantity"
+        ]
+      },
+      "SplitGeneratedListLineDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "The outstanding amount you believed. Refused with a conflict when the line has moved since it was read, so two phones splitting one line cannot double it."
+          },
+          "shares": {
+            "maxItems": 50,
+            "description": "Units for products other than the line’s own. One sibling appears under the line per product, and the line keeps its own product and the rest.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedListLineShareDto"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "shares"
         ]
       },
       "SettlementOutcome": {
@@ -21272,7 +22199,7 @@
           "lineId": {
             "type": "string",
             "format": "uuid",
-            "description": "The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it."
+            "description": "The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it. Leave it out for a list that holds no matching line, and the line is created there through the ordinary add, under that list’s own approval rule."
           },
           "quantity": {
             "type": "number",
@@ -21289,22 +22216,8 @@
         },
         "required": [
           "listId",
-          "lineId",
           "quantity",
           "from"
-        ]
-      },
-      "BindGeneratedListLineDto": {
-        "type": "object",
-        "properties": {
-          "listId": {
-            "type": "string",
-            "format": "uuid",
-            "description": "The shopping list to send this line to. Must be one both you and the basket’s owner can write right now: the owner’s access is what authorizes every later settle on it, so a list they cannot write would give the household a line it never sees bought."
-          }
-        },
-        "required": [
-          "listId"
         ]
       },
       "LookupItemsDto": {
@@ -21562,6 +22475,22 @@
           "defaultUnit"
         ]
       },
+      "CreateItemsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 1000,
+            "description": "The products to create, all of them or none. A longer list is refused rather than split: two chunks are two transactions, so the first can land while the second fails.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
       "UpdateItemDto": {
         "type": "object",
         "properties": {
@@ -21682,6 +22611,111 @@
           "name",
           "slug",
           "referenceUnit"
+        ]
+      },
+      "ProductGroupExpectationDto": {
+        "type": "object",
+        "properties": {
+          "productGroupId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Null for a product curation has not reached, which is what a session working the ungrouped products records."
+          }
+        },
+        "required": [
+          "productGroupId"
+        ]
+      },
+      "ProductGroupAssignmentDto": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "createGroup",
+              "assignItem"
+            ]
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "createGroup: this request’s own name for the group, so an assignItem below can name it before the database has issued an id."
+          },
+          "name": {
+            "description": "createGroup.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedTextDto"
+              }
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "createGroup."
+          },
+          "referenceUnit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "KILOGRAM",
+              "MILLILITER",
+              "LITER",
+              "PACK"
+            ],
+            "description": "createGroup."
+          },
+          "synonyms": {
+            "description": "createGroup.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedSynonymsDto"
+              }
+            ]
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "assignItem: the product to move."
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "assignItem: a group catalog already holds. Exactly one of this and groupRef."
+          },
+          "groupRef": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "assignItem: a group this same request creates."
+          },
+          "expect": {
+            "description": "assignItem: the group the product was in when the decision was made. A product somebody has sorted since fails it, and fails the whole request with it.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProductGroupExpectationDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "ApplyProductGroupAssignmentsDto": {
+        "type": "object",
+        "properties": {
+          "operations": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductGroupAssignmentDto"
+            }
+          }
+        },
+        "required": [
+          "operations"
         ]
       },
       "UpdateProductGroupDto": {
@@ -21844,7 +22878,7 @@
             "type": "string",
             "enum": [
               "NATIONAL",
-              "WAREHOUSE",
+              "REGION",
               "POSTAL_CODE",
               "STORE"
             ]
@@ -21877,7 +22911,7 @@
             "type": "string",
             "enum": [
               "NATIONAL",
-              "WAREHOUSE",
+              "REGION",
               "POSTAL_CODE",
               "STORE"
             ]
@@ -21978,17 +23012,17 @@
           "supermarketId": {
             "type": "string",
             "format": "uuid",
-            "description": "Required for CATALOG_DISCOVERY and FILE_IMPORT."
+            "description": "Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`)."
           },
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices; a `deza-web` one accepts it and ignores it, because the site prints none."
+            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices. A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself."
           },
           "postalCode": {
             "type": "string",
             "maxLength": 16,
-            "description": "Required for STORE_DISCOVERY. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8)."
+            "description": "Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8)."
           },
           "country": {
             "type": "string",
@@ -22008,6 +23042,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "detailBackfill": {
+            "type": "boolean",
+            "default": false,
+            "description": "Read product pages for the EAN instead of crawling the assortment (plan 0090, section 12.1). `carrefour-web` only. A crawl reads 851 listing pages in about an hour; a backfill reads one page per product that has no EAN yet, of the order of 18,000 the first time, so the two are never one run. Stopping a backfill costs nothing: an EAN is written as it is read, and a product that has one is never fetched again."
           }
         },
         "required": [
@@ -22072,6 +23111,30 @@
             "format": "uuid"
           }
         }
+      },
+      "AddPostalCodeDiscoveryDto": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "maxLength": 2,
+            "description": "ISO 3166-1 alpha-2."
+          },
+          "postalCode": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "A code catalog does not hold is refused with `postal_code_unknown`: the centroid table is the whole national list, so a code missing from it is a typo."
+          },
+          "discoverNow": {
+            "type": "boolean",
+            "description": "True queues it for the worker. False parks it, which is a row the worker never claims until somebody queues it."
+          }
+        },
+        "required": [
+          "country",
+          "postalCode",
+          "discoverNow"
+        ]
       },
       "AcceptSourceEntryDto": {
         "type": "object",
@@ -22150,6 +23213,98 @@
           }
         }
       },
+      "SourceEntryExpectationDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "CANDIDATE",
+              "UNRESOLVED",
+              "REJECTED"
+            ]
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Exactly the string the queue listing printed for this row. A row observed again since then fails the check."
+          }
+        },
+        "required": [
+          "status",
+          "lastSeenAt"
+        ]
+      },
+      "SourceEntryDecisionDto": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "createItem"
+            ],
+            "description": "accept binds the row to a product; createItem creates the product and binds the row to it. There is no bulk reject: junk is a person’s call."
+          },
+          "entryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "accept: a product the catalog already holds. Exactly one of this and itemRef."
+          },
+          "itemRef": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "accept: a product a createItem of this same file creates, which is how a second row of the same product is bound before an id exists."
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "createItem: this file’s own name for the product it creates."
+          },
+          "item": {
+            "description": "createItem: the product to create. Every field is optional, because the row already holds a default for each.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreateItemFromEntryDto"
+              }
+            ]
+          },
+          "expect": {
+            "$ref": "#/components/schemas/SourceEntryExpectationDto"
+          }
+        },
+        "required": [
+          "op",
+          "entryId",
+          "expect"
+        ]
+      },
+      "ApplySourceEntryDecisionsDto": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "The curation session this file came out of. Provenance, echoed back in the answer so a report can be filed under it; the backend stores no run of its own for a decisions file."
+          },
+          "operations": {
+            "maxItems": 1000,
+            "description": "The whole file, applied in the order given. A longer file is refused rather than split: two chunks are two transactions, so the first can land while the second fails.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceEntryDecisionDto"
+            }
+          }
+        },
+        "required": [
+          "operations"
+        ]
+      },
       "MapSourceLocationDto": {
         "type": "object",
         "properties": {
@@ -22171,6 +23326,8 @@
             "enum": [
               "mercadona-api",
               "deza-web",
+              "carrefour-web",
+              "lidl-api",
               "osm-places",
               "manual"
             ]
@@ -22650,6 +23807,14 @@
             "type": "string",
             "minLength": 1
           },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listName": {
+            "type": "string",
+            "minLength": 1
+          },
           "content": {
             "type": "string"
           },
@@ -22674,6 +23839,8 @@
         },
         "required": [
           "id",
+          "listId",
+          "listName",
           "content",
           "quantity",
           "approvalStatus",
@@ -22895,6 +24062,14 @@
             "type": "string",
             "minLength": 1
           },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneName": {
+            "type": "string",
+            "minLength": 1
+          },
           "userId": {
             "type": "string",
             "minLength": 1
@@ -22916,6 +24091,8 @@
         },
         "required": [
           "membershipId",
+          "zoneId",
+          "zoneName",
           "userId",
           "username",
           "role",
@@ -23007,6 +24184,665 @@
           "createdAt",
           "updatedAt",
           "ownerName"
+        ],
+        "additionalProperties": false
+      },
+      "admin-core.PostalCodeUsageListView": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "minLength": 1
+          },
+          "usage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-core.PostalCodeUsageView"
+            }
+          }
+        },
+        "required": [
+          "country",
+          "usage"
+        ],
+        "additionalProperties": false
+      },
+      "admin-core.PostalCodeUsageView": {
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mainProfiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nearbyProfiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "suppressedProfiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mainUsers": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nearbyUsers": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "postalCode",
+          "mainProfiles",
+          "nearbyProfiles",
+          "suppressedProfiles",
+          "mainUsers",
+          "nearbyUsers"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminActivityEntry": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorKind": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SERVICE"
+            ]
+          },
+          "actorId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CREATE",
+              "UPDATE",
+              "DELETE"
+            ]
+          }
+        },
+        "required": [
+          "at",
+          "actorKind",
+          "actorId",
+          "entity",
+          "entityId",
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminCatalogDashboard": {
+        "type": "object",
+        "properties": {
+          "supermarkets": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "locations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "productGroups": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "supermarketItems": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "priced",
+              "stale",
+              "unavailable"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "priced": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "stale": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unavailable": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "pricesWritten": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminPricesWrittenSeries"
+            }
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminActivityEntry"
+            }
+          }
+        },
+        "required": [
+          "supermarkets",
+          "locations",
+          "items",
+          "productGroups",
+          "supermarketItems",
+          "pricesWritten",
+          "activity"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminCoreDashboard": {
+        "type": "object",
+        "properties": {
+          "zones": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "active",
+              "markedForDeletion"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "active": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "markedForDeletion": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "memberships": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pending"
+            ],
+            "properties": {
+              "pending": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "lists": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "baskets": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "draft",
+              "completed"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "draft": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "zonesCreated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.DailyCount"
+            }
+          },
+          "listsCreated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.DailyCount"
+            }
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminActivityEntry"
+            }
+          }
+        },
+        "required": [
+          "zones",
+          "memberships",
+          "lists",
+          "baskets",
+          "zonesCreated",
+          "listsCreated",
+          "activity"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminDashboardActivityEntry": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorKind": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SERVICE"
+            ]
+          },
+          "actorId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CREATE",
+              "UPDATE",
+              "DELETE"
+            ]
+          },
+          "actorName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The admin’s display name, else the username, else the id itself. A service actor keeps its id."
+          }
+        },
+        "required": [
+          "at",
+          "actorKind",
+          "actorId",
+          "entity",
+          "entityId",
+          "action",
+          "actorName"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminDashboardWindow": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The first day in every series, as `YYYY-MM-DD`, UTC."
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The last day in every series, as `YYYY-MM-DD`, UTC. Today."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminHarvestDashboard": {
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "byStatus",
+              "inWindow"
+            ],
+            "properties": {
+              "byStatus": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/admin-dashboard.AdminHarvestRunStatusCount"
+                }
+              },
+              "inWindow": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.HarvestRunView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.HarvestRunView"
+            }
+          },
+          "queues": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "entries",
+              "places",
+              "shops"
+            ],
+            "properties": {
+              "entries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/admin-dashboard.AdminHarvestQueueEntry"
+                }
+              },
+              "places": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "shops": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/admin-dashboard.AdminHarvestShopQueue"
+                }
+              }
+            }
+          },
+          "sources": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "enabled"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "enabled": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "required": [
+          "runs",
+          "running",
+          "recent",
+          "queues",
+          "sources"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminHarvestQueueEntry": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "candidate": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unresolved": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "supermarketId",
+          "candidate",
+          "unresolved"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminHarvestRunStatusCount": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/enums.HarvestRunStatus"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "status",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminHarvestShopQueue": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unmapped": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "supermarketId",
+          "unmapped"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminIdentityDashboard": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "registered",
+              "temporary",
+              "verified"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "registered": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "temporary": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "verified": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "signUps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.DailyCount"
+            }
+          },
+          "admins": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "disabled"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "disabled": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "loginFailures": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "last24h",
+              "last7d",
+              "recent"
+            ],
+            "properties": {
+              "last24h": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "last7d": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "recent": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/admin-dashboard.AdminLoginFailureView"
+                }
+              }
+            }
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminActivityEntry"
+            }
+          }
+        },
+        "required": [
+          "users",
+          "signUps",
+          "admins",
+          "loginFailures",
+          "activity"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminLoginFailureView": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "username": {
+            "type": "string"
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "at",
+          "username",
+          "ip"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.AdminPricesWrittenSeries": {
+        "type": "object",
+        "properties": {
+          "sourceKind": {
+            "$ref": "#/components/schemas/enums.PriceSourceKind"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.DailyCount"
+            }
+          }
+        },
+        "required": [
+          "sourceKind",
+          "points"
+        ],
+        "additionalProperties": false
+      },
+      "admin-dashboard.DailyCount": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "minLength": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "day",
+          "count"
         ],
         "additionalProperties": false
       },
@@ -23149,6 +24985,82 @@
           "updatedAt"
         ],
         "additionalProperties": false
+      },
+      "admin.AdminDashboardResponse": {
+        "type": "object",
+        "description": "What the back office opens to. Each block is `null` when that service did not answer, and the response is still 200: one stopped service costs its own block rather than the whole page.",
+        "required": [
+          "window",
+          "identity",
+          "core",
+          "catalog",
+          "harvest",
+          "activity",
+          "measuredAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "window": {
+            "$ref": "#/components/schemas/admin-dashboard.AdminDashboardWindow",
+            "description": "The days every daily series covers, stated by the gateway so four services fill the same window."
+          },
+          "identity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/admin-dashboard.AdminIdentityDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Users, admins and failed operator logins, from auth."
+          },
+          "core": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/admin-dashboard.AdminCoreDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Zones, memberships, lists and baskets, from core."
+          },
+          "catalog": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/admin-dashboard.AdminCatalogDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The catalog totals and the prices written, from catalog."
+          },
+          "harvest": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/admin-dashboard.AdminHarvestDashboard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Runs, the run in flight and the per chain queues, from the harvester."
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-dashboard.AdminDashboardActivityEntry"
+            },
+            "description": "The three audit trails merged, newest first, at most twenty, each actor named."
+          },
+          "measuredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the numbers were taken, so a tab opened yesterday is not read as now."
+          }
+        }
       },
       "admin.AdminEnvironmentResponse": {
         "type": "object",
@@ -23384,6 +25296,147 @@
           "latitude",
           "longitude",
           "locationCount"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.AdminSupermarketItemPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.AdminSupermarketItemView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "catalog.AdminSupermarketItemView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "price": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unitPriceLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceKind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PriceSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "validUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemPriceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "itemName": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "itemId",
+          "priceScopeId",
+          "price",
+          "currency",
+          "unitPrice",
+          "unitPriceLabel",
+          "observedAt",
+          "sourceKind",
+          "stale",
+          "validUntil",
+          "itemPriceId",
+          "available",
+          "itemName"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.BulkOperationError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/enums.BulkOperationErrorCode"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
         ],
         "additionalProperties": false
       },
@@ -23917,6 +25970,35 @@
         "additionalProperties": false,
         "minProperties": 1
       },
+      "catalog.NearbyPostalCodesView": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "known": {
+            "type": "boolean"
+          },
+          "postalCodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.PostalCodeDistanceView"
+            }
+          }
+        },
+        "required": [
+          "country",
+          "postalCode",
+          "known",
+          "postalCodes"
+        ],
+        "additionalProperties": false
+      },
       "catalog.PostalCodeCoverageView": {
         "type": "object",
         "properties": {
@@ -23931,6 +26013,24 @@
         "required": [
           "postalCode",
           "served"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.PostalCodeDistanceView": {
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "distanceMetres": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "postalCode",
+          "distanceMetres"
         ],
         "additionalProperties": false
       },
@@ -24037,6 +26137,57 @@
           "kind",
           "externalKey",
           "label"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ProductGroupAssignmentOutcome": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "enum": [
+              "createGroup",
+              "assignItem"
+            ]
+          },
+          "ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.BulkOperationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "ref",
+          "itemId",
+          "groupId",
+          "applied",
+          "error"
         ],
         "additionalProperties": false
       },
@@ -24801,6 +26952,8 @@
         "enum": [
           "mercadona-api",
           "deza-web",
+          "carrefour-web",
+          "lidl-api",
           "osm-places",
           "manual"
         ]
@@ -24810,6 +26963,18 @@
         "enum": [
           "GOOGLE",
           "EMAIL"
+        ]
+      },
+      "enums.BulkOperationErrorCode": {
+        "type": "string",
+        "enum": [
+          "NOT_FOUND",
+          "NOT_PENDING",
+          "EXPECT_MISMATCH",
+          "DUPLICATE_SUBJECT",
+          "UNKNOWN_REFERENCE",
+          "MALFORMED_OPERATION",
+          "ALREADY_TAKEN"
         ]
       },
       "enums.CommentTranscription": {
@@ -24964,6 +27129,7 @@
         "type": "string",
         "enum": [
           "CLAIMED",
+          "REJECTED",
           "NOT_APPROVED",
           "SETTLED"
         ]
@@ -24974,6 +27140,16 @@
           "OWNER",
           "REGISTERED",
           "GUEST"
+        ]
+      },
+      "enums.PostalCodeDiscoveryStatus": {
+        "type": "string",
+        "enum": [
+          "QUEUED",
+          "RUNNING",
+          "DONE",
+          "FAILED",
+          "PARKED"
         ]
       },
       "enums.PostalCodeSource": {
@@ -24988,7 +27164,7 @@
         "type": "string",
         "enum": [
           "NATIONAL",
-          "WAREHOUSE",
+          "REGION",
           "POSTAL_CODE",
           "STORE"
         ]
@@ -25391,6 +27567,12 @@
           },
           "writable": {
             "type": "boolean"
+          },
+          "fromRun": {
+            "type": "boolean"
+          },
+          "approvalStatus": {
+            "$ref": "#/components/schemas/enums.LineApprovalStatus"
           }
         },
         "required": [
@@ -25403,11 +27585,35 @@
           "contributed",
           "listQuantity",
           "settledHere",
-          "writable"
+          "writable",
+          "fromRun",
+          "approvalStatus"
         ],
         "additionalProperties": false
       },
-      "generated-list-sharing.LineTarget": {
+      "generated-list-sharing.LinkPreview": {
+        "type": "object",
+        "properties": {
+          "joinable": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "participantCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "joinable"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.ListRef": {
         "type": "object",
         "properties": {
           "listId": {
@@ -25440,28 +27646,6 @@
           "listName",
           "zoneName",
           "fromRun"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list-sharing.LinkPreview": {
-        "type": "object",
-        "properties": {
-          "joinable": {
-            "type": "boolean"
-          },
-          "name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "participantCount": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "joinable"
         ],
         "additionalProperties": false
       },
@@ -25504,6 +27688,9 @@
           },
           "unavailable": {
             "$ref": "#/components/schemas/enums.OriginUnavailableReason"
+          },
+          "fromRun": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -25514,7 +27701,8 @@
           "zoneName",
           "listQuantity",
           "content",
-          "matchedOnText"
+          "matchedOnText",
+          "fromRun"
         ],
         "additionalProperties": false
       },
@@ -25813,6 +28001,40 @@
           "listId",
           "name",
           "zoneName"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.SplitLineResult": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+          },
+          "created": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+            }
+          },
+          "merged": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "line",
+          "created",
+          "merged",
+          "removed"
         ],
         "additionalProperties": false
       },
@@ -26134,6 +28356,34 @@
         ],
         "additionalProperties": false
       },
+      "harvest.DiscoveredPlaceCounts": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rejected": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "undecided": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "total",
+          "imported",
+          "rejected",
+          "undecided"
+        ],
+        "additionalProperties": false
+      },
       "harvest.DiscoveredPlaceGroup": {
         "type": "object",
         "properties": {
@@ -26280,6 +28530,16 @@
               "null"
             ]
           },
+          "postalCodeSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PostalCodeSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "country": {
             "type": [
               "string",
@@ -26335,6 +28595,7 @@
           "street",
           "city",
           "postalCode",
+          "postalCodeSource",
           "country",
           "website",
           "openingHours",
@@ -26600,6 +28861,164 @@
         ],
         "additionalProperties": false
       },
+      "harvest.PostalCodeDiscoveryRequestPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PostalCodeDiscoveryRequestView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "harvest.PostalCodeDiscoveryRequestView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.PostalCodeDiscoveryStatus"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastAttemptedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discoveredAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nextAttemptAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "placeName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dismissed": {
+            "type": "boolean"
+          },
+          "foundByItsRuns": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceCounts"
+          },
+          "locatedInIt": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceCounts"
+          }
+        },
+        "required": [
+          "id",
+          "country",
+          "postalCode",
+          "status",
+          "requestedAt",
+          "lastAttemptedAt",
+          "discoveredAt",
+          "nextAttemptAt",
+          "attempts",
+          "runId",
+          "error",
+          "placeName",
+          "dismissed",
+          "foundByItsRuns",
+          "locatedInIt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PostalCodeDiscoverySummaryView": {
+        "type": "object",
+        "properties": {
+          "queued": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "running": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parked": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "oldestQueuedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "draining": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued",
+          "running",
+          "done",
+          "failed",
+          "parked",
+          "oldestQueuedAt",
+          "draining"
+        ],
+        "additionalProperties": false
+      },
       "harvest.SourceCatalogEntryPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -26808,6 +29227,82 @@
           "entry",
           "pricesWritten",
           "createdItem"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SourceEntryDecisionOutcome": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "enum": [
+              "accept",
+              "createItem"
+            ]
+          },
+          "entryId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pricesWritten": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.BulkOperationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "entryId",
+          "ref",
+          "applied",
+          "itemId",
+          "pricesWritten",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SourceEntryPriceSkip": {
+        "type": "object",
+        "properties": {
+          "entryId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entryId",
+          "itemId",
+          "reason"
         ],
         "additionalProperties": false
       },
@@ -27061,6 +29556,28 @@
           "consecutiveFailures"
         ],
         "additionalProperties": false
+      },
+      "list.AddLineResult": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/list.LineView"
+          },
+          "merged": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "line",
+          "merged"
+        ],
+        "additionalProperties": false
+      },
+      "list.AddLineResultList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/list.AddLineResult"
+        }
       },
       "list.CommentPage": {
         "type": "object",
@@ -27399,12 +29916,6 @@
         ],
         "additionalProperties": false
       },
-      "list.LineViewList": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/list.LineView"
-        }
-      },
       "list.ListAccessEntry": {
         "type": "object",
         "properties": {
@@ -27677,42 +30188,6 @@
         ],
         "additionalProperties": false
       },
-      "msg.generatedList.bindLine.response": {
-        "type": "object",
-        "properties": {
-          "line": {
-            "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
-          },
-          "listId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "zoneId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "createdLineId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "quantity": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "pendingApproval": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "line",
-          "listId",
-          "zoneId",
-          "createdLineId",
-          "quantity",
-          "pendingApproval"
-        ],
-        "additionalProperties": false
-      },
       "msg.generatedList.lineOrigins.response": {
         "type": "object",
         "properties": {
@@ -27735,38 +30210,20 @@
             "items": {
               "$ref": "#/components/schemas/generated-list-sharing.OriginCandidate"
             }
-          }
-        },
-        "required": [
-          "generatedListId",
-          "lineId",
-          "origins",
-          "candidates"
-        ],
-        "additionalProperties": false
-      },
-      "msg.generatedList.lineTargets.response": {
-        "type": "object",
-        "properties": {
-          "generatedListId": {
-            "type": "string",
-            "minLength": 1
           },
-          "lineId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "targets": {
+          "others": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/generated-list-sharing.LineTarget"
+              "$ref": "#/components/schemas/generated-list-sharing.ListRef"
             }
           }
         },
         "required": [
           "generatedListId",
           "lineId",
-          "targets"
+          "origins",
+          "candidates",
+          "others"
         ],
         "additionalProperties": false
       },
@@ -27824,6 +30281,21 @@
         ],
         "additionalProperties": false
       },
+      "msg.item.createMany.response": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
       "msg.item.getMany.response": {
         "type": "object",
         "properties": {
@@ -27855,6 +30327,117 @@
         "required": [
           "lists",
           "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "msg.productGroup.applyAssignments.response": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ProductGroupAssignmentOutcome"
+            }
+          },
+          "createdGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "groupId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "ref",
+                "groupId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "applied",
+          "error",
+          "results",
+          "createdGroups"
+        ],
+        "additionalProperties": false
+      },
+      "msg.sourceEntry.applyDecisions.response": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "failedStep": {
+            "anyOf": [
+              {
+                "enum": [
+                  "VALIDATE",
+                  "CREATE_ITEMS",
+                  "BIND"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryDecisionOutcome"
+            }
+          },
+          "priceSkips": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceSkip"
+            }
+          },
+          "orphanedItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "runId",
+          "applied",
+          "failedStep",
+          "error",
+          "results",
+          "priceSkips",
+          "orphanedItemIds"
         ],
         "additionalProperties": false
       },
@@ -27898,6 +30481,8 @@
               "stale_quantity",
               "below_settled",
               "account_locked",
+              "postal_code_unknown",
+              "run_in_progress",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

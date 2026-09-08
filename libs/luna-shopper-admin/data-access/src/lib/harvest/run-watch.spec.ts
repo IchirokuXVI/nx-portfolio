@@ -114,7 +114,7 @@ describe('RunWatch', () => {
   /**
    * The first terminal read is the last read. A finished run cannot change, so
    * a poll that carried on would be asking a question with a fixed answer every
-   * two seconds for as long as the tab stayed open.
+   * few seconds for as long as the tab stayed open.
    */
   it.each(['COMPLETED', 'FAILED', 'ABORTED', 'STALE'] as const)(
     'stops reading once the run is %s',

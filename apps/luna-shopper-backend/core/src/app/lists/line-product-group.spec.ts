@@ -97,6 +97,11 @@ function build(options: Options = {}) {
 
   const lineRepo = {
     findOne: async () => line,
+    // What an add sees on the list before it decides whether to create or to
+    // raise a line already there (plan 0091). Empty, because every case here is
+    // about what a **new** line records: a list already holding this name would
+    // merge, and a merge keeps the products it has rather than recording any.
+    find: async () => [],
     create: (data: Partial<ListLine>) => ({ ...data }),
     save: async (row: Partial<ListLine>) => {
       const stored = {
@@ -214,7 +219,7 @@ describe('picking a group in the composer (plan 0070, section 9)', () => {
   it('subscribes the line and marks the set as the group’s', async () => {
     const w = build();
 
-    const view = await w.service.add({
+    const { line: view } = await w.service.add({
       userId: ACTOR,
       listId: LIST_ID,
       content: 'Milk',
@@ -235,7 +240,7 @@ describe('picking a group in the composer (plan 0070, section 9)', () => {
   it('leaves a hand assembled set owned by the person who assembled it', async () => {
     const w = build();
 
-    const view = await w.service.add({
+    const { line: view } = await w.service.add({
       userId: ACTOR,
       listId: LIST_ID,
       content: 'Milk',
@@ -254,14 +259,14 @@ describe('picking a group in the composer (plan 0070, section 9)', () => {
     // somebody picking a group. `AddLinesItem` carries no group to say so.
     const w = build();
 
-    const views = await w.service.addMany({
+    const results = await w.service.addMany({
       userId: ACTOR,
       listId: LIST_ID,
       items: [{ content: 'Milk', itemIds: [itemId(1)] }],
     });
 
-    expect(views[0].productGroupId).toBeNull();
-    expect(views[0].groupItemIds).toEqual([]);
+    expect(results[0].line.productGroupId).toBeNull();
+    expect(results[0].line.groupItemIds).toEqual([]);
   });
 });
 

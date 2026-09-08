@@ -2,10 +2,8 @@ import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   BasketAddLineRequest,
-  BasketBindResult,
   BasketLine,
   BasketLineOrigins,
-  BasketLineTarget,
   BasketLinkPreview,
   BasketOriginQuantityRequest,
   BasketOriginQuantityResult,
@@ -15,6 +13,8 @@ import type {
   BasketSettleRequest,
   BasketSettleResult,
   BasketShareLink,
+  BasketSplitRequest,
+  BasketSplitResult,
   BasketView,
   CatalogSuggestion,
 } from '@portfolio/velista/models';
@@ -124,16 +124,23 @@ export interface BasketServiceI {
   reopen(generatedListId: string, lineId: string): Promise<BasketSettleResult>;
 
   /**
-   * Swap a line's pick (`POST .../lines/:lineId/pick`).
+   * Give units of a line to other products (`POST .../lines/:lineId/products`),
+   * which splits it (velista `0069`; backend `0094`).
    *
    * **Anybody may, guests included.** The options are catalog products and never
-   * zone data, and the person at the shelf is exactly who wants another brand.
+   * zone data, and the person at the shelf is exactly who took three of one milk
+   * and two of another.
+   *
+   * It replaces `setPick`, which this interface carried until velista `0069`.
+   * Moving every outstanding unit to one other product is this call with one
+   * share, and a second route would be a second rule about which product a
+   * settlement records.
    */
-  setPick(
+  splitLine(
     generatedListId: string,
     lineId: string,
-    itemId: string
-  ): Promise<BasketLine>;
+    body: BasketSplitRequest
+  ): Promise<BasketSplitResult>;
 
   /**
    * Put a line in the basket (`POST .../basket/lines`), velista `0053`.
@@ -212,8 +219,13 @@ export interface BasketServiceI {
   ): Promise<BasketSettleResult>;
 
   /**
-   * Which lists are on this line, and which could be (`GET .../lines/:lineId/origins`),
-   * velista `0055`.
+   * Every list this reader may write, in three collections
+   * (`GET .../lines/:lineId/origins`), velista `0055`, widened by backend `0092`.
+   *
+   * The lists already on the line, the lists holding the same thing, and the lists
+   * holding nothing matching. It answers for **any** line, including one somebody
+   * added in an aisle whose first two collections are empty, because that is exactly
+   * the line the sheet most needs to offer (velista `0068`, section 2).
    *
    * **Zone data throughout**, so the server refuses it outright to a guest and to a
    * registered participant who does not pass the all or nothing rule: a redacted
@@ -228,9 +240,16 @@ export interface BasketServiceI {
   /**
    * Set what one list contributes (`POST .../lines/:lineId/origins`), velista `0055`.
    *
-   * One call for three gestures, because they are one write at different starting
-   * points: changing an existing contribution, adopting a candidate (`from: 0`), and
+   * One call for four gestures, because they are one write at different starting
+   * points: changing an existing contribution, adopting a candidate (`from: 0`),
+   * creating the line on a list that holds none (`from: 0` and no `lineId`), and
    * taking a list off the line altogether (`quantity: 0`).
+   *
+   * **Adoption takes over demand before it adds any** (backend `0092`, section 4.1):
+   * raising a list to what it already asks for on its own moves that list by
+   * nothing, and above it by the difference. Creation is the ordinary add, under
+   * that list's own approval rule, which is what the answered origin's
+   * `approvalStatus` says.
    *
    * **It buys nothing, ever.** No settlement is written and no bought indicator is
    * set, whichever way the number goes, which is what keeps this sheet's captions
@@ -243,38 +262,6 @@ export interface BasketServiceI {
     lineId: string,
     body: BasketOriginQuantityRequest
   ): Promise<BasketOriginQuantityResult>;
-
-  /**
-   * The lists this line could be sent to (`GET .../lines/:lineId/targets`),
-   * velista `0056`.
-   *
-   * Every list **both** the reader and the basket's owner can write right now. The
-   * owner's access is not a formality: it is what authorizes every later settle
-   * against the line, so a list only the reader can write would give a household a
-   * line it never sees bought.
-   */
-  getLineTargets(
-    generatedListId: string,
-    lineId: string
-  ): Promise<readonly BasketLineTarget[]>;
-
-  /**
-   * Send a line to a shopping list (`POST .../lines/:lineId/target`), velista `0056`.
-   *
-   * Only an `ADDED` line, and only one that has been sent nowhere: a `DERIVED` line
-   * already has the lists it came from, and a bound one cannot be bound twice. Both
-   * refusals have codes of their own, because "this is not that kind of line" and
-   * "this has already gone" are different sentences to whoever is holding the phone.
-   *
-   * The created zone line asks for what is **outstanding**, which may be zero on a
-   * line already bought: sending it is still worth doing, because it puts what
-   * happened onto the household's list.
-   */
-  bindLine(
-    generatedListId: string,
-    lineId: string,
-    listId: string
-  ): Promise<BasketBindResult>;
 
   /** Everybody on the basket (`GET .../participants/mine`), for presence. */
   listParticipants(

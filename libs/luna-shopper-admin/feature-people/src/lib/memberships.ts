@@ -1,11 +1,10 @@
 import { inject } from '@angular/core';
 import {
-  ADMIN_ZONE_MEMBERS_PATH,
+  ADMIN_MEMBERSHIPS_PATH,
   DIRECTORY_SERVICE,
   MEMBERSHIP_KEY,
   RESOURCE_GATEWAYS,
   zoneMemberPath,
-  zoneMembersPath,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   compositeIdOf,
@@ -40,12 +39,14 @@ export const MEMBERSHIP_ROLE_OPTIONS = [
  *
  * Three things about it are the gateway's shape rather than choices.
  *
- * - **A zone must be named before anything can be read.** `requires` says so,
- *   and the screen names the missing filter instead of asking for a URL with a
- *   hole in it.
- * - **Both URLs are nested.** There is no flat route for a membership, so the
- *   collection and the member are both under the zone, and the row is addressed
- *   by the pair `(zoneId, membershipId)`.
+ * - **The zone is a filter and not a question.** Opening this screen with none
+ *   chosen lists every household's memberships, which is what somebody looking
+ *   for one person's places needs: the zone is the thing they do not know yet
+ *   (plan 0017).
+ * - **The member URL is nested and the collection is not.** There is no flat
+ *   route to one membership, so the row is addressed by the pair
+ *   `(zoneId, membershipId)`, and the row carries its own `zoneId` so a page
+ *   read across zones can still open one.
  * - **`status` is not a field.** It moves along a state machine with a service
  *   method per edge, and each edge does more than write the enum: approving
  *   emits `MemberApproved`, banning keeps the row so the ban survives, rejecting
@@ -80,6 +81,16 @@ export const MEMBERSHIPS = defineResource<Membership>({
       resource: 'zones',
       editable: false,
       help: 'people.memberships.zoneIdHelp',
+    },
+    {
+      // The household by name, because a reference column draws the uuid it
+      // holds: resolving one per row per column is a request a list cannot
+      // afford, so the server sends the name beside the id.
+      kind: 'text',
+      name: 'zoneName',
+      label: 'people.memberships.zoneName',
+      help: 'people.memberships.zoneNameHelp',
+      editable: false,
     },
     {
       kind: 'reference',
@@ -130,10 +141,11 @@ export const MEMBERSHIPS = defineResource<Membership>({
   ],
 
   list: {
-    columns: ['username', 'role', 'status', 'createdAt'],
+    columns: ['zoneName', 'username', 'role', 'status', 'createdAt'],
     // The card is titled with the person's name in this zone, so the two lines
-    // under it are what the screen is opened to check.
-    compact: ['role', 'status'],
+    // under it are the household that tells two rows apart and what they are in
+    // it. Across zones the first is the only thing that does.
+    compact: ['zoneName', 'role'],
   },
 
   formNote: 'people.broadcast',
@@ -146,8 +158,6 @@ export const MEMBERSHIPS = defineResource<Membership>({
       resource: 'zones',
     },
   ],
-
-  requires: ['zoneId'],
 
   // No create: joining a zone is done with a join code by the person joining.
   // No delete: removing somebody is kick or ban, and the two are different
@@ -210,25 +220,18 @@ export const MEMBERSHIPS = defineResource<Membership>({
 
   gateway: () =>
     inject(RESOURCE_GATEWAYS).for<Membership>({
-      // Not a URL, and never used as one: both halves below build the real
-      // path. It is the name this resource's in-memory table goes under.
-      path: ADMIN_ZONE_MEMBERS_PATH,
-      collectionPath: (values) => {
-        const zoneId = values['zoneId'];
-        return typeof zoneId === 'string' && zoneId !== ''
-          ? zoneMembersPath(zoneId)
-          : null;
-      },
+      // A plain path with a plain query parameter, so `zoneId` needs no
+      // `pathParams`: it goes on the query string like any other filter, and
+      // the rows come back carrying it (plan 0017, section 4).
+      path: ADMIN_MEMBERSHIPS_PATH,
+      // One membership is still under its zone. There is no flat route to one,
+      // so the address stays the pair.
       memberPath: (id) => {
         const parts = compositeParts(id, MEMBERSHIP_KEY);
         return parts === null
           ? null
           : zoneMemberPath(parts['zoneId'], parts['membershipId']);
       },
-      // In the path, and therefore not also in the query string or the body.
-      // `PageQueryDto` does not declare it and neither does the update body, and
-      // the validation pipe refuses a property no DTO declares.
-      pathParams: ['zoneId'],
       key: [...MEMBERSHIP_KEY],
       idField: 'membershipId',
       seed: MEMBERSHIP_SEED,

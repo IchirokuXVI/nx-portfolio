@@ -181,8 +181,15 @@ export class LineClaimService {
     }
   }
 
-  /** The oldest a basket may have been generated and still claim its lines. */
-  private since(): Date {
+  /**
+   * The oldest a basket may have been generated and still claim its lines.
+   *
+   * Public since plan 0092, for the overlap query beside it: "another basket is
+   * carrying this line" and "somebody is out buying this line" have to be the
+   * same window, or one screen says a line is claimed while the other refuses to
+   * put it in a basket, and neither is wrong about the query it ran.
+   */
+  since(): Date {
     return new Date(Date.now() - this.windowMs);
   }
 }

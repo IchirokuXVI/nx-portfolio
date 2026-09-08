@@ -61,5 +61,12 @@ export function formatSince(
   if (seconds < 3600) {
     return format.format(-Math.round(seconds / 60), 'minute');
   }
-  return format.format(-Math.round(seconds / 3600), 'hour');
+  // Days above a day, which a heartbeat never reaches and a postal code reaches
+  // constantly (admin plan 0021, section 2). The cooldown on a discovered code
+  // is thirty days, so the honest unit for "last looked" is days: "720 hours
+  // ago" is a number the reader has to divide before it means anything.
+  if (seconds < 86_400) {
+    return format.format(-Math.round(seconds / 3600), 'hour');
+  }
+  return format.format(-Math.round(seconds / 86_400), 'day');
 }

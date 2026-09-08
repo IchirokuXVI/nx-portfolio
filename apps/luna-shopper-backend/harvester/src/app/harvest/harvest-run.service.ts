@@ -10,6 +10,7 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   PriceSourceKind,
+  type AdapterKey,
   type HarvestRunIdRequest,
   type HarvestRunPage,
   type HarvestRunView,
@@ -28,12 +29,12 @@ import {
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { readHarvestDocument } from './harvest-document.reader';
 import {
   ActiveRunExistsError,
   DocumentAlreadyImportedError,
   HarvestRunStore,
 } from './harvest-run.store';
-import { readHarvestDocument } from './harvest-document.reader';
 import { toHarvestRunView } from './harvest.mappers';
 import { resolveImportWindow } from './import-window';
 import { PlatformAdminService } from './platform-admin.service';
@@ -61,6 +62,42 @@ const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
   // existed to fetch again.
   HarvestRunMode.CATALOG_DISCOVERY,
 ];
+
+/**
+ * The adapters whose walk states a price, and which therefore need a scope to
+ * write it for (plan 0086, section 9; plan 0090, section 12).
+ *
+ * `deza-web` is absent because the site prints none: it accepts a scope and
+ * ignores it, and a required field that does nothing is a lie in a form.
+ *
+ * `lidl-api` is absent for the opposite reason and is refused a scope below: it
+ * publishes a price per region and resolves its own (plan 0089, section 8).
+ */
+const PRICE_YIELDING_ADAPTERS: readonly AdapterKey[] = [
+  'mercadona-api',
+  'carrefour-web',
+];
+
+/**
+ * The adapters that resolve their own price scopes, and therefore refuse one.
+ *
+ * **The opposite rule to the one above, and it has to be a refusal rather than
+ * an ignore** (plan 0089, section 8). A LIDL product publishes a price for each
+ * of 59 regions, and the run creates one scope per region from what it reads.
+ * A `priceScopeId` on the request would silently write every region's price
+ * into that single scope, which is a wrong number rather than a missing one.
+ */
+const SELF_SCOPING_ADAPTERS: readonly AdapterKey[] = ['lidl-api'];
+
+/**
+ * The adapters that publish their own shop list (plan 0089, section 9).
+ *
+ * A separate list from the one above, because they are separate facts about a
+ * chain: LIDL happens to state both its regions and its shops, and a chain that
+ * did one without the other would still be described correctly here. A store
+ * discovery for one of these takes no postal code and no radius.
+ */
+const SELF_LISTING_ADAPTERS: readonly AdapterKey[] = ['lidl-api'];
 
 /**
  * The kinds an upload may be stamped with (plan 0086, section 9).
@@ -276,6 +313,16 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         `A ${run.mode} run writes no price, so there is nothing to revert.`
       );
     }
+    if (run.input?.['detailBackfill'] === true) {
+      // A backfill fills one field on rows another run created (plan 0090,
+      // section 12.1). It writes no price and no row of its own, so a revert
+      // would delete nothing and mark the run anyway, which reads as an act
+      // that happened when none did.
+      throw new ValidationException(
+        'An EAN backfill writes no price and creates no row, so there is ' +
+          'nothing to revert. Revert the crawl that wrote them.'
+      );
+    }
 
     const prices = await this.catalog.deletePricesByRun(run.id);
     // Section 8's two deletes, in the harvester's own database. The rows this
@@ -393,17 +440,26 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       return this.validateFileImport(req);
     }
     if (req.mode === HarvestRunMode.STORE_DISCOVERY) {
-      if (!req.postalCode) {
+      // A chain that publishes its own shops names all of them in three
+      // requests, so it takes no postal code and no radius (plan 0089, section
+      // 9). Every other run is a radius around a point, which is what the
+      // postal code queue starts and what needs a centre.
+      const namesOwnShops =
+        req.supermarketId !== undefined &&
+        source !== null &&
+        SELF_LISTING_ADAPTERS.includes(source.adapterKey);
+      if (!req.postalCode && !namesOwnShops) {
         throw new ValidationException(
-          'A store discovery run needs a postal code to centre on.'
+          'A store discovery run needs a postal code to centre on, unless the ' +
+            'chain it names publishes its own shop list.'
         );
       }
       return {
-        supermarketId: null,
+        supermarketId: namesOwnShops ? (req.supermarketId as string) : null,
         priceScopeId: null,
         documentSha256: null,
         payload: {
-          postalCode: req.postalCode,
+          postalCode: req.postalCode ?? '',
           country: req.country ?? 'es',
           // Section 11's recommendation: 3 km returned 26 supermarkets around
           // 14013 while the wider box returned 75. The review step makes a small
@@ -430,10 +486,38 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     // somewhere to write them (plan 0086, section 9). `deza-web` accepts a scope
     // and ignores it, because the site prints no price and a required field that
     // does nothing is a lie in a form.
-    if (source?.adapterKey === 'mercadona-api' && !req.priceScopeId) {
+    // `carrefour-web` writes a price for every card it reads, which is what
+    // separates it from the other rendered page adapter (plan 0090, section 12).
+    const detailBackfill = req.detailBackfill === true;
+    if (
+      PRICE_YIELDING_ADAPTERS.includes(source?.adapterKey ?? 'manual') &&
+      !req.priceScopeId &&
+      !detailBackfill
+    ) {
       throw new ValidationException(
         "This chain's walk fetches a price for every product, so it needs the " +
           'price scope to write the prices for.'
+      );
+    }
+    // The opposite rule, and the reason it is a refusal is in the constant's
+    // own comment: a scope here would be applied to all 59 regions at once.
+    if (
+      SELF_SCOPING_ADAPTERS.includes(source?.adapterKey ?? 'manual') &&
+      req.priceScopeId
+    ) {
+      throw new ValidationException(
+        'This chain publishes a price for each of its own regions, so the run ' +
+          'creates the scopes it needs and cannot be given one. Start it ' +
+          'without a price scope.'
+      );
+    }
+    // A backfill reads product pages for the EAN, and only one adapter has a
+    // product page to read (plan 0090, section 12.1). Refusing it here names
+    // the field on the form rather than starting a run that finds nothing.
+    if (detailBackfill && source?.adapterKey !== 'carrefour-web') {
+      throw new ValidationException(
+        'Only a carrefour-web source has product pages to backfill EANs from. ' +
+          'Start this run without the backfill switch.'
       );
     }
     return {
@@ -443,6 +527,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       payload: {
         supermarketId: req.supermarketId,
         priceScopeId: req.priceScopeId ?? null,
+        detailBackfill,
       },
     };
   }

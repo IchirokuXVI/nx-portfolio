@@ -137,6 +137,29 @@
       "reload": "Recargar ahora"
     }
   },
+  "startup": {
+    "connecting": "Conectando",
+    "slow": {
+      "title": "Esto está tardando más de lo normal",
+      "body": "velista todavía no consigue conectar con el servidor. Espera un poco más o vuelve a intentarlo.",
+      "retry": "Reintentar"
+    },
+    "actions": {
+      "connecting": "Conectando. Podrás hacerlo en un momento.",
+      "slow": "velista no consigue conectar con el servidor. Inténtalo dentro de un momento."
+    }
+  },
+  "update": {
+    "required": {
+      "title": "velista se está actualizando",
+      "body": "Esta versión es demasiado antigua para hablar con el servidor. La nueva ya viene y tarda unos segundos."
+    },
+    "failed": {
+      "title": "velista no ha podido actualizarse",
+      "body": "Cierra velista del todo y vuelve a abrirlo. Si así no funciona, ábrelo una vez en tu navegador.",
+      "reload": "Reintentar"
+    }
+  },
   "auth": {
     "back": "Atrás",
     "signIn": {
@@ -1017,9 +1040,17 @@
     },
     "product": {
       "change": "Cambiar",
-      "title": "¿Cuál has cogido?",
-      "hint": "Cualquiera de estos cuenta para esta línea. Elige el que llevas en el carro.",
-      "current": "Elegido",
+      "title": "¿Cuáles has cogido?",
+      "hint": "Reparte las unidades entre los que has cogido. {{name}} se queda con el resto.",
+      "hintNone": "Reparte las unidades entre los que has cogido. El resto se queda sin producto.",
+      "rest": "se queda con el resto",
+      "noneRest": "sin producto elegido, se queda con el resto",
+      "units": "{{name}}, unidades",
+      "less": "Una unidad menos de {{name}}",
+      "more": "Una unidad más de {{name}}",
+      "apply": "Aplicar",
+      "notBought": "Esto cambia qué filas hay que comprar. Aquí no se marca nada como comprado.",
+      "split": "{{name}} se ha dividido en {{count}} filas",
       "none": "Esta línea no nombra ningún producto",
       "cheapest": "Más barato",
       "noPrice": "Sin precio",
@@ -1044,40 +1075,31 @@
       "buying_one": "Se compra {{count}}",
       "buying_other": "Se compran {{count}}",
       "extra": "{{lists}} para estas listas y {{extra}} de más",
-      "lists": "Listas que quieren esto",
-      "listWants": "la lista pide {{count}}",
+      "lists": "Listas que han pedido esto",
+      "askedFor": "Pedido",
+      "bought": "Comprado",
+      "more_one": "1 lista más",
+      "more_other": "{{count}} listas más",
+      "listAsks": "en su lista pide {{count}}",
+      "listNow": "ahora su lista pide {{count}}",
+      "pending": "esperando a que la lista lo acepte",
       "noAccess": "ya no puedes cambiar esta lista",
-      "others_one": "Otra lista quiere esto",
-      "others_other": "Otras {{count}} listas quieren esto",
       "claimed": "alguien ya está comprando esto para esa lista",
-      "notApproved": "esa lista todavía no ha aceptado esta línea",
-      "settled": "esa lista no quiere ninguno ahora mismo",
+      "rejected": "esa lista ha dicho que no a esta línea",
+      "cannotTake": "esta línea no se puede añadir a esa lista",
+      "cameHome": "Añadido a {{name}}. Ahí constan {{count}} como comprados",
+      "stillWaiting_one": "1 comprado y todavía en ninguna lista",
+      "stillWaiting_other": "{{count}} comprados y todavía en ninguna lista",
+      "alreadyHere": "esta lista ya lo tiene, vuelve a leer",
       "byName": "coincide por el nombre: «{{content}}»",
       "loading": "Leyendo las listas",
       "failed": "No se han podido leer las listas",
       "retry": "Reintentar",
-      "empty": "Ninguna lista pide esto",
+      "empty": "No hay ninguna lista en la que puedas poner esto",
       "close": "Listo"
     },
     "send": {
-      "open": "Enviar a una lista de la compra",
-      "title": "{{name}}",
-      "pending": "Esperando a que esa lista lo acepte",
-      "loading": "Cargando tus listas",
-      "loadFailed": "Tus listas no se han podido cargar",
-      "retry": "Reintentar",
-      "empty": "No hay ninguna lista a la que puedas enviar esto",
-      "fromThisBasket": "De esta compra",
-      "searchLabel": "Buscar entre tus listas",
-      "matches_one": "{{count}} lista",
-      "matches_other": "{{count}} listas",
-      "warning": "Esto añade «{{content}}» a {{list}}. No se puede sacar de ahí desde aquí.",
-      "confirm": "Enviarlo",
-      "cancel": "Cancelar",
-      "close": "Cerrar",
-      "done": "Añadido a {{list}}.",
-      "waiting": "Añadido a {{list}}. Está esperando a que alguien de ahí lo apruebe.",
-      "noneOutstanding": "Añadido a {{list}} sin nada pendiente. Ahí no se ha registrado ninguna compra."
+      "pending": "Esperando a que esa lista lo acepte"
     },
     "people": {
       "title": "En esta lista",
@@ -1187,8 +1209,6 @@
       "belowSettled_one": "Ya se ha comprado uno para esta lista",
       "belowSettled_other": "Ya se han comprado {{count}} para esta lista",
       "basketFinished": "Quien hizo la lista ha terminado la compra. Ya no se puede cambiar",
-      "notSendable": "Solo se puede enviar a una lista de la compra una línea añadida aquí",
-      "alreadySent": "Esta línea ya se ha enviado a una lista de la compra",
       "reference": "ref {{correlationId}}"
     },
     "status": {

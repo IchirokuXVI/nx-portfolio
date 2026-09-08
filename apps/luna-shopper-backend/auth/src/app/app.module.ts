@@ -16,6 +16,7 @@ import { AdminDirectoryService } from './admin/admin-directory.service';
 import { AdminIdentityService } from './admin/admin-identity.service';
 import { AdminTokenService } from './admin/admin-token.service';
 import { AdminController } from './admin/admin.controller';
+import { AuthDashboardService } from './admin/dashboard.service';
 import { AuthPlatformAdminService } from './admin/platform-admin.service';
 import { AuditModule } from './audit/audit.module';
 import type { AuthConfig } from './config/app-config';
@@ -122,6 +123,8 @@ import { UsernameGenerator } from './username/username-generator.service';
     // mint a token it would then refuse.
     AuthPlatformAdminService,
     AdminDirectoryService,
+    // The dashboard's identity block (plan 0088), behind the same gate.
+    AuthDashboardService,
     PasswordService,
     IdentityEventsPublisher,
     UsernameGenerator,

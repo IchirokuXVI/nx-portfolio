@@ -108,6 +108,7 @@ export function toDiscoveredPlaceView(
     street: row.street,
     city: row.city,
     postalCode: row.postalCode,
+    postalCodeSource: row.postalCodeSource,
     country: row.country,
     website: row.website,
     openingHours: row.openingHours,
@@ -207,9 +208,17 @@ export function toSourceLocationView(row: SourceLocation): SourceLocationView {
  * later enqueue re opens the row, so a reader can see how long a code has been
  * waiting rather than only when it was last touched.
  */
+/**
+ * The row itself, **without its counts**.
+ *
+ * The two count groups are a query over `discovered_places` for a whole page at
+ * once (plan 0097, section 2), so they cannot come from the row and this mapper
+ * cannot produce them. The service adds them, and the `Omit` is what stops a
+ * caller mapping a row and shipping a view with two fields missing.
+ */
 export function toPostalCodeDiscoveryRequestView(
   row: PostalCodeDiscoveryRequest
-): PostalCodeDiscoveryRequestView {
+): Omit<PostalCodeDiscoveryRequestView, 'foundByItsRuns' | 'locatedInIt'> {
   return {
     id: row.id,
     country: row.country,
@@ -222,6 +231,8 @@ export function toPostalCodeDiscoveryRequestView(
     attempts: row.attempts,
     runId: row.runId,
     error: row.error,
+    placeName: row.placeName,
+    dismissed: row.dismissed,
   };
 }
 

@@ -4,10 +4,15 @@ import { MessagingModule } from '../messaging/messaging.module';
 import { AdminAuthController } from './admin-auth.controller';
 import {
   AdminBasketsController,
+  AdminListLinesController,
   AdminListsController,
+  AdminMembershipsController,
   AdminPostalCodesController,
+  AdminProfilePostalCodesController,
   AdminZonesController,
 } from './admin-core.controller';
+import { AdminDashboardController } from './admin-dashboard.controller';
+import { AdminDashboardService } from './admin-dashboard.service';
 import {
   AdminAdminsController,
   AdminUsersController,
@@ -43,13 +48,18 @@ import { AdminUserNamesService } from './admin-user-names.service';
   controllers: [
     AdminAuthController,
     AdminEnvironmentController,
+    AdminDashboardController,
     AdminUsersController,
     AdminAdminsController,
     AdminZonesController,
+    AdminMembershipsController,
     AdminListsController,
+    AdminListLinesController,
     AdminBasketsController,
     AdminPostalCodesController,
+    // The demand behind a postal code, which is core's (plan 0097, section 5).
+    AdminProfilePostalCodesController,
   ],
-  providers: [AdminJwtStrategy, AdminUserNamesService],
+  providers: [AdminJwtStrategy, AdminUserNamesService, AdminDashboardService],
 })
 export class GatewayAdminModule {}

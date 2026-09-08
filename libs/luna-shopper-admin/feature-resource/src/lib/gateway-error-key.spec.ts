@@ -54,6 +54,17 @@ describe('gatewayErrorKey', () => {
     expect(gatewayErrorKey(failure({ code: 'teapot', status: 418 }))).toBe(
       'resource.error.unknown'
     );
-    expect(gatewayErrorKey(null)).toBe('resource.error.unknown');
+  });
+
+  /**
+   * The state where nothing went wrong is not the unknown failure.
+   *
+   * Every screen guards this key on truthiness, so a sentence here for no error
+   * at all drew "That did not work, and the server did not say why" over four
+   * working screens. A caller that has lost the type of a failure it already
+   * has says `?? 'resource.error.unknown'` at its own call site.
+   */
+  it('has no sentence for no failure', () => {
+    expect(gatewayErrorKey(null)).toBeNull();
   });
 });

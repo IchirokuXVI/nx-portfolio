@@ -1,4 +1,5 @@
 import {
+  BulkOperationErrorCode,
   ItemCategory,
   PostalCodeSource,
   PriceScopeKind,
@@ -69,12 +70,14 @@ export const CATALOG_SCHEMA_IDS = {
   priceScopeView: schemaId('catalog/PriceScopeView'),
   itemView: schemaId('catalog/ItemView'),
   supermarketItemView: schemaId('catalog/SupermarketItemView'),
+  adminSupermarketItemView: schemaId('catalog/AdminSupermarketItemView'),
   supermarketLocationItemView: schemaId('catalog/SupermarketLocationItemView'),
   supermarketPage: schemaId('catalog/SupermarketPage'),
   supermarketLocationPage: schemaId('catalog/SupermarketLocationPage'),
   priceScopePage: schemaId('catalog/PriceScopePage'),
   itemPage: schemaId('catalog/ItemPage'),
   supermarketItemPage: schemaId('catalog/SupermarketItemPage'),
+  adminSupermarketItemPage: schemaId('catalog/AdminSupermarketItemPage'),
   supermarketLocationItemPage: schemaId('catalog/SupermarketLocationItemPage'),
   createSupermarketRequest: schemaId('msg/supermarket.create/request'),
   updateSupermarketRequest: schemaId('msg/supermarket.update/request'),
@@ -93,6 +96,23 @@ export const CATALOG_SCHEMA_IDS = {
   searchItemsRequest: schemaId('msg/item.search/request'),
   findItemByEanRequest: schemaId('msg/item.findByEan/request'),
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
+  // Plan 0100: the two bulk replays, and the error shape they share.
+  bulkOperationErrorCode: schemaId('enums/BulkOperationErrorCode'),
+  bulkOperationError: schemaId('catalog/BulkOperationError'),
+  createItemInput: schemaId('catalog/CreateItemInput'),
+  createItemsRequest: schemaId('msg/item.createMany/request'),
+  createItemsResult: schemaId('msg/item.createMany/response'),
+  createProductGroupOperation: schemaId('catalog/CreateProductGroupOperation'),
+  assignItemToGroupOperation: schemaId('catalog/AssignItemToGroupOperation'),
+  productGroupAssignmentOutcome: schemaId(
+    'catalog/ProductGroupAssignmentOutcome'
+  ),
+  applyGroupAssignmentsRequest: schemaId(
+    'msg/productGroup.applyAssignments/request'
+  ),
+  applyGroupAssignmentsResult: schemaId(
+    'msg/productGroup.applyAssignments/response'
+  ),
   // Plan 0080: every price a source gave, and the policy that picks one.
   itemPriceOverride: schemaId('catalog/ItemPriceOverride'),
   itemPriceOverrides: schemaId('catalog/ItemPriceOverrides'),
@@ -390,38 +410,52 @@ const catalogSuggestResponse = object(
   ['suggestions']
 );
 
+// Stated once and used by both views below, so the admin view cannot drift
+// from the shopper's row by one forgotten property.
+const supermarketItemProperties = () => ({
+  id: nonEmptyString(),
+  itemId: nonEmptyString(),
+  priceScopeId: nonEmptyString(),
+  price: numberOrNull(),
+  currency: nullableString(),
+  unitPrice: numberOrNull(),
+  unitPriceLabel: nullableString(),
+  observedAt: nullableString(),
+  sourceKind: nullableSourceKind(),
+  stale: boolean(),
+  validUntil: nullableString(),
+  itemPriceId: nullableString(),
+  available: boolean(),
+});
+const SUPERMARKET_ITEM_REQUIRED = [
+  'id',
+  'itemId',
+  'priceScopeId',
+  'price',
+  'currency',
+  'unitPrice',
+  'unitPriceLabel',
+  'observedAt',
+  'sourceKind',
+  'stale',
+  'validUntil',
+  'itemPriceId',
+  'available',
+];
+
 const supermarketItemView = object(
   CATALOG_SCHEMA_IDS.supermarketItemView,
-  {
-    id: nonEmptyString(),
-    itemId: nonEmptyString(),
-    priceScopeId: nonEmptyString(),
-    price: numberOrNull(),
-    currency: nullableString(),
-    unitPrice: numberOrNull(),
-    unitPriceLabel: nullableString(),
-    observedAt: nullableString(),
-    sourceKind: nullableSourceKind(),
-    stale: boolean(),
-    validUntil: nullableString(),
-    itemPriceId: nullableString(),
-    available: boolean(),
-  },
-  [
-    'id',
-    'itemId',
-    'priceScopeId',
-    'price',
-    'currency',
-    'unitPrice',
-    'unitPriceLabel',
-    'observedAt',
-    'sourceKind',
-    'stale',
-    'validUntil',
-    'itemPriceId',
-    'available',
-  ]
+  supermarketItemProperties(),
+  SUPERMARKET_ITEM_REQUIRED
+);
+
+// The back office's row (admin plan 0023, section 3): the shopper's row plus
+// the product's name, joined on by `supermarketItem.adminList` and by nothing
+// else. A separate view because the shopper page is velista's contract.
+const adminSupermarketItemView = object(
+  CATALOG_SCHEMA_IDS.adminSupermarketItemView,
+  { ...supermarketItemProperties(), itemName: nullableLocalized() },
+  [...SUPERMARKET_ITEM_REQUIRED, 'itemName']
 );
 
 // --- Item prices and policies (plan 0080) ----------------------------------
@@ -559,6 +593,10 @@ const itemPage = paginated(
 const supermarketItemPage = paginated(
   CATALOG_SCHEMA_IDS.supermarketItemPage,
   CATALOG_SCHEMA_IDS.supermarketItemView
+);
+const adminSupermarketItemPage = paginated(
+  CATALOG_SCHEMA_IDS.adminSupermarketItemPage,
+  CATALOG_SCHEMA_IDS.adminSupermarketItemView
 );
 const priceScopePage = paginated(
   CATALOG_SCHEMA_IDS.priceScopePage,
@@ -711,6 +749,132 @@ const updateItemRequest = object(
   },
   ['userId', 'itemId']
 );
+// --- The two bulk replays (plan 0100) ---------------------------------------
+
+/**
+ * One refused operation, in the shape both bulk routes answer with.
+ *
+ * The code is for a tool deciding what to do next, the detail for the person
+ * reading the report afterwards. Neither is enough on its own: a code cannot
+ * say which slug collided, and a sentence cannot be branched on.
+ */
+const bulkOperationError = object(
+  CATALOG_SCHEMA_IDS.bulkOperationError,
+  {
+    code: ref(CATALOG_SCHEMA_IDS.bulkOperationErrorCode),
+    detail: string(),
+  },
+  ['code', 'detail']
+);
+
+/** A product of a bulk create: {@link createItemRequest} without the credential. */
+const createItemInput = object(
+  CATALOG_SCHEMA_IDS.createItemInput,
+  {
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    brand: nullableString(),
+    imageUrl: nullableString(),
+    sku: nullableString(),
+    ean: nullableString(),
+    unitSize: numberOrNull(),
+    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    productGroupId: nullableString(),
+  },
+  ['name', 'category', 'defaultUnit']
+);
+
+const createItemsRequest = object(
+  CATALOG_SCHEMA_IDS.createItemsRequest,
+  {
+    ...adminCredentialProperties,
+    items: array(ref(CATALOG_SCHEMA_IDS.createItemInput)),
+  },
+  ['userId', 'items']
+);
+
+/** One view per input, in the order the request named them. */
+const createItemsResult = object(
+  CATALOG_SCHEMA_IDS.createItemsResult,
+  { items: array(ref(CATALOG_SCHEMA_IDS.itemView)) },
+  ['items']
+);
+
+const createProductGroupOperation = object(
+  CATALOG_SCHEMA_IDS.createProductGroupOperation,
+  {
+    op: { const: 'createGroup' },
+    ref: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    slug: nonEmptyString(),
+    referenceUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    synonyms: ref(CATALOG_SCHEMA_IDS.localizedSynonyms),
+  },
+  ['op', 'ref', 'name', 'slug', 'referenceUnit']
+);
+
+const assignItemToGroupOperation = object(
+  CATALOG_SCHEMA_IDS.assignItemToGroupOperation,
+  {
+    op: { const: 'assignItem' },
+    itemId: nonEmptyString(),
+    groupId: nonEmptyString(),
+    groupRef: nonEmptyString(),
+    expect: {
+      type: 'object',
+      additionalProperties: false,
+      properties: { productGroupId: nullableString() },
+      required: ['productGroupId'],
+    },
+  },
+  ['op', 'itemId', 'expect']
+);
+
+const applyGroupAssignmentsRequest = object(
+  CATALOG_SCHEMA_IDS.applyGroupAssignmentsRequest,
+  {
+    ...adminCredentialProperties,
+    operations: array({
+      anyOf: [
+        ref(CATALOG_SCHEMA_IDS.createProductGroupOperation),
+        ref(CATALOG_SCHEMA_IDS.assignItemToGroupOperation),
+      ],
+    }),
+  },
+  ['userId', 'operations']
+);
+
+const productGroupAssignmentOutcome = object(
+  CATALOG_SCHEMA_IDS.productGroupAssignmentOutcome,
+  {
+    op: { enum: ['createGroup', 'assignItem'] },
+    ref: nullableString(),
+    itemId: nullableString(),
+    groupId: nullableString(),
+    applied: boolean(),
+    error: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.bulkOperationError), { type: 'null' }],
+    },
+  },
+  ['op', 'ref', 'itemId', 'groupId', 'applied', 'error']
+);
+
+const applyGroupAssignmentsResult = object(
+  CATALOG_SCHEMA_IDS.applyGroupAssignmentsResult,
+  {
+    applied: boolean(),
+    error: nullableString(),
+    results: array(ref(CATALOG_SCHEMA_IDS.productGroupAssignmentOutcome)),
+    createdGroups: array({
+      type: 'object',
+      additionalProperties: false,
+      properties: { ref: nonEmptyString(), groupId: nonEmptyString() },
+      required: ['ref', 'groupId'],
+    }),
+  },
+  ['applied', 'error', 'results', 'createdGroups']
+);
+
 const findItemByEanRequest = object(
   CATALOG_SCHEMA_IDS.findItemByEanRequest,
   { userId: nonEmptyString(), ean: nonEmptyString() },
@@ -1444,6 +1608,10 @@ export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.priceScopeKind, Object.values(PriceScopeKind)),
   enumOf(CATALOG_SCHEMA_IDS.priceSourceKind, Object.values(PriceSourceKind)),
   enumOf(CATALOG_SCHEMA_IDS.postalCodeSource, Object.values(PostalCodeSource)),
+  enumOf(
+    CATALOG_SCHEMA_IDS.bulkOperationErrorCode,
+    Object.values(BulkOperationErrorCode)
+  ),
   localizedText,
   localizedSynonyms,
   supermarketView,
@@ -1456,6 +1624,7 @@ export const catalogSchemas: JsonSchema[] = [
   catalogSuggestion,
   catalogSuggestResponse,
   supermarketItemView,
+  adminSupermarketItemView,
   supermarketLocationItemView,
   supermarketPage,
   supermarketLocationPage,
@@ -1464,6 +1633,7 @@ export const catalogSchemas: JsonSchema[] = [
   productGroupPage,
   productGroupOfferPage,
   supermarketItemPage,
+  adminSupermarketItemPage,
   supermarketLocationItemPage,
   createSupermarketRequest,
   updateSupermarketRequest,
@@ -1476,6 +1646,15 @@ export const catalogSchemas: JsonSchema[] = [
   createItemRequest,
   updateItemRequest,
   itemIdRequest,
+  bulkOperationError,
+  createItemInput,
+  createItemsRequest,
+  createItemsResult,
+  createProductGroupOperation,
+  assignItemToGroupOperation,
+  productGroupAssignmentOutcome,
+  applyGroupAssignmentsRequest,
+  applyGroupAssignmentsResult,
   getItemsRequest,
   getItemsResult,
   searchItemsRequest,
@@ -1622,6 +1801,10 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.findItemByEanRequest,
     response: CATALOG_SCHEMA_IDS.findItemByEanResult,
   },
+  [ITEM_PATTERNS.createMany]: {
+    request: CATALOG_SCHEMA_IDS.createItemsRequest,
+    response: CATALOG_SCHEMA_IDS.createItemsResult,
+  },
   [PRODUCT_GROUP_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createProductGroupRequest,
     response: CATALOG_SCHEMA_IDS.productGroupView,
@@ -1641,6 +1824,10 @@ export const catalogMessageContracts: Record<
   [PRODUCT_GROUP_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listProductGroupsRequest,
     response: CATALOG_SCHEMA_IDS.productGroupPage,
+  },
+  [PRODUCT_GROUP_PATTERNS.applyAssignments]: {
+    request: CATALOG_SCHEMA_IDS.applyGroupAssignmentsRequest,
+    response: CATALOG_SCHEMA_IDS.applyGroupAssignmentsResult,
   },
   [ITEM_PRICE_PATTERNS.add]: {
     request: CATALOG_SCHEMA_IDS.addItemPriceRequest,
@@ -1692,7 +1879,7 @@ export const catalogMessageContracts: Record<
   },
   [SUPERMARKET_ITEM_PATTERNS.adminList]: {
     request: CATALOG_SCHEMA_IDS.adminListSupermarketItemsRequest,
-    response: CATALOG_SCHEMA_IDS.supermarketItemPage,
+    response: CATALOG_SCHEMA_IDS.adminSupermarketItemPage,
   },
   [PRICE_SCOPE_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createPriceScopeRequest,

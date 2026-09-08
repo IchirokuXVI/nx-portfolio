@@ -13,6 +13,7 @@ import {
 import {
   adminRoutes,
   provideResources,
+  type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
 import { ITEMS } from './items';
@@ -57,13 +58,23 @@ const ALL = [
   LOCATION_ITEMS,
 ];
 
+/**
+ * The catalog's resources, mounted at the root rather than under `/catalog`.
+ *
+ * This file is about the screens, not about where the app hangs them: admin
+ * plan 0022's own mount is asserted in `shell-sections.spec.ts` and in the app's
+ * route spec, against the real sections. Leaving the segment off here keeps
+ * every URL below reading as the screen it opens.
+ */
+const SECTION: AdminSection = { key: 'catalog', label: '', resources: ALL };
+
 async function boot(url: string) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
       ServerReachability,
-      provideRouter(adminRoutes(ALL)),
+      provideRouter(adminRoutes([SECTION])),
       provideLocationMocks(),
       provideResources(...ALL),
       SessionStorage,
@@ -171,6 +182,18 @@ describe('the effective price list', () => {
    * sufferance, and the screen draws the flag rather than working it out from
    * the date.
    */
+  /**
+   * Admin plan 0023, section 3: the admin read joins the product's name on,
+   * and the row's own heading draws it, so the operator reads "Whole milk"
+   * where a uuid used to be.
+   */
+  it('names the product rather than printing its id', async () => {
+    const fixture = await boot('/prices');
+
+    expect(rowsText(fixture)).toContain('Whole milk 1 L');
+    expect(rowsText(fixture)).not.toContain('it_milk_1l');
+  });
+
   it('shows the source, the date and the stale flag', async () => {
     const fixture = await boot('/prices');
 
@@ -252,7 +275,9 @@ describe('the price form', () => {
 
     const notice = fixture.debugElement.query(By.directive(PriceScopeNotice));
     expect(notice).not.toBeNull();
-    expect((notice.componentInstance as PriceScopeNotice).scopeName()).toBeNull();
+    expect(
+      (notice.componentInstance as PriceScopeNotice).scopeName()
+    ).toBeNull();
   });
 
   /**
@@ -269,6 +294,33 @@ describe('the price form', () => {
 
     expect(resources).toContain('price-scopes');
     expect(resources).not.toContain('locations');
+  });
+});
+
+/**
+ * The two lookup columns (admin plan 0023, section 4): a group and a chain are
+ * small targets, so the page resolves each distinct id once through the
+ * reference lookup and the cell becomes the target's name and a link to it.
+ */
+describe('the looked up reference columns', () => {
+  it('names the group on the product list, as a link to it', async () => {
+    const fixture = await boot('/items');
+    await settle(fixture);
+
+    const anchors = [
+      ...fixture.nativeElement.querySelectorAll('tbody td a'),
+    ].map((anchor) => (anchor as HTMLElement).textContent?.trim());
+
+    expect(anchors).toContain('Olive oil');
+    expect(rowsText(fixture)).not.toContain('pg_olive_oil');
+  });
+
+  it('names the chain on the price scopes list', async () => {
+    const fixture = await boot('/price-scopes');
+    await settle(fixture);
+
+    expect(rowsText(fixture)).toContain('Mercadona');
+    expect(rowsText(fixture)).not.toContain('sm_mercadona');
   });
 });
 

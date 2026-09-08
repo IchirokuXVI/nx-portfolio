@@ -150,8 +150,14 @@ function typeFor(schema, names, indent) {
   const nullable = types.includes('null') || schema.nullable === true;
   const concrete = types.filter((type) => type !== 'null');
 
+  // A branch of a union that is nothing but `null` is the whole point of that
+  // branch: `oneOf: [{ $ref }, { type: 'null' }]` is how a nullable block is
+  // spelled, and answering `unknown` for the second half made the union
+  // `X | unknown`, which is `unknown`. Every nullable block on the dashboard
+  // response was typed away by that until backend plan 0088 was the first
+  // document to use the form.
   if (concrete.length === 0) {
-    return nullable ? 'unknown' : 'unknown';
+    return nullable ? 'null' : 'unknown';
   }
 
   const rendered = concrete

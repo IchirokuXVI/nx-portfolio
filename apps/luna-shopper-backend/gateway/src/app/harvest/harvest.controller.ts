@@ -19,16 +19,21 @@ import {
   HARVEST_PATTERNS,
   HARVEST_SCHEMA_IDS,
   HarvestRunMode,
+  POSTAL_CODE_DISCOVERY_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   validateHarvestDocument,
+  type ApplySourceEntryDecisionsResult,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlacePage,
   type DiscoveredPlaceView,
   type HarvestRunExportResult,
   type HarvestRunPage,
   type HarvestRunView,
+  type PostalCodeDiscoveryRequestPage,
+  type PostalCodeDiscoveryRequestView,
+  type PostalCodeDiscoverySummaryView,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
   type SourceEntryAcceptResult,
@@ -50,6 +55,8 @@ import {
 import { NatsClient } from '../messaging/nats-client';
 import {
   AcceptSourceEntryDto,
+  AddPostalCodeDiscoveryDto,
+  ApplySourceEntryDecisionsDto,
   CreateItemFromEntryDto,
   DiscoveredPlaceGroupQueryDto,
   DiscoveredPlaceListQueryDto,
@@ -57,6 +64,7 @@ import {
   ImportDiscoveredPlaceDto,
   ImportHarvestDocumentDto,
   MapSourceLocationDto,
+  PostalCodeDiscoveryListQueryDto,
   SetSourceEnabledDto,
   SourceEntryListQueryDto,
   SourceLocationListQueryDto,
@@ -486,6 +494,42 @@ export class AdminHarvestEntriesController {
   }
 
   /**
+   * A whole decisions file, in one call, all or nothing (plan 0100).
+   *
+   * The route the curation toolchain applies with, after a session decided the
+   * queue offline. Replaying that file through the two routes above is one
+   * request per row, so a file that goes wrong at row 300 leaves the queue half
+   * worked and the operator with no way to say which half.
+   *
+   * **A refused file answers 201 with `applied: false`**, not an error status.
+   * The caller needs to know which row failed which check, and a problem
+   * document carries one message for a thousand rows. What does answer 400 is
+   * what the request got wrong before any row was looked at: an empty file, or
+   * one over the cap.
+   *
+   * There is no bulk reject, and there will not be one: junk is a person's call,
+   * and a wrong reject hides a row from the queue that nobody looks at again.
+   */
+  @Post('decisions')
+  @ApiContractResponse(SOURCE_ENTRY_PATTERNS.applyDecisions, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  applyDecisions(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: ApplySourceEntryDecisionsDto
+  ): Promise<ApplySourceEntryDecisionsResult> {
+    return this.nats.send<ApplySourceEntryDecisionsResult>(
+      SOURCE_ENTRY_PATTERNS.applyDecisions,
+      {
+        ...adminCredential(admin),
+        runId: dto.runId,
+        operations: dto.operations,
+      }
+    );
+  }
+
+  /**
    * Not a product he tracks. The row stays as REJECTED rather than being
    * deleted, so the next run that observes the key touches it and asks nobody.
    */
@@ -660,6 +704,124 @@ export class AdminHarvestSourcesController {
     return this.nats.send<SupermarketSourceView>(
       SUPERMARKET_SOURCE_PATTERNS.setEnabled,
       { ...adminCredential(admin), supermarketId, enabled: dto.enabled }
+    );
+  }
+}
+
+/**
+ * The postal code discovery queue (plan 0097).
+ *
+ * Plan 0063 built the queue and a listing subject nothing consumed, so the only
+ * way to see whether a code had ever been looked at was to open the harvester's
+ * database. This is that surface.
+ *
+ * **Demand driven, and that is the point.** A code is in this list because a
+ * profile write announced it or because an operator typed it here. It is not the
+ * shipped centroid table, which is eleven thousand rows and lives at
+ * `admin/catalog/postal-codes`: a screen listing the whole country would bury
+ * the forty codes that matter under eleven thousand that do not.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/postal-codes', version: '1' })
+export class AdminHarvestPostalCodesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: PostalCodeDiscoveryListQueryDto
+  ): Promise<PostalCodeDiscoveryRequestPage> {
+    return this.nats.send<PostalCodeDiscoveryRequestPage>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.list,
+      {
+        ...adminCredential(admin),
+        country: query.country,
+        status: query.status,
+        postalCode: query.postalCode,
+        dismissed: query.dismissed,
+        cursor: query.cursor,
+        limit: query.limit,
+      }
+    );
+  }
+
+  /**
+   * Counts by status, the oldest waiting row, and whether anything drains it.
+   *
+   * `draining` is `HARVEST_ENABLED`, and it is here rather than on
+   * `GET /v1/admin/environment` because that route answers callers with no token
+   * at all (plan 0097, section 7.1).
+   */
+  @Get('summary')
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.summary)
+  summary(
+    @ActingAdmin() admin: CurrentAdmin
+  ): Promise<PostalCodeDiscoverySummaryView> {
+    return this.nats.send<PostalCodeDiscoverySummaryView>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.summary,
+      adminCredential(admin)
+    );
+  }
+
+  /**
+   * Add one code, queued now or parked (section 6.1).
+   *
+   * A code catalog does not hold is refused with `postal_code_unknown` and
+   * nothing is written: the harvester asks catalog before it inserts.
+   */
+  @Post()
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.add, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  add(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: AddPostalCodeDiscoveryDto
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.nats.send<PostalCodeDiscoveryRequestView>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.add,
+      { ...adminCredential(admin), ...dto }
+    );
+  }
+
+  /**
+   * Discover it again, inside the cooldown (section 6.2).
+   *
+   * **It queues, and it does not run.** The queue drains serially and one run
+   * exists at a time, so the answer says the row is waiting rather than working,
+   * and the screen repeats that instead of promising a run.
+   */
+  @Post(':id/requeue')
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.requeue, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ conflict: true })
+  requeue(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.nats.send<PostalCodeDiscoveryRequestView>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.requeue,
+      { ...adminCredential(admin), requestId: id }
+    );
+  }
+
+  /** Hide a code nobody can geocode. Nothing is deleted (section 6.3). */
+  @Post(':id/dismiss')
+  @ApiContractResponse(POSTAL_CODE_DISCOVERY_PATTERNS.dismiss, {
+    status: HttpStatus.CREATED,
+  })
+  dismiss(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<PostalCodeDiscoveryRequestView> {
+    return this.nats.send<PostalCodeDiscoveryRequestView>(
+      POSTAL_CODE_DISCOVERY_PATTERNS.dismiss,
+      { ...adminCredential(admin), requestId: id }
     );
   }
 }

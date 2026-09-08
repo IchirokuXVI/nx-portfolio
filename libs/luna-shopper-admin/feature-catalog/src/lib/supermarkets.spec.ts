@@ -44,7 +44,9 @@ async function boot(url: string): Promise<ComponentFixture<TestHost>> {
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
       ServerReachability,
-      provideRouter(adminRoutes([SUPERMARKETS])),
+      provideRouter(
+        adminRoutes([{ key: 'catalog', label: '', resources: [SUPERMARKETS] }])
+      ),
       provideLocationMocks(),
       provideResources(SUPERMARKETS),
       SessionStorage,

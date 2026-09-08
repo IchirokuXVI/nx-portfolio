@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  BULK_DECISION_MAX_OPERATIONS,
   ITEM_LOOKUP_LIMITS,
   LINE_ITEM_SET_MAX,
+  type CreateItemInput,
   type CreateItemRequest,
+  type CreateItemsRequest,
+  type CreateItemsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
   type GetItemsRequest,
@@ -21,11 +25,18 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
+  ConflictException,
   decodeCursor,
   encodeCursor,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { In, Repository, type SelectQueryBuilder } from 'typeorm';
+import {
+  In,
+  QueryFailedError,
+  Repository,
+  type SelectQueryBuilder,
+} from 'typeorm';
 import { Item, ProductGroup, SupermarketItem } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
@@ -145,13 +156,95 @@ export class ItemService {
   }
 
   /**
+   * Several products, in one transaction, all or nothing (plan 0100).
+   *
+   * The step a bulk entry decision needs before it can bind anything: a
+   * decisions file that creates forty products and binds forty rows to them
+   * must create forty or none, because a half filled catalog leaves the
+   * operator to work out which half and the binds that follow name every one.
+   *
+   * **Not a loop over {@link create}, and that is the whole point.** Forty calls
+   * are forty transactions, so the thirty seventh failing leaves thirty six
+   * products nothing points at. One transaction here fails as one thing.
+   *
+   * Announced after the commit, one event per product that landed in a group,
+   * for the same reason {@link create} announces one: a household subscribed to
+   * Milk should get a milk the catalog has only just heard of, and no second
+   * write is coming that would tell them.
+   */
+  async createMany(req: CreateItemsRequest): Promise<CreateItemsResult> {
+    const actor = await this.admin.requireAdmin(req);
+    if (req.items.length === 0) {
+      throw new ValidationException(
+        'A bulk create needs at least one product.'
+      );
+    }
+    if (req.items.length > BULK_DECISION_MAX_OPERATIONS) {
+      throw new ValidationException(
+        `A bulk create carries at most ${BULK_DECISION_MAX_OPERATIONS} ` +
+          `products, and this one carries ${req.items.length}. Split the work ` +
+          'into separate files: this request is refused whole rather than ' +
+          'chunked, because two chunks are two transactions and the first can ' +
+          'land while the second fails.'
+      );
+    }
+    this.refuseRepeatedEans(req.items);
+
+    // Every group is resolved before the transaction opens, which is where the
+    // audit service says validating reads belong. A group deleted between the
+    // check and the write fails on the foreign key, and fails the whole batch.
+    const drafts: Item[] = [];
+    for (const input of req.items) {
+      drafts.push(
+        this.items.create({
+          name: input.name,
+          brand: input.brand ?? null,
+          imageUrl: input.imageUrl ?? null,
+          sku: input.sku ?? null,
+          ean: input.ean ?? null,
+          unitSize: input.unitSize ?? null,
+          category: input.category,
+          defaultUnit: input.defaultUnit,
+          productGroupId: await this.resolveGroup(input.productGroupId ?? null),
+        })
+      );
+    }
+
+    let saved: Item[];
+    try {
+      saved = await this.audit.write(actor, async (tx) => {
+        const rows: Item[] = [];
+        for (const draft of drafts) {
+          rows.push(await tx.create(Item, draft));
+        }
+        return rows;
+      });
+    } catch (error) {
+      throw asEanConflict(error);
+    }
+
+    for (const row of saved) {
+      if (row.productGroupId !== null) {
+        this.events.itemGroupChanged(row.id, null, row.productGroupId);
+      }
+    }
+    return { items: saved.map((row) => toItemView(row)) };
+  }
+
+  /**
    * Edit a product (plan 0012).
    *
-   * **This is where group membership moves**, and therefore where plan 0070's fan
-   * out is triggered from. `ProductGroupService` says so in its own class doc:
-   * nothing there assigns items to groups, so "an admin adds three products to
-   * Milk" is three calls to this method, and a sync hung off the group service
-   * would watch a service that never fires.
+   * **This is where group membership moves one product at a time**, and
+   * therefore one of the places plan 0070's fan out is triggered from.
+   * `ProductGroupService` says so in its own class doc: nothing there assigns
+   * items to groups, so "an admin adds three products to Milk" is three calls to
+   * this method, and a sync hung off the group service would watch a service
+   * that never fires.
+   *
+   * The other two places are {@link createMany} above, which creates a product
+   * straight into a group, and `ProductGroupAssignmentService`, which replays a
+   * whole curation session (plan 0100). Both announce the same event for the
+   * same reason. Anything else that ever writes `productGroupId` has to as well.
    *
    * Announced only when the group actually moved, and only after the write. Every
    * other field an admin can change here means nothing to a subscribed line, and
@@ -768,6 +861,30 @@ export class ItemService {
    * "product group not found" rather than a driver error, and it is the only
    * place an assignment is ever made.
    */
+  /**
+   * A file that names one EAN twice is a file that contradicts itself.
+   *
+   * Postgres would refuse the second insert anyway, since EAN is unique when
+   * present, and the batch would fail as a whole with the driver's message.
+   * Saying it here names both products instead, before anything is written.
+   */
+  private refuseRepeatedEans(items: readonly CreateItemInput[]): void {
+    const seen = new Set<string>();
+    for (const item of items) {
+      const ean = item.ean?.trim();
+      if (!ean) {
+        continue;
+      }
+      if (seen.has(ean)) {
+        throw new ValidationException(
+          `Two products of this request carry EAN ${ean}. An EAN names one ` +
+            'product, so one of the two is the same product written twice.'
+        );
+      }
+      seen.add(ean);
+    }
+  }
+
   private async resolveGroup(
     productGroupId: string | null
   ): Promise<string | null> {
@@ -849,6 +966,30 @@ export class ItemService {
     }
     return displayName(row.name);
   }
+}
+
+const PG_UNIQUE_VIOLATION = '23505';
+
+/**
+ * The one way a bulk create fails that an operator can act on.
+ *
+ * EAN is unique when present, so a product the catalog already holds under the
+ * same barcode refuses the insert and takes the whole batch with it. The driver
+ * message names a constraint; this names the thing to do about it.
+ */
+function asEanConflict(error: unknown): unknown {
+  if (
+    error instanceof QueryFailedError &&
+    (error as { driverError?: { code?: string } }).driverError?.code ===
+      PG_UNIQUE_VIOLATION
+  ) {
+    return new ConflictException(
+      'One of these products carries an EAN the catalog already holds, so ' +
+        'none of them were created. Bind that row onto the product that has ' +
+        'the barcode instead of creating a second one.'
+    );
+  }
+  return error;
 }
 
 /** One row of the ranked group query, before it becomes a view. */

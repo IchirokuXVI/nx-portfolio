@@ -98,7 +98,7 @@ export enum ParticipantKind {
 
 /**
  * Why a list holding the same thing cannot be put into a basket line (plan 0057,
- * section 3.2).
+ * section 3.2, as plan 0092 section 3.2 revised it).
  *
  * A candidate carrying one of these is **served rather than filtered out**, which
  * is the one place this codebase deliberately answers with something the caller
@@ -107,12 +107,28 @@ export enum ParticipantKind {
  * fact about lists this reader has already been found entitled to. Velista draws
  * it as a caption with no control beside it, so the **control** is absent and the
  * information is present, which is what keeps plan 0030's rule intact.
+ *
+ * ## Two of these are no longer produced
+ *
+ * Plan 0092 made a pending line and a line at zero **adoptable**, because a
+ * pending origin is still claimed and still settled, and a list at zero is a list
+ * that can be asked again. {@link NOT_APPROVED} and {@link SETTLED} are kept so a
+ * client still drawing their captions keeps reading this enum, and velista 0068
+ * is where they stop being drawn. Nothing on the server answers with either.
  */
 export enum OriginUnavailableReason {
-  /** Another active basket of the owner's already carries it (plan 0050, section 3). */
+  /** Another live basket of the owner's already carries it (plan 0050, section 3). */
   CLAIMED = 'CLAIMED',
-  /** Its `approvalStatus` is not `APPROVED`, so a run would not have taken it either. */
+  /**
+   * The household said no to it (plan 0091, section 3.1).
+   *
+   * A rejected line is a decision, and a basket must not raise a line the list
+   * will never buy. It is the one refusal about the line's own state that
+   * survives plan 0092.
+   */
+  REJECTED = 'REJECTED',
+  /** No longer answered: a pending line is adoptable (plan 0092, section 3.2). */
   NOT_APPROVED = 'NOT_APPROVED',
-  /** Its quantity is already zero, so this basket would be asking for nothing. */
+  /** No longer answered: a line at zero is adoptable (plan 0092, section 3.2). */
   SETTLED = 'SETTLED',
 }

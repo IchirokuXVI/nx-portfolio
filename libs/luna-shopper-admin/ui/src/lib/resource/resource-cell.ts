@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
 
@@ -14,10 +15,23 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
  */
 @Component({
   selector: 'lib-resource-cell',
-  imports: [RokuTranslatorPipe],
+  imports: [RokuTranslatorPipe, RouterLink],
   template: `
     @if (cell().key; as key) {
       <span class="word">{{ key | rokuT }}</span>
+    } @else if (cell().link; as link) {
+      <!-- A reference with somewhere to go (admin plan 0023, section 2.3): a
+           real anchor, in its own tab stop, named by the text it shows and
+           openable in a new tab. It sits inside a row that opens its own
+           detail, so it stops the click from reaching the row. -->
+      <a (click)="$event.stopPropagation()" [routerLink]="link">{{
+        cell().text
+      }}</a>
+      @for (locale of cell().missing ?? []; track locale) {
+        <span class="missing">{{
+          'resource.value.missingLocale' | rokuT: { locale }
+        }}</span>
+      }
     } @else if (cell().href; as href) {
       <!-- rel="noopener" on every outbound link: these are supermarket
            websites, and the tab one opens must not be able to reach back into
@@ -49,6 +63,11 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
 
     a {
       color: var(--admin-accent);
+    }
+
+    a:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
     }
 
     .missing {

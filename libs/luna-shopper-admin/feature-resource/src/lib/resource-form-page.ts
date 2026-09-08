@@ -227,7 +227,11 @@ export class ResourceFormPage {
       : gatewayErrorKey(error);
   });
 
-  readonly errorKey = computed(() => gatewayErrorKey(this.store.error()));
+  // Drawn only while `store.status()` is `'error'`, so the fallback is for the
+  // type rather than for a state the screen can reach.
+  readonly errorKey = computed(
+    () => gatewayErrorKey(this.store.error()) ?? 'resource.error.unknown'
+  );
 
   constructor() {
     void this.store.load();

@@ -1,0 +1,172 @@
+[
+  {
+    "url": "https://www.lidl.es/q/search?q=leche",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/q/search?q=leche",
+    "contentType": "text/html",
+    "bytes": 1578669,
+    "ms": 1120,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Resultados en Lidl.es para: leche</title><script type=\"importm"
+  },
+  {
+    "url": "https://www.lidl.es/q/search?q=leche&productsOnly=true",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/q/search?q=leche&productsOnly=true",
+    "contentType": "text/html",
+    "bytes": 1578716,
+    "ms": 960,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Resultados en Lidl.es para: leche</title><script type=\"importm"
+  },
+  {
+    "url": "https://www.lidl.es/q/search?q=leche&idsOnly=true",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/q/search?q=leche&idsOnly=true",
+    "contentType": "text/html",
+    "bytes": 1578736,
+    "ms": 1029,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Resultados en Lidl.es para: leche</title><script type=\"importm"
+  },
+  {
+    "url": "https://www.lidl.es/q/search?q=leche&offset=24",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/q/search?q=leche&offset=24",
+    "contentType": "text/html",
+    "bytes": 1578733,
+    "ms": 642,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Resultados en Lidl.es para: leche</title><script type=\"importm"
+  },
+  {
+    "url": "https://www.lidl.es/q/search?q=leche&sort=price",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/q/search?q=leche&sort=price",
+    "contentType": "text/html",
+    "bytes": 1732028,
+    "ms": 721,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Resultados en Lidl.es para: leche</title><script type=\"importm"
+  },
+  {
+    "url": "https://www.lidl.es/h/cocina-y-comedor/h10067556",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/h/cocina-y-comedor/h10067556",
+    "contentType": "text/html",
+    "bytes": 1305505,
+    "ms": 634,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Mobiliario y accesorios para la Cocina | Lidl</title><script t"
+  },
+  {
+    "url": "https://www.lidl.es/h/cocina-y-comedor/h10067556?productsOnly=true",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/h/cocina-y-comedor/h10067556?productsOnly=true",
+    "contentType": "text/html",
+    "bytes": 1305478,
+    "ms": 692,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Mobiliario y accesorios para la Cocina | Lidl</title><script t"
+  },
+  {
+    "url": "https://www.lidl.es/h/cocina-y-comedor/h10067556?idsOnly=true",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/h/cocina-y-comedor/h10067556?idsOnly=true",
+    "contentType": "text/html",
+    "bytes": 1305408,
+    "ms": 572,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Mobiliario y accesorios para la Cocina | Lidl</title><script t"
+  },
+  {
+    "url": "https://www.lidl.es/h/cocina-y-comedor/h10067556?offset=48",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/h/cocina-y-comedor/h10067556?offset=48",
+    "contentType": "text/html",
+    "bytes": 414726,
+    "ms": 417,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Mobiliario y accesorios para la Cocina | Lidl</title><script t"
+  },
+  {
+    "url": "https://www.lidl.es/q/api/search?q=leche",
+    "status": 400,
+    "finalUrl": "https://www.lidl.es/q/api/search?q=leche",
+    "contentType": "application/json",
+    "bytes": 46,
+    "ms": 203,
+    "isJson": true,
+    "head": "{\"error\":\"Assortment 'null' is not supported\"}"
+  },
+  {
+    "url": "https://www.lidl.es/p/api/gridboxes/ES/es/100408539",
+    "status": 404,
+    "finalUrl": "https://www.lidl.es/p/api/gridboxes/ES/es/100408539",
+    "contentType": "application/json",
+    "bytes": 73,
+    "ms": 205,
+    "isJson": true,
+    "head": "{\"code\":404,\"message\":\"The current request is not defined by this API.\"} "
+  },
+  {
+    "url": "https://www.lidl.es/q/api/product/100408539",
+    "status": 404,
+    "finalUrl": "https://www.lidl.es/q/api/product/100408539",
+    "contentType": "application/json",
+    "bytes": 73,
+    "ms": 203,
+    "isJson": true,
+    "head": "{\"message\":\"The current request is not defined by this API.\",\"code\":404} "
+  },
+  {
+    "url": "https://www.lidl.es/user-api/search?q=leche",
+    "status": 404,
+    "finalUrl": "https://www.lidl.es/user-api/search?q=leche",
+    "contentType": "application/json",
+    "bytes": 73,
+    "ms": 229,
+    "isJson": true,
+    "head": "{\"message\":\"The current request is not defined by this API.\",\"code\":404} "
+  },
+  {
+    "url": "https://www.lidl.es/w/api/flyers",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/w/api/flyers",
+    "contentType": "text/html",
+    "bytes": 12016,
+    "ms": 255,
+    "isJson": false,
+    "head": "<!doctype html> <html lang=\"de-DE\"> <head> <title>LIDL lohnt sich » Tolle Angebote in deiner Filiale: Alle Aktionen auf einen Blick</title> <meta name=\"viewport\" content=\"width=device-width,"
+  },
+  {
+    "url": "https://endpoints.leaflets.schwarz/v3/ES/flyers",
+    "status": 404,
+    "finalUrl": "https://endpoints.leaflets.schwarz/v3/ES/flyers",
+    "contentType": "application/json",
+    "bytes": 232,
+    "ms": 189,
+    "isJson": true,
+    "head": "{\"self\":\"v4/error_response?error_id=exception_e281544abceb8ae83a5f4a9ed4befa71a16fc7f9\",\"version\":4,\"success\":false,\"message\":\"The resource does not exist. (6a9cc1f83e7e9)\",\"dateTime\":\"2026-09-06T01:2"
+  },
+  {
+    "url": "https://www.lidl.es/s/api/stores?q=madrid",
+    "status": 404,
+    "finalUrl": "https://www.lidl.es/s/api/stores?q=madrid",
+    "contentType": "text/html",
+    "bytes": 152601,
+    "ms": 294,
+    "isJson": false,
+    "head": "<!DOCTYPE html> <html> <head> <meta charset=\"utf-8\" /> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <link rel=\"icon\" type=\"image/svg+xml\" href=\"/cdn/assets/logos/1."
+  },
+  {
+    "url": "https://www.lidl.es/s/es-ES/tiendas/madrid/",
+    "status": 200,
+    "finalUrl": "https://www.lidl.es/s/es-ES/tiendas/madrid/",
+    "contentType": "text/html",
+    "bytes": 336096,
+    "ms": 283,
+    "isJson": false,
+    "head": "<!DOCTYPE html><html lang=\"es-ES\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Tiendas en Madrid - Tu supermercado cercano</title><style>.sto"
+  }
+]

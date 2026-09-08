@@ -75,25 +75,69 @@ export class JoinGeneratedListDto {
   displayName?: string;
 }
 
-/**
- * Swap a line's pick (plan 0051, section 6.1).
- *
- * A body of one field rather than a query parameter, because it is a write and
- * because the same shape is where a second product attribute would go if the
- * pick ever grew one.
- */
-export class SetGeneratedListPickDto {
+/** One product of a split, and how many units go to it (plan 0094). */
+export class GeneratedListLineShareDto {
   @ApiProperty({
     format: 'uuid',
     description:
-      'The product to buy instead. Must be one of the line’s own options, which the service checks: the options are the line’s set rather than the whole catalog.',
+      'The product these units go to. Must be one of the line’s own options, and never the product the line already names: that one is the balance.',
   })
   @IsUUID()
   itemId!: string;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'How many units go to this product. Zero is folded out rather than refused, so a screen drawing a stepper per option can send every option it drew.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  quantity!: number;
 }
 
 /**
- * Set one list's contribution to a basket line (plan 0057, section 5).
+ * Give units of a line to other products, which splits the line (plan 0094,
+ * section 2).
+ *
+ * It replaces the pick body, which named one product and moved the whole line to
+ * it. That is this request with one share, and two ways of choosing a product
+ * would be two rules about which product a settlement records.
+ *
+ * **The balance is never typed.** The shares are units for products other than
+ * the line's own, they sum to at most what is outstanding, and whatever is left
+ * stays on the line, which is what makes a stale or hand edited request land
+ * somewhere honest.
+ */
+export class SplitGeneratedListLineDto {
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'The outstanding amount you believed. Refused with a conflict when the line has moved since it was read, so two phones splitting one line cannot double it.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  from!: number;
+
+  @ApiProperty({
+    type: [GeneratedListLineShareDto],
+    maxItems: GENERATED_LIST_LIMITS.maxOptions,
+    description:
+      'Units for products other than the line’s own. One sibling appears under the line per product, and the line keeps its own product and the rest.',
+  })
+  @IsArray()
+  @ArrayMaxSize(GENERATED_LIST_LIMITS.maxOptions)
+  @ValidateNested({ each: true })
+  @Type(() => GeneratedListLineShareDto)
+  shares!: GeneratedListLineShareDto[];
+}
+
+/**
+ * Set one list's contribution to a basket line (plan 0057 section 5, plan 0092
+ * section 4).
  *
  * `listId` and `lineId` name the **zone** line, not the basket line: the basket
  * line is already in the path. They keep the plan's own names here, where the
@@ -104,6 +148,9 @@ export class SetGeneratedListPickDto {
  * **This buys nothing.** The same control one screen up means "bought"; this one
  * means what a household wants, and the response carries neither settlement refs
  * nor a skip report so a client cannot read one into the other.
+ *
+ * **A body without `lineId` sends the line to a list that does not hold it**,
+ * which is the write that replaced plan 0058's bind route (section 4.2).
  */
 export class SetGeneratedListOriginQuantityDto {
   @ApiProperty({
@@ -114,13 +161,14 @@ export class SetGeneratedListOriginQuantityDto {
   @IsUUID()
   listId!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it.',
+      'The zone line: an existing origin of this basket line, or one holding the same thing that is being adopted into it. Leave it out for a list that holds no matching line, and the line is created there through the ordinary add, under that list’s own approval rule.',
   })
+  @IsOptional()
   @IsUUID()
-  lineId!: string;
+  lineId?: string;
 
   @ApiProperty({
     minimum: 0,
@@ -324,29 +372,4 @@ export class SetGeneratedListLineOutstandingDto {
   @Min(0)
   @Max(LINE_QUANTITY_MAX)
   from!: number;
-}
-
-/**
- * Send an added basket line to a shopping list (plan 0058, section 4).
- *
- * `listId` names the **zone** list receiving the line; the basket line is
- * already in the path.
- *
- * **One field, and deliberately no quantity.** What the created line asks for is
- * the basket line's outstanding amount, and the server computes it (section
- * 4.1): a shopper who has already bought three of the four batteries is asking
- * the household for one, and a number here would let a client ask for four.
- *
- * There is no inverse of this request and there is not going to be one. Clearing
- * a target does not delete the line it created (plan 0050, section 5); removing
- * it is done on the target list, by somebody with access, as an ordinary delete.
- */
-export class BindGeneratedListLineDto {
-  @ApiProperty({
-    format: 'uuid',
-    description:
-      'The shopping list to send this line to. Must be one both you and the basket’s owner can write right now: the owner’s access is what authorizes every later settle on it, so a list they cannot write would give the household a line it never sees bought.',
-  })
-  @IsUUID()
-  listId!: string;
 }

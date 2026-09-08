@@ -17,16 +17,17 @@ import type { LineService } from '../lists/line.service';
 import type { ListAccessService } from '../lists/list-access.service';
 import type { ProfileService } from '../profiles/profile.service';
 import { GeneratedListBasketService } from './generated-list-basket.service';
-import { GeneratedListBindService } from './generated-list-bind.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
+import { GeneratedListSplitService } from './generated-list-split.service';
 import { GeneratedListService } from './generated-list.service';
 import type { ZoneLineClaimRef } from './line-claim.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
+import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * A finished basket refuses every write (plan 0059, section 3).
@@ -194,6 +195,9 @@ function build(status: GeneratedListStatus): Harness {
     basketLineViewsFor: async () => [],
   } as unknown as GeneratedListService;
 
+  // Plan 0092's seam, filled by plan 0093. Real rather than stubbed, because a
+  // finished basket must keep its waiting units rather than place them.
+  const waiting = new WaitingSettlementService(claims.service, publisher);
   const lineWrites = new GeneratedListLineService(
     lines as never,
     options as never,
@@ -202,6 +206,7 @@ function build(status: GeneratedListStatus): Harness {
     {} as unknown as LineService,
     claims.service,
     sharing,
+    waiting,
     publisher
   );
   const settle = new GeneratedListSettleService(
@@ -244,14 +249,14 @@ function build(status: GeneratedListStatus): Harness {
     lineWrites,
     publisher
   );
-  const bind = new GeneratedListBindService(
+  const splitWrites = new GeneratedListSplitService(
+    dataSource,
     lists as never,
     lines as never,
+    options as never,
     noRows as never,
     sharing,
     generated,
-    lineWrites,
-    claims.service,
     publisher
   );
   const originWrites = new GeneratedListOriginsService(
@@ -264,7 +269,9 @@ function build(status: GeneratedListStatus): Harness {
     noRows as never,
     sharing,
     generated,
+    lineWrites,
     claims.service,
+    waiting,
     publisher
   );
 
@@ -307,12 +314,15 @@ function build(status: GeneratedListStatus): Harness {
         generatedListId: BASKET,
         lineIds: [LINE],
       }),
-    'swap the product pick': () =>
-      basketWrites.setPick({
+    'split a line by the product that was got': () =>
+      splitWrites.split({
         generatedListId: BASKET,
         lineId: LINE,
         participantId: ACTOR,
-        itemId: ITEM,
+        // The line asks for two and one is settled, so this is the outstanding
+        // amount and the stale guard is not what refuses the request.
+        from: 1,
+        shares: [{ itemId: ITEM, quantity: 1 }],
       }),
     'participant adds a line': () =>
       basketWrites.addLine({
@@ -328,12 +338,17 @@ function build(status: GeneratedListStatus): Harness {
         outstanding: 0,
         from: 1,
       }),
-    'bind an added line to a list': () =>
-      bind.bindLine({
+    // Plan 0092's replacement for plan 0058's bind: raising a list that holds
+    // no matching line is what sends the line there, so it is the same write as
+    // the row below with no zone line named.
+    'send a line to a list that does not hold it': () =>
+      originWrites.setOriginQuantity({
         generatedListId: BASKET,
         lineId: LINE,
         participantId: ACTOR,
-        listId: LIST,
+        sourceListId: LIST,
+        quantity: 1,
+        from: 0,
       }),
     'change what a household asked for': () =>
       originWrites.setOriginQuantity({
@@ -376,6 +391,21 @@ describe('a finished basket refuses every write (section 3)', () => {
       await codeOf(harness.writes[name]());
       expect(harness.events).toEqual([]);
       expect(harness.claims.calls).toEqual([]);
+    });
+
+    it('leaves a purchase with no list where it is (plan 0093, section 3.3)', async () => {
+      // A basket that finishes with waiting units keeps them, attached to no
+      // list. Every write that could create an origin is refused here, and
+      // re-homing happens only inside one of those, so the units stay basket
+      // history: the shopper bought them, nobody was ever told for whom, and the
+      // record says exactly that. Putting them on the last list as extra was the
+      // alternative, and the last list is whichever the shopper happened to
+      // raise last, which is not a fact about who wanted the units.
+      const harness = build(GeneratedListStatus.COMPLETED);
+      await codeOf(harness.writes[name]());
+      // The harness's write repositories throw, so a settlement that moved would
+      // have surfaced as a `threw:` code above rather than as this refusal.
+      expect(await codeOf(harness.writes[name]())).toBe(FINISHED);
     });
 
     it('gets past the status on an ACTIVE basket, so the refusal above was the status', async () => {

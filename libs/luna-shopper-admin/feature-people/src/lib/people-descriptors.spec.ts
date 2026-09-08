@@ -1,5 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { ResourceListStore } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  RESOURCE_GATEWAYS,
+  ResourceListStore,
+  type ResourceSource,
+} from '@portfolio/luna-shopper-admin/data-access';
 import {
   compositeId,
   CONTENT_LOCALES,
@@ -10,6 +14,8 @@ import {
   toInput,
   toRowView,
   type AnyResourceDescriptor,
+  type ResourceGateway,
+  type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { ADMINS, toAdminPage } from './admins';
 import { BASKETS } from './baskets';
@@ -83,6 +89,41 @@ function namedActionsOf(descriptor: AnyResourceDescriptor) {
   return TestBed.runInInjectionContext(
     () => descriptor.actions?.named?.() ?? []
   );
+}
+
+/**
+ * What a descriptor asks the gateway factory for.
+ *
+ * The source is the half of a descriptor no screen reads, and it is where plan
+ * 0017 does its work: a path with no hole in it, no `pathParams`, and a member
+ * path still built from the pair. So it is captured rather than inferred, by
+ * standing in for `RESOURCE_GATEWAYS` and keeping what it was handed.
+ */
+function sourceOf(
+  descriptor: AnyResourceDescriptor
+): ResourceSource<ResourceRow> {
+  let captured: ResourceSource<ResourceRow> | undefined;
+
+  TestBed.configureTestingModule({
+    providers: [
+      {
+        provide: RESOURCE_GATEWAYS,
+        useValue: {
+          for: (source: ResourceSource<ResourceRow>) => {
+            captured = source;
+            return {} as ResourceGateway<ResourceRow>;
+          },
+        },
+      },
+    ],
+  });
+  TestBed.runInInjectionContext(() => descriptor.gateway());
+  TestBed.resetTestingModule();
+
+  if (captured === undefined) {
+    throw new Error('the descriptor asked for no gateway');
+  }
+  return captured;
 }
 
 describe('every people descriptor', () => {
@@ -441,17 +482,48 @@ describe('the admins descriptor', () => {
 });
 
 /**
- * The two nested collections plan 0009 adds.
+ * The two collections plan 0009 adds, and plan 0017 opened.
  *
- * Both hang off a parent, both are addressed by the pair, and both have exactly
- * one field an operator would reach for that turns out to be an act instead.
+ * Each row is addressed by the pair it is keyed on, each has exactly one field
+ * an operator would reach for that turns out to be an act instead, and neither
+ * refuses to draw anything until its parent is named.
  */
 describe('the membership descriptor', () => {
-  it('cannot be read until a zone is named, and says which filter is missing', () => {
-    expect(MEMBERSHIPS.requires).toEqual(['zoneId']);
+  it('reads with no zone named, and offers the zone as a filter', () => {
+    expect(MEMBERSHIPS.requires).toBeUndefined();
     expect(MEMBERSHIPS.filters?.map((filter) => filter.param)).toEqual([
       'zoneId',
     ]);
+  });
+
+  /**
+   * Plan 0017, section 4: the collection is a plain path with a plain query
+   * parameter, so there is nothing for `pathParams` to keep out of the query
+   * string, and nothing for `collectionPath` to refuse to build. One membership
+   * is still under its zone, because there is no flat route to one.
+   */
+  it('lists at a flat path and still opens a row under its zone', () => {
+    const source = sourceOf(MEMBERSHIPS);
+    const [first] = MEMBERSHIP_SEED;
+
+    expect(source.path).toBe('/v1/admin/memberships');
+    expect(source.pathParams).toBeUndefined();
+    expect(source.collectionPath).toBeUndefined();
+    expect(
+      source.memberPath?.(compositeId([first.zoneId, first.membershipId]))
+    ).toBe(`/v1/admin/zones/${first.zoneId}/members/${first.membershipId}`);
+  });
+
+  /**
+   * A username and a role tell two rows apart only inside one household. Across
+   * zones the household is the fact that does, so it is a column and it
+   * survives to a phone.
+   */
+  it('names the household on every row', () => {
+    expect(MEMBERSHIPS.list.columns[0]).toBe('zoneName');
+    expect(MEMBERSHIPS.list.compact).toContain('zoneName');
+    expect(fieldOf(MEMBERSHIPS, 'zoneName')?.editable).toBe(false);
+    expect(MEMBERSHIP_SEED.every((row) => row.zoneName !== '')).toBe(true);
   });
 
   /**
@@ -522,11 +594,31 @@ describe('the membership descriptor', () => {
 });
 
 describe('the list line descriptor', () => {
-  it('cannot be read until a list is named, and says which filter is missing', () => {
-    expect(LIST_LINES.requires).toEqual(['listId']);
+  it('reads with no list named, and offers the list as a filter', () => {
+    expect(LIST_LINES.requires).toBeUndefined();
     expect(LIST_LINES.filters?.map((filter) => filter.param)).toEqual([
       'listId',
     ]);
+  });
+
+  it('lists at a flat path and still opens a row under its list', () => {
+    const source = sourceOf(LIST_LINES);
+    const [first] = LIST_LINE_SEED;
+
+    expect(source.path).toBe('/v1/admin/list-lines');
+    expect(source.pathParams).toBeUndefined();
+    expect(source.collectionPath).toBeUndefined();
+    expect(source.memberPath?.(compositeId([first.listId, first.id]))).toBe(
+      `/v1/admin/lists/${first.listId}/lines/${first.id}`
+    );
+  });
+
+  /** Two lines can say the same thing, and then the list is what tells them apart. */
+  it('names the list on every row', () => {
+    expect(LIST_LINES.list.columns[0]).toBe('listName');
+    expect(LIST_LINES.list.compact).toContain('listName');
+    expect(fieldOf(LIST_LINES, 'listName')?.editable).toBe(false);
+    expect(LIST_LINE_SEED.every((row) => row.listName !== '')).toBe(true);
   });
 
   /**
@@ -648,46 +740,56 @@ describe('what a user form actually submits', () => {
 });
 
 /**
- * Plan 0009, sections 3.2 and 4.2: a nested list with no parent chosen is a
- * **third** state, beside empty and no match.
+ * Plan 0017: a list with no parent chosen is an ordinary list.
  *
- * Asking the gateway anyway would answer 400, and drawing "there is nothing
- * here" would be a claim nobody checked. The store answers neither: it asks for
- * nothing and names the filter that is missing, which is what the screen puts on
- * the page.
+ * The screen used to state a missing filter instead of drawing anything, which
+ * meant an operator had to know the household before they could look for the
+ * person in it. Both lists now open across every parent, and choosing one
+ * narrows them.
  */
-describe('a nested list with no parent chosen', () => {
+describe('a list with no parent chosen', () => {
   const storeFor = (descriptor: AnyResourceDescriptor) =>
     TestBed.runInInjectionContext(
       () => new ResourceListStore(descriptor, descriptor.gateway())
     );
 
-  it('blocks the membership list until a zone is named', async () => {
+  it('lists memberships from every zone, and narrows to one', async () => {
     const store = storeFor(MEMBERSHIPS);
     await store.load();
 
-    expect(store.blocked()).toBe(true);
-    expect(store.missingFilters()).toEqual(['zoneId']);
-    expect(store.rows()).toEqual([]);
-    expect(store.empty()).toBe(false);
+    expect(store.blocked()).toBe(false);
+    expect(store.missingFilters()).toEqual([]);
+    expect(store.rows().length).toBe(MEMBERSHIP_SEED.length);
+    // The fixture spans more than one household, which is what makes the
+    // assertion above mean anything.
+    expect(
+      new Set(MEMBERSHIP_SEED.map((row) => row.zoneId)).size
+    ).toBeGreaterThan(1);
 
     await store.setFilter('zoneId', ZONE_SEED[0].id);
 
-    expect(store.blocked()).toBe(false);
-    expect(store.rows().length).toBeGreaterThan(0);
+    expect(store.rows().length).toBe(
+      MEMBERSHIP_SEED.filter((row) => row.zoneId === ZONE_SEED[0].id).length
+    );
+    expect(store.rows().length).toBeLessThan(MEMBERSHIP_SEED.length);
   });
 
-  it('blocks the line list until a list is named', async () => {
+  it('lists lines from every list, and narrows to one', async () => {
     const store = storeFor(LIST_LINES);
     await store.load();
 
-    expect(store.blocked()).toBe(true);
-    expect(store.missingFilters()).toEqual(['listId']);
-    expect(store.rows()).toEqual([]);
+    expect(store.blocked()).toBe(false);
+    expect(store.missingFilters()).toEqual([]);
+    expect(store.rows().length).toBe(LIST_LINE_SEED.length);
+    expect(
+      new Set(LIST_LINE_SEED.map((row) => row.listId)).size
+    ).toBeGreaterThan(1);
 
     await store.setFilter('listId', LIST_SEED[0].id);
 
-    expect(store.blocked()).toBe(false);
-    expect(store.rows().length).toBeGreaterThan(0);
+    expect(store.rows().length).toBe(
+      LIST_LINE_SEED.filter((row) => row.listId === LIST_SEED[0].id).length
+    );
+    expect(store.rows().length).toBeLessThan(LIST_LINE_SEED.length);
   });
 });

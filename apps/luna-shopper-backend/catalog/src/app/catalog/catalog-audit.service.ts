@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
+import type { AdminActivityEntry } from '@portfolio/luna-shopper/contracts';
 import {
   DataSource,
   type EntityManager,
@@ -82,6 +83,35 @@ export class CatalogAuditService {
     return this.dataSource.transaction((manager) =>
       work(new AuditedWrite(manager, this.dataSource, actor))
     );
+  }
+
+  /**
+   * The newest rows of the trail, newest first (plan 0088, section 4).
+   *
+   * The first thing that ever reads this table, and the only query path into it,
+   * so the rule that the trail is written inside the transaction that changed
+   * the row keeps one owner and so does reading it.
+   *
+   * `before` and `after` are deliberately not returned: they are what a person
+   * investigating one change reads, and a dashboard feed of twenty of them is a
+   * screen nobody asked for.
+   */
+  async recent(limit: number): Promise<AdminActivityEntry[]> {
+    const rows = await this.dataSource.getRepository(CatalogAudit).find({
+      // The id breaks a tie, so a run that wrote many rows in one transaction
+      // comes back in the same order on every poll rather than shuffling.
+      order: { at: 'DESC', id: 'DESC' },
+      take: limit,
+    });
+
+    return rows.map((row) => ({
+      at: row.at.toISOString(),
+      actorKind: row.actorKind,
+      actorId: row.actorId,
+      entity: row.entity,
+      entityId: row.entityId,
+      action: row.action,
+    }));
   }
 }
 

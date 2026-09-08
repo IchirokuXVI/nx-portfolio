@@ -72,6 +72,21 @@ export class RunContext {
   }
 
   /**
+   * Say the run is alive without counting anything.
+   *
+   * An enumerate stage can fetch for many minutes before it has a counter to
+   * add, and a heartbeat that only moves with the counters reads as a stopped
+   * run to the stale reaper, which then marks the run STALE and releases its
+   * lock while the crawl is still working. Throttled exactly like
+   * {@link report}, so a call per row costs one write per interval.
+   */
+  async heartbeat(): Promise<void> {
+    if (this.now() - this.lastFlushAt >= HEARTBEAT_INTERVAL_MS) {
+      await this.flush();
+    }
+  }
+
+  /**
    * Record a decision that was not a write (plan 0081, section 7).
    *
    * Accumulated beside the counters and written by the same flush, so a run that

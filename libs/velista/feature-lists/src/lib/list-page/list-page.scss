@@ -9,11 +9,14 @@
 // the two, `.app-main`'s bottom safe area, which keeps a notched phone from gaining a
 // document scroll the height of its home indicator. Mounted in the shell the percentage
 // does resolve and is already at least this, so the minimum never binds.
+//
+// `svh` and not `dvh`: the app is sized in the small viewport everywhere, and
+// `AppLayout`'s stylesheet says why.
 :host {
   display: flex;
   flex-direction: column;
   block-size: 100%;
-  min-block-size: calc(100dvh - var(--app-safe-bottom));
+  min-block-size: calc(100svh - var(--app-safe-bottom));
 }
 
 // Whether this column is the scroll container depends on where the app is running,

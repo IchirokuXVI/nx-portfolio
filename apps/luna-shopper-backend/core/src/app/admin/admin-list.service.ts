@@ -49,13 +49,22 @@ interface RowCursor {
 }
 
 /**
- * Where a page of lines left off: the household's own order, ties broken by id.
+ * Where a page of lines left off: the list, then the household's own order,
+ * ties broken by id.
  *
  * `position` rather than a timestamp, because that is the order the list means
- * and the order every other view of it uses. It is a number rather than a string,
- * so it is its own field on the cursor rather than reusing {@link RowCursor}.
+ * and the order every other view of it uses. It is a number rather than a
+ * string, so it is its own field on the cursor rather than reusing
+ * {@link RowCursor}.
+ *
+ * The list leads because the collection reads across lists when none is named
+ * (admin plan 0017, section 3.1). A `position` is a place inside one list, so
+ * ordering four lists by it alone would interleave them into an order that
+ * means nothing. Inside one list that first key is constant, so a scoped read
+ * pages exactly as it did before it was there.
  */
 interface LineCursor {
+  list: string;
   position: number;
   id: string;
 }
@@ -209,7 +218,10 @@ export class AdminListService {
       where: { listId: req.listId },
       order: { position: 'ASC', id: 'ASC' },
     });
-    return { ...toListRow(row), lines: lines.map(toLineView) };
+    return {
+      ...toListRow(row),
+      lines: lines.map((line) => toLineView(line, row.name)),
+    };
   }
 
   /**
@@ -248,27 +260,42 @@ export class AdminListService {
   }
 
   /**
-   * A page of one list's lines (plan 0077, section 9).
+   * A page of lines, from one list or from every list (plan 0077, section 9,
+   * widened by admin plan 0017).
    *
-   * The detail read keeps its embedded `lines` array, unchanged. This collection
-   * serves the screen that edits one line, and it pages in the household's own
-   * order rather than by time, because that is the order the line's position
-   * means and the order every other view of the list uses.
+   * The detail read keeps its embedded `lines` array, unchanged. This
+   * collection serves the screen that edits one line, and it pages in the
+   * household's own order rather than by time, because that is the order the
+   * line's position means and the order every other view of the list uses.
+   *
+   * **`listId` is a filter and not an address.** Somebody looking for the lines
+   * one person wrote does not know which lists they are on, so a read with no
+   * list lists every list's, grouped by the list they are on because a
+   * `position` means nothing across lists.
+   *
+   * `requireList` runs only when a list is named, so an unknown list is a 404
+   * and an absent one is not.
    */
   async listLines(req: ListAdminListLinesRequest): Promise<AdminListLinePage> {
     await this.gate.requireAdmin(req);
-    await this.requireList(req.listId);
+    if (req.listId !== undefined) {
+      await this.requireList(req.listId);
+    }
 
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as LineCursor | undefined;
     const qb = this.lines
       .createQueryBuilder('n')
-      .where('n."listId" = :listId', { listId: req.listId })
-      .orderBy('n.position', 'ASC')
+      .orderBy('n."listId"', 'ASC')
+      .addOrderBy('n.position', 'ASC')
       .addOrderBy('n.id', 'ASC')
       .take(limit + 1);
+    if (req.listId !== undefined) {
+      qb.andWhere('n."listId" = :listId', { listId: req.listId });
+    }
     if (cursor) {
-      qb.andWhere('(n.position, n.id) > (:cv, :cid)', {
+      qb.andWhere('(n."listId", n.position, n.id) > (:cl, :cv, :cid)', {
+        cl: cursor.list,
         cv: cursor.position,
         cid: cursor.id,
       });
@@ -278,12 +305,17 @@ export class AdminListService {
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
+    const names = await this.listNames(page.map((row) => row.listId));
 
     return {
-      items: page.map(toLineView),
+      items: page.map((row) => toLineView(row, names.get(row.listId) ?? '')),
       nextCursor:
         hasMore && last
-          ? encodeCursor({ position: last.position, id: last.id })
+          ? encodeCursor({
+              list: last.listId,
+              position: last.position,
+              id: last.id,
+            })
           : null,
     };
   }
@@ -291,7 +323,11 @@ export class AdminListService {
   /** One line, read through its own address (plan 0077, section 9). */
   async getLine(req: GetAdminListLineRequest): Promise<AdminListLineView> {
     await this.gate.requireAdmin(req);
-    return toLineView(await this.requireLine(req.listId, req.lineId));
+    const list = await this.requireList(req.listId);
+    return toLineView(
+      await this.requireLine(req.listId, req.lineId),
+      list.name
+    );
   }
 
   /**
@@ -350,6 +386,27 @@ export class AdminListService {
    * first, and the operator paths skip that by design, so an action on a mistyped
    * id would otherwise report whatever the delegated service happened to say.
    */
+  /**
+   * The names of the lists a page of lines belongs to.
+   *
+   * A second query rather than a join, so the rows stay entities: `position` is
+   * a `double precision` the cursor is built from, and a raw read would hand it
+   * back as whatever the driver made of the column.
+   */
+  private async listNames(listIds: string[]): Promise<Map<string, string>> {
+    const unique = [...new Set(listIds)];
+    if (!unique.length) {
+      return new Map();
+    }
+    const rows = await this.lists
+      .createQueryBuilder('l')
+      .select('l.id', 'id')
+      .addSelect('l.name', 'name')
+      .where('l.id IN (:...ids)', { ids: unique })
+      .getRawMany<{ id: string; name: string }>();
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
   private async requireList(listId: string): Promise<ShoppingList> {
     const list = await this.lists.findOne({ where: { id: listId } });
     if (!list) {
@@ -539,9 +596,11 @@ function toListRow(row: RawListRow): AdminListView {
   };
 }
 
-function toLineView(line: ListLine): AdminListLineView {
+function toLineView(line: ListLine, listName: string): AdminListLineView {
   return {
     id: line.id,
+    listId: line.listId,
+    listName,
     content: line.content,
     quantity: line.quantity,
     approvalStatus: line.approvalStatus,

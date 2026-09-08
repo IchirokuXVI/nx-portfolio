@@ -7,8 +7,8 @@ import { ResourceMemoryGateways } from '../resource/resource-memory';
 import {
   ADMIN_LIST_LINES_PATH,
   ADMIN_LISTS_PATH,
+  ADMIN_MEMBERSHIPS_PATH,
   ADMIN_USERS_PATH,
-  ADMIN_ZONE_MEMBERS_PATH,
   ADMIN_ZONES_PATH,
   LIST_LINE_KEY,
   MEMBERSHIP_KEY,
@@ -150,7 +150,7 @@ export class DirectoryMemory implements DirectoryServiceI {
 
   private _memberships() {
     return this._gateways.for({
-      path: ADMIN_ZONE_MEMBERS_PATH,
+      path: ADMIN_MEMBERSHIPS_PATH,
       key: [...MEMBERSHIP_KEY],
       idField: 'membershipId',
     });
