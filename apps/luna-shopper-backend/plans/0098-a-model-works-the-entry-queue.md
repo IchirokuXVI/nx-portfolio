@@ -1,5 +1,12 @@
 > **PR:** [#287](https://github.com/IchirokuXVI/nx-portfolio/pull/287)
 
+> **Superseded in part.** The single file CLI this plan describes is being split
+> into the curation toolchain: `libs/luna-shopper/curation-suggestions` (the
+> decider), `curation-auth`, and `curation-cli` (the orchestrator), with bulk
+> apply from backend plan 0100. The six rules, the validators, the decision
+> contract and the prompt in this plan remain the reference; the loop, the
+> flags and the dry run semantics do not survive.
+
 # 0098 A model works the entry queue
 
 ## Where this starts
