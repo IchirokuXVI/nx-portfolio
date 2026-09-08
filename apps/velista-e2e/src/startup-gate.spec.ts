@@ -29,8 +29,11 @@ test.describe('the startup gate', () => {
     await expect(create).toHaveAttribute('aria-disabled', 'true');
 
     // Criterion 2: pressing one says why, and creates nothing. `disabled` would have
-    // swallowed the press and said nothing at all (D5).
-    await create.click();
+    // swallowed the press and said nothing at all (D5). Forced, because Playwright's
+    // own actionability check reads `aria-disabled="true"` as not enabled and would
+    // otherwise wait forever for the exact state this screen is in on purpose.
+    // eslint-disable-next-line playwright/no-force-option -- aria-disabled is the state under test
+    await create.click({ force: true });
 
     await expect(page.locator('[role="status"]')).toBeVisible();
     await expect(page).toHaveURL(/\/velista\/en\/?$/);
@@ -39,12 +42,20 @@ test.describe('the startup gate', () => {
   test('holds the outlet closed on every other page', async ({ page }) => {
     await stubBackendUnreachable(page);
 
-    // A group's page, which is not landing and carries no flag, so it waits. The URL
-    // is reached and the locale guard settles it; what is held is only the drawing.
-    await page.goto('/velista/en/zones');
+    // The sign-in page: a real page that is not landing and carries no flag, so it
+    // waits. Its guard reads only the local session store, so the URL is reached and
+    // settled without the backend; what is held is only the drawing. A guarded page
+    // like a group's would not do here (`authenticatedGuard` sends an anonymous
+    // visitor to landing, which draws), and neither would a URL that matches nothing
+    // (the app's 404 hangs outside `AppLayout`, where there is no gate to see).
+    await page.goto('/velista/en/auth/login');
 
-    await expect(page.locator('lib-startup-screen')).toBeVisible();
-    await expect(page.locator('router-outlet')).toHaveCount(0);
+    // The panel inside the screen, because the host element is inline with block
+    // children: its own bounding box is empty, and Playwright reads that as hidden.
+    await expect(page.locator('lib-startup-screen .panel')).toBeVisible();
+    // The outlet inside the layout, not every outlet on the page: the shell and the
+    // app root above the gate keep theirs, held or not.
+    await expect(page.locator('lib-app-layout router-outlet')).toHaveCount(0);
   });
 
   test('lets go as soon as the backend answers, with no reload', async ({
