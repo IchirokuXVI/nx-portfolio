@@ -26,10 +26,20 @@ and returns the minimal decision JSON.
    reports. No free slot stops the run with an error naming the taken slots.
    Slot 0 is never taken: it is the developer's own and usually the main API.
 3. **Bring up only what the rehearsal needs**:
-   `luna-slot --up <n> --services gateway,catalog`, growing the list by `auth`
-   only if the admin login route resolves through the auth service (the
-   implementer verifies this against the gateway module once, and records the
-   answer here). Wait for the slot gateway to answer readiness before step 4.
+   `luna-slot --up <n> --services gateway,auth,catalog`. **The list grew by
+   `auth`, and this is the recorded answer**: `admin-auth.controller.ts` sends
+   `ADMIN_AUTH_PATTERNS.login` over NATS, and the only handler of that pattern
+   is `apps/luna-shopper-backend/auth/src/app/admin/admin.controller.ts`, so a
+   rehearsal without the auth service cannot pass step 4. Wait for the slot
+   gateway to answer `/health/ready` before step 4, because `--up` waits for
+   the port to open, which happens before Nest has finished wiring the broker.
+
+   `--services` used to narrow `--restart` only, and `--up` started all seven
+   whatever it was told. Both twins now honour it on `--up` as well, and both
+   refuse an unknown service name before anything is written or started. The
+   compose stack is still always the whole of it: the databases are cheap
+   beside seven Node processes, and a service started later would otherwise
+   find its own missing.
 4. **Verify both admins before the first model call**, through the decider's
    `start`: main gateway with `--main-user` (default `dev-admin`, empty
    password, overridable), rehearsal gateway with the `dev-admin` that
