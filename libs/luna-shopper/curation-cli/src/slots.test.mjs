@@ -94,7 +94,7 @@ test('the bash twin is asked with the services the rehearsal needs', () => {
   ]);
 });
 
-test('the PowerShell twin is asked on Windows', () => {
+test('Windows is asked in bash too, because the PowerShell twin is gone', () => {
   const { command, args } = lunaSlotCommand('up', {
     platform: 'win32',
     repoRoot: 'D:/repo',
@@ -102,18 +102,14 @@ test('the PowerShell twin is asked on Windows', () => {
     services: ['gateway'],
     timeoutSeconds: 600,
   });
-  assert.equal(command, 'powershell');
+  assert.equal(command, 'bash');
   assert.deepEqual(args, [
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    'D:/repo/k8s/e2e/luna-shopper-backend/luna-slot.ps1',
-    '-Up',
+    'D:/repo/k8s/e2e/luna-shopper-backend/luna-slot.sh',
+    '--up',
     '3',
-    '-Services',
+    '--services',
     'gateway',
-    '-Timeout',
+    '--timeout',
     '600',
   ]);
 });

@@ -1,10 +1,10 @@
 # Running the Angular apps from several worktrees at once
 
-`ng-slot.sh` / `ng-slot.ps1` place a checkout on an isolated **slot** so several
+`ng-slot.sh` places a checkout on an isolated **slot** so several
 worktrees, and therefore several agents, can serve the front end at the same time
 without fighting over ports.
 
-It works the same way as `k8s/e2e/luna-shopper-backend/luna-slot.{sh,ps1}`, in its
+It works the same way as `k8s/e2e/luna-shopper-backend/luna-slot.sh`, in its
 own port band and on its **own independent numbering**. See "which backend" below
 before assuming a front end slot implies a backend slot.
 
@@ -58,22 +58,70 @@ tools/dev/ng-slot.sh --auto          # claim the lowest free slot
 tools/dev/ng-slot.sh --up            # claim one if needed, then serve everything
 tools/dev/ng-slot.sh --up --apps shell,velista
 tools/dev/ng-slot.sh --restart       # bounce apps, keeping the rest serving
-tools/dev/ng-slot.sh --down          # stop what this worktree started
+tools/dev/ng-slot.sh --down          # stop, and give the slot back
+tools/dev/ng-slot.sh --down --keep-slot   # stop, and keep the number
 tools/dev/ng-slot.sh --e2e-env       # this slot's E2E_BASE_URL, as an export
 ```
 
-```powershell
-./tools/dev/ng-slot.ps1 -List
-./tools/dev/ng-slot.ps1 -Up -Apps shell,velista
-./tools/dev/ng-slot.ps1 -Restart -Apps velista
-./tools/dev/ng-slot.ps1 -Down
-./tools/dev/ng-slot.ps1 -E2eEnv
-```
+There is no PowerShell twin. Git Bash is the supported shell on Windows, and this
+script already handles Windows itself, through `taskkill //F //T` and
+`netstat -ano`.
 
 `--up` waits for every app's first build to answer before it returns, so a zero
 exit means the slot is genuinely serving. It refuses to start over a port that is
 already busy rather than half starting the slot. Logs and pids land in
 `tools/dev/.run/`, all git ignored.
+
+## A slot is borrowed, and `--down` gives it back
+
+`--down` stops the apps, strips this slot's derived keys out of the `.env` files
+this script owns, and deletes the claim. The number is then free for anybody.
+
+Two consequences worth knowing before you rely on one:
+
+- **`--up` afterwards can return a different number**, because another worktree
+  can take yours in between. Do not depend on getting the same slot back. When
+  the number matters, `--restart` bounces without releasing, and
+  `--down --keep-slot` stops everything and holds the number.
+- **Slot 0 always behaves as though `--keep-slot` were given**, whether or not it
+  was. Slot 0 is the developer's own, nothing takes it, and there is nothing to
+  give back.
+
+The `.env` files are not deleted. Only the lines that point at a slot this
+worktree no longer holds are removed, and the next `--up` puts them back.
+
+There is no `--keep-data` here, because the front end has no data. `--keep-slot`
+is what holds a front end slot, and a claim is already enough to make `--auto`
+skip it.
+
+## A re-run never overwrites what you edited
+
+Every `.env` this script writes is a file somebody may have edited by hand, so
+only the keys the **slot** decides are rewritten. `DERIVED_KEYS`, at the top of
+`ng-slot.sh`, names them, and the rule is:
+
+| the key is                     | the result                     |
+| ------------------------------ | ------------------------------ |
+| in `DERIVED_KEYS`              | the freshly computed value     |
+| present in the file on disk    | the value on disk, verbatim    |
+| absent from the file on disk   | the template default, inserted |
+
+A key on disk that the script does not write is kept too, appended under a marked
+comment. **A blank value is a value**: `SOMETHING=` present and empty is a
+decision, so only a key that is genuinely absent takes the template default.
+
+`--reset-env` puts every non-derived key back to its shipped default, for the
+first time a preserved value is the thing that broke the stack.
+`--reset-env --keep-env A,B` spares the named ones. `--keep-env` on its own is an
+error rather than a silent no-op.
+
+**A new slot dependent key belongs in `DERIVED_KEYS`.** The list is inclusive, so
+a key nobody classified is preserved rather than recomputed, and it would keep a
+stale port. The net under that is a warning: after each merge the script scans the
+preserved values for a port in the 42000 or 43000 band that is not this slot's,
+names the file and the key, and changes nothing. It changes nothing because
+pointing a key at another slot on purpose is legitimate, and no script can tell
+that apart from a forgotten one.
 
 ## Running an e2e suite against a slot
 
@@ -87,11 +135,6 @@ typed by hand:
 eval "$(tools/dev/ng-slot.sh --e2e-env)"
 npx nx e2e velista-e2e
 npx nx e2e damoclesSword-e2e
-```
-
-```powershell
-Invoke-Expression (./tools/dev/ng-slot.ps1 -E2eEnv)
-npx nx e2e velista-e2e
 ```
 
 **One origin covers all four suites.** Each one drives its app _through the shell_

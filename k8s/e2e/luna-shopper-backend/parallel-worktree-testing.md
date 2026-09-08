@@ -115,7 +115,7 @@ reads the slot each one claims out of its own `.env.slot`, and then probes the
 ports to say whether anything is actually answering:
 
 ```sh
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list   # or: ...luna-slot.ps1 -List
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
 ```
 
 ```
@@ -136,7 +136,7 @@ all of it: write the `.env` files, bring the compose stack up and wait on its
 healthchecks, run every migration, then serve all seven services.
 
 ```sh
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1   # or: ...luna-slot.ps1 -Up 1
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1
 ```
 
 Leave the number off and it takes the lowest free slot, so an agent that has just
@@ -155,7 +155,97 @@ to stop the containers instead and keep the databases.
 
 ```sh
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down --keep-slot   # ...keep the number
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down --keep-data   # ...keep the databases
 ```
+
+### `--down` gives the slot back
+
+It also **releases the claim**: it strips this slot's derived keys out of the
+`.env` files it owns and deletes `.env.slot`, so the number is free for anybody.
+
+Two consequences worth knowing before you rely on one:
+
+- **`--up` afterwards can return a different number**, because another worktree
+  can take yours in between. Do not depend on getting the same slot back. When
+  the number matters, `--restart` bounces without releasing, and
+  `--down --keep-slot` stops everything and holds the number.
+- **The four `.env.test` files hold nothing but a derived connection string.**
+  After a releasing `--down` they are comments and no value, so a `LUNA_ENV=test`
+  db target fails with a missing connection string until the next `--up`. That is
+  the correct failure. The alternative is a test run against another worktree's
+  database.
+
+**Slot 0 always behaves as though `--keep-slot` were given**, whether or not it
+was: slot 0 is the developer's own, nothing takes it, and there is nothing to give
+back.
+
+The `.env` files themselves are not deleted. Only the lines that point at a slot
+this worktree no longer holds are removed, and the next `--up` puts them back.
+
+### `--keep-data` locks the slot
+
+The volumes it keeps outlive the claim, so once `--down` releases the number
+`--auto` would hand those databases to the next worktree that asks, with nothing
+telling it they are there. So `--keep-data` writes a **lock**.
+
+A lock and a claim are different things and are independent. A claim says a
+worktree is configured for this slot. A lock says data on this slot is being kept
+on purpose. A slot can be locked and claimed at once, which is exactly what
+`--down --keep-data --keep-slot` produces.
+
+The only thing a lock changes is `--auto`, which skips a locked slot. Everything
+else ignores it.
+
+- **Naming the number takes it.** `--up <n>` on a locked slot warns, names the
+  volumes it found, proceeds, and clears the lock. It does not refuse, because
+  inheriting those databases is the point of the mechanism: the lock exists so
+  nobody takes them **by accident**, through `--auto`. Typing the number is the
+  confirmation.
+- **`--unlock [<n>]` drops a lock and touches nothing else.** With no number it
+  means this worktree's slot. Without it, a lock ends only when somebody brings
+  that slot up, so a lock nobody wants any more removes a slot from `--auto`
+  permanently.
+
+The locks live in the main `.git` directory, one file per locked slot, because a
+lock has to outlive the descriptor that `--down` deletes and the worktree that
+gets removed when a task ends. The volumes outlive both. `--list` names the
+worktree holding each lock and the date it was written.
+
+`ng-slot.sh` has no `--keep-data`, because the front end has no data.
+
+### A re-run never overwrites what you edited
+
+Every `.env` this script writes is a file somebody may have edited by hand: a
+pasted `GEMINI_API_KEY`, a `HARVEST_ENABLED` flipped on for a crawl, a
+`MERCADONA_BASE_URL` pointed at a local recording. Those are exactly the values
+nobody can regenerate, so only the keys the **slot** decides are rewritten.
+`DERIVED_KEYS`, at the top of `luna-slot.sh`, names them per file, and the rule is:
+
+| the key is                     | the result                     |
+| ------------------------------ | ------------------------------ |
+| in `DERIVED_KEYS`              | the freshly computed value     |
+| present in the file on disk    | the value on disk, verbatim    |
+| absent from the file on disk   | the template default, inserted |
+
+A key on disk that the script does not write is kept too, appended under a marked
+comment. **A blank value is a value**: `GEMINI_API_KEY=` present and empty means
+"use no key, answer 501, and do not ask me again", so only a key that is genuinely
+absent takes the template default.
+
+`--reset-env` puts every non-derived key back to its shipped default, for the
+first time a preserved value is the thing that broke the stack.
+`--reset-env --keep-env GEMINI_API_KEY` spares the named ones. `--keep-env` on its
+own is an error rather than a silent no-op.
+
+**A new slot dependent key belongs in `DERIVED_KEYS`.** The list is inclusive, so
+a key nobody classified is preserved rather than recomputed, and it would keep a
+stale port. A stale port is the worst failure this area has: a service pointed at
+another worktree's database, which looks like working software until the data is
+wrong. The net under that is a warning, printed after each merge when a preserved
+value names a port in the 42000 or 43000 band that is not this slot's. It names
+the file and the key and changes nothing, because pointing a key at another slot
+on purpose is legitimate and no script can tell that apart from a forgotten one.
 
 ### Editing code: you do not restart anything
 
@@ -189,7 +279,7 @@ The steps are still available one at a time, and `--up` is exactly their sum:
 
 ```sh
 # just write .env.slot (compose) + every service .env, and a dev JWT keypair if absent
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh 1        # or: ...luna-slot.ps1 1
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh 1
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --auto   # ...or the lowest free one
 
 # bring up this slot's isolated infra (own containers + volumes)
@@ -202,13 +292,18 @@ npx nx run luna-shopper-backend-core:migration:run
 npx nx serve luna-shopper-backend-gateway     # + realtime / auth / core / catalog
 ```
 
-`luna-slot.{sh,ps1}` is idempotent: re-run it with the same N to refresh the
-files, or a different N to move the worktree to another slot. Everything it
+`luna-slot.sh` is idempotent: re-run it with the same N to refresh the files, or
+a different N to move the worktree to another slot. A re-run keeps every value
+it did not derive from the slot, so a hand edit survives both. Everything it
 writes is git ignored, so it never shows up in a diff or a commit.
+
+There is no PowerShell twin. Git Bash is the supported shell on Windows, and the
+script already handles Windows itself, through `taskkill //F //T` and
+`netstat -ano`.
 
 ## The front end slots are a separate numbering
 
-`tools/dev/ng-slot.{sh,ps1}` does all of this for the Angular apps with the same
+`tools/dev/ng-slot.sh` does all of this for the Angular apps with the same
 arithmetic, but **the two numbers are independent and must not be assumed equal**.
 A front end on slot 5 may point at a backend on slot 1, or 2, or 8, and **several
 front end slots may point at one backend at the same time**. That last case is the
@@ -269,7 +364,7 @@ docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
   -f k8s/e2e/luna-shopper-backend/compose.yml up -d
 ```
 
-`luna-slot.{sh,ps1}` already wrote `OTEL_ENABLED=true` and this slot's collector
+`luna-slot.sh` already wrote `OTEL_ENABLED=true` and this slot's collector
 endpoint into **each service's own `.env`**, so the services export as soon as
 they restart. The per service file is not a style choice: the OpenTelemetry SDK
 starts before Nest and reads `process.env`, Nx loads `{projectRoot}/.env` into a

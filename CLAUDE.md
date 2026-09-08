@@ -83,8 +83,17 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up   # compose + migrations + s
 tools/dev/ng-slot.sh --restart --apps velista
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services gateway
 
+# give the slot back when you are finished with it
 tools/dev/ng-slot.sh --down
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
+
+# ...or stop everything and keep the number
+tools/dev/ng-slot.sh --down --keep-slot
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down --keep-slot
+
+# keep this slot's databases, which also locks the slot against --auto
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down --keep-data
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --unlock 3   # ...and release it later
 ```
 
 **Check first, then claim, and bring instances up only through these scripts.** `--list` reads every worktree's claim and probes the ports, so it is the one accurate answer to what is already running; run it before taking a slot, and let `--up` with no number take the lowest free one. A hand rolled `nx serve` or `docker compose up` writes no claim and no per slot `.env`, so it collides with slot 0, which is the developer's own.
@@ -93,7 +102,11 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
 
 **Editing code needs none of those.** Everything is served with watch on, and each app or service watches its own sources _and_ the libraries it consumes, so a change recompiles and reloads by itself; only the app you edited rebuilds. The one thing a running process cannot pick up is a rewritten `.env` (a slot move, `--backend-slot`, `--app-slot`), because Nx loads `{projectRoot}/.env` when it starts the task and webpack reads its values once — and the rewrite _does_ trigger a rebuild that silently keeps the old values, so nothing looks wrong. That case is `--restart`. Use `--down` when you are finished with a slot, not to check your work.
 
-Both have `.ps1` twins with `-List` / `-Up` / `-Restart` / `-Down`. Everything they write is git ignored and per worktree. **Do not add a port override to a `project.json` to work around a collision**: use a slot. See `tools/dev/README.md` for why the remote ports cannot come from the project graph, and `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md` for the backend half.
+**A slot is borrowed, and `--down` gives it back.** It stops the processes, strips this slot's derived keys out of the `.env` files it owns, and deletes the claim, so `--up` afterwards can hand you a **different** number. Pass `--keep-slot` when you were told to use a specific slot, or when the number has to survive for any other reason; `--restart` bounces without releasing. On `luna-slot.sh`, `--down --keep-data` keeps this slot's databases and **locks** the slot, so `--auto` will not hand them to anybody else: take it back by naming the number, or clear the lock with `--unlock <n>`. `ng-slot.sh` has no `--keep-data`, because the front end has no data.
+
+**A re-run never overwrites what you edited.** Only the keys the slot decides are rewritten (each script's `DERIVED_KEYS` names them), so a pasted `GEMINI_API_KEY`, a `HARVEST_ENABLED` flipped on for a crawl, or a base URL pointed at a local recording all survive a re-run and a slot move, and a key that is blank on purpose stays blank. `--reset-env` puts the rest back to the shipped defaults, and `--reset-env --keep-env A,B` spares the named ones. A new slot dependent key belongs in `DERIVED_KEYS`, or it will be preserved stale; the script warns when a preserved value names a port that is not this slot's.
+
+There are no `.ps1` twins any more: Git Bash is the supported shell on Windows. Everything the scripts write is git ignored and per worktree. **Do not add a port override to a `project.json` to work around a collision**: use a slot. See `tools/dev/README.md` for why the remote ports cannot come from the project graph, and `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md` for the backend half.
 
 ## Architecture
 
