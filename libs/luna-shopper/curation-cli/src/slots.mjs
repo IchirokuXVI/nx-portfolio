@@ -46,14 +46,13 @@ const CATALOG_DB_USER = 'luna_catalog';
 const CATALOG_DB_NAME = 'luna_catalog';
 
 const SH_PATH = 'k8s/e2e/luna-shopper-backend/luna-slot.sh';
-const PS1_PATH = 'k8s/e2e/luna-shopper-backend/luna-slot.ps1';
 const SLOT_ENV_PATH = 'k8s/e2e/luna-shopper-backend/.env.slot';
 
 /**
  * One data row of the `--list` table.
  *
- * Both twins print the same fixed width table: two leading spaces, the slot
- * number, the compose project, then four `open/total` counts. The header row
+ * The table is fixed width: two leading spaces, the slot number, the compose
+ * project, then four `open/total` counts. The header row
  * says `SLOT` rather than a number and the notes below the table never start
  * with a number, so anchoring on "digits, a project name, a count" reads the
  * body and nothing else.
@@ -101,7 +100,7 @@ export function pickFreeSlot(taken, { min = MIN_SLOT, max = MAX_SLOT } = {}) {
   );
 }
 
-/** The compose project of a slot, named the same way both twins name it. */
+/** The compose project of a slot, named the same way luna-slot names it. */
 export function slotProject(slot) {
   return slot === 0 ? 'luna-shopper-backend' : `luna-slot${slot}`;
 }
@@ -119,40 +118,20 @@ export function rehearsalUrl(slot) {
 }
 
 /**
- * The command that runs a `luna-slot` verb on this platform.
+ * The command that runs a `luna-slot` verb.
  *
- * Windows gets the PowerShell twin and everything else gets the bash one. The
- * two scripts write the same files and print the same table, so which one runs
- * changes nothing above this function.
+ * Always bash, on every platform. The PowerShell twin was deleted with
+ * `tools/dev/plans/0003`: Git Bash is the supported shell on Windows, and the
+ * bash script already handles Windows itself, through `taskkill //F //T` and
+ * `netstat -ano`.
+ *
+ * `platform` is still accepted, and ignored, so no caller has to change.
  */
 export function lunaSlotCommand(
   verb,
-  { platform, repoRoot, slot, services, timeoutSeconds }
+  { repoRoot, slot, services, timeoutSeconds }
 ) {
-  const windows = platform === 'win32';
-  const script = `${repoRoot}/${windows ? PS1_PATH : SH_PATH}`;
-
-  if (windows) {
-    const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script];
-    if (verb === 'list') {
-      args.push('-List');
-    } else if (verb === 'up') {
-      args.push('-Up', String(slot));
-    } else if (verb === 'down') {
-      args.push('-Down');
-    } else {
-      args.push(String(slot));
-    }
-    if (services && services.length) {
-      args.push('-Services', services.join(','));
-    }
-    if (timeoutSeconds) {
-      args.push('-Timeout', String(timeoutSeconds));
-    }
-    return { command: 'powershell', args };
-  }
-
-  const args = [script];
+  const args = [`${repoRoot}/${SH_PATH}`];
   if (verb === 'list') {
     args.push('--list');
   } else if (verb === 'up') {

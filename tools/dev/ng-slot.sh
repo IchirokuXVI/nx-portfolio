@@ -16,9 +16,22 @@
 #   tools/dev/ng-slot.sh --auto          configure it for the lowest free slot
 #   tools/dev/ng-slot.sh --up [<slot>]   configure if needed, then serve
 #   tools/dev/ng-slot.sh --restart       bounce the running apps, keeping the slot
-#   tools/dev/ng-slot.sh --down          stop what this worktree started
+#   tools/dev/ng-slot.sh --down          stop, and give the slot back
 #   tools/dev/ng-slot.sh --list          every worktree's slot, and what is live
 #   tools/dev/ng-slot.sh --e2e-env       print this slot's E2E_BASE_URL export
+#
+# --- a slot is borrowed, and an .env is yours --------------------------------
+#
+# --down gives the slot back: it stops the apps, strips this slot's derived keys
+# out of the .env files it owns, and deletes the claim. So --up afterwards can
+# return a DIFFERENT number, because another worktree may have taken yours in
+# between. --restart bounces without releasing, and --down --keep-slot stops
+# everything and holds the number.
+#
+# Nothing else in those files is touched, on any run. A GEMINI_API_KEY pasted in
+# by hand, a switch flipped for one experiment, a base URL pointed at a local
+# recording: only the keys this script DERIVES from the slot are rewritten, and
+# everything else is kept exactly as it is on disk. See DERIVED_KEYS.
 #
 # --- you almost never need to stop anything ----------------------------------
 #
@@ -177,6 +190,179 @@ MIN_AUTO_SLOT=1
 # `detect_backend_slot`, not a coupling to this slot's number.
 DEFAULT_BACKEND_SLOT=0
 
+# --- what a re-run is allowed to rewrite -------------------------------------
+#
+# Every .env below is rendered from a heredoc in write_config, and every one of
+# them is a file somebody may have edited by hand. Writing it with `cat >` throws
+# that edit away, which is how a pasted key or a flipped switch disappears the
+# moment anybody moves a slot. So the rendered text goes through merge_env on its
+# way to disk instead, and only the keys the SLOT decides are rewritten.
+#
+# DERIVED_KEYS is that set, per file. A new slot dependent key must be added
+# here. The list is INCLUSIVE, never an exception list: an exception list defaults
+# to rewriting, so a key nobody classified stays correct, while this defaults to
+# preserving, so a key nobody classified keeps a stale value. warn_foreign_ports
+# is the net under that, and it is the reason the trade is acceptable.
+#
+# The descriptor, tools/dev/.env.ng-slot, is the exception to all of it: it is
+# this script's own bookkeeping, every value in it is derived, and the one choice
+# it carries across a re-run (NG_BACKEND_SLOT) already has a function that reads
+# it back. It is generated whole, with no merge.
+declare -A DERIVED_KEYS=(
+  [shell]='MFE_REMOTE_URLS'
+  [velista]='LUNA_GATEWAY_URL LUNA_REALTIME_URL'
+  [luna-shopper-admin]='LUNA_GATEWAY_URL'
+)
+
+# How this run treats the keys it does not derive.
+#
+#   ''      keep whatever is on disk. The default.
+#   reset   put them back to the template default, except those named in
+#           KEEP_ENV. --reset-env, for when a preserved value is the thing that
+#           broke the stack.
+#   strip   leave the derived keys out of the file altogether and keep the rest.
+#           What a releasing --down writes: the file survives with its hand edits
+#           in it, and nothing left in it points at a slot this worktree has
+#           given back.
+MERGE_MODE=''
+KEEP_ENV=''
+
+# Every port this slot may legitimately name, the backend it talks to included.
+# write_config fills it; warn_foreign_ports reads it.
+ALLOWED_PORTS=''
+
+# Merge the rendered template on stdin into $1, which need not exist yet. $2 is
+# the space separated list of keys this slot decides.
+#
+#   the key is                     the result
+#   -----------------------------  ------------------------------
+#   in $2                          the freshly computed value
+#   present in the file on disk    the value on disk, verbatim
+#   absent from the file on disk   the template default, inserted
+#
+# A key on disk that the template does not name is kept, appended under a marked
+# comment.
+#
+# A BLANK VALUE IS A VALUE. `LUNA_GATEWAY_URL=` present and empty is a decision,
+# so only a key that is genuinely ABSENT takes the template default. Treating
+# blank as absent overwrites that decision on every run, which is the defect this
+# whole mechanism exists to fix.
+#
+# Parsing rules, stated because each one is a way to be silently wrong:
+#
+#   - only an uncommented `^[A-Za-z_][A-Za-z0-9_]*=` line counts as a key, so
+#     `# LUNA_GATEWAY_URL=x` is a comment and that key is absent
+#   - the value is the rest of the line, verbatim, so quotes and a `#` inside a
+#     value survive
+#   - a key that appears twice keeps its FIRST value, which is what dotenv does
+#     when it reads the same file
+#   - multi line values are not supported. No file this script writes has one.
+merge_env() {
+  local target="$1" derived="${2:-}"
+
+  local disk="$target"
+  [[ -f "$disk" ]] || disk='/dev/null'
+
+  # Beside the target rather than in /tmp, so the rename is on one filesystem and
+  # a half written file can never be what a service reads.
+  local tmp="$target.ng-slot.tmp"
+
+  awk -v derived="$derived" -v keep="$KEEP_ENV" -v mode="$MERGE_MODE" '
+    BEGIN {
+      n = split(derived, a, /[ ,]+/)
+      for (i = 1; i <= n; i++) if (a[i] != "") is_derived[a[i]] = 1
+      n = split(keep, b, /[ ,]+/)
+      for (i = 1; i <= n; i++) if (b[i] != "") is_kept[b[i]] = 1
+    }
+
+    # Pass one: the file already on disk.
+    #
+    # Selected on FILENAME rather than the usual `FNR == NR`, because the file
+    # very often does not exist and /dev/null takes its place. With an empty first
+    # input FNR == NR stays true right through the second one, so the whole
+    # template is read as though it were already on disk and nothing is printed at
+    # all. The template is the only input given as `-`.
+    FILENAME != "-" {
+      if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+        eq = index($0, "=")
+        key = substr($0, 1, eq - 1)
+        if (!(key in on_disk)) {
+          on_disk[key] = substr($0, eq + 1)
+          order[++count] = key
+        }
+      }
+      next
+    }
+
+    # Pass two: the freshly rendered template. Its comments and blank lines are
+    # what the file looks like, so they are printed unconditionally.
+    {
+      if ($0 !~ /^[A-Za-z_][A-Za-z0-9_]*=/) { print; next }
+      eq = index($0, "=")
+      key = substr($0, 1, eq - 1)
+      in_template[key] = 1
+
+      if (key in is_derived) {
+        if (mode == "strip") next
+        print
+        next
+      }
+      if (mode == "reset" && !(key in is_kept)) { print; next }
+      if (key in on_disk) { print key "=" on_disk[key]; next }
+      print
+    }
+
+    END {
+      # A key on disk the template does not name is somebody addition, or a key
+      # this script used to write. Keeping it is the point; saying where it came
+      # from stops the next reader taking it for generated output.
+      for (i = 1; i <= count; i++) {
+        key = order[i]
+        if (key in in_template) continue
+        if (!said) {
+          print ""
+          print "# --- kept from the file that was here: keys this script does not write ---"
+          said = 1
+        }
+        print key "=" on_disk[key]
+      }
+    }
+  ' "$disk" - > "$tmp"
+
+  mv -f "$tmp" "$target"
+  warn_foreign_ports "$target" "$derived"
+}
+
+# The net under the inclusive DERIVED_KEYS list.
+#
+# A slot dependent key nobody added to that list keeps a stale port, and a stale
+# port is the worst failure this area has: an app pointed at another worktree's
+# backend, which looks like working software until the data is wrong. This turns
+# it into one line of output.
+#
+# It changes nothing. `LUNA_GATEWAY_URL=http://localhost:43100` is a legitimate
+# hand edit when somebody is aiming at a particular backend on purpose, and no
+# script can tell that apart from a forgotten key.
+warn_foreign_ports() {
+  local file="$1" derived="${2:-}"
+  [[ -f "$file" ]] || return 0
+
+  local line key value port
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+    key="${line%%=*}"
+    [[ " $derived " == *" $key "* ]] && continue
+    value="${line#*=}"
+    while IFS= read -r port; do
+      [[ -n "$port" ]] || continue
+      [[ " $ALLOWED_PORTS " == *" $port "* ]] && continue
+      echo "  WARNING: ${file#"$root/"} keeps ${key}, which names port ${port}." >&2
+      echo "           That is not this slot's. Either somebody meant it, or the" >&2
+      echo "           key belongs in DERIVED_KEYS. Nothing was changed." >&2
+    done < <(printf '%s\n' "$value" | grep -oE '\b4[23][0-9]{3}\b' | sort -u || true)
+  done < "$file"
+}
+
 usage() {
   cat >&2 <<'EOF'
 usage:
@@ -184,7 +370,7 @@ usage:
   ng-slot.sh --auto [--backend-slot <n>]   configure it for the lowest free slot
   ng-slot.sh --up [<slot>] [--apps a,b]    configure if needed, then serve
   ng-slot.sh --restart [--apps a,b]        bounce apps, keeping the rest serving
-  ng-slot.sh --down                        stop what this worktree started
+  ng-slot.sh --down [--keep-slot]          stop, and give the slot back
   ng-slot.sh --list                        every worktree's slot, and what is live
   ng-slot.sh --e2e-env                     print this slot's E2E_BASE_URL export
 
@@ -201,6 +387,17 @@ options:
   --apps a,b,c        limit --up or --restart to these apps
                       (--up default: all five; --restart default: whatever of
                       this slot is currently running)
+  --keep-slot         with --down: stop the apps but keep the claim and every
+                      value, so a plain `npx nx serve velista` still works and
+                      --up gets this same number back. Without it, --down gives
+                      the slot back and --up may hand you a different one.
+                      Slot 0 always behaves this way; nothing takes it.
+  --reset-env         put every key this script does not derive back to its
+                      shipped default. Preservation is what makes a hand edit
+                      survive a re-run, and this is the repair for the first time
+                      a preserved value is the thing that broke the stack.
+  --keep-env A,B      with --reset-env, leave these keys alone. An error on its
+                      own: with nothing being reset there is nothing to keep.
   --backend-slot <n>  which luna-shopper slot velista should talk to. It is NOT
                       this slot's number: the two numberings are independent, and
                       one backend can serve every front end slot at once. Left
@@ -211,6 +408,10 @@ options:
                         4. backend slot 0 if it is listening
                         5. backend slot 0 anyway, with a note
   --timeout <secs>    how long --up waits for each app to answer (default 300)
+
+There is no --keep-data here, because the front end has no data. --keep-slot is
+what holds a front end slot, and a claim is already enough to make --auto skip
+it. The lock --keep-data writes on the backend has no counterpart on this side.
 EOF
 }
 
@@ -390,8 +591,18 @@ write_config() {
   gateway_port=$(backend_port gateway "$backend_slot")
   realtime_port=$(backend_port realtime "$backend_slot")
 
+  # What warn_foreign_ports will accept in a preserved value: every port of this
+  # slot, plus the two the backend this slot points at listens on. Those two are
+  # a different numbering (see detect_backend_slot), so they have to be added
+  # rather than derived from this slot's number.
+  ALLOWED_PORTS="$(slot_ports "$slot" | tr '\n' ' ')${gateway_port} ${realtime_port}"
+
   mkdir -p "$RUN_DIR"
 
+  # The descriptor is generated whole, with no merge: it is this script's own
+  # bookkeeping and every value in it is derived. A releasing --down is about to
+  # delete it, so strip mode does not write it at all.
+  if [[ "$MERGE_MODE" != 'strip' ]]; then
   cat > "$SLOT_ENV" <<EOF
 # Generated by ng-slot.sh for slot ${slot}. Git ignored.
 # This file is what makes the slot durable: --up, --down and every other
@@ -413,13 +624,14 @@ NG_LUNA_SHOPPER_ADMIN_URL=http://localhost:${admin_port}
 # --e2e-env, which prints it as an export for \`eval\`.
 E2E_BASE_URL=http://localhost:${shell_port}
 EOF
+  fi
 
   # The shell resolves its remotes at build time (apps/shell/remote-urls.ts), and
   # already reads this variable in the dev config, so moving the remotes needs no
   # change to the shell at all. Every remote is named explicitly rather than left
   # to fall back, because a name absent from the map keeps the port the project
   # graph gave it, which on any slot but 0 is another worktree's.
-  cat > "$root/apps/shell/.env" <<EOF
+  merge_env "$root/apps/shell/.env" "${DERIVED_KEYS[shell]}" <<EOF
 # Generated by ng-slot.sh (slot ${slot}). Git ignored.
 # Nx loads {projectRoot}/.env into this project's tasks, so \`nx serve shell\`
 # picks this up with nothing exported by the caller.
@@ -430,7 +642,7 @@ EOF
   # so they are the two this half of the slot reaches. The backend they name is a
   # separate number (see detect_backend_slot): one backend commonly serves several
   # front end slots, and its CORS list allows every one of them.
-  cat > "$root/apps/velista/.env" <<EOF
+  merge_env "$root/apps/velista/.env" "${DERIVED_KEYS[velista]}" <<EOF
 # Generated by ng-slot.sh (slot ${slot}, luna-shopper slot ${backend_slot}). Git ignored.
 # Read by apps/velista/webpack.config.ts and substituted into environment.ts at
 # compile time, the same way webpack.prod.config.ts supplies the deployed hosts.
@@ -440,12 +652,16 @@ EOF
 
   # The back office reaches the same gateway on different routes, and no realtime
   # service at all: it polls and never subscribes (its plan 0001, section 4).
-  cat > "$root/apps/luna-shopper-admin/.env" <<EOF
+  merge_env "$root/apps/luna-shopper-admin/.env" "${DERIVED_KEYS[luna-shopper-admin]}" <<EOF
 # Generated by ng-slot.sh (slot ${slot}, luna-shopper slot ${backend_slot}). Git ignored.
 # Read by apps/luna-shopper-admin/webpack.config.ts and substituted into
 # environment.ts at compile time.
 LUNA_GATEWAY_URL=http://localhost:${gateway_port}
 EOF
+
+  # A releasing --down renders these same templates to strip the derived keys out
+  # of them, and has nothing to announce: the slot is being given back, not taken.
+  [[ "$MERGE_MODE" == 'strip' ]] && return 0
 
   cat <<EOF
 
@@ -478,16 +694,25 @@ find_free_slot() {
     [[ -n "$wt" ]] || continue
     [[ "$(cd "$wt" 2>/dev/null && pwd)" == "$self" ]] && continue
     s="$(slot_of_worktree "$wt")"
-    [[ -n "$s" ]] && claimed[$s]=1
+    [[ -n "$s" ]] && claimed[$s]="$wt"
   done < <(worktree_paths)
 
-  local slot ports state busy
+  # Why each slot was passed over, kept so that running out can say so. The two
+  # causes have different fixes, and one message for both is not enough.
+  local -A why=()
+  local slot ports port state busy
   for (( slot = MIN_AUTO_SLOT; slot <= MAX_SLOT; slot++ )); do
-    [[ -n "${claimed[$slot]:-}" ]] && continue
+    if [[ -n "${claimed[$slot]:-}" ]]; then
+      why[$slot]="claimed by ${claimed[$slot]}"
+      continue
+    fi
     mapfile -t ports < <(slot_ports "$slot")
     busy=0
-    while IFS=$'\t' read -r _ state; do
-      [[ "$state" == "closed" ]] || busy=1
+    while IFS=$'\t' read -r port state; do
+      if [[ "$state" != "closed" ]]; then
+        (( busy )) || why[$slot]="port ${port} is ${state}, and no checkout of this repository claims it"
+        busy=1
+      fi
     done < <(probe_ports "${ports[@]}")
     if (( ! busy )); then
       echo "$slot"
@@ -495,8 +720,21 @@ find_free_slot() {
     fi
   done
 
-  echo "no free Angular slot in ${MIN_AUTO_SLOT}..${MAX_SLOT}: every one is claimed by another worktree or has something listening on it" >&2
+  echo "no free Angular slot in ${MIN_AUTO_SLOT}..${MAX_SLOT}. Every one, and why:" >&2
+  for (( slot = MIN_AUTO_SLOT; slot <= MAX_SLOT; slot++ )); do
+    printf '  %-2s %s\n' "$slot" "${why[$slot]:-unavailable}" >&2
+  done
   echo "(slot 0 is the developer's own, and --auto never takes it)" >&2
+  echo >&2
+  echo "The two causes have different fixes:" >&2
+  echo "  claimed    that worktree still holds the number. --down in it gives the slot" >&2
+  echo "             back now; --down --keep-slot is what holds one on purpose." >&2
+  echo "  listening  something outside this repository has the port, so no --down" >&2
+  echo "             anywhere will free it." >&2
+  echo >&2
+  echo "STOP HERE AND ASK THE USER which slot to take. Do not improvise a port: a port" >&2
+  echo "outside the band is a collision with the software this scheme was moved away" >&2
+  echo "from, and it will not be found by --list." >&2
   return 1
 }
 
@@ -571,6 +809,19 @@ wait_for_ports() {
 
 up() {
   local requested_slot="$1" backend_slot="$2" apps_csv="$3" timeout="$4"
+
+  # --auto in a worktree that already holds a claim keeps that number rather than
+  # taking a fresh one. Taking a fresh one abandons whatever is still running on
+  # the old number, which is what stopped `--up --auto` being the one command an
+  # agent can always run.
+  if [[ "$requested_slot" == 'auto' ]]; then
+    if require_config; then
+      echo "==> this worktree already holds Angular slot ${NG_SLOT}; --auto keeps it."
+      requested_slot=''
+    else
+      requested_slot="$(find_free_slot)"
+    fi
+  fi
 
   if [[ -n "$requested_slot" ]]; then
     write_config "$requested_slot" "${backend_slot:-$(detect_backend_slot)}"
@@ -823,7 +1074,35 @@ stop_apps() {
   return $(( freed ? 0 : 1 ))
 }
 
+# Give the slot back: strip this slot's derived keys out of the files this script
+# owns, keeping everything else, then delete the claim.
+#
+# It rewrites rather than deleting single lines, so the comment blocks never end
+# up describing keys that are no longer in the file. It is merge_env again, in the
+# mode that omits the derived keys instead of computing them.
+#
+# The files themselves are NOT deleted. Deleting them throws away exactly the hand
+# edits the merge exists to protect. What is removed is only what points at a slot
+# this worktree no longer holds, and the next --up puts it back through the insert
+# path: a key absent from the file takes the template default, and for a derived
+# key the template default is the freshly computed value.
+release_slot() {
+  echo "==> giving Angular slot $NG_SLOT back"
+
+  MERGE_MODE='strip'
+  write_config "$NG_SLOT" "${NG_BACKEND_SLOT:-$DEFAULT_BACKEND_SLOT}"
+  MERGE_MODE=''
+
+  rm -f "$SLOT_ENV"
+
+  echo "  the .env files kept every value that was not this slot's; the claim is gone."
+  echo "  --up now takes the lowest free slot, which may not be $NG_SLOT again."
+  echo "  --restart bounces without releasing, and --down --keep-slot holds the number."
+}
+
 down() {
+  local keep_slot="$1"
+
   if ! require_config; then
     echo "this worktree has no slot configured, so there is nothing of its own to stop." >&2
     echo "Run --list to see which worktrees do." >&2
@@ -843,6 +1122,19 @@ down() {
   while IFS=$'\t' read -r port state; do
     [[ "$state" == "closed" ]] || echo "  WARNING: $port is still $state" >&2
   done < <(probe_ports "${ports[@]}")
+
+  # Slot 0 is the developer's own. Nothing takes it, so there is nothing to give
+  # back, and it behaves as though --keep-slot were given whether or not it was.
+  if (( NG_SLOT == 0 )); then
+    echo "  slot 0 is the developer's own: the claim and every .env are left alone."
+    return 0
+  fi
+  if [[ -n "$keep_slot" ]]; then
+    echo "  --keep-slot: this worktree still holds Angular slot $NG_SLOT, values and all."
+    return 0
+  fi
+
+  release_slot
 }
 
 # --- listing -----------------------------------------------------------------
@@ -951,6 +1243,8 @@ action=''
 slot_arg=''
 backend_slot=''
 apps_csv=''
+keep_slot=''
+reset_env=''
 timeout=300
 
 while (( $# )); do
@@ -966,6 +1260,10 @@ while (( $# )); do
     --apps=*) apps_csv="${1#*=}"; shift ;;
     --backend-slot) backend_slot="${2:-}"; shift 2 ;;
     --backend-slot=*) backend_slot="${1#*=}"; shift ;;
+    --keep-slot) keep_slot=1; shift ;;
+    --reset-env) reset_env=1; shift ;;
+    --keep-env) KEEP_ENV="${2:-}"; shift 2 ;;
+    --keep-env=*) KEEP_ENV="${1#*=}"; shift ;;
     --timeout) timeout="${2:-}"; shift 2 ;;
     --timeout=*) timeout="${1#*=}"; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -987,14 +1285,26 @@ if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-if [[ "$slot_arg" == 'auto' ]]; then
+# --keep-env on its own reads like a promise this script does not keep: with
+# nothing being reset there is nothing for it to protect. An error rather than a
+# silent no-op, because the way people find out otherwise is by losing the value.
+if [[ -n "$KEEP_ENV" && -z "$reset_env" ]]; then
+  echo "--keep-env only means something with --reset-env: it names the keys a reset leaves alone." >&2
+  echo "Without a reset, every non-derived key is already kept." >&2
+  exit 2
+fi
+[[ -n "$reset_env" ]] && MERGE_MODE='reset'
+
+# --auto is resolved inside up(), which keeps a claim this worktree already holds
+# rather than abandoning it. Every other verb takes the lowest free slot outright.
+if [[ "$slot_arg" == 'auto' && "$action" != 'up' ]]; then
   slot_arg="$(find_free_slot)"
 fi
 
 case "${action:-}" in
   list) list ;;
   e2e-env) e2e_env ;;
-  down) down ;;
+  down) down "$keep_slot" ;;
   restart) restart "$apps_csv" "$timeout" ;;
   up) up "$slot_arg" "$backend_slot" "$apps_csv" "$timeout" ;;
   # No --backend-slot means "work it out", never "the same number as this slot".

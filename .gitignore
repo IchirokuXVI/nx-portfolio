@@ -46,7 +46,7 @@ apps/luna-shopper-backend/*/.env
 apps/luna-shopper-backend/*/.env.test
 # pg_dump snapshots written by luna-shopper-backend:db:snapshot (plan 0013, section 3.2).
 apps/luna-shopper-backend/.snapshots/
-# Per worktree compose slot file written by luna-slot.sh / luna-slot.ps1, and the
+# Per worktree compose slot file written by luna-slot.sh, and the
 # logs and pid files of the services its --up started.
 k8s/e2e/luna-shopper-backend/.env.slot
 k8s/e2e/luna-shopper-backend/.run/

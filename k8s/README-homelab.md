@@ -242,14 +242,17 @@ Postgres even deliberately.
 **If you want dev off the default ports as well**, the slot mechanism already does
 it, no new machinery:
 
-```powershell
-./k8s/e2e/luna-shopper-backend/luna-slot.ps1 -Slot 1
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh 1
 ```
 
-That moves every dev port by +100 (Postgres 5532/5533/5534, NATS 4322, Redis 6479,
-services 3100 to 3104), renames the compose project to `luna-slot1`, and rewrites
-the `.env` files to match. Production is untouched because it never used those
-ports.
+That moves every dev port into slot 1's block up in the 43000s (Postgres 43010 to
+43013, NATS 43020, Redis 43030, the seven services 43000 to 43006), renames the
+compose project to `luna-slot1`, and rewrites the `.env` files to match.
+Production is untouched because it never used those ports.
+
+Give the slot back with `--down` when you are finished with it, or hold the
+number with `--down --keep-slot`.
 
 One real hazard remains, and nothing in the setup prevents it:
 
