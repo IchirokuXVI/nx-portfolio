@@ -1,0 +1,72 @@
+{
+  "byEntry": {
+    "entry-milk": {
+      "decision": "LINK",
+      "itemId": "item-milk",
+      "confidence": 0.96,
+      "issues": [],
+      "reasoning": "Same brand and the same one litre format as the candidate."
+    },
+    "entry-biscuits": {
+      "decision": "CREATE",
+      "item": {
+        "nameEs": "Galletas María",
+        "nameEn": "Marie biscuits",
+        "brand": "Hacendado",
+        "unitSize": 800,
+        "defaultUnit": "GRAM",
+        "category": "SNACKS",
+        "ean": "8480000111111"
+      },
+      "confidence": 0.94,
+      "issues": [],
+      "reasoning": "Catalog holds nothing under this barcode or this name."
+    },
+    "entry-detergent": {
+      "decision": "CREATE",
+      "item": {
+        "nameEs": "Detergente líquido",
+        "nameEn": null,
+        "brand": null,
+        "unitSize": null,
+        "defaultUnit": "UNIT",
+        "category": "HOUSEHOLD",
+        "ean": null
+      },
+      "confidence": 0.55,
+      "issues": [
+        {
+          "code": "NO_BRAND_OR_SIZE",
+          "detail": "The row states no brand and no size, so the product cannot be told apart."
+        }
+      ],
+      "reasoning": "The row is too thin to create a product from."
+    },
+    "entry-bread": {
+      "decision": "LINK",
+      "itemId": "item-bread",
+      "confidence": 0.95,
+      "issues": [],
+      "reasoning": "The catalog product is the same bread by the same maker."
+    },
+    "entry-oil": {
+      "decision": "CREATE",
+      "item": {
+        "nameEs": "Aceite de oliva Hacendado 1 L",
+        "nameEn": null,
+        "brand": "Hacendado",
+        "unitSize": 1,
+        "defaultUnit": "LITER",
+        "category": "PANTRY",
+        "ean": null
+      },
+      "confidence": 0.93,
+      "issues": [],
+      "reasoning": "A new olive oil for this chain."
+    }
+  },
+  "invalid": [
+    "I think this row is olive oil, but I would rather a person looked at it.",
+    "Sorry, here it is again: olive oil, one litre, Hacendado."
+  ]
+}
