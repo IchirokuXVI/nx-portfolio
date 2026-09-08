@@ -86,6 +86,10 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     const products: MercadonaListProduct[] = [];
     for await (const product of client.walkCatalog('es')) {
       products.push(product);
+      // The walk reports no counter until the detail phase, so at a low owner
+      // set rate its 151 requests can outlast `HARVEST_STALE_AFTER` with the
+      // heartbeat still sitting at the stage change.
+      await context.heartbeat();
       if (context.signal.aborted) {
         break;
       }
@@ -110,15 +114,19 @@ export class MercadonaCatalogRunner implements CatalogRunner {
       workers: source.workers,
       signal: context.signal,
       handle: async (listProduct) => {
-        const detail = await client.fetchProduct(listProduct.externalId, ['es'], {
-          // The walk's own path, passed straight through. It used to be a list
-          // of bare names that had to be wrapped into nodes here; it carries
-          // each node's id now, and rewrapping it made a node whose `name` was
-          // a node. Section 5.6 splits cheese from cured meat on the level 2
-          // id, so the ids have to survive this hop.
-          categoryPath: listProduct.categoryPath,
-          observedAt,
-        });
+        const detail = await client.fetchProduct(
+          listProduct.externalId,
+          ['es'],
+          {
+            // The walk's own path, passed straight through. It used to be a list
+            // of bare names that had to be wrapped into nodes here; it carries
+            // each node's id now, and rewrapping it made a node whose `name` was
+            // a node. Section 5.6 splits cheese from cured meat on the level 2
+            // id, so the ids have to survive this hop.
+            categoryPath: listProduct.categoryPath,
+            observedAt,
+          }
+        );
 
         // A 404 is "not stocked in this warehouse" (section 2.6): a value, not a
         // failure, and it neither fails the run nor deletes what we know. It
@@ -201,7 +209,10 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     context: RunContext,
     input: CatalogDiscoveryInput,
     priceScopeId: string,
-    outcomes: ReadonlyArray<{ entry: SourceCatalogEntry; itemId: string | null }>
+    outcomes: ReadonlyArray<{
+      entry: SourceCatalogEntry;
+      itemId: string | null;
+    }>
   ): Promise<void> {
     const byItem = new Map<string, boolean>();
     const observedIds = new Set<string>();

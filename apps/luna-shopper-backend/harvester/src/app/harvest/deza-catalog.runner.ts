@@ -104,7 +104,8 @@ export class DezaCatalogRunner implements CatalogRunner {
       items: sections,
       workers: source.workers,
       signal: context.signal,
-      handle: (section) => this.enumerateSection(crawl, client, section),
+      handle: (section) =>
+        this.enumerateSection(context, crawl, client, section),
       onError: async (error, section) => {
         // A section that fails does not fail the run. It is counted, logged, and
         // named in the report as unfinished, which is the same thing the budget
@@ -149,6 +150,7 @@ export class DezaCatalogRunner implements CatalogRunner {
    * the token bucket, which is the thing that has to be shared.
    */
   private async enumerateSection(
+    context: RunContext,
     crawl: Crawl,
     client: () => DezaClient,
     section: DezaSection
@@ -168,7 +170,18 @@ export class DezaCatalogRunner implements CatalogRunner {
       state.queries += 1;
 
       const before = crawl.products.size;
-      const capped = await this.crawlQuery(crawl, client(), section, terms);
+      const capped = await this.crawlQuery(
+        context,
+        crawl,
+        client(),
+        section,
+        terms
+      );
+      // The whole enumeration writes no counter while it is healthy, so without
+      // this the heartbeat sits at the stage change until the stage ends, and a
+      // twenty minute crawl reads as a stopped run to the stale reaper. Per row
+      // covers a query that returns products; this covers one that returns none.
+      await context.heartbeat();
       if (capped) {
         state.capped.push(terms);
       }
@@ -190,6 +203,7 @@ export class DezaCatalogRunner implements CatalogRunner {
 
   /** One query, every page of it, recorded. Answers whether it hit the ceiling. */
   private async crawlQuery(
+    context: RunContext,
     crawl: Crawl,
     client: DezaClient,
     section: DezaSection,
@@ -201,6 +215,7 @@ export class DezaCatalogRunner implements CatalogRunner {
       lastPage = Math.max(lastPage, page.lastPage);
     })) {
       crawl.record(section, row);
+      await context.heartbeat();
     }
     return lastPage >= DEZA_CEILING_PAGES;
   }
