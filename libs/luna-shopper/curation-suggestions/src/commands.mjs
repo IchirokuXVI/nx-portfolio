@@ -672,6 +672,13 @@ export function end({ runDir, usage = null }) {
  * One request, so the file lands whole or not at all (plan 0100). A file the
  * server refuses leaves the queue exactly as it was, which is the point of
  * deciding and applying being two acts.
+ *
+ * **A refusal is a 201 answer, not an error.** The route reports which row
+ * failed which check rather than throwing, because a problem document carries
+ * one message for a thousand rows. So the verdict is `applied`, a boolean the
+ * server decided, and this function passes it through beside `failedStep`,
+ * `error` and `orphanedItemIds`. The CLI turns a false verdict into a non zero
+ * exit, so a shell replaying a stale file is not told it succeeded.
  */
 export async function apply({
   mainUrl,
@@ -705,9 +712,13 @@ export async function apply({
     return {
       runId: header.runId,
       operations: 0,
-      applied: 0,
+      applied: true,
+      appliedOperations: 0,
+      failedStep: null,
+      error: null,
       results: [],
       priceSkips: [],
+      orphanedItemIds: [],
     };
   }
 
@@ -725,12 +736,25 @@ export async function apply({
     body: { runId: header.runId, operations },
   });
 
+  const results = answer?.results ?? [];
   return {
-    runId: header.runId,
+    runId: answer?.runId ?? header.runId,
     operations: operations.length,
-    applied: (answer?.results ?? []).filter((result) => result.applied).length,
-    results: answer?.results ?? [],
+    // The file level verdict, which is the server's and not a count. A refused
+    // file answers 201 with `applied: false`, so a caller reading only the
+    // status code, or only how many rows say `applied`, cannot tell a file that
+    // landed from one the first check threw out.
+    applied: answer?.applied === true,
+    appliedOperations: results.filter((result) => result.applied).length,
+    // Which of the four steps refused it, and why, when no single row was at
+    // fault. Without these an operator holding a refused file is told nothing.
+    failedStep: answer?.failedStep ?? null,
+    error: answer?.error ?? null,
+    results,
     priceSkips: answer?.priceSkips ?? [],
+    // Products step two created that a step three failure could not delete.
+    // Unbound and nobody's, and reported rather than swallowed.
+    orphanedItemIds: answer?.orphanedItemIds ?? [],
   };
 }
 

@@ -162,6 +162,13 @@ if (invokedDirectly) {
   run(process.argv.slice(2)).then(
     (answer) => {
       process.stdout.write(`${JSON.stringify(answer)}\n`);
+      // Only `apply` carries a verdict, and a refused file is a 201 answer
+      // rather than an error, so nothing else would tell a shell that the
+      // replay wrote nothing. The JSON is printed either way: it names the row
+      // that failed, which is what the operator needs.
+      if (answer?.applied === false) {
+        process.exitCode = 2;
+      }
     },
     (error) => {
       process.stderr.write(`${error.message ?? error}\n`);
