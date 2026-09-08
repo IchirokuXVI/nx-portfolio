@@ -13,7 +13,11 @@ import {
   waitForGateway,
 } from './slots.mjs';
 
-/** A `--list` table with slots 0, 1 and 4 in it, printed the way both twins print it. */
+/**
+ * A `--list` table with slots 0, 1 and 4 in it, printed the way `luna-slot.sh`
+ * prints it, lock note and all. Slot 4 is locked by `--down --keep-data`, which
+ * is a slot that looks free and is not, so the table keeps its row.
+ */
 const LIST_OUTPUT = `
 Luna Shopper dev slots (slot 0 is the historic ports; 1 and up are a block at 43000 + (slot-1)*100)
 
@@ -21,6 +25,7 @@ Luna Shopper dev slots (slot 0 is the historic ports; 1 and up are a block at 43
   0    luna-shopper-backend 9/9       7/7       0/5     0/4    D:/Projects/nx-portfolio  (this one)
   1    luna-slot1           9/9       3/7       0/5     0/4    D:/Projects/nx-portfolio/.claude/worktrees/a
   4    luna-slot4           0/9       0/7       0/5     0/4    (no worktree claims it)
+                                                               LOCKED, databases kept: D:/Projects/nx-portfolio/.claude/worktrees/b
 
   INFRA     the four databases, NATS and its monitor, Redis, SMTP, Mailpit
   SERVICES  gateway, realtime, auth, core, catalog, harvester, assistant
@@ -28,7 +33,10 @@ Luna Shopper dev slots (slot 0 is the historic ports; 1 and up are a block at 43
   TEST      the four test-profile databases: opt in too, so 0/4 is normal
 
 A slot claimed with 0/9 infra is configured but not started: --up will take it.
-Slots 0..9 with neither a claim nor a listener are omitted.
+LOCKED means somebody kept that slot's databases with --down --keep-data. --auto
+skips it; --up <n> takes it and the databases with it; --unlock <n> frees the
+number and leaves them.
+Slots 0..9 with no claim, no lock and no listener are omitted.
 `;
 
 test('parseTakenSlots reads the table body and nothing else', () => {
@@ -74,7 +82,7 @@ test('a slot names its ports and its compose project the way luna-slot does', ()
   assert.equal(rehearsalUrl(2), 'http://localhost:43100');
 });
 
-test('the bash twin is asked with the services the rehearsal needs', () => {
+test('luna-slot is asked with the services the rehearsal needs', () => {
   const { command, args } = lunaSlotCommand('up', {
     platform: 'linux',
     repoRoot: '/repo',
@@ -161,7 +169,7 @@ test('makeSlots turns a failed luna-slot into an error carrying its stderr', asy
   await assert.rejects(() => slots.up(2), /unknown service zzz/);
 });
 
-test('makeSlots lists through the twin and writes the dump it was given a path for', async () => {
+test('makeSlots lists through luna-slot and writes the dump it was given a path for', async () => {
   const calls = [];
   const written = [];
   const slots = makeSlots({

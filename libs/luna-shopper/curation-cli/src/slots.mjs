@@ -13,13 +13,13 @@
 
 /**
  * Slot 0 is never taken: it is the developer's own, and it is usually the main
- * API this run reads its queue from. The upper bound is `MAX_SLOT` in both
- * `luna-slot` twins, and a change there has to be repeated here.
+ * API this run reads its queue from. The upper bound is `MAX_SLOT` in
+ * `luna-slot.sh`, and a change there has to be repeated here.
  */
 export const MIN_SLOT = 1;
 export const MAX_SLOT = 9;
 
-/** The band both twins derive a slot's ports from. Gateway sits at offset 0. */
+/** The band `luna-slot.sh` derives a slot's ports from. Gateway is offset 0. */
 const SLOT_BAND = 43000;
 const SLOT_STRIDE = 100;
 const DEFAULT_GATEWAY_PORT = 3000;

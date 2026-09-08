@@ -22,8 +22,8 @@ and returns the minimal decision JSON.
    TTY, or given as `--implementation <suggestions|groups>`. The choice names
    which decider CLI is driven; everything below is identical for both.
 2. **Take a fresh slot, every run.** The rehearsal always uses a new slot.
-   The CLI asks the platform's `luna-slot` twin (`.sh` through bash, `.ps1`
-   through PowerShell) for the state of slots 1 to 9; a slot is taken when a
+   The CLI asks `luna-slot.sh`, through bash on every platform, for the state
+   of slots 1 to 9; a slot is taken when a
    worktree claims it or its ports answer, which is what `--list` already
    reports. No free slot stops the run with an error naming the taken slots.
    Slot 0 is never taken: it is the developer's own and usually the main API.
@@ -37,8 +37,8 @@ and returns the minimal decision JSON.
    the port to open, which happens before Nest has finished wiring the broker.
 
    `--services` used to narrow `--restart` only, and `--up` started all seven
-   whatever it was told. Both twins now honour it on `--up` as well, and both
-   refuse an unknown service name before anything is written or started. The
+   whatever it was told. It now narrows `--up` as well, and an unknown service
+   name is refused before anything is written or started. The
    compose stack is still always the whole of it: the databases are cheap
    beside seven Node processes, and a service started later would otherwise
    find its own missing.
@@ -51,8 +51,11 @@ and returns the minimal decision JSON.
    answer, `decide`, repeat until `done`. Progress goes to stderr as
    `52/349 - <row name>`; stdout carries one JSON line per decided row and
    nothing else. Model usage per call is accumulated and handed to `end`.
-6. **Teardown, always.** `end`, then `luna-slot --down <n>`, on success and on
-   failure both. On failure the CLI first dumps the slot's catalog database
+6. **Teardown, always.** `end`, then `luna-slot --down`, on success and on
+   failure both. `--down` takes no slot number: it stops whatever this
+   worktree claims, which `--up <n>` made the rehearsal slot, and gives the
+   number back. The claim the worktree held before the run is written again
+   afterwards. On failure the CLI first dumps the slot's catalog database
    (`pg_dump` through the slot's container, into the run directory) so the
    rehearsal state survives the teardown; there is no `--keep-slot`.
 
