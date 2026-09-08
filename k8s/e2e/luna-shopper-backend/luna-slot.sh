@@ -117,7 +117,8 @@ stack and its volumes alone so a restart never costs you the data.
 
 options:
   -p, --profile <name>   compose profile for --up / --down (e.g. observability)
-  --services a,b         limit --restart to these (default: all of them)
+  --services a,b         limit --up and --restart to these (default: all of
+                         them). The compose stack is always the whole of it.
   --app-slot <n>         which Angular slot the Google callback and the mail
                          links send a browser to (default 0). Only those; CORS
                          allows every Angular slot no matter what this says.
@@ -924,6 +925,28 @@ service_port() {
     "$root/apps/luna-shopper-backend/$1/.env" 2>/dev/null | head -n 1
 }
 
+# The services a `--services a,b` names, or all of them when it names none.
+#
+# `--up` and `--restart` both take the list, so the parsing and the "unknown
+# service" refusal live here rather than in each of them. The second argument is
+# the name of an array in the caller.
+resolve_services() {
+  local csv="$1"
+  local -n _wanted="$2"
+  local svc
+
+  if [[ -z "$csv" ]]; then
+    _wanted=("${SERVICES[@]}")
+    return 0
+  fi
+
+  IFS=',' read -r -a _wanted <<< "$csv"
+  for svc in "${_wanted[@]}"; do
+    [[ " ${SERVICES[*]} " == *" $svc "* ]] || {
+      echo "unknown service '$svc'; known: ${SERVICES[*]}" >&2; return 2; }
+  done
+}
+
 # Start each named service in the background and collect the ports to wait on.
 # Both arguments are names of arrays in the caller, so the ports come back without
 # a subshell swallowing the jobs.
@@ -972,7 +995,14 @@ wait_for_ports() {
 }
 
 up() {
-  local requested_slot="$1" profile="$2" timeout="$3" app_slot="$4"
+  local requested_slot="$1" profile="$2" timeout="$3" app_slot="$4" services_csv="$5"
+
+  # The compose stack is always the whole of it, because the databases are cheap
+  # beside the seven Node processes and a service started later would find its
+  # own missing. Only the services are narrowed, and a name that is not one of
+  # them is refused here, before anything is written or started.
+  local -a wanted=()
+  resolve_services "$services_csv" wanted || return $?
 
   if [[ -n "$requested_slot" ]]; then
     write_config "$requested_slot" "${app_slot:-$(current_app_slot)}"
@@ -998,7 +1028,7 @@ up() {
   "${stack[@]}" up
 
   local -a ports=()
-  serve_services SERVICES ports || return 1
+  serve_services wanted ports || return 1
 
   echo "==> waiting up to ${timeout}s for the services to listen"
   if wait_for_ports "$timeout" "${ports[@]}"; then
@@ -1016,7 +1046,7 @@ up() {
   echo "timed out after ${timeout}s. These are not listening yet:" >&2
   local i=0
   while IFS=$'\t' read -r port state; do
-    [[ "$state" == "open" ]] || echo "  ${SERVICES[$i]} ($port): $state, see k8s/e2e/luna-shopper-backend/.run/${SERVICES[$i]}.log" >&2
+    [[ "$state" == "open" ]] || echo "  ${wanted[$i]} ($port): $state, see k8s/e2e/luna-shopper-backend/.run/${wanted[$i]}.log" >&2
     i=$(( i + 1 ))
   done < <(probe_ports "${ports[@]}")
   echo "The processes are still running; --down stops them." >&2
@@ -1073,15 +1103,7 @@ restart_services() {
 
   local -a wanted=()
   local svc port state
-  if [[ -n "$services_csv" ]]; then
-    IFS=',' read -r -a wanted <<< "$services_csv"
-    for svc in "${wanted[@]}"; do
-      [[ " ${SERVICES[*]} " == *" $svc "* ]] || {
-        echo "unknown service '$svc'; known: ${SERVICES[*]}" >&2; return 2; }
-    done
-  else
-    wanted=("${SERVICES[@]}")
-  fi
+  resolve_services "$services_csv" wanted || return $?
 
   echo "==> restarting on Luna slot $LUNA_SLOT: ${wanted[*]}"
   echo "    (the compose stack and its volumes are left alone)"
@@ -1343,7 +1365,7 @@ case "${action:-}" in
   list) list ;;
   down) down "$profile" "$keep_data" ;;
   restart) restart_services "$services_csv" "$timeout" ;;
-  up) up "$slot_arg" "$profile" "$timeout" "$app_slot" ;;
+  up) up "$slot_arg" "$profile" "$timeout" "$app_slot" "$services_csv" ;;
   # An --app-slot given on its own keeps the slot this worktree already has, and a
   # re-run with neither keeps the front end it was already pointed at.
   configure) write_config "$slot_arg" "${app_slot:-$(current_app_slot)}" ;;

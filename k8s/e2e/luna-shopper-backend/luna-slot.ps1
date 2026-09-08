@@ -920,6 +920,21 @@ function Stop-Services([string[]]$svcs, [int[]]$ports) {
 # It exists chiefly so that is not a reason to run -Down, which takes the databases
 # and their volumes with it. Restarting a service should never cost the data
 # somebody has been working with.
+# The services -Services a,b names, or all of them when it names none.
+#
+# -Up and -Restart both take the list, so the parsing and the "unknown service"
+# refusal live here rather than in each of them.
+function Resolve-Services {
+  if (-not $Services) { return $serviceNames }
+  $wanted = $Services -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+  foreach ($svc in $wanted) {
+    if ($serviceNames -notcontains $svc) {
+      throw "unknown service '$svc'; known: $($serviceNames -join ', ')"
+    }
+  }
+  return $wanted
+}
+
 function Invoke-Restart {
   $config = Read-SlotConfig
   if ($null -eq $config) {
@@ -927,15 +942,7 @@ function Invoke-Restart {
   }
   $slotNumber = [int]$config['LUNA_SLOT']
 
-  $wanted = $serviceNames
-  if ($Services) {
-    $wanted = $Services -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-    foreach ($svc in $wanted) {
-      if ($serviceNames -notcontains $svc) {
-        throw "unknown service '$svc'; known: $($serviceNames -join ', ')"
-      }
-    }
-  }
+  $wanted = Resolve-Services
 
   Write-Host "==> restarting on Luna slot ${slotNumber}: $($wanted -join ', ')"
   Write-Host '    (the compose stack and its volumes are left alone)'
@@ -981,6 +988,12 @@ function Invoke-Stack([string[]]$stackArgs) {
 }
 
 function Invoke-Up {
+  # The compose stack is always the whole of it, because the databases are cheap
+  # beside the seven Node processes and a service started later would find its own
+  # missing. Only the services are narrowed, and a name that is not one of them is
+  # refused here, before anything is written or started.
+  $wanted = Resolve-Services
+
   $config = Read-SlotConfig
 
   # -Auto names the slot, not the verb, so `-Up -Auto` moves this worktree to a
@@ -1008,9 +1021,9 @@ function Invoke-Up {
   # infrastructure is; it reads the same .env.slot just written.
   Invoke-Stack @('up')
 
-  $ports = Start-Services $serviceNames $slotNumber
+  $ports = Start-Services $wanted $slotNumber
 
-  Write-Host "==> waiting up to ${Timeout}s for the seven services to listen"
+  Write-Host "==> waiting up to ${Timeout}s for $($wanted.Count) service(s) to listen"
   if (Wait-ForPorts $ports $Timeout) {
     Write-Host ""
     Write-Host "Luna Shopper slot $slotNumber is up."
@@ -1025,9 +1038,9 @@ function Invoke-Up {
   $states = Get-PortStates $ports
   Write-Host ""
   Write-Host "timed out after ${Timeout}s. These are not listening yet:"
-  for ($i = 0; $i -lt $serviceNames.Count; $i++) {
+  for ($i = 0; $i -lt $wanted.Count; $i++) {
     if ($states[$ports[$i]] -ne 'open') {
-      Write-Host "  $($serviceNames[$i]) ($($ports[$i])): $($states[$ports[$i]]), see k8s/e2e/luna-shopper-backend/.run/$($serviceNames[$i]).log"
+      Write-Host "  $($wanted[$i]) ($($ports[$i])): $($states[$ports[$i]]), see k8s/e2e/luna-shopper-backend/.run/$($wanted[$i]).log"
     }
   }
   throw 'the processes are still running; -Down stops them.'
