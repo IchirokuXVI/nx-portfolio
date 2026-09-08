@@ -269,16 +269,23 @@ instruction the reader is already looking at is the one that gets followed.
 `tools/dev/ng-slot.ps1` and `k8s/e2e/luna-shopper-backend/luna-slot.ps1` are removed. Git
 Bash is the supported shell on Windows.
 
-Eleven live files name them and change with them: `CLAUDE.md`, `.gitignore`,
-`k8s/e2e/luna-shopper-backend/compose.yml`, `tools/dev/README.md`,
+**Those two files, and nothing else.** `k8s/bootstrap/install.ps1` is a different tool,
+for a step run once per cluster on a Windows machine, and it stays. So does every other
+`.ps1` in the workspace. Delete by name, never by pattern.
+
+Fifteen live files name the two twins and change with them: `CLAUDE.md`, `README.md`,
+`.gitignore`, `k8s/e2e/luna-shopper-backend/compose.yml`, `tools/dev/README.md`,
 `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md`, `k8s/README-homelab.md`, and
 the eight `.env.example` headers under `apps/luna-shopper-backend`.
 
-Six plan files also name them, and all six keep the mention:
-`apps/luna-shopper-backend/plans/0039`, `0045`, `0071`, `0072`, `0083`, and
-`k8s/plans/0001`. A plan records what was designed at the time and names the pull request
-that built it. Editing one to hide a file that has since been deleted rewrites history for
-no reader's benefit.
+Two of those name no filename, so a search for `ng-slot.ps1` misses them. `CLAUDE.md` and
+`README.md` both say "Both have `.ps1` twins". Search for `ps1` and read every hit.
+
+Eight plan files also name them, and all eight keep the mention:
+`apps/luna-shopper-backend/plans/0039`, `0041`, `0045`, `0071`, `0072`, `0083`,
+`apps/luna-shopper-admin/plans/0001`, and `k8s/plans/0001`. A plan records what was
+designed at the time and names the pull request that built it. Editing one to hide a file
+that has since been deleted rewrites history for no reader's benefit.
 
 ## 7. What the documents have to say afterwards
 
@@ -323,4 +330,5 @@ longer exists, so it is deleted.
 11. `--up --auto` in a worktree that already holds a claim keeps its number.
 12. With every slot from 1 to 9 unavailable, `--auto` exits non-zero and names each slot
     and its reason.
-13. No `.ps1` remains in the workspace, and no live document names one.
+13. Neither slot script has a `.ps1` twin, and no live document names one.
+    `k8s/bootstrap/install.ps1` is still there.
