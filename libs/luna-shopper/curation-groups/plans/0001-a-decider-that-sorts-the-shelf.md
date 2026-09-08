@@ -1,5 +1,3 @@
-> **PR:** [#296](https://github.com/IchirokuXVI/nx-portfolio/pull/296)
-
 # 0001 A decider that sorts the shelf
 
 Part of the curation toolchain: `curation-auth` (sessions),
