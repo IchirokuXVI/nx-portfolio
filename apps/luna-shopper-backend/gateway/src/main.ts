@@ -15,6 +15,7 @@ import {
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app/app.module';
 import {
+  DEFAULT_BULK_DECISION_MAX_BYTES,
   DEFAULT_JSON_MAX_BYTES,
   type GatewayConfig,
 } from './app/config/app-config';
@@ -63,12 +64,14 @@ async function bootstrap() {
   // id its problem document names.
   bootstrapPlatform(app, { versioning: true });
 
-  // The import route's own limit, then the default for everything else, then
-  // the handler that turns a parser's own refusal into the house envelope with
-  // the number in it. Order is load bearing: `express.json` marks the request
-  // as parsed, so a later parser returns immediately and the first limit wins.
+  // The import route's own limit, then the bulk decision routes of plan 0100,
+  // then the default for everything else, then the handler that turns a
+  // parser's own refusal into the house envelope with the number in it. Order
+  // is load bearing: `express.json` marks the request as parsed, so a later
+  // parser returns immediately and the first limit wins.
   const bodyLimits = {
     importMaxBytes: config.importMaxBytes,
+    bulkMaxBytes: DEFAULT_BULK_DECISION_MAX_BYTES,
     defaultMaxBytes: DEFAULT_JSON_MAX_BYTES,
   };
   for (const parser of jsonBodyParsers(bodyLimits)) {

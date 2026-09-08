@@ -20,6 +20,7 @@ import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PricePolicyService } from './price-policy.service';
 import { PriceScopeService } from './price-scope.service';
+import { ProductGroupAssignmentService } from './product-group-assignment.service';
 import { ProductGroupService } from './product-group.service';
 import { ScopeResolverService } from './scope-resolver.service';
 import { SupermarketItemService } from './supermarket-item.service';
@@ -71,6 +72,7 @@ import { SupermarketService } from './supermarket.service';
     PriceScopeService,
     SupermarketLocationService,
     ProductGroupService,
+    ProductGroupAssignmentService,
     ItemService,
     // Turns a place into the scopes that price it today (plan 0049).
     ScopeResolverService,

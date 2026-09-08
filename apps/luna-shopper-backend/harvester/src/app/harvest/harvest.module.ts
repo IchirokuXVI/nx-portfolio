@@ -22,6 +22,8 @@ import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { RunExecutor } from './run-executor.service';
+import { SourceEntryBatchService } from './source-entry-batch.service';
+import { SourceEntryPriceWriter } from './source-entry-write';
 import { SourceEntryService } from './source-entry.service';
 import { SourceIngest } from './source-ingest';
 import { SourceLocationService } from './source-location.service';
@@ -81,6 +83,8 @@ import { SupermarketSourceService } from './supermarket-source.service';
     // (plan 0086, section 7). `SourceAliasService` and `ItemSourceRefService`
     // were the same three decisions over two other tables and are gone.
     SourceEntryService,
+    SourceEntryBatchService,
+    SourceEntryPriceWriter,
     SourceLocationService,
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,

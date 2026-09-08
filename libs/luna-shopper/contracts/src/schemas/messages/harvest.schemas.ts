@@ -102,6 +102,20 @@ export const HARVEST_SCHEMA_IDS = {
   entryIdRequest: schemaId('msg/sourceEntry.id/request'),
   acceptEntryRequest: schemaId('msg/sourceEntry.accept/request'),
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
+  // Plan 0100: a whole decisions file, in one call.
+  sourceEntryExpectation: schemaId('harvest/SourceEntryExpectation'),
+  acceptEntryOperation: schemaId('harvest/AcceptSourceEntryOperation'),
+  createItemEntryOperation: schemaId(
+    'harvest/CreateItemFromSourceEntryOperation'
+  ),
+  sourceEntryDecisionOutcome: schemaId('harvest/SourceEntryDecisionOutcome'),
+  sourceEntryPriceSkip: schemaId('harvest/SourceEntryPriceSkip'),
+  applyEntryDecisionsRequest: schemaId(
+    'msg/sourceEntry.applyDecisions/request'
+  ),
+  applyEntryDecisionsResult: schemaId(
+    'msg/sourceEntry.applyDecisions/response'
+  ),
   upsertSourceRequest: schemaId('msg/supermarketSource.upsert/request'),
   sourceIdRequest: schemaId('msg/supermarketSource.id/request'),
   setSourceEnabledRequest: schemaId('msg/supermarketSource.setEnabled/request'),
@@ -805,6 +819,127 @@ const createItemFromEntryRequest = object(
   ['userId', 'entryId']
 );
 
+// --- A whole decisions file, in one call (plan 0100) ------------------------
+
+/**
+ * The row as the decisions file saw it. Two fields are enough: a moved status
+ * means somebody else decided, and a moved `lastSeenAt` means a later run
+ * observed the row again and it may no longer say what was decided about.
+ */
+const sourceEntryExpectation = object(
+  HARVEST_SCHEMA_IDS.sourceEntryExpectation,
+  {
+    status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
+    lastSeenAt: nonEmptyString(),
+  },
+  ['status', 'lastSeenAt']
+);
+
+const acceptEntryOperation = object(
+  HARVEST_SCHEMA_IDS.acceptEntryOperation,
+  {
+    op: { const: 'accept' },
+    entryId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    itemRef: nonEmptyString(),
+    expect: ref(HARVEST_SCHEMA_IDS.sourceEntryExpectation),
+  },
+  ['op', 'entryId', 'expect']
+);
+
+const createItemEntryOperation = object(
+  HARVEST_SCHEMA_IDS.createItemEntryOperation,
+  {
+    op: { const: 'createItem' },
+    entryId: nonEmptyString(),
+    ref: nonEmptyString(),
+    item: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        name: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { es: string(), en: string() },
+        },
+        brand: nullableString(),
+        ean: nullableString(),
+        unitSize: numberOrNull(),
+        category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+        defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+      },
+    },
+    expect: ref(HARVEST_SCHEMA_IDS.sourceEntryExpectation),
+  },
+  ['op', 'entryId', 'ref', 'item', 'expect']
+);
+
+const applyEntryDecisionsRequest = object(
+  HARVEST_SCHEMA_IDS.applyEntryDecisionsRequest,
+  {
+    ...adminCredentialProperties,
+    runId: nonEmptyString(),
+    operations: array({
+      anyOf: [
+        ref(HARVEST_SCHEMA_IDS.acceptEntryOperation),
+        ref(HARVEST_SCHEMA_IDS.createItemEntryOperation),
+      ],
+    }),
+  },
+  ['userId', 'operations']
+);
+
+const sourceEntryDecisionOutcome = object(
+  HARVEST_SCHEMA_IDS.sourceEntryDecisionOutcome,
+  {
+    op: { enum: ['accept', 'createItem'] },
+    entryId: nonEmptyString(),
+    ref: nullableString(),
+    applied: boolean(),
+    itemId: nullableString(),
+    pricesWritten: integer({ minimum: 0 }),
+    error: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.bulkOperationError), { type: 'null' }],
+    },
+  },
+  ['op', 'entryId', 'ref', 'applied', 'itemId', 'pricesWritten', 'error']
+);
+
+/** A row that was bound but whose prices step four could not write. */
+const sourceEntryPriceSkip = object(
+  HARVEST_SCHEMA_IDS.sourceEntryPriceSkip,
+  {
+    entryId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    reason: string(),
+  },
+  ['entryId', 'itemId', 'reason']
+);
+
+const applyEntryDecisionsResult = object(
+  HARVEST_SCHEMA_IDS.applyEntryDecisionsResult,
+  {
+    runId: nullableString(),
+    applied: boolean(),
+    failedStep: {
+      anyOf: [{ enum: ['VALIDATE', 'CREATE_ITEMS', 'BIND'] }, { type: 'null' }],
+    },
+    error: nullableString(),
+    results: array(ref(HARVEST_SCHEMA_IDS.sourceEntryDecisionOutcome)),
+    priceSkips: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceSkip)),
+    orphanedItemIds: array(nonEmptyString()),
+  },
+  [
+    'runId',
+    'applied',
+    'failedStep',
+    'error',
+    'results',
+    'priceSkips',
+    'orphanedItemIds',
+  ]
+);
+
 const upsertSourceRequest = object(
   HARVEST_SCHEMA_IDS.upsertSourceRequest,
   {
@@ -947,6 +1082,13 @@ export const harvestSchemas: JsonSchema[] = [
   entryIdRequest,
   acceptEntryRequest,
   createItemFromEntryRequest,
+  sourceEntryExpectation,
+  acceptEntryOperation,
+  createItemEntryOperation,
+  sourceEntryDecisionOutcome,
+  sourceEntryPriceSkip,
+  applyEntryDecisionsRequest,
+  applyEntryDecisionsResult,
   upsertSourceRequest,
   sourceIdRequest,
   setSourceEnabledRequest,
@@ -1036,6 +1178,10 @@ export const harvestMessageContracts: Record<
   [SOURCE_ENTRY_PATTERNS.reject]: {
     request: HARVEST_SCHEMA_IDS.entryIdRequest,
     response: HARVEST_SCHEMA_IDS.sourceCatalogEntryView,
+  },
+  [SOURCE_ENTRY_PATTERNS.applyDecisions]: {
+    request: HARVEST_SCHEMA_IDS.applyEntryDecisionsRequest,
+    response: HARVEST_SCHEMA_IDS.applyEntryDecisionsResult,
   },
   [SUPERMARKET_SOURCE_PATTERNS.upsert]: {
     request: HARVEST_SCHEMA_IDS.upsertSourceRequest,

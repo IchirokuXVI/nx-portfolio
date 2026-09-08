@@ -18,7 +18,7 @@ import type {
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
-import type { ItemView } from './catalog.messages';
+import type { BulkOperationError, ItemView } from './catalog.messages';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
@@ -106,6 +106,21 @@ export const SOURCE_ENTRY_PATTERNS = {
   accept: 'sourceEntry.accept',
   createItem: 'sourceEntry.createItem',
   reject: 'sourceEntry.reject',
+  /**
+   * A whole decisions file, in one call, all or nothing (plan 0100).
+   *
+   * The curation toolchain decides a queue offline and applies the file
+   * afterwards. Replaying it through {@link SOURCE_ENTRY_PATTERNS.accept} and
+   * {@link SOURCE_ENTRY_PATTERNS.createItem} is one request per row, so a file
+   * that goes wrong at row 300 leaves the queue half worked and the operator
+   * with no way to say which half. This subject takes the whole file, checks
+   * every row before it writes anything, and refuses the file rather than
+   * landing part of it.
+   *
+   * `reject` has no bulk twin on purpose. Junk is a person's call, and a wrong
+   * reject hides a row from the queue that nobody will look at again.
+   */
+  applyDecisions: 'sourceEntry.applyDecisions',
 } as const;
 
 /**
@@ -742,6 +757,146 @@ export interface SourceEntryAcceptResult {
   pricesWritten: number;
   /** The product this call created, or null when it bound an existing one. */
   createdItem: ItemView | null;
+}
+
+// --- Bulk entry decisions (plan 0100) ---------------------------------------
+
+/**
+ * The row as the decisions file saw it, and the check that it still says so.
+ *
+ * Two fields, because two are enough: a row whose status has moved was decided
+ * by somebody else, and a row whose `lastSeenAt` has moved was observed again
+ * by a later run and may now say something different from what was decided
+ * about. Either one makes the recorded judgment a judgment about a different
+ * row.
+ */
+export interface SourceEntryExpectation {
+  status: SourceEntryStatus;
+  /** ISO 8601, exactly as `SourceCatalogEntryView.lastSeenAt` printed it. */
+  lastSeenAt: string;
+}
+
+/** Bind a queued row to a product, named directly or by a `ref` of this request. */
+export interface AcceptSourceEntryOperation {
+  op: 'accept';
+  entryId: string;
+  /** A product catalog already holds. Exactly one of this and `itemRef`. */
+  itemId?: string;
+  /** A product a `createItem` operation of this same request creates. */
+  itemRef?: string;
+  expect: SourceEntryExpectation;
+}
+
+/**
+ * Create the product a queued row is for, and bind the row to it.
+ *
+ * `ref` names the product inside this request so a second row of the same
+ * product can be bound to it by `itemRef` before the database has issued an id.
+ *
+ * **No English name is fetched here**, which is the one way this differs from
+ * the per row route. That route pays one extra request to the chain for the one
+ * product an operator is looking at; a thousand of them would be a thousand
+ * requests inside one call, and the file already carries the name it decided on.
+ * Every field the item omits falls back to what the row itself holds.
+ */
+export interface CreateItemFromSourceEntryOperation {
+  op: 'createItem';
+  entryId: string;
+  ref: string;
+  item: {
+    name?: { es?: string; en?: string };
+    brand?: string | null;
+    ean?: string | null;
+    unitSize?: number | null;
+    category?: ItemCategory;
+    defaultUnit?: UnitOfMeasure;
+  };
+  expect: SourceEntryExpectation;
+}
+
+export type SourceEntryDecisionOperation =
+  | AcceptSourceEntryOperation
+  | CreateItemFromSourceEntryOperation;
+
+/**
+ * A whole decisions file, applied in one call (plan 0100).
+ *
+ * Capped at `BULK_DECISION_MAX_OPERATIONS`, and a longer file is refused rather
+ * than split: two chunks are two transactions, so the first can land and the
+ * second fail, which is the half worked queue this route exists to prevent.
+ */
+export interface ApplySourceEntryDecisionsRequest extends AdminCredential {
+  /**
+   * The curation session this file came out of, echoed back in the answer.
+   *
+   * Provenance and nothing else: the harvester stores no run of its own for a
+   * decisions file, so this is what lets an operator reading a report tie the
+   * writes back to the session that decided them.
+   */
+  runId?: string;
+  operations: SourceEntryDecisionOperation[];
+}
+
+/** Which step of the four refused the file, when one did. */
+export type SourceEntryDecisionStep = 'VALIDATE' | 'CREATE_ITEMS' | 'BIND';
+
+export interface SourceEntryDecisionOutcome {
+  op: SourceEntryDecisionOperation['op'];
+  entryId: string;
+  /** The `ref` a `createItem` named, or null for an `accept`. */
+  ref: string | null;
+  applied: boolean;
+  /** The product the row is bound to now, when the operation applied. */
+  itemId: string | null;
+  /** How many `item_prices` rows this row's prices wrote. Zero is normal. */
+  pricesWritten: number;
+  /** Why nothing was written for this operation. */
+  error: BulkOperationError | null;
+}
+
+/**
+ * Step four could not write one row's prices, and why.
+ *
+ * **The bind still stands**, which is why this is a list of its own rather than
+ * a failure. Prices are the one part of this route that is not all or nothing:
+ * they cross into catalog one scope at a time, and a cross service rollback to
+ * undo a price is not worth the saga it would take. A skipped row is named here
+ * so the operator can write its prices again without replaying a decision that
+ * already landed.
+ */
+export interface SourceEntryPriceSkip {
+  entryId: string;
+  /** The product the row was bound to, which the prices were meant for. */
+  itemId: string;
+  reason: string;
+}
+
+/**
+ * What the file did (plan 0100).
+ *
+ * `applied` is the whole answer for the binds: either every operation bound or
+ * none did. `results` says which check refused which row when it did not, and
+ * `priceSkips` carries the rows step four could not price when it did.
+ */
+export interface ApplySourceEntryDecisionsResult {
+  /** The `runId` the request named, echoed so a report can be filed under it. */
+  runId: string | null;
+  applied: boolean;
+  /** The step that refused the file, or null when the file landed. */
+  failedStep: SourceEntryDecisionStep | null;
+  /** Why the file was refused as a whole, when no single operation was at fault. */
+  error: string | null;
+  /** One per operation, in the order the file named them. */
+  results: SourceEntryDecisionOutcome[];
+  priceSkips: SourceEntryPriceSkip[];
+  /**
+   * Products step two created that a step three failure could not delete.
+   *
+   * Unbound and nobody's, and named here rather than swallowed: a best effort
+   * cleanup that quietly fails leaves the catalog holding products no row
+   * points at and no record that it happened.
+   */
+  orphanedItemIds: string[];
 }
 
 // --- Source location requests (plan 0084, section 7) ------------------------

@@ -14,6 +14,8 @@ import {
   type AdminCredential,
   type AdminDashboardRequest,
   type AdminHarvestDashboard,
+  type ApplySourceEntryDecisionsRequest,
+  type ApplySourceEntryDecisionsResult,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
@@ -56,6 +58,7 @@ import { HarvestDashboardService } from './dashboard.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunService } from './harvest-run.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
+import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntryService } from './source-entry.service';
 import { SourceLocationService } from './source-location.service';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -79,6 +82,7 @@ export class HarvestController {
     private readonly runs: HarvestRunService,
     private readonly places: DiscoveredPlaceService,
     private readonly entries: SourceEntryService,
+    private readonly entryBatch: SourceEntryBatchService,
     private readonly shops: SourceLocationService,
     private readonly sources: SupermarketSourceService,
     private readonly discovery: PostalCodeDiscoveryService,
@@ -283,6 +287,20 @@ export class HarvestController {
     @Payload() req: CreateItemFromSourceEntryRequest
   ): Promise<SourceEntryAcceptResult> {
     return this.entries.createItem(req);
+  }
+
+  /**
+   * A whole decisions file, in one call, all or nothing (plan 0100).
+   *
+   * It answers rather than throws when the file is refused: the caller needs to
+   * know which row failed which check, and an exception carries one message for
+   * a thousand rows.
+   */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.applyDecisions)
+  applyEntryDecisions(
+    @Payload() req: ApplySourceEntryDecisionsRequest
+  ): Promise<ApplySourceEntryDecisionsResult> {
+    return this.entryBatch.applyDecisions(req);
   }
 
   /** Not a product he tracks. The next run that observes the key asks nobody. */

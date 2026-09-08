@@ -5,6 +5,7 @@ import {
   IntersectionType,
 } from '@nestjs/swagger';
 import {
+  BULK_DECISION_MAX_OPERATIONS,
   CONTENT_LOCALES,
   ITEM_LOOKUP_LIMITS,
   ItemCategory,
@@ -16,6 +17,7 @@ import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -372,6 +374,28 @@ export class CreateItemDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string | null;
+}
+
+/**
+ * Several products in one transaction (plan 0100).
+ *
+ * The cap is stated here **and** in catalog, which is the repository's standing
+ * rule about a gateway: it is one caller among several rather than a wall, and a
+ * bound enforced at one layer is a bound a second client walks straight through.
+ */
+export class CreateItemsDto {
+  @ApiProperty({
+    type: [CreateItemDto],
+    maxItems: BULK_DECISION_MAX_OPERATIONS,
+    description:
+      'The products to create, all of them or none. A longer list is refused rather than split: two chunks are two transactions, so the first can land while the second fails.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_DECISION_MAX_OPERATIONS)
+  @ValidateNested({ each: true })
+  @Type(() => CreateItemDto)
+  items!: CreateItemDto[];
 }
 
 export class UpdateItemDto {
@@ -1000,6 +1024,19 @@ export class SearchShopsQueryDto extends IntersectionType(
   query?: string;
 }
 
+/** The group a product was in when a bulk assignment was decided (plan 0100). */
+export class ProductGroupExpectationDto {
+  @ApiProperty({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Null for a product curation has not reached, which is what a session working the ungrouped products records.',
+  })
+  @ValidateIf((dto: ProductGroupExpectationDto) => dto.productGroupId !== null)
+  @IsUUID()
+  productGroupId!: string | null;
+}
+
 export class CreateProductGroupDto {
   @ApiProperty({ type: LocalizedTextDto })
   @ValidateNested()
@@ -1028,6 +1065,107 @@ export class CreateProductGroupDto {
   @ValidateNested()
   @Type(() => LocalizedSynonymsDto)
   synonyms?: LocalizedSynonymsDto;
+}
+
+/**
+ * One operation of a bulk group assignment (plan 0100).
+ *
+ * **One class for both kinds, with `kind` deciding which fields matter.** A
+ * discriminated union of two DTO classes is not something `class-validator`
+ * expresses without a custom decorator, and the combinations are checked in
+ * catalog anyway, where they have to be: the gateway is one caller among
+ * several. What this class buys is the type of every field and the cap.
+ */
+export class ProductGroupAssignmentDto {
+  @ApiProperty({ enum: ['createGroup', 'assignItem'] })
+  @IsIn(['createGroup', 'assignItem'])
+  op!: 'createGroup' | 'assignItem';
+
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description:
+      'createGroup: this request’s own name for the group, so an assignItem below can name it before the database has issued an id.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  ref?: string;
+
+  @ApiPropertyOptional({ type: LocalizedTextDto, description: 'createGroup.' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name?: LocalizedTextDto;
+
+  @ApiPropertyOptional({ maxLength: 80, description: 'createGroup.' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  slug?: string;
+
+  @ApiPropertyOptional({ enum: UnitOfMeasure, description: 'createGroup.' })
+  @IsOptional()
+  @IsEnum(UnitOfMeasure)
+  referenceUnit?: UnitOfMeasure;
+
+  @ApiPropertyOptional({
+    type: LocalizedSynonymsDto,
+    description: 'createGroup.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedSynonymsDto)
+  synonyms?: LocalizedSynonymsDto;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'assignItem: the product to move.',
+  })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'assignItem: a group catalog already holds. Exactly one of this and groupRef.',
+  })
+  @IsOptional()
+  @IsUUID()
+  groupId?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description: 'assignItem: a group this same request creates.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  groupRef?: string;
+
+  @ApiPropertyOptional({
+    type: ProductGroupExpectationDto,
+    description:
+      'assignItem: the group the product was in when the decision was made. A product somebody has sorted since fails it, and fails the whole request with it.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProductGroupExpectationDto)
+  expect?: ProductGroupExpectationDto;
+}
+
+export class ApplyProductGroupAssignmentsDto {
+  @ApiProperty({
+    type: [ProductGroupAssignmentDto],
+    maxItems: BULK_DECISION_MAX_OPERATIONS,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_DECISION_MAX_OPERATIONS)
+  @ValidateNested({ each: true })
+  @Type(() => ProductGroupAssignmentDto)
+  operations!: ProductGroupAssignmentDto[];
 }
 
 export class UpdateProductGroupDto {

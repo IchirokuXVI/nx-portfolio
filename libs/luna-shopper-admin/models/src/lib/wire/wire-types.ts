@@ -127,6 +127,21 @@ export type AdminLoginDto = {
 };
 
 /**
+ * `ApplyProductGroupAssignmentsDto` in the gateway's OpenAPI document.
+ */
+export type ApplyProductGroupAssignmentsDto = {
+  operations: ProductGroupAssignmentDto[];
+};
+
+/**
+ * `ApplySourceEntryDecisionsDto` in the gateway's OpenAPI document.
+ */
+export type ApplySourceEntryDecisionsDto = {
+  runId?: string;
+  operations: SourceEntryDecisionDto[];
+};
+
+/**
  * `AssistantMessageDto` in the gateway's OpenAPI document.
  */
 export type AssistantMessageDto = {
@@ -211,6 +226,13 @@ export type CreateItemFromEntryDto = {
     | 'PERSONAL_CARE'
     | 'OTHER';
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
+};
+
+/**
+ * `CreateItemsDto` in the gateway's OpenAPI document.
+ */
+export type CreateItemsDto = {
+  items: CreateItemDto[];
 };
 
 /**
@@ -455,6 +477,35 @@ export type ProblemDetails = {
 };
 
 /**
+ * `ProductGroupAssignmentDto` in the gateway's OpenAPI document.
+ */
+export type ProductGroupAssignmentDto = {
+  op: 'createGroup' | 'assignItem';
+  ref?: string;
+  name?: LocalizedTextDto;
+  slug?: string;
+  referenceUnit?:
+    | 'UNIT'
+    | 'GRAM'
+    | 'KILOGRAM'
+    | 'MILLILITER'
+    | 'LITER'
+    | 'PACK';
+  synonyms?: LocalizedSynonymsDto;
+  itemId?: string;
+  groupId?: string;
+  groupRef?: string;
+  expect?: ProductGroupExpectationDto;
+};
+
+/**
+ * `ProductGroupExpectationDto` in the gateway's OpenAPI document.
+ */
+export type ProductGroupExpectationDto = {
+  productGroupId: string | null;
+};
+
+/**
  * `ProfileGenerationSourceDto` in the gateway's OpenAPI document.
  */
 export type ProfileGenerationSourceDto = {
@@ -666,6 +717,27 @@ export type SettleLineDto = {
  * `SettlementOutcome` in the gateway's OpenAPI document.
  */
 export type SettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
+
+/**
+ * `SourceEntryDecisionDto` in the gateway's OpenAPI document.
+ */
+export type SourceEntryDecisionDto = {
+  op: 'accept' | 'createItem';
+  entryId: string;
+  itemId?: string;
+  itemRef?: string;
+  ref?: string;
+  item?: CreateItemFromEntryDto;
+  expect: SourceEntryExpectationDto;
+};
+
+/**
+ * `SourceEntryExpectationDto` in the gateway's OpenAPI document.
+ */
+export type SourceEntryExpectationDto = {
+  status: 'ACTIVE' | 'CANDIDATE' | 'UNRESOLVED' | 'REJECTED';
+  lastSeenAt: string;
+};
 
 /**
  * `SpawnHarvestRunDto` in the gateway's OpenAPI document.
@@ -1548,6 +1620,14 @@ export type CatalogAdminSupermarketItemView = {
 };
 
 /**
+ * `catalog.BulkOperationError` in the gateway's OpenAPI document.
+ */
+export type CatalogBulkOperationError = {
+  code: EnumsBulkOperationErrorCode;
+  detail: string;
+};
+
+/**
  * `catalog.CatalogScopeView` in the gateway's OpenAPI document.
  */
 export type CatalogCatalogScopeView = {
@@ -1758,6 +1838,18 @@ export type CatalogPriceScopeView = {
   kind: EnumsPriceScopeKind;
   externalKey: string | null;
   label: CatalogLocalizedText | null;
+};
+
+/**
+ * `catalog.ProductGroupAssignmentOutcome` in the gateway's OpenAPI document.
+ */
+export type CatalogProductGroupAssignmentOutcome = {
+  op: 'createGroup' | 'assignItem';
+  ref: string | null;
+  itemId: string | null;
+  groupId: string | null;
+  applied: boolean;
+  error: CatalogBulkOperationError | null;
 };
 
 /**
@@ -2016,6 +2108,18 @@ export type EnumsAdapterKey =
  * `enums.AuthProvider` in the gateway's OpenAPI document.
  */
 export type EnumsAuthProvider = 'GOOGLE' | 'EMAIL';
+
+/**
+ * `enums.BulkOperationErrorCode` in the gateway's OpenAPI document.
+ */
+export type EnumsBulkOperationErrorCode =
+  | 'NOT_FOUND'
+  | 'NOT_PENDING'
+  | 'EXPECT_MISMATCH'
+  | 'DUPLICATE_SUBJECT'
+  | 'UNKNOWN_REFERENCE'
+  | 'MALFORMED_OPERATION'
+  | 'ALREADY_TAKEN';
 
 /**
  * `enums.CommentTranscription` in the gateway's OpenAPI document.
@@ -2814,6 +2918,28 @@ export type HarvestSourceEntryAcceptResult = {
 };
 
 /**
+ * `harvest.SourceEntryDecisionOutcome` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceEntryDecisionOutcome = {
+  op: 'accept' | 'createItem';
+  entryId: string;
+  ref: string | null;
+  applied: boolean;
+  itemId: string | null;
+  pricesWritten: number;
+  error: CatalogBulkOperationError | null;
+};
+
+/**
+ * `harvest.SourceEntryPriceSkip` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceEntryPriceSkip = {
+  entryId: string;
+  itemId: string;
+  reason: string;
+};
+
+/**
  * `harvest.SourceEntryPriceView` in the gateway's OpenAPI document.
  */
 export type HarvestSourceEntryPriceView = {
@@ -3130,6 +3256,13 @@ export type MsgGeneratedListShareLinkRevokeResponse = {
 };
 
 /**
+ * `msg.item.createMany.response` in the gateway's OpenAPI document.
+ */
+export type MsgItemCreateManyResponse = {
+  items: CatalogItemView[];
+};
+
+/**
  * `msg.item.getMany.response` in the gateway's OpenAPI document.
  */
 export type MsgItemGetManyResponse = {
@@ -3142,6 +3275,32 @@ export type MsgItemGetManyResponse = {
 export type MsgListHoldingItemResponse = {
   lists: ListListHoldingItemView[];
   hasMore: boolean;
+};
+
+/**
+ * `msg.productGroup.applyAssignments.response` in the gateway's OpenAPI document.
+ */
+export type MsgProductGroupApplyAssignmentsResponse = {
+  applied: boolean;
+  error: string | null;
+  results: CatalogProductGroupAssignmentOutcome[];
+  createdGroups: {
+    ref: string;
+    groupId: string;
+  }[];
+};
+
+/**
+ * `msg.sourceEntry.applyDecisions.response` in the gateway's OpenAPI document.
+ */
+export type MsgSourceEntryApplyDecisionsResponse = {
+  runId: string | null;
+  applied: boolean;
+  failedStep: 'VALIDATE' | 'CREATE_ITEMS' | 'BIND' | null;
+  error: string | null;
+  results: HarvestSourceEntryDecisionOutcome[];
+  priceSkips: HarvestSourceEntryPriceSkip[];
+  orphanedItemIds: string[];
 };
 
 /**

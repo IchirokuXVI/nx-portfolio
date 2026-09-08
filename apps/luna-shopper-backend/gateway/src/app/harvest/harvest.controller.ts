@@ -24,6 +24,7 @@ import {
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   validateHarvestDocument,
+  type ApplySourceEntryDecisionsResult,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlacePage,
   type DiscoveredPlaceView,
@@ -55,6 +56,7 @@ import { NatsClient } from '../messaging/nats-client';
 import {
   AcceptSourceEntryDto,
   AddPostalCodeDiscoveryDto,
+  ApplySourceEntryDecisionsDto,
   CreateItemFromEntryDto,
   DiscoveredPlaceGroupQueryDto,
   DiscoveredPlaceListQueryDto,
@@ -488,6 +490,42 @@ export class AdminHarvestEntriesController {
     return this.nats.send<SourceEntryAcceptResult>(
       SOURCE_ENTRY_PATTERNS.createItem,
       { ...adminCredential(admin), entryId: id, ...dto }
+    );
+  }
+
+  /**
+   * A whole decisions file, in one call, all or nothing (plan 0100).
+   *
+   * The route the curation toolchain applies with, after a session decided the
+   * queue offline. Replaying that file through the two routes above is one
+   * request per row, so a file that goes wrong at row 300 leaves the queue half
+   * worked and the operator with no way to say which half.
+   *
+   * **A refused file answers 201 with `applied: false`**, not an error status.
+   * The caller needs to know which row failed which check, and a problem
+   * document carries one message for a thousand rows. What does answer 400 is
+   * what the request got wrong before any row was looked at: an empty file, or
+   * one over the cap.
+   *
+   * There is no bulk reject, and there will not be one: junk is a person's call,
+   * and a wrong reject hides a row from the queue that nobody looks at again.
+   */
+  @Post('decisions')
+  @ApiContractResponse(SOURCE_ENTRY_PATTERNS.applyDecisions, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  applyDecisions(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: ApplySourceEntryDecisionsDto
+  ): Promise<ApplySourceEntryDecisionsResult> {
+    return this.nats.send<ApplySourceEntryDecisionsResult>(
+      SOURCE_ENTRY_PATTERNS.applyDecisions,
+      {
+        ...adminCredential(admin),
+        runId: dto.runId,
+        operations: dto.operations,
+      }
     );
   }
 

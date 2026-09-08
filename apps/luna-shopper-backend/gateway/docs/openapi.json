@@ -15365,6 +15365,112 @@
         ]
       }
     },
+    "/v1/admin/catalog/items/batch": {
+      "post": {
+        "operationId": "AdminCatalogItemsController_createMany_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `item.createMany` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.item.createMany.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/items/{id}": {
       "get": {
         "operationId": "AdminCatalogItemsController_get_v1",
@@ -15773,6 +15879,102 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ProductGroupPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/product-groups/assignments": {
+      "post": {
+        "operationId": "AdminCatalogProductGroupsController_applyAssignments_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyProductGroupAssignmentsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `productGroup.applyAssignments` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.productGroup.applyAssignments.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -19426,6 +19628,102 @@
         ]
       }
     },
+    "/v1/admin/harvest/entries/decisions": {
+      "post": {
+        "operationId": "AdminHarvestEntriesController_applyDecisions_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplySourceEntryDecisionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `sourceEntry.applyDecisions` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.sourceEntry.applyDecisions.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
     "/v1/admin/harvest/entries/{id}/reject": {
       "post": {
         "operationId": "AdminHarvestEntriesController_reject_v1",
@@ -22177,6 +22475,22 @@
           "defaultUnit"
         ]
       },
+      "CreateItemsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 1000,
+            "description": "The products to create, all of them or none. A longer list is refused rather than split: two chunks are two transactions, so the first can land while the second fails.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateItemDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
       "UpdateItemDto": {
         "type": "object",
         "properties": {
@@ -22297,6 +22611,111 @@
           "name",
           "slug",
           "referenceUnit"
+        ]
+      },
+      "ProductGroupExpectationDto": {
+        "type": "object",
+        "properties": {
+          "productGroupId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Null for a product curation has not reached, which is what a session working the ungrouped products records."
+          }
+        },
+        "required": [
+          "productGroupId"
+        ]
+      },
+      "ProductGroupAssignmentDto": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "createGroup",
+              "assignItem"
+            ]
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "createGroup: this request’s own name for the group, so an assignItem below can name it before the database has issued an id."
+          },
+          "name": {
+            "description": "createGroup.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedTextDto"
+              }
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "createGroup."
+          },
+          "referenceUnit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "KILOGRAM",
+              "MILLILITER",
+              "LITER",
+              "PACK"
+            ],
+            "description": "createGroup."
+          },
+          "synonyms": {
+            "description": "createGroup.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedSynonymsDto"
+              }
+            ]
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "assignItem: the product to move."
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "assignItem: a group catalog already holds. Exactly one of this and groupRef."
+          },
+          "groupRef": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "assignItem: a group this same request creates."
+          },
+          "expect": {
+            "description": "assignItem: the group the product was in when the decision was made. A product somebody has sorted since fails it, and fails the whole request with it.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProductGroupExpectationDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "ApplyProductGroupAssignmentsDto": {
+        "type": "object",
+        "properties": {
+          "operations": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductGroupAssignmentDto"
+            }
+          }
+        },
+        "required": [
+          "operations"
         ]
       },
       "UpdateProductGroupDto": {
@@ -22793,6 +23212,98 @@
             "description": "Override the unit the source’s own size text mapped to."
           }
         }
+      },
+      "SourceEntryExpectationDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "CANDIDATE",
+              "UNRESOLVED",
+              "REJECTED"
+            ]
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Exactly the string the queue listing printed for this row. A row observed again since then fails the check."
+          }
+        },
+        "required": [
+          "status",
+          "lastSeenAt"
+        ]
+      },
+      "SourceEntryDecisionDto": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "createItem"
+            ],
+            "description": "accept binds the row to a product; createItem creates the product and binds the row to it. There is no bulk reject: junk is a person’s call."
+          },
+          "entryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "accept: a product the catalog already holds. Exactly one of this and itemRef."
+          },
+          "itemRef": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "accept: a product a createItem of this same file creates, which is how a second row of the same product is bound before an id exists."
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "createItem: this file’s own name for the product it creates."
+          },
+          "item": {
+            "description": "createItem: the product to create. Every field is optional, because the row already holds a default for each.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreateItemFromEntryDto"
+              }
+            ]
+          },
+          "expect": {
+            "$ref": "#/components/schemas/SourceEntryExpectationDto"
+          }
+        },
+        "required": [
+          "op",
+          "entryId",
+          "expect"
+        ]
+      },
+      "ApplySourceEntryDecisionsDto": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "The curation session this file came out of. Provenance, echoed back in the answer so a report can be filed under it; the backend stores no run of its own for a decisions file."
+          },
+          "operations": {
+            "maxItems": 1000,
+            "description": "The whole file, applied in the order given. A longer file is refused rather than split: two chunks are two transactions, so the first can land while the second fails.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceEntryDecisionDto"
+            }
+          }
+        },
+        "required": [
+          "operations"
+        ]
       },
       "MapSourceLocationDto": {
         "type": "object",
@@ -24912,6 +25423,22 @@
         ],
         "additionalProperties": false
       },
+      "catalog.BulkOperationError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/enums.BulkOperationErrorCode"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "additionalProperties": false
+      },
       "catalog.CatalogScopeView": {
         "type": "object",
         "properties": {
@@ -25609,6 +26136,57 @@
           "kind",
           "externalKey",
           "label"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ProductGroupAssignmentOutcome": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "enum": [
+              "createGroup",
+              "assignItem"
+            ]
+          },
+          "ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.BulkOperationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "ref",
+          "itemId",
+          "groupId",
+          "applied",
+          "error"
         ],
         "additionalProperties": false
       },
@@ -26383,6 +26961,18 @@
         "enum": [
           "GOOGLE",
           "EMAIL"
+        ]
+      },
+      "enums.BulkOperationErrorCode": {
+        "type": "string",
+        "enum": [
+          "NOT_FOUND",
+          "NOT_PENDING",
+          "EXPECT_MISMATCH",
+          "DUPLICATE_SUBJECT",
+          "UNKNOWN_REFERENCE",
+          "MALFORMED_OPERATION",
+          "ALREADY_TAKEN"
         ]
       },
       "enums.CommentTranscription": {
@@ -28638,6 +29228,82 @@
         ],
         "additionalProperties": false
       },
+      "harvest.SourceEntryDecisionOutcome": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "enum": [
+              "accept",
+              "createItem"
+            ]
+          },
+          "entryId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pricesWritten": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.BulkOperationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "entryId",
+          "ref",
+          "applied",
+          "itemId",
+          "pricesWritten",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SourceEntryPriceSkip": {
+        "type": "object",
+        "properties": {
+          "entryId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entryId",
+          "itemId",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
       "harvest.SourceEntryPriceView": {
         "type": "object",
         "properties": {
@@ -29613,6 +30279,21 @@
         ],
         "additionalProperties": false
       },
+      "msg.item.createMany.response": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
       "msg.item.getMany.response": {
         "type": "object",
         "properties": {
@@ -29644,6 +30325,117 @@
         "required": [
           "lists",
           "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "msg.productGroup.applyAssignments.response": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ProductGroupAssignmentOutcome"
+            }
+          },
+          "createdGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "groupId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "ref",
+                "groupId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "applied",
+          "error",
+          "results",
+          "createdGroups"
+        ],
+        "additionalProperties": false
+      },
+      "msg.sourceEntry.applyDecisions.response": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "failedStep": {
+            "anyOf": [
+              {
+                "enum": [
+                  "VALIDATE",
+                  "CREATE_ITEMS",
+                  "BIND"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryDecisionOutcome"
+            }
+          },
+          "priceSkips": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceSkip"
+            }
+          },
+          "orphanedItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "runId",
+          "applied",
+          "failedStep",
+          "error",
+          "results",
+          "priceSkips",
+          "orphanedItemIds"
         ],
         "additionalProperties": false
       },
