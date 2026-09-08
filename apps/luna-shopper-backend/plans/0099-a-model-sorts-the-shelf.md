@@ -27,10 +27,13 @@ The gateway already exposes everything the tool needs:
 
 ## What this plan builds
 
-- `tools/catalog/assign-groups.mjs`, the tool.
-- `tools/catalog/assign-groups-prompt.md`, the system prompt.
-- Fixtures under `tools/catalog/fixtures/` and `tools/catalog/assign-groups.test.mjs`,
-  run with `node --test`, no network.
+- `apps/luna-shopper-backend/catalog/tools/assign-groups.mjs`, the tool.
+- `apps/luna-shopper-backend/catalog/tools/assign-groups-prompt.md`, the system prompt.
+- Fixtures under `apps/luna-shopper-backend/catalog/tools/fixtures/` and
+  `assign-groups.test.mjs` beside them, run with `node --test`, no network.
+
+The tool lives with the catalog service, whose data it curates, the same way
+the leaflet toolchain lives under `harvester/tools/`.
 
 Same hard constraints as plan 0098: zero npm dependencies, plain ESM Node,
 the Claude API over raw `fetch`, and shared conventions with `review-entries.mjs`
@@ -104,14 +107,15 @@ renames a group and never touches an item that already has one.
 
 Identical to plan 0098, deliberately: stdout is one JSON line per item, stderr
 is `52/349 - <item name es>`, the run writes
-`tools/catalog/out/groups-<timestamp>.jsonl` and a report with per-decision
+`catalog/tools/out/groups-<timestamp>.jsonl` and a report with per-decision
 counts, every `REVIEW` with issues, groups created, and token usage. Dry run by
 default, `--apply` to write, `--limit`, `--base-url`, same auth environment
 variables, refuse to start without `ANTHROPIC_API_KEY`.
 
 ## Verification
 
-`node --test tools/catalog/assign-groups.test.mjs` with `fetch` injected. Cover:
+`node --test apps/luna-shopper-backend/catalog/tools/assign-groups.test.mjs`
+with `fetch` injected. Cover:
 each validator on a crafted bad decision and a good one; the confidence
 demotion; the directory growing mid-run and a later `ASSIGN` hitting the new
 group; slug validation agreeing with `product-group.service.ts#validateSlug`

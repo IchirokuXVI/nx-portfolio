@@ -4,7 +4,7 @@
 // gateway or the model, and no test waits: the backoff sleep is a spy that
 // records the delay it was asked for and returns at once.
 //
-//   node --test tools/catalog/assign-groups.test.mjs
+//   node --test apps/luna-shopper-backend/catalog/tools/assign-groups.test.mjs
 
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -906,7 +906,13 @@ describe('the session', () => {
 
   it('says so when there is no way to sign in', async () => {
     await assert.rejects(
-      resolveToken({ baseUrl: BASE_URL, fetchImpl: async () => {}, env: {} }),
+      resolveToken({
+        baseUrl: BASE_URL,
+        fetchImpl: async () => {
+          throw new Error('no request should be made without credentials');
+        },
+        env: {},
+      }),
       /LUNA_ADMIN_TOKEN/
     );
   });

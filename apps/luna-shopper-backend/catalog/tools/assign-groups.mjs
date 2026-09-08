@@ -13,19 +13,19 @@
 // already has one.
 //
 // Dry run by default. Every decision is printed as one JSON line on stdout and
-// saved under tools/catalog/out/, so a run can be read before it is repeated
+// saved under apps/luna-shopper-backend/catalog/tools/out/, so a run can be read before it is repeated
 // with --apply.
 //
 //   # a dry run over the first 20 ungrouped products of a dev slot
 //   ANTHROPIC_API_KEY=sk-... LUNA_ADMIN_USERNAME=admin LUNA_ADMIN_PASSWORD=... \
-//     node tools/catalog/assign-groups.mjs --limit 20
+//     node apps/luna-shopper-backend/catalog/tools/assign-groups.mjs --limit 20
 //
 //   # the same run against slot 1's gateway, writing the assignments
 //   ANTHROPIC_API_KEY=sk-... LUNA_ADMIN_TOKEN=eyJ... \
-//     node tools/catalog/assign-groups.mjs --apply --base-url http://localhost:43000
+//     node apps/luna-shopper-backend/catalog/tools/assign-groups.mjs --apply --base-url http://localhost:43000
 //
 //   # the whole ungrouped catalog, dry run, decisions only
-//   node tools/catalog/assign-groups.mjs > /tmp/groups.jsonl
+//   node apps/luna-shopper-backend/catalog/tools/assign-groups.mjs > /tmp/groups.jsonl
 //
 // Zero npm dependencies on purpose: Node built-ins and global fetch only.
 
@@ -53,7 +53,7 @@ export const BACKOFF_MS = [2000, 8000, 30000];
 
 const DEFAULT_BASE_URL = 'http://localhost:3000';
 
-const USAGE = `Usage: node tools/catalog/assign-groups.mjs [options]
+const USAGE = `Usage: node apps/luna-shopper-backend/catalog/tools/assign-groups.mjs [options]
 
   --apply           Write the assignments. Without it the run only reports.
   --limit <n>       Stop after n products. Default: every ungrouped product.
@@ -73,7 +73,7 @@ Environment:
 
 /** Where the gateway's own document sits, relative to this file. */
 export const OPENAPI_PATH = new URL(
-  '../../apps/luna-shopper-backend/gateway/docs/openapi.json',
+  '../../gateway/docs/openapi.json',
   import.meta.url
 );
 
