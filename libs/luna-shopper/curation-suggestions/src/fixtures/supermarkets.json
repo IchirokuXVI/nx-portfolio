@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "id": "sm-mercadona",
+      "name": { "es": "Mercadona", "en": "Mercadona" },
+      "logoUrl": null,
+      "websiteUrl": "https://www.mercadona.es",
+      "externalBrandKey": "mercadona",
+      "defaultPriceScopeId": "scope-mercadona"
+    },
+    {
+      "id": "sm-el-jamon",
+      "name": { "es": "El Jamón", "en": "El Jamón" },
+      "logoUrl": null,
+      "websiteUrl": null,
+      "externalBrandKey": "el-jamon",
+      "defaultPriceScopeId": null
+    }
+  ],
+  "nextCursor": null
+}
