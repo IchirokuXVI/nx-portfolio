@@ -1,5 +1,12 @@
 > **PR:** [#288](https://github.com/IchirokuXVI/nx-portfolio/pull/288)
 
+> **Superseded in part.** The single file CLI this plan describes is being split
+> into the curation toolchain: `libs/luna-shopper/curation-groups` (the decider),
+> `curation-auth`, and `curation-cli` (the orchestrator), with bulk apply from
+> backend plan 0100. The grouping rules, the validators, the decision contract
+> and the prompt in this plan remain the reference; the loop, the flags and the
+> in-prompt group directory do not survive.
+
 # 0099 A model sorts items into product groups
 
 ## Where this starts
