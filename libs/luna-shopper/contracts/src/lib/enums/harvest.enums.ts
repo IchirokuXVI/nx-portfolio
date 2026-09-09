@@ -195,6 +195,24 @@ export enum HarvestWarningCode {
   ALREADY_QUEUED = 'ALREADY_QUEUED',
   /** A warning the document itself carried, from whatever produced it, verbatim. */
   EXTRACTOR = 'EXTRACTOR',
+  /**
+   * A price named a scope key nothing declared, so it was not written (plan
+   * 0103, D4).
+   *
+   * The producer's fault rather than the operator's: a scope is created only
+   * from a declaration, because a scope with no kind and no name is a row
+   * nobody can act on.
+   */
+  UNKNOWN_PRICE_SCOPE = 'UNKNOWN_PRICE_SCOPE',
+  /**
+   * A price named no scope and the run has no default one, so it was not
+   * written (plan 0103, section 3.2).
+   *
+   * The operator's to fix, by starting the run with a price scope. The rest of
+   * the run is kept: a source that states a region for most of its prices and
+   * none for one has still told us something true about the others.
+   */
+  NO_PRICE_SCOPE = 'NO_PRICE_SCOPE',
 }
 
 /**

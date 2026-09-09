@@ -227,28 +227,34 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         url: product.path,
         observedAt,
         extra: null,
-        price:
+        // An empty array is a card with no readable price. Carrefour names no
+        // scope of its own, so the one price it states falls to the run's
+        // default (plan 0103, section 3.2).
+        prices:
           product.priceCents === null && product.unitPriceCents === null
-            ? null
-            : {
-                price: centsToUnits(product.priceCents),
-                currency: 'EUR',
-                // Stored as printed and never recomputed. The field exists so a
-                // shopper can compare, and a derivation that disagrees with the
-                // chain in the last cent is worse than useless.
-                unitPrice: centsToUnits(product.unitPriceCents),
-                unitPriceLabel: product.unitPriceLabel,
-                // A storefront price has no window: it is what the till charges
-                // until the storefront says otherwise.
-                validFrom: null,
-                validUntil: null,
-              },
+            ? []
+            : [
+                {
+                  scopeKey: null,
+                  price: centsToUnits(product.priceCents),
+                  currency: 'EUR',
+                  // Stored as printed and never recomputed. The field exists so
+                  // a shopper can compare, and a derivation that disagrees with
+                  // the chain in the last cent is worse than useless.
+                  unitPrice: centsToUnits(product.unitPriceCents),
+                  unitPriceLabel: product.unitPriceLabel,
+                  // A storefront price has no window: it is what the till
+                  // charges until the storefront says otherwise.
+                  validFrom: null,
+                  validUntil: null,
+                },
+              ],
       })
     );
 
     await this.ingest.ingest(context, {
       supermarketId: input.supermarketId,
-      priceScopeId,
+      defaultPriceScopeId: priceScopeId,
       // A page the chain publishes, which is what `OFFICIAL_WEB` means.
       sourceKind: PriceSourceKind.OFFICIAL_WEB,
       observations,

@@ -147,16 +147,22 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           url: detail.sourceUrl,
           observedAt,
           extra: null,
-          price: {
-            price: detail.price,
-            currency: detail.currency,
-            unitPrice: detail.unitPrice,
-            unitPriceLabel: detail.unitPriceLabel,
-            // A storefront price has no window: it is what the till charges
-            // until the storefront says otherwise (plan 0086, section 5).
-            validFrom: null,
-            validUntil: null,
-          },
+          // One price, for the scope the run was started with. Mercadona names
+          // no scope of its own, so the key is null and the price falls to the
+          // run's default (plan 0103, section 3.2).
+          prices: [
+            {
+              scopeKey: null,
+              price: detail.price,
+              currency: detail.currency,
+              unitPrice: detail.unitPrice,
+              unitPriceLabel: detail.unitPriceLabel,
+              // A storefront price has no window: it is what the till charges
+              // until the storefront says otherwise (plan 0086, section 5).
+              validFrom: null,
+              validUntil: null,
+            },
+          ],
         });
       },
       onError: async (error, listProduct) => {
@@ -177,7 +183,7 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     );
     const { outcomes } = await this.ingest.ingest(context, {
       supermarketId: input.supermarketId,
-      priceScopeId,
+      defaultPriceScopeId: priceScopeId,
       sourceKind: PriceSourceKind.OFFICIAL_API,
       observations,
     });

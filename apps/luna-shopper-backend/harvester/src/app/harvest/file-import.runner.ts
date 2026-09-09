@@ -101,7 +101,8 @@ export class FileImportRunner {
 
     await context.setStage('READ', 'Reading the document');
     const started = new Date();
-    const fallbackObservedAt = parseInstant(document.producer?.produced_at) ?? started;
+    const fallbackObservedAt =
+      parseInstant(document.producer?.produced_at) ?? started;
     const duplicates = duplicateKeysIn(document.products);
 
     const observations = document.products.map((product) =>
@@ -134,7 +135,7 @@ export class FileImportRunner {
     );
     const { outcomes } = await this.ingest.ingest(context, {
       supermarketId: input.supermarketId,
-      priceScopeId: input.priceScopeId,
+      defaultPriceScopeId: input.priceScopeId,
       sourceKind: input.sourceKind,
       observations,
     });
@@ -159,7 +160,8 @@ export class FileImportRunner {
     }
   ): SourceObservation {
     const sizeFormat = product.size?.label ?? product.size?.unit ?? null;
-    const externalId = product.external_id ?? entryKey(product.name, sizeFormat);
+    const externalId =
+      product.external_id ?? entryKey(product.name, sizeFormat);
     // The product's own window beats the document's, and neither is required.
     const window = product.validity
       ? resolveImportWindow({
@@ -182,9 +184,9 @@ export class FileImportRunner {
       // Stored and shown, never interpreted (D6). Whatever the producer knew
       // that the import does not read is in here and stays in here.
       extra: product.extra ?? null,
-      price: context.duplicates.has(externalId)
-        ? null
-        : priceOf(product, window),
+      prices: context.duplicates.has(externalId)
+        ? []
+        : pricesOf(product, window),
     };
   }
 
@@ -217,26 +219,38 @@ export class FileImportRunner {
   }
 }
 
-/** The window a price row carries, from the two blocks 6.1 allows. */
-function priceOf(
+/**
+ * Every price a product states, from the two blocks 6.1 allows.
+ *
+ * A version 1 product states at most one, for no particular group of shops, so
+ * it falls to the scope the operator chose at the spawn. Version 2 is what
+ * carries several (plan 0103, section 5.1), and it arrives here already
+ * normalized into the same shape.
+ */
+function pricesOf(
   product: HarvestDocumentProduct,
   window: ImportWindow | null
-): SourceObservation['price'] {
+): SourceObservation['prices'] {
   if (!product.price && !product.unit_price) {
-    return null;
+    return [];
   }
-  return {
-    // Null when the source stated only a comparison figure. The ingest then
-    // writes the unit price and no till price, which is plan 0081 section 6.1's
-    // one surviving decision.
-    price: product.price?.amount ?? null,
-    currency:
-      product.price?.currency ?? product.unit_price?.currency ?? DEFAULT_CURRENCY,
-    unitPrice: product.unit_price?.amount ?? null,
-    unitPriceLabel: product.unit_price?.label ?? null,
-    validFrom: window?.validFrom ?? null,
-    validUntil: window?.validUntil ?? null,
-  };
+  return [
+    {
+      scopeKey: null,
+      // Null when the source stated only a comparison figure. The ingest then
+      // writes the unit price and no till price, which is plan 0081 section
+      // 6.1's one surviving decision.
+      price: product.price?.amount ?? null,
+      currency:
+        product.price?.currency ??
+        product.unit_price?.currency ??
+        DEFAULT_CURRENCY,
+      unitPrice: product.unit_price?.amount ?? null,
+      unitPriceLabel: product.unit_price?.label ?? null,
+      validFrom: window?.validFrom ?? null,
+      validUntil: window?.validUntil ?? null,
+    },
+  ];
 }
 
 /** The keys more than one product in this document resolves to (D2). */
@@ -327,7 +341,9 @@ function parseInstant(value: unknown): Date | null {
  * page renders, and dropping the number the producer put there would lose it for
  * no reason.
  */
-function pageOf(extra: Record<string, unknown> | null | undefined): number | null {
+function pageOf(
+  extra: Record<string, unknown> | null | undefined
+): number | null {
   const page = extra?.['page'];
   return typeof page === 'number' ? page : null;
 }

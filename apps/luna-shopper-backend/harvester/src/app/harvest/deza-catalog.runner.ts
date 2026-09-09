@@ -253,7 +253,7 @@ export class DezaCatalogRunner implements CatalogRunner {
         // **It writes no price, ever.** The site prints none, and the blank
         // price elements in its markup are the storefront's own hidden pricing,
         // which a parser reading them would write as zeros.
-        price: null,
+        prices: [],
       })
     );
 
@@ -262,7 +262,7 @@ export class DezaCatalogRunner implements CatalogRunner {
       // A scope is accepted and ignored (plan 0086, section 9): there is no
       // price to write it for, and a required field that does nothing is a lie
       // in a form.
-      priceScopeId: null,
+      defaultPriceScopeId: null,
       sourceKind: PriceSourceKind.OFFICIAL_WEB,
       observations,
     });

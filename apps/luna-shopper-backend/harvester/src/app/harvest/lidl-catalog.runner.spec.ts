@@ -259,6 +259,15 @@ describe('LidlCatalogRunner', () => {
   const idsOf = (input: SourceIngestInput): string[] =>
     input.observations.map((observation) => observation.externalId);
 
+  /** Every offer region a call's prices name, in order, without repeats. */
+  const scopeKeysOf = (input: SourceIngestInput): string[] => [
+    ...new Set(
+      input.observations.flatMap((observation) =>
+        observation.prices.map((price) => price.scopeKey as string)
+      )
+    ),
+  ];
+
   it('keeps the groceries, drops the bazar and the online shop', async () => {
     const runner = new TestRunner(ingest, catalog, {
       index: [
@@ -293,7 +302,7 @@ describe('LidlCatalogRunner', () => {
     expect(ingested[0].sourceKind).toBe(PriceSourceKind.OFFICIAL_API);
   });
 
-  it('creates one scope per region and writes one ingest call for each', async () => {
+  it('creates one scope per region and makes one ingest call for all of them', async () => {
     const runner = new TestRunner(ingest, catalog, {
       index: [row({ id: '1', title: 'Queso', category: 'Food' })],
       products: {
@@ -313,25 +322,25 @@ describe('LidlCatalogRunner', () => {
       { externalKey: '2', kind: PriceScopeKind.REGION },
       { externalKey: '3', kind: PriceScopeKind.REGION },
     ]);
-    expect(ingested.map((input) => input.priceScopeId)).toEqual([
-      'scope-1',
-      'scope-2',
-      'scope-3',
-    ]);
+    // **One call, not one per scope** (plan 0103, D5). The regions travel with
+    // the product rather than splitting the run into a pass each.
+    expect(ingested).toHaveLength(1);
+    expect(scopeKeysOf(ingested[0])).toEqual(['1', '2', '3']);
     expect(ingested[0].observations[0]).toMatchObject({
       externalId: '1',
       ean: '4335619207615',
       unitSize: 500,
       sizeFormat: '500 g',
-      price: {
-        price: 2.5,
-        currency: 'EUR',
-        // LIDL publishes no per kilogram figure, and deriving one would
-        // disagree with the chain on the field made for comparing.
-        unitPrice: null,
-        validFrom: new Date('2026-09-03T22:00Z'),
-        validUntil: new Date('2026-09-06T21:59:59Z'),
-      },
+    });
+    expect(ingested[0].observations[0].prices[0]).toMatchObject({
+      scopeKey: '1',
+      price: 2.5,
+      currency: 'EUR',
+      // LIDL publishes no per kilogram figure, and deriving one would
+      // disagree with the chain on the field made for comparing.
+      unitPrice: null,
+      validFrom: new Date('2026-09-03T22:00Z'),
+      validUntil: new Date('2026-09-06T21:59:59Z'),
     });
   });
 
@@ -358,7 +367,7 @@ describe('LidlCatalogRunner', () => {
     await runner.run(context(), { supermarketId: CHAIN }, source());
 
     expect(created).toEqual([]);
-    expect(ingested[0].priceScopeId).toBe('scope-held');
+    expect(ingested[0].scopeIdFor?.('1')).toBe('scope-held');
   });
 
   it('writes the two prices of a product its regions disagree about', async () => {
@@ -377,10 +386,12 @@ describe('LidlCatalogRunner', () => {
 
     await runner.run(context(), { supermarketId: CHAIN }, source());
 
+    // Three prices on one product, each naming its own region. The scope a key
+    // resolves to is the run's to say, and the ingest writes one row per scope.
     const priced = new Map(
-      ingested.map((input) => [
-        input.priceScopeId,
-        input.observations[0].price?.price,
+      ingested[0].observations[0].prices.map((price) => [
+        ingested[0].scopeIdFor?.(price.scopeKey as string),
+        price.price,
       ])
     );
     expect(priced.get('scope-1')).toBe(74.99);
@@ -407,7 +418,7 @@ describe('LidlCatalogRunner', () => {
     await runner.run(context(), { supermarketId: CHAIN }, source());
 
     expect(created.map((scope) => scope.externalKey)).toEqual(['1']);
-    expect(ingested.map((input) => input.priceScopeId)).toEqual(['scope-1']);
+    expect(scopeKeysOf(ingested[0])).toEqual(['1']);
   });
 
   it('ingests a product the window holds and prices nowhere', async () => {
@@ -419,10 +430,10 @@ describe('LidlCatalogRunner', () => {
     await runner.run(context(), { supermarketId: CHAIN }, source());
 
     // 21 of the week's products look like this. The catalog is allowed to know
-    // the article exists, so the row is written with no scope and no price.
+    // the article exists, so the row is written with no price at all.
     expect(ingested).toHaveLength(1);
-    expect(ingested[0].priceScopeId).toBeNull();
-    expect(ingested[0].observations[0].price).toBeNull();
+    expect(ingested[0].defaultPriceScopeId).toBeNull();
+    expect(ingested[0].observations[0].prices).toEqual([]);
     expect(created).toEqual([]);
   });
 

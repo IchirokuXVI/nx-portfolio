@@ -2189,7 +2189,9 @@ export type EnumsHarvestWarningCode =
   | 'CANDIDATE_MATCH'
   | 'NO_MATCH'
   | 'ALREADY_QUEUED'
-  | 'EXTRACTOR';
+  | 'EXTRACTOR'
+  | 'UNKNOWN_PRICE_SCOPE'
+  | 'NO_PRICE_SCOPE';
 
 /**
  * `enums.ItemCategory` in the gateway's OpenAPI document.

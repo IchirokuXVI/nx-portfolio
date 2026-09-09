@@ -234,53 +234,23 @@ export class LidlCatalogRunner implements CatalogRunner {
     products: readonly LidlProduct[],
     scopes: ReadonlyMap<string, ScopeRef>
   ): Promise<void> {
-    /** priceScopeId -> the observations that scope pays for. */
-    const byScope = new Map<string, SourceObservation[]>();
-    const unpriced: SourceObservation[] = [];
-
-    for (const product of products) {
-      if (product.prices.length === 0) {
-        unpriced.push(observationOf(product, null));
-        continue;
-      }
-      for (const price of product.prices) {
-        const observation = observationOf(product, price.priceId);
-        for (const region of price.regions) {
-          const scope = scopes.get(region.id);
-          if (!scope) {
-            continue;
-          }
-          const held = byScope.get(scope.id);
-          if (held) {
-            held.push(observation);
-          } else {
-            byScope.set(scope.id, [observation]);
-          }
-        }
-      }
-    }
-
-    for (const [priceScopeId, observations] of byScope) {
-      context.signal.throwIfAborted();
-      await this.ingest.ingest(context, {
-        supermarketId: input.supermarketId,
-        priceScopeId,
-        // A JSON service the chain publishes, which is what OFFICIAL_API means.
-        sourceKind: PriceSourceKind.OFFICIAL_API,
-        observations,
-      });
-    }
-
-    if (unpriced.length > 0) {
-      // No scope, because there is no price to write one for. The row still
-      // exists, which is the point: the catalog learns the article.
-      await this.ingest.ingest(context, {
-        supermarketId: input.supermarketId,
-        priceScopeId: null,
-        sourceKind: PriceSourceKind.OFFICIAL_API,
-        observations: unpriced,
-      });
-    }
+    // **One pass, not one per scope** (plan 0103, D5, reversing plan 0089
+    // section 8). A price carries the region it is for, so the week's 59
+    // regions travel with their products instead of being grouped into roughly
+    // 54 ingest calls of the same 132 products. A product with no price at all
+    // still writes its row, which is 21 of a week: the catalog is allowed to
+    // know the article exists.
+    context.signal.throwIfAborted();
+    await this.ingest.ingest(context, {
+      supermarketId: input.supermarketId,
+      // The fallback for a price that names no region, which LIDL never
+      // produces. It is accepted rather than refused now (plan 0103, D5).
+      defaultPriceScopeId: input.priceScopeId ?? null,
+      // A JSON service the chain publishes, which is what OFFICIAL_API means.
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      scopeIdFor: (regionId) => scopes.get(regionId)?.id ?? null,
+      observations: products.map(observationOf),
+    });
   }
 }
 
@@ -291,18 +261,19 @@ interface ScopeRef {
 }
 
 /**
- * One product as LIDL described it, for one of its prices.
+ * One product as LIDL described it, with every price it publishes.
  *
- * The price is the one the group states, verbatim. `unitPrice` is null: LIDL
- * publishes no per kilogram figure, and deriving one from the printed size
- * would disagree with the chain in the last cent on the field whose only
- * purpose is comparison.
+ * **A price per offer region, and there are 59 of them** (plan 0089, section 4).
+ * A price the chain states for several regions becomes one entry per region,
+ * each naming that region as its scope, because the format allows a different
+ * price per region and a model that collapsed the ones that agree this week
+ * could not store the week one of them differs.
+ *
+ * Each price is verbatim. `unitPrice` is null: LIDL publishes no per kilogram
+ * figure, and deriving one from the printed size would disagree with the chain
+ * in the last cent on the field whose only purpose is comparison.
  */
-function observationOf(
-  product: LidlProduct,
-  priceId: string | null
-): SourceObservation {
-  const price = product.prices.find((entry) => entry.priceId === priceId);
+function observationOf(product: LidlProduct): SourceObservation {
   return {
     externalId: product.externalId,
     name: product.name,
@@ -317,19 +288,23 @@ function observationOf(
     // LIDL's own number for a weight item, and the aisle is a proposal a person
     // reads: neither may be written as an identifier or as a decision.
     extra: extraOf(product),
-    price: price
-      ? {
-          price: price.price,
-          currency: price.currency,
-          unitPrice: null,
-          unitPriceLabel: null,
-          // The window the chain published, kept as it stated it. Next week's
-          // prices arrive with a start date in the future and are written with
-          // it: plan 0080 decides on read whether a price applies.
-          validFrom: price.validFrom,
-          validUntil: price.validUntil,
-        }
-      : null,
+    prices: product.prices.flatMap((price) =>
+      price.regions.map((region) => ({
+        // The chain's own id for the offer region, which is what a scope is
+        // resolved by: it survives a move to another cluster, and a uuid does
+        // not (plan 0103, D3).
+        scopeKey: region.id,
+        price: price.price,
+        currency: price.currency,
+        unitPrice: null,
+        unitPriceLabel: null,
+        // The window the chain published, kept as it stated it. Next week's
+        // prices arrive with a start date in the future and are written with
+        // it: plan 0080 decides on read whether a price applies.
+        validFrom: price.validFrom,
+        validUntil: price.validUntil,
+      }))
+    ),
   };
 }
 

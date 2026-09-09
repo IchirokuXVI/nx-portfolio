@@ -193,7 +193,7 @@ describe('CarrefourCatalogRunner', () => {
     );
 
     expect(ingested?.sourceKind).toBe(PriceSourceKind.OFFICIAL_WEB);
-    expect(ingested?.priceScopeId).toBe(SCOPE);
+    expect(ingested?.defaultPriceScopeId).toBe(SCOPE);
     expect(ingested?.observations).toHaveLength(2);
     expect(ingested?.observations[0]).toMatchObject({
       externalId: 'p1',
@@ -203,7 +203,16 @@ describe('CarrefourCatalogRunner', () => {
       // The listing card carries none. The backfill is what fills it.
       ean: null,
       categoryPath: ['Bebidas'],
-      price: { price: 0.39, currency: 'EUR', unitPriceLabel: '€/l' },
+      // One price, naming no scope of its own: Carrefour publishes one price
+      // for the whole site, so it falls to the scope the run was started with.
+      prices: [
+        expect.objectContaining({
+          scopeKey: null,
+          price: 0.39,
+          currency: 'EUR',
+          unitPriceLabel: '€/l',
+        }),
+      ],
     });
   });
 
@@ -229,7 +238,7 @@ describe('CarrefourCatalogRunner', () => {
     expect(ingested?.observations).toHaveLength(1);
     expect(ingested?.observations[0]).toMatchObject({
       externalId: 'p9',
-      price: null,
+      prices: [],
     });
   });
 
