@@ -311,42 +311,27 @@
                   </span>
                 </span>
               } @else {
-                <span class="share-stepper">
-                  <button
-                    (click)="step(option.id, -1)"
-                    [attr.aria-label]="
-                      'basket.product.less' | rokuT: { name: option.name }
-                    "
-                    [disabled]="busy() || option.share === 0"
-                    class="share-step"
-                    type="button"
-                  >
-                    −
-                  </button>
-                  <input
-                    (input)="setShare(option.id, +$any($event.target).value)"
-                    [attr.aria-label]="
-                      'basket.product.units' | rokuT: { name: option.name }
-                    "
-                    [disabled]="busy()"
-                    [max]="option.max"
-                    [value]="option.share"
-                    class="share-field"
-                    min="0"
-                    type="number"
-                  />
-                  <button
-                    (click)="step(option.id, 1)"
-                    [attr.aria-label]="
-                      'basket.product.more' | rokuT: { name: option.name }
-                    "
-                    [disabled]="busy() || option.share >= option.max"
-                    class="share-step"
-                    type="button"
-                  >
-                    +
-                  </button>
-                </span>
+                <!--
+                  The reel, buttons kept: this control was a minus, a number and a
+                  plus before it was a reel, and the amounts here are small and
+                  moved at a shelf with one hand. `preview` writes through as the
+                  thumb moves, so the balance above walks down under the gesture
+                  and Apply pressed inside the reel's idle beat sends what is on
+                  screen. The ceiling is the row's, and `setShare` clamps again
+                  rather than trusting any control.
+                -->
+                <lib-quantity-reel
+                  (committedTo)="setShare(option.id, $event.to)"
+                  (preview)="onSharePreview(option.id, $event)"
+                  [label]="
+                    'basket.product.units' | rokuT: { name: option.name }
+                  "
+                  [max]="option.max"
+                  [min]="0"
+                  [readonly]="busy()"
+                  [value]="option.share"
+                  class="share-reel"
+                />
               }
             </span>
           </li>
@@ -417,17 +402,24 @@
                 {{ 'basket.allocate.wanted' | rokuT: { count: row.wanted } }}
               </span>
             </span>
-            <input
-              (input)="setAllocation(row.listId, +$any($event.target).value)"
-              [attr.aria-label]="
+            <!--
+              The reel again, without its buttons: this was a bare number field,
+              so nothing here grew a control it did not have. Capped at what the
+              list wanted, and written through on `preview` so the running total
+              under the pane moves with the thumb rather than a beat behind it.
+            -->
+            <lib-quantity-reel
+              (committedTo)="setAllocation(row.listId, $event.to)"
+              (preview)="onAllocationPreview(row.listId, $event)"
+              [hideButtons]="true"
+              [label]="
                 row.name ||
                 ('basket.allocate.wanted' | rokuT: { count: row.wanted })
               "
               [max]="row.wanted"
+              [min]="0"
               [value]="allocation().get(row.listId) ?? 0"
-              class="allocation-field"
-              min="0"
-              type="number"
+              class="allocation-reel"
             />
           </li>
         }
