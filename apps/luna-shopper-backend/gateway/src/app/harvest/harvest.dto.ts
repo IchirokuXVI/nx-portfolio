@@ -178,13 +178,14 @@ export class ImportHarvestDocumentDto {
   @IsUUID()
   supermarketId!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The scope the prices are written for. Most leaflets are nationwide, so usually the chain NATIONAL scope, which then reaches every scope of that chain.',
+      'The scope a price that names no group of shops is written for. Most leaflets are nationwide, so usually the chain NATIONAL scope, which then reaches every scope of that chain. Required only when the document actually carries such a price: a file that scopes every price of its own needs no default, and one that states no price needs no scope at all.',
   })
+  @IsOptional()
   @IsUUID()
-  priceScopeId!: string;
+  priceScopeId?: string;
 
   @ApiProperty({
     enum: IMPORTABLE_SOURCE_KINDS,

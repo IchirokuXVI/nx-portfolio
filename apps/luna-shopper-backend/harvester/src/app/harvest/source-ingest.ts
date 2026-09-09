@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  HarvestWarningCode,
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
@@ -31,12 +32,40 @@ const PRICE_BATCH = 200;
 const PRICE_ROW_CHUNK = 200;
 
 /**
+ * One price of one product, for the group of shops that pays it (plan 0103,
+ * section 3.1).
+ *
+ * **A price names its own scope**, so a product can carry a different number for
+ * each region a chain prints one for, and the run makes one pass rather than one
+ * pass per scope. `scopeKey` is the source's own key, resolved against
+ * `PriceScope.externalKey` by whoever opened the session.
+ */
+export interface SourceObservationPrice {
+  /**
+   * The scope this price is for, as the source names it. Null means the run's
+   * default scope, which is what the operator chose at the spawn.
+   */
+  scopeKey: string | null;
+  /**
+   * Null when the source stated only a comparison figure, a per kilogram
+   * price with no pack price. The ingest then writes the unit price and no
+   * till price, which is plan 0081 section 6.1's one surviving decision.
+   */
+  price: number | null;
+  currency: string;
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  validFrom: Date | null;
+  validUntil: Date | null;
+}
+
+/**
  * One product as a source described it (plan 0086, section 5).
  *
- * Every column of 3.1's first group the source can fill, and a price block only
- * when the source stated a price a shopper pays for one unit. A walk's detail
- * call, a DEZA listing row and a line of an uploaded file all become this, and
- * from here on nothing knows which of the three it was.
+ * Every column of 3.1's first group the source can fill, and the prices the
+ * source stated for it. A walk's detail call, a DEZA listing row and a line of
+ * an uploaded file all become this, and from here on nothing knows which of the
+ * three it was.
  */
 export interface SourceObservation {
   externalId: string;
@@ -49,30 +78,38 @@ export interface SourceObservation {
   url: string | null;
   observedAt: Date;
   extra: Record<string, unknown> | null;
-  price: {
-    /**
-     * Null when the source stated only a comparison figure, a per kilogram
-     * price with no pack price. The ingest then writes the unit price and no
-     * till price, which is plan 0081 section 6.1's one surviving decision.
-     */
-    price: number | null;
-    currency: string;
-    unitPrice: number | null;
-    unitPriceLabel: string | null;
-    validFrom: Date | null;
-    validUntil: Date | null;
-  } | null;
+  /**
+   * Every price the source stated for this product, one per scope it named.
+   *
+   * An empty array is a product the source named and priced nowhere, which is
+   * every DEZA product and 21 of a LIDL week. It is not the same as a price of
+   * zero and it clears nothing an earlier run wrote.
+   */
+  prices: readonly SourceObservationPrice[];
 }
 
-export interface SourceIngestInput {
+/** What a session writes for, decided once and held across every chunk. */
+export interface SourceIngestSessionInput {
   supermarketId: string;
   /**
-   * The scope the run was started for, and null for a source that states no
-   * price at all. A run with no scope writes no `source_entry_prices` row and
-   * calls catalog with no price, which is the DEZA crawl exactly.
+   * The scope a price that names none is written to, and null when the run was
+   * given none. A price with neither is a warning and no row (plan 0103,
+   * section 3.2).
    */
-  priceScopeId: string | null;
+  defaultPriceScopeId: string | null;
   sourceKind: PriceSourceKind;
+  /**
+   * The scope a source's own key resolves to, or null when nothing declared it.
+   *
+   * Supplied by the orchestrator, which resolves and creates scopes through
+   * `PriceScopeResolver` (plan 0103, section 2.3). The ingest never creates a
+   * scope and never asks catalog for one: a scope is created only from a
+   * declaration, and a declaration is a runner's to make.
+   */
+  scopeIdFor?: (scopeKey: string) => string | null;
+}
+
+export interface SourceIngestInput extends SourceIngestSessionInput {
   observations: readonly SourceObservation[];
 }
 
@@ -134,19 +171,58 @@ export class SourceIngest {
     private readonly catalog: CatalogClient
   ) {}
 
+  /**
+   * Open a session over one chain, for a run that pushes as it fetches.
+   *
+   * **The three indexes are loaded once and held**, which is why a session
+   * exists at all (plan 0103, section 2.3). A sink that flushes in chunks and
+   * called {@link ingest} per chunk would reload the chain's rows and the
+   * catalog item index for every one of them, and would lose the sibling index a
+   * previous chunk added to: rung 4 matches a new row against the chain's other
+   * rows, so two chunks of one run would stop seeing each other's products.
+   */
+  async open(
+    context: RunContext,
+    input: SourceIngestSessionInput
+  ): Promise<SourceIngestSession> {
+    // The chain's rows and the catalog item index, once. Asking catalog per
+    // product would be 4,232 NATS round trips on top of 4,232 HTTP ones.
+    const rows = await this.entries.find({
+      where: { supermarketId: input.supermarketId },
+    });
+    return new SourceIngestSession(
+      this,
+      context,
+      input,
+      rows,
+      new ItemMatchIndex(await loadCatalogItems(this.catalog))
+    );
+  }
+
+  /**
+   * One call over a list already in hand: open, push once, close.
+   *
+   * The file import reads a whole document before it writes anything, so it has
+   * nothing to stream and this is the honest shape for it.
+   */
   async ingest(
     context: RunContext,
     input: SourceIngestInput
   ): Promise<SourceIngestResult> {
-    // Step 1. The chain's rows and the catalog item index, once. Asking catalog
-    // per product would be 4,232 NATS round trips on top of 4,232 HTTP ones.
-    const rows = await this.entries.find({
-      where: { supermarketId: input.supermarketId },
-    });
-    const byExternalId = new Map(rows.map((row) => [row.externalId, row]));
-    const siblings = new SiblingEntryIndex(rows);
-    const items = new ItemMatchIndex(await loadCatalogItems(this.catalog));
+    const session = await this.open(context, input);
+    await session.push(input.observations);
+    return session.close();
+  }
 
+  /** @internal The write half, driven by a session. */
+  async writeChunk(
+    context: RunContext,
+    input: SourceIngestSessionInput,
+    observations: readonly SourceObservation[],
+    byExternalId: Map<string, SourceCatalogEntry>,
+    siblings: SiblingEntryIndex,
+    items: ItemMatchIndex
+  ): Promise<SourceIngestResult> {
     const seenAt = new Date();
     const outcomes: SourceEntryOutcome[] = [];
     const counters: SourceIngestCounters = {
@@ -156,18 +232,18 @@ export class SourceIngest {
       pricesWritten: 0,
       pricesConfirmed: 0,
     };
-    /** The `source_entry_prices` rows this run observed, one per observation. */
+    /** The `source_entry_prices` rows this chunk observed, one per price. */
     const observed: ObservedPrice[] = [];
 
     // Steps 2 and 3, per observation and in the order the runner produced them.
-    for (const observation of input.observations) {
+    for (const observation of observations) {
       const fields = fieldsOf(observation, input.sourceKind);
       const held = byExternalId.get(observation.externalId);
       // Asked before the touch writes, because the touch is what makes it false.
       const changed = held ? sourceGroupChanged(held, fields) : false;
 
       const outcome = held
-        ? await this.touch(held, fields, context.runId, seenAt)
+        ? await this.touch(held, fields, context.runId, seenAt, items)
         : await this.create(
             fields,
             input.supermarketId,
@@ -192,67 +268,179 @@ export class SourceIngest {
       }
 
       outcomes.push(outcome);
-      const price = observation.price;
-      if (price) {
-        observed.push({ price, observation, entry: outcome.entry });
+      // Every price the source stated, each resolved to the scope it names.
+      // A price nothing can place is a warning and no row (plan 0103, D4):
+      // writing it to the default would put a Sevilla price on Madrid.
+      for (const price of observation.prices) {
+        const priceScopeId = this.resolveScope(
+          context,
+          input,
+          observation,
+          price
+        );
+        if (priceScopeId) {
+          observed.push({
+            price,
+            priceScopeId,
+            observation,
+            entry: outcome.entry,
+          });
+        }
       }
     }
 
-    // Step 3, in one statement per chunk rather than one per observation.
-    await this.replaceScopePrices(input.priceScopeId, context.runId, observed);
+    // Step 3, grouped by resolved scope, in one statement per chunk of rows.
+    await this.replaceScopePrices(context.runId, observed);
 
     // Step 4. Only an `ACTIVE` row is owed a price: a fuzzy match never writes
     // one, because a wrong number on a real product is worse than no number.
-    const owed = outcomes
-      .map((outcome, index) => ({
-        outcome,
-        observation: input.observations[index],
-      }))
-      .filter(({ outcome, observation }) => outcome.itemId && observation.price)
-      .map(({ outcome, observation }) =>
-        priceEntryFor(outcome.itemId as string, observation)
+    // Grouped by scope, because `catalog.addPrices` writes one scope at a time.
+    const owed = new Map<string, ItemPriceBatchEntry[]>();
+    for (const [index, outcome] of outcomes.entries()) {
+      const observation = observations[index];
+      if (!outcome.itemId) {
+        continue;
+      }
+      for (const price of observation.prices) {
+        const priceScopeId = this.scopeOf(input, price);
+        if (!priceScopeId) {
+          continue;
+        }
+        const batch = owed.get(priceScopeId) ?? [];
+        batch.push(priceEntryFor(outcome.itemId, observation, price));
+        owed.set(priceScopeId, batch);
+      }
+    }
+
+    let owedCount = 0;
+    for (const [priceScopeId, entries] of owed) {
+      owedCount += entries.length;
+      const written = await this.writePrices(
+        context,
+        priceScopeId,
+        input.sourceKind,
+        entries
       );
-    const written = await this.writePrices(
-      context,
-      input.priceScopeId,
-      input.sourceKind,
-      owed
-    );
-    counters.pricesWritten = written.inserted;
-    counters.pricesConfirmed = written.confirmed;
+      counters.pricesWritten += written.inserted;
+      counters.pricesConfirmed += written.confirmed;
+    }
 
     this.logger.log(
-      `Run ${context.runId}: ${input.observations.length} observation(s) ` +
+      `Run ${context.runId}: ${observations.length} observation(s) ` +
         `ingested (${counters.created} new, ${counters.updated} changed), ` +
-        `${owed.length} price(s) owed, ${counters.pricesWritten} written.`
+        `${owedCount} price(s) owed across ${owed.size} scope(s), ` +
+        `${counters.pricesWritten} written.`
     );
     return { outcomes, counters };
   }
 
   /**
-   * Rung 1. The row exists, so it is touched and its status is not re-derived,
-   * whatever it is.
+   * The scope a price belongs to, or null with a warning naming the product.
+   *
+   * Two ways to have nowhere to go, and they are two different faults, so they
+   * are two warnings: a key nothing declared is the producer's, and no key with
+   * no default is the operator's, who started the run without a price scope.
+   */
+  private resolveScope(
+    context: RunContext,
+    input: SourceIngestSessionInput,
+    observation: SourceObservation,
+    price: SourceObservationPrice
+  ): string | null {
+    const resolved = this.scopeOf(input, price);
+    if (resolved) {
+      return resolved;
+    }
+    if (price.scopeKey === null) {
+      context.warn({
+        code: HarvestWarningCode.NO_PRICE_SCOPE,
+        message:
+          `"${observation.name}" states a price for no particular group of ` +
+          'shops, and this run was given no price scope to write it to.',
+        offerId: observation.externalId,
+        page: null,
+        name: observation.name,
+      });
+      return null;
+    }
+    context.warn({
+      code: HarvestWarningCode.UNKNOWN_PRICE_SCOPE,
+      message:
+        `"${observation.name}" states a price for "${price.scopeKey}", which ` +
+        'nothing in this run declared, so there is no scope to write it to.',
+      offerId: observation.externalId,
+      page: null,
+      name: observation.name,
+    });
+    return null;
+  }
+
+  /** The scope id a price resolves to, with no warning and no side effect. */
+  private scopeOf(
+    input: SourceIngestSessionInput,
+    price: SourceObservationPrice
+  ): string | null {
+    return price.scopeKey === null
+      ? input.defaultPriceScopeId
+      : (input.scopeIdFor?.(price.scopeKey) ?? null);
+  }
+
+  /**
+   * Rung 1. The row exists, so it is touched and its status is not re-derived.
    *
    * This is also what makes **resuming free** (plan 0038, section 6.3): an
    * aborted run leaves rows with a fresh `lastSeenAt`, so a re-run skips what it
    * already has by reading that timestamp. There is no checkpoint to replay,
    * only a snapshot that is already the answer.
+   *
+   * **The one thing that does re-derive a status is a new EAN**, and only on a
+   * row nobody has decided. That is not an exception to the ladder, it is the
+   * ladder: only an EAN or a person ever makes a row `ACTIVE` (plan 0086), and
+   * a row that had no EAN could not reach rung 2 when it was created. Carrefour
+   * is why it matters. Its listing card carries no EAN and its product page
+   * does, so an entire chain sits in the queue until a backfill run reads those
+   * pages, and before plan 0103 that run wrote the EAN and promoted the row
+   * itself, holding a repository to do it.
    */
   private async touch(
     row: SourceCatalogEntry,
     fields: SourceEntryFields,
     runId: string,
-    seenAt: Date
+    seenAt: Date,
+    items: ItemMatchIndex
   ): Promise<SourceEntryOutcome> {
+    const learnedEan = fields.ean !== null && row.ean !== fields.ean;
     applySourceGroup(row, fields);
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
+
+    let rung: 1 | 2 = 1;
+    if (learnedEan && undecided(row)) {
+      const match = items.match({
+        ean: fields.ean,
+        name: fields.name,
+        brand: fields.brand,
+        unitSize: fields.unitSize === null ? null : Number(fields.unitSize),
+      });
+      // Only the EAN rung promotes. A name match here would be a fuzzy proposal
+      // made at the very moment the identifier that makes fuzziness unnecessary
+      // arrived.
+      if (match && match.matchedBy === ItemSourceMatch.EAN) {
+        row.itemId = match.itemId;
+        row.status = SourceEntryStatus.ACTIVE;
+        row.matchedBy = ItemSourceMatch.EAN;
+        row.confidence = match.confidence;
+        row.decidedAt = seenAt;
+        rung = 2;
+      }
+    }
+
     const saved = await this.entries.save(row);
     return {
       entry: saved,
       created: false,
-      rung: 1,
+      rung,
       itemId: activeItemOf(saved),
     };
   }
@@ -331,18 +519,17 @@ export class SourceIngest {
    * earlier run said.
    */
   private async replaceScopePrices(
-    priceScopeId: string | null,
     runId: string,
     observed: readonly ObservedPrice[]
   ): Promise<void> {
-    if (!priceScopeId || observed.length === 0) {
+    if (observed.length === 0) {
       return;
     }
     // Plain values rather than entity instances: an upsert takes the columns
     // it writes, and a created entity carries the `entry` relation too, which
     // has no place in an `INSERT ... ON CONFLICT`.
     const rows = observed.map(
-      ({ price, observation, entry }) => ({
+      ({ price, priceScopeId, observation, entry }) => ({
         entryId: entry.id,
         priceScopeId,
         price: price.price,
@@ -388,11 +575,11 @@ export class SourceIngest {
    */
   private async writePrices(
     context: RunContext,
-    priceScopeId: string | null,
+    priceScopeId: string,
     sourceKind: PriceSourceKind,
-    entries: ItemPriceBatchEntry[]
+    entries: readonly ItemPriceBatchEntry[]
   ): Promise<{ inserted: number; confirmed: number }> {
-    if (!priceScopeId || entries.length === 0) {
+    if (entries.length === 0) {
       return { inserted: 0, confirmed: 0 };
     }
     let inserted = 0;
@@ -415,9 +602,10 @@ export class SourceIngest {
   }
 }
 
-/** One observation that carried a price, beside the row it landed on. */
+/** One price of one observation, beside the row and the scope it landed on. */
 interface ObservedPrice {
-  price: NonNullable<SourceObservation['price']>;
+  price: SourceObservationPrice;
+  priceScopeId: string;
   observation: SourceObservation;
   entry: SourceCatalogEntry;
 }
@@ -425,6 +613,20 @@ interface ObservedPrice {
 /** The item an observation resolves to, which only an `ACTIVE` row states. */
 function activeItemOf(row: SourceCatalogEntry): string | null {
   return row.status === SourceEntryStatus.ACTIVE ? row.itemId : null;
+}
+
+/**
+ * A row nobody has decided, which is the only kind a new EAN may promote.
+ *
+ * A `REJECTED` row is the owner saying this is not a product he tracks, and an
+ * `ACTIVE` one is already answered. Neither is re-derived by a run.
+ */
+function undecided(row: SourceCatalogEntry): boolean {
+  return (
+    row.decidedAt === null &&
+    (row.status === SourceEntryStatus.UNRESOLVED ||
+      row.status === SourceEntryStatus.CANDIDATE)
+  );
 }
 
 function fieldsOf(
@@ -447,18 +649,104 @@ function fieldsOf(
 
 function priceEntryFor(
   itemId: string,
-  observation: SourceObservation
+  observation: SourceObservation,
+  price: SourceObservationPrice
 ): ItemPriceBatchEntry {
-  const price = observation.price;
   return {
     itemId,
-    price: price?.price ?? null,
-    currency: price?.currency ?? null,
-    unitPrice: price?.unitPrice ?? null,
-    unitPriceLabel: price?.unitPriceLabel ?? null,
-    validFrom: price?.validFrom?.toISOString() ?? null,
-    validUntil: price?.validUntil?.toISOString() ?? null,
+    price: price.price,
+    currency: price.currency,
+    unitPrice: price.unitPrice,
+    unitPriceLabel: price.unitPriceLabel,
+    validFrom: price.validFrom?.toISOString() ?? null,
+    validUntil: price.validUntil?.toISOString() ?? null,
     observedAt: observation.observedAt.toISOString(),
     details: toItemPriceDetails(observation.extra),
   };
+}
+
+/**
+ * One run's ingest, open across every chunk it pushes (plan 0103, section 2.3).
+ *
+ * It holds the three things that must not be rebuilt per chunk: the chain's rows
+ * by external id, the sibling index rung 4 matches against, and the catalog item
+ * index rungs 2 and 3 match against. A run that pushed in chunks without this
+ * would reload all three per chunk, and rung 4 would stop seeing the rows an
+ * earlier chunk of the same run created.
+ *
+ * The counters and outcomes accumulate, so {@link close} answers for the whole
+ * run exactly as a single {@link SourceIngest.ingest} call would.
+ */
+export class SourceIngestSession {
+  private readonly byExternalId: Map<string, SourceCatalogEntry>;
+  private readonly siblings: SiblingEntryIndex;
+  private readonly outcomes: SourceEntryOutcome[] = [];
+  private readonly counters: SourceIngestCounters = {
+    created: 0,
+    updated: 0,
+    unchanged: 0,
+    pricesWritten: 0,
+    pricesConfirmed: 0,
+  };
+  private closed = false;
+
+  constructor(
+    private readonly ingest: SourceIngest,
+    private readonly context: RunContext,
+    private readonly input: SourceIngestSessionInput,
+    rows: readonly SourceCatalogEntry[],
+    private readonly items: ItemMatchIndex
+  ) {
+    this.byExternalId = new Map(rows.map((row) => [row.externalId, row]));
+    this.siblings = new SiblingEntryIndex(rows);
+  }
+
+  /**
+   * Write one chunk, and answer what the ladder made of it.
+   *
+   * The outcomes are answered per chunk as well as accumulated, because
+   * availability is stated per catalog item and only the ladder knows which item
+   * a row resolved to. A caller that wants the whole run's outcomes takes them
+   * from {@link close} instead.
+   */
+  async push(
+    observations: readonly SourceObservation[]
+  ): Promise<SourceEntryOutcome[]> {
+    if (this.closed) {
+      throw new Error(
+        'This ingest session is closed. A run opens one, pushes into it and ' +
+          'closes it once.'
+      );
+    }
+    if (observations.length === 0) {
+      return [];
+    }
+    const result = await this.ingest.writeChunk(
+      this.context,
+      this.input,
+      observations,
+      this.byExternalId,
+      this.siblings,
+      this.items
+    );
+    this.outcomes.push(...result.outcomes);
+    this.counters.created += result.counters.created;
+    this.counters.updated += result.counters.updated;
+    this.counters.unchanged += result.counters.unchanged;
+    this.counters.pricesWritten += result.counters.pricesWritten;
+    this.counters.pricesConfirmed += result.counters.pricesConfirmed;
+    return result.outcomes;
+  }
+
+  /**
+   * Everything this run ingested, in the order it was pushed.
+   *
+   * There is nothing to flush: a chunk is written when it is pushed, so an
+   * aborted run keeps what it already wrote. Closing only stops further pushes
+   * and answers the totals.
+   */
+  async close(): Promise<SourceIngestResult> {
+    this.closed = true;
+    return { outcomes: this.outcomes, counters: this.counters };
+  }
 }

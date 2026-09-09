@@ -1,17 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import {
-  DiscoveredPlaceStatus,
-  PostalCodeSource,
-} from '@portfolio/luna-shopper/contracts';
+import { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
 import { OsmPlacesClient } from '@portfolio/luna-shopper/osm-places';
-import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import { DiscoveredPlace } from '../entities';
-import { CatalogClient } from './catalog-client.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import type { RunContext } from './run-context';
+import type { RunReport } from './run-report';
 import type {
   StoreDiscoveryInput,
   StoreDiscoveryRunner,
@@ -46,14 +40,15 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
   private readonly logger = new Logger(OsmStoreDiscoveryRunner.name);
 
   constructor(
-    @InjectRepository(DiscoveredPlace)
-    private readonly places: Repository<DiscoveredPlace>,
     private readonly queue: PostalCodeDiscoveryStore,
-    private readonly catalog: CatalogClient,
     private readonly config: ConfigService
   ) {}
 
-  async run(context: RunContext, input: StoreDiscoveryInput): Promise<void> {
+  async run(
+    context: RunContext,
+    report: RunReport,
+    input: StoreDiscoveryInput
+  ): Promise<void> {
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
     const client = new OsmPlacesClient({
       userAgent: settings.userAgent,
@@ -105,7 +100,6 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
     );
 
     await context.setStage('UPSERT', `Recording ${found.length} place(s)`);
-    const seenAt = new Date();
     // The run's own country, recorded on every place it touches (plan 0061,
     // section 4). OSM does not tag one and the run has always known it; it is
     // what keys the centroid lookup that fills the postcode on import.
@@ -115,117 +109,31 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
       if (context.signal.aborted) {
         break;
       }
-      const located = await this.locate(place, country, settings);
-      const existing = await this.places.findOne({
-        where: { provider: place.provider, externalRef: place.externalRef },
+      // **The postal code is the source's or it is absent** (plan 0097, section
+      // 3). About a third of places carry `addr:postcode`, and the rest are
+      // derived by the orchestrator from the coordinates below, bounded, which
+      // is the only thing this runner ever knew about them anyway.
+      report.place({
+        provider: place.provider,
+        externalRef: place.externalRef,
+        brandKey: place.brandKey,
+        brandName: place.brandName,
+        name: place.name,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        street: place.street,
+        city: place.city,
+        postalCode: place.postalCode,
+        postalCodeSource: place.postalCode ? PostalCodeSource.SOURCE : null,
+        // The run's own country, on every place it touches (plan 0061, section
+        // 4). OSM does not tag one and the run has always known it.
+        country,
+        website: place.website,
+        openingHours: place.openingHours,
+        tags: place.tags,
       });
-
-      if (existing) {
-        // Re-discovery refreshes the description but never resurrects a place
-        // the owner already rejected or imported: `status` is the owner's, and a
-        // run does not get to overwrite a decision.
-        existing.brandKey = place.brandKey;
-        existing.brandName = place.brandName;
-        existing.name = place.name;
-        existing.latitude = place.latitude;
-        existing.longitude = place.longitude;
-        existing.street = place.street;
-        existing.city = place.city;
-        existing.postalCode = located.postalCode;
-        existing.postalCodeSource = located.postalCodeSource;
-        existing.country = country;
-        existing.website = place.website;
-        existing.openingHours = place.openingHours;
-        existing.tags = place.tags;
-        existing.runId = context.runId;
-        existing.lastSeenAt = seenAt;
-        await this.places.save(existing);
-        await context.report({ processed: 1, unchanged: 1 });
-        continue;
-      }
-
-      await this.places.save(
-        this.places.create({
-          runId: context.runId,
-          provider: place.provider,
-          externalRef: place.externalRef,
-          brandKey: place.brandKey,
-          brandName: place.brandName,
-          name: place.name,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          street: place.street,
-          city: place.city,
-          postalCode: located.postalCode,
-          postalCodeSource: located.postalCodeSource,
-          country,
-          website: place.website,
-          openingHours: place.openingHours,
-          tags: place.tags,
-          status: DiscoveredPlaceStatus.NEW,
-          firstSeenAt: seenAt,
-          lastSeenAt: seenAt,
-        })
-      );
-      await context.report({ processed: 1, created: 1 });
     }
 
     await context.flush();
-  }
-
-  /**
-   * The place's postal code, and where it came from (plan 0097, section 3).
-   *
-   * `addr:postcode` wins whenever OpenStreetMap has one, because a source value
-   * is never overridden by a guess. About a third of places have it, so the rest
-   * ask catalog for the nearest centroid, bounded by the same
-   * `POSTAL_CODE_DERIVE_MAX_METRES` plan 0061 bounds a location's own derivation
-   * with.
-   *
-   * **A place beyond the bound keeps both columns null**, which is the honest
-   * answer: a wrong postcode is worse than none, because it puts the shop in
-   * somebody else's list.
-   *
-   * A failure asking catalog leaves the place with no code rather than failing
-   * the run. One untagged address is not worth losing an eighteen minute walk
-   * over, and the next run of this code fills it in.
-   */
-  private async locate(
-    place: { postalCode: string | null; latitude: number; longitude: number },
-    country: string,
-    settings: HarvesterConfig
-  ): Promise<{
-    postalCode: string | null;
-    postalCodeSource: PostalCodeSource | null;
-  }> {
-    if (place.postalCode) {
-      return {
-        postalCode: place.postalCode,
-        postalCodeSource: PostalCodeSource.SOURCE,
-      };
-    }
-    if (!country) {
-      return { postalCode: null, postalCodeSource: null };
-    }
-    try {
-      const { nearest } = await this.catalog.resolveNearestPostalCode(
-        country,
-        place.latitude,
-        place.longitude,
-        settings.postalCodeDeriveMaxMetres
-      );
-      return nearest
-        ? {
-            postalCode: nearest.postalCode,
-            postalCodeSource: PostalCodeSource.DERIVED,
-          }
-        : { postalCode: null, postalCodeSource: null };
-    } catch (error) {
-      this.logger.warn(
-        `Could not derive a postal code for a place in ${country}: ` +
-          `${String(error)}`
-      );
-      return { postalCode: null, postalCodeSource: null };
-    }
   }
 }

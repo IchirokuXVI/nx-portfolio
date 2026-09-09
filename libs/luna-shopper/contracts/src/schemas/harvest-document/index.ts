@@ -1,5 +1,6 @@
 import type { JsonSchema } from '../builders';
 import { harvestDocument1Schema } from './harvest-document-1.schema';
+import { harvestDocument2Schema } from './harvest-document-2.schema';
 
 export * from './harvest-document';
 export {
@@ -8,6 +9,13 @@ export {
   harvestDocument1Schema,
 } from './harvest-document-1.schema';
 export {
+  HARVEST_DOCUMENT_2_SCHEMA_ID,
+  HARVEST_DOCUMENT_2_VERSION,
+  harvestDocument2Schema,
+} from './harvest-document-2.schema';
+export { normalizeHarvestDocument } from './harvest-document-normalize';
+export {
+  HARVEST_DOCUMENT_CURRENT_VERSION,
   HARVEST_DOCUMENT_SCHEMA_IDS,
   HARVEST_DOCUMENT_VERSIONS,
   harvestDocumentSchemaId,
@@ -19,4 +27,7 @@ export type {
 } from './harvest-document-validation';
 
 /** Registered into the shared Ajv instance beside the message schemas. */
-export const harvestDocumentSchemas: JsonSchema[] = [harvestDocument1Schema];
+export const harvestDocumentSchemas: JsonSchema[] = [
+  harvestDocument1Schema,
+  harvestDocument2Schema,
+];

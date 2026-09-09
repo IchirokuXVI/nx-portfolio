@@ -1,6 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import {
   PriceScopeKind,
+  PriceSourceKind,
   type PriceScopeView,
 } from '@portfolio/luna-shopper/contracts';
 import { LidlClient } from '@portfolio/luna-shopper/lidl';
@@ -17,19 +18,25 @@ import {
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
+import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
+import { RunReportSink } from './run-report.sink';
 import { SourceIngest } from './source-ingest';
 
 /**
- * One product, two regional prices, two scopes, against real Postgres (plan
+ * One product, two regional prices, three scopes, against real Postgres (plan
  * 0089, section 12).
  *
- * The unit spec asserts that the runner makes one ingest call per scope. This
- * asserts what those calls leave behind, and it needs a database because the
- * thing being tested is the shape of the write: `source_entry_prices` is unique
- * on (entry, scope), so a run that wrote both prices for one product either
- * lands two rows or violates that constraint. A mocked repository cannot tell
- * you which.
+ * The unit spec asserts what the runner reports. This asserts what the write
+ * half leaves behind, and it needs a database because the thing being tested is
+ * the shape of the write: `source_entry_prices` is unique on (entry, scope), so
+ * a run that wrote every price of one product either lands one row per scope or
+ * violates that constraint. A mocked repository cannot tell you which.
+ *
+ * **It runs the runner through the real sink**, which is what plan 0103 made
+ * the writing half: the runner declares its regions and reports its products,
+ * `PriceScopeResolver` turns the declarations into scopes, and the ingest writes
+ * every price of every product in one pass.
  *
  *   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up
  *   LUNA_INTEGRATION=1 HARVESTER_DB_URL=postgres://luna_harvester:luna_harvester@localhost:<port>/luna_harvester \
@@ -43,6 +50,9 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
   let entries: Repository<SourceCatalogEntry>;
   let prices: Repository<SourceEntryPrice>;
   let runner: LidlCatalogRunner;
+  let ingest: SourceIngest;
+  let scopes: PriceScopeResolver;
+  let catalog: CatalogClient;
 
   beforeAll(async () => {
     dataSource = new DataSource({
@@ -58,7 +68,7 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
     // Catalog is another service behind the broker, and what this spec is about
     // is the harvester's own write. The scopes it hands back are the ones the
     // run would have created there.
-    const catalog = {
+    catalog = {
       listPriceScopes: async () => ({ items: [], nextCursor: null }),
       createPriceScope: async (
         supermarketId: string,
@@ -77,11 +87,46 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
       findItemByEan: async () => ({ item: null }),
     } as unknown as CatalogClient;
 
-    runner = new TestRunner(
-      new SourceIngest(entries, prices, catalog),
-      catalog
-    );
+    runner = new TestRunner();
+    ingest = new SourceIngest(entries, prices, catalog);
+    scopes = new PriceScopeResolver(catalog);
   });
+
+  /**
+   * The write half, built the way `RunExecutor` builds it.
+   *
+   * A fresh one per run, because a resolver caches the scopes of the run it
+   * belongs to and a session holds that run's indexes.
+   */
+  function sink(run: RunContext): RunReportSink {
+    return new RunReportSink(
+      run,
+      {
+        supermarketId: CHAIN,
+        // LIDL scopes every price itself, so there is no default to fall back
+        // to and every price resolves through a declaration.
+        defaultPriceScopeId: null,
+        sourceKind: PriceSourceKind.OFFICIAL_API,
+        postalCodeDeriveMaxMetres: 5000,
+      },
+      {
+        ingest,
+        scopes: scopes.forRun(CHAIN),
+        places: {} as never,
+        shops: {} as never,
+        catalog,
+        entries,
+      }
+    );
+  }
+
+  /** One whole run: the runner reports, the sink writes. */
+  async function run(): Promise<void> {
+    const held = context();
+    const written = sink(held);
+    await runner.run(held, written, { supermarketId: CHAIN }, source());
+    await written.drain();
+  }
 
   beforeEach(async () => {
     await clean();
@@ -107,7 +152,7 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
   }
 
   it('writes one row for the product and one price row per scope', async () => {
-    await runner.run(context(), { supermarketId: CHAIN }, source());
+    await run();
 
     const rows = await entries.find({ where: { supermarketId: CHAIN } });
     expect(rows).toHaveLength(1);
@@ -128,8 +173,8 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
   });
 
   it('replaces its own price rows when the run is repeated', async () => {
-    await runner.run(context(), { supermarketId: CHAIN }, source());
-    await runner.run(context(), { supermarketId: CHAIN }, source());
+    await run();
+    await run();
 
     const rows = await entries.find({ where: { supermarketId: CHAIN } });
     expect(rows).toHaveLength(1);
@@ -146,8 +191,8 @@ function scopeIdFor(externalKey: string | null): string {
 
 /** The runner, over a fetch that answers one index page and one product page. */
 class TestRunner extends LidlCatalogRunner {
-  constructor(ingest: SourceIngest, catalog: CatalogClient) {
-    super(ingest, catalog, {
+  constructor() {
+    super({
       getOrThrow: () => ({ userAgent: 'LunaShopperBot/1.0' }),
     } as unknown as ConfigService);
   }

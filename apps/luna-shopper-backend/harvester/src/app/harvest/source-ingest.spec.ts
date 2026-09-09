@@ -1,14 +1,20 @@
 import {
+  HarvestWarningCode,
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import { entryKey } from './matching';
 import type { RunContext } from './run-context';
-import { SourceIngest, type SourceObservation } from './source-ingest';
+import {
+  SourceIngest,
+  type SourceObservation,
+  type SourceObservationPrice,
+} from './source-ingest';
 
 /**
  * The one ladder, rung by rung (plan 0086, sections 4 and 5).
@@ -119,10 +125,14 @@ function build(options: {
   };
 
   const reported: Record<string, number>[] = [];
+  const warnings: HarvestRunWarning[] = [];
   const context = {
     runId: options.runId ?? RUN,
     report: jest.fn(async (counters: Record<string, number>) => {
       reported.push(counters);
+    }),
+    warn: jest.fn((warning: HarvestRunWarning) => {
+      warnings.push(warning);
     }),
   } as unknown as RunContext;
 
@@ -131,12 +141,34 @@ function build(options: {
     prices,
     catalog as unknown as CatalogClient
   );
-  return { ingest, context, entries, saved, stored, priceRows, catalog, reported };
+  return {
+    ingest,
+    context,
+    entries,
+    saved,
+    stored,
+    priceRows,
+    catalog,
+    reported,
+    warnings,
+  };
 }
 
+/**
+ * One observation, with `price` as shorthand for a single unscoped price.
+ *
+ * A product carries several prices now, one per scope the source named (plan
+ * 0103, section 3.1). Most cases here are about the ladder rather than about
+ * scopes, so they state the one price a source with no regions states, and the
+ * cases that are about scopes pass `prices` instead.
+ */
 function observation(
-  over: Partial<SourceObservation> & { name: string }
+  over: Partial<SourceObservation> & {
+    name: string;
+    price?: Omit<SourceObservationPrice, 'scopeKey'> | null;
+  }
 ): SourceObservation {
+  const { price, ...rest } = over;
   return {
     externalId: over.externalId ?? entryKey(over.name, over.sizeFormat ?? null),
     brand: null,
@@ -147,8 +179,8 @@ function observation(
     url: null,
     observedAt: new Date('2026-09-05T10:00:00.000Z'),
     extra: null,
-    price: null,
-    ...over,
+    prices: price ? [{ scopeKey: null, ...price }] : [],
+    ...rest,
   };
 }
 
@@ -191,7 +223,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes, counters } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_API,
       observations: [
         observation({
@@ -234,7 +266,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [
         observation({ externalId: 'k1', name: 'Cerveza', price: PRICE }),
@@ -265,7 +297,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes, counters } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_API,
       observations: [
         observation({
@@ -277,7 +309,11 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
       ],
     });
 
-    expect(outcomes[0]).toMatchObject({ rung: 2, created: true, itemId: 'item-ean' });
+    expect(outcomes[0]).toMatchObject({
+      rung: 2,
+      created: true,
+      itemId: 'item-ean',
+    });
     expect(saved[0]).toMatchObject({
       status: SourceEntryStatus.ACTIVE,
       matchedBy: ItemSourceMatch.EAN,
@@ -323,7 +359,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [
         observation({
@@ -370,7 +406,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [
         observation({ name: 'LECHE ENTERA', sizeFormat: '1 l', price: PRICE }),
@@ -407,7 +443,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [observation({ name: 'Leche entera', sizeFormat: '1 L' })],
     });
@@ -438,7 +474,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [observation({ name: 'Leche entera', sizeFormat: '1 L' })],
     });
@@ -455,7 +491,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes, counters } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [observation({ name: 'Algo nuevo', price: PRICE })],
     });
@@ -492,7 +528,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_API,
       observations: [
         observation({ externalId: 'active', name: 'Uno', price: PRICE }),
@@ -519,7 +555,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
     });
     await first.ingest.ingest(first.context, {
       supermarketId: CHAIN,
-      priceScopeId: 'scope-north',
+      defaultPriceScopeId: 'scope-north',
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [
         observation({ externalId: 'k1', name: 'Leche', price: PRICE }),
@@ -540,7 +576,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
     });
     await second.ingest.ingest(second.context, {
       supermarketId: CHAIN,
-      priceScopeId: 'scope-south',
+      defaultPriceScopeId: 'scope-south',
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [
         observation({
@@ -586,7 +622,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_API,
       observations: [
         observation({ externalId: 'k1', name: 'Leche', price: PRICE }),
@@ -594,7 +630,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
     });
     await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_API,
       observations: [
         observation({
@@ -625,7 +661,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [
         observation({
@@ -652,7 +688,11 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
   });
 
   it('carries the extra bag onto the row and onto the price row, untouched', async () => {
-    const extra = { page: 3, loyalty: { required: false }, anything: ['at all'] };
+    const extra = {
+      page: 3,
+      loyalty: { required: false },
+      anything: ['at all'],
+    };
     const { ingest, context, saved, priceRows } = build({
       rows: [
         {
@@ -667,7 +707,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [
         observation({
@@ -698,7 +738,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const result = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_API,
       observations: [
         observation({ externalId: 'a', name: 'Uno', price: PRICE }),
@@ -719,7 +759,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 
     const { outcomes } = await ingest.ingest(context, {
       supermarketId: CHAIN,
-      priceScopeId: SCOPE,
+      defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       observations: [
         observation({ externalId: 'k1', name: 'Leche' }),
@@ -731,5 +771,262 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
     expect(outcomes[1].rung).toBe(1);
     expect(saved.filter((row) => row.externalId === 'k1')).toHaveLength(2);
     expect(new Set(saved.map((row) => row.id)).size).toBe(1);
+  });
+});
+
+/**
+ * The one thing rung 1 does re-derive (plan 0103, section 6.2).
+ *
+ * A row created without an EAN could not reach rung 2, and Carrefour is a whole
+ * chain in that state: its listing card carries no EAN and its product page
+ * does. The backfill used to write the EAN and promote the row itself, holding a
+ * repository to do it. The promotion is the ladder's now, which is the one place
+ * that writes rows, and it is the rule plan 0086 already stated: only an EAN or
+ * a person ever makes a row `ACTIVE`.
+ */
+describe('SourceIngest, rung 1 and an EAN that has just arrived', () => {
+  const held = {
+    externalId: 'p1',
+    name: 'Agua CARREFOUR',
+    ean: null,
+    status: SourceEntryStatus.UNRESOLVED,
+    itemId: null,
+  };
+  const item = {
+    id: 'item-water',
+    name: { es: 'Something else entirely', en: null },
+    brand: null,
+    ean: '8411327052016',
+    unitSize: null,
+  };
+
+  it('promotes an undecided row when the new EAN names a catalog item', async () => {
+    const { ingest, context, saved } = build({ rows: [held], items: [item] });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [
+        observation({
+          externalId: 'p1',
+          name: 'Agua CARREFOUR',
+          ean: '8411327052016',
+        }),
+      ],
+    });
+
+    expect(outcomes[0].rung).toBe(2);
+    expect(saved[0]).toMatchObject({
+      ean: '8411327052016',
+      itemId: 'item-water',
+      status: SourceEntryStatus.ACTIVE,
+      matchedBy: ItemSourceMatch.EAN,
+      confidence: 1,
+    });
+  });
+
+  it('leaves a row a person decided exactly as it is', async () => {
+    // A run does not reopen a decision a person made, whatever it now knows.
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          ...held,
+          status: SourceEntryStatus.REJECTED,
+          decidedAt: new Date('2026-09-01T00:00:00Z'),
+        },
+      ],
+      items: [item],
+    });
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [
+        observation({
+          externalId: 'p1',
+          name: 'Agua CARREFOUR',
+          ean: '8411327052016',
+        }),
+      ],
+    });
+
+    // The EAN is a source column and is written; the decision is not touched.
+    expect(saved[0].ean).toBe('8411327052016');
+    expect(saved[0].status).toBe(SourceEntryStatus.REJECTED);
+    expect(saved[0].itemId).toBeNull();
+  });
+
+  it('promotes nothing when the EAN names no item this catalog holds', async () => {
+    const { ingest, context, saved } = build({ rows: [held], items: [] });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [
+        observation({
+          externalId: 'p1',
+          name: 'Agua CARREFOUR',
+          ean: '8411327052016',
+        }),
+      ],
+    });
+
+    expect(outcomes[0].rung).toBe(1);
+    expect(saved[0].ean).toBe('8411327052016');
+    expect(saved[0].status).toBe(SourceEntryStatus.UNRESOLVED);
+  });
+});
+
+/**
+ * A run that pushes as it fetches (plan 0103, section 2.3).
+ *
+ * The session exists for one reason and these cases are that reason: the chain's
+ * rows, the sibling index and the catalog item index are loaded once and held
+ * across every chunk.
+ */
+describe('SourceIngestSession, the indexes held across chunks', () => {
+  it('loads the chain and the catalog once, however many chunks are pushed', async () => {
+    const { ingest, context, entries, catalog } = build({});
+
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+    await session.push([observation({ externalId: 'a', name: 'Uno' })]);
+    await session.push([observation({ externalId: 'b', name: 'Dos' })]);
+    await session.push([observation({ externalId: 'c', name: 'Tres' })]);
+    const result = await session.close();
+
+    // Three chunks, one read of each index. Calling `ingest` per chunk would
+    // have made this three and three.
+    expect(entries.find).toHaveBeenCalledTimes(1);
+    expect(catalog.searchItems).toHaveBeenCalledTimes(1);
+    expect(result.outcomes).toHaveLength(3);
+    expect(result.counters.created).toBe(3);
+  });
+
+  it('sees in a later chunk the row an earlier chunk of the same run created', async () => {
+    const { ingest, context } = build({});
+
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+    await session.push([observation({ externalId: 'k1', name: 'Leche' })]);
+    await session.push([observation({ externalId: 'k1', name: 'Leche' })]);
+    const result = await session.close();
+
+    // Rung 1 on the second, because the row is in the index the session holds.
+    // A session that rebuilt the index per chunk would have created it twice.
+    expect(result.outcomes.map((outcome) => outcome.created)).toEqual([
+      true,
+      false,
+    ]);
+    expect(result.outcomes[1].rung).toBe(1);
+  });
+
+  it('refuses a push after it is closed', async () => {
+    const { ingest, context } = build({});
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+    await session.close();
+
+    await expect(
+      session.push([observation({ name: 'Tarde' })])
+    ).rejects.toThrow(/closed/);
+  });
+});
+
+/**
+ * Which scope each price is written to (plan 0103, section 3.2).
+ *
+ * A price names its own scope or falls to the run's default, and a price that
+ * can do neither is a warning and no row. It is never written to the default as
+ * a guess: that would put one region's price on another region's shops.
+ */
+describe('SourceIngest, the scope a price names', () => {
+  it('writes each price to the scope its key resolves to', async () => {
+    const { ingest, context, priceRows } = build({});
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      scopeIdFor: (key) => (key === 'r1' ? 'scope-north' : 'scope-south'),
+      observations: [
+        observation({
+          externalId: 'k1',
+          name: 'Nevera',
+          prices: [
+            { ...PRICE, scopeKey: 'r1', price: 74.99 },
+            { ...PRICE, scopeKey: 'r58', price: 77.99 },
+          ],
+        }),
+      ],
+    });
+
+    // One product, one row, two prices. This is the walk LIDL makes in one pass
+    // instead of the 54 it used to make.
+    expect(priceRows.map((row) => [row.priceScopeId, row.price])).toEqual([
+      ['scope-north', 74.99],
+      ['scope-south', 77.99],
+    ]);
+  });
+
+  it('warns and writes nothing for a price naming a scope nothing declared', async () => {
+    const { ingest, context, priceRows, warnings } = build({});
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      scopeIdFor: () => null,
+      observations: [
+        observation({
+          externalId: 'k1',
+          name: 'Nevera',
+          prices: [{ ...PRICE, scopeKey: 'r99' }],
+        }),
+      ],
+    });
+
+    // Never the default as a fallback: a scope the run cannot place is a price
+    // that would land on the wrong shops (plan 0103, D4).
+    expect(priceRows).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      code: HarvestWarningCode.UNKNOWN_PRICE_SCOPE,
+      name: 'Nevera',
+    });
+  });
+
+  it('warns and writes nothing for an unscoped price when the run has no default', async () => {
+    const { ingest, context, priceRows, warnings, saved } = build({});
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ externalId: 'k1', name: 'Leche', price: PRICE }),
+      ],
+    });
+
+    // Not a failed run. The row is written, because the source did name the
+    // product; only the price had nowhere to go.
+    expect(saved).toHaveLength(1);
+    expect(priceRows).toEqual([]);
+    expect(warnings[0]).toMatchObject({
+      code: HarvestWarningCode.NO_PRICE_SCOPE,
+      name: 'Leche',
+    });
   });
 });

@@ -1,18 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
 import {
-  DiscoveredPlaceStatus,
   PostalCodeSource,
   PriceScopeKind,
-  type PriceScopeView,
 } from '@portfolio/luna-shopper/contracts';
 import { LidlClient, type LidlStore } from '@portfolio/luna-shopper/lidl';
-import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import { DiscoveredPlace, type SupermarketSource } from '../entities';
-import { CatalogClient } from './catalog-client.service';
+import type { SupermarketSource } from '../entities';
 import type { RunContext } from './run-context';
+import type { RunReport } from './run-report';
 import type {
   StoreDiscoveryInput,
   StoreDiscoveryRunner,
@@ -34,34 +30,31 @@ import type {
  * 12 of the 52 provinces hold shops in more than one region, and 3 of the 652
  * postcodes that hold a Lidl do too (section 4.1).
  *
- * **It creates no shop and no chain in catalog.** The rule from plan 0038
- * section 6.1 holds: a run writes `DiscoveredPlace` rows and an admin imports
- * them, one at a time and by choice. What it does create is the price scopes,
- * because a price scope is not a shop of ours: it is the chain's own grouping,
- * and a price cannot point at one that does not exist yet.
+ * **It creates nothing at all** (plan 0103, section 6.4). The rule from plan
+ * 0038 section 6.1 already said it writes no shop and no chain in catalog: a
+ * run reports places and an admin imports them, one at a time and by choice. It
+ * used to create the price scopes itself, with the same paging and creating
+ * written again in the catalog runner. It declares the regions now, and the
+ * orchestrator resolves every declaration through one resolver.
  *
  * **Run it before the first catalog run.** A catalog run that meets a region
- * with no scope creates the scope itself, so the order is a recommendation
- * rather than a hard gate, but a run in the wrong order produces scopes with no
- * shops attached to them.
+ * with no scope declares it too, so the order is a recommendation rather than a
+ * hard gate, but a run in the wrong order produces scopes with no shops
+ * attached to them.
  */
 @Injectable()
 export class LidlStoreDiscoveryRunner implements StoreDiscoveryRunner {
   private readonly logger = new Logger(LidlStoreDiscoveryRunner.name);
 
-  constructor(
-    @InjectRepository(DiscoveredPlace)
-    private readonly places: Repository<DiscoveredPlace>,
-    private readonly catalog: CatalogClient,
-    private readonly config: ConfigService
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
   async run(
     context: RunContext,
+    report: RunReport,
     input: StoreDiscoveryInput,
     source: SupermarketSource | null
   ): Promise<void> {
-    const supermarketId = requireChain(input.supermarketId);
+    requireChain(input.supermarketId);
     const client = this.createClient(context, source);
     const country = (input.country || 'es').trim().toLowerCase();
 
@@ -70,20 +63,17 @@ export class LidlStoreDiscoveryRunner implements StoreDiscoveryRunner {
     await context.setTotalPlanned(stores.length);
     this.logger.log(`Run ${context.runId}: ${stores.length} shop(s) named`);
 
-    // The chain's own identity, so a place this run writes groups with the same
-    // chain a radius search found. It is read rather than guessed: the owner
-    // owns that key, and a QID typed here would be a second opinion about it.
-    const chain = await this.catalog.getSupermarket(supermarketId);
-    const brandName = chain.name.es ?? chain.name.en ?? null;
+    // The chain's own identity, so a place this run reports groups with the
+    // same chain a radius search found. It is read by the orchestrator rather
+    // than guessed here: the owner owns that key, and a QID typed in a runner
+    // would be a second opinion about it.
+    const brandKey = input.chain?.externalBrandKey ?? null;
+    const brandName = input.chain?.brandName ?? null;
 
-    await context.setStage(
-      'SCOPES',
-      'Creating a price scope for each offer region'
-    );
-    const scopes = await this.resolveScopes(supermarketId, stores);
+    await context.setStage('SCOPES', 'Naming each offer region');
+    const regions = this.declareRegions(report, stores);
 
     await context.setStage('UPSERT', `Recording ${stores.length} place(s)`);
-    const seenAt = new Date();
     let withoutRegion = 0;
     for (const store of stores) {
       if (context.signal.aborted) {
@@ -94,26 +84,68 @@ export class LidlStoreDiscoveryRunner implements StoreDiscoveryRunner {
         // away, because a shop with no region is a shop no price can reach.
         withoutRegion += 1;
       }
-      await this.upsert(store, {
-        runId: context.runId,
-        brandKey: chain.externalBrandKey,
+      report.place({
+        provider: PROVIDER,
+        externalRef: store.externalRef,
+        brandKey,
         brandName,
+        name: store.name,
+        latitude: store.latitude,
+        longitude: store.longitude,
+        street: store.street,
+        city: store.city,
+        postalCode: store.postalCode,
+        // The chain states it on every store record, so it is a source value in
+        // plan 0097's sense: never a guess, and never overridden by one.
+        postalCodeSource: store.postalCode ? PostalCodeSource.SOURCE : null,
         country,
-        seenAt,
+        website: null,
+        openingHours: store.openingHours,
+        // The source's own fields, kept whole and unreshaped, so the region an
+        // admin sees on the row is the one the chain stated (plan 0038, 8.2).
+        tags: tagsOf(store),
       });
-      await context.report({ processed: 1 });
     }
 
     await context.flush();
     await context.setReport({
       stores: stores.length,
-      regionsSeen: scopes.size,
-      scopesCreated: [...scopes.entries()]
-        .filter(([, scope]) => scope.created)
-        .map(([regionId]) => regionId),
+      regionsSeen: regions.length,
+      /**
+       * The regions this run declared, by the chain's own key. Which of them
+       * catalog already held is the orchestrator's to say (plan 0103, 3).
+       */
+      regionsDeclared: regions,
       storesWithoutRegion: withoutRegion,
       requests: client.requests,
     });
+  }
+
+  /**
+   * Every offer region the store list names, declared once each.
+   *
+   * A shop with no region declares nothing: there is no group to price it in,
+   * which is why the count of those shops is on the run's report.
+   */
+  private declareRegions(
+    report: RunReport,
+    stores: readonly LidlStore[]
+  ): string[] {
+    const seen = new Set<string>();
+    for (const store of stores) {
+      if (!store.regionId || seen.has(store.regionId)) {
+        continue;
+      }
+      seen.add(store.regionId);
+      report.scope({
+        key: store.regionId,
+        // A LIDL offer region is not a postal code and not a shop: it is a
+        // group of shops the chain prices together and names itself.
+        kind: PriceScopeKind.REGION,
+        name: store.regionName ?? null,
+      });
+    }
+    return [...seen];
   }
 
   /**
@@ -132,102 +164,6 @@ export class LidlStoreDiscoveryRunner implements StoreDiscoveryRunner {
       acquire: context.acquire,
       signal: context.signal,
     });
-  }
-
-  /** One price scope per region the store list names, created on first sight. */
-  private async resolveScopes(
-    supermarketId: string,
-    stores: readonly LidlStore[]
-  ): Promise<Map<string, { id: string; created: boolean }>> {
-    const held = new Map<string, PriceScopeView>();
-    let cursor: string | undefined;
-    do {
-      const page = await this.catalog.listPriceScopes(supermarketId, cursor);
-      for (const scope of page.items) {
-        if (scope.externalKey) {
-          held.set(scope.externalKey, scope);
-        }
-      }
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor);
-
-    const scopes = new Map<string, { id: string; created: boolean }>();
-    for (const store of stores) {
-      if (!store.regionId || scopes.has(store.regionId)) {
-        continue;
-      }
-      const existing = held.get(store.regionId);
-      if (existing) {
-        scopes.set(store.regionId, { id: existing.id, created: false });
-        continue;
-      }
-      const created = await this.catalog.createPriceScope(
-        supermarketId,
-        PriceScopeKind.REGION,
-        store.regionId,
-        store.regionName ? { es: store.regionName, en: store.regionName } : null
-      );
-      scopes.set(store.regionId, { id: created.id, created: true });
-    }
-    return scopes;
-  }
-
-  /**
-   * One shop, written or refreshed.
-   *
-   * Re-discovery refreshes the description but **never resurrects a place the
-   * owner already rejected or imported**: `status` is the owner's, and a run
-   * does not get to overwrite a decision.
-   */
-  private async upsert(
-    store: LidlStore,
-    run: {
-      runId: string;
-      brandKey: string | null;
-      brandName: string | null;
-      country: string;
-      seenAt: Date;
-    }
-  ): Promise<void> {
-    const fields = {
-      brandKey: run.brandKey,
-      brandName: run.brandName,
-      name: store.name,
-      latitude: store.latitude,
-      longitude: store.longitude,
-      street: store.street,
-      city: store.city,
-      postalCode: store.postalCode,
-      // The chain states it on every store record, so it is a source value in
-      // plan 0097's sense: never a guess, and never overridden by one.
-      postalCodeSource: store.postalCode ? PostalCodeSource.SOURCE : null,
-      country: run.country,
-      website: null,
-      openingHours: store.openingHours,
-      // The source's own fields, kept whole and unreshaped, so the region an
-      // admin sees on the row is the one the chain stated (plan 0038, 8.2).
-      tags: tagsOf(store),
-      runId: run.runId,
-      lastSeenAt: run.seenAt,
-    };
-
-    const existing = await this.places.findOne({
-      where: { provider: PROVIDER, externalRef: store.externalRef },
-    });
-    if (existing) {
-      Object.assign(existing, fields);
-      await this.places.save(existing);
-      return;
-    }
-    await this.places.save(
-      this.places.create({
-        provider: PROVIDER,
-        externalRef: store.externalRef,
-        status: DiscoveredPlaceStatus.NEW,
-        firstSeenAt: run.seenAt,
-        ...fields,
-      })
-    );
   }
 }
 

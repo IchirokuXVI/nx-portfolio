@@ -51,6 +51,9 @@ import {
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
 
+/** How many scopes the preview names before it counts the rest. */
+const SCOPES_NAMED = 4;
+
 /** How far the scope search walks looking for the chain's `NATIONAL` one. */
 const SCOPE_PAGE = 100;
 
@@ -238,42 +241,71 @@ export interface PreviewTally {
           />
         </div>
 
-        <div class="field">
-          <span>{{ 'harvest.imports.scope' | rokuT }}</span>
-          @if (supermarketId() === '') {
-            <p class="hint">{{ 'harvest.imports.scopeNeedsChain' | rokuT }}</p>
-          } @else {
-            <lib-reference-picker
-              (valueChange)="priceScopeId.set($event)"
-              [controlId]="'import-scope'"
-              [lookup]="references"
-              [resource]="'price-scopes'"
-              [scope]="scopeFilter()"
-              [value]="priceScopeId()"
-            />
-            @if (noNationalScope()) {
+        <!-- Asked for only by a file that carries a price naming no group of
+             shops, which is every leaflet and every version 1 document (admin
+             plan 0025, section 3). A file that scopes every price of its own
+             needs no default, and one that states no price at all needs no
+             scope to write it to. -->
+        @if (needsScope()) {
+          <div class="field">
+            <span>{{ 'harvest.imports.scope' | rokuT }}</span>
+            @if (supermarketId() === '') {
               <p class="hint">
-                {{ 'harvest.imports.noNational' | rokuT }}
-                <!-- Where the price scopes screen is, asked of the registry
+                {{ 'harvest.imports.scopeNeedsChain' | rokuT }}
+              </p>
+            } @else {
+              <lib-reference-picker
+                (valueChange)="priceScopeId.set($event)"
+                [controlId]="'import-scope'"
+                [lookup]="references"
+                [resource]="'price-scopes'"
+                [scope]="scopeFilter()"
+                [value]="priceScopeId()"
+              />
+              @if (noNationalScope()) {
+                <p class="hint">
+                  {{ 'harvest.imports.noNational' | rokuT }}
+                  <!-- Where the price scopes screen is, asked of the registry
                      rather than written out: the resource moved into the catalog
                      section and its segment never said which section held it
                      (admin plan 0022, section 3). An app that did not mount it
                      gets the sentence without the link. -->
-                @if (newScopeLink(); as link) {
-                  <a
-                    [queryParams]="{ supermarketId: supermarketId() }"
-                    [routerLink]="link"
-                    target="_blank"
-                    >{{ 'harvest.imports.createScope' | rokuT }}</a
-                  >
-                }
-              </p>
-              <button (click)="refreshScopes()" type="button">
-                {{ 'harvest.imports.refreshScopes' | rokuT }}
-              </button>
+                  @if (newScopeLink(); as link) {
+                    <a
+                      [queryParams]="{ supermarketId: supermarketId() }"
+                      [routerLink]="link"
+                      target="_blank"
+                      >{{ 'harvest.imports.createScope' | rokuT }}</a
+                    >
+                  }
+                </p>
+                <button (click)="refreshScopes()" type="button">
+                  {{ 'harvest.imports.refreshScopes' | rokuT }}
+                </button>
+              }
             }
-          }
-        </div>
+          </div>
+        }
+
+        <!-- What the file prices for, when it says so itself. A LIDL export
+             names 59 regions, and an operator about to import one should see
+             that before they press the button (admin plan 0025, section 4). -->
+        @if (scopeSummary(); as summary) {
+          <section class="scopes" role="status">
+            <p>
+              {{
+                'harvest.imports.scopes.count'
+                  | rokuT: { count: summary.count, names: summary.names }
+              }}
+            </p>
+            <p class="hint">
+              {{
+                'harvest.imports.scopes.perProduct'
+                  | rokuT: { most: summary.mostPerProduct }
+              }}
+            </p>
+          </section>
+        }
 
         <label class="field">
           <span>{{ 'harvest.imports.sourceKind' | rokuT }}</span>
@@ -897,11 +929,52 @@ export class ImportUploadPage implements OnDestroy {
     );
   });
 
+  /**
+   * Whether this file needs to be told which group of shops its prices are for
+   * (admin plan 0025, section 3).
+   *
+   * Three cases, and only the first asks:
+   *
+   * 1. A price names no scope. Every leaflet, and every version 1 document.
+   * 2. Every price names one. A LIDL export, which prices 59 regions itself.
+   * 3. There is no price at all. A DEZA export, which states none.
+   *
+   * **Read from the products and never from `hints.adapter_key`.** The hint is
+   * what a producer claims and the products are what the file holds, so a file
+   * labelled `lidl-api` that carries an unscoped price is asked for a default
+   * rather than left with a price that has nowhere to go.
+   */
+  readonly needsScope = computed(() => this.read()?.pricing.unscoped !== false);
+
+  /**
+   * What the file declares, for the operator to read before importing.
+   *
+   * Absent for a document that declares no scopes, so nothing changes for a
+   * leaflet upload.
+   */
+  readonly scopeSummary = computed(() => {
+    const read = this.read();
+    if (read === undefined || read === null || read.scopes.length === 0) {
+      return null;
+    }
+    const shown = read.scopes.slice(0, SCOPES_NAMED);
+    const rest = read.scopes.length - shown.length;
+    const names = shown.map((scope) => scope.name).join(', ');
+
+    return {
+      count: read.scopes.length,
+      // The first few by name and the rest as a number: 59 region names is a
+      // paragraph, and what an operator checks is that the list looks right.
+      names: rest > 0 ? `${names} (+${rest})` : names,
+      mostPerProduct: read.pricing.mostPerProduct,
+    };
+  });
+
   readonly ready = computed(
     () =>
       this.read() !== null &&
       this.supermarketId() !== '' &&
-      this.priceScopeId() !== '' &&
+      (!this.needsScope() || this.priceScopeId() !== '') &&
       this.sourceKind() !== '' &&
       !this.missingDates()
   );
@@ -1146,7 +1219,10 @@ export class ImportUploadPage implements OnDestroy {
     try {
       const run = await this._service.importDocument({
         supermarketId: this.supermarketId(),
-        priceScopeId: this.priceScopeId(),
+        // Sent only where it means something. A file that scopes every price of
+        // its own has nothing to fall back to, so a scope here would be this
+        // screen asserting a fact about an import that has none.
+        ...(this.needsScope() ? { priceScopeId: this.priceScopeId() } : {}),
         sourceKind,
         ...(this.validFrom() === '' ? {} : { validFrom: this.validFrom() }),
         ...(this.validUntil() === '' ? {} : { validUntil: this.validUntil() }),

@@ -13,6 +13,7 @@ import type {
 import type { CatalogClient } from './catalog-client.service';
 import { FileImportRunner } from './file-import.runner';
 import { buildHarvestDocument, digestOf, producerName } from './harvest-export';
+import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import { SourceIngest } from './source-ingest';
 
@@ -85,6 +86,12 @@ function entry(
   } as SourceCatalogEntry;
 }
 
+/** The chain's two scopes, as catalog holds them, for the export to name. */
+const SCOPES = [
+  { id: NATIONAL, externalKey: 'national', kind: 'NATIONAL', name: 'España' },
+  { id: CORDOBA, externalKey: '14', kind: 'REGION', name: 'Córdoba' },
+];
+
 function build(
   entries: SourceCatalogEntry[],
   priceScopeId: string | null = NATIONAL
@@ -92,8 +99,17 @@ function build(
   return buildHarvestDocument({
     run: { id: RUN, supermarketId: CHAIN, priceScopeId },
     entries,
+    scopes: SCOPES,
     producedAt: PRODUCED,
   }) as unknown as Record<string, unknown>;
+}
+
+/** The prices of one product, as the file states them. */
+function pricesOf(
+  document: Record<string, unknown>,
+  index = 0
+): Record<string, unknown>[] {
+  return productsOf(document)[index]['prices'] as Record<string, unknown>[];
 }
 
 function productsOf(document: Record<string, unknown>) {
@@ -104,7 +120,7 @@ describe('buildHarvestDocument', () => {
   it('names the harvester and the run, and fills the three hints', async () => {
     const document = build([entry()]);
 
-    expect(document['schema_version']).toBe(1);
+    expect(document['schema_version']).toBe(2);
     // The run rides in the name because `producer` has three fields and none of
     // them is a run: the file schema is closed, and a field for one producer's
     // private handle is not one a file schema should carry.
@@ -142,7 +158,11 @@ describe('buildHarvestDocument', () => {
     expect(Object.keys(product)).not.toContain('confidence');
   });
 
-  it('takes the run scope price and no other scope', async () => {
+  it('takes every price this run wrote, each naming its own scope', async () => {
+    // **The fix to plan 0103, section 1.1.** This asked for one scope before,
+    // so a LIDL run, which is refused a single scope and writes 59 regions,
+    // exported a file with no price in it at all. The rows were right in the
+    // database the whole time.
     const document = build([
       entry({
         prices: [
@@ -152,10 +172,29 @@ describe('buildHarvestDocument', () => {
       }),
     ]);
 
-    expect(productsOf(document)[0]['price']).toEqual({
-      amount: 1.19,
-      currency: 'EUR',
-    });
+    expect(pricesOf(document)).toEqual([
+      expect.objectContaining({
+        // The source's own key, never the uuid: an id does not survive a move
+        // to another cluster (plan 0103, D3).
+        scope: 'national',
+        amount: 1.19,
+        currency: 'EUR',
+      }),
+      expect.objectContaining({ scope: '14', amount: 1.09 }),
+    ]);
+    // Only the scopes some price actually named, so a chain with fifty of them
+    // and a run that used two declares two.
+    expect(document['scopes']).toEqual([
+      { key: 'national', kind: 'NATIONAL', name: 'España' },
+      { key: '14', kind: 'REGION', name: 'Córdoba' },
+    ]);
+  });
+
+  it('declares no scopes when the run wrote no price', async () => {
+    const document = build([entry({ prices: [] })]);
+
+    expect(Object.keys(document)).not.toContain('scopes');
+    expect(pricesOf(document)).toEqual([]);
   });
 
   it('writes no price for a source that states none, which is DEZA', async () => {
@@ -169,10 +208,7 @@ describe('buildHarvestDocument', () => {
       ],
       NATIONAL
     );
-    const [product] = productsOf(document);
-
-    expect(Object.keys(product)).not.toContain('price');
-    expect(Object.keys(product)).not.toContain('unit_price');
+    expect(pricesOf(document)).toEqual([]);
     expect((document['hints'] as Record<string, unknown>)['source_kind']).toBe(
       PriceSourceKind.OFFICIAL_WEB
     );
@@ -194,7 +230,9 @@ describe('buildHarvestDocument', () => {
       }),
     ]);
 
-    expect(productsOf(document)[0]['validity']).toEqual({
+    // On the price rather than on the product, because a region can date a
+    // product differently from its neighbour (plan 0103, section 5.1).
+    expect(pricesOf(document)[0]['validity']).toEqual({
       from: '2026-09-10',
       until: '2026-09-23',
     });
@@ -268,9 +306,26 @@ describe('importing a run this backend exported', () => {
       }),
     } as unknown as Repository<SourceEntryPrice>;
 
+    // The receiving cluster's own scopes: none at all, so a document that
+    // declares any has them created there, keyed on the source's own key.
+    const createdScopes: Array<{ externalKey: string | null; kind: string }> =
+      [];
+    let held: Array<Record<string, unknown>> = [];
     const catalog = {
       searchItems: jest.fn(async () => ({ items, nextCursor: null })),
       addPrices: jest.fn(async () => ({ inserted: 1, confirmed: 0 })),
+      listPriceScopes: jest.fn(async () => ({
+        items: held,
+        nextCursor: null,
+      })),
+      createPriceScope: jest.fn(
+        async (_chain: string, kind: string, externalKey: string | null) => {
+          createdScopes.push({ externalKey, kind });
+          const scope = { id: `there-${externalKey}`, externalKey, kind };
+          held = [...held, scope];
+          return scope;
+        }
+      ),
     };
 
     const context = {
@@ -292,9 +347,10 @@ describe('importing a run this backend exported', () => {
     } as unknown as RunContext;
 
     const runner = new FileImportRunner(
-      new SourceIngest(entries, prices, catalog as unknown as CatalogClient)
+      new SourceIngest(entries, prices, catalog as unknown as CatalogClient),
+      new PriceScopeResolver(catalog as unknown as CatalogClient)
     );
-    return { runner, context, saved, priceRows, catalog };
+    return { runner, context, saved, priceRows, catalog, createdScopes };
   }
 
   const importInto = (
@@ -317,6 +373,7 @@ describe('importing a run this backend exported', () => {
   it('reproduces the rows, the prices and the ladder in an empty chain', async () => {
     const document = buildHarvestDocument({
       run: { id: RUN, supermarketId: CHAIN, priceScopeId: NATIONAL },
+      scopes: SCOPES,
       entries: [
         entry(),
         entry({
@@ -330,7 +387,13 @@ describe('importing a run this backend exported', () => {
           unitSize: 0.35,
           extra: null,
           prices: [
-            price({ id: 'sep-2', entryId: 'e-2', price: 11.29, unitPrice: null, unitPriceLabel: null }),
+            price({
+              id: 'sep-2',
+              entryId: 'e-2',
+              price: 11.29,
+              unitPrice: null,
+              unitPriceLabel: null,
+            }),
           ],
         }),
       ],
@@ -383,6 +446,7 @@ describe('importing a run this backend exported', () => {
   it('does not lengthen a window by a day on every round trip', async () => {
     const document = buildHarvestDocument({
       run: { id: RUN, supermarketId: CHAIN, priceScopeId: NATIONAL },
+      scopes: SCOPES,
       entries: [
         entry({
           sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
@@ -396,11 +460,7 @@ describe('importing a run this backend exported', () => {
       ],
       producedAt: PRODUCED,
     });
-    const parts = importInto(
-      document,
-      [],
-      PriceSourceKind.OFFICIAL_LEAFLET
-    );
+    const parts = importInto(document, [], PriceSourceKind.OFFICIAL_LEAFLET);
 
     await parts.run();
 

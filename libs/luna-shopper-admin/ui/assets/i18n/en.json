@@ -578,7 +578,9 @@
         "failed": "The run did not start, and the server did not say why.",
         "refused": "The run did not start. The server said:",
         "priceScope": "Price scope to write to",
-        "priceScopeHelp": "A walk writes the prices it reads, so it has to be told which scope they belong to. Only asked for a chain fetched through an API that publishes prices; a site that prints none needs no scope.",
+        "priceScopeHelp": "A walk writes the prices it reads, so it has to be told which scope they belong to. Only asked for a chain whose source states a price and does not name the scope of each one itself; a site that prints none needs no scope.",
+        "detailBackfill": "Read product pages for the missing EANs",
+        "detailBackfillHelp": "A second pass over the pages this chain already has, asking each one for its barcode rather than its price. It writes no price, so it needs no scope, and it takes far longer than a walk. Only offered for a chain whose products have a page to read.",
         "fileImport": "A file import starts from the document itself: the file says what was observed, and you say which chain, which scope and what observed it. Drop it on the import screen.",
         "openUpload": "Go to the file import"
       }
@@ -793,6 +795,10 @@
       "noNational": "This chain has no national scope. Most uploads are nationwide, so create one and come back.",
       "createScope": "Create a price scope in a new tab",
       "refreshScopes": "Look again",
+      "scopes": {
+        "count": "This file prices {{count}} group(s) of shops itself: {{names}}. It needs no scope from you.",
+        "perProduct": "At most {{most}} price(s) per product, one for each group that pays it."
+      },
       "sourceKind": "What observed it",
       "sourceKindChoose": "Choose one",
       "sourceKindHelp": "What the products and the prices are stamped with, and what decides which price a shopper sees when two sources disagree. A walk of a chain's API imported here is an API price, not a leaflet price: the upload is not what observed it.",

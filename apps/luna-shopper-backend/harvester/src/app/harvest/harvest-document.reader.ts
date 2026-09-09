@@ -1,4 +1,5 @@
 import {
+  normalizeHarvestDocument,
   validateHarvestDocument,
   type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
@@ -23,12 +24,18 @@ import { ValidationException } from '@portfolio/luna-shopper/platform';
 const MAX_LISTED = 10;
 
 /**
- * The document, or a `ValidationException` naming the paths that failed.
+ * The document in the version 2 shape, or a `ValidationException` naming the
+ * paths that failed.
  *
  * Used at spawn, where the caller is a person uploading a file, and again when a
  * run reads a stored document back. The second case means something already
  * validated has since become unreadable, which is worth stating loudly rather
  * than skipping past.
+ *
+ * **It normalizes on the way out** (plan 0103, D7). A version 1 document is
+ * validated against version 1 and answered in the version 2 shape, so nothing
+ * past here branches on the version and every file ever exported or extracted
+ * still imports.
  */
 export function readHarvestDocument(value: unknown): HarvestDocument {
   const { valid, failures } = validateHarvestDocument(value);
@@ -46,5 +53,5 @@ export function readHarvestDocument(value: unknown): HarvestDocument {
       { details: { document: failures.slice(0, MAX_LISTED) } }
     );
   }
-  return value as HarvestDocument;
+  return normalizeHarvestDocument(value as HarvestDocument);
 }

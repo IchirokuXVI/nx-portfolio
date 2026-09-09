@@ -699,3 +699,157 @@ describe('the import, previewing a large file', () => {
     expect(rows(fixture)).toBe(250);
   });
 });
+
+/**
+ * Whether the file needs to be told which group of shops its prices are for
+ * (admin plan 0025, section 3).
+ *
+ * Three rules, one case each. **All three are read from the products and never
+ * from `hints.adapter_key`**: the hint is what a producer claims and the
+ * products are what the file holds, so a mislabelled file is asked for what it
+ * actually needs rather than refused for lying.
+ */
+describe('the import, the scope the file needs', () => {
+  /** A version 2 document that prices two regions itself. */
+  const scoped = (over: Record<string, unknown> = {}) =>
+    document({
+      schema_version: 2,
+      validity: undefined,
+      scopes: [
+        { key: '58', kind: 'REGION', name: 'Sevilla' },
+        { key: '12', kind: 'REGION', name: 'Madrid' },
+      ],
+      products: [
+        {
+          id: 'p-1',
+          name: 'Uva blanca',
+          prices: [
+            { scope: '58', amount: 1.29, currency: 'EUR' },
+            { scope: '12', amount: 1.39, currency: 'EUR' },
+          ],
+        },
+      ],
+      ...over,
+    });
+
+  it('asks for a scope for a leaflet, which prices no group of its own', async () => {
+    // Rule 1, and every version 1 document: a price naming no group has
+    // nowhere to go without a default.
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(document({ hints: undefined })));
+    fixture.detectChanges();
+
+    expect(page.needsScope()).toBe(true);
+    expect(text(fixture)).toContain('harvest.imports.scope');
+  });
+
+  it('asks for no scope from a file that prices every group itself', async () => {
+    // Rule 2. A LIDL export names 59 regions and prices each, so a default
+    // would catch nothing.
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(scoped({ hints: undefined })));
+    fixture.detectChanges();
+
+    expect(page.needsScope()).toBe(false);
+    page.supermarketId.set(CHAIN);
+    page.sourceKind.set('OFFICIAL_API');
+
+    // Ready with no scope chosen at all, which is the whole point of the rule.
+    expect(page.priceScopeId()).toBe('');
+    expect(page.ready()).toBe(true);
+  });
+
+  it('asks for no scope from a file that states no price at all', async () => {
+    // Rule 3. A DEZA export prices nothing, so there is no scope to write a
+    // price for.
+    const { page } = await render();
+
+    await page.chooseFile(
+      dropped(
+        document({
+          hints: undefined,
+          products: [{ id: 'p-1', name: 'Uva blanca' }],
+        })
+      )
+    );
+
+    expect(page.needsScope()).toBe(false);
+  });
+
+  it('asks for a scope when one price of a scoped file names none', async () => {
+    // One unscoped price is enough: that price has nowhere to go, and the rest
+    // of the file being scoped does not help it.
+    const { page } = await render();
+
+    await page.chooseFile(
+      dropped(
+        scoped({
+          hints: undefined,
+          products: [
+            {
+              id: 'p-1',
+              name: 'Uva blanca',
+              prices: [
+                { scope: '58', amount: 1.29, currency: 'EUR' },
+                { amount: 1.19, currency: 'EUR' },
+              ],
+            },
+          ],
+        })
+      )
+    );
+
+    expect(page.needsScope()).toBe(true);
+  });
+
+  it('reads the products, not the adapter the file claims', async () => {
+    // A file labelled `lidl-api` that carries an unscoped price is asked for a
+    // default. The hint is a claim; the products are the proof.
+    const { page } = await render();
+
+    await page.chooseFile(
+      dropped(document({ hints: { adapter_key: 'lidl-api' } }))
+    );
+
+    expect(page.needsScope()).toBe(true);
+  });
+
+  it('shows what the file prices for, and sends no scope with it', async () => {
+    const { fixture, page, imported } = await render();
+    const doc = scoped({ hints: undefined });
+
+    await page.chooseFile(dropped(doc));
+    page.supermarketId.set(CHAIN);
+    page.sourceKind.set('OFFICIAL_API');
+    fixture.detectChanges();
+
+    expect(page.scopeSummary()).toEqual({
+      count: 2,
+      names: 'Sevilla, Madrid',
+      mostPerProduct: 2,
+    });
+    expect(text(fixture)).toContain('harvest.imports.scopes.count');
+
+    await page.submit();
+
+    // No `priceScopeId` at all: sending one would be this screen asserting a
+    // fact about an import that has no default to fall back to.
+    expect(imported[0]).toEqual({
+      supermarketId: CHAIN,
+      sourceKind: 'OFFICIAL_API',
+      document: doc,
+    });
+  });
+
+  it('shows no scope block for a leaflet, which declares none', async () => {
+    const { fixture, page } = await render();
+
+    await page.chooseFile(dropped(document({ hints: undefined })));
+    fixture.detectChanges();
+
+    expect(page.scopeSummary()).toBeNull();
+    expect(text(fixture)).not.toContain('harvest.imports.scopes.count');
+  });
+});

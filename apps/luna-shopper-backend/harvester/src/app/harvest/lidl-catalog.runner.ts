@@ -1,10 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  PriceScopeKind,
-  PriceSourceKind,
-  type PriceScopeView,
-} from '@portfolio/luna-shopper/contracts';
+import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import {
   isGroceryCategory,
   LidlClient,
@@ -13,10 +9,10 @@ import {
 } from '@portfolio/luna-shopper/lidl';
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
-import { CatalogClient } from './catalog-client.service';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import type { RunContext } from './run-context';
-import { SourceIngest, type SourceObservation } from './source-ingest';
+import type { RunReport } from './run-report';
+import type { SourceObservation } from './source-ingest';
 
 /**
  * `CATALOG_DISCOVERY` against the `lidl-api` adapter (plan 0089).
@@ -50,14 +46,11 @@ import { SourceIngest, type SourceObservation } from './source-ingest';
 export class LidlCatalogRunner implements CatalogRunner {
   private readonly logger = new Logger(LidlCatalogRunner.name);
 
-  constructor(
-    private readonly ingest: SourceIngest,
-    private readonly catalog: CatalogClient,
-    private readonly config: ConfigService
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
   async run(
     context: RunContext,
+    report: RunReport,
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
@@ -109,19 +102,25 @@ export class LidlCatalogRunner implements CatalogRunner {
       }
     }
 
-    // --- 3. The scopes, then one ingest call each --------------------------
+    // --- 3. Declare the regions, then report every product -----------------
+    //
+    // **The run declares its regions and creates none** (plan 0103, section
+    // 6.4). Scope creation used to live here and again in the store discovery
+    // runner, which meant no other runner could create one and the ingest could
+    // not create one at all. Declaring is all a source can honestly do: it says
+    // what it named, and the orchestrator decides what that is in catalog.
     await context.setStage('INGEST', `Recording ${products.length} product(s)`);
-    const scopes = await this.resolveScopes(input.supermarketId, products);
-    await this.writeSnapshot(context, input, products, scopes);
+    const regions = declareRegions(report, products);
+    this.reportProducts(report, products);
 
     await context.flush();
     await context.setReport(
-      report(
+      describeRun(
         listed,
         grocery.length,
         products,
         unreadable,
-        scopes,
+        regions,
         client.requests
       )
     );
@@ -151,158 +150,80 @@ export class LidlCatalogRunner implements CatalogRunner {
   }
 
   /**
-   * Every region the run saw, as a price scope, created on first sight.
+   * Step 3: every product, with every price it publishes.
    *
-   * **One scope per region, at the granularity the source publishes at**
-   * (section 4). Collapsing the regions that agree this week into two or three
-   * groups reads as an obvious simplification and cannot store next week's
-   * disagreement, so the scope stays as fine as the price map is.
+   * **One pass, not one per scope** (plan 0103, D5, reversing plan 0089 section
+   * 8). A price carries the region it is for, so the week's 59 regions travel
+   * with their products instead of being grouped into roughly 54 ingest calls
+   * of the same 132 products. Widening the ingest was refused while it could
+   * hold one scope, for the reason that it changed a contract every caller used
+   * to save 53 batched calls a week. That reasoning was right for a plan whose
+   * job was LIDL and wrong for a plan whose job is the contract.
    *
-   * A region a store discovery run already met has its scope; a region met here
-   * first gets one created, which is why the two runs have a recommended order
-   * rather than a hard one.
-   */
-  private async resolveScopes(
-    supermarketId: string,
-    products: readonly LidlProduct[]
-  ): Promise<Map<string, ScopeRef>> {
-    const held = await this.loadScopes(supermarketId);
-    const scopes = new Map<string, ScopeRef>();
-
-    for (const product of products) {
-      for (const price of product.prices) {
-        for (const region of price.regions) {
-          if (scopes.has(region.id)) {
-            continue;
-          }
-          const existing = held.get(region.id);
-          if (existing) {
-            scopes.set(region.id, { id: existing.id, created: false });
-            continue;
-          }
-          const created = await this.catalog.createPriceScope(
-            supermarketId,
-            // A LIDL offer region is not a postal code and not a shop: it is a
-            // group of shops the chain prices together and names itself.
-            PriceScopeKind.REGION,
-            region.id,
-            region.name ? { es: region.name, en: region.name } : null
-          );
-          held.set(region.id, created);
-          scopes.set(region.id, { id: created.id, created: true });
-        }
-      }
-    }
-    return scopes;
-  }
-
-  private async loadScopes(
-    supermarketId: string
-  ): Promise<Map<string, PriceScopeView>> {
-    const held = new Map<string, PriceScopeView>();
-    let cursor: string | undefined;
-    do {
-      const page = await this.catalog.listPriceScopes(supermarketId, cursor);
-      for (const scope of page.items) {
-        if (scope.externalKey) {
-          held.set(scope.externalKey, scope);
-        }
-      }
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor);
-    return held;
-  }
-
-  /**
-   * Step 3: one ingest call per scope, carrying every product priced in it.
-   *
-   * `SourceIngest.ingest` takes a single `priceScopeId`, so the run groups its
-   * observations by scope rather than calling once per product: that is about
-   * 54 calls of roughly 132 products each, not 54 times 132 calls. Widening the
-   * ingest to take several scopes for one set of observations would turn those
-   * 54 into one, and it is deliberately not done here, because it changes a
-   * contract every existing caller uses for a saving of 53 batched calls a
-   * week (section 4).
-   *
-   * **A product with no price is still ingested** (section 8.1). 21 of the
+   * **A product with no price is still reported** (section 8.1). 21 of the
    * week's products are in the window with no price at all, and the catalog is
    * allowed to know the article exists.
    */
-  private async writeSnapshot(
-    context: RunContext,
-    input: CatalogDiscoveryInput,
-    products: readonly LidlProduct[],
-    scopes: ReadonlyMap<string, ScopeRef>
-  ): Promise<void> {
-    /** priceScopeId -> the observations that scope pays for. */
-    const byScope = new Map<string, SourceObservation[]>();
-    const unpriced: SourceObservation[] = [];
-
+  private reportProducts(
+    report: RunReport,
+    products: readonly LidlProduct[]
+  ): void {
     for (const product of products) {
-      if (product.prices.length === 0) {
-        unpriced.push(observationOf(product, null));
-        continue;
-      }
-      for (const price of product.prices) {
-        const observation = observationOf(product, price.priceId);
-        for (const region of price.regions) {
-          const scope = scopes.get(region.id);
-          if (!scope) {
-            continue;
-          }
-          const held = byScope.get(scope.id);
-          if (held) {
-            held.push(observation);
-          } else {
-            byScope.set(scope.id, [observation]);
-          }
-        }
-      }
-    }
-
-    for (const [priceScopeId, observations] of byScope) {
-      context.signal.throwIfAborted();
-      await this.ingest.ingest(context, {
-        supermarketId: input.supermarketId,
-        priceScopeId,
-        // A JSON service the chain publishes, which is what OFFICIAL_API means.
-        sourceKind: PriceSourceKind.OFFICIAL_API,
-        observations,
-      });
-    }
-
-    if (unpriced.length > 0) {
-      // No scope, because there is no price to write one for. The row still
-      // exists, which is the point: the catalog learns the article.
-      await this.ingest.ingest(context, {
-        supermarketId: input.supermarketId,
-        priceScopeId: null,
-        sourceKind: PriceSourceKind.OFFICIAL_API,
-        observations: unpriced,
-      });
+      report.product(observationOf(product));
     }
   }
 }
 
-/** A scope this run wrote for, and whether the run had to create it. */
-interface ScopeRef {
-  id: string;
-  created: boolean;
+/**
+ * Every offer region the run saw, declared once each (plan 0089, section 4).
+ *
+ * **One scope per region, at the granularity the source publishes at.**
+ * Collapsing the regions that agree this week into two or three groups reads as
+ * an obvious simplification and cannot store next week's disagreement, so the
+ * scope stays as fine as the price map is.
+ *
+ * Declaring is all the run does. Whether catalog already holds the region, and
+ * what to do when it does not, is the orchestrator's (plan 0103, section 3).
+ */
+function declareRegions(
+  report: RunReport,
+  products: readonly LidlProduct[]
+): string[] {
+  const seen = new Map<string, string | null>();
+  for (const product of products) {
+    for (const price of product.prices) {
+      for (const region of price.regions) {
+        if (seen.has(region.id)) {
+          continue;
+        }
+        seen.set(region.id, region.name ?? null);
+        report.scope({
+          key: region.id,
+          // A LIDL offer region is not a postal code and not a shop: it is a
+          // group of shops the chain prices together and names itself.
+          kind: PriceScopeKind.REGION,
+          name: region.name ?? null,
+        });
+      }
+    }
+  }
+  return [...seen.keys()];
 }
 
 /**
- * One product as LIDL described it, for one of its prices.
+ * One product as LIDL described it, with every price it publishes.
  *
- * The price is the one the group states, verbatim. `unitPrice` is null: LIDL
- * publishes no per kilogram figure, and deriving one from the printed size
- * would disagree with the chain in the last cent on the field whose only
- * purpose is comparison.
+ * **A price per offer region, and there are 59 of them** (plan 0089, section 4).
+ * A price the chain states for several regions becomes one entry per region,
+ * each naming that region as its scope, because the format allows a different
+ * price per region and a model that collapsed the ones that agree this week
+ * could not store the week one of them differs.
+ *
+ * Each price is verbatim. `unitPrice` is null: LIDL publishes no per kilogram
+ * figure, and deriving one from the printed size would disagree with the chain
+ * in the last cent on the field whose only purpose is comparison.
  */
-function observationOf(
-  product: LidlProduct,
-  priceId: string | null
-): SourceObservation {
-  const price = product.prices.find((entry) => entry.priceId === priceId);
+function observationOf(product: LidlProduct): SourceObservation {
   return {
     externalId: product.externalId,
     name: product.name,
@@ -317,19 +238,23 @@ function observationOf(
     // LIDL's own number for a weight item, and the aisle is a proposal a person
     // reads: neither may be written as an identifier or as a decision.
     extra: extraOf(product),
-    price: price
-      ? {
-          price: price.price,
-          currency: price.currency,
-          unitPrice: null,
-          unitPriceLabel: null,
-          // The window the chain published, kept as it stated it. Next week's
-          // prices arrive with a start date in the future and are written with
-          // it: plan 0080 decides on read whether a price applies.
-          validFrom: price.validFrom,
-          validUntil: price.validUntil,
-        }
-      : null,
+    prices: product.prices.flatMap((price) =>
+      price.regions.map((region) => ({
+        // The chain's own id for the offer region, which is what a scope is
+        // resolved by: it survives a move to another cluster, and a uuid does
+        // not (plan 0103, D3).
+        scopeKey: region.id,
+        price: price.price,
+        currency: price.currency,
+        unitPrice: null,
+        unitPriceLabel: null,
+        // The window the chain published, kept as it stated it. Next week's
+        // prices arrive with a start date in the future and are written with
+        // it: plan 0080 decides on read whether a price applies.
+        validFrom: price.validFrom,
+        validUntil: price.validUntil,
+      }))
+    ),
   };
 }
 
@@ -352,12 +277,12 @@ function extraOf(product: LidlProduct): Record<string, unknown> | null {
  * empty query had not already returned. `listed` and `grocery` are counts of
  * what this window held, and they are named so they cannot be read as a census.
  */
-function report(
+function describeRun(
   listed: number,
   grocery: number,
   products: readonly LidlProduct[],
   unreadable: readonly string[],
-  scopes: ReadonlyMap<string, ScopeRef>,
+  regions: readonly string[],
   requests: number
 ): Record<string, unknown> {
   const observations = products.reduce(
@@ -378,12 +303,15 @@ function report(
     priced: priced.length,
     unpriced: products.length - priced.length,
     withEan13: products.filter((product) => product.ean !== null).length,
-    regionsSeen: scopes.size,
-    scopesWritten: scopes.size,
-    /** Regions this run had to create a scope for, which store discovery had not. */
-    scopesCreated: [...scopes.entries()]
-      .filter(([, scope]) => scope.created)
-      .map(([regionId]) => regionId),
+    regionsSeen: regions.length,
+    /**
+     * The regions this run declared, by the chain's own key.
+     *
+     * Which of them catalog already held and which had to be created is the
+     * orchestrator's to say now (plan 0103, section 3), so it is written on the
+     * run beside this rather than counted here from scopes the runner made.
+     */
+    regionsDeclared: [...regions],
     observations,
     /** Products whose price is not the same in every region that stocks them. */
     regionallyPriced: products.filter(

@@ -1,3 +1,5 @@
+> **PR:** [#316](https://github.com/IchirokuXVI/nx-portfolio/pull/316)
+
 # 0025 A form that asks what the adapter needs
 
 Two forms in the back office decide whether to ask for a price scope, and both decide it from a

@@ -100,10 +100,11 @@ describe('parseHarvestDocument', () => {
     expect(read().document).toEqual(document);
   });
 
-  it('reads the three hints', () => {
+  it('reads the hints', () => {
     expect(read().hints).toEqual({
       chainId: 'chain-1',
       priceScopeId: 'scope-1',
+      adapterKey: '',
       sourceKind: 'OFFICIAL_LEAFLET',
     });
   });
@@ -113,6 +114,7 @@ describe('parseHarvestDocument', () => {
     expect(read({ hints: undefined }).hints).toEqual({
       chainId: '',
       priceScopeId: '',
+      adapterKey: '',
       sourceKind: null,
     });
   });
@@ -159,6 +161,7 @@ describe('parseHarvestDocument', () => {
       size: '1 L',
       price: expect.stringContaining('0.89'),
       unitPrice: expect.stringContaining('/ l'),
+      prices: 1,
       validFrom: '2026-09-12',
       validUntil: '2026-09-14',
       categoryPath: 'Lacteos / Leche',
@@ -179,6 +182,7 @@ describe('parseHarvestDocument', () => {
       price: '',
       unitPrice: '',
       validFrom: '',
+      prices: 0,
       validUntil: '',
       categoryPath: '',
     });
@@ -191,6 +195,127 @@ describe('parseHarvestDocument', () => {
     }).products;
 
     expect(product.size).toBe('kg');
+  });
+});
+
+/**
+ * What a version 2 document holds, which is what the upload form asks from
+ * (admin plan 0025, section 3).
+ *
+ * **Read from the products and never from `hints.adapter_key`.** The hint is
+ * what a producer claims and the products are what the file holds, so a
+ * mislabelled file is asked for what it actually needs.
+ */
+describe('parseHarvestDocument, a document that prices by scope', () => {
+  const v2 = (over: object = {}) => {
+    const parsed = parseHarvestDocument(
+      JSON.stringify({
+        schema_version: 2,
+        sha256: 'a'.repeat(64),
+        scopes: [
+          { key: '58', kind: 'REGION', name: 'Sevilla' },
+          { key: '12', kind: 'REGION' },
+        ],
+        products: [
+          {
+            name: 'Uva blanca',
+            prices: [
+              { scope: '58', amount: 1.29, currency: 'EUR' },
+              { scope: '12', amount: 1.39, currency: 'EUR' },
+            ],
+          },
+        ],
+        ...over,
+      }),
+      'en'
+    );
+    if (!parsed.ok) {
+      throw new Error(`expected a document, got ${parsed.reason}`);
+    }
+    return parsed.read;
+  };
+
+  it('reads the scopes it declares, naming one that named itself nothing', () => {
+    expect(v2().scopes).toEqual([
+      { key: '58', kind: 'REGION', name: 'Sevilla' },
+      // A scope the source did not name reads as its own key, so the preview
+      // lists something rather than a blank row.
+      { key: '12', kind: 'REGION', name: '12' },
+    ]);
+  });
+
+  it('says a file whose every price names a scope needs no default', () => {
+    expect(v2().pricing).toEqual({
+      any: true,
+      unscoped: false,
+      mostPerProduct: 2,
+    });
+  });
+
+  it('says a file with one unscoped price does need a default', () => {
+    // One is enough: that price has nowhere to go, and the rest of the file
+    // being scoped does not help it.
+    const pricing = v2({
+      products: [
+        {
+          name: 'Uva',
+          prices: [
+            { scope: '58', amount: 1.29, currency: 'EUR' },
+            { amount: 1.19, currency: 'EUR' },
+          ],
+        },
+      ],
+    }).pricing;
+
+    expect(pricing).toMatchObject({ any: true, unscoped: true });
+  });
+
+  it('says a file with no price at all needs no default', () => {
+    // A DEZA export, which states no price anywhere. Asking for a scope would
+    // be asking for a field nothing in the file uses.
+    const pricing = v2({
+      scopes: null,
+      products: [{ name: 'Uva', prices: [] }],
+    }).pricing;
+
+    expect(pricing).toEqual({ any: false, unscoped: false, mostPerProduct: 0 });
+  });
+
+  it('reads a version 1 product as one price naming no scope', () => {
+    // Every leaflet. The form asks for a default exactly as it always has.
+    const parsed = parseHarvestDocument(
+      JSON.stringify({
+        schema_version: 1,
+        sha256: 'b'.repeat(64),
+        products: [{ name: 'Uva', price: { amount: 1.29, currency: 'EUR' } }],
+      }),
+      'en'
+    );
+    if (!parsed.ok) {
+      throw new Error('expected a document');
+    }
+
+    expect(parsed.read.scopes).toEqual([]);
+    expect(parsed.read.pricing).toEqual({
+      any: true,
+      unscoped: true,
+      mostPerProduct: 1,
+    });
+  });
+
+  it('shows the first price on the row and counts the rest', () => {
+    // A product priced for 59 regions is one line and a count, not 59 rows of
+    // the same product.
+    const [product] = v2().products;
+
+    expect(product.price).toEqual(expect.stringContaining('1.29'));
+    expect(product.prices).toBe(2);
+  });
+
+  it('reads the adapter the file claims, which decides nothing', () => {
+    expect(v2({ hints: { adapter_key: 'lidl-api' } }).hints.adapterKey).toBe(
+      'lidl-api'
+    );
   });
 });
 

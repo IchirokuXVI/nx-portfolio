@@ -219,7 +219,9 @@ describe('the sibling row index, rung 4', () => {
     // DEZA leaflet printing the same name and size therefore meet on one row
     // through rung 1 rather than through this rung at all.
     expect(entryKey('Leche entera', '1 L')).toBe(
-      createHash('sha1').update(entryNameKey('Leche entera', '1 L')).digest('hex')
+      createHash('sha1')
+        .update(entryNameKey('Leche entera', '1 L'))
+        .digest('hex')
     );
     expect(entryNameKey('LECHE  entera', '1 l')).toBe(
       entryNameKey('Leche entera', '1 L')
