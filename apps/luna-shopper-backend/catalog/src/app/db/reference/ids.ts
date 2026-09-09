@@ -47,6 +47,22 @@ export const MERCADONA_SUPERMARKET_ID = '5efa0000-0000-4000-a000-000000000001';
 export const groupId = (slug: string): string => derive('group', slug);
 export const itemId = (store: string, slug: string): string =>
   derive('item', `${store}/${slug}`);
+/**
+ * The product id for an authored entry: its own, unless it names a `sameAs`
+ * (see `AuthoredItem`).
+ *
+ * Every writer has to agree on this, so it lives here beside the derivation
+ * rather than inside the seeder. An entry whose price row used one id and whose
+ * product row used another would price a product that is not the one it wrote.
+ */
+export const authoredItemId = (
+  store: string,
+  item: { slug: string; sameAs?: { store: string; slug: string } }
+): string =>
+  item.sameAs
+    ? itemId(item.sameAs.store, item.sameAs.slug)
+    : itemId(store, item.slug);
+
 export const supermarketId = (slug: string): string =>
   derive('supermarket', slug);
 export const priceScopeId = (slug: string): string => derive('scope', slug);

@@ -80,6 +80,25 @@ export interface AuthoredItem {
    * different prices per kilo and there is one product behind both.
    */
   alsoReceipt?: string[];
+  /**
+   * The entry in another store that is **the same product as this one**.
+   *
+   * A national brand carried by two chains is one product with a price in each,
+   * not two products, and the ids say so: an entry naming a `sameAs` takes that
+   * entry's item id instead of deriving its own. Its price still goes to its own
+   * chain's scope, because `supermarket_items` is keyed on the item and the
+   * scope together, so one product ends up priced in both.
+   *
+   * It is only ever right when the two agree on **brand and format**, which is
+   * rule 1 of the product rules. A private label never qualifies: Hacendado is
+   * Mercadona's and Alteza is Deza's, so two chains selling a same named store
+   * brand are selling two different things.
+   *
+   * Both entries still state the whole product, and `reference-catalog.spec.ts`
+   * asserts that they state the same one. Each keeps its own `receipt`, `price`
+   * and `observedAt`, which are the facts that differ per chain.
+   */
+  sameAs?: { store: string; slug: string };
 }
 
 /** A chain the reference catalog introduces, with its single priced store. */
