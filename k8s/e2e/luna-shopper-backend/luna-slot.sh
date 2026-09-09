@@ -919,6 +919,15 @@ HARVESTER_FILE_IMPORT_MAX_BYTES=10485760
 # semantic version to exercise the retirement path, and note the value is
 # validated at boot, so a typo fails the process rather than retiring nobody.
 MIN_CLIENT_VERSION=
+# Scales every rate limit at once (plan 0004, section 8). The numbers in the code
+# are sized for one honest client on the internet, and this machine is not that:
+# a browser, the e2e suites, the seeding scripts and the curation CLI reach one
+# gateway from one address and therefore share one bucket, so five logins a
+# minute is spent by a CLI that signs in on every run and the next real login is
+# refused. Twenty is loose enough that nothing local meets a limit and still a
+# limit, so a runaway loop is stopped. Absent means 1, which is how both clusters
+# run; no values file carries this key.
+THROTTLE_MULTIPLIER=20
 EOF
   telemetry_env gateway
   } | merge_env "$root/apps/luna-shopper-backend/gateway/.env" "${DERIVED_KEYS[gateway]} $TELEMETRY_DERIVED"
