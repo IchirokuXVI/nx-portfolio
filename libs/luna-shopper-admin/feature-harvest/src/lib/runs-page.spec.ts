@@ -48,7 +48,18 @@ const drain = async () => {
   }
 };
 
-function spawnRecorder(refusal?: unknown): {
+/**
+ * The adapter a chain is fetched with, overriding the seed.
+ *
+ * The form draws itself from what the adapter can tell us (backend plan 0103,
+ * section 4), so a spec per capability row needs a chain per adapter. The seed
+ * has two, and adding four more chains to it would be seeding a directory to
+ * test a form.
+ */
+function spawnRecorder(
+  refusal?: unknown,
+  adapters: Readonly<Record<string, string>> = {}
+): {
   service: HarvestServiceI;
   spawned: unknown[];
   listed: unknown[];
@@ -63,7 +74,13 @@ function spawnRecorder(refusal?: unknown): {
       listed.push(query);
       return memory.listRuns(query);
     },
-    readSource: (id: string) => memory.readSource(id),
+    readSource: async (id: string) => {
+      const source = await memory.readSource(id);
+      const adapterKey = adapters[id];
+      return adapterKey === undefined
+        ? source
+        : { ...source, adapterKey: adapterKey as typeof source.adapterKey };
+    },
     spawnRun: async (input: unknown) => {
       spawned.push(input);
       if (refusal !== undefined) {
@@ -76,8 +93,11 @@ function spawnRecorder(refusal?: unknown): {
   return { service, spawned, listed };
 }
 
-async function render(refusal?: unknown) {
-  const { service, spawned, listed } = spawnRecorder(refusal);
+async function render(
+  refusal?: unknown,
+  adapters: Readonly<Record<string, string>> = {}
+) {
+  const { service, spawned, listed } = spawnRecorder(refusal, adapters);
 
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -284,6 +304,70 @@ describe('the run form, the price scope a walk writes to', () => {
   });
 
   /**
+   * The defect of admin plan 0025, section 1, as a test.
+   *
+   * The spawn required a scope for `carrefour-web` as well as for
+   * `mercadona-api`, and this form named only the second. So a Carrefour walk
+   * drew no picker, sent an empty scope, and was refused with a message about a
+   * field the operator was never shown. Both sides read one table now.
+   */
+  it('asks for a scope for a chain behind a browser that prices', async () => {
+    const { fixture, spawned } = await render(undefined, {
+      [DEZA]: 'carrefour-web',
+    });
+    await chain(fixture, DEZA);
+    const page = fixture.componentInstance;
+
+    expect(page.needsScope()).toBe(true);
+    expect(text(fixture)).toContain('harvest.runs.start.priceScope');
+
+    await page.start();
+    await drain();
+
+    expect(spawned[0]).toEqual({
+      mode: 'CATALOG_DISCOVERY',
+      supermarketId: DEZA,
+      priceScopeId: NATIONAL,
+    });
+  });
+
+  /**
+   * The opposite half of the same table. LIDL publishes a price for each of its
+   * 59 regions and every price names the region it is for, so the run needs no
+   * default and a picker would offer a field that catches nothing.
+   */
+  it('asks for no scope for a chain that names the scope of every price', async () => {
+    const { fixture } = await render(undefined, { [DEZA]: 'lidl-api' });
+    await chain(fixture, DEZA);
+    const page = fixture.componentInstance;
+
+    expect(page.capabilities().writesPrices).toBe(true);
+    expect(page.needsScope()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.runs.start.priceScope');
+    expect(page.ready()).toBe(true);
+  });
+
+  /**
+   * A back office one release behind a backend that added an adapter draws a
+   * plain form rather than a broken one, and the spawn is still the thing that
+   * refuses a bad request.
+   */
+  it('draws a plain form for an adapter it has never heard of', async () => {
+    const { fixture } = await render(undefined, { [DEZA]: 'aldi-web' });
+    await chain(fixture, DEZA);
+    const page = fixture.componentInstance;
+
+    expect(page.needsScope()).toBe(false);
+    expect(page.offersBackfill()).toBe(false);
+    expect(page.capabilities()).toEqual({
+      writesPrices: false,
+      scopesItsOwn: false,
+      listsItsOwnStores: false,
+      hasProductPages: false,
+    });
+  });
+
+  /**
    * A store discovery finds shops and writes no price at all, so the field has
    * nothing to be about whatever the chain's adapter is.
    */
@@ -296,6 +380,56 @@ describe('the run form, the price scope a walk writes to', () => {
     fixture.detectChanges();
 
     expect(page.needsScope()).toBe(false);
+  });
+
+  /**
+   * The other two rules that used to name an adapter and now read the table
+   * (admin plan 0025, section 2).
+   */
+  it('asks where to look for shops, unless the chain names its own', async () => {
+    const { fixture } = await render(undefined, { [DEZA]: 'lidl-api' });
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.mode.set('STORE_DISCOVERY');
+    fixture.detectChanges();
+    expect(page.needsCentre()).toBe(true);
+    expect(text(fixture)).toContain('harvest.runs.start.postalCode');
+
+    await chain(fixture, DEZA);
+    fixture.detectChanges();
+    expect(page.needsCentre()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.runs.start.postalCode');
+  });
+
+  it('offers the EAN backfill only where there are product pages to read', async () => {
+    const { fixture, spawned } = await render(undefined, {
+      [DEZA]: 'carrefour-web',
+    });
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    expect(page.offersBackfill()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.runs.start.detailBackfill');
+
+    await chain(fixture, DEZA);
+    expect(page.offersBackfill()).toBe(true);
+    expect(text(fixture)).toContain('harvest.runs.start.detailBackfill');
+
+    // A backfill reads pages for the EAN and writes no price, so the scope the
+    // same chain's walk would be asked for is not asked for here.
+    page.detailBackfill.set(true);
+    fixture.detectChanges();
+    expect(page.needsScope()).toBe(false);
+
+    await page.start();
+    await drain();
+
+    expect(spawned[0]).toEqual({
+      mode: 'CATALOG_DISCOVERY',
+      supermarketId: DEZA,
+      detailBackfill: true,
+    });
   });
 
   /** A scope of the previous chain is not a scope of this one. */

@@ -179,6 +179,102 @@ export const ADAPTER_KEYS = [
 ] as const;
 export type AdapterKey = (typeof ADAPTER_KEYS)[number];
 
+/**
+ * What a source is able to tell us, stated once for every adapter (plan 0103,
+ * section 4).
+ *
+ * Each field is a fact about the storefront rather than a switch somebody sets.
+ * The spawn turns them into the fields a run requires, and the back office turns
+ * the same four booleans into the fields a form offers, so the two cannot
+ * disagree about what a chain needs. Three arrays in `harvest-run.service.ts`
+ * and one constant in `runs-page.ts` said this before, and they already
+ * disagreed: the backend required a price scope for `carrefour-web` and the form
+ * never offered one, so a Carrefour walk was refused for a field nobody was
+ * shown.
+ */
+export interface AdapterCapabilities {
+  /** The source states a price, so a run of it has somewhere to write prices. */
+  writesPrices: boolean;
+  /** The source names the scope of each price, so it needs no default. */
+  scopesItsOwn: boolean;
+  /** The source publishes its own shop list, so a store discovery takes no radius. */
+  listsItsOwnStores: boolean;
+  /** The source has a product page, so an EAN backfill has something to read. */
+  hasProductPages: boolean;
+}
+
+/**
+ * The four facts, per adapter.
+ *
+ * **A reader that does not know an adapter must answer no to everything.** A
+ * back office one release behind a backend that added an adapter then draws a
+ * plain form rather than a broken one, and the spawn is still the thing that
+ * refuses a bad request.
+ */
+export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
+  'mercadona-api': {
+    writesPrices: true,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: false,
+  },
+  // The site prints no price at all, so a scope would be a required field that
+  // does nothing (plan 0085).
+  'deza-web': {
+    writesPrices: false,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: false,
+  },
+  'carrefour-web': {
+    writesPrices: true,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: true,
+  },
+  // The one source that states the region of every price it publishes and names
+  // its own 730 shops (plan 0089).
+  'lidl-api': {
+    writesPrices: true,
+    scopesItsOwn: true,
+    listsItsOwnStores: true,
+    hasProductPages: true,
+  },
+  'osm-places': {
+    writesPrices: false,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: false,
+  },
+  manual: {
+    writesPrices: false,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: false,
+  },
+};
+
+/**
+ * The capabilities of an adapter this build knows, and all four false otherwise.
+ *
+ * The lookup is a function rather than an index so the "answers no to
+ * everything" rule is written once. A caller reading the record directly gets
+ * `undefined` for an adapter added after it shipped, and every call site would
+ * have to remember to handle it.
+ */
+export function adapterCapabilities(
+  adapterKey: string | null | undefined
+): AdapterCapabilities {
+  return (
+    ADAPTER_CAPABILITIES[adapterKey as AdapterKey] ?? {
+      writesPrices: false,
+      scopesItsOwn: false,
+      listsItsOwnStores: false,
+      hasProductPages: false,
+    }
+  );
+}
+
 // --- Views -----------------------------------------------------------------
 
 /**
