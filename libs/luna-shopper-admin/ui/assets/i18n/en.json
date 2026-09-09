@@ -795,6 +795,10 @@
       "noNational": "This chain has no national scope. Most uploads are nationwide, so create one and come back.",
       "createScope": "Create a price scope in a new tab",
       "refreshScopes": "Look again",
+      "scopes": {
+        "count": "This file prices {{count}} group(s) of shops itself: {{names}}. It needs no scope from you.",
+        "perProduct": "At most {{most}} price(s) per product, one for each group that pays it."
+      },
       "sourceKind": "What observed it",
       "sourceKindChoose": "Choose one",
       "sourceKindHelp": "What the products and the prices are stamped with, and what decides which price a shopper sees when two sources disagree. A walk of a chain's API imported here is an API price, not a leaflet price: the upload is not what observed it.",

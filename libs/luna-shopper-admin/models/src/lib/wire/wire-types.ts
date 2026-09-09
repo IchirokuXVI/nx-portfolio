@@ -362,7 +362,7 @@ export type ImportDiscoveredPlaceDto = {
  */
 export type ImportHarvestDocumentDto = {
   supermarketId: string;
-  priceScopeId: string;
+  priceScopeId?: string;
   sourceKind: 'OFFICIAL_API' | 'OFFICIAL_WEB' | 'OFFICIAL_LEAFLET';
   validFrom?: string;
   validUntil?: string;

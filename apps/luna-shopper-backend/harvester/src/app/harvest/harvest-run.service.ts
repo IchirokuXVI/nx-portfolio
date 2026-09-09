@@ -11,6 +11,7 @@ import {
   HarvestRunTrigger,
   PriceSourceKind,
   adapterCapabilities,
+  type HarvestDocument,
   type HarvestRunIdRequest,
   type HarvestRunPage,
   type HarvestRunView,
@@ -521,12 +522,6 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
           'document is a hint the upload screen shows, never a lookup key.'
       );
     }
-    if (!req.priceScopeId) {
-      throw new ValidationException(
-        'A file import needs the price scope to write the prices for. Most ' +
-          'files are nationwide, so that is usually the chain NATIONAL scope.'
-      );
-    }
     if (!req.sourceKind) {
       throw new ValidationException(
         'A file import needs the source kind the prices are stamped with: what ' +
@@ -544,6 +539,18 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     }
 
     const document = readHarvestDocument(req.document);
+    // **A default scope is required by what the document holds, not by what it
+    // claims** (plan 0103, section 4.3). A price naming no group of shops has
+    // nowhere to go without one, which is every leaflet and every version 1
+    // file. A document that scopes every price of its own needs no default, and
+    // one that states no price needs no scope at all.
+    if (!req.priceScopeId && hasUnscopedPrice(document)) {
+      throw new ValidationException(
+        'This file states a price for no particular group of shops, so it ' +
+          'needs the price scope to write those prices for. Most files are ' +
+          'nationwide, so that is usually the chain NATIONAL scope.'
+      );
+    }
     const window = resolveImportWindow({
       documentFrom: document.validity?.from ?? null,
       documentUntil: document.validity?.until ?? null,
@@ -553,11 +560,11 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
 
     return {
       supermarketId: req.supermarketId,
-      priceScopeId: req.priceScopeId,
+      priceScopeId: req.priceScopeId ?? null,
       documentSha256: document.sha256,
       payload: {
         supermarketId: req.supermarketId,
-        priceScopeId: req.priceScopeId,
+        priceScopeId: req.priceScopeId ?? null,
         sourceKind: req.sourceKind,
         // The resolved instants, not the local days: the runner writes them onto
         // every price row. Absent when the document states no window, which is
@@ -572,6 +579,19 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       },
     };
   }
+}
+
+/**
+ * Whether any price in the document names no group of shops.
+ *
+ * The document arrives normalized into the version 2 shape, so a version 1
+ * product's one price is already an entry naming no scope and answers true,
+ * which is why every leaflet is still asked for a default.
+ */
+function hasUnscopedPrice(document: HarvestDocument): boolean {
+  return document.products.some((product) =>
+    (product.prices ?? []).some((price) => !price.scope)
+  );
 }
 
 /** Re-exported for the module's provider list. */

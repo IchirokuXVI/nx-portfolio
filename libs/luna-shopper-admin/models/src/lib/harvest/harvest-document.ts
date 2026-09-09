@@ -55,6 +55,43 @@ export interface HarvestDocumentRead {
    */
   readonly validity: HarvestValidity | null;
   readonly products: readonly HarvestProductRow[];
+  /**
+   * The groups of shops this file prices for (backend plan 0103, section 5.1).
+   *
+   * Empty for every version 1 document and every leaflet, which is what makes
+   * the scope picker appear: a price naming no group falls to the one the
+   * operator chooses.
+   */
+  readonly scopes: readonly HarvestScopeRow[];
+  /** What this file holds by way of prices, which is what the form asks from. */
+  readonly pricing: HarvestPricing;
+}
+
+/** One group of shops the file names, as the preview shows it. */
+export interface HarvestScopeRow {
+  readonly key: string;
+  readonly kind: string;
+  /** What the source calls it, or its key when it named none. */
+  readonly name: string;
+}
+
+/**
+ * What a document holds by way of prices (admin plan 0025, section 3).
+ *
+ * **The form reads this and never `hints.adapter_key`.** The hint is what a
+ * producer claims and this is what the file holds, so a mislabelled file is
+ * asked for what it actually needs rather than refused for lying.
+ */
+export interface HarvestPricing {
+  /** Whether any product states any price at all. */
+  readonly any: boolean;
+  /**
+   * Whether any price names no scope, which is the one case that needs a
+   * default. Every leaflet, and every version 1 document.
+   */
+  readonly unscoped: boolean;
+  /** The largest number of prices any one product carries. */
+  readonly mostPerProduct: number;
 }
 
 /**
@@ -89,6 +126,14 @@ export interface HarvestDocumentHints {
   /** `''` when the file states none. */
   readonly chainId: string;
   readonly priceScopeId: string;
+  /**
+   * What produced the file, `''` when it states none.
+   *
+   * **It labels the preview and preselects, and decides nothing else** (admin
+   * plan 0025, section 3): whether a default scope is needed is read from the
+   * products.
+   */
+  readonly adapterKey: string;
   /** `null` when the file states none, or states one this app does not know. */
   readonly sourceKind: OfficialSourceKind | null;
 }
@@ -121,6 +166,11 @@ export interface HarvestProductRow {
   readonly price: string;
   /** The comparison figure with the label the source printed. `''` when none. */
   readonly unitPrice: string;
+  /**
+   * How many prices this product carries, one per group of shops it was priced
+   * for. The row shows the first, so this is what says there are others.
+   */
+  readonly prices: number;
   /** This product's own window, where it states one. `''` otherwise. */
   readonly validFrom: string;
   readonly validUntil: string;
@@ -161,6 +211,8 @@ export function parseHarvestDocument(
       products: document['products'].map((entry, index) =>
         readProduct(entry, index, locale)
       ),
+      scopes: readScopes(document['scopes']),
+      pricing: readPricing(document['products']),
     },
   };
 }
@@ -514,8 +566,67 @@ function readHints(value: unknown): HarvestDocumentHints {
   return {
     chainId: asText(hints['chain_id']),
     priceScopeId: asText(hints['price_scope_id']),
+    adapterKey: asText(hints['adapter_key']),
     sourceKind: toOfficialSourceKind(hints['source_kind']),
   };
+}
+
+/** The groups of shops the file names, in the order it named them. */
+function readScopes(value: unknown): HarvestScopeRow[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    const scope = asRecord(entry);
+    const key = asText(scope?.['key']);
+    if (key === '') {
+      return [];
+    }
+    return [
+      {
+        key,
+        kind: asText(scope?.['kind']),
+        name: asText(scope?.['name']) || key,
+      },
+    ];
+  });
+}
+
+/**
+ * What the file holds by way of prices (admin plan 0025, section 3).
+ *
+ * Read from the products and never from `hints.adapter_key`. A version 1
+ * document states `price` and `unit_price` on the product, which is a price
+ * naming no scope, so it answers `unscoped` and the form asks for a default
+ * exactly as it always has.
+ */
+function readPricing(products: readonly unknown[]): HarvestPricing {
+  let any = false;
+  let unscoped = false;
+  let mostPerProduct = 0;
+
+  for (const entry of products) {
+    const product = asRecord(entry) ?? {};
+    const prices = product['prices'];
+    if (Array.isArray(prices)) {
+      mostPerProduct = Math.max(mostPerProduct, prices.length);
+      for (const price of prices) {
+        any = true;
+        if (asText(asRecord(price)?.['scope']) === '') {
+          unscoped = true;
+        }
+      }
+      continue;
+    }
+    // Version 1: one price on the product, for no particular group of shops.
+    if (product['price'] || product['unit_price']) {
+      any = true;
+      unscoped = true;
+      mostPerProduct = Math.max(mostPerProduct, 1);
+    }
+  }
+
+  return { any, unscoped, mostPerProduct };
 }
 
 /**
@@ -544,15 +655,28 @@ function readProduct(
 ): HarvestProductRow {
   const product = asRecord(entry) ?? {};
   const size = asRecord(product['size']) ?? {};
-  const price = asRecord(product['price']);
-  const unitPrice = asRecord(product['unit_price']);
-  const validity = asRecord(product['validity']) ?? {};
+  // Version 2 states a price per group of shops; version 1 stated one on the
+  // product. The row shows the first either way, and `prices` says how many
+  // there are, so a product priced for 59 regions reads as one line and a count
+  // rather than as 59 rows of the same product.
+  const prices = Array.isArray(product['prices']) ? product['prices'] : null;
+  const first = prices === null ? null : asRecord(prices[0]);
+  const price = first ?? asRecord(product['price']);
+  const unitPrice = first
+    ? asRecord(first['unit_price'])
+    : asRecord(product['unit_price']);
+  const validity =
+    (first ? asRecord(first['validity']) : null) ??
+    asRecord(product['validity']) ??
+    {};
   const categoryPath = product['category_path'];
 
   const label = asText(unitPrice?.['label']);
   const unit = formatCurrencyAmount(
     asAmount(unitPrice),
-    asText(unitPrice?.['currency']) || null,
+    // A version 2 unit price carries no currency of its own: the price it sits
+    // on states one for both.
+    asText(unitPrice?.['currency']) || asText(price?.['currency']) || null,
     locale
   );
 
@@ -572,6 +696,7 @@ function readProduct(
       locale
     ),
     unitPrice: unit === '' || label === '' ? unit : `${unit} / ${label}`,
+    prices: prices === null ? (price ? 1 : 0) : prices.length,
     validFrom: asDay(validity['from']),
     validUntil: asDay(validity['until']),
     categoryPath: Array.isArray(categoryPath)
