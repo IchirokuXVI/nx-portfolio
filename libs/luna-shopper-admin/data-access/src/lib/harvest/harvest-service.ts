@@ -247,12 +247,15 @@ export interface PlaceGroupQuery {
 }
 
 /**
- * One chain's source catalog entries (backend plan 0086, section 10).
+ * The source catalog entries, of one chain or of every chain (backend plan
+ * 0086, section 10).
  *
- * `supermarketId` is **required**, as the shops query's is and for the same
- * reason: a row is keyed on (`supermarketId`, `externalId`) and a chain's own
- * name for a product means nothing outside that chain, so there is no queue over
- * every chain's rows and no screen that could use one.
+ * `supermarketId` is **a filter and not an address**. A row is keyed on
+ * (`supermarketId`, `externalId`), so its key means nothing outside its chain,
+ * but the row names its own chain and the queue is one queue: absent, the read
+ * answers every chain's rows newest first. That is unlike the shops query, whose
+ * chain really is its address, because a source shop is only a shop of the
+ * source that named it.
  *
  * `status` absent lists `CANDIDATE` and `UNRESOLVED` together, which is the
  * queue: the rows waiting for a person. That default is the route's rather than
@@ -262,7 +265,8 @@ export interface PlaceGroupQuery {
  * column, and the status says it now.
  */
 export interface EntryQuery extends PageQuery {
-  readonly supermarketId: string;
+  /** One chain's rows. Absent, or empty, lists every chain's. */
+  readonly supermarketId?: string;
   readonly status?: SourceEntryStatus;
   /**
    * One kind at a time, so an operator working through a leaflet's rows is not

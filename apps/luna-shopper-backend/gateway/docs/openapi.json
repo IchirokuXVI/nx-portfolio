@@ -19287,8 +19287,9 @@
         "parameters": [
           {
             "name": "supermarketId",
-            "required": true,
+            "required": false,
             "in": "query",
+            "description": "One chain’s rows. Absent lists every chain’s: the chain narrows the queue rather than addressing it, and a row names the chain it came from.",
             "schema": {
               "format": "uuid",
               "type": "string"
