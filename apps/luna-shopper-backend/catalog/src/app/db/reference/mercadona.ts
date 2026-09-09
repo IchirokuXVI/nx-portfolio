@@ -242,7 +242,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'fuet-espetec',
-    name: { en: 'Fuet', es: 'Fuet espetec' },
+    name: { en: 'Fuet', es: 'Fuet' },
     group: 'fuet',
     category: MEAT,
     defaultUnit: KILOGRAM,
@@ -290,7 +290,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'torrezno-morro',
-    name: { en: 'Pork Crackling', es: 'Torreznos' },
+    name: { en: 'Pork Snout Crackling', es: 'Torreznos de morro' },
     group: 'pork-crackling',
     category: SNACKS,
     defaultUnit: KILOGRAM,
@@ -446,10 +446,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   // --- Bakery ---------------------------------------------------------------
   {
     slug: 'pan-blanco-familiar',
-    name: {
-      en: 'Sliced White Bread, Family Size',
-      es: 'Pan de molde blanco familiar',
-    },
+    name: { en: 'Sliced White Bread', es: 'Pan de molde blanco' },
     group: 'sliced-white-bread',
     category: BAKERY,
     defaultUnit: KILOGRAM,
@@ -582,7 +579,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'garfitos-queso',
-    name: { en: 'Cheese Corn Puffs', es: 'Garfitos de maíz sabor queso' },
+    name: { en: 'Cheese Corn Puffs', es: 'Aperitivos de maíz sabor queso' },
     group: 'corn-snacks',
     category: SNACKS,
     defaultUnit: KILOGRAM,
@@ -609,7 +606,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'cuquis',
-    name: { en: 'Savoury Biscuits', es: 'Galletas saladas Cuquis' },
+    name: { en: 'Savoury Biscuits', es: 'Galletas saladas' },
     group: 'savoury-biscuits',
     category: SNACKS,
     defaultUnit: KILOGRAM,
@@ -633,7 +630,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'choco-swing',
-    name: { en: 'Swing Chocolate Bar', es: 'Chocolate Swing' },
+    name: { en: 'Milk Chocolate Bar', es: 'Chocolate con leche' },
     group: 'milk-chocolate',
     category: SNACKS,
     defaultUnit: KILOGRAM,
@@ -661,7 +658,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
     slug: 'fussion-avellana',
     name: {
       en: 'Hazelnut Filled Chocolate',
-      es: 'Chocolate Fussion de avellana',
+      es: 'Chocolate relleno de avellana',
     },
     group: 'filled-chocolate',
     category: SNACKS,
@@ -727,8 +724,8 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   {
     slug: 'crocan-choc-vainilla',
     name: {
-      en: 'Vanilla Crocan Ice Cream Cone',
-      es: 'Cono de helado crocan de vainilla',
+      en: 'Vanilla Ice Cream Cone with Nut Brittle',
+      es: 'Cono de helado de vainilla con crocanti',
     },
     group: 'ice-cream-cones',
     category: FROZEN,
@@ -753,7 +750,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'helado-golden-pecan',
-    name: { en: 'Golden Pecan Ice Cream', es: 'Helado golden pecan' },
+    name: { en: 'Pecan Ice Cream', es: 'Helado de nuez pecana' },
     group: 'ice-cream-tub',
     category: FROZEN,
     defaultUnit: LITER,
@@ -822,6 +819,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
     group: 'mayonnaise',
     category: PANTRY,
     defaultUnit: LITER,
+    unitSize: 0.5,
     brand: 'Hacendado',
     receipt: 'MAYONESA 500ML',
     price: 1.2,
@@ -913,7 +911,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   // --- Drinks ---------------------------------------------------------------
   {
     slug: 'agua-mineral-grande',
-    name: { en: 'Still Water, Large', es: 'Agua mineral grande' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,
@@ -925,10 +923,11 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'agua-mineral-pequena',
-    name: { en: 'Still Water, Small', es: 'Agua mineral pequeña' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,
+    unitSize: 0.5,
     brand: 'Fuente Dehesa',
     receipt: 'F. DEHESA 500ML',
     price: 0.29,
@@ -1352,8 +1351,8 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   {
     slug: 'edp-rebel',
     name: {
-      en: "Men's Eau de Parfum, Rebel",
-      es: 'Eau de parfum de hombre, Rebel',
+      en: "Men's Eau de Parfum",
+      es: 'Eau de parfum de hombre',
     },
     group: 'eau-de-parfum',
     category: PERSONAL_CARE,
@@ -1468,7 +1467,10 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'mascara-long-xtrem',
-    name: { en: 'Long Xtrem Mascara', es: 'Máscara de pestañas Long Xtrem' },
+    name: {
+      en: 'Lengthening Mascara',
+      es: 'Máscara de pestañas alargadora',
+    },
     group: 'mascara',
     category: PERSONAL_CARE,
     defaultUnit: UNIT,

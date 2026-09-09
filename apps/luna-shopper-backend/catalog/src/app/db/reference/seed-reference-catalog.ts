@@ -14,8 +14,8 @@ import { EL_JAMON_ITEMS, SUPERCASH_ITEMS } from './authored';
 import { REFERENCE_GROUPS } from './groups';
 import {
   MERCADONA_SUPERMARKET_ID,
+  authoredItemId,
   groupId,
-  itemId,
   locationId,
   priceScopeId,
   supermarketId,
@@ -275,7 +275,7 @@ async function seedMercadona(
    * database was then left with 108 permanently unpriced products.
    */
   const isHarvested = (it: AuthoredItem, id: string) =>
-    id !== itemId('mercadona', it.slug);
+    id !== authoredItemId('mercadona', it);
 
   const adopt: AuthoredItem[] = [];
   const mine: AuthoredItem[] = [];
@@ -320,13 +320,13 @@ async function writeItems(
   if (!items.length) return;
 
   const itemRows = items.map((it) => ({
-    id: itemId(storeSlug, it.slug),
+    id: authoredItemId(storeSlug, it),
     name: it.name,
     brand: it.brand ?? null,
     imageUrl: null,
     sku: null,
     ean: it.ean ?? null,
-    unitSize: null,
+    unitSize: it.unitSize ?? null,
     category: it.category,
     defaultUnit: it.defaultUnit,
     productGroupId: groupId(it.group),
@@ -344,7 +344,7 @@ async function writeItems(
     sourceRunId: null,
     now,
     entries: items.map((it) => ({
-      itemId: itemId(storeSlug, it.slug),
+      itemId: authoredItemId(storeSlug, it),
       // A counter product's receipt figure is per kilogram, which is not what
       // one of them costs, so it goes to the per unit fields and `price` stays
       // null rather than claiming a pack price nobody paid.
@@ -362,7 +362,10 @@ async function writeItems(
   // above it.
   await recomputeEffectivePrices(
     m,
-    items.map((it) => ({ itemId: itemId(storeSlug, it.slug), priceScopeId: scopeId })),
+    items.map((it) => ({
+      itemId: authoredItemId(storeSlug, it),
+      priceScopeId: scopeId,
+    })),
     now
   );
 }
