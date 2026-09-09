@@ -92,18 +92,43 @@ describe('BottomActionBar', () => {
     expect(primary(fixture).getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('leaves the join-by-code action working', async () => {
+  // The second action is the history now, not Join with a code: a glyph with no label
+  // has to be something reached often, and joining a group is once per group. Both are
+  // asserted, the output it raises and the button never being disabled, because "even
+  // with no basket" is the whole reason it moved here.
+  it('opens the history from the second action', async () => {
     const fixture = await render();
 
-    let joined = 0;
-    fixture.componentInstance.joinZone.subscribe(() => (joined += 1));
+    let opened = 0;
+    fixture.componentInstance.openHistory.subscribe(() => (opened += 1));
 
     const secondary = (
       fixture.nativeElement as HTMLElement
     ).querySelector<HTMLButtonElement>('.secondary');
     secondary?.click();
 
-    expect(joined).toBe(1);
+    expect(opened).toBe(1);
+    expect(secondary?.disabled).toBe(false);
+  });
+
+  it('labels the second action, which draws only a glyph', async () => {
+    const fixture = await render();
+
+    const secondary = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLButtonElement>('.secondary');
+
+    expect(secondary?.getAttribute('aria-label')).toBe('home.action.history');
+  });
+
+  // The dock no longer offers a way into a group. The groups header carries both,
+  // spelled out, and a reintroduced glyph here would pass silently otherwise.
+  it('offers no join action', async () => {
+    const fixture = await render();
+
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).not.toContain('joinCode');
+    expect(html).not.toContain('lib-join-code-icon');
   });
 });
 
@@ -141,7 +166,7 @@ describe('BottomActionBar as a shell', () => {
   });
 
   // The whole point of the fallback: a caller with a row of its own gets its row and
-  // nothing else, so the history page does not also grow the dashboard's join button.
+  // nothing else, so the history page does not also grow a button back to itself.
   it('drops the dashboard pair when a row is projected', async () => {
     const fixture = await renderHost();
     const host = fixture.nativeElement as HTMLElement;
