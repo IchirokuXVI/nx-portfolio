@@ -326,7 +326,7 @@ async function writeItems(
     imageUrl: null,
     sku: null,
     ean: it.ean ?? null,
-    unitSize: null,
+    unitSize: it.unitSize ?? null,
     category: it.category,
     defaultUnit: it.defaultUnit,
     productGroupId: groupId(it.group),
@@ -362,7 +362,10 @@ async function writeItems(
   // above it.
   await recomputeEffectivePrices(
     m,
-    items.map((it) => ({ itemId: itemId(storeSlug, it.slug), priceScopeId: scopeId })),
+    items.map((it) => ({
+      itemId: itemId(storeSlug, it.slug),
+      priceScopeId: scopeId,
+    })),
     now
   );
 }

@@ -28,6 +28,22 @@ export interface AuthoredItem {
   group: string;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
+  /**
+   * How much of `defaultUnit` one of these is: 1.5 for a 1.5 L bottle, 0.25 for
+   * a 250 g jar, 3 for a pack of three.
+   *
+   * It is where a size goes, because a name does not carry one. `Still Water
+   * 1.5 L` states the same fact twice, in the one field search reads, and it
+   * makes the bottle look like a different product from the same water in a
+   * different bottle. So the name says what the thing is and this says how much
+   * of it there is, which is the split `splitCardName` already makes for a
+   * harvested Carrefour card.
+   *
+   * Left unset when the receipt does not state a size, rather than guessed. The
+   * `receipt` field below keeps whatever was printed either way, so stripping a
+   * size from the name discards no evidence.
+   */
+  unitSize?: number;
   brand?: string;
   /** What the till printed, kept as the evidence for the normalized name. */
   receipt: string;

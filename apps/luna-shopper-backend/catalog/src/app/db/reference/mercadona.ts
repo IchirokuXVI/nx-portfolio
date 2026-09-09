@@ -258,7 +258,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
     group: 'salami',
     category: MEAT,
     defaultUnit: KILOGRAM,
-    brand: 'El Pozo',
+    brand: 'ElPozo',
     receipt: 'SALAMI MONTAÑES',
     price: 1.85,
     observedAt: '2026-08-27',
@@ -290,7 +290,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'torrezno-morro',
-    name: { en: 'Pork Crackling', es: 'Torreznos' },
+    name: { en: 'Pork Snout Crackling', es: 'Torreznos de morro' },
     group: 'pork-crackling',
     category: SNACKS,
     defaultUnit: KILOGRAM,
@@ -446,10 +446,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   // --- Bakery ---------------------------------------------------------------
   {
     slug: 'pan-blanco-familiar',
-    name: {
-      en: 'Sliced White Bread, Family Size',
-      es: 'Pan de molde blanco familiar',
-    },
+    name: { en: 'Sliced White Bread', es: 'Pan de molde blanco' },
     group: 'sliced-white-bread',
     category: BAKERY,
     defaultUnit: KILOGRAM,
@@ -609,7 +606,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'cuquis',
-    name: { en: 'Savoury Biscuits', es: 'Galletas saladas Cuquis' },
+    name: { en: 'Savoury Biscuits', es: 'Galletas saladas' },
     group: 'savoury-biscuits',
     category: SNACKS,
     defaultUnit: KILOGRAM,
@@ -661,7 +658,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
     slug: 'fussion-avellana',
     name: {
       en: 'Hazelnut Filled Chocolate',
-      es: 'Chocolate Fussion de avellana',
+      es: 'Chocolate relleno de avellana',
     },
     group: 'filled-chocolate',
     category: SNACKS,
@@ -822,6 +819,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
     group: 'mayonnaise',
     category: PANTRY,
     defaultUnit: LITER,
+    unitSize: 0.5,
     brand: 'Hacendado',
     receipt: 'MAYONESA 500ML',
     price: 1.2,
@@ -913,7 +911,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   // --- Drinks ---------------------------------------------------------------
   {
     slug: 'agua-mineral-grande',
-    name: { en: 'Still Water, Large', es: 'Agua mineral grande' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,
@@ -925,10 +923,11 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'agua-mineral-pequena',
-    name: { en: 'Still Water, Small', es: 'Agua mineral pequeña' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,
+    unitSize: 0.5,
     brand: 'Fuente Dehesa',
     receipt: 'F. DEHESA 500ML',
     price: 0.29,
