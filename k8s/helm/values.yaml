@@ -591,6 +591,26 @@ lunaShopperBackend:
       routed: true
       hostPrefix: api
       websocket: false
+      # Paths that need longer than the implementation's default before it gives
+      # up on the request. Each one becomes its own HTTPRoute rule, ahead of the
+      # catch all: Gateway API matches by specificity, so a prefix rule always
+      # beats `/` and nothing else on this host is affected.
+      #
+      # It exists for the assistant, and the numbers here are one decision with
+      # ASSISTANT_TURN_TIMEOUT_MS. A turn is a model call, then up to six rounds
+      # of tools with a model call before each, so the ordinary fifteen second
+      # default cut off perfectly good turns. Worse, it cut off the **caller**
+      # and not the turn: the assistant went on running and wrote its lines
+      # seconds after the app had said the recording did not arrive, and somebody
+      # who believed that said it again and got two of everything.
+      #
+      # 120s is the turn budget (60s) plus one whole provider timeout (30s) plus
+      # slack, because the deadline stops the loop starting new work and does not
+      # abort a provider call already in flight. Raise the turn budget and this
+      # has to move with it, or the proxy starts giving up first again.
+      slowPaths:
+        - path: /v1/assistant
+          timeout: 120s
     - name: luna-shopper-backend-realtime
       role: realtime
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-realtime

@@ -34,6 +34,7 @@ import {
   AssistantService,
   capTranscript,
   NOTHING_HEARD,
+  RAN_OUT_OF_TIME,
 } from './assistant.service';
 import {
   GatewayApiClient,
@@ -269,6 +270,7 @@ const CONFIG: AssistantConfig = {
   concurrency: 2,
   retryAfterFallbackSeconds: 30,
   providerTimeoutMs: 30000,
+  turnTimeoutMs: 60000,
 };
 
 function build(
@@ -819,6 +821,73 @@ describe('AssistantService', () => {
 
       expect(response.reply).toBe('Listo.');
       expect(api.of('addLines')).toHaveLength(2);
+    });
+
+    /**
+     * The turn budget, and the duplicate it exists to prevent.
+     *
+     * `providerTimeoutMs` bounds one call and nothing about a turn, so a turn's own
+     * ceiling was seven provider timeouts plus whatever the tools took. Long before
+     * that, whatever routes to this service gives up, the caller is told the request
+     * failed, and the loop goes on calling tools: rows appear on the list seconds
+     * after somebody was told nothing had happened, and they say it again.
+     *
+     * `turnTimeoutMs: 0` is the whole deadline expressed as a fixture. Every reply
+     * arrives after it.
+     */
+    describe('a turn that runs past its budget', () => {
+      it('does not run the tool calls the model asked for', async () => {
+        const api = new RecordingApi();
+        const service = build(
+          new FakeModelProvider([
+            FakeModelProvider.calls('upsert_lines', {
+              items: [{ product: 'leche' }],
+            }),
+            FakeModelProvider.says('Listo.'),
+          ]),
+          api,
+          { turnTimeoutMs: 0 }
+        );
+
+        const response = await service.turn(turnRequest('añade leche'));
+
+        // The point of the whole change: nothing was written behind the caller.
+        expect(api.of('addLines')).toHaveLength(0);
+        expect(response.reply).toBe(RAN_OUT_OF_TIME);
+      });
+
+      it('tells the caller to look at the list before asking again', async () => {
+        // Some of it may already be there: a write in an earlier round is written,
+        // and this sentence is what stops somebody repeating into a duplicate.
+        const service = build(
+          new FakeModelProvider([
+            FakeModelProvider.calls('upsert_lines', {
+              items: [{ product: 'leche' }],
+            }),
+            FakeModelProvider.says('Listo.'),
+          ]),
+          new RecordingApi(),
+          { turnTimeoutMs: 0 }
+        );
+
+        const response = await service.turn(turnRequest('añade leche'));
+
+        expect(response.reply).toContain('list');
+      });
+
+      it('still returns a finished answer that arrived late', async () => {
+        // A reply with nothing left to do is the work already paid for. Replacing
+        // it with an apology because the clock ran out would throw it away.
+        const service = build(
+          new FakeModelProvider([FakeModelProvider.says('Hay leche, sí.')]),
+          new RecordingApi(),
+          { turnTimeoutMs: 0 }
+        );
+
+        const response = await service.turn(turnRequest('¿queda leche?'));
+
+        expect(response.reply).toBe('Hay leche, sí.');
+      });
     });
 
     it("mode 'add' calls the quantity route and never reads then writes", async () => {

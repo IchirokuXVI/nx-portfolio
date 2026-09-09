@@ -67,14 +67,14 @@ spec:
   thing with no core spec equivalent, and they live in
   implementation-envoy.yaml.tpl.
 */}}
-{{- range .Values.lunaShopperBackend.services }}
-{{- if .routed }}
-{{- $host := include "charts.host" (dict "item" . "root" $) }}
+{{- range $service := .Values.lunaShopperBackend.services }}
+{{- if $service.routed }}
+{{- $host := include "charts.host" (dict "item" $service "root" $) }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: {{ .name }}
+  name: {{ $service.name }}
   namespace: {{ $.Values.namespace }}
 spec:
   parentRefs:
@@ -85,12 +85,36 @@ spec:
   hostnames:
     - {{ $host }}
   rules:
+{{- /*
+      Slow paths first, though the order in the document decides nothing:
+      Gateway API ranks rules by how specific the match is, so a path prefix
+      always wins over the `/` below whichever is written first. They are first
+      because that is how they read.
+
+      `timeouts.request` is core Gateway API rather than an implementation
+      extension, so this survives swapping Envoy Gateway for another one. What it
+      replaces is the implementation's own default, which for Envoy is fifteen
+      seconds and is not written down anywhere in this chart. See the entry in
+      values.yaml for why the assistant needs more than that and how the number
+      is tied to ASSISTANT_TURN_TIMEOUT_MS.
+*/ -}}
+{{- range $slow := $service.slowPaths }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ $slow.path }}
+      timeouts:
+        request: {{ $slow.timeout }}
+      backendRefs:
+        - name: {{ $service.name }}
+          port: 80
+{{- end }}
     - matches:
         - path:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ .name }}
+        - name: {{ $service.name }}
           port: 80
 {{- end }}
 {{- end }}

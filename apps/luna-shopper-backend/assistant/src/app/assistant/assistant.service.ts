@@ -68,6 +68,20 @@ import { ScopeUnavailableError, TurnContextFactory } from './turn-context';
  */
 export const NOTHING_HEARD = 'I did not catch that. Could you say it again?';
 
+/**
+ * What a turn that ran past its budget is answered with.
+ *
+ * It names the list rather than only apologising, and that is the whole point of
+ * the sentence. A turn can write in one round and run out of time in the next, so
+ * some of what was asked for may be on the list already; the honest instruction is
+ * to look before saying it again, which is what stops the duplicate.
+ *
+ * English, for `NOTHING_HEARD`'s reason: the service speaks here, and the service
+ * has no translator.
+ */
+export const RAN_OUT_OF_TIME =
+  'That took me too long, so I stopped partway. Have a look at the list before asking again, in case some of it went on.';
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -344,7 +358,64 @@ export class AssistantService {
     // the loop's share of it.
     let providerMs = providerMsBefore;
 
+    /**
+     * When this turn stops starting new work.
+     *
+     * Measured from `startedAtMs`, which is the moment the request arrived, so a
+     * spoken turn's transcription is inside the budget: what is bounded is how
+     * long the person has been waiting, not how long this loop has been running.
+     */
+    const deadlineAtMs = startedAtMs + this.config.turnTimeoutMs;
+    const withinDeadline = () => Date.now() < deadlineAtMs;
+
+    /**
+     * The turn ends here, with a sentence nobody asked for.
+     *
+     * It is English, like the "got stuck" line below: both are statements about
+     * this service rather than translated parts of the product.
+     *
+     * The sentence names the list on purpose. Some of the work may already have
+     * happened — a write in an earlier round is written — and this is the answer
+     * that stops somebody repeating themselves into a duplicate.
+     */
+    const outOfTime = (): AssistantTurnResponse => {
+      const text = RAN_OUT_OF_TIME;
+
+      this.record({
+        userId: request.userId,
+        locale,
+        said: request.message,
+        replied: text,
+        calledTools,
+        listResolution,
+        usage,
+        providerMs,
+        gatewayMs: contextReadyAtMs - startedAtMs,
+        totalMs: Date.now() - startedAtMs,
+        // Its own outcome rather than folded into `acted`, because it is the one
+        // a dashboard has to be able to count: it says either the budget is too
+        // small or the provider is too slow, and both are worth knowing before
+        // somebody reports a duplicated shopping list.
+        outcome: 'timedout',
+      });
+
+      return {
+        reply: text,
+        link: link.link(),
+        choices: choices.all(),
+        ...(listResolution ? { listResolution } : {}),
+      };
+    };
+
     for (let round = 0; ; round += 1) {
+      // Never on the first round: a turn still owes an answer however long the
+      // context read took, and the model is the only thing that can write one.
+      // From the second round on, asking again would spend a whole provider
+      // timeout discovering what the clock already says.
+      if (round > 0 && !withinDeadline()) {
+        return outOfTime();
+      }
+
       const askedAtMs = Date.now();
       const reply = await this.ask(
         { system, turns, tools, locale },
@@ -353,7 +424,23 @@ export class AssistantService {
       providerMs += Date.now() - askedAtMs;
       usage = reply.usage ?? usage;
 
-      if (reply.toolCalls.length === 0 || round >= this.config.maxToolCalls) {
+      const wantsTools =
+        reply.toolCalls.length > 0 && round < this.config.maxToolCalls;
+
+      // **The deadline is checked between the model answering and its tool calls
+      // being run, because the tool calls are what write.** A turn whose caller
+      // has given up must not go on adding lines behind them: they were told the
+      // recording had not arrived, rows appear a few seconds later, and saying it
+      // again gets them two of everything.
+      //
+      // A reply with nothing left to do is returned whatever the clock says. It
+      // is a finished answer, and replacing it with an apology because it arrived
+      // late would throw away the work that was paid for.
+      if (wantsTools && !withinDeadline()) {
+        return outOfTime();
+      }
+
+      if (!wantsTools) {
         // Out of rounds with no answer is a real, if rare, outcome. Saying
         // nothing would be worse than saying so, and there is no useful sentence
         // to invent here that would not be a guess about what happened.
@@ -655,7 +742,7 @@ export class AssistantService {
     providerMs: number;
     gatewayMs: number;
     totalMs: number;
-    outcome: 'talked' | 'acted' | 'unheard';
+    outcome: 'talked' | 'acted' | 'unheard' | 'timedout';
   }): void {
     this.logger.log(
       JSON.stringify({
