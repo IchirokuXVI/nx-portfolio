@@ -20,7 +20,6 @@ import {
 import {
   ASSISTANT_SERVICE,
   CATALOG_SERVICE,
-  GatewayError,
   LineStore,
   ListStore,
   MemberNames,
@@ -81,6 +80,7 @@ import {
   type ListOperation,
 } from '../list-error-copy';
 import { selectListState } from '../select-list-state';
+import { voiceFailureCopy } from '../voice-error-copy';
 
 /**
  * The list, its lines, and the aisle. The screen the product exists for.
@@ -906,18 +906,14 @@ export class ListPage {
       );
     } catch (error) {
       // Everything is said in the strip, in words. Nothing here is a banner or a
-      // dialog (plan 0038, section 6), and a rate limit counts down in seconds
-      // because that is the one failure with a number worth showing.
-      const wait =
-        error instanceof GatewayError && error.code === 'rate_limited'
-          ? error.retryAfterSeconds
-          : undefined;
+      // dialog (plan 0038, section 6). Which sentence is `voiceFailureCopy`, which is
+      // where the reasoning lives; the short version is that the strip is the only
+      // thing telling somebody whether the list changed, so it says "nothing was
+      // added" only where that is a fact.
       this.voiceStrip.set({
         heard: '',
         reply: '',
-        messageKey:
-          wait === undefined ? 'list.add.voiceFailed' : 'list.add.voiceBusy',
-        messageArgs: wait === undefined ? undefined : { count: wait },
+        ...voiceFailureCopy(error),
         failed: true,
       });
     } finally {

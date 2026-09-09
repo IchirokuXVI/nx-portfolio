@@ -17,6 +17,7 @@ import {
   fakePresenceStore,
   fakeShoppingProfileStore,
   fakeZoneStore,
+  GatewayError,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
@@ -323,6 +324,59 @@ describe('ListPage', () => {
       });
 
       expect(tone.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('says why the assistant could not answer, rather than only that it did not', async () => {
+      // A cluster with no model provider answers 501 for ever. The strip used to say
+      // "That did not send", which describes a network and not a deployment.
+      const { fixture } = await render();
+      jest
+        .spyOn(TestBed.inject(ASSISTANT_SERVICE), 'askAboutList')
+        .mockRejectedValue(
+          new GatewayError({
+            code: 'not_configured',
+            status: 501,
+            correlationId: 'cid-1',
+          })
+        );
+
+      await fixture.componentInstance.addAloud({
+        blob: new Blob(['audio'], { type: 'audio/webm' }),
+        mimeType: 'audio/webm',
+        durationSeconds: 3,
+      });
+
+      expect(fixture.componentInstance.voiceStrip()).toMatchObject({
+        messageKey: 'list.add.voiceUnavailable',
+        failed: true,
+      });
+    });
+
+    it('does not claim nothing was added when it cannot know', async () => {
+      // The duplicate. A proxy gives up on a turn that is still running, the assistant
+      // finishes and writes the lines seconds later, and somebody who was told nothing
+      // happened says it again.
+      const { fixture } = await render();
+      jest
+        .spyOn(TestBed.inject(ASSISTANT_SERVICE), 'askAboutList')
+        .mockRejectedValue(
+          new GatewayError({
+            code: 'internal',
+            status: 504,
+            correlationId: 'cid-1',
+          })
+        );
+
+      await fixture.componentInstance.addAloud({
+        blob: new Blob(['audio'], { type: 'audio/webm' }),
+        mimeType: 'audio/webm',
+        durationSeconds: 3,
+      });
+
+      expect(fixture.componentInstance.voiceStrip()).toMatchObject({
+        messageKey: 'list.add.voiceUnsure',
+        failed: true,
+      });
     });
 
     it('leaves a confirmation quiet', async () => {
