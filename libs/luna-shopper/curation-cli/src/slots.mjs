@@ -8,6 +8,18 @@
  * never probes a port itself, because `luna-slot --list` already answers that
  * and two answers would eventually disagree.
  *
+ * EVERY VERB IS `--ephemeral`, and that is the whole relationship with the
+ * checkout it runs in. An ordinary `luna-slot --up <n>` configures the worktree
+ * for that slot: it rewrites eight .env files and moves the claim. Doing that
+ * for a rehearsal meant taking the developer's own stack apart for the length of
+ * a run and putting it back afterwards, from a `finally` that a Ctrl+C skips. An
+ * ephemeral run writes none of it and claims nothing, so a developer serving
+ * slot 0 in the same checkout keeps serving slot 0 while this runs beside it,
+ * and a run that dies leaves their configuration exactly as it was.
+ *
+ * The price is that the slot number goes on every command, because nothing
+ * records it. That is why `down` takes one.
+ *
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
@@ -46,7 +58,6 @@ const CATALOG_DB_USER = 'luna_catalog';
 const CATALOG_DB_NAME = 'luna_catalog';
 
 const SH_PATH = 'k8s/e2e/luna-shopper-backend/luna-slot.sh';
-const SLOT_ENV_PATH = 'k8s/e2e/luna-shopper-backend/.env.slot';
 
 /**
  * One data row of the `--list` table.
@@ -133,14 +144,22 @@ export function lunaSlotCommand(
 ) {
   const args = [`${repoRoot}/${SH_PATH}`];
   if (verb === 'list') {
+    // The one verb that is not ephemeral: it reads every slot and writes
+    // nothing, and `--ephemeral` is refused on it for saying otherwise.
     args.push('--list');
-  } else if (verb === 'up') {
-    args.push('--up', String(slot));
-  } else if (verb === 'down') {
-    args.push('--down');
-  } else {
-    args.push(String(slot));
+    return { command: 'bash', args };
   }
+
+  if (verb !== 'up' && verb !== 'down' && verb !== 'restart') {
+    throw new Error(`luna-slot has no ${verb} for a rehearsal to run.`);
+  }
+  if (!Number.isInteger(slot)) {
+    throw new Error(
+      `luna-slot --ephemeral --${verb} needs the slot number: nothing records it.`
+    );
+  }
+  args.push('--ephemeral', `--${verb}`, String(slot));
+
   if (services && services.length) {
     args.push('--services', services.join(','));
   }
@@ -172,12 +191,6 @@ export function catalogDumpCommand(slot) {
   };
 }
 
-/** The slot this worktree already claims, or null when it claims none. */
-export function parseClaimedSlot(envText) {
-  const match = /^LUNA_SLOT=(\d+)\s*$/m.exec(String(envText ?? ''));
-  return match ? Number(match[1]) : null;
-}
-
 /**
  * The slot driver the orchestrator holds.
  *
@@ -189,7 +202,6 @@ export function makeSlots({
   run,
   repoRoot,
   platform = process.platform,
-  readFile = null,
   writeFile = null,
 }) {
   async function invoke(verb, options = {}) {
@@ -217,9 +229,9 @@ export function makeSlots({
     /**
      * Brings up one slot with only the rehearsal's services.
      *
-     * `--up <n>` writes this worktree's `.env.slot`, so it moves the worktree's
-     * claim to the rehearsal slot for as long as the run lasts. The
-     * orchestrator restores the previous claim after the teardown.
+     * Ephemeral, so it configures nothing: this checkout's .env files and its
+     * claim are read and left alone, and the slot's own values reach the three
+     * services through their environment.
      */
     up(slot, services = REHEARSAL_SERVICES) {
       return invoke('up', {
@@ -229,26 +241,16 @@ export function makeSlots({
       });
     },
 
-    /** Takes down whatever this worktree currently claims. */
-    down() {
-      return invoke('down');
-    },
-
-    /** Writes the claim without starting anything. */
-    configure(slot) {
-      return invoke('configure', { slot });
-    },
-
-    /** The claim this worktree held before the run, or null. */
-    claimedSlot() {
-      if (!readFile) {
-        return null;
-      }
-      try {
-        return parseClaimedSlot(readFile(`${repoRoot}/${SLOT_ENV_PATH}`));
-      } catch {
-        return null;
-      }
+    /**
+     * Takes that slot down: its services, its containers and its volumes.
+     *
+     * The number is required and it is the number `up` was given. An ephemeral
+     * slot records nothing, so a `down` with no number would have nothing to
+     * read back, and the slot this checkout claims is exactly what it must not
+     * reach for instead.
+     */
+    down(slot) {
+      return invoke('down', { slot });
     },
 
     /**

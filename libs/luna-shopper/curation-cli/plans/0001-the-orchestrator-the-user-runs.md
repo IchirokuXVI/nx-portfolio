@@ -28,7 +28,12 @@ and returns the minimal decision JSON.
    reports. No free slot stops the run with an error naming the taken slots.
    Slot 0 is never taken: it is the developer's own and usually the main API.
 3. **Bring up only what the rehearsal needs**:
-   `luna-slot --up <n> --services gateway,auth,catalog`. **The list grew by
+   `luna-slot --ephemeral --up <n> --services gateway,auth,catalog`.
+   **Ephemeral is what keeps the checkout out of it**: an ordinary `--up <n>`
+   configures the worktree for that slot, so a rehearsal used to rewrite eight
+   `.env` files and move the claim of whoever was working in it. An ephemeral
+   run writes none of them and claims nothing, so a developer serving slot 0 in
+   this checkout keeps serving it. **The list grew by
    `auth`, and this is the recorded answer**: `admin-auth.controller.ts` sends
    `ADMIN_AUTH_PATTERNS.login` over NATS, and the only handler of that pattern
    is `apps/luna-shopper-backend/auth/src/app/admin/admin.controller.ts`, so a
@@ -43,19 +48,23 @@ and returns the minimal decision JSON.
    beside seven Node processes, and a service started later would otherwise
    find its own missing.
 4. **Verify both admins before the first model call**, through the decider's
-   `start`: main gateway with `--main-user` (default `dev-admin`, empty
-   password, overridable), rehearsal gateway with the `dev-admin` that
-   `luna-slot` seeds. Either failing stops the run before any token is spent.
+   `start`: main gateway with `--main-user` (default `dev-admin`, password
+   `dev-admin-password`, both overridable), rehearsal gateway with the
+   `dev-admin` that `stack.sh` seeds. Either failing stops the run before any
+   token is spent. **The password is sent even though every slot has
+   `ADMIN_DEV_AUTOLOGIN` on**, and it is not the empty string: the switch makes
+   the gateway ignore the body, but `AdminLoginDto` validates first, so an empty
+   password answers 400 `validation_failed` before autologin is consulted.
 5. **The loop.** `next`, build the model input (the decider's `prompt` from
    `start` plus the row packet), one model call, parse the minimal JSON
    answer, `decide`, repeat until `done`. Progress goes to stderr as
    `52/349 - <row name>`; stdout carries one JSON line per decided row and
    nothing else. Model usage per call is accumulated and handed to `end`.
-6. **Teardown, always.** `end`, then `luna-slot --down`, on success and on
-   failure both. `--down` takes no slot number: it stops whatever this
-   worktree claims, which `--up <n>` made the rehearsal slot, and gives the
-   number back. The claim the worktree held before the run is written again
-   afterwards. On failure the CLI first dumps the slot's catalog database
+6. **Teardown, always.** `end`, then `luna-slot --ephemeral --down <n>`, on
+   success and on failure both. It **names the slot**, because an ephemeral run
+   recorded nothing and the slot a `--down` would otherwise reach for is the one
+   this checkout claims. There is no claim to restore afterwards, because none
+   was taken. On failure the CLI first dumps the slot's catalog database
    (`pg_dump` through the slot's container, into the run directory) so the
    rehearsal state survives the teardown; there is no `--keep-slot`.
 

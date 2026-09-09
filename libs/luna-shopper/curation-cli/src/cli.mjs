@@ -7,6 +7,9 @@
  * drives the decider's next/model/decide loop with one model call per row, and
  * tears the slot down whatever happened.
  *
+ * The rehearsal slot is ephemeral: this checkout is not configured for it, and
+ * whatever slot you are serving here keeps running throughout. See `slots.mjs`.
+ *
  *   node libs/luna-shopper/curation-cli/src/cli.mjs --implementation suggestions
  *   node libs/luna-shopper/curation-cli/src/cli.mjs --apply .curation-runs/<id>/decisions.jsonl
  *
@@ -27,8 +30,9 @@
  *      Watch stderr: it names the slot, then the run id and the row count, then
  *      one `n/total - name` line per row. Stop it with Ctrl+C after a handful.
  *   4. bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
- *      The rehearsal slot is gone. A Ctrl+C skips the teardown, so a slot left
- *      behind here is taken down with `luna-slot --down` from this worktree.
+ *      The rehearsal slot is gone, and slot 0 is exactly as step 1 left it. A
+ *      Ctrl+C skips the teardown, so a slot left behind here is taken down with
+ *      `luna-slot.sh --ephemeral --down <the number step 3 named>`.
  *   5. head -3 .curation-runs/smoke/decisions.jsonl
  *      The header line, then one record per decided row.
  *
@@ -36,7 +40,7 @@
  */
 
 import { spawn as spawnProcess } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { IMPLEMENTATION_NAMES, deciderPath, makeDecider } from './decider.mjs';
@@ -72,7 +76,8 @@ const USAGE = `Usage: node cli.mjs [options]
   --run-dir <dir>                        default ${DEFAULT_RUN_ROOT}/<timestamp>
   --main-url <u>                         default ${DEFAULT_MAIN_URL}
   --main-user <name>                     default dev-admin
-  --main-password <p>                    default empty
+  --main-password <p>                    default dev-admin-password, which is
+                                         what every slot seeds
   --chain <supermarket id>               work one chain only (suggestions)
   --services <a,b>                       rehearsal services, default
                                          ${REHEARSAL_SERVICES.join(',')}
@@ -297,7 +302,6 @@ export async function main(
     run: spawn,
     repoRoot,
     platform,
-    readFile: (path) => readFileSync(path, 'utf8'),
     writeFile: (path, text) => writeFileSync(path, text),
   });
 
