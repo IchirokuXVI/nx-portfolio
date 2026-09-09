@@ -232,6 +232,85 @@ describe('the chain sources screen, creating a row', () => {
   });
 });
 
+/**
+ * The adapter picker, against the document rather than against a second list.
+ *
+ * The screen used to carry its own array of four adapter keys, and it fell
+ * behind twice without anything going red: `lidl-api` (backend plan 0089) and
+ * `carrefour-web` (backend plan 0090) reached the contract, the gateway and the
+ * generated types while the picker still offered `mercadona-api`, `deza-web`,
+ * `osm-places` and `manual`. Both chains shipped with a runner an operator could
+ * not describe a source for, because the only screen that writes `adapterKey`
+ * would not offer the value.
+ *
+ * So the expectation is read out of `wire-types.ts`, which is generated from the
+ * gateway's OpenAPI document and is the admin's own account of what the route
+ * accepts. A seventh adapter fails this file on the commit that generates it,
+ * rather than on the day somebody looks for it in the dropdown.
+ */
+describe('the chain sources screen, and the adapters it offers', () => {
+  const WIRE_TYPES = readFileSync(
+    join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      'models',
+      'src',
+      'lib',
+      'wire',
+      'wire-types.ts'
+    ),
+    'utf8'
+  );
+
+  /** Every member of the generated `EnumsAdapterKey` union, in its own order. */
+  const declared = (): readonly string[] => {
+    const union = /export type EnumsAdapterKey =([^;]+);/.exec(WIRE_TYPES);
+    if (union === null) {
+      throw new Error('wire-types.ts declares no EnumsAdapterKey union');
+    }
+
+    return [...union[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  };
+
+  const options = (fixture: ComponentFixture<SourcesPage>): readonly string[] =>
+    [
+      ...(fixture.nativeElement.querySelectorAll(
+        'select[name="adapterKey"] option'
+      ) as NodeListOf<HTMLOptionElement>),
+    ].map((option) => option.value);
+
+  it('reads a union of more than the four the screen used to name', () => {
+    // A guard on the guard: a regex that matched nothing useful would make the
+    // two tests below pass against an empty list.
+    expect(declared()).toContain('lidl-api');
+    expect(declared()).toContain('carrefour-web');
+    expect(declared().length).toBeGreaterThan(4);
+  });
+
+  it('offers every adapter the document declares, when creating a row', async () => {
+    const fixture = await render();
+
+    fixture.componentInstance.startCreate();
+    fixture.detectChanges();
+
+    expect([...options(fixture)].sort()).toEqual([...declared()].sort());
+  });
+
+  it('offers every one of them when editing a row too', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+
+    page.edit(
+      page.sources().filter((source) => source.supermarketId === MERCADONA)[0]
+    );
+    fixture.detectChanges();
+
+    expect([...options(fixture)].sort()).toEqual([...declared()].sort());
+  });
+});
+
 describe('the chain sources screen, and its controls', () => {
   let remove: () => void;
 
