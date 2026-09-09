@@ -7,16 +7,18 @@ the per kilogram figure on `unitPrice`, and the source's own words beside it on
 `unitPriceLabel`. The basket then quotes nothing for it, because everything that ranks or draws
 a price reads `price`.
 
-This is the first of three plans that close that gap. It was backlog `0011`, which measured the
+This is the first of a series that closes that gap. It was backlog `0011`, which measured the
 gap, named the real defect and refused four shortcuts. Those findings are restated here where
 they decide something, and the backlog file is retired with this plan. The split is by what
 each plan adds and by what has to exist before the next one can:
 
-| Plan            | Adds                                                                            |
-| --------------- | ------------------------------------------------------------------------------- |
-| `0095`, this    | A basis on every price row, stated by the source, and a ranking that honours it |
-| `0096`          | A product that says how it is sold, and the till line computed from it          |
-| velista `0070`  | The three readers that draw the till line, and the unit on the row              |
+| Plan            | Adds                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------- |
+| `0095`, this    | A basis on every price row, stated by the source, and one comparable figure per row   |
+| `0096`          | A product measured in one unit, a group that allows several, and the rule that prices |
+| `0101`          | A line that counts in the unit the shopper chose                                      |
+| `0102`          | One unit of a product equals so many of another                                       |
+| velista `0070`  | The readers that draw the amount, the unit chip and the reel that steps by the unit   |
 
 Depends on `0080`, because the row this plan widens is `item_prices` and the answer it changes
 is materialized by that plan's recompute. Depends on `0086` for the harvest document and the
@@ -61,11 +63,15 @@ a machine can read, which has two consequences today:
   and a milk at 0.89 per litre compare as 9.95 against 0.89. Inside one group the bases usually
   agree, which is why the ranking looks sane, and nothing enforces it.
 
-The leaflet extractor already knows the basis. Every `unit_price` in the harvest document
-carries `extra.printed_unit_price.per`, an enum of `l`, `kg`, `unit`, `wash`, `m`, `100ml`,
-`100g`, and by the rule of plan `0086` section 6.1 the `extra` bag is stored, shown and read by
-nothing. Mercadona and Carrefour know it too, in their own ways (section 5). The fact exists at
-every source and is thrown away at the door.
+The label is also written four different ways today, one per source: the seed writes `kg`,
+Carrefour writes `€/kg`, Mercadona writes its raw `reference_format`, and LIDL writes nothing
+at all. No parser can read that consistently, and none is going to try.
+
+The leaflet extractor already knows the basis. Every `unit_price` in the harvest documents in
+`tmp/leaflet` carries `extra.printed_unit_price.per`, an enum of `l`, `kg`, `unit`, `wash`,
+`m`, `100ml`, `100g`, and by the rule of plan `0086` section 6.1 the `extra` bag is stored,
+shown and read by nothing. Mercadona and Carrefour know it too, in their own ways (section 5).
+The fact exists at every source and is thrown away at the door.
 
 ## 3. `PriceBasis`, a second enum and not a reuse of the first
 
@@ -93,56 +99,74 @@ It is not `UnitOfMeasure`, for three reasons that each rule out the reuse on its
 3. **`HUNDRED_GRAMS` and `HUNDRED_MILLILITERS` exist because of the verbatim rule.** A leaflet
    prints "el 100 g le sale a 1,29 €". Storing 12.90 per kilogram is a recomputation of the
    source's figure, which `0038` section 2.4 forbids and `0080` restates. The basis is recorded
-   as printed and the conversion happens on read, where it is arithmetic on a stored fact and
-   not a rewrite of one.
+   as printed and the conversion happens at recompute, where it is arithmetic on a stored fact
+   written into a derived column, and not a rewrite of the fact.
+
+It is also not the `MeasurementUnit` plan `0096` introduces for quantities. That one is what a
+shopper counts in, and it holds base units only (unit, gram, millilitre). A price is per
+kilogram because that is what the shop prints and because a per gram price is 0.00995, which a
+column with four decimals rounds to 0.0100. Quantities are stored in base units and prices per
+the family's reference, and the two never meet except through the factor below.
 
 The field is `unitPriceBasis: PriceBasis | null`, beside `unitPriceLabel` and never instead of
 it. Null means the source did not say, and **null is never filled in from the label**. Backlog
 `0011` section 4 rejected that parser with the evidence of section 2: a parser that reads
 `100 ml` as per 100 ml multiplies a per litre price by ten.
 
-### 3.1 The conversion, stated once
+### 3.1 The comparable figure, stated once
+
+Five of the seven bases are **families** and two are printings of a family: per 100 g is the
+per kilogram family printed smaller, per 100 ml is the per litre family. The recompute of
+section 6 turns any basis into its family's figure:
 
 ```ts
-/** Multiply a figure per `basis` to get a figure per `unit`, or null when the pair has no answer. */
-export function priceBasisFactor(basis: PriceBasis, unit: UnitOfMeasure): number | null;
+/** The five values `comparableUnit` can hold. `HUNDRED_*` never appears there. */
+export type ComparableUnit =
+  | PriceBasis.UNIT
+  | PriceBasis.KILOGRAM
+  | PriceBasis.LITER
+  | PriceBasis.WASH
+  | PriceBasis.METER;
+
+/** A figure per `basis` as a figure per its family, or null for a null basis. */
+export function toComparable(
+  unitPrice: number,
+  basis: PriceBasis
+): { price: number; unit: ComparableUnit };
 ```
 
-The table is small and closed:
-
-| Basis                 | `KILOGRAM` | `GRAM` | `LITER` | `MILLILITER` | `UNIT` | `PACK` |
-| --------------------- | ---------- | ------ | ------- | ------------ | ------ | ------ |
-| `KILOGRAM`            | 1          | 0.001  |         |              |        |        |
-| `HUNDRED_GRAMS`       | 10         | 0.01   |         |              |        |        |
-| `LITER`               |            |        | 1       | 0.001        |        |        |
-| `HUNDRED_MILLILITERS` |            |        | 10      | 0.01         |        |        |
-| `UNIT`                |            |        |         |              | 1      |        |
-| `WASH`, `METER`       |            |        |         |              |        |        |
-
-An empty cell is null. `UNIT` to `PACK` is null on purpose: a per piece figure says nothing
-about a pack until somebody counts the pieces, and this table invents no count. `WASH` and
-`METER` convert to nothing because no `UnitOfMeasure` names them. A detergent group whose
-members are priced per wash ranks them as unconvertible (section 6), which is the honest
-answer and was not the answer before.
+| Basis                 | Comparable unit | Factor |
+| --------------------- | --------------- | ------ |
+| `KILOGRAM`            | `KILOGRAM`      | 1      |
+| `HUNDRED_GRAMS`       | `KILOGRAM`      | 10     |
+| `LITER`               | `LITER`         | 1      |
+| `HUNDRED_MILLILITERS` | `LITER`         | 10     |
+| `UNIT`                | `UNIT`          | 1      |
+| `WASH`                | `WASH`          | 1      |
+| `METER`               | `METER`         | 1      |
 
 It lives in `libs/luna-shopper/contracts` beside the enum, framework free, with a spec over
-every pair. The same table exists once more as a SQL function (section 6), and a catalog
-integration spec asserts the two agree on every pair, so the table cannot drift between the
-ranking and a client.
+every row. **It exists once.** An earlier draft of this plan put the same table into a SQL
+function and asserted the two copies agreed. The materialized column of section 6 makes the
+SQL copy unnecessary, and a table that exists once cannot drift.
+
+A `UnitOfMeasure` has a family too, and the ranking of section 6 needs it: `KILOGRAM` and
+`GRAM` compare per kilogram, `LITER` and `MILLILITER` per litre, `UNIT` and `PACK` per unit.
+`comparableUnitOf(unit: UnitOfMeasure): ComparableUnit` states that beside the table.
 
 ## 4. Where the field goes
 
 One column, `"unitPriceBasis" price_basis NULL`, on three tables, and one field on every view
 and write that already carries `unitPriceLabel`:
 
-| Owner     | Table or type                                                 | Written by                                      |
-| --------- | ------------------------------------------------------------- | ----------------------------------------------- |
-| catalog   | `item_prices`                                                 | `item-price-writer.ts`, every source            |
-| catalog   | `supermarket_items`                                           | `applyEffective` in `effective-price.service.ts` |
-| harvester | `source_entry_prices`                                         | `source-ingest.ts`                              |
-| contracts | `ItemPriceView`, `SupermarketItemView`, `ItemOfferView`       | the mappers                                     |
-| contracts | `ItemPriceValues`, harvester's `CatalogEntryPrice`            | the callers                                     |
-| contracts | `HarvestDocumentUnitPrice.per`, schema version 2 (section 5.1) | the producer                                    |
+| Owner     | Table or type                                                         | Written by                                      |
+| --------- | --------------------------------------------------------------------- | ----------------------------------------------- |
+| catalog   | `item_prices`                                                         | `item-price-writer.ts`, every source            |
+| catalog   | `supermarket_items`                                                   | `applyEffective` in `effective-price.service.ts` |
+| harvester | `source_entry_prices`                                                 | `source-ingest.ts`                              |
+| contracts | `ItemPriceView`, `SupermarketItemView`, `ItemOfferView`               | the mappers                                     |
+| contracts | `ItemPriceValues`, `SourceEntryPriceView`, `SourceObservation.price`  | the callers                                     |
+| contracts | `HarvestDocumentUnitPrice.per`, schema version 2 (section 5.1)        | the producer                                    |
 
 Two migrations, `PriceBasis1757100000000` in catalog and its twin in the harvester, add the
 enum type and the column and **backfill nothing**. Every existing row keeps a null basis until
@@ -188,11 +212,12 @@ It is version 2 because the registry (`harvest-document-registry.ts`) is built f
 a new file, a new `$id`, one more entry, and version 1 stays readable and writes a null basis.
 The two checked in fixture documents in `contracts/src/schemas/harvest-document/__fixtures__`
 gain a version 2 sibling each. `harvest.export` writes version 2 and fills `per` from the row's
-basis where it has one.
+basis where it has one. Plan `0096` adds `measured_in` to the same version, so the two plans
+ship one schema between them and version 2 is cut once.
 
 The importer (`file-import.runner.ts`, `priceOf`) passes the basis into `SourceObservation.price`
 and the ingest writes it to `source_entry_prices`. An accepted entry carries it to catalog on
-`CatalogEntryPrice`, through `source-entry.service.ts`, the same path the label takes today.
+`ItemPriceValues`, through `source-entry-write.ts`, the same path the label takes today.
 
 ### 5.2 Mercadona derives it, for the products where the derivation is proven
 
@@ -207,13 +232,18 @@ and the 110 that agree with nothing. `bulk_price` itself is still stored verbati
 and never writes it. `reference_format` is not consulted. Fixture tests name a product from each
 of the three populations.
 
+Written down so nobody is surprised: **one Mercadona product in ten keeps a null basis for
+ever** under this rule, and a null basis ranks last in its group (section 6). That is the
+honest answer for a figure the chain's own arithmetic does not explain, and plan `0102` is where
+a figure with no stated basis can still earn a comparison, from the product's own size.
+
 ### 5.3 Carrefour reads it off the card
 
 The card states `measure_unit` and the figure in two fields, and `price.ts` builds the label
 `€/kg` from the unit because the storefront shows one. The unit is the basis stated outright:
 `kg`, `l` and `ud` over the whole fixture set, in the same three families `listing.ts` already
-checks the size against. `unitPriceBasisOf(measureUnit)` maps those three and answers null for
-anything else, and the runner passes it through beside the label.
+checks the size against in `MEASURE_BASE`. `unitPriceBasisOf(measureUnit)` maps those three and
+answers null for anything else, and the runner passes it through beside the label.
 
 ### 5.4 The reference seed and a typed price
 
@@ -225,57 +255,89 @@ the picker is the one place the operator states the basis in words the machine r
 detail page and the history show it. `ItemPriceValues` on the gateway validates it as the enum,
 the OpenAPI document and the wire types regenerate, and no other admin screen changes.
 
-DEZA writes no price and states nothing.
+DEZA writes no price and states nothing. LIDL writes no unit price at all and states nothing
+here either. Plan `0102` is where a LIDL product becomes comparable.
 
-## 6. `searchOffers` never compares two unit prices of different basis
+## 6. One comparable figure per row, and a ranking that reads it
+
+`supermarket_items` gains two derived columns beside the ones `0080` already materializes:
+
+| Column            | Type                          | Holds                                                   |
+| ----------------- | ----------------------------- | ------------------------------------------------------- |
+| `comparablePrice` | `numeric(12, 4)` null         | `toComparable(unitPrice, unitPriceBasis).price`         |
+| `comparableUnit`  | `price_basis` null            | its unit, one of the five family values, never `HUNDRED_*` |
+
+Both are written by `applyEffective` from the effective row, in the same write and by the same
+rule as `stale` and `nextBoundaryAt`: derived, with a stated derivation, recomputed whenever
+the row they derive from moves. **`unitPrice` is unchanged on every row.** A per 100 g figure
+stays 1.29 with basis `HUNDRED_GRAMS`, and beside it the row says 12.90 per kilogram, which is
+the number a machine compares and the number the shopper is never shown as the source's own.
+Null basis, null comparison.
+
+`ItemOfferView` and `SupermarketItemView` carry both, so a client can see that the figure it
+was handed is per wash. `ItemPriceView` does not: it is one source's statement, and a derived
+number does not belong on it.
+
+### 6.1 `searchOffers` never compares two figures of different unit
 
 A product group declares the unit its members are compared in: `referenceUnit`, a
 `UnitOfMeasure`, which backlog `0001` section 3.3 designed for exactly this comparison and
-which nothing used until now because no row converted to it. Now one does. The
-lateral that picks a group's cheapest member orders by
+which nothing used until now because no row converted to it. Now one does. The lateral that
+picks a group's cheapest member orders by
 
 ```sql
-si."unitPrice" * price_basis_factor(si."unitPriceBasis", g."referenceUnit") ASC NULLS LAST
+CASE WHEN si."comparableUnit" = <family of g."referenceUnit"> THEN si."comparablePrice" END
+  ASC NULLS LAST
 ```
 
-where `price_basis_factor(price_basis, unit_of_measure) RETURNS numeric` is an `IMMUTABLE` SQL
-function the catalog migration creates, with section 3.1's table as its body and null for every
-empty cell. A member whose basis is null or does not convert to the group's unit sorts last,
-after every member that does, and is never compared with one. A group in which no member
-converts answers its cheapest member by `price`, as it does today, and the offer view says why:
-`ItemOfferView.unitPriceBasis` travels, so a client can see that the figure it was handed is per
-wash.
+where the family is the `comparableUnitOf` table of section 3.1 written as one `CASE` over the
+six `UnitOfMeasure` values, inline in the query, because six lines inline are cheaper to keep
+right than a function the migration owns. A member whose comparable unit is null or differs
+from the group's sorts last, after every member that matches, and is never compared with one.
+A group in which no member matches answers its cheapest member by `price`, as it does today.
 
-The item search (`rankedItems`) keeps unit price as its last ranking key, after relevance and
-the exact match, and normalizes it the same way to the family of the item's own `defaultUnit`
-(`KILOGRAM` for a product sized in grams or kilograms, `LITER` for millilitres or litres, `UNIT`
-otherwise). Two hits of different families still meet on that key, and that is accepted and
-written down: it is a tie break of last resort between products nobody declared comparable,
-and the read that makes a comparison mean something is the group read above.
+**`referenceUnit` defaults to `UNIT`, and that default is now load bearing.** A group the
+curation decider wrote carries the right unit, because `curation-groups` refuses a member from
+a different family. A group made by hand and left at the default compares per piece, so every
+per litre member of it sorts as unmatched and the group quietly falls back to the pack price.
+The admin's group list shows a group whose members' comparable units disagree with its
+reference unit, so the state is visible instead of silent, and the fix is the picker that
+already exists.
+
+### 6.2 The item search keeps unit price as its last key
+
+`rankedItems` keeps unit price as its last ranking key, after relevance and the exact match,
+and reads `min(comparablePrice)` over the rows whose `comparableUnit` matches the family of the
+item's own `defaultUnit`. Two hits of different families still meet on that key, and that is
+accepted and written down: it is a tie break of last resort between products nobody declared
+comparable, and the read that makes a comparison mean something is the group read above.
 
 ## 7. What this plan does not do
 
 - **It does not change what `getMany` ranks by.** The basket read still picks the cheapest
   `price`, for the six pack reason `0066` section 2.1 gave. Plan `0096` changes that, and only
-  once the product itself says which rule applies to it.
-- **It writes no till line.** A per kilogram figure with a basis is a fact that can be
-  multiplied. What to multiply it by is `0096`.
-- **It draws nothing.** Velista `0070` reads `unitPriceBasis` off the offer. Until then the
-  three readers are unchanged and a weighed product is exactly as blank as it is today.
+  once the product itself says which unit it is measured in.
+- **It writes no amount for a line.** A per kilogram figure with a basis is a fact that can be
+  multiplied. What to multiply it by is the line's unit and quantity, which are `0101`'s, and
+  the rule is stated in `0096` section 5.
+- **It draws nothing.** Velista `0070` reads `comparablePrice` and `comparableUnit` off the
+  offer. Until then the readers are unchanged and a weighed product is exactly as blank as it
+  is today.
 - **It parses no label and backfills no row.** Section 3 and section 4.
 
 ## 8. Testing
 
-- `priceBasisFactor` has a spec over every pair in the table, including every null cell, and
-  the catalog integration suite asserts `price_basis_factor` agrees with it on every pair.
+- `toComparable` and `comparableUnitOf` have a spec over every row of their tables.
 - `item-price-writer.spec.ts` gains the three cases of 4.1: a null basis filled in by a
   confirming observation with no new row, a differing basis inserting a row, and an observation
   with no basis leaving a held one alone.
-- `effective-price.spec.ts` asserts the basis reaches `supermarket_items` and that a basis
-  change alone marks the row as moved.
+- `effective-price.spec.ts` asserts the basis, `comparablePrice` and `comparableUnit` reach
+  `supermarket_items`, that a per 100 g row materializes ten times its figure per kilogram, and
+  that a basis change alone marks the row as moved.
 - `item-prices.integration.spec.ts` gains a group with a per kilogram member, a per 100 g member
   and a per wash member, and asserts the per 100 g member wins when it is cheaper per kilogram
-  and the per wash member is last whatever its figure.
+  and the per wash member is last whatever its figure. A second case leaves the group at the
+  default `UNIT` and asserts every weighed member sorts as unmatched.
 - The harvest document spec validates a version 2 document with every `per` value, refuses an
   unknown one at the schema, and reads a version 1 document to a null basis.
 - The Mercadona and Carrefour libraries test their `unitPriceBasisOf` against checked in
@@ -292,7 +354,10 @@ and the read that makes a comparison mean something is the group read above.
 3. A Mercadona crawl writes a basis for exactly the products where `bulk_price` equals
    `unit_price / unit_size`, and null for the rest.
 4. A Carrefour crawl writes the card's `measure_unit` as the basis.
-5. `searchOffers` orders a group's members by unit price converted to `referenceUnit`, and a
-   member that cannot convert sorts after every member that can.
-6. No row's basis is ever set from `unitPriceLabel`, by migration or by code.
-7. The OpenAPI document and the wire types are regenerated and committed.
+5. Every materialized row with a basis carries `comparablePrice` and `comparableUnit`, and
+   `unitPrice` is unchanged on every row.
+6. `searchOffers` orders a group's members by `comparablePrice` among the members whose
+   `comparableUnit` matches the group's reference unit, and a member that does not match sorts
+   after every member that does.
+7. No row's basis is ever set from `unitPriceLabel`, by migration or by code.
+8. The OpenAPI document and the wire types are regenerated and committed.
