@@ -205,8 +205,10 @@ describe('ItemService', () => {
     const [sql] = (items.query as jest.Mock).mock.calls[0] as [string];
     expect(sql).not.toContain('i."ean" = $');
     // And no ranking key standing in for it: Postgres refuses a constant in
-    // ORDER BY, which is what a `false` written there would be.
-    expect(sql).toContain('ORDER BY round(GREATEST(');
+    // ORDER BY, which is what a `false` written there would be. The first key
+    // is the whole word test, which is an expression over a column and so is
+    // always legal there.
+    expect(sql).toContain('ORDER BY ("catalog_norm"');
   });
 
   it('no query still lists, because the admin surface uses it that way', async () => {
@@ -404,7 +406,10 @@ describe('ItemService', () => {
       await expect(
         service.createMany({
           userId: ADMIN,
-          items: [milk({ ean: '8480000123456' }), milk({ ean: '8480000123456' })],
+          items: [
+            milk({ ean: '8480000123456' }),
+            milk({ ean: '8480000123456' }),
+          ],
         })
       ).rejects.toBeInstanceOf(ValidationException);
       expect(items.save).not.toHaveBeenCalled();

@@ -20,8 +20,8 @@ import {
   SupermarketItem,
 } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
-import { ItemService } from './item.service';
 import { CatalogAuditService } from './catalog-audit.service';
+import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
 
@@ -314,9 +314,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       });
       const pascual = scoped.items.find((i) => i.id === ids.pascualMilk);
       expect(pascual?.bestOffer?.unitPrice).toBe(1.35);
-      expect(pascual?.bestOffer?.sourceKind).toBe(
-        PriceSourceKind.OFFICIAL_API
-      );
+      expect(pascual?.bestOffer?.sourceKind).toBe(PriceSourceKind.OFFICIAL_API);
 
       // With no scopes the suggestions still work and no price is quoted. That
       // is the whole of section 3.1: no default is resolved here, and an
@@ -490,10 +488,13 @@ describeIntegration('catalog search (real Postgres)', () => {
   });
 
   describe('the triggers keep the documents current', () => {
-    it('re-indexes a group’s members when the group gains a synonym', async () => {
-      // Nothing about the items changed, and both of them have to become
-      // findable by a word that did not exist a moment ago. This is the second
-      // trigger, and the reason the vectors are columns rather than generated.
+    it('gives a new synonym to the group and not to each of its members', async () => {
+      // A synonym names a **kind** of thing, so it reaches the kind of thing.
+      // It used to reach every member as well, which is how one typed word
+      // became as many suggestions as the group had cartons, four times over
+      // for a group with four synonyms. The suggest endpoint already draws the
+      // group above the products, so nothing became unreachable when that
+      // stopped: what went is the duplication underneath it.
       const before = await items.search({
         userId: SHOPPER,
         query: 'mantequilla',
@@ -506,19 +507,49 @@ describeIntegration('catalog search (real Postgres)', () => {
         synonyms: { en: ['milk'], es: ['leche', 'lácteo', 'mantequilla'] },
       });
 
-      const after = await items.search({
+      const groupPage = await items.searchOffers({
         userId: SHOPPER,
         query: 'mantequilla',
       });
-      expect(after.items.map((i) => i.id).sort()).toEqual(
-        [ids.pascualMilk, ids.hacendadoMilk].sort()
-      );
+      expect(groupPage.items.map((g) => g.group.id)).toEqual([ids.milkGroup]);
+
+      const itemPage = await items.search({
+        userId: SHOPPER,
+        query: 'mantequilla',
+      });
+      expect(itemPage.items).toHaveLength(0);
 
       // Put it back, so the ordering of the tests in this file does not matter.
       await groups.update({
         userId: OWNER,
         productGroupId: ids.milkGroup,
         synonyms: { en: ['milk'], es: ['leche', 'lácteo'] },
+      });
+    }, 30_000);
+
+    it('re-indexes a group’s members when the group is renamed', async () => {
+      // Nothing about the items changed, and both of them have to become
+      // findable by a word that did not exist a moment ago. This is the second
+      // trigger, and the reason the vectors are columns rather than generated.
+      // The group's **name** is the part of it an item still carries.
+      const before = await items.search({ userId: SHOPPER, query: 'lacteos' });
+      expect(before.items).toHaveLength(0);
+
+      await groups.update({
+        userId: OWNER,
+        productGroupId: ids.milkGroup,
+        name: { en: 'Milk', es: 'Lacteos' },
+      });
+
+      const after = await items.search({ userId: SHOPPER, query: 'lacteos' });
+      expect(after.items.map((i) => i.id).sort()).toEqual(
+        [ids.pascualMilk, ids.hacendadoMilk].sort()
+      );
+
+      await groups.update({
+        userId: OWNER,
+        productGroupId: ids.milkGroup,
+        name: { en: 'Milk', es: 'Leche' },
       });
     }, 30_000);
 
@@ -582,6 +613,106 @@ describeIntegration('catalog search (real Postgres)', () => {
 
       const after = await items.get({ userId: SHOPPER, itemId: orphan.id });
       expect(after.productGroupId).toBeNull();
+    });
+  });
+
+  /**
+   * What the search refuses to match, and in what order it puts what it does.
+   *
+   * Every claim here is a claim about the stemmer, so a fake repository would
+   * pass all of them while the SQL matched half the shop. The Spanish
+   * configuration reduces "salado", "salada" and "salted" to the single lexeme
+   * `sal`, and the prefix a composer needs turns `lech:*` into "lechuga": on the
+   * real assortment those two together answered "sal" with 247 products, of
+   * which the first was salted caramel ice cream.
+   */
+  describe('a match has to be literal (the strictness pass)', () => {
+    const strict = {
+      lettuce: '',
+      sausages: '',
+      salt: '',
+      salmon: '',
+    };
+
+    beforeAll(async () => {
+      const created = await Promise.all([
+        items.create({
+          userId: OWNER,
+          name: { en: 'Iceberg lettuce', es: 'Lechuga iceberg' },
+          category: ItemCategory.OTHER,
+          defaultUnit: UnitOfMeasure.UNIT,
+        }),
+        items.create({
+          userId: OWNER,
+          name: { en: 'Chicken sausages', es: 'Salchichas de pollo' },
+          category: ItemCategory.MEAT,
+          defaultUnit: UnitOfMeasure.UNIT,
+        }),
+        items.create({
+          userId: OWNER,
+          name: { en: 'Fine salt', es: 'Sal fina' },
+          category: ItemCategory.OTHER,
+          defaultUnit: UnitOfMeasure.GRAM,
+        }),
+        items.create({
+          userId: OWNER,
+          name: { en: 'Smoked salmon', es: 'Salmón ahumado' },
+          category: ItemCategory.OTHER,
+          defaultUnit: UnitOfMeasure.GRAM,
+        }),
+      ]);
+      [strict.lettuce, strict.sausages, strict.salt, strict.salmon] =
+        created.map((item) => item.id);
+    });
+
+    it('does not answer a whole word with what merely stems to it', async () => {
+      // "leche" and "lechuga" are one lexeme apart in the index and a shop
+      // apart on the shelf.
+      const page = await items.search({ userId: SHOPPER, query: 'leche' });
+      expect(page.items.map((i) => i.id)).not.toContain(strict.lettuce);
+    });
+
+    it('still answers the prefix that was actually typed', async () => {
+      // The narrowing is literal and not a ban on prefixes: somebody four
+      // characters into "lechuga" is asking for it, and the composer starts
+      // asking at three.
+      const page = await items.search({ userId: SHOPPER, query: 'lechu' });
+      expect(page.items.map((i) => i.id)).toContain(strict.lettuce);
+    });
+
+    it('puts the product the word names above the ones that start with it', async () => {
+      // Both are honest matches for three characters, and only one of them is
+      // salt. This is the ordering the whole word key exists for.
+      const page = await items.search({ userId: SHOPPER, query: 'sal' });
+      const order = page.items.map((i) => i.id);
+
+      expect(order).toContain(strict.salt);
+      expect(order).toContain(strict.sausages);
+      expect(order.indexOf(strict.salt)).toBeLessThan(
+        order.indexOf(strict.sausages)
+      );
+    });
+
+    it('matches a word typed without its accent', async () => {
+      // The Spanish configuration strips accents while it stems, so this
+      // already worked; the literal recheck goes through `catalog_norm` so that
+      // it keeps working. Most Spanish is typed without them.
+      const page = await items.search({ userId: SHOPPER, query: 'salmon' });
+      expect(page.items.map((i) => i.id)).toContain(strict.salmon);
+    });
+
+    it('does not fuzzy match a query too short to mean anything', async () => {
+      // `similarity('sal', 'sol')` is 0.5, which says nothing except that both
+      // are three letters long. Below MIN_FUZZY_LENGTH the full text branch
+      // answers alone, so this finds nothing rather than every short word on
+      // the shelf.
+      const page = await items.search({ userId: SHOPPER, query: 'sol' });
+      expect(page.items.map((i) => i.id)).not.toContain(strict.salt);
+    });
+
+    it('still reaches a misspelling long enough to be one', async () => {
+      const page = await items.search({ userId: SHOPPER, query: 'pasqual' });
+      expect(page.items.map((i) => i.id)).toContain(ids.pascualMilk);
     });
   });
 });

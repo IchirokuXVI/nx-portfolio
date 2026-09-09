@@ -50,9 +50,13 @@ import {
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
 import {
+  GROUP_SEARCH_TEXT,
+  ITEM_SEARCH_TEXT,
+  literalMatchSql,
   parseSearchTerm,
   TRIGRAM_THRESHOLD,
   TRIGRAM_WEIGHT,
+  wholeWordMatchSql,
   type SearchTerm,
 } from './search-term';
 
@@ -442,7 +446,6 @@ export class ItemService {
     const p = params();
     const query = term ? p.bind(term.tsquery) : null;
     const raw = term ? p.bind(term.raw) : null;
-    const threshold = term ? p.bind(TRIGRAM_THRESHOLD) : null;
 
     // The cheapest member, resolved inside the ranking query rather than after
     // it, because unit price is one of the ranking keys. With no scopes there is
@@ -470,8 +473,8 @@ export class ItemService {
     const relevance =
       query && raw
         ? `GREATEST(
-             ts_rank(g."search_es", to_tsquery('spanish', ${query})),
-             ts_rank(g."search_en", to_tsquery('english', ${query})),
+             ts_rank(g."search_es", to_tsquery('spanish', ${query}), 1),
+             ts_rank(g."search_en", to_tsquery('english', ${query}), 1),
              GREATEST(
                similarity(g."name" ->> 'es', ${raw}),
                similarity(g."name" ->> 'en', ${raw})
@@ -484,14 +487,34 @@ export class ItemService {
         : `(lower(g."name" ->> 'es') = lower(${raw})
             OR lower(g."name" ->> 'en') = lower(${raw}))`;
     const where =
-      query && raw && threshold
+      term && query && raw
         ? `WHERE (
-             g."search_es" @@ to_tsquery('spanish', ${query})
-             OR g."search_en" @@ to_tsquery('english', ${query})
-             OR similarity(g."name" ->> 'es', ${raw}) > ${threshold}
-             OR similarity(g."name" ->> 'en', ${raw}) > ${threshold}
+             (
+               (
+                 g."search_es" @@ to_tsquery('spanish', ${query})
+                 OR g."search_en" @@ to_tsquery('english', ${query})
+               )
+               AND ${literalMatchSql(GROUP_SEARCH_TEXT, term.words, p.bind)}
+             )
+             ${
+               term.fuzzy
+                 ? `OR similarity(g."name" ->> 'es', ${raw}) > ${p.bind(
+                     TRIGRAM_THRESHOLD
+                   )}
+                    OR similarity(g."name" ->> 'en', ${raw}) > ${p.bind(
+                      TRIGRAM_THRESHOLD
+                    )}`
+                 : ''
+             }
            )`
         : '';
+    // The whole word key, as on the items: a group whose name *is* the typed
+    // word comes before one that merely contains it. Written only when there is
+    // a term, because Postgres refuses a bare constant in `ORDER BY`.
+    const wholeWords = term
+      ? `(${wholeWordMatchSql(GROUP_SEARCH_TEXT, term.words, p.bind)}) DESC,
+               `
+      : '';
     const priced = scopeIds.length === 0 ? 'NULL::numeric' : 'o."unitPrice"';
 
     const rows: RankedGroupRow[] = await this.groups.query(
@@ -515,7 +538,7 @@ export class ItemService {
              round(${relevance}::numeric, 4) AS "relevance"
       FROM "product_groups" g${offerJoin}
       ${where}
-      ORDER BY "relevance" DESC,
+      ORDER BY ${wholeWords}"relevance" DESC,
                ${exact} DESC,
                ${priced} ASC NULLS LAST,
                g."name" ->> 'en' ASC,
@@ -694,7 +717,6 @@ export class ItemService {
     const p = params();
     const query = p.bind(term.tsquery);
     const raw = p.bind(term.raw);
-    const threshold = p.bind(TRIGRAM_THRESHOLD);
     // The barcode test, bound once and spent in both the filter and the
     // ordering, or the constant `false` when the query is words. A barcode names
     // one product, so the row carrying it is not merely the most relevant
@@ -716,6 +738,21 @@ export class ItemService {
     // since a key every row ties on decides nothing.
     const barcodeKey =
       term.ean === null ? '' : `(${barcode}) DESC NULLS LAST,\n               `;
+    // The fuzzy branch, or nothing at all when the query is too short for
+    // trigram distance to mean anything. It is the one part of the filter the
+    // literal recheck is not applied to, and that is the point of it: a
+    // misspelling has no literal occurrence to find.
+    //
+    // The threshold is bound inside the branch rather than beside the other
+    // parameters, because a `$n` that no part of the statement mentions is a
+    // bind error and not a harmless extra.
+    const fuzzy = term.fuzzy
+      ? `OR similarity(coalesce(i."brand", ''), ${raw}) > ${p.bind(
+          TRIGRAM_THRESHOLD
+        )}
+        OR similarity(i."name" ->> 'es', ${raw}) > ${p.bind(TRIGRAM_THRESHOLD)}
+        OR similarity(i."name" ->> 'en', ${raw}) > ${p.bind(TRIGRAM_THRESHOLD)}`
+      : '';
 
     const filters: string[] = [];
     if (req.category) {
@@ -752,16 +789,24 @@ export class ItemService {
       FROM "items" i
       WHERE (
         ${barcode}
-        OR i."search_es" @@ to_tsquery('spanish', ${query})
-        OR i."search_en" @@ to_tsquery('english', ${query})
-        OR similarity(coalesce(i."brand", ''), ${raw}) > ${threshold}
-        OR similarity(i."name" ->> 'es', ${raw}) > ${threshold}
-        OR similarity(i."name" ->> 'en', ${raw}) > ${threshold}
+        OR (
+          (
+            i."search_es" @@ to_tsquery('spanish', ${query})
+            OR i."search_en" @@ to_tsquery('english', ${query})
+          )
+          AND ${literalMatchSql(ITEM_SEARCH_TEXT, term.words, p.bind)}
+        )
+        ${fuzzy}
       )
       ${filters.map((clause) => `AND ${clause}`).join('\n      ')}
-      ORDER BY ${barcodeKey}round(GREATEST(
-                 ts_rank(i."search_es", to_tsquery('spanish', ${query})),
-                 ts_rank(i."search_en", to_tsquery('english', ${query})),
+      ORDER BY ${barcodeKey}(${wholeWordMatchSql(
+        ITEM_SEARCH_TEXT,
+        term.words,
+        p.bind
+      )}) DESC,
+               round(GREATEST(
+                 ts_rank(i."search_es", to_tsquery('spanish', ${query}), 1),
+                 ts_rank(i."search_en", to_tsquery('english', ${query}), 1),
                  GREATEST(
                    similarity(coalesce(i."brand", ''), ${raw}),
                    similarity(i."name" ->> 'es', ${raw}),
@@ -798,19 +843,38 @@ export class ItemService {
   ): Promise<Item[]> {
     const qb = this.items.createQueryBuilder('i').take(limit + 1);
     if (term) {
+      // The same filter the ranked branch applies, named parameters apart. It is
+      // written twice because the two branches assemble their SQL differently,
+      // and it has to stay one rule: an admin who narrows a table by a word and
+      // then sorts it by name is asking for an ordering, not for a wider search.
+      const words: Record<string, string> = {};
+      const literal = literalMatchSql(ITEM_SEARCH_TEXT, term.words, (value) => {
+        const name = `word${Object.keys(words).length}`;
+        words[name] = String(value);
+        return `:${name}`;
+      });
+      const fuzzy = term.fuzzy
+        ? `OR similarity(coalesce(i."brand", ''), :raw) > :threshold
+           OR similarity(i."name" ->> 'es', :raw) > :threshold
+           OR similarity(i."name" ->> 'en', :raw) > :threshold`
+        : '';
       qb.andWhere(
         `(
           ${term.ean === null ? 'false' : 'i."ean" = :ean'}
-          OR i."search_es" @@ to_tsquery('spanish', :tsquery)
-          OR i."search_en" @@ to_tsquery('english', :tsquery)
-          OR similarity(coalesce(i."brand", ''), :raw) > :threshold
-          OR similarity(i."name" ->> 'es', :raw) > :threshold
-          OR similarity(i."name" ->> 'en', :raw) > :threshold
+          OR (
+            (
+              i."search_es" @@ to_tsquery('spanish', :tsquery)
+              OR i."search_en" @@ to_tsquery('english', :tsquery)
+            )
+            AND ${literal}
+          )
+          ${fuzzy}
         )`,
         {
           tsquery: term.tsquery,
           raw: term.raw,
-          threshold: TRIGRAM_THRESHOLD,
+          ...words,
+          ...(term.fuzzy ? { threshold: TRIGRAM_THRESHOLD } : {}),
           // The barcode filters here too, so an admin who pastes one into a
           // table ordered by name finds the product rather than an empty table.
           // Only the ordering is the ranked branch's alone.
