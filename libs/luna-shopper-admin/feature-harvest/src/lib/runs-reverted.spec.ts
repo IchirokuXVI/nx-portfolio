@@ -171,8 +171,10 @@ describe('RunsPage, a reverted run', () => {
     });
     const { fixture, queries } = await render([standing, taken]);
 
-    fixture.componentInstance.reverted.set('reverted');
-    fixture.componentInstance.onRevertedChange();
+    // The choice is the argument, as the select sends it. Setting the signal
+    // first and calling with nothing is what the screen used to do, and it read
+    // the filter one write behind.
+    fixture.componentInstance.onRevertedChange('reverted');
     await drain();
     fixture.detectChanges();
 
@@ -181,8 +183,7 @@ describe('RunsPage, a reverted run', () => {
       'run-taken',
     ]);
 
-    fixture.componentInstance.reverted.set('standing');
-    fixture.componentInstance.onRevertedChange();
+    fixture.componentInstance.onRevertedChange('standing');
     await drain();
     fixture.detectChanges();
 
