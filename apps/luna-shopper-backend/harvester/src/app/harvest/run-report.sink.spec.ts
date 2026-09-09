@@ -11,7 +11,11 @@ import type { RunScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import type { ObservedPlace } from './run-report';
 import { RunReportSink } from './run-report.sink';
-import type { SourceIngest, SourceObservation } from './source-ingest';
+import type {
+  SourceIngest,
+  SourceIngestCounters,
+  SourceObservation,
+} from './source-ingest';
 import type { SourceLocationService } from './source-location.service';
 
 /**
@@ -71,11 +75,24 @@ function build(
     tracked?: Array<{ externalId: string; itemId: string }>;
     shops?: Array<Partial<SourceLocation>>;
     conflicts?: Array<Record<string, unknown>>;
+    /** What the ingest counted, which the sink carries into the report. */
+    counters?: Partial<SourceIngestCounters>;
   } = {}
 ) {
   const pushed: SourceObservation[][] = [];
   const opened: unknown[] = [];
-  const closed = jest.fn(async () => ({ outcomes: [], counters: {} }));
+  const closed = jest.fn(async () => ({
+    outcomes: [],
+    counters: {
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      pricesRecorded: 0,
+      pricesWritten: 0,
+      pricesConfirmed: 0,
+      ...options.counters,
+    },
+  }));
   const ingest = {
     open: jest.fn(async (_context: RunContext, input: unknown) => {
       opened.push(input);
@@ -192,6 +209,43 @@ describe('RunReportSink', () => {
     });
     expect(pushed.flat().map((each) => each.externalId)).toEqual(['a', 'b']);
     expect(written.products).toBe(2);
+  });
+
+  /**
+   * The session's counters used to be dropped on the floor: `close` was called
+   * for its side effect and its answer discarded, so a run's report named no
+   * price and the back office fell back to `updated`, which is rows the ladder
+   * changed. A LIDL walk then read "prices written: 0" beside 8,154 prices on
+   * its own source rows.
+   */
+  it('carries the prices the ingest counted into the result', async () => {
+    const { sink } = build({
+      counters: {
+        pricesRecorded: 8154,
+        pricesWritten: 0,
+        pricesConfirmed: 0,
+      },
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    const written = await sink.drain();
+
+    // Recorded and published are two different numbers, and a chain nobody has
+    // matched yet is exactly where they differ most.
+    expect(written.pricesRecorded).toBe(8154);
+    expect(written.pricesPublished).toBe(0);
+    expect(written.pricesConfirmed).toBe(0);
+  });
+
+  it('reports no price for a run that opened no session', async () => {
+    const { sink } = build();
+
+    // A store discovery reports places and no product, so no session is opened
+    // and there is nothing to count.
+    const written = await sink.drain();
+
+    expect(written.pricesRecorded).toBe(0);
+    expect(written.pricesPublished).toBe(0);
   });
 
   it('resolves a declared scope before the prices that name it are written', async () => {

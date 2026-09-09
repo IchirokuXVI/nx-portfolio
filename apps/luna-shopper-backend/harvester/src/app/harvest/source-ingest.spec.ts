@@ -503,7 +503,15 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
       confidence: 0,
       itemId: null,
     });
-    expect(counters).toMatchObject({ created: 1, pricesWritten: 0 });
+    // The price is kept on the source row and none of it reaches catalog, and
+    // the two counters say so separately. Counting only the second is what made
+    // the LIDL walk of 2026-09-09 report no price at all while its own rows
+    // carried 8,154 of them.
+    expect(counters).toMatchObject({
+      created: 1,
+      pricesRecorded: 1,
+      pricesWritten: 0,
+    });
     expect(catalog.addPrices).not.toHaveBeenCalled();
   });
 

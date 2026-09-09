@@ -15,6 +15,7 @@ import type { RunContext } from './run-context';
 import {
   SourceIngest,
   type SourceEntryOutcome,
+  type SourceIngestCounters,
   type SourceObservation,
 } from './source-ingest';
 
@@ -69,7 +70,19 @@ export class FileImportRunner {
     private readonly scopes: PriceScopeResolver
   ) {}
 
-  async run(context: RunContext, input: FileImportInput): Promise<void> {
+  /**
+   * Read the document and record what it says, answering what the ingest
+   * counted.
+   *
+   * The counters are answered rather than written here, because the run's
+   * report is the orchestrator's to compose and an import must name its prices
+   * the same way a walk does. Dropping them was how a run that recorded prices
+   * came to report none of them.
+   */
+  async run(
+    context: RunContext,
+    input: FileImportInput
+  ): Promise<SourceIngestCounters> {
     // Validated again here, because the harvester owns the schema version and a
     // broker message is not a trusted input (section 6.2). The gateway already
     // refused a malformed document; this refuses one that arrived some other way.
@@ -157,7 +170,7 @@ export class FileImportRunner {
       'INGEST',
       `Recording ${observations.length} product(s)`
     );
-    const { outcomes } = await this.ingest.ingest(context, {
+    const { outcomes, counters } = await this.ingest.ingest(context, {
       supermarketId: input.supermarketId,
       defaultPriceScopeId: input.priceScopeId,
       sourceKind: input.sourceKind,
@@ -167,6 +180,7 @@ export class FileImportRunner {
 
     await this.recordOutcomes(context, document.products, outcomes);
     await context.flush();
+    return counters;
   }
 
   /**

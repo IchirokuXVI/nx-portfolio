@@ -601,8 +601,10 @@
         "created": "Created",
         "updated": "Updated",
         "unchanged": "Unchanged",
-        "pricesWritten": "Prices written",
+        "pricesRecorded": "Prices recorded",
+        "pricesPublished": "Prices published to catalog",
         "pricesConfirmed": "Prices confirmed",
+        "pricesNote": "Recorded prices are kept on this chain's source products. A price reaches the catalog only once its source product is bound to a product, so a chain still in the queue records prices and publishes none.",
         "notFound": "Not stocked",
         "skipped": "Skipped by a rule",
         "failed": "Failed"

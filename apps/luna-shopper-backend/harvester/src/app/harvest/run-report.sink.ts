@@ -62,6 +62,24 @@ export interface RunReportSinkInput {
 /** What the run wrote, for the counters and the run's report. */
 export interface RunReportResult {
   products: number;
+  /**
+   * Prices this run stored on the chain's own source rows.
+   *
+   * The number a person means by "prices". It is every price the source stated
+   * that resolved to a scope, and it is what the source products screen shows.
+   */
+  pricesRecorded: number;
+  /**
+   * Prices this run published to catalog, which only a row bound to a product
+   * earns.
+   *
+   * It is legitimately zero for a chain nobody has matched yet, and reading it
+   * beside {@link pricesRecorded} is what makes that readable rather than
+   * alarming.
+   */
+  pricesPublished: number;
+  /** Prices catalog already held at that value and only moved the clock on. */
+  pricesConfirmed: number;
   placesCreated: number;
   placesRefreshed: number;
   scopesDeclared: number;
@@ -104,6 +122,9 @@ export class RunReportSink implements RunReport {
 
   private readonly result: RunReportResult = {
     products: 0,
+    pricesRecorded: 0,
+    pricesPublished: 0,
+    pricesConfirmed: 0,
     placesCreated: 0,
     placesRefreshed: 0,
     scopesDeclared: 0,
@@ -193,7 +214,14 @@ export class RunReportSink implements RunReport {
     await this.chain;
 
     if (this.session) {
-      await this.session.close();
+      // The ingest already counted every price this run wrote, and the close
+      // used to be called for its side effect alone and the answer dropped on
+      // the floor. That is why a walk's report named no price at all and the
+      // screen fell back to `updated`, which is rows the ladder changed.
+      const { counters } = await this.session.close();
+      this.result.pricesRecorded += counters.pricesRecorded;
+      this.result.pricesPublished += counters.pricesWritten;
+      this.result.pricesConfirmed += counters.pricesConfirmed;
     }
     this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
 
