@@ -18,14 +18,83 @@ import {
  * probes included.
  *
  * So the open, abusable surfaces override this single bucket's limit for
- * themselves with `@Throttle(THROTTLE_LIMITS.login)`. The values are
- * conservative starting points, tunable from config later.
+ * themselves with `@Throttle(THROTTLE_LIMITS.login)`. The values below are the
+ * production numbers, and {@link THROTTLE_MULTIPLIER_VARIABLE} is how a
+ * development stack raises all of them at once.
  */
 const DEFAULT_BUCKET = 'default';
 
+/**
+ * The environment variable that scales every limit in this file.
+ *
+ * It exists because the numbers are sized for one honest client on the public
+ * internet, and a development stack is not that. One machine runs the browser,
+ * the e2e suites, the seeding scripts and the curation CLI against one gateway,
+ * they share one Redis and one source address, so they share one bucket: five
+ * logins a minute is spent by a CLI that signs in on every run while somebody is
+ * also using the back office, and the next honest login is refused. The counters
+ * are per source, so nothing about that is visible from the code that was
+ * refused, which is what makes it worth a knob rather than a habit of waiting a
+ * minute.
+ *
+ * Unset means 1, so both clusters keep the numbers written below and a raise
+ * cannot leak into them by being forgotten: it is set in the `.env` that
+ * `luna-slot.sh` writes and in the local compose file, and in neither values
+ * file. The gateway's Joi schema names it too, so a malformed value fails boot
+ * rather than silently reading as 1.
+ *
+ * **It is read from `process.env` at import time, not from `ConfigService`.**
+ * The per route limits are arguments to `@Throttle()`, which runs while the
+ * controller file is imported, long before Nest builds a container to ask. Nx
+ * loads `{projectRoot}/.env` before it starts the task and Docker sets the
+ * environment before node starts, so the value is present either way.
+ */
+export const THROTTLE_MULTIPLIER_VARIABLE = 'THROTTLE_MULTIPLIER';
+
+/**
+ * Reads {@link THROTTLE_MULTIPLIER_VARIABLE}, falling back to 1.
+ *
+ * Anything that is not a finite number of at least 1 reads as 1, because the
+ * failure mode of the alternative is a stack that quietly rate limits itself to
+ * nothing. A value below 1 would tighten the limits, which is not what the
+ * variable is for and is better said by editing the numbers.
+ *
+ * Exported for the tests, which cannot restart the module to try a value.
+ */
+export function readThrottleMultiplier(raw: string | undefined): number {
+  const parsed = Number(raw ?? '');
+  if (raw === undefined || raw.trim() === '' || !Number.isFinite(parsed)) {
+    return 1;
+  }
+  return Math.max(1, parsed);
+}
+
+const MULTIPLIER = readThrottleMultiplier(
+  process.env[THROTTLE_MULTIPLIER_VARIABLE]
+);
+
+/**
+ * One limit, scaled by {@link THROTTLE_MULTIPLIER_VARIABLE}.
+ *
+ * The window is left alone and only the count moves, so a route that reports its
+ * own wait from the window keeps reporting the same wait. The result is rounded
+ * and floored at 1, because a fractional limit is not a limit and a limit of 0
+ * refuses everything.
+ */
+export function scaleThrottleLimit(limit: number): number {
+  return Math.max(1, Math.round(limit * MULTIPLIER));
+}
+
+/** One override of the single bucket, with the count already scaled. */
+function bucket(ttl: number, limit: number): ThrottleLimit {
+  return { [DEFAULT_BUCKET]: { ttl, limit: scaleThrottleLimit(limit) } };
+}
+
 export function createThrottlerOptions(): ThrottlerModuleOptions {
   return {
-    throttlers: [{ name: DEFAULT_BUCKET, ttl: minutes(1), limit: 120 }],
+    throttlers: [
+      { name: DEFAULT_BUCKET, ttl: minutes(1), limit: scaleThrottleLimit(120) },
+    ],
   };
 }
 
@@ -36,17 +105,17 @@ export function createThrottlerOptions(): ThrottlerModuleOptions {
  */
 export const THROTTLE_LIMITS = {
   /** Login attempts. */
-  login: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 5 } },
+  login: bucket(minutes(1), 5),
   /** Account registration. */
-  registration: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 3 } },
+  registration: bucket(minutes(1), 3),
   /** Anonymous zone create / join. */
-  anonymousZone: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
+  anonymousZone: bucket(minutes(1), 10),
   /**
    * Email verification resend (plan 0021, section 4.2). One at a time, so the
    * countdown the client renders means something, and so the whole of the
    * enforcement is this bucket rather than a second limiter in the domain.
    */
-  verifyResend: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 1 } },
+  verifyResend: bucket(minutes(1), 1),
   /**
    * Consuming a verification link (plan 0021, section 4.3). Brute forcing a 256
    * bit single use token is not a threat worth designing around, so this exists
@@ -54,7 +123,7 @@ export const THROTTLE_LIMITS = {
    * a mail client that prefetches links included; the resend bucket used to sit
    * here and could refuse a link that would have worked.
    */
-  verifyConsume: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
+  verifyConsume: bucket(minutes(1), 10),
   /**
    * Asking for a password reset link (plan 0022, section 2.2). One a minute, the
    * same shape as the resend and for the same reason: the whole of the
@@ -63,23 +132,23 @@ export const THROTTLE_LIMITS = {
    * hammering the endpoint rather than a limit on filling one person's inbox; a
    * per address limit is the answer to that, and section 9 leaves it unbuilt.
    */
-  passwordReset: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 1 } },
+  passwordReset: bucket(minutes(1), 1),
   /** Join code redemption (enumeration protection). */
-  joinCode: { [DEFAULT_BUCKET]: { ttl: seconds(30), limit: 5 } },
+  joinCode: bucket(seconds(30), 5),
   /**
    * The public platform totals (plan 0017, section 8.2). Tighter than the
    * default because an unauthenticated endpoint is the cheapest thing to hammer,
    * and loose enough that a real visitor never meets it: the gateway serves this
    * from a 60 second cache, so a client polling faster than this gains nothing.
    */
-  publicStats: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 30 } },
+  publicStats: bucket(minutes(1), 30),
   /**
    * Renaming, global or per zone (plan 0018, section 6). Usernames are public,
    * non unique and freely changeable, so rapid renaming is a plausible
    * harassment pattern: take a target's name, act under it, change back. Five an
    * hour leaves ordinary editing untouched and makes that loop impractical.
    */
-  usernameChange: { [DEFAULT_BUCKET]: { ttl: hours(1), limit: 5 } },
+  usernameChange: bucket(hours(1), 5),
   /**
    * Uploading a voice comment (plan 0045, section 6).
    *
@@ -93,7 +162,7 @@ export const THROTTLE_LIMITS = {
    * messages on one shopping list inside a minute is not a use this product has,
    * and the eleventh is refused with a wait rather than lost.
    */
-  voiceComment: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
+  voiceComment: bucket(minutes(1), 10),
   /**
    * Turning a device's point into a postal code (`apps/velista/plans/0058`,
    * section 3).
@@ -108,8 +177,8 @@ export const THROTTLE_LIMITS = {
    * browser permission prompt, and a person who presses it twice has already
    * been told twice where they are.
    */
-  postalCodeLookup: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
-} as const;
+  postalCodeLookup: bucket(minutes(1), 10),
+};
 
 /** One per route override, as {@link THROTTLE_LIMITS} publishes them. */
 export type ThrottleLimit = Record<

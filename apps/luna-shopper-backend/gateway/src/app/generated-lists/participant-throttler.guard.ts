@@ -1,7 +1,10 @@
 import { Injectable, SetMetadata, type ExecutionContext } from '@nestjs/common';
 import { minutes, type ThrottlerOptions } from '@nestjs/throttler';
 import type { GeneratedListParticipantContext } from '@portfolio/luna-shopper/contracts';
-import { ProblemThrottlerGuard } from '@portfolio/luna-shopper/platform';
+import {
+  ProblemThrottlerGuard,
+  scaleThrottleLimit,
+} from '@portfolio/luna-shopper/platform';
 
 /** The bucket these limits are counted under, kept apart from `default`. */
 const PARTICIPANT_BUCKET = 'participant';
@@ -37,7 +40,7 @@ export const PARTICIPANT_THROTTLE_LIMITS = {
    * makes filling somebody's basket with rubbish slow enough to be noticed and
    * revoked. `checkRoom` is what bounds the total.
    */
-  write: { ttl: minutes(1), limit: 60 },
+  write: { ttl: minutes(1), limit: scaleThrottleLimit(60) },
   /**
    * Searching the catalog through a basket.
    *
@@ -48,8 +51,8 @@ export const PARTICIPANT_THROTTLE_LIMITS = {
    * requests, because velista debounces at the composer and the server must not
    * depend on it having done so.
    */
-  suggest: { ttl: minutes(1), limit: 20 },
-} as const;
+  suggest: { ttl: minutes(1), limit: scaleThrottleLimit(20) },
+};
 
 /** Declares what one participant may do on this route, per {@link ParticipantThrottlerGuard}. */
 export const ParticipantThrottle = (limit: ParticipantThrottleLimit) =>

@@ -43,7 +43,7 @@ setupSwagger(app, { title, description });     // gateway only
 | Localization | `resolveLocale`, `SUPPORTED_LOCALES`, `DEFAULT_LOCALE` |
 | Pagination | `Page`, `PageQueryDto`, `encodeCursor`, `decodeCursor`, `clampPageSize`, `buildPage` |
 | Idempotency | `IdempotencyStore`, `runOnce`, `commandStepKey` |
-| Rate limit buckets | `THROTTLE_BUCKETS`, `createThrottlerOptions` |
+| Rate limit buckets | `THROTTLE_LIMITS`, `createThrottlerOptions`, `THROTTLE_MULTIPLIER` (raises every limit at once, for a development stack) |
 | NATS correlation | `buildNatsHeaders`, `readCorrelationFromHeaders`, `readLocaleFromHeaders` |
 
 ## Guarantees (plan 0004 exit criteria)
