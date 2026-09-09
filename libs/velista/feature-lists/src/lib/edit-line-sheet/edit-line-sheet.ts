@@ -29,11 +29,7 @@ import {
   SheetNavigation,
   zoneIdOf,
 } from '@portfolio/velista/platform';
-import {
-  QuantityStepper,
-  SheetShell,
-  SpinnerIcon,
-} from '@portfolio/velista/ui';
+import { QuantityReel, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
 import { editScopeFor, selectAbilities } from '../select-list-state';
 
@@ -97,7 +93,7 @@ import { editScopeFor, selectAbilities } from '../select-list-state';
  */
 @Component({
   selector: 'lib-edit-line-sheet',
-  imports: [RokuTranslatorPipe, QuantityStepper, SheetShell, SpinnerIcon],
+  imports: [RokuTranslatorPipe, QuantityReel, SheetShell, SpinnerIcon],
   templateUrl: './edit-line-sheet.html',
   styleUrl: './edit-line-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -222,6 +218,18 @@ export class EditLineSheet {
 
   onContentInput(event: Event): void {
     this.content.set((event.target as HTMLInputElement).value);
+  }
+
+  /**
+   * The number under the thumb while the reel is being worked, so a save that lands
+   * inside the reel's idle beat sends what is on screen rather than what the last
+   * settled run left behind. The settle sheet reads its reel the same way, and for the
+   * same race.
+   */
+  onQuantityPreview(next: number | null): void {
+    if (next !== null) {
+      this.quantity.set(next);
+    }
   }
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */

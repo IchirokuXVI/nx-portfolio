@@ -112,6 +112,7 @@ import {
     '[class.dragging]': 'dragging()',
     '[class.open]': 'open()',
     '[class.readonly]': 'readonly()',
+    '[class.with-buttons]': '!hideButtons()',
   },
 })
 export class QuantityReel {
@@ -138,6 +139,17 @@ export class QuantityReel {
    * never be permitted for them.
    */
   readonly readonly = input(false);
+
+  /**
+   * Whether to draw the control without its minus and plus buttons.
+   *
+   * The buttons flank the pill and step by one, which is the short way to ±1 for a
+   * pointer that would rather press than drag. They are drawn by default; a caller
+   * whose layout has no room for them, or whose surface already narrates the step
+   * some other way, turns them off here. The drag, the tap and the keyboard are
+   * untouched either way.
+   */
+  readonly hideButtons = input(false);
 
   /**
    * The lowest number the reel will go to.
@@ -207,6 +219,17 @@ export class QuantityReel {
   /** What the control is showing, which is the settled value unless a gesture is on. */
   private readonly _pending = signal<number | null>(null);
 
+  /**
+   * Whether the current run is being driven by the minus and plus buttons.
+   *
+   * A run of button presses keeps the overlay closed, because the overlay covers the
+   * buttons the moment it opens and a control that removes itself from under a finger
+   * mid run cannot be pressed twice. The run still commits the way every run does:
+   * one delta, after the idle beat. A drag or a tap on the pill converts the run into
+   * an ordinary open one, from wherever the presses had got to.
+   */
+  private readonly _stepping = signal(false);
+
   /** The value the current run of adjustments started from, for the delta at the end. */
   private _startedFrom = 0;
 
@@ -225,7 +248,7 @@ export class QuantityReel {
   readonly dragging = signal(false);
 
   /** Whether the overlay is up: through the drag, and for a beat after it. */
-  readonly open = computed(() => this._pending() !== null);
+  readonly open = computed(() => this._pending() !== null && !this._stepping());
 
   /** What to draw and what to announce. */
   readonly shown = computed(() => this._pending() ?? this.value());
@@ -243,6 +266,19 @@ export class QuantityReel {
 
   readonly next = computed(() =>
     this.shown() < this.max() ? this.shown() + 1 : null
+  );
+
+  /**
+   * Whether each button has anywhere to go. Disabled at the end rather than clamping
+   * silently, the same choice the stepper made: the limit is visible before it is hit
+   * rather than being a correction after it.
+   */
+  readonly canDecrease = computed(
+    () => !this.readonly() && this.shown() > this.min()
+  );
+
+  readonly canIncrease = computed(
+    () => !this.readonly() && this.shown() < this.max()
   );
 
   constructor() {
@@ -284,6 +320,17 @@ export class QuantityReel {
     if (this.readonly() || !event.isPrimary) {
       return;
     }
+
+    // A press on a button is the button's, not the start of a drag. Claiming it here
+    // would capture the pointer away from the element that is about to be clicked.
+    if (this._isStepButton(event.target)) {
+      return;
+    }
+
+    // A press on the pill mid button run opens the overlay over it, from wherever the
+    // presses had got to. The run itself continues: `_startedFrom` already holds where
+    // it began, so the commit at the end is still one delta for the whole adjustment.
+    this._stepping.set(false);
 
     // Whatever is on screen, which is the snapped number when a second drag starts
     // inside the idle window rather than the value the list still holds.
@@ -387,6 +434,36 @@ export class QuantityReel {
     return Number.isFinite(value) ? value : null;
   }
 
+  /** Whether the press landed on the minus or the plus, whose click handles itself. */
+  private _isStepButton(target: EventTarget | null): boolean {
+    return ((target as Element | null)?.closest?.('.step') ?? null) !== null;
+  }
+
+  // ------------------------------------------------------------------ buttons
+
+  /**
+   * One press of the minus or the plus.
+   *
+   * The same run the keyboard makes, with one difference: the overlay stays closed,
+   * because it would cover the button that was just pressed and a second press has to
+   * land somewhere. The commit is unchanged, one delta after the idle beat, so a run
+   * of presses does not become a request per press.
+   */
+  onStepButton(step: number): void {
+    if (this.readonly()) {
+      return;
+    }
+
+    if (this._pending() === null) {
+      this._startedFrom = this.value();
+      this._stepping.set(true);
+    }
+
+    this._clearTimer();
+    this._pending.set(this._clamp(this.shown() + step));
+    this._restartIdle();
+  }
+
   // ----------------------------------------------------------------- keyboard
 
   /**
@@ -468,7 +545,10 @@ export class QuantityReel {
     this._clearTimer();
     this._idleTimer = setTimeout(() => {
       this._idleTimer = null;
-      const wasOpen = this._pending() !== null;
+      // The overlay, not merely a pending value: a run driven by the buttons never
+      // opened one, so there is no close to announce and no beat of deafness to ask
+      // the row for. Nothing disappeared from under anybody's finger.
+      const wasOpen = this.open();
       this._flush();
       if (wasOpen) {
         this.autoClosed.emit();
@@ -493,6 +573,7 @@ export class QuantityReel {
   private _flush(): void {
     const settled = this._pending();
     this._pending.set(null);
+    this._stepping.set(false);
     this.dragging.set(false);
 
     if (settled === null) {

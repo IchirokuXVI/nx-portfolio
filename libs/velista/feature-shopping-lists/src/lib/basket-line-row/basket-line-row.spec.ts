@@ -358,15 +358,18 @@ describe('BasketLineRow: the row itself', () => {
     });
   });
 
-  it('is a container rather than a control, so it may hold two buttons', async () => {
+  it('is a container rather than a control, so it may hold its buttons', async () => {
     // A button cannot contain a button, which is what splits the row in the first
     // place. The row keeping its own `button` role would be an invalid tree that
-    // renders anyway and announces wrongly.
+    // renders anyway and announces wrongly. Two of its own, the status and the body,
+    // and the reel's minus and plus beside them.
     const fixture = await render(line());
 
     const row = (fixture.nativeElement as HTMLElement).querySelector('.row');
     expect(row?.tagName).toBe('DIV');
-    expect(row?.querySelectorAll('button')).toHaveLength(2);
+    expect(row?.querySelector('button.status')).not.toBeNull();
+    expect(row?.querySelector('button.body')).not.toBeNull();
+    expect(row?.querySelectorAll('button:not(.step)')).toHaveLength(2);
   });
 });
 
