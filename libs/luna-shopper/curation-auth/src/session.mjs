@@ -12,9 +12,22 @@
  * it.
  */
 
-/** The development convention: the admin `luna-slot` seeds, with no password. */
+/**
+ * The development convention: the admin `stack.sh up` seeds on every slot, and
+ * the constant password it seeds it with.
+ *
+ * The password is sent even though `ADMIN_DEV_AUTOLOGIN` is on in every `.env`
+ * `luna-slot` writes, and the empty string is not an option. The switch makes
+ * the gateway ignore the body, but it ignores it in the handler, and
+ * `AdminLoginDto` validates first: an empty password answers 400
+ * `validation_failed` before autologin is ever consulted. Sending the real
+ * password costs nothing and is also what makes a session work against a slot
+ * whose autologin somebody turned off.
+ *
+ * It is `stack.sh`'s `DEV_ADMIN_PASSWORD`, and the two have to agree.
+ */
 export const DEFAULT_ADMIN_USERNAME = 'dev-admin';
-export const DEFAULT_ADMIN_PASSWORD = '';
+export const DEFAULT_ADMIN_PASSWORD = 'dev-admin-password';
 
 const LOGIN_PATH = '/v1/admin/auth/login';
 const ME_PATH = '/v1/admin/auth/me';
@@ -71,7 +84,7 @@ function withQuery(path, query) {
  * @param {object} options
  * @param {string} options.baseUrl The gateway origin, with or without a trailing slash.
  * @param {string} [options.username] Defaults to `dev-admin`.
- * @param {string} [options.password] Defaults to the empty password.
+ * @param {string} [options.password] Defaults to the development password every slot seeds.
  * @param {Function} [options.fetchImpl] Injected in every test; defaults to the global fetch.
  * @param {string} [options.label] What to call this gateway in an error, for example `main`.
  */

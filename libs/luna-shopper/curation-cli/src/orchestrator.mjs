@@ -7,6 +7,10 @@
  * the decider (which is where both admin logins are verified), drives the
  * next/model/decide loop, and tears the slot down whatever happened.
  *
+ * The slot is ephemeral (see `slots.mjs`), so the checkout this runs in is left
+ * exactly as it was: nothing is configured on the way in and nothing has to be
+ * put back on the way out. A developer serving slot 0 here keeps serving it.
+ *
  * Everything that touches a process, a socket or the clock is injected, so the
  * whole of it runs under `node --test` with no network and no Docker.
  */
@@ -136,7 +140,6 @@ export async function runCuration({
 }) {
   const taken = await slots.list();
   const slot = pickFreeSlot(taken);
-  const previousClaim = slots.claimedSlot();
   const url = rehearsalUrl(slot);
 
   stderr.write(
@@ -199,23 +202,18 @@ export async function runCuration({
         );
       }
     }
+    // The slot is named rather than inferred: it was taken ephemerally, so
+    // nothing recorded it, and the alternative to naming it is taking down
+    // whichever slot this checkout happens to claim.
     try {
-      await slots.down();
+      await slots.down(slot);
     } catch (downError) {
       stderr.write(
         `slot ${slot} did not come down cleanly: ${downError.message ?? downError}\n`
       );
-    }
-    // `--up <n>` moved this worktree's claim to the rehearsal slot. Putting the
-    // previous one back means a developer who had a slot still has it.
-    if (previousClaim !== null && previousClaim !== slot) {
-      try {
-        await slots.configure(previousClaim);
-      } catch {
-        stderr.write(
-          `this worktree's claim on slot ${previousClaim} could not be restored; run luna-slot ${previousClaim} to put it back\n`
-        );
-      }
+      stderr.write(
+        `take it down with: bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --down ${slot}\n`
+      );
     }
   }
 }

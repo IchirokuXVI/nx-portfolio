@@ -214,6 +214,55 @@ worktree holding each lock and the date it was written.
 
 `ng-slot.sh` has no `--keep-data`, because the front end has no data.
 
+### `--ephemeral`: a second slot from a checkout that is already using one
+
+Everything above is per **worktree**: eight `.env` files and one claim. So a
+checkout runs one slot, and pointing it at another means rewriting those files and
+handing the claim over. That is the right trade for a developer moving between
+slots, and the wrong one for a tool that wants a slot of its own for ten minutes
+while somebody is working in the same checkout.
+
+`--ephemeral` is that case. It writes nothing under the worktree and claims
+nothing: the values the slot decides are given to the processes it starts through
+their **environment**, and the `.env` files on disk are read and left alone.
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up 3
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --restart 3 --services gateway
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --down 3
+```
+
+It works because an environment variable that is already set beats a `.env` file
+in every reader this repository uses: Nx loads `{projectRoot}/.env` with dotenv's
+`override` off, `@nestjs/config` assigns only the keys absent from `process.env`,
+and the database tooling is dotenv again. A hand edited key on disk therefore
+still applies to an ephemeral run, and the keys the slot decides win over it.
+
+Four things follow, and none of them is a detail:
+
+- **The slot number is required on every verb.** Nothing records it, so a
+  `--down` with no number would have nothing to read back, and the slot it would
+  reach for instead is the one this checkout claims.
+- **Slot 0 is refused.** It is the developer's own, and an ephemeral run of it
+  would be invisible to `--list`, which reads claims.
+- **The rendered files, the logs and the pid files live outside the repository**,
+  under `$TMPDIR/luna-slot-ephemeral/slot<n>`, so an `--up` in one terminal and a
+  `--down` in another still find each other. A releasing `--down` removes the
+  directory.
+- **`--list` still sees it**, through the port probe rather than a claim: an open
+  port with no claim is already how `--list` and `--auto` describe a slot that is
+  somebody else's. So an ephemeral slot cannot be handed to another worktree
+  while it is running, and leaves nothing behind once it is not.
+
+Two files under the checkout are still written, and both are shared by every
+slot: the throwaway dev JWT keypairs in `apps/luna-shopper-backend/secrets/`,
+which are generated only when they are absent because no service can boot without
+them, and a `--keep-data` lock, which is in the main `.git` directory and is the
+only thing that stops `--auto` handing away databases somebody kept on purpose.
+
+The curation toolchain (`libs/luna-shopper/curation-cli`) takes its rehearsal slot
+this way, which is why a rehearsal no longer disturbs the stack you are serving.
+
 ### A re-run never overwrites what you edited
 
 Every `.env` this script writes is a file somebody may have edited by hand: a

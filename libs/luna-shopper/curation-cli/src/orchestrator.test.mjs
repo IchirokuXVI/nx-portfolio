@@ -19,7 +19,7 @@ function sink() {
 }
 
 /** A slot driver that records the verbs it was asked for. */
-function fakeSlots({ taken = [1], claimed = null, dumpFails = false } = {}) {
+function fakeSlots({ taken = [1], dumpFails = false } = {}) {
   const verbs = [];
   return {
     verbs,
@@ -27,15 +27,11 @@ function fakeSlots({ taken = [1], claimed = null, dumpFails = false } = {}) {
       verbs.push('list');
       return taken;
     },
-    claimedSlot: () => claimed,
     up: async (slot, services) => {
       verbs.push(`up:${slot}:${services.join(',')}`);
     },
-    down: async () => {
-      verbs.push('down');
-    },
-    configure: async (slot) => {
-      verbs.push(`configure:${slot}`);
+    down: async (slot) => {
+      verbs.push(`down:${slot}`);
     },
     dumpCatalog: async (slot, path) => {
       verbs.push(`dump:${slot}`);
@@ -287,7 +283,11 @@ test('the run picks a free slot, brings up three services, walks and tears down'
   });
 
   assert.equal(result.slot, 3);
-  assert.deepEqual(slots.verbs, ['list', 'up:3:gateway,auth,catalog', 'down']);
+  assert.deepEqual(slots.verbs, [
+    'list',
+    'up:3:gateway,auth,catalog',
+    'down:3',
+  ]);
   assert.deepEqual(waited, ['http://localhost:43200']);
   assert.equal(decider.calls[0].options.rehearsalUrl, 'http://localhost:43200');
 
@@ -337,7 +337,7 @@ test('a login that fails ends the run before the first model call', async () => 
     'list',
     'up:2:gateway,auth,catalog',
     'dump:2',
-    'down',
+    'down:2',
   ]);
 });
 
@@ -372,7 +372,7 @@ test('a mid run failure dumps the rehearsal catalog and still tears the slot dow
     'list',
     'up:2:gateway,auth,catalog',
     'dump:2',
-    'down',
+    'down:2',
   ]);
   assert.match(stderr.text(), /dumped to \/runs\/x\/dump\.sql/);
 });
@@ -398,12 +398,15 @@ test('a dump that fails does not stop the teardown', async () => {
     /nope/
   );
 
-  assert.ok(slots.verbs.includes('down'));
+  assert.ok(slots.verbs.includes('down:2'));
   assert.match(stderr.text(), /could not be dumped: no container/);
 });
 
-test('the worktree gets the slot it claimed before the run back', async () => {
-  const slots = fakeSlots({ taken: [1], claimed: 6 });
+// The checkout is never configured for the rehearsal slot, so there is nothing
+// to put back afterwards: the teardown is one verb, and it names the slot it
+// took rather than whichever one this checkout claims.
+test('the teardown names the slot it took and restores no claim', async () => {
+  const slots = fakeSlots({ taken: [1] });
   await runCuration({
     slots,
     makeDeciderFor: () => fakeDecider({ rows: [] }),
@@ -418,8 +421,7 @@ test('the worktree gets the slot it claimed before the run back', async () => {
   assert.deepEqual(slots.verbs, [
     'list',
     'up:2:gateway,auth,catalog',
-    'down',
-    'configure:6',
+    'down:2',
   ]);
 });
 

@@ -93,7 +93,11 @@ describe('createAdminSession', () => {
     assert.equal(tokenOf(fetchImpl.calls[1]), 'Bearer token-1');
   });
 
-  it('sends the empty password default unchanged', async () => {
+  // A gateway with ADMIN_DEV_AUTOLOGIN on ignores the body, but AdminLoginDto
+  // validates before the handler reads it, so an empty password is a 400 rather
+  // than a passwordless session. The default has to be the password stack.sh
+  // seeds.
+  it('sends the development admin and the password every slot seeds', async () => {
     const fetchImpl = fakeFetch(() => OK_LOGIN);
     const session = createAdminSession({
       baseUrl: 'http://localhost:3000',
@@ -107,7 +111,7 @@ describe('createAdminSession', () => {
       password: DEFAULT_ADMIN_PASSWORD,
     });
     assert.equal(fetchImpl.calls[0].body.username, 'dev-admin');
-    assert.equal(fetchImpl.calls[0].body.password, '');
+    assert.equal(fetchImpl.calls[0].body.password, 'dev-admin-password');
   });
 
   it('reuses the token across requests and logs in once', async () => {

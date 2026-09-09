@@ -5,7 +5,6 @@ import {
   gatewayPort,
   lunaSlotCommand,
   makeSlots,
-  parseClaimedSlot,
   parseTakenSlots,
   pickFreeSlot,
   rehearsalUrl,
@@ -82,7 +81,7 @@ test('a slot names its ports and its compose project the way luna-slot does', ()
   assert.equal(rehearsalUrl(2), 'http://localhost:43100');
 });
 
-test('luna-slot is asked with the services the rehearsal needs', () => {
+test('luna-slot is asked ephemerally, with the services the rehearsal needs', () => {
   const { command, args } = lunaSlotCommand('up', {
     platform: 'linux',
     repoRoot: '/repo',
@@ -93,6 +92,7 @@ test('luna-slot is asked with the services the rehearsal needs', () => {
   assert.equal(command, 'bash');
   assert.deepEqual(args, [
     '/repo/k8s/e2e/luna-shopper-backend/luna-slot.sh',
+    '--ephemeral',
     '--up',
     '3',
     '--services',
@@ -113,6 +113,7 @@ test('Windows is asked in bash too, because the PowerShell twin is gone', () => 
   assert.equal(command, 'bash');
   assert.deepEqual(args, [
     'D:/repo/k8s/e2e/luna-shopper-backend/luna-slot.sh',
+    '--ephemeral',
     '--up',
     '3',
     '--services',
@@ -122,18 +123,33 @@ test('Windows is asked in bash too, because the PowerShell twin is gone', () => 
   ]);
 });
 
-test('down takes no slot, because luna-slot down is the worktree its own', () => {
+test('down names its slot, and refuses to run without one', () => {
   assert.deepEqual(
-    lunaSlotCommand('down', { platform: 'linux', repoRoot: '/repo' }).args,
-    ['/repo/k8s/e2e/luna-shopper-backend/luna-slot.sh', '--down']
-  );
-  assert.deepEqual(
-    lunaSlotCommand('configure', {
+    lunaSlotCommand('down', {
       platform: 'linux',
       repoRoot: '/repo',
       slot: 7,
     }).args,
-    ['/repo/k8s/e2e/luna-shopper-backend/luna-slot.sh', '7']
+    [
+      '/repo/k8s/e2e/luna-shopper-backend/luna-slot.sh',
+      '--ephemeral',
+      '--down',
+      '7',
+    ]
+  );
+
+  // Without a number an ephemeral --down has nothing to read back, and the
+  // slot it would reach for instead is the one this checkout claims.
+  assert.throws(
+    () => lunaSlotCommand('down', { platform: 'linux', repoRoot: '/repo' }),
+    /needs the slot number/
+  );
+});
+
+test('--list is the one verb that is not ephemeral', () => {
+  assert.deepEqual(
+    lunaSlotCommand('list', { platform: 'linux', repoRoot: '/repo' }).args,
+    ['/repo/k8s/e2e/luna-shopper-backend/luna-slot.sh', '--list']
   );
 });
 
@@ -149,15 +165,6 @@ test('the dump names the compose container and the catalog role', () => {
     'luna_catalog',
     'luna_catalog',
   ]);
-});
-
-test('parseClaimedSlot reads the worktree claim', () => {
-  assert.equal(
-    parseClaimedSlot('COMPOSE_PROJECT_NAME=luna-slot6\nLUNA_SLOT=6\n'),
-    6
-  );
-  assert.equal(parseClaimedSlot('LUNA_APP_SLOT=2\n'), null);
-  assert.equal(parseClaimedSlot(''), null);
 });
 
 test('makeSlots turns a failed luna-slot into an error carrying its stderr', async () => {
@@ -187,13 +194,13 @@ test('makeSlots lists through luna-slot and writes the dump it was given a path 
   });
 
   assert.deepEqual(await slots.list(), [0, 1, 4]);
-  assert.equal(slots.claimedSlot(), 8);
   await slots.up(3);
   // The rehearsal waits longer than luna-slot's own 180 seconds, because a cold
   // worktree compiles each service before it listens.
   assert.deepEqual(calls[1], [
     'bash',
     '/repo/k8s/e2e/luna-shopper-backend/luna-slot.sh',
+    '--ephemeral',
     '--up',
     '3',
     '--services',
