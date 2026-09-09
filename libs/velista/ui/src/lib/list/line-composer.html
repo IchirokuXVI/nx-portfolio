@@ -38,22 +38,11 @@
     </div>
 
     <!--
-      The meter stays whatever else is happening, because the microphone is still
-      open: the previous sentence being on its way to the server is not a reason to
-      stop showing that this one is being heard.
-
-      Only the words under it change. A pause sends what was said and reopens the
-      microphone at once, so there is a stretch where both are true, and saying so is
-      the difference between a system that is working and one that looks stuck.
+      One sentence, because there is only one state this row is ever in. Stop ends
+      the session and sends, so the send is never in flight while the microphone is
+      still open, and the row is gone by the time the page reports a send.
     -->
-    @if (busy()) {
-      <p aria-live="polite" class="hint">
-        <lib-spinner-icon class="hint-spinner" />
-        <span>{{ 'list.add.sending' | rokuT }}</span>
-      </p>
-    } @else {
-      <p class="hint">{{ 'list.add.listening' | rokuT }}</p>
-    }
+    <p class="hint">{{ 'list.add.listening' | rokuT }}</p>
 
     <!--
       Last, and pushed to the far end of the row. One press ends the recording and

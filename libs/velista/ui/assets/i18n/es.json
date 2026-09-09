@@ -418,7 +418,6 @@
       "stopListening": "Dejar de escuchar",
       "discard": "Descartar esta grabación",
       "listening": "Escuchando",
-      "sending": "Enviando lo que has dicho",
       "heard": "He oído",
       "micRefused": "Velista no puede oírte. El micrófono está desactivado para esta aplicación, así que actívalo en el navegador, o escríbelo",
       "micMissing": "Este dispositivo no tiene micrófono, así que escríbelo",
@@ -715,17 +714,6 @@
       "badName": "Los nombres tienen de 2 a 40 caracteres y admiten letras, números, espacios y . _ ' -",
       "gone": "Esa cuenta ya no existe",
       "failed": "No se pudo completar. Inténtalo de nuevo"
-    },
-    "voice": {
-      "section": "Voz",
-      "sendOnSilence": {
-        "label": "Enviar cuando deje de hablar",
-        "hint": "La grabación termina sola tras un momento de silencio, en vez de esperar a que pulses parar. Útil con las manos ocupadas, y te cortará si te paras a pensar."
-      },
-      "keepListening": {
-        "label": "Seguir escuchando tras enviar",
-        "hint": "El micrófono sigue abierto cuando una grabación va de camino, para que puedas nombrar varias cosas seguidas. La papelera lo cierra."
-      }
     },
     "app": {
       "section": "La app",

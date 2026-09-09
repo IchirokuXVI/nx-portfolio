@@ -28,7 +28,6 @@ import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
   TEST_BRAND,
-  VoicePreferences,
   type InstallState,
 } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
@@ -681,68 +680,6 @@ describe('AccountPage', () => {
       expect(row).toBeDefined();
       expect(row?.querySelector('button')).toBeNull();
       expect(opened).toEqual([]);
-    });
-  });
-
-  /**
-   * The two voice settings (`VoicePreferences`). They are on this screen rather than
-   * decided in the composer because the person at an open fridge and the person at a
-   * desk are using the same screen for different things.
-   */
-  describe('the voice settings', () => {
-    it('offers both, off, for somebody who has never touched them', async () => {
-      const { fixture } = await render();
-      const host = fixture.nativeElement as HTMLElement;
-      const silence = host.querySelector<HTMLInputElement>(
-        '#account-voice-silence'
-      );
-      const keep = host.querySelector<HTMLInputElement>('#account-voice-keep');
-
-      expect(silence).not.toBeNull();
-      expect(keep).not.toBeNull();
-      expect(silence?.checked).toBe(false);
-      expect(keep?.checked).toBe(false);
-    });
-
-    it('saves each on the flip, with nothing to submit', async () => {
-      const { fixture } = await render();
-      const host = fixture.nativeElement as HTMLElement;
-      const voice = TestBed.inject(VoicePreferences);
-
-      const silence = host.querySelector<HTMLInputElement>(
-        '#account-voice-silence'
-      ) as HTMLInputElement;
-      silence.checked = true;
-      silence.dispatchEvent(new Event('change'));
-      fixture.detectChanges();
-
-      expect(voice.sendOnSilence()).toBe(true);
-      // And independently: flipping one must not carry the other with it.
-      expect(voice.keepListening()).toBe(false);
-
-      const keep = host.querySelector<HTMLInputElement>(
-        '#account-voice-keep'
-      ) as HTMLInputElement;
-      keep.checked = true;
-      keep.dispatchEvent(new Event('change'));
-      fixture.detectChanges();
-
-      expect(voice.keepListening()).toBe(true);
-    });
-
-    it('explains what each one costs, beside the control', async () => {
-      // `aria-describedby`, so the part that catches people out is read with the
-      // control rather than found afterwards.
-      const { fixture } = await render();
-      const host = fixture.nativeElement as HTMLElement;
-
-      expect(
-        host
-          .querySelector('#account-voice-silence')
-          ?.getAttribute('aria-describedby')
-      ).toBe('account-voice-silence-hint');
-      expect(host.querySelector('#account-voice-silence-hint')).not.toBeNull();
-      expect(host.querySelector('#account-voice-keep-hint')).not.toBeNull();
     });
   });
 });
