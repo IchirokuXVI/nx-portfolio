@@ -34,6 +34,35 @@ interface PlaceCursor {
   id: string;
 }
 
+/** The chains catalog knows, read once and asked twice. */
+interface KnownChains {
+  readonly byKey: ReadonlyMap<string, SupermarketView>;
+  readonly byName: ReadonlyMap<string, SupermarketView>;
+}
+
+/**
+ * A chain name reduced to what two spellings of the same chain share.
+ *
+ * Case and surrounding space only. Nothing else is folded, because a name is
+ * the weak identity here and widening it widens the only case it can get wrong.
+ */
+function chainNameKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** The chain a place belongs to, by key first and by name second. */
+function matchChain(
+  known: KnownChains,
+  place: Pick<DiscoveredPlace, 'brandKey'>,
+  name: string | null
+): SupermarketView | undefined {
+  const keyed = place.brandKey ? known.byKey.get(place.brandKey) : undefined;
+  if (keyed) {
+    return keyed;
+  }
+  return name ? known.byName.get(chainNameKey(name)) : undefined;
+}
+
 /**
  * The review queue a store discovery run fills (plan 0038, section 6.1).
  *
@@ -50,6 +79,12 @@ interface PlaceCursor {
 @Injectable()
 export class DiscoveredPlaceService {
   private readonly logger = new Logger(DiscoveredPlaceService.name);
+
+  /**
+   * The chain resolutions in flight, by identity, so a bulk import that decides
+   * four places at a time creates one chain rather than four.
+   */
+  private readonly _resolving = new Map<string, Promise<SupermarketView>>();
 
   constructor(
     @InjectRepository(DiscoveredPlace)
@@ -252,7 +287,7 @@ export class DiscoveredPlaceService {
     }
     const rows = await qb.getMany();
 
-    const known = await this.knownBrandKeys();
+    const { byKey: known } = await this.knownChains();
     const buckets = new Map<string | null, DiscoveredPlace[]>();
     for (const row of rows) {
       const bucket = buckets.get(row.brandKey);
@@ -342,46 +377,116 @@ export class DiscoveredPlaceService {
   }
 
   /**
-   * Find the chain by its `externalBrandKey`, or create it. The QID is the
-   * identity because the brand name splits `Dia` from `Maxi Dia`; it is a good
-   * default the owner can override afterwards, not an oracle.
+   * Find the chain the place belongs to, or create it once.
+   *
+   * The QID is the identity where the place carries one, because the brand name
+   * splits `Dia` from `Maxi Dia`; it is a good default the owner can override
+   * afterwards, not an oracle.
+   *
+   * **A place with no QID is matched on the chain's name**, and that is not a
+   * refinement. `brand:wikidata` is the tag most shops lack, and every place a
+   * chain's own store list reports carries whatever key the owner put on the
+   * chain, which is nothing until somebody types one. Matching on the key alone
+   * meant none of those places ever found a chain, so importing twelve LIDL
+   * shops wrote twelve chains called LIDL, one per place. The name is the weaker
+   * identity and it is used as the weaker one: only after the key has answered
+   * nothing, and only for an exact name, so the worst it can do is file two
+   * independent shops that chose the same name under one chain, which the owner
+   * can split. Twelve rows for one chain is not something the owner can undo as
+   * easily.
    */
   private async resolveSupermarket(
     place: DiscoveredPlace
   ): Promise<SupermarketView> {
-    if (place.brandKey) {
-      const known = await this.knownBrandKeys();
-      const existing = known.get(place.brandKey);
-      if (existing) {
-        return existing;
-      }
-    }
     const name = place.brandName ?? place.name;
-    if (!name) {
+    if (!place.brandKey && !name) {
       throw new ConflictException(
         'That place carries neither a brand nor a name, so there is nothing to ' +
           'call the chain. Pass an explicit supermarketId to attach it to one.'
       );
     }
-    return this.catalog.createSupermarket({
-      name: { en: name, es: name },
-      externalBrandKey: place.brandKey,
+
+    const identity = place.brandKey
+      ? `key:${place.brandKey}`
+      : `name:${chainNameKey(name ?? '')}`;
+    const inflight = this._resolving.get(identity);
+    if (inflight) {
+      return inflight;
+    }
+    const resolving = this.findOrCreateChain(place, name).finally(() => {
+      this._resolving.delete(identity);
     });
+    this._resolving.set(identity, resolving);
+    return resolving;
   }
 
-  private async knownBrandKeys(): Promise<Map<string, SupermarketView>> {
-    const known = new Map<string, SupermarketView>();
+  /**
+   * The chain itself, created at most once for one identity.
+   *
+   * A bulk import decides four places at a time, so four calls asking for the
+   * same new chain overlap. Every one of them read "catalog does not know it"
+   * and every one of them created it: with a key three of the four then died on
+   * the unique index and the operator read three failures for a run that worked,
+   * and with no key all four landed. `_resolving` holds the first call's promise
+   * so the other three wait for its answer instead of racing it. One replica is
+   * all this needs to be exact, and the harvester runs exactly one (plan 0038:
+   * a run holds an in memory queue), but a create that loses a race anyway is
+   * caught below rather than reported as a failure.
+   */
+  private async findOrCreateChain(
+    place: DiscoveredPlace,
+    name: string | null
+  ): Promise<SupermarketView> {
+    const existing = matchChain(await this.knownChains(), place, name);
+    if (existing) {
+      return existing;
+    }
+    if (!name) {
+      throw new ConflictException(
+        'That place carries no name for the chain its brand key belongs to. ' +
+          'Pass an explicit supermarketId to attach it to one.'
+      );
+    }
+    try {
+      return await this.catalog.createSupermarket({
+        name: { en: name, es: name },
+        externalBrandKey: place.brandKey,
+      });
+    } catch (error) {
+      // Somebody else created it between the read and the write. Reporting a
+      // failure here would name the one place whose call happened to lose,
+      // over a chain that now exists and is the right one to attach to.
+      const created = matchChain(await this.knownChains(), place, name);
+      if (created) {
+        return created;
+      }
+      throw error;
+    }
+  }
+
+  /** Every chain catalog knows, indexed both ways a place can be matched. */
+  private async knownChains(): Promise<KnownChains> {
+    const byKey = new Map<string, SupermarketView>();
+    const byName = new Map<string, SupermarketView>();
     let cursor: string | undefined;
     do {
       const page = await this.catalog.listSupermarkets(cursor);
       for (const supermarket of page.items) {
         if (supermarket.externalBrandKey) {
-          known.set(supermarket.externalBrandKey, supermarket);
+          byKey.set(supermarket.externalBrandKey, supermarket);
+        }
+        for (const text of Object.values(supermarket.name)) {
+          const key = chainNameKey(text ?? '');
+          // The first chain of that name wins, so the answer does not depend on
+          // which locale of which row was read last.
+          if (key && !byName.has(key)) {
+            byName.set(key, supermarket);
+          }
         }
       }
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
-    return known;
+    return { byKey, byName };
   }
 
   private async load(id: string): Promise<DiscoveredPlace> {
