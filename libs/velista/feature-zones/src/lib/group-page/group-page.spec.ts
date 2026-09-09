@@ -290,16 +290,30 @@ describe('GroupPage', () => {
     const { lists } = await render({ listsState: 'idle' });
 
     expect(lists.loadCount()).toBe(1);
+    expect(lists.refreshCount()).toBe(0);
   });
 
-  it('does not ask again for lists it already holds', async () => {
-    // `ListStore` survives navigation, so coming back to a group must not refetch
-    // rows that are already correct (plan 0004, section 7.1).
+  it('reads lists it already holds again, quietly', async () => {
+    // `ListStore` survives navigation, so coming back to a group must not drop rows
+    // that are already on screen back to a skeleton (plan 0004, section 7.1). It must
+    // still ask: the store applies no line event to `lineCount` or `wantedCount`, so
+    // the rows it kept are stale about counts the moment anybody adds a line.
     const { lists } = await render({
       lists: [list('list-1', 'Weekly shop')],
     });
 
     expect(lists.loadCount()).toBe(0);
+    expect(lists.refreshCount()).toBe(1);
+  });
+
+  it('draws the rows it kept while that read is in flight', async () => {
+    // The whole point of choosing `refresh`: the group is readable through the
+    // reconcile rather than blank for the length of a request.
+    const { fixture } = await render({
+      lists: [list('list-1', 'Weekly shop')],
+    });
+
+    expect(text(fixture)).toContain('Weekly shop');
   });
 
   describe('a membership that is still waiting', () => {
@@ -313,6 +327,7 @@ describe('GroupPage', () => {
       });
 
       expect(lists.loadCount()).toBe(0);
+      expect(lists.refreshCount()).toBe(0);
     });
 
     it('explains itself rather than rendering an error', async () => {
@@ -381,6 +396,7 @@ describe('GroupPage', () => {
       });
 
       expect(lists.loadCount()).toBe(0);
+      expect(lists.refreshCount()).toBe(0);
     });
 
     it('offers the claim to an admin and nothing to a member', async () => {
