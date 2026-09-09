@@ -191,19 +191,12 @@
         </div>
       }
 
-      <!--
-        The two voice settings, read from the device rather than decided here. The
-        default is the plain recorder: stop sends, the bin discards, and nothing
-        happens on its own (`VoicePreferences`).
-      -->
       <lib-line-composer
         (queryChanged)="onComposerQuery($event)"
         (recordingFailed)="onRecordingFailed()"
         (spoke)="addAloud($event)"
         (submitted)="add($event)"
         [busy]="composerBusy()"
-        [keepListening]="keepListening()"
-        [sendOnSilence]="sendOnSilence()"
         [suggestions]="suggestions()"
         [takeFocus]="page.empty"
       />
