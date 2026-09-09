@@ -1497,10 +1497,12 @@ describe('SettleSheet: the pick sheet splits the line', () => {
       )
     );
 
+  // The reels, read through the spinbutton attributes they announce: the value
+  // and the ceiling are the control's contract, not its markup.
   const fields = (fixture: ComponentFixture<SettleSheet>) =>
     Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>(
-        '.share-field'
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '.share-reel'
       )
     );
 
@@ -1521,10 +1523,10 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     fixture.detectChanges();
   };
 
-  it('draws a stepper on every product but the line’s own, which shows the balance', async () => {
+  it('draws a reel on every product but the line’s own, which shows the balance', async () => {
     const { fixture } = await renderPane();
 
-    // Three rows, two steppers: the row that keeps the balance has no control,
+    // Three rows, two reels: the row that keeps the balance has no control,
     // because the balance is never typed.
     expect(rows(fixture)).toHaveLength(3);
     expect(fields(fixture)).toHaveLength(2);
@@ -1548,17 +1550,21 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     const { fixture } = await renderPane();
 
     put(fixture, 'i-whole', 3);
-    // Two left, so the other stepper's ceiling is two and its own value is zero.
-    expect(fields(fixture).map((field) => field.max)).toEqual(['5', '2']);
+    // Two left, so the other reel's ceiling is two and its own value is zero.
+    expect(
+      fields(fixture).map((reel) => reel.getAttribute('aria-valuemax'))
+    ).toEqual(['5', '2']);
 
-    // Typed past the ceiling, which a keyboard can do whatever `max` says. The
-    // component clamps rather than trusting the control.
+    // Driven past the ceiling, which the reel refuses but this method can be
+    // handed. The component clamps rather than trusting the control.
     put(fixture, 'i-lactose', 9);
     expect(fixture.componentInstance['balance']()).toBe(0);
-    expect(fields(fixture).map((field) => field.value)).toEqual(['3', '2']);
+    expect(
+      fields(fixture).map((reel) => reel.getAttribute('aria-valuenow'))
+    ).toEqual(['3', '2']);
   });
 
-  it('sends one share per stepper above zero, with the amount the pane opened with', async () => {
+  it('sends one share per reel above zero, with the amount the pane opened with', async () => {
     const { fixture, store } = await renderPane();
 
     put(fixture, 'i-whole', 3);
@@ -1573,7 +1579,7 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     });
   });
 
-  it('commits once, on the button, and not on a stepper move', async () => {
+  it('commits once, on the button, and not on a reel move', async () => {
     const { fixture, store } = await renderPane();
 
     put(fixture, 'i-whole', 1);
@@ -1669,12 +1675,14 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     fixture.detectChanges();
 
     // The store has already refetched, so the sentence names the amount as it
-    // now stands and the steppers go back to nothing.
+    // now stands and the reels go back to nothing.
     expect(fixture.componentInstance['errorKey']()).toBe(
       'basket.error.staleLine'
     );
     expect(fixture.componentInstance['balance']()).toBe(5);
-    expect(fields(fixture).map((field) => field.value)).toEqual(['0', '0']);
+    expect(
+      fields(fixture).map((reel) => reel.getAttribute('aria-valuenow'))
+    ).toEqual(['0', '0']);
   });
 
   it('leaves when the line it is about disappears underneath it', async () => {

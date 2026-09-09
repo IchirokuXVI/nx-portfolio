@@ -263,41 +263,11 @@
   color: var(--app-text-primary);
 }
 
-// One stepper per product (velista 0069, section 2). Minus, the number, plus:
-// three targets rather than a drag, because the amounts here are small and the
-// pane is read at a shelf with one hand.
-.share-stepper {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-1);
+// One reel per product (velista 0069, section 2), its minus and plus kept: the
+// control they replaced was a stepper, the amounts here are small, and the pane
+// is read at a shelf with one hand. The reel brings the drag and the tap with it.
+.share-reel {
   margin-inline-start: auto;
-}
-
-.share-step {
-  @include shared.tap-target;
-
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-card-radius);
-  background: var(--app-surface-sunken);
-  color: var(--app-text-primary);
-  font-family: inherit;
-  font-size: var(--app-text-sm);
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-}
-
-// Typed as well as stepped, because somebody moving eight units should not tap
-// eight times. The clamp is in the component: a keyboard can type past `max`.
-.share-field {
-  @include shared.field;
-
-  inline-size: 4rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
 }
 
 // How old the prices are, once under the pane (section 5.4). A sentence and not
@@ -344,12 +314,10 @@
   color: var(--app-text-muted);
 }
 
-.allocation-field {
-  @include shared.field;
-
-  inline-size: 6rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+// The reel without its buttons: the field it replaced was a bare number input,
+// so nothing here grew a control it did not have.
+.allocation-reel {
+  flex: 0 0 auto;
 }
 
 .allocation-total {

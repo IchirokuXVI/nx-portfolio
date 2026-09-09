@@ -736,9 +736,10 @@ export class SettleSheet {
   /**
    * Move units onto one product, or off it.
    *
-   * Clamped **here** rather than trusted from the control, because the control is
-   * a number field and a keyboard can type past its `max`. The floor is zero and
-   * the ceiling is the balance plus this row's own value, which is the same rule
+   * Clamped **here** rather than trusted from the control. The reel bounds itself
+   * at the ceiling the row hands it, but a write must hold whatever feeds it, and
+   * this one is also driven directly. The floor is zero and the ceiling is the
+   * balance plus this row's own value, which is the same rule
    * {@link productRows} draws.
    */
   protected setShare(itemId: string, quantity: number): void {
@@ -754,9 +755,18 @@ export class SettleSheet {
     });
   }
 
-  /** One step up or down on a product's stepper. */
-  protected step(itemId: string, by: number): void {
-    this.setShare(itemId, (this._shares().get(itemId) ?? 0) + by);
+  /**
+   * The number under the thumb on a product's reel, written through as it moves.
+   *
+   * Two things hang on the write being live rather than waiting for the commit:
+   * the balance above the rows walks down under the gesture, and an Apply pressed
+   * inside the reel's idle beat sends the number on screen rather than the one
+   * the last settled run left behind.
+   */
+  protected onSharePreview(itemId: string, next: number | null): void {
+    if (next !== null) {
+      this.setShare(itemId, next);
+    }
   }
 
   /**
@@ -837,6 +847,13 @@ export class SettleSheet {
       next.set(listId, Math.max(0, quantity));
       return next;
     });
+  }
+
+  /** The live half of a list's reel, for the same reasons {@link onSharePreview} has one. */
+  protected onAllocationPreview(listId: string, next: number | null): void {
+    if (next !== null) {
+      this.setAllocation(listId, next);
+    }
   }
 
   /**
