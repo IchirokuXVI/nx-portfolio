@@ -34,6 +34,15 @@
   gap: var(--app-space-3);
 }
 
+// Join and New, as one group pushed to the end by the head's `space-between`. The gap
+// is smaller than the head's, so the pair reads as a pair rather than as two things
+// the label happens to sit away from.
+.zones-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
 .section-label {
   margin: 0;
   font-size: var(--app-text-2xs);
