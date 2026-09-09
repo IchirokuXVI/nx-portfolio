@@ -308,13 +308,35 @@ export class GroupPage {
     // deep link is not true until the reload above lands. That is why this is its own
     // effect rather than a branch in that one: it wants to run again when the answer
     // changes, and the reload must not.
+    //
+    // **A warm cache is read again rather than trusted.** `ListStore` survives
+    // navigation and applies no line event to the counts on purpose: `wantedCount`
+    // counts the lines above zero, so an event carrying a line as it now stands cannot
+    // move it without knowing what the line was before. The rows this store already
+    // holds are therefore right about names and access and stale about counts from the
+    // moment anybody adds a line, and a page that asked only for what it did not have
+    // drew "3 of 8 pending" over a list of eleven until the next cold start.
+    //
+    // `refresh` and not `load`, which is the distinction `ListStore` draws and the list
+    // page already uses: what is on screen is good enough to keep drawing, and dropping
+    // the rows back to a skeleton on every return to the group would be a worse page
+    // than the stale number was.
     effect(() => {
       const id = this.zoneId();
       const mayLoad = this._mayLoadLists();
 
       untracked(() => {
-        if (mayLoad && this._lists.stateOf(id) === 'idle') {
+        if (!mayLoad) {
+          return;
+        }
+
+        // `loading` already has a request in flight, and `failed` belongs to the retry
+        // button, which is the control that says on screen that it failed.
+        const state = this._lists.stateOf(id);
+        if (state === 'idle') {
           void this._lists.load(id);
+        } else if (state === 'loaded') {
+          void this._lists.refresh(id);
         }
       });
     });

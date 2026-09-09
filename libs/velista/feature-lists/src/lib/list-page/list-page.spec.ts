@@ -349,7 +349,9 @@ describe('ListPage', () => {
       const { lines, lists } = await render({ lists: [] });
 
       expect(lines.loadCount()).toBeGreaterThan(0);
-      expect(lists.loadCount()).toBeGreaterThan(0);
+      // Either kind of read: this page loads a cold zone and refreshes a warm one, and
+      // which one it chose is not what this test is about.
+      expect(lists.readCount()).toBeGreaterThan(0);
     });
 
     it('renders the lines on a cold arrival, before the name exists', async () => {
