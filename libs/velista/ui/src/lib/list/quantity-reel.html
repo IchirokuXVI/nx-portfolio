@@ -1,6 +1,30 @@
 @let current = shown();
 
 <!--
+  The minus and the plus, flush against the pill on either side, for a pointer that
+  would rather press than drag. They step the same run every other gesture steps: one
+  delta after the idle beat, never a request per press.
+
+  `aria-hidden` and out of the tab order, like the overlay below and for the same
+  reason: the host is the spinbutton, its arrow keys already step by one, and a second
+  pair of focus stops inside a control that announces one value would read as three
+  controls where there is one. When the overlay opens it covers them (the stylesheet
+  hides them under it), because the overlay is then the whole control.
+-->
+@if (!hideButtons()) {
+  <button
+    (click)="onStepButton(-1)"
+    [disabled]="!canDecrease()"
+    aria-hidden="true"
+    class="step minus"
+    tabindex="-1"
+    type="button"
+  >
+    &minus;
+  </button>
+}
+
+<!--
   The pill at rest, and the thing a thumb aims at. The host carries the role and the
   focus, so this is decoration: everything a screen reader needs is announced from the
   spinbutton above it and repeating the number here would read it out twice.
@@ -8,6 +32,19 @@
 <span [class.zero]="current === min()" aria-hidden="true" class="pill">
   {{ current }}
 </span>
+
+@if (!hideButtons()) {
+  <button
+    (click)="onStepButton(1)"
+    [disabled]="!canIncrease()"
+    aria-hidden="true"
+    class="step plus"
+    tabindex="-1"
+    type="button"
+  >
+    +
+  </button>
+}
 
 <!--
   The overlay: the previous number, the current one, and the next.

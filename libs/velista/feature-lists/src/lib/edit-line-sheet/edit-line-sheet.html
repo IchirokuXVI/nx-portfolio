@@ -26,14 +26,29 @@
     Two modes of one sheet (plan 0030, section 4; plan 0066, section 2.1). In `content`
     mode the quantity is **shown and not editable** rather than hidden: the words being
     changed are the words for a number of something, and a sheet that dropped the count
-    is one you have to remember the row for. A paragraph and not a disabled stepper,
+    is one you have to remember the row for. A paragraph and not a disabled control,
     because a greyed out control invites a tap that does nothing, and nothing here is
     going to become editable later.
   -->
   <div class="quantity-row">
     <span class="label">{{ 'list.add.quantity' | rokuT }}</span>
     @if (scope() === 'full') {
-      <lib-quantity-stepper [(value)]="quantity" [disabled]="submitting()" />
+      <!--
+        The same reel the row uses, buttons included, where this drew its own stepper.
+        There is one number control in this product; a sheet reached from the row must
+        not hand the same number back with a different control on it.
+
+        `preview` writes through as the thumb moves and `committedTo` settles it on the
+        close, so a save that lands inside the reel's idle beat still sends the number
+        that is on screen.
+      -->
+      <lib-quantity-reel
+        (committedTo)="quantity.set($event.to)"
+        (preview)="onQuantityPreview($event)"
+        [label]="'list.add.quantity' | rokuT"
+        [readonly]="submitting()"
+        [value]="quantity()"
+      />
     } @else {
       <p class="shown">{{ quantity() }}</p>
     }

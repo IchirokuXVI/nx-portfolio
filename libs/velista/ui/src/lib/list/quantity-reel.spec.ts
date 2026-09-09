@@ -29,7 +29,12 @@ function pointer(type: string, clientX: number): Event {
 
 async function render(
   value: number,
-  options: { readonly?: boolean; min?: number; max?: number } = {}
+  options: {
+    readonly?: boolean;
+    min?: number;
+    max?: number;
+    hideButtons?: boolean;
+  } = {}
 ): Promise<{
   fixture: ComponentFixture<QuantityReel>;
   host: HTMLElement;
@@ -55,6 +60,9 @@ async function render(
   }
   if (options.max !== undefined) {
     fixture.componentRef.setInput('max', options.max);
+  }
+  if (options.hideButtons !== undefined) {
+    fixture.componentRef.setInput('hideButtons', options.hideButtons);
   }
   fixture.detectChanges();
 
@@ -704,6 +712,125 @@ describe('QuantityReel', () => {
 
       expect(deltas).toEqual([]);
       expect(runs).toEqual([]);
+    });
+  });
+
+  /**
+   * The third pointer path: a minus and a plus flush against the pill, for a pointer
+   * that would rather press than drag. They step the same run every other gesture
+   * steps, and the one thing of their own is that they keep the overlay closed, so a
+   * second press has somewhere to land.
+   */
+  describe('the minus and plus buttons', () => {
+    function button(
+      host: HTMLElement,
+      which: 'minus' | 'plus'
+    ): HTMLButtonElement {
+      return host.querySelector(`.step.${which}`) as HTMLButtonElement;
+    }
+
+    it('draws both by default, and a press steps by one', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      button(host, 'plus').click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.shown()).toBe(3);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([1]);
+    });
+
+    it('keeps the overlay closed, so the button stays under the finger', async () => {
+      const { fixture, host, deltas, runs } = await render(2);
+
+      button(host, 'plus').click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.open()).toBe(false);
+
+      // The second press lands on the same button, which is the point of keeping it.
+      button(host, 'plus').click();
+      button(host, 'minus').click();
+      button(host, 'plus').click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.shown()).toBe(4);
+
+      // One request for the whole run, exactly as a drag or a run of arrow presses.
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([2]);
+      expect(runs).toEqual([{ from: 2, to: 4 }]);
+    });
+
+    it('announces no auto close for a run whose overlay never opened', async () => {
+      // Nothing disappeared from under anybody's finger, so the row above has no
+      // reason to stay deaf for a beat.
+      const { fixture, host } = await render(2);
+      const closes: number[] = [];
+      fixture.componentInstance.autoClosed.subscribe(() => closes.push(1));
+
+      button(host, 'plus').click();
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+      expect(closes).toEqual([]);
+    });
+
+    it('is covered by the overlay when the pill is pressed mid run', async () => {
+      // The press converts the run into an ordinary open one, from wherever the
+      // presses had got to, and the commit still measures from where the run began.
+      const { fixture, host, runs } = await render(2);
+
+      button(host, 'plus').click();
+      fixture.detectChanges();
+
+      tap(host.querySelector('.pill') as HTMLElement);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.open()).toBe(true);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(runs).toEqual([{ from: 2, to: 3 }]);
+    });
+
+    it('does not read a press on a button as the start of a drag', async () => {
+      const { fixture, host } = await render(2);
+
+      button(host, 'plus').dispatchEvent(pointer('pointerdown', 0));
+      host.dispatchEvent(
+        pointer('pointermove', -3 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(2);
+    });
+
+    it('disables the minus at the floor and the plus at the ceiling', async () => {
+      // Disabled rather than clamping silently, the same choice the stepper made:
+      // the limit is visible before it is hit.
+      const { fixture, host } = await render(0, { max: 1 });
+
+      expect(button(host, 'minus').disabled).toBe(true);
+      expect(button(host, 'plus').disabled).toBe(false);
+
+      button(host, 'plus').click();
+      fixture.detectChanges();
+      expect(button(host, 'plus').disabled).toBe(true);
+    });
+
+    it('is out of reach for a caller who may not change it', async () => {
+      const { fixture, host, deltas } = await render(3, { readonly: true });
+
+      expect(button(host, 'plus').disabled).toBe(true);
+      fixture.componentInstance.onStepButton(1);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(3);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([]);
+    });
+
+    it('can be hidden by the caller', async () => {
+      const { fixture, host } = await render(2, { hideButtons: true });
+
+      expect(host.querySelector('.step')).toBeNull();
+      expect(fixture.componentInstance.shown()).toBe(2);
     });
   });
 });

@@ -176,9 +176,7 @@ describe('EditLineSheet', () => {
         expect(
           host(fixture).querySelector('#edit-line-content')
         ).not.toBeNull();
-        expect(
-          host(fixture).querySelector('lib-quantity-stepper')
-        ).not.toBeNull();
+        expect(host(fixture).querySelector('lib-quantity-reel')).not.toBeNull();
         expect(host(fixture).querySelector('.shown')).toBeNull();
       });
     });
@@ -191,9 +189,7 @@ describe('EditLineSheet', () => {
       });
 
       expect(host(fixture).querySelector('#edit-line-content')).not.toBeNull();
-      expect(
-        host(fixture).querySelector('lib-quantity-stepper')
-      ).not.toBeNull();
+      expect(host(fixture).querySelector('lib-quantity-reel')).not.toBeNull();
     });
 
     it('lets a writer fix an approved line, and shows the number without a control', async () => {
@@ -203,7 +199,7 @@ describe('EditLineSheet', () => {
       });
 
       expect(host(fixture).querySelector('#edit-line-content')).not.toBeNull();
-      expect(host(fixture).querySelector('lib-quantity-stepper')).toBeNull();
+      expect(host(fixture).querySelector('lib-quantity-reel')).toBeNull();
       // Shown rather than hidden: the words being changed are the words for a number of
       // something, and a sheet that dropped the count is one you have to remember the
       // row for.

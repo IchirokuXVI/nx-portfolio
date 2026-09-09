@@ -33,6 +33,54 @@
   border-radius: var(--app-radius-md);
 }
 
+// The minus and the plus, drawn as one piece with the pill: no gap on either side, the
+// outer corners rounded and the inner ones square, and the shared edge drawn once by
+// the pill's own border rather than twice. They match the pill's height exactly, since
+// a button standing taller than the number it steps would break the single shape the
+// three of them make.
+.step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--app-touch-target);
+  height: var(--app-quantity-height);
+  padding: 0;
+  border: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-base);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+}
+
+.step.minus {
+  border-right: 0;
+  border-radius: var(--app-radius-md) 0 0 var(--app-radius-md);
+}
+
+.step.plus {
+  border-left: 0;
+  border-radius: 0 var(--app-radius-md) var(--app-radius-md) 0;
+}
+
+// The pill keeps its rounded corners only when it stands alone; between the buttons it
+// is the middle segment of one shape.
+:host(.with-buttons) .pill {
+  border-radius: 0;
+}
+
+// The overlay is then the whole control. `visibility` rather than `display`, so the
+// host keeps its width and the overlay's geometry does not shift under the finger that
+// just opened it.
+:host(.open) .step {
+  visibility: hidden;
+}
+
 // The resting state, and what the row draws when nothing is happening.
 .pill {
   display: flex;
@@ -80,6 +128,9 @@
   align-items: center;
   gap: var(--app-space-6);
   height: var(--app-reel-height);
+  // At least the whole host, buttons included: the overlay is what hides them when it
+  // opens, so it cannot be allowed to come up narrower than the control it replaces.
+  min-width: 100%;
   padding: 0 var(--app-space-5);
   border: 1px solid var(--app-border-strong);
   border-radius: var(--app-reel-radius);
