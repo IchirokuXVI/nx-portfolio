@@ -446,10 +446,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   // --- Bakery ---------------------------------------------------------------
   {
     slug: 'pan-blanco-familiar',
-    name: {
-      en: 'Sliced White Bread, Family Size',
-      es: 'Pan de molde blanco familiar',
-    },
+    name: { en: 'Sliced White Bread', es: 'Pan de molde blanco' },
     group: 'sliced-white-bread',
     category: BAKERY,
     defaultUnit: KILOGRAM,
@@ -914,7 +911,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   // --- Drinks ---------------------------------------------------------------
   {
     slug: 'agua-mineral-grande',
-    name: { en: 'Still Water, Large', es: 'Agua mineral grande' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,
@@ -926,7 +923,7 @@ export const MERCADONA_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'agua-mineral-pequena',
-    name: { en: 'Still Water, Small', es: 'Agua mineral pequeña' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,

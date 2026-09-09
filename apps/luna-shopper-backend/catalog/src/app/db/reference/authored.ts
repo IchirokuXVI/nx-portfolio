@@ -53,7 +53,7 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'aquadeus-50cl',
-    name: { en: 'Still Water 50 cl', es: 'Agua mineral 50 cl' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,
@@ -97,7 +97,7 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'pate-125g',
-    name: { en: 'Pâté 125 g', es: 'Paté 125 g' },
+    name: { en: 'Pâté', es: 'Paté' },
     group: 'pate',
     category: MEAT,
     defaultUnit: KILOGRAM,
@@ -129,7 +129,7 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'bocatin-180g',
-    name: { en: 'Sandwich Roll 180 g', es: 'Bocatín 180 g' },
+    name: { en: 'Sandwich Roll', es: 'Bocatín' },
     group: 'bread-rolls',
     category: BAKERY,
     defaultUnit: UNIT,
@@ -170,7 +170,7 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'iberitos-250g',
-    name: { en: 'Iberian Pâté 250 g', es: 'Paté ibérico 250 g' },
+    name: { en: 'Iberian Pâté', es: 'Paté ibérico' },
     group: 'pate',
     category: MEAT,
     defaultUnit: KILOGRAM,
@@ -192,7 +192,7 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'fontvella-15l',
-    name: { en: 'Still Water 1.5 L', es: 'Agua mineral 1,5 L' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,
@@ -220,10 +220,7 @@ export const EL_JAMON_ITEMS: AuthoredItem[] = [
 export const SUPERCASH_ITEMS: AuthoredItem[] = [
   {
     slug: 'rotuladores-pizarra-3',
-    name: {
-      en: 'Whiteboard Markers, Pack of 3',
-      es: 'Rotuladores de pizarra, pack de 3',
-    },
+    name: { en: 'Whiteboard Markers', es: 'Rotuladores de pizarra' },
     group: 'whiteboard-markers',
     category: OTHER,
     defaultUnit: UNIT,
@@ -260,7 +257,7 @@ export const SUPERCASH_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'agua-font-natura',
-    name: { en: 'Still Water 8 L', es: 'Agua mineral 8 L' },
+    name: { en: 'Still Water', es: 'Agua mineral' },
     group: 'still-water',
     category: BEVERAGES,
     defaultUnit: LITER,
@@ -1060,7 +1057,7 @@ export const SUPERCASH_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'cintas-adhesivas',
-    name: { en: 'Adhesive Tape, Pack of 2', es: 'Cinta adhesiva, pack de 2' },
+    name: { en: 'Adhesive Tape', es: 'Cinta adhesiva' },
     group: 'adhesive-tape',
     category: OTHER,
     defaultUnit: UNIT,
@@ -1152,7 +1149,7 @@ export const SUPERCASH_ITEMS: AuthoredItem[] = [
   },
   {
     slug: 'pate-pamplonica',
-    name: { en: 'Pâté, Pack of 3', es: 'Paté, pack de 3' },
+    name: { en: 'Pâté', es: 'Paté' },
     group: 'pate',
     category: MEAT,
     defaultUnit: KILOGRAM,
