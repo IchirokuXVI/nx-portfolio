@@ -1,25 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import {
-  PriceSourceKind,
-  SourceEntryStatus,
-} from '@portfolio/luna-shopper/contracts';
 import {
   MercadonaClient,
   type MercadonaListProduct,
 } from '@portfolio/luna-shopper/mercadona';
-import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import { SourceCatalogEntry, SupermarketSource } from '../entities';
+import type { SupermarketSource } from '../entities';
 import { runWorkerPool } from '../runner/worker-pool';
-import { CatalogClient } from './catalog-client.service';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import type { RunContext } from './run-context';
-import { SourceIngest, type SourceObservation } from './source-ingest';
-
-/** Availability entries per call, as the refresh this replaced used. */
-const AVAILABILITY_BATCH = 200;
+import type { RunReport } from './run-report';
 
 /**
  * `CATALOG_DISCOVERY` against the `mercadona-api` adapter (plan 0038, section
@@ -28,9 +18,16 @@ const AVAILABILITY_BATCH = 200;
  * 1. Walk the category tree, level 1 by level 1: **151 requests**.
  * 2. For each unique product, fetch detail **in `es` only**, to capture `ean` and
  *    `brand`: **4,232 requests**.
- * 3. Hand the details to {@link SourceIngest} as observations, each carrying the
- *    price the detail stated.
- * 4. Say what the warehouse carries and what it does not.
+ * 3. Report each detail as a product, carrying the price the detail stated.
+ * 4. Say that the walk was whole, so the orchestrator can work out what the
+ *    warehouse does not carry.
+ *
+ * **It fetches and reports, and holds nothing else** (plan 0103, section 2.1).
+ * It used to hold a `Repository<SourceCatalogEntry>`, a `CatalogClient` and a
+ * `SourceIngest`, and used all three: the repository to find the tracked
+ * products it had not seen, the client to write their availability, and the
+ * ingest to write the rows. All three are the orchestrator's now, and what is
+ * left is the half that is different for every source.
  *
  * **The walk writes the price it fetched** (plan 0086, D4). It always had it, on
  * every one of those 4,232 details, and it used to put the number on a snapshot
@@ -52,16 +49,11 @@ const AVAILABILITY_BATCH = 200;
 export class MercadonaCatalogRunner implements CatalogRunner {
   private readonly logger = new Logger(MercadonaCatalogRunner.name);
 
-  constructor(
-    @InjectRepository(SourceCatalogEntry)
-    private readonly entries: Repository<SourceCatalogEntry>,
-    private readonly ingest: SourceIngest,
-    private readonly catalog: CatalogClient,
-    private readonly config: ConfigService
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
   async run(
     context: RunContext,
+    report: RunReport,
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
@@ -70,7 +62,11 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     // this method and a second check would only ever guard a run that could not
     // have started.
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
-    const priceScopeId = requireScope(input.priceScopeId);
+    // Checked and not kept: the scope the prices land in is the sink's, and a
+    // walk that reached here with none was written some other way than the
+    // spawn. It is worth an error rather than a silent walk that throws its
+    // prices away, which is the thing plan 0086 deleted.
+    requireScope(input.priceScopeId);
 
     const warehouse = readWarehouse(source.config);
     const client = new MercadonaClient({
@@ -107,7 +103,7 @@ export class MercadonaCatalogRunner implements CatalogRunner {
       `Fetching detail for ${products.length} product(s)`
     );
     const observedAt = new Date();
-    const observations: SourceObservation[] = [];
+    let observed = 0;
 
     await runWorkerPool({
       items: products,
@@ -136,7 +132,8 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           return;
         }
 
-        observations.push({
+        observed += 1;
+        report.product({
           externalId: detail.externalId,
           name: detail.name.es,
           brand: detail.brand,
@@ -176,91 +173,24 @@ export class MercadonaCatalogRunner implements CatalogRunner {
       },
     });
 
-    // --- Phase 3: the rows, the ladder and the prices ----------------------
-    await context.setStage(
-      'INGEST',
-      `Recording ${observations.length} product(s)`
-    );
-    const { outcomes } = await this.ingest.ingest(context, {
-      supermarketId: input.supermarketId,
-      defaultPriceScopeId: priceScopeId,
-      sourceKind: PriceSourceKind.OFFICIAL_API,
-      observations,
-    });
-
-    // --- Phase 4: what this warehouse carries ------------------------------
-    await context.setStage('AVAILABILITY', 'Recording what is stocked');
-    await this.writeAvailability(context, input, priceScopeId, outcomes);
-    await context.flush();
-  }
-
-  /**
-   * What the warehouse carries, and what it does not (plan 0086, section 5).
-   *
-   * Every `ACTIVE` row this run observed is stocked. Every `ACTIVE` row of this
-   * chain of kind `OFFICIAL_API` that it did **not** observe is not, which is
-   * what a refresh's 404 used to mean, said by the walk instead: a product the
-   * whole tree walk did not list is not stocked in this warehouse.
-   *
-   * **An aborted run asserts nothing negative.** It did not walk the whole tree,
-   * so the products it never reached are unobserved for a reason that says
-   * nothing about the warehouse. It still writes what it did see, because prices
-   * and stock already fetched are valid data (plan 0038, section 6.6).
-   *
-   * Rows of another source kind are left out on purpose. A leaflet row of this
-   * chain is a printed name, not a product id the walk could have listed, so its
-   * absence from the tree is not a claim about stock.
-   */
-  private async writeAvailability(
-    context: RunContext,
-    input: CatalogDiscoveryInput,
-    priceScopeId: string,
-    outcomes: ReadonlyArray<{
-      entry: SourceCatalogEntry;
-      itemId: string | null;
-    }>
-  ): Promise<void> {
-    const byItem = new Map<string, boolean>();
-    const observedIds = new Set<string>();
-    for (const outcome of outcomes) {
-      observedIds.add(outcome.entry.externalId);
-      if (outcome.itemId) {
-        byItem.set(outcome.itemId, true);
-      }
-    }
-
+    // --- Phase 3: what this warehouse carries, and what it does not --------
+    //
+    // The runner used to load every `ACTIVE` row of the chain here to work out
+    // which tracked products the walk had not seen, and call those out of stock.
+    // That fact is already in the report: the orchestrator knows what the run
+    // named, so the runner says only that the walk was whole (plan 0103, 6.1).
+    //
+    // **An aborted run declares nothing**, so it writes positives only. A walk
+    // that stopped early has not proved anything absent.
     if (!context.signal.aborted) {
-      const tracked = await this.entries.find({
-        where: {
-          supermarketId: input.supermarketId,
-          sourceKind: PriceSourceKind.OFFICIAL_API,
-          status: SourceEntryStatus.ACTIVE,
-        },
-      });
-      for (const row of tracked) {
-        if (!row.itemId || observedIds.has(row.externalId)) {
-          continue;
-        }
-        // A product two rows resolve to is stocked if either row saw it: the
-        // false would be a claim the source never made.
-        byItem.set(row.itemId, byItem.get(row.itemId) ?? false);
-      }
-    }
-
-    const entries = [...byItem].map(([itemId, available]) => ({
-      itemId,
-      available,
-    }));
-    for (let i = 0; i < entries.length; i += AVAILABILITY_BATCH) {
-      await this.catalog.setAvailability(
-        priceScopeId,
-        entries.slice(i, i + AVAILABILITY_BATCH)
-      );
+      report.assortmentComplete(null);
     }
     this.logger.log(
-      `Run ${context.runId}: availability for ${entries.length} item(s)` +
+      `Run ${context.runId}: ${observed} product(s) observed in warehouse ` +
+        `${warehouse}` +
         (context.signal.aborted ? ', positives only (the run was aborted)' : '')
     );
+    await context.flush();
   }
 }
 

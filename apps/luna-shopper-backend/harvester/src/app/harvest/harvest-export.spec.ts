@@ -330,7 +330,13 @@ describe('importing a run this backend exported', () => {
           unitSize: 0.35,
           extra: null,
           prices: [
-            price({ id: 'sep-2', entryId: 'e-2', price: 11.29, unitPrice: null, unitPriceLabel: null }),
+            price({
+              id: 'sep-2',
+              entryId: 'e-2',
+              price: 11.29,
+              unitPrice: null,
+              unitPriceLabel: null,
+            }),
           ],
         }),
       ],
@@ -396,11 +402,7 @@ describe('importing a run this backend exported', () => {
       ],
       producedAt: PRODUCED,
     });
-    const parts = importInto(
-      document,
-      [],
-      PriceSourceKind.OFFICIAL_LEAFLET
-    );
+    const parts = importInto(document, [], PriceSourceKind.OFFICIAL_LEAFLET);
 
     await parts.run();
 

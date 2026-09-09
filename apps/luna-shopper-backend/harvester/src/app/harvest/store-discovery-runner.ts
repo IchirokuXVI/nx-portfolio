@@ -1,5 +1,6 @@
 import type { SupermarketSource } from '../entities';
 import type { RunContext } from './run-context';
+import type { RunReport } from './run-report';
 
 /** What a `STORE_DISCOVERY` is asked to find. */
 export interface StoreDiscoveryInput {
@@ -18,6 +19,15 @@ export interface StoreDiscoveryInput {
    * will not exist as `Supermarket` rows until it finishes.
    */
   supermarketId?: string;
+  /**
+   * The chain's own identity, read by the orchestrator (plan 0103, section
+   * 6.4).
+   *
+   * A chain reading its own store list stamps this on every place it reports,
+   * so a shop it writes groups with the same chain a radius search found. The
+   * runner used to ask catalog for it, which was the last read it made.
+   */
+  chain?: { externalBrandKey: string | null; brandName: string | null };
 }
 
 /**
@@ -37,6 +47,7 @@ export interface StoreDiscoveryInput {
 export interface StoreDiscoveryRunner {
   run(
     context: RunContext,
+    report: RunReport,
     input: StoreDiscoveryInput,
     source: SupermarketSource | null
   ): Promise<void>;

@@ -7,12 +7,11 @@ import {
   type CarrefourCategory,
   type CarrefourProduct,
 } from '@portfolio/luna-shopper/carrefour';
-import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import type { RunContext } from './run-context';
-import { SourceIngest, type SourceObservation } from './source-ingest';
+import type { RunReport } from './run-report';
 
 /**
  * `CATALOG_DISCOVERY` against the `carrefour-web` adapter (plan 0090).
@@ -49,17 +48,15 @@ import { SourceIngest, type SourceObservation } from './source-ingest';
 export class CarrefourCatalogRunner implements CatalogRunner {
   private readonly logger = new Logger(CarrefourCatalogRunner.name);
 
-  constructor(
-    private readonly ingest: SourceIngest,
-    private readonly config: ConfigService
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
   async run(
     context: RunContext,
+    report: RunReport,
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
-    const priceScopeId = requireScope(input.priceScopeId);
+    requireScope(input.priceScopeId);
     const client = this.createClient(context, source);
 
     try {
@@ -113,13 +110,13 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         }
       }
 
-      // --- 3. The rows, the ladder and the prices --------------------------
+      // --- 3. Report what was read -----------------------------------------
       await context.setStage('INGEST', `Recording ${products.size} product(s)`);
-      await this.writeSnapshot(context, input, priceScopeId, products);
+      this.reportProducts(report, products);
 
       await context.flush();
       await context.setReport(
-        report(
+        describeRun(
           frontier.categories,
           frontier.capped,
           unreadable,
@@ -196,25 +193,27 @@ export class CarrefourCatalogRunner implements CatalogRunner {
   }
 
   /**
-   * Step 3: the rows, the ladder and the price each card printed.
+   * Step 3: every product the crawl read, and the price each card printed.
    *
-   * **A card with no readable price writes an entry and no price row** (plan
-   * 0090, section 12). Some products are priced by weight and print no figure,
-   * and a zero there is a lie about a real product.
+   * **A card with no readable price reports no price** (plan 0090, section 12).
+   * Some products are priced by weight and print no figure, and a zero there is
+   * a lie about a real product.
    *
    * The EAN is null on every observation, because the listing card carries
    * none. Until the backfill has run, every row resolves through the fuzzy rung
    * of plan 0086 and waits for a person, which is where DEZA sits today.
+   *
+   * It states no completeness. A Carrefour crawl walks a frontier of categories
+   * and a product filed nowhere in it is unseen for a reason that says nothing
+   * about stock.
    */
-  private async writeSnapshot(
-    context: RunContext,
-    input: CatalogDiscoveryInput,
-    priceScopeId: string,
+  private reportProducts(
+    report: RunReport,
     products: Map<string, CarrefourProduct>
-  ): Promise<void> {
+  ): void {
     const observedAt = new Date();
-    const observations: SourceObservation[] = [...products.values()].map(
-      (product) => ({
+    for (const product of products.values()) {
+      report.product({
         externalId: product.externalId,
         name: product.name,
         brand: product.brand,
@@ -249,21 +248,13 @@ export class CarrefourCatalogRunner implements CatalogRunner {
                   validUntil: null,
                 },
               ],
-      })
-    );
-
-    await this.ingest.ingest(context, {
-      supermarketId: input.supermarketId,
-      defaultPriceScopeId: priceScopeId,
-      // A page the chain publishes, which is what `OFFICIAL_WEB` means.
-      sourceKind: PriceSourceKind.OFFICIAL_WEB,
-      observations,
-    });
+      });
+    }
   }
 }
 
 /** What a run has to say about itself beyond its counters. */
-function report(
+function describeRun(
   frontier: readonly CarrefourCategory[],
   capped: readonly CarrefourCappedCategory[],
   unreadable: readonly string[],

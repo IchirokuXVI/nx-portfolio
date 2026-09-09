@@ -7,7 +7,11 @@ import {
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
-import type { HarvestRun, SourceCatalogEntry, SourceEntryPrice } from '../entities';
+import type {
+  HarvestRun,
+  SourceCatalogEntry,
+  SourceEntryPrice,
+} from '../entities';
 import eljamon from './__fixtures__/eljamon.vision.harvest-document.json';
 import type { CatalogClient } from './catalog-client.service';
 import { FileImportRunner } from './file-import.runner';
@@ -302,7 +306,8 @@ describe('FileImportRunner (plan 0086)', () => {
         products: [{ name: 'Leche', price: { amount: 0.89, currency: 'EUR' } }],
         warnings: [
           {
-            message: 'Page 22 is a competition entry form and holds no products.',
+            message:
+              'Page 22 is a competition entry form and holds no products.',
             extra: { page: 22 },
           },
         ],

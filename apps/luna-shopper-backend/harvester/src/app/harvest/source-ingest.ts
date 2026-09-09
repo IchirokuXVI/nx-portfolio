@@ -243,7 +243,7 @@ export class SourceIngest {
       const changed = held ? sourceGroupChanged(held, fields) : false;
 
       const outcome = held
-        ? await this.touch(held, fields, context.runId, seenAt)
+        ? await this.touch(held, fields, context.runId, seenAt, items)
         : await this.create(
             fields,
             input.supermarketId,
@@ -386,29 +386,61 @@ export class SourceIngest {
   }
 
   /**
-   * Rung 1. The row exists, so it is touched and its status is not re-derived,
-   * whatever it is.
+   * Rung 1. The row exists, so it is touched and its status is not re-derived.
    *
    * This is also what makes **resuming free** (plan 0038, section 6.3): an
    * aborted run leaves rows with a fresh `lastSeenAt`, so a re-run skips what it
    * already has by reading that timestamp. There is no checkpoint to replay,
    * only a snapshot that is already the answer.
+   *
+   * **The one thing that does re-derive a status is a new EAN**, and only on a
+   * row nobody has decided. That is not an exception to the ladder, it is the
+   * ladder: only an EAN or a person ever makes a row `ACTIVE` (plan 0086), and
+   * a row that had no EAN could not reach rung 2 when it was created. Carrefour
+   * is why it matters. Its listing card carries no EAN and its product page
+   * does, so an entire chain sits in the queue until a backfill run reads those
+   * pages, and before plan 0103 that run wrote the EAN and promoted the row
+   * itself, holding a repository to do it.
    */
   private async touch(
     row: SourceCatalogEntry,
     fields: SourceEntryFields,
     runId: string,
-    seenAt: Date
+    seenAt: Date,
+    items: ItemMatchIndex
   ): Promise<SourceEntryOutcome> {
+    const learnedEan = fields.ean !== null && row.ean !== fields.ean;
     applySourceGroup(row, fields);
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
+
+    let rung: 1 | 2 = 1;
+    if (learnedEan && undecided(row)) {
+      const match = items.match({
+        ean: fields.ean,
+        name: fields.name,
+        brand: fields.brand,
+        unitSize: fields.unitSize === null ? null : Number(fields.unitSize),
+      });
+      // Only the EAN rung promotes. A name match here would be a fuzzy proposal
+      // made at the very moment the identifier that makes fuzziness unnecessary
+      // arrived.
+      if (match && match.matchedBy === ItemSourceMatch.EAN) {
+        row.itemId = match.itemId;
+        row.status = SourceEntryStatus.ACTIVE;
+        row.matchedBy = ItemSourceMatch.EAN;
+        row.confidence = match.confidence;
+        row.decidedAt = seenAt;
+        rung = 2;
+      }
+    }
+
     const saved = await this.entries.save(row);
     return {
       entry: saved,
       created: false,
-      rung: 1,
+      rung,
       itemId: activeItemOf(saved),
     };
   }
@@ -583,6 +615,20 @@ function activeItemOf(row: SourceCatalogEntry): string | null {
   return row.status === SourceEntryStatus.ACTIVE ? row.itemId : null;
 }
 
+/**
+ * A row nobody has decided, which is the only kind a new EAN may promote.
+ *
+ * A `REJECTED` row is the owner saying this is not a product he tracks, and an
+ * `ACTIVE` one is already answered. Neither is re-derived by a run.
+ */
+function undecided(row: SourceCatalogEntry): boolean {
+  return (
+    row.decidedAt === null &&
+    (row.status === SourceEntryStatus.UNRESOLVED ||
+      row.status === SourceEntryStatus.CANDIDATE)
+  );
+}
+
 function fieldsOf(
   observation: SourceObservation,
   sourceKind: PriceSourceKind
@@ -655,8 +701,17 @@ export class SourceIngestSession {
     this.siblings = new SiblingEntryIndex(rows);
   }
 
-  /** Write one chunk. Called as often as the sink flushes, including never. */
-  async push(observations: readonly SourceObservation[]): Promise<void> {
+  /**
+   * Write one chunk, and answer what the ladder made of it.
+   *
+   * The outcomes are answered per chunk as well as accumulated, because
+   * availability is stated per catalog item and only the ladder knows which item
+   * a row resolved to. A caller that wants the whole run's outcomes takes them
+   * from {@link close} instead.
+   */
+  async push(
+    observations: readonly SourceObservation[]
+  ): Promise<SourceEntryOutcome[]> {
     if (this.closed) {
       throw new Error(
         'This ingest session is closed. A run opens one, pushes into it and ' +
@@ -664,7 +719,7 @@ export class SourceIngestSession {
       );
     }
     if (observations.length === 0) {
-      return;
+      return [];
     }
     const result = await this.ingest.writeChunk(
       this.context,
@@ -680,6 +735,7 @@ export class SourceIngestSession {
     this.counters.unchanged += result.counters.unchanged;
     this.counters.pricesWritten += result.counters.pricesWritten;
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
+    return result.outcomes;
   }
 
   /**

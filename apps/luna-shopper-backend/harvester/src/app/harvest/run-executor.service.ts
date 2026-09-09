@@ -1,16 +1,27 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import {
   HarvestRunMode,
   HarvestRunStatus,
   PriceSourceKind,
+  type AdapterKey,
 } from '@portfolio/luna-shopper/contracts';
+import { IsNull, Not, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
+import { SourceCatalogEntry, type SupermarketSource } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
+import { CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
+import type { BackfillEntry } from './catalog-runner';
+import { DiscoveredPlaceService } from './discovered-place.service';
 import { FileImportRunner } from './file-import.runner';
 import { HarvestRunStore } from './harvest-run.store';
+import { PriceScopeResolver } from './price-scope-resolver';
 import { RunContext } from './run-context';
+import { RunReportSink, type RunReportResult } from './run-report.sink';
+import { SourceIngest } from './source-ingest';
+import { SourceLocationService } from './source-location.service';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
 import { SupermarketSourceService } from './supermarket-source.service';
 
@@ -33,13 +44,76 @@ export class RunExecutor implements OnApplicationShutdown {
   private readonly inFlight = new Map<string, AbortController>();
 
   constructor(
+    @InjectRepository(SourceCatalogEntry)
+    private readonly entries: Repository<SourceCatalogEntry>,
     private readonly store: HarvestRunStore,
     private readonly sources: SupermarketSourceService,
     private readonly storeDiscovery: StoreDiscoveryRunner,
     private readonly catalogDiscovery: CatalogDiscoveryRunner,
     private readonly fileImport: FileImportRunner,
+    private readonly ingest: SourceIngest,
+    private readonly scopes: PriceScopeResolver,
+    private readonly places: DiscoveredPlaceService,
+    private readonly shops: SourceLocationService,
+    private readonly catalog: CatalogClient,
     private readonly config: ConfigService
   ) {}
+
+  /**
+   * The chain's own identity, for a store discovery that reports places under
+   * it.
+   *
+   * A failure is not fatal: the places are still worth writing and group under
+   * their own names rather than under the chain's key.
+   */
+  private async chainOf(
+    supermarketId: string
+  ): Promise<{ externalBrandKey: string | null; brandName: string | null }> {
+    try {
+      const chain = await this.catalog.getSupermarket(supermarketId);
+      return {
+        externalBrandKey: chain.externalBrandKey,
+        brandName: chain.name.es ?? chain.name.en ?? null,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Could not read the chain ${supermarketId}: ${String(error)}`
+      );
+      return { externalBrandKey: null, brandName: null };
+    }
+  }
+
+  /**
+   * The rows a backfill reads pages for: this chain's rows that carry a product
+   * page and no EAN (plan 0103, section 6.2).
+   *
+   * The row's own fields travel with it, because the page a backfill reads
+   * answers the EAN and nothing else, and a product is reported whole.
+   */
+  private async backfillRows(
+    supermarketId: string,
+    source: SupermarketSource
+  ): Promise<BackfillEntry[]> {
+    const rows = await this.entries.find({
+      where: {
+        supermarketId,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        ean: IsNull(),
+        url: Not(IsNull()),
+      },
+      order: { createdAt: 'ASC' },
+      take: readBackfillBudget(source.config),
+    });
+    return rows.map((row) => ({
+      externalId: row.externalId,
+      url: row.url as string,
+      name: row.name,
+      brand: row.brand,
+      unitSize: row.unitSize === null ? null : Number(row.unitSize),
+      sizeFormat: row.sizeFormat,
+      categoryPath: row.categoryPath ?? [],
+    }));
+  }
 
   /** True while this process is actually running that run. */
   isRunning(runId: string): boolean {
@@ -111,6 +185,32 @@ export class RunExecutor implements OnApplicationShutdown {
         await this.sources.recordRunStarted(source);
       }
 
+      // The write half of the run, and the only thing that has one (plan 0103,
+      // section 2.3). Everything a runner has to say goes into this, and
+      // everything that has to be done about it is done here.
+      const sink =
+        run.mode === HarvestRunMode.FILE_IMPORT
+          ? null
+          : new RunReportSink(
+              context,
+              {
+                supermarketId: run.supermarketId,
+                defaultPriceScopeId: run.priceScopeId,
+                sourceKind: sourceKindOf(source?.adapterKey),
+                postalCodeDeriveMaxMetres: settings.postalCodeDeriveMaxMetres,
+              },
+              {
+                ingest: this.ingest,
+                scopes: run.supermarketId
+                  ? this.scopes.forRun(run.supermarketId)
+                  : null,
+                places: this.places,
+                shops: this.shops,
+                catalog: this.catalog,
+                entries: this.entries,
+              }
+            );
+
       switch (run.mode) {
         // The source is passed and may be null: it is what the discovery
         // dispatches on (plan 0089, section 9), and a run started by the postal
@@ -118,32 +218,54 @@ export class RunExecutor implements OnApplicationShutdown {
         case HarvestRunMode.STORE_DISCOVERY:
           await this.storeDiscovery.run(
             context,
+            sink as RunReportSink,
             {
               postalCode: String(run.input['postalCode'] ?? ''),
               country: String(run.input['country'] ?? 'es'),
               radiusMetres: Number(run.input['radiusMetres'] ?? 3000),
               supermarketId: run.supermarketId ?? undefined,
+              // The chain's own identity, read here rather than by the runner
+              // (plan 0103, section 6.4).
+              chain: run.supermarketId
+                ? await this.chainOf(run.supermarketId)
+                : undefined,
             },
             source
           );
           break;
-        case HarvestRunMode.CATALOG_DISCOVERY:
+        case HarvestRunMode.CATALOG_DISCOVERY: {
+          // Plan 0090, section 12.1. The spawn already refused it for every
+          // adapter that has no product page to read.
+          const detailBackfill = run.input['detailBackfill'] === true;
           await this.catalogDiscovery.run(
             context,
+            sink as RunReportSink,
             {
               supermarketId: run.supermarketId as string,
               priceScopeId: run.priceScopeId ?? undefined,
-              // Plan 0090, section 12.1. The spawn already refused it for
-              // every adapter that has no product page to read.
-              detailBackfill: run.input['detailBackfill'] === true,
+              detailBackfill,
+              // The rows a backfill reads pages for, loaded here rather than by
+              // the runner (plan 0103, section 6.2).
+              backfill: detailBackfill
+                ? await this.backfillRows(
+                    run.supermarketId as string,
+                    requireSource(source)
+                  )
+                : undefined,
             },
             requireSource(source)
           );
           break;
+        }
         // `requireSource` is deliberately not called (plan 0081, section 1).
         // A `SupermarketSource` is fetching configuration and an upload fetches
         // nothing, so a chain with no adapter at all still gets rows that look
         // exactly like a walk's (plan 0086, D6).
+        //
+        // It writes through the ingest directly rather than through a report,
+        // because it reads a whole document before it writes anything and turns
+        // the outcomes into a warning per product, which is the one thing a
+        // report cannot answer (plan 0103, D1).
         case HarvestRunMode.FILE_IMPORT:
           await this.fileImport.run(context, {
             supermarketId: run.supermarketId as string,
@@ -155,6 +277,13 @@ export class RunExecutor implements OnApplicationShutdown {
           break;
       }
 
+      if (sink) {
+        const written = await sink.drain();
+        await this.store.setReport(runId, {
+          ...(await this.store.load(runId)).report,
+          ...describeWrites(written),
+        });
+      }
       await context.flush();
       const finished = await this.store.load(runId);
       const status = controller.signal.aborted
@@ -224,6 +353,65 @@ export class RunExecutor implements OnApplicationShutdown {
       controller.abort();
     }
   }
+}
+
+/**
+ * What observed a price, per adapter (plan 0103, section 2.3).
+ *
+ * It is stamped on every row and every price a run writes, and it used to be
+ * stated inline by each runner at its own ingest call. The runners write
+ * nothing now, so it is stated here, once, and a run of an adapter this map does
+ * not know is `OFFICIAL_WEB`: a page a chain publishes is the least specific
+ * honest answer, and a file import never reaches here because the operator says
+ * what observed it.
+ */
+const SOURCE_KIND_BY_ADAPTER: Partial<Record<AdapterKey, PriceSourceKind>> = {
+  'mercadona-api': PriceSourceKind.OFFICIAL_API,
+  'lidl-api': PriceSourceKind.OFFICIAL_API,
+  'deza-web': PriceSourceKind.OFFICIAL_WEB,
+  'carrefour-web': PriceSourceKind.OFFICIAL_WEB,
+};
+
+function sourceKindOf(adapterKey: AdapterKey | undefined): PriceSourceKind {
+  return (
+    (adapterKey && SOURCE_KIND_BY_ADAPTER[adapterKey]) ??
+    PriceSourceKind.OFFICIAL_WEB
+  );
+}
+
+/**
+ * How many product pages one backfill run may read, **the owner's number**.
+ *
+ * Unset means every row that still needs one, which is the overnight run plan
+ * 0090 section 12.1 describes. A number is how an operator takes a bite instead:
+ * the chain holds one run at a time, so a bounded backfill leaves room for
+ * tomorrow's price crawl without anybody having to abort anything.
+ */
+function readBackfillBudget(
+  config: Record<string, unknown>
+): number | undefined {
+  const budget = Number(config['detailBudget']);
+  return Number.isFinite(budget) && budget > 0 ? Math.floor(budget) : undefined;
+}
+
+/** What the write half did, for the run's own report. */
+function describeWrites(written: RunReportResult): Record<string, unknown> {
+  return {
+    productsWritten: written.products,
+    placesCreated: written.placesCreated,
+    placesRefreshed: written.placesRefreshed,
+    scopesDeclared: written.scopesDeclared,
+    scopesCreated: written.scopesCreated,
+    shopsWritten: written.shopsWritten,
+    // Named rather than counted: an operator draining the queue wants to know
+    // which shop they are looking at, and there are ten of them, not ten
+    // thousand.
+    shopsUnmapped: written.shopsUnmapped,
+    availabilityWritten: written.availabilityWritten,
+    // Plan 0084, section 3: a person always wins, and the run reports the
+    // disagreement rather than applying it.
+    availabilityConflicts: written.conflicts,
+  };
 }
 
 function requireSource<T>(source: T | null): T {

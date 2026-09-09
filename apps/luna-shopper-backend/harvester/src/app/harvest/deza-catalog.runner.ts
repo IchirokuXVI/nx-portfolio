@@ -1,10 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  PriceSourceKind,
-  SourceLocationStatus,
-} from '@portfolio/luna-shopper/contracts';
-import {
   DEZA_CEILING_PAGES,
   DezaClient,
   leafSections,
@@ -15,15 +11,10 @@ import {
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import { runWorkerPool } from '../runner/worker-pool';
-import { CatalogClient } from './catalog-client.service';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import { entryKey, normalizeName } from './matching';
 import type { RunContext } from './run-context';
-import { SourceIngest, type SourceObservation } from './source-ingest';
-import {
-  SourceLocationService,
-  type ObservedShop,
-} from './source-location.service';
+import type { RunReport } from './run-report';
 
 /**
  * The identity of a DEZA product, which is the identity of any product from a
@@ -64,15 +55,11 @@ export { entryKey } from './matching';
 export class DezaCatalogRunner implements CatalogRunner {
   private readonly logger = new Logger(DezaCatalogRunner.name);
 
-  constructor(
-    private readonly ingest: SourceIngest,
-    private readonly catalog: CatalogClient,
-    private readonly shops: SourceLocationService,
-    private readonly config: ConfigService
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
   async run(
     context: RunContext,
+    report: RunReport,
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
@@ -120,24 +107,76 @@ export class DezaCatalogRunner implements CatalogRunner {
     });
     await context.setTotalPlanned(crawl.products.size);
 
-    // --- 3 and 4. The snapshot, and the match -----------------------------
+    // --- 3 and 4. The products this crawl saw ------------------------------
     await context.setStage(
       'SNAPSHOT',
       `Writing ${crawl.products.size} product(s)`
     );
-    const itemIdByKey = await this.writeSnapshot(context, input, crawl);
+    this.reportProducts(report, crawl);
 
-    // --- 5 and 6. The shops, and what they carry --------------------------
-    await context.setStage('AVAILABILITY', 'Resolving shops');
-    const report = await this.writeAvailability(
-      context,
-      input,
-      crawl,
-      itemIdByKey
-    );
+    // --- 5 and 6. The shops, and what each carries ------------------------
+    //
+    // **Absence is the claim.** The popup names the shops that carry a product,
+    // so a shop it did not name does not stock it, and a run that reported only
+    // the positives could say nothing negative at all.
+    //
+    // The codes are the source's own. Which catalog location each one is stays
+    // a person's decision, resolved by the orchestrator through the queue that
+    // holds it (plan 0103, section 6.3), and an unmapped shop is skipped,
+    // counted and never guessed.
+    await context.setStage('AVAILABILITY', 'Reading what each shop carries');
+    this.reportAvailability(report, crawl);
 
     await context.flush();
-    await context.setReport({ ...crawl.toReport(), ...report });
+    await context.setReport(crawl.toReport());
+  }
+
+  /**
+   * Steps 3 and 4: every product this crawl saw.
+   *
+   * **It reports no price, ever.** The site prints none, and the blank price
+   * elements in its markup are the storefront's own hidden pricing, which a
+   * parser reading them would write as zeros.
+   *
+   * It states no completeness either. Every query answers at most 300 rows
+   * however it is filtered, so a section the budget could not finish is a
+   * section this run cannot speak for, and `harvest_runs.report` names each one
+   * rather than a number claiming otherwise (plan 0085).
+   */
+  private reportProducts(report: RunReport, crawl: Crawl): void {
+    const observedAt = new Date();
+    for (const [externalId, product] of crawl.products) {
+      report.product({
+        externalId,
+        name: product.name,
+        brand: product.brand,
+        // The site states neither, and a field invented here is a field that
+        // joins two different products in the one place chains meet.
+        ean: null,
+        unitSize: null,
+        sizeFormat: product.sizeFormat,
+        categoryPath: product.categoryPath,
+        // There is no per product URL on this site; the listing is the page.
+        url: null,
+        observedAt,
+        extra: null,
+        prices: [],
+      });
+    }
+  }
+
+  /** Every shop the crawl met, and whether each carries each product. */
+  private reportAvailability(report: RunReport, crawl: Crawl): void {
+    for (const [shopCode, printedName] of crawl.shops) {
+      for (const [externalId, product] of crawl.products) {
+        report.availability({
+          externalId,
+          shopCode,
+          shopName: printedName,
+          available: product.shops.has(shopCode),
+        });
+      }
+    }
   }
 
   /**
@@ -219,176 +258,6 @@ export class DezaCatalogRunner implements CatalogRunner {
     }
     return lastPage >= DEZA_CEILING_PAGES;
   }
-
-  /**
-   * Steps 3 and 4: the rows and the ladder, answering which catalog item
-   * each product resolved to.
-   *
-   * A product that resolved to nothing is a candidate for the review queue and
-   * nothing else. It cannot take part in step 6 either, because per shop
-   * availability is stated per catalog item, and there is no item to state it
-   * for.
-   */
-  private async writeSnapshot(
-    context: RunContext,
-    input: CatalogDiscoveryInput,
-    crawl: Crawl
-  ): Promise<Map<string, string>> {
-    const observedAt = new Date();
-    const observations: SourceObservation[] = [...crawl.products].map(
-      ([externalId, product]) => ({
-        externalId,
-        name: product.name,
-        brand: product.brand,
-        // The site states neither, and a field invented here is a field that
-        // joins two different products in the one place chains meet.
-        ean: null,
-        unitSize: null,
-        sizeFormat: product.sizeFormat,
-        categoryPath: product.categoryPath,
-        // There is no per product URL on this site; the listing is the page.
-        url: null,
-        observedAt,
-        extra: null,
-        // **It writes no price, ever.** The site prints none, and the blank
-        // price elements in its markup are the storefront's own hidden pricing,
-        // which a parser reading them would write as zeros.
-        prices: [],
-      })
-    );
-
-    const { outcomes } = await this.ingest.ingest(context, {
-      supermarketId: input.supermarketId,
-      // A scope is accepted and ignored (plan 0086, section 9): there is no
-      // price to write it for, and a required field that does nothing is a lie
-      // in a form.
-      defaultPriceScopeId: null,
-      sourceKind: PriceSourceKind.OFFICIAL_WEB,
-      observations,
-    });
-
-    // The row's own `itemId`, not the outcome's. The outcome answers an item
-    // only for an `ACTIVE` row, because that is the rule for writing a **price**;
-    // the site prints none, and availability is what this run has to say. A
-    // fuzzy proposal's item is what plan 0085 wrote here and plan 0086 leaves
-    // unchanged, and with no EAN on this source an `ACTIVE` row would only ever
-    // be one a person accepted, which would silence the crawl entirely.
-    const itemIdByKey = new Map<string, string>();
-    for (const outcome of outcomes) {
-      if (outcome.entry.itemId) {
-        itemIdByKey.set(outcome.entry.externalId, outcome.entry.itemId);
-      }
-    }
-    return itemIdByKey;
-  }
-
-  /**
-   * Steps 5 and 6: which shop of theirs is which of ours, and what each carries.
-   *
-   * **Absence is the claim.** Every mapped shop receives a value for every
-   * product the run resolved, `false` included: the popup names the shops that
-   * carry a product, so a shop it did not name does not stock it, and dropping
-   * that leaves the run unable to say anything negative at all.
-   *
-   * An unmapped shop is **skipped, counted and never guessed** (plan 0084,
-   * section 6). The run writes nothing for it and finishes; the row is what the
-   * back office shows, so the operator sees a shop waiting to be mapped rather
-   * than a silence.
-   */
-  private async writeAvailability(
-    context: RunContext,
-    input: CatalogDiscoveryInput,
-    crawl: Crawl,
-    itemIdByKey: Map<string, string>
-  ): Promise<Record<string, unknown>> {
-    const observed: ObservedShop[] = [...crawl.shops].map(
-      ([externalId, printedName]) => ({ externalId, printedName })
-    );
-    const rows = await this.shops.observe(
-      input.supermarketId,
-      observed,
-      context.runId
-    );
-    const mapped = rows.filter(
-      (row) =>
-        row.status === SourceLocationStatus.ACTIVE && row.supermarketLocationId
-    );
-    const unmapped = rows.filter(
-      (row) => row.status === SourceLocationStatus.UNMAPPED
-    );
-    const observedAt = new Date();
-
-    let written = 0;
-    const conflicts: Array<Record<string, unknown>> = [];
-    for (const row of mapped) {
-      const entries = this.availabilityFor(crawl, itemIdByKey, row.externalId);
-      for (const chunk of chunked(entries, AVAILABILITY_BATCH)) {
-        const result = await this.catalog.setLocationAvailability(
-          row.supermarketLocationId as string,
-          chunk,
-          context.runId,
-          // A page the chain publishes, which is what `OFFICIAL_WEB` means. It
-          // is also the client's default; stating it keeps the provenance this
-          // run stamps visible at the call rather than one file away.
-          PriceSourceKind.OFFICIAL_WEB,
-          observedAt
-        );
-        written += result.written;
-        for (const conflict of result.conflicts) {
-          conflicts.push({ shop: row.externalId, ...conflict });
-        }
-      }
-    }
-
-    if (conflicts.length > 0) {
-      this.logger.warn(
-        `Run ${context.runId}: ${conflicts.length} availability row(s) ` +
-          'belong to a person and were left alone'
-      );
-    }
-
-    return {
-      shopsSeen: rows.length,
-      shopsWritten: mapped.length,
-      // Named rather than counted: an operator draining the queue wants to know
-      // which shop they are looking at, and there are ten of them, not ten
-      // thousand.
-      shopsUnmapped: unmapped.map((row) => ({
-        externalId: row.externalId,
-        printedName: row.printedName,
-      })),
-      availabilityWritten: written,
-      // Plan 0084, section 3: a person always wins, and the run reports the
-      // disagreement rather than applying it.
-      availabilityConflicts: conflicts,
-    };
-  }
-
-  /**
-   * One shop's entries: every product the run resolved, and whether this shop's
-   * code was in that product's popup.
-   *
-   * Two source products can resolve to one catalog item, through two
-   * rows an operator accepted. When they disagree the shop
-   * **carries** it: stocking either one is stocking the item, and the false
-   * would be a claim the source never made.
-   */
-  private availabilityFor(
-    crawl: Crawl,
-    itemIdByKey: Map<string, string>,
-    shopCode: string
-  ): Array<{ itemId: string; available: boolean }> {
-    const byItem = new Map<string, boolean>();
-    for (const [externalId, product] of crawl.products) {
-      const itemId = itemIdByKey.get(externalId);
-      if (!itemId) {
-        continue;
-      }
-      const available = product.shops.has(shopCode);
-      byItem.set(itemId, (byItem.get(itemId) ?? false) || available);
-    }
-    return [...byItem].map(([itemId, available]) => ({ itemId, available }));
-  }
 }
 
 /**
@@ -403,15 +272,6 @@ const DEFAULT_SECTION_BUDGET = 25;
 const BARREN_QUERIES = 3;
 
 /**
- * Entries per `setAvailability` call.
- *
- * The NATS subject has no cap and the HTTP DTO caps at 500; this follows the
- * DTO. A chain of 13,000 products would otherwise be one message of the better
- * part of a megabyte per shop, which is the size a broker starts refusing at,
- * and the handler decides per item so splitting it costs nothing.
- */
-const AVAILABILITY_BATCH = 500;
-
 /** A word short enough to be noise is not a useful narrowing term. */
 const MIN_TERM_LENGTH = 4;
 
@@ -582,12 +442,6 @@ function mostFrequentUnused(
 
 function describeQuery(terms: string[]): string {
   return terms.length === 0 ? '(the whole section)' : terms.join(' ');
-}
-
-function* chunked<T>(items: T[], size: number): Iterable<T[]> {
-  for (let index = 0; index < items.length; index += size) {
-    yield items.slice(index, index + size);
-  }
 }
 
 /**

@@ -775,6 +775,112 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
 });
 
 /**
+ * The one thing rung 1 does re-derive (plan 0103, section 6.2).
+ *
+ * A row created without an EAN could not reach rung 2, and Carrefour is a whole
+ * chain in that state: its listing card carries no EAN and its product page
+ * does. The backfill used to write the EAN and promote the row itself, holding a
+ * repository to do it. The promotion is the ladder's now, which is the one place
+ * that writes rows, and it is the rule plan 0086 already stated: only an EAN or
+ * a person ever makes a row `ACTIVE`.
+ */
+describe('SourceIngest, rung 1 and an EAN that has just arrived', () => {
+  const held = {
+    externalId: 'p1',
+    name: 'Agua CARREFOUR',
+    ean: null,
+    status: SourceEntryStatus.UNRESOLVED,
+    itemId: null,
+  };
+  const item = {
+    id: 'item-water',
+    name: { es: 'Something else entirely', en: null },
+    brand: null,
+    ean: '8411327052016',
+    unitSize: null,
+  };
+
+  it('promotes an undecided row when the new EAN names a catalog item', async () => {
+    const { ingest, context, saved } = build({ rows: [held], items: [item] });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [
+        observation({
+          externalId: 'p1',
+          name: 'Agua CARREFOUR',
+          ean: '8411327052016',
+        }),
+      ],
+    });
+
+    expect(outcomes[0].rung).toBe(2);
+    expect(saved[0]).toMatchObject({
+      ean: '8411327052016',
+      itemId: 'item-water',
+      status: SourceEntryStatus.ACTIVE,
+      matchedBy: ItemSourceMatch.EAN,
+      confidence: 1,
+    });
+  });
+
+  it('leaves a row a person decided exactly as it is', async () => {
+    // A run does not reopen a decision a person made, whatever it now knows.
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          ...held,
+          status: SourceEntryStatus.REJECTED,
+          decidedAt: new Date('2026-09-01T00:00:00Z'),
+        },
+      ],
+      items: [item],
+    });
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [
+        observation({
+          externalId: 'p1',
+          name: 'Agua CARREFOUR',
+          ean: '8411327052016',
+        }),
+      ],
+    });
+
+    // The EAN is a source column and is written; the decision is not touched.
+    expect(saved[0].ean).toBe('8411327052016');
+    expect(saved[0].status).toBe(SourceEntryStatus.REJECTED);
+    expect(saved[0].itemId).toBeNull();
+  });
+
+  it('promotes nothing when the EAN names no item this catalog holds', async () => {
+    const { ingest, context, saved } = build({ rows: [held], items: [] });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [
+        observation({
+          externalId: 'p1',
+          name: 'Agua CARREFOUR',
+          ean: '8411327052016',
+        }),
+      ],
+    });
+
+    expect(outcomes[0].rung).toBe(1);
+    expect(saved[0].ean).toBe('8411327052016');
+    expect(saved[0].status).toBe(SourceEntryStatus.UNRESOLVED);
+  });
+});
+
+/**
  * A run that pushes as it fetches (plan 0103, section 2.3).
  *
  * The session exists for one reason and these cases are that reason: the chain's

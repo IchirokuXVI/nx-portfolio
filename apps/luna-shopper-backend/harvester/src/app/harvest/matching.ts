@@ -73,7 +73,9 @@ export function entryNameKey(name: string, sizeFormat: string | null): string {
  * for a product the catalog holds, which rung 4 then proposes a match for.
  */
 export function entryKey(name: string, sizeFormat: string | null): string {
-  return createHash('sha1').update(entryNameKey(name, sizeFormat)).digest('hex');
+  return createHash('sha1')
+    .update(entryNameKey(name, sizeFormat))
+    .digest('hex');
 }
 
 /**
@@ -128,7 +130,11 @@ export class ItemMatchIndex {
       }
     }
 
-    const key = itemNameKey(candidate.name, candidate.brand, candidate.unitSize);
+    const key = itemNameKey(
+      candidate.name,
+      candidate.brand,
+      candidate.unitSize
+    );
     const bucket = this.byNameKey.get(key);
     // Exactly one item under the key, or it is not a match: two products that
     // normalize the same are precisely the case where guessing does harm.
@@ -196,8 +202,9 @@ export class SiblingEntryIndex {
    * same rule rung 3 uses: the ambiguous case is exactly where guessing harms.
    */
   match(name: string, sizeFormat: string | null): SiblingProposal | null {
-    const siblings = (this.byNameKey.get(entryNameKey(name, sizeFormat)) ?? [])
-      .filter((row) => row.status !== SourceEntryStatus.REJECTED);
+    const siblings = (
+      this.byNameKey.get(entryNameKey(name, sizeFormat)) ?? []
+    ).filter((row) => row.status !== SourceEntryStatus.REJECTED);
     if (siblings.length === 0) {
       return null;
     }

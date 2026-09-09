@@ -1,22 +1,9 @@
 import type { ConfigService } from '@nestjs/config';
-import {
-  ItemSourceMatch,
-  SourceEntryStatus,
-  SourceLocationStatus,
-} from '@portfolio/luna-shopper/contracts';
-import type { Repository } from 'typeorm';
-import type {
-  SourceCatalogEntry,
-  SourceEntryPrice,
-  SourceLocation,
-  SupermarketSource,
-} from '../entities';
-import type { CatalogClient } from './catalog-client.service';
+import type { SupermarketSource } from '../entities';
 import { DezaCatalogRunner, entryKey } from './deza-catalog.runner';
 import { startFakeListing, type FakeListing } from './deza-listing.fake';
 import type { RunContext } from './run-context';
-import { SourceIngest } from './source-ingest';
-import type { SourceLocationService } from './source-location.service';
+import { RecordingRunReport } from './run-report';
 
 const CHAIN = '11111111-1111-4111-8111-111111111111';
 const RUN = '33333333-3333-4333-8333-333333333333';
@@ -46,67 +33,23 @@ function cappedSection() {
 interface Built {
   runner: DezaCatalogRunner;
   context: RunContext;
-  saved: SourceCatalogEntry[];
-  catalog: {
-    searchItems: jest.Mock;
-    setLocationAvailability: jest.Mock;
-    addPrices: jest.Mock;
-  };
-  priceUpsert: jest.Mock;
-  observed: jest.Mock;
-  report: Record<string, unknown>;
+  /** What the run said about the world. */
+  report: RecordingRunReport;
+  /** What the run said about itself, which `setReport` wrote. */
+  runReport: Record<string, unknown>;
 }
 
-function build(listing: FakeListing, shops: Partial<SourceLocation>[]): Built {
-  const saved: SourceCatalogEntry[] = [];
-  const entries = {
-    find: jest.fn(async () => [...saved]),
-    create: jest.fn((row: SourceCatalogEntry) => ({
-      id: `entry-${saved.length + 1}`,
-      ...row,
-    })),
-    save: jest.fn(async (row: SourceCatalogEntry) => {
-      const held = saved.find((each) => each.externalId === row.externalId);
-      if (held) {
-        Object.assign(held, row);
-        return held;
-      }
-      saved.push(row);
-      return row;
-    }),
-  } as unknown as Repository<SourceCatalogEntry>;
-
-  // A crawl states no price, so nothing may reach this repository at all.
-  const priceUpsert = jest.fn(async () => undefined);
-  const prices = {
-    upsert: priceUpsert,
-  } as unknown as Repository<SourceEntryPrice>;
-
-  const catalog = {
-    // One catalog item whose Spanish name matches the first product exactly, so
-    // the name rung fires for it and for nothing else.
-    searchItems: jest.fn(async () => ({
-      items: [
-        {
-          id: 'item-1',
-          name: { es: 'Producto MARCA0 variante0', en: null },
-          brand: 'MARCA0',
-          ean: null,
-          unitSize: null,
-        },
-      ],
-      nextCursor: null,
-    })),
-    setLocationAvailability: jest.fn(async () => ({
-      written: 1,
-      skipped: 0,
-      conflicts: [],
-    })),
-    addPrices: jest.fn(async () => ({ inserted: 0, confirmed: 0 })),
-  };
-
-  const observed = jest.fn(async () => shops as SourceLocation[]);
-  const report: Record<string, unknown> = {};
+/**
+ * A crawl and the report it produced.
+ *
+ * **There is no repository, no `CatalogClient` and no `SourceLocationService`
+ * here.** The runner fetches and reports, so a recording `RunReport` is the
+ * whole of what it needs (plan 0103, section 9). What the orchestrator does
+ * with a report, including resolving shop codes and writing availability, is
+ * `run-report.sink.spec.ts`.
+ */
+function build(_listing: FakeListing): Built {
+  const runReport: Record<string, unknown> = {};
   const context = {
     runId: RUN,
     signal: new AbortController().signal,
@@ -117,25 +60,15 @@ function build(listing: FakeListing, shops: Partial<SourceLocation>[]): Built {
     heartbeat: jest.fn(async () => undefined),
     flush: jest.fn(async () => undefined),
     setReport: jest.fn(async (value: Record<string, unknown>) => {
-      Object.assign(report, value);
+      Object.assign(runReport, value);
     }),
   } as unknown as RunContext;
 
-  const ingest = new SourceIngest(
-    entries,
-    prices,
-    catalog as unknown as CatalogClient
-  );
-  const runner = new DezaCatalogRunner(
-    ingest,
-    catalog as unknown as CatalogClient,
-    { observe: observed } as unknown as SourceLocationService,
-    {
-      getOrThrow: () => ({ userAgent: 'test' }),
-    } as unknown as ConfigService
-  );
+  const runner = new DezaCatalogRunner({
+    getOrThrow: () => ({ userAgent: 'test' }),
+  } as unknown as ConfigService);
 
-  return { runner, context, saved, catalog, observed, report, priceUpsert };
+  return { runner, context, report: new RecordingRunReport(), runReport };
 }
 
 const source = (
@@ -168,25 +101,27 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         shops: ['T1'],
       },
     ]);
-    const { runner, context, saved } = build(listing, []);
+    const { runner, context, report } = build(listing);
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url })
     );
 
     // Two sections, one query each, and neither narrowed by a term.
     expect(listing.queries).toEqual(['W011|', 'W051|']);
-    expect(saved).toHaveLength(2);
+    expect(report.products).toHaveLength(2);
   });
 
   it('splits a capped section by the most frequent unused term', async () => {
     listing = await startFakeListing(SECTIONS, cappedSection());
-    const { runner, context } = build(listing, []);
+    const { runner, context, report } = build(listing);
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url, sectionQueryBudget: 4 })
     );
@@ -203,10 +138,11 @@ describe('DezaCatalogRunner (plan 0085)', () => {
 
   it('stops at the budget and names the section with its open queries', async () => {
     listing = await startFakeListing(SECTIONS, cappedSection());
-    const { runner, context, report } = build(listing, []);
+    const { runner, context, report, runReport } = build(listing);
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url, sectionQueryBudget: 3 })
     );
@@ -218,7 +154,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     // query that was still at the ceiling when the budget ran out. `producto`
     // appears in all 400 descriptions, so narrowing by it narrows nothing and it
     // is open too.
-    expect(report['incompleteSections']).toEqual([
+    expect(runReport['incompleteSections']).toEqual([
       {
         code: 'W011',
         name: 'Carniceria',
@@ -237,19 +173,20 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       { ...repeated, section: 'W011' },
       { ...repeated, section: 'W051' },
     ]);
-    const { runner, context, saved } = build(listing, []);
+    const { runner, context, report } = build(listing);
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url })
     );
 
-    expect(saved).toHaveLength(1);
-    expect(saved[0].externalId).toBe(
+    expect(report.products).toHaveLength(1);
+    expect(report.products[0].externalId).toBe(
       entryKey('Perlas de perfume LENOR classic', '195 g')
     );
-    expect(saved[0]).toMatchObject({
+    expect(report.products[0]).toMatchObject({
       name: 'Perlas de perfume LENOR classic',
       sizeFormat: '195 g',
       brand: 'LENOR',
@@ -264,119 +201,76 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         shops: ['T1'],
       },
     ]);
-    const { runner, context, saved, catalog, priceUpsert } = build(listing, []);
+    const { runner, context, report } = build(listing);
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url })
     );
 
-    // The price columns left the row in plan 0086, so "no price" is now two
-    // absences: no `source_entry_prices` row for any scope, and nothing sent to
-    // catalog.
-    expect(priceUpsert).not.toHaveBeenCalled();
-    expect(catalog.addPrices).not.toHaveBeenCalled();
-    expect(saved[0]).toMatchObject({
-      // No EAN either, so the EAN rung of the ladder never fires and every
-      // automatic match here is a candidate.
-      ean: null,
-      status: SourceEntryStatus.UNRESOLVED,
-    });
+    // **It reports no price, ever.** The site prints none, and the blank price
+    // elements in its markup are the storefront's own hidden pricing, which a
+    // parser reading them would write as zeros. A runner that cannot write is
+    // also a runner whose "no price" is one absence rather than two.
+    expect(report.products[0].prices).toEqual([]);
+    // No EAN either, so the EAN rung of the ladder never fires and every
+    // automatic match here is a candidate.
+    expect(report.products[0].ean).toBeNull();
   });
 
-  it('sends every mapped shop a value for every product, positive and negative', async () => {
+  it('claims every shop it met against every product, positive and negative', async () => {
+    // **Absence is the claim.** The popup names the shops that carry a product,
+    // so a shop it did not name does not stock it, and a run reporting only the
+    // positives could say nothing negative at all.
+    //
+    // Which catalog location each code is, and whether one is mapped yet, is
+    // the orchestrator's to resolve (plan 0103, section 6.3). This runner names
+    // the source's own code and what the source called it, and nothing else.
     listing = await startFakeListing(SECTIONS, [
       {
         description: 'Producto MARCA0 variante0',
         section: 'W011',
         shops: ['T1'],
       },
-    ]);
-    const { runner, context, catalog, observed } = build(listing, [
       {
-        externalId: 'T1',
-        printedName: 'Jesús Rescatado',
-        supermarketLocationId: 'loc-1',
-        status: SourceLocationStatus.ACTIVE,
-        matchedBy: ItemSourceMatch.NAME_SIZE,
-      },
-      {
-        externalId: 'C1',
-        printedName: 'SuperCash (Quemadas)',
-        supermarketLocationId: 'loc-2',
-        status: SourceLocationStatus.ACTIVE,
-        matchedBy: ItemSourceMatch.MANUAL,
-      },
-    ]);
-
-    await runner.run(
-      context,
-      { supermarketId: CHAIN },
-      source({ baseUrl: listing.url })
-    );
-
-    expect(observed).toHaveBeenCalledWith(
-      CHAIN,
-      [{ externalId: 'T1', printedName: 'Jesús Rescatado' }],
-      RUN
-    );
-    expect(catalog.setLocationAvailability).toHaveBeenCalledTimes(2);
-    expect(catalog.setLocationAvailability.mock.calls[0][0]).toBe('loc-1');
-    expect(catalog.setLocationAvailability.mock.calls[0][1]).toEqual([
-      { itemId: 'item-1', available: true },
-    ]);
-    // The shop the popup did not name gets the negative, which is the whole
-    // claim this source makes.
-    expect(catalog.setLocationAvailability.mock.calls[1][1]).toEqual([
-      { itemId: 'item-1', available: false },
-    ]);
-  });
-
-  it('skips an unmapped shop, names it, and still finishes', async () => {
-    listing = await startFakeListing(SECTIONS, [
-      {
-        description: 'Producto MARCA0 variante0',
+        description: 'Otro MARCA1 variante1',
         section: 'W011',
-        shops: ['T1', 'C1'],
+        shops: ['C1'],
       },
     ]);
-    const { runner, context, catalog, report } = build(listing, [
-      {
-        externalId: 'T1',
-        printedName: 'Jesús Rescatado',
-        supermarketLocationId: 'loc-1',
-        status: SourceLocationStatus.ACTIVE,
-        matchedBy: ItemSourceMatch.NAME_SIZE,
-      },
-      {
-        externalId: 'C1',
-        printedName: 'SuperCash (Quemadas)',
-        supermarketLocationId: null,
-        status: SourceLocationStatus.UNMAPPED,
-        matchedBy: ItemSourceMatch.NAME_SIZE,
-      },
-    ]);
+    const { runner, context, report } = build(listing);
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url })
     );
 
-    expect(catalog.setLocationAvailability).toHaveBeenCalledTimes(1);
-    expect(report['shopsUnmapped']).toEqual([
-      { externalId: 'C1', printedName: 'SuperCash (Quemadas)' },
+    const first = report.products[0].externalId;
+    const claims = report.availabilities.filter(
+      (claim) => claim.externalId === first
+    );
+    // Two shops were met, so the product carries a claim for each: the one that
+    // named it and the one that did not.
+    expect(
+      claims.map((claim) => [claim.shopCode, claim.available]).sort()
+    ).toEqual([
+      ['C1', false],
+      ['T1', true],
     ]);
-    expect(report['shopsWritten']).toBe(1);
+    expect(claims.every((claim) => claim.shopName !== null)).toBe(true);
   });
 
   it('keeps the heartbeat moving while it enumerates', async () => {
     listing = await startFakeListing(SECTIONS, cappedSection());
-    const { runner, context } = build(listing, []);
+    const { runner, context, report } = build(listing);
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url, sectionQueryBudget: 3 })
     );
@@ -405,7 +299,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         }))
       )
     );
-    const { runner, context } = build(listing, []);
+    const { runner, context, report } = build(listing);
     let acquired = 0;
     (context as { acquire: () => Promise<void> }).acquire = async () => {
       acquired += 1;
@@ -413,6 +307,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url, sectionQueryBudget: 3 }, 4)
     );
@@ -420,39 +315,5 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     // Both sections crawled at four workers, over many pages each.
     expect(listing.requests()).toBeGreaterThan(10);
     expect(acquired).toBe(listing.requests());
-  });
-
-  it('reports an availability row a person owns rather than overwriting it', async () => {
-    listing = await startFakeListing(SECTIONS, [
-      {
-        description: 'Producto MARCA0 variante0',
-        section: 'W011',
-        shops: ['T1'],
-      },
-    ]);
-    const { runner, context, catalog, report } = build(listing, [
-      {
-        externalId: 'T1',
-        printedName: 'Jesús Rescatado',
-        supermarketLocationId: 'loc-1',
-        status: SourceLocationStatus.ACTIVE,
-        matchedBy: ItemSourceMatch.NAME_SIZE,
-      },
-    ]);
-    catalog.setLocationAvailability.mockResolvedValue({
-      written: 0,
-      skipped: 1,
-      conflicts: [{ itemId: 'item-1', held: false, offered: true }],
-    });
-
-    await runner.run(
-      context,
-      { supermarketId: CHAIN },
-      source({ baseUrl: listing.url })
-    );
-
-    expect(report['availabilityConflicts']).toEqual([
-      { shop: 'T1', itemId: 'item-1', held: false, offered: true },
-    ]);
   });
 });

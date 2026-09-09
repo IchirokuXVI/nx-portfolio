@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DiscoveredPlaceStatus,
@@ -27,6 +27,7 @@ import { DiscoveredPlace } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { toDiscoveredPlaceView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import type { ObservedPlace } from './run-report';
 
 interface PlaceCursor {
   value: string;
@@ -48,12 +49,133 @@ interface PlaceCursor {
  */
 @Injectable()
 export class DiscoveredPlaceService {
+  private readonly logger = new Logger(DiscoveredPlaceService.name);
+
   constructor(
     @InjectRepository(DiscoveredPlace)
     private readonly places: Repository<DiscoveredPlace>,
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService
   ) {}
+
+  /**
+   * What a run does with the shops it found (plan 0103, section 6.4).
+   *
+   * Both store discovery runners held a `Repository<DiscoveredPlace>` and wrote
+   * this themselves, twice, with the postal code derivation in one of them only.
+   * A runner reports places now and holds nothing that could write them, so the
+   * upsert is here, once, for every source that finds a shop.
+   *
+   * **Re-discovery refreshes the description and never resurrects a decision.**
+   * `status` is the owner's: a place already imported or rejected keeps that
+   * answer however many runs meet it again.
+   *
+   * **A postal code the source stated is never overridden by a guess.** A place
+   * that arrives without one is derived from its coordinates, bounded by the
+   * same limit plan 0061 bounds a location's own derivation with, and a place
+   * beyond that bound keeps both columns null. A wrong postcode puts the shop in
+   * somebody else's list, which is worse than no postcode at all.
+   *
+   * No admin gate, unlike every other method here: the caller is a run, not a
+   * person, and the run was already gated at the spawn.
+   */
+  async observe(
+    places: readonly ObservedPlace[],
+    options: { runId: string; deriveMaxMetres: number }
+  ): Promise<{ created: number; refreshed: number }> {
+    const seenAt = new Date();
+    let created = 0;
+    let refreshed = 0;
+
+    for (const place of places) {
+      const located = await this.locate(place, options.deriveMaxMetres);
+      const fields = {
+        brandKey: place.brandKey,
+        brandName: place.brandName,
+        name: place.name,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        street: place.street,
+        city: place.city,
+        postalCode: located.postalCode,
+        postalCodeSource: located.postalCodeSource,
+        country: place.country,
+        website: place.website,
+        openingHours: place.openingHours,
+        tags: place.tags,
+        runId: options.runId,
+        lastSeenAt: seenAt,
+      };
+
+      const existing = await this.places.findOne({
+        where: { provider: place.provider, externalRef: place.externalRef },
+      });
+      if (existing) {
+        Object.assign(existing, fields);
+        await this.places.save(existing);
+        refreshed += 1;
+        continue;
+      }
+      await this.places.save(
+        this.places.create({
+          provider: place.provider,
+          externalRef: place.externalRef,
+          status: DiscoveredPlaceStatus.NEW,
+          firstSeenAt: seenAt,
+          ...fields,
+        })
+      );
+      created += 1;
+    }
+
+    return { created, refreshed };
+  }
+
+  /**
+   * The place's postal code, and where it came from (plan 0097, section 3).
+   *
+   * A failure asking catalog leaves the place with no code rather than failing
+   * the run. One untagged address is not worth losing an eighteen minute walk
+   * over, and the next run of this code fills it in.
+   */
+  private async locate(
+    place: ObservedPlace,
+    deriveMaxMetres: number
+  ): Promise<{
+    postalCode: string | null;
+    postalCodeSource: PostalCodeSource | null;
+  }> {
+    if (place.postalCode) {
+      return {
+        postalCode: place.postalCode,
+        postalCodeSource: place.postalCodeSource ?? PostalCodeSource.SOURCE,
+      };
+    }
+    const country = place.country.trim().toLowerCase();
+    if (!country) {
+      return { postalCode: null, postalCodeSource: null };
+    }
+    try {
+      const { nearest } = await this.catalog.resolveNearestPostalCode(
+        country,
+        place.latitude,
+        place.longitude,
+        deriveMaxMetres
+      );
+      return nearest
+        ? {
+            postalCode: nearest.postalCode,
+            postalCodeSource: PostalCodeSource.DERIVED,
+          }
+        : { postalCode: null, postalCodeSource: null };
+    } catch (error) {
+      this.logger.warn(
+        `Could not derive a postal code for a place in ${country}: ` +
+          `${String(error)}`
+      );
+      return { postalCode: null, postalCodeSource: null };
+    }
+  }
 
   async list(req: ListDiscoveredPlacesRequest): Promise<DiscoveredPlacePage> {
     await this.admin.requireAdmin(req);

@@ -14,10 +14,10 @@ import type { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import type { DiscoveredPlace, PostalCodeDiscoveryRequest } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import { DiscoveredPlaceService } from './discovered-place.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import type { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
-import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
 
 const ADMIN = 'owner-1';
 
@@ -427,32 +427,37 @@ describe('The postal code queue as a screen (plan 0097)', () => {
 
 // --- Section 3: a place takes the nearest centroid --------------------------
 
-describe('OsmStoreDiscoveryRunner and the postal code it writes (plan 0097)', () => {
+describe('The postal code a discovered place is written with (plan 0097)', () => {
   /**
-   * The runner is exercised through {@link OsmStoreDiscoveryRunner.locate}, which
-   * is private and reached here by name.
+   * Exercised through `DiscoveredPlaceService.locate`, which is private and
+   * reached here by name.
    *
-   * The alternative is faking Nominatim and Overpass to reach three lines of
-   * branching, which is what `osm-places` fixtures already cover, and the rule
-   * being tested is about catalog rather than about either of them.
+   * **It used to be the runner's**, and plan 0103 moved it: both store
+   * discovery runners wrote places, and only one of them derived a postal code
+   * at all. A runner reports a place now and the service writes it, so the rule
+   * is stated once for every source that finds a shop.
+   *
+   * The alternative to reaching in is faking Nominatim and Overpass to get at
+   * three lines of branching, which is what the `osm-places` fixtures already
+   * cover, and the rule being tested is about catalog rather than about either
+   * of them.
    */
   function locate(
-    runner: OsmStoreDiscoveryRunner,
+    service: DiscoveredPlaceService,
     place: { postalCode: string | null; latitude: number; longitude: number },
     country: string
   ) {
     return (
-      runner as unknown as {
+      service as unknown as {
         locate: (
           place: unknown,
-          country: string,
-          config: HarvesterConfig
+          deriveMaxMetres: number
         ) => Promise<{
           postalCode: string | null;
           postalCodeSource: PostalCodeSource | null;
         }>;
       }
-    ).locate(place, country, settings());
+    ).locate({ ...place, country }, settings().postalCodeDeriveMaxMetres);
   }
 
   function build(
@@ -463,23 +468,20 @@ describe('OsmStoreDiscoveryRunner and the postal code it writes (plan 0097)', ()
       nearest,
     }));
     const catalog = { resolveNearestPostalCode } as unknown as CatalogClient;
-    const recordPlaceName = jest.fn(async () => undefined);
-    const queue = { recordPlaceName } as unknown as PostalCodeDiscoveryStore;
-    const runner = new OsmStoreDiscoveryRunner(
+    const service = new DiscoveredPlaceService(
       {} as unknown as Repository<DiscoveredPlace>,
-      queue,
       catalog,
-      configOf(settings())
+      {} as unknown as PlatformAdminService
     );
-    return { runner, resolveNearestPostalCode, recordPlaceName };
+    return { service, resolveNearestPostalCode };
   }
 
   it('keeps the tag a place already carried and asks catalog nothing', async () => {
-    const { runner, resolveNearestPostalCode } = build(null);
+    const { service, resolveNearestPostalCode } = build(null);
 
     await expect(
       locate(
-        runner,
+        service,
         { postalCode: '14013', latitude: 37.9, longitude: -4.8 },
         'es'
       )
@@ -492,14 +494,14 @@ describe('OsmStoreDiscoveryRunner and the postal code it writes (plan 0097)', ()
   });
 
   it('derives a code for an untagged place, flagged DERIVED', async () => {
-    const { runner, resolveNearestPostalCode } = build({
+    const { service, resolveNearestPostalCode } = build({
       postalCode: '14010',
       distanceMetres: 800,
     });
 
     await expect(
       locate(
-        runner,
+        service,
         { postalCode: null, latitude: 37.9, longitude: -4.8 },
         'es'
       )
@@ -518,11 +520,11 @@ describe('OsmStoreDiscoveryRunner and the postal code it writes (plan 0097)', ()
   it('keeps both columns null when nothing is within the bound', async () => {
     // A wrong postcode is worse than none: it puts the shop in somebody else's
     // list, where none only makes the price say it is approximate.
-    const { runner } = build(null);
+    const { service } = build(null);
 
     await expect(
       locate(
-        runner,
+        service,
         { postalCode: null, latitude: 37.9, longitude: -4.8 },
         'es'
       )
@@ -535,16 +537,15 @@ describe('OsmStoreDiscoveryRunner and the postal code it writes (plan 0097)', ()
         throw new Error('catalog is down');
       }),
     } as unknown as CatalogClient;
-    const runner = new OsmStoreDiscoveryRunner(
+    const service = new DiscoveredPlaceService(
       {} as unknown as Repository<DiscoveredPlace>,
-      {} as unknown as PostalCodeDiscoveryStore,
       catalog,
-      configOf(settings())
+      {} as unknown as PlatformAdminService
     );
 
     await expect(
       locate(
-        runner,
+        service,
         { postalCode: null, latitude: 37.9, longitude: -4.8 },
         'es'
       )
