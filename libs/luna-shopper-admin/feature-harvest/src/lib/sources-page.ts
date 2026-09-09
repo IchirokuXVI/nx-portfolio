@@ -24,13 +24,31 @@ import { HarvestShell } from './harvest-shell';
 
 type Source = Wire.HarvestSupermarketSourceView;
 
-/** The adapters `UpsertSupermarketSourceDto` accepts. */
-const ADAPTERS: readonly Wire.EnumsAdapterKey[] = [
-  'mercadona-api',
-  'deza-web',
-  'osm-places',
-  'manual',
-];
+/**
+ * The adapters `UpsertSupermarketSourceDto` accepts, in the order the picker
+ * offers them.
+ *
+ * It is a `Record` keyed on the wire union rather than an array of strings so
+ * that a key the document declares and this screen does not is a compile error
+ * here. The array form drifted twice: `lidl-api` (backend plan 0089) and
+ * `carrefour-web` (backend plan 0090) both reached the contract, the gateway and
+ * the generated types while this list still named four adapters, so two chains
+ * shipped with a runner nobody could describe a source for.
+ *
+ * The values are the order, and nothing else reads them.
+ */
+const ADAPTER_ORDER: Record<Wire.EnumsAdapterKey, number> = {
+  'mercadona-api': 1,
+  'deza-web': 2,
+  'carrefour-web': 3,
+  'lidl-api': 4,
+  'osm-places': 5,
+  manual: 6,
+};
+
+const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
+  Object.keys(ADAPTER_ORDER) as Wire.EnumsAdapterKey[]
+).sort((a, b) => ADAPTER_ORDER[a] - ADAPTER_ORDER[b]);
 
 /**
  * Per chain fetching configuration (plan 0006, sections 3 and 8).
