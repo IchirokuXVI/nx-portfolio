@@ -129,15 +129,16 @@ const SCOPED_ADAPTER = 'mercadona-api';
         <!-- An import states its chain on the upload screen, beside the
              document that says which chain printed it (admin plan 0010). -->
         @if (!uploading()) {
-          <label>
+          <div class="field">
             <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
-            <input
-              (ngModelChange)="onChainChange()"
-              [(ngModel)]="supermarketId"
-              name="supermarketId"
-              type="text"
+            <lib-reference-picker
+              (valueChange)="chooseChain($event)"
+              [controlId]="'run-chain'"
+              [lookup]="references"
+              [resource]="'supermarkets'"
+              [value]="supermarketId()"
             />
-          </label>
+          </div>
         }
 
         <!-- A walk writes prices now, so a Mercadona walk needs to be told
@@ -197,16 +198,32 @@ const SCOPED_ADAPTER = 'mercadona-api';
       }
 
       @if (blockedKey(); as key) {
-        <p class="failure" role="alert">{{ key | rokuT }}</p>
+        <div class="failure" role="alert">
+          <p>{{ key | rokuT }}</p>
+          <!-- The server's own words, under the screen's. The refusals that
+               reach here are written for whoever is operating the harvester,
+               and they name the row or the switch that has to change. -->
+          @if (blockedDetails().length > 0) {
+            <ul>
+              @for (line of blockedDetails(); track line) {
+                <li>{{ line }}</li>
+              }
+            </ul>
+          }
+        </div>
       }
     </section>
 
     <section class="filters">
       <label>
         <span>{{ 'harvest.runs.filter.reverted' | rokuT }}</span>
+        <!-- One way, with the handler setting the signal itself. A banana box
+             beside an explicit ngModelChange fires this handler first and
+             writes the signal second, so the read below it would go out with
+             the filter the operator just moved away from. -->
         <select
-          (ngModelChange)="onRevertedChange()"
-          [(ngModel)]="reverted"
+          (ngModelChange)="onRevertedChange($event)"
+          [ngModel]="reverted()"
           name="reverted"
         >
           @for (option of revertedOptions; track option) {
@@ -326,6 +343,14 @@ const SCOPED_ADAPTER = 'mercadona-api';
       border-radius: var(--admin-radius);
       background: var(--admin-danger-wash);
       inline-size: 100%;
+    }
+
+    /* The server's own sentences, indented under the screen's own. Marked as a
+       list because there can be several, which is what a refusal by field is. */
+    .failure ul {
+      margin-block-start: var(--admin-space-2);
+      padding-inline-start: var(--admin-space-4);
+      font-size: 0.8125rem;
     }
 
     .state {
@@ -449,8 +474,17 @@ export class RunsPage {
    * The adapter is read rather than guessed, because it is what decides whether
    * the scope picker is offered at all, and the scope is cleared with it: a
    * scope of the previous chain is not a scope of this one.
+   *
+   * **The chain arrives as an argument, and that is the fix rather than a
+   * detail of it.** This was a text input carrying `[(ngModel)]` and an
+   * `(ngModelChange)` beside it, and the two listeners fire in the order the
+   * template names them: the handler ran first and read the signal the banana
+   * box had not written yet. So the form asked the source route about the
+   * previous chain, and a Mercadona walk drew no scope field until a second
+   * chain was chosen, which is when the answer for the first one arrived.
    */
-  onChainChange(): void {
+  chooseChain(supermarketId: string): void {
+    this.supermarketId.set(supermarketId);
     this.priceScopeId.set('');
     this.adapterKey.set('');
     void this._readAdapter();
@@ -541,17 +575,56 @@ export class RunsPage {
     if (reason !== null) {
       return reasonKey(reason);
     }
-    return error.status === 409
-      ? 'harvest.runs.start.alreadyRunning'
+    if (error.status === 409) {
+      return 'harvest.runs.start.alreadyRunning';
+    }
+    // Two sentences for the same status, and which one is true depends on
+    // whether the server explained itself. Saying it did not while its own
+    // words are drawn under the line is the failure this replaces.
+    return this.blockedDetails().length > 0
+      ? 'harvest.runs.start.refused'
       : 'harvest.runs.start.failed';
+  });
+
+  /**
+   * What the server said about the refusal, in its own words.
+   *
+   * Empty when it sent none, which is the case the screen has its own sentence
+   * for. Most spawn refusals are not that case: the harvester answers a chain
+   * with no source row, a source switched off, a walk with no scope and a
+   * document already imported with a `ValidationException` or a
+   * `ConflictException`, and the fact that names the row to fix rides in
+   * `detail` rather than in `message`, which is the same generic line for every
+   * failure sharing a code.
+   *
+   * The per field messages come first where there are any, because a gateway
+   * DTO refusal leaves `detail` as the status text rather than as a sentence.
+   */
+  readonly blockedDetails = computed<readonly string[]>(() => {
+    const error = this._spawnError();
+    if (error === null) {
+      return [];
+    }
+
+    const fields = Object.values(error.fieldErrors).flat();
+    if (fields.length > 0) {
+      return fields;
+    }
+    return error.detail === '' ? [] : [error.detail];
   });
 
   constructor() {
     void this.load();
   }
 
-  /** The filter is a server side one, so changing it is a fresh read. */
-  onRevertedChange(): void {
+  /**
+   * The filter is a server side one, so changing it is a fresh read.
+   *
+   * The chosen value is the argument for the reason the template gives: read
+   * off the signal instead, this would send the filter that was there before.
+   */
+  onRevertedChange(filter: RevertedFilter): void {
+    this.reverted.set(filter);
     void this.load();
   }
 

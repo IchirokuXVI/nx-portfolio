@@ -568,7 +568,7 @@
       "start": {
         "heading": "Start a run",
         "mode": "What to run",
-        "supermarketId": "Chain identifier",
+        "supermarketId": "Chain",
         "postalCode": "Postal code",
         "country": "Country",
         "submit": "Start the run",
@@ -576,6 +576,7 @@
         "attribution": "A run's writes are recorded against the harvester service, not against you. Starting one is what is being recorded here.",
         "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
         "failed": "The run did not start, and the server did not say why.",
+        "refused": "The run did not start. The server said:",
         "priceScope": "Price scope to write to",
         "priceScopeHelp": "A walk writes the prices it reads, so it has to be told which scope they belong to. Only asked for a chain fetched through an API that publishes prices; a site that prints none needs no scope.",
         "fileImport": "A file import starts from the document itself: the file says what was observed, and you say which chain, which scope and what observed it. Drop it on the import screen.",
