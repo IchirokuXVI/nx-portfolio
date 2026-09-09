@@ -126,6 +126,18 @@ export interface SourceIngestCounters {
   created: number;
   updated: number;
   unchanged: number;
+  /**
+   * `source_entry_prices` rows this run wrote: one per price the source stated
+   * that resolved to a scope, whatever the row's status.
+   *
+   * Separate from {@link pricesWritten}, and the difference is why both exist.
+   * This one counts what the chain said, on the chain's own rows. That one
+   * counts what reached catalog, which only an `ACTIVE` row earns. A LIDL walk
+   * of 188 products nobody has matched yet writes 8,154 of these and none of
+   * those, and a report naming only the second reads as a run that fetched
+   * prices and lost them.
+   */
+  pricesRecorded: number;
   /** `item_prices` rows catalog inserted. */
   pricesWritten: number;
   /** Rows catalog already held at this value and only moved the clock on. */
@@ -229,6 +241,7 @@ export class SourceIngest {
       created: 0,
       updated: 0,
       unchanged: 0,
+      pricesRecorded: 0,
       pricesWritten: 0,
       pricesConfirmed: 0,
     };
@@ -291,6 +304,10 @@ export class SourceIngest {
 
     // Step 3, grouped by resolved scope, in one statement per chunk of rows.
     await this.replaceScopePrices(context.runId, observed);
+    // One row per price, so the count is the length. Counted here rather than
+    // inside the write, because a price that resolved to no scope was already
+    // dropped with a warning above and was never a row.
+    counters.pricesRecorded += observed.length;
 
     // Step 4. Only an `ACTIVE` row is owed a price: a fuzzy match never writes
     // one, because a wrong number on a real product is worse than no number.
@@ -328,8 +345,9 @@ export class SourceIngest {
     this.logger.log(
       `Run ${context.runId}: ${observations.length} observation(s) ` +
         `ingested (${counters.created} new, ${counters.updated} changed), ` +
+        `${counters.pricesRecorded} price(s) recorded on the source rows, ` +
         `${owedCount} price(s) owed across ${owed.size} scope(s), ` +
-        `${counters.pricesWritten} written.`
+        `${counters.pricesWritten} written to catalog.`
     );
     return { outcomes, counters };
   }
@@ -685,6 +703,7 @@ export class SourceIngestSession {
     created: 0,
     updated: 0,
     unchanged: 0,
+    pricesRecorded: 0,
     pricesWritten: 0,
     pricesConfirmed: 0,
   };
@@ -733,6 +752,7 @@ export class SourceIngestSession {
     this.counters.created += result.counters.created;
     this.counters.updated += result.counters.updated;
     this.counters.unchanged += result.counters.unchanged;
+    this.counters.pricesRecorded += result.counters.pricesRecorded;
     this.counters.pricesWritten += result.counters.pricesWritten;
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
     return result.outcomes;

@@ -6,7 +6,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
-  runCounterKeys,
+  runPriceCounters,
   type HarvestRun,
   type RunProgress,
 } from '@portfolio/luna-shopper-admin/models';
@@ -77,6 +77,18 @@ import {
         </div>
       }
     </dl>
+
+    @if (prices().length > 0) {
+      <dl class="prices">
+        @for (counter of prices(); track counter.key) {
+          <div>
+            <dt>{{ 'harvest.run.counter.' + counter.key | rokuT }}</dt>
+            <dd>{{ counter.value }}</dd>
+          </div>
+        }
+      </dl>
+      <p class="note">{{ 'harvest.run.counter.pricesNote' | rokuT }}</p>
+    }
   `,
   styles: `
     :host {
@@ -99,8 +111,14 @@ import {
     }
 
     .stage,
-    .unsized {
+    .unsized,
+    .note {
       color: var(--admin-ink-muted);
+    }
+
+    .note {
+      margin: 0;
+      font-size: 0.8125rem;
     }
 
     .track {
@@ -151,18 +169,18 @@ export class RunProgressView {
   /**
    * The run's own counters, shown separately rather than summed.
    *
-   * Two of them are renamed on a run that writes prices (admin plan 0014,
-   * section 3): a walk writes prices now, so its `updated` and `unchanged` are
-   * prices written and prices confirmed, which is what the ingest counted. On a
-   * store discovery they are shops, so they keep the neutral words.
+   * They keep their neutral words on every mode. Two of them used to be renamed
+   * prices on a run that writes any, and that was wrong twice over: `updated` is
+   * rows the ladder changed, and the harvester adds its price inserts to it as
+   * well. A LIDL walk read "prices written: 0" while its own source rows carried
+   * 8,154 prices. The real numbers are {@link prices}, which the run reports.
    */
   readonly counters = computed(() => {
     const run = this.run();
-    const keys = runCounterKeys(run);
     return [
       { key: 'created', value: run.created },
-      { key: keys.updated, value: run.updated },
-      { key: keys.unchanged, value: run.unchanged },
+      { key: 'updated', value: run.updated },
+      { key: 'unchanged', value: run.unchanged },
       { key: 'notFound', value: run.notFound },
       // What a rule dropped, which is not the same as what failed (backend plan
       // 0081, section 7). A loyalty gated leaflet offer is skipped on purpose
@@ -171,5 +189,26 @@ export class RunProgressView {
       { key: 'skipped', value: run.skipped },
       { key: 'failed', value: run.failed },
     ];
+  });
+
+  /**
+   * What the run did with prices, in its own words.
+   *
+   * Two numbers and not one, because they answer two different questions and a
+   * chain nobody has matched yet answers them very differently: every price the
+   * source stated is kept on the source rows, and none of it reaches catalog
+   * until a person binds the row to a product. Drawn only when the run reports
+   * them, so a store discovery and an older run show nothing here rather than
+   * three zeros.
+   */
+  readonly prices = computed(() => {
+    const counters = runPriceCounters(this.run());
+    return counters === null
+      ? []
+      : [
+          { key: 'pricesRecorded', value: counters.recorded },
+          { key: 'pricesPublished', value: counters.published },
+          { key: 'pricesConfirmed', value: counters.confirmed },
+        ];
   });
 }

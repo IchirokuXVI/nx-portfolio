@@ -20,7 +20,7 @@ import { HarvestRunStore } from './harvest-run.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { RunContext } from './run-context';
 import { RunReportSink, type RunReportResult } from './run-report.sink';
-import { SourceIngest } from './source-ingest';
+import { SourceIngest, type SourceIngestCounters } from './source-ingest';
 import { SourceLocationService } from './source-location.service';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -211,6 +211,10 @@ export class RunExecutor implements OnApplicationShutdown {
               }
             );
 
+      // What a file import's ingest counted. A file import has no sink, so this
+      // is the one path whose prices the report can learn about no other way.
+      let imported: SourceIngestCounters | null = null;
+
       switch (run.mode) {
         // The source is passed and may be null: it is what the discovery
         // dispatches on (plan 0089, section 9), and a run started by the postal
@@ -267,7 +271,7 @@ export class RunExecutor implements OnApplicationShutdown {
         // the outcomes into a warning per product, which is the one thing a
         // report cannot answer (plan 0103, D1).
         case HarvestRunMode.FILE_IMPORT:
-          await this.fileImport.run(context, {
+          imported = await this.fileImport.run(context, {
             supermarketId: run.supermarketId as string,
             priceScopeId: run.priceScopeId as string,
             // What observed the price, not what uploaded it: a re-imported
@@ -282,6 +286,11 @@ export class RunExecutor implements OnApplicationShutdown {
         await this.store.setReport(runId, {
           ...(await this.store.load(runId)).report,
           ...describeWrites(written),
+        });
+      } else if (imported) {
+        await this.store.setReport(runId, {
+          ...(await this.store.load(runId)).report,
+          ...describePrices(imported),
         });
       }
       await context.flush();
@@ -394,10 +403,41 @@ function readBackfillBudget(
   return Number.isFinite(budget) && budget > 0 ? Math.floor(budget) : undefined;
 }
 
+/**
+ * What a run did with prices, in the two numbers that are not the same number.
+ *
+ * `pricesRecorded` is every price the chain stated, kept on the chain's own
+ * source rows. `pricesPublished` is what reached catalog, which only a row bound
+ * to a product earns. A LIDL walk of 188 unmatched products records thousands
+ * and publishes none, and both are correct.
+ *
+ * They are not the run's `updated` and `unchanged` counters, which is where the
+ * back office read them from before. Those two are rows the ladder changed and
+ * rows it left alone, and the ingest adds its price inserts to them as well, so
+ * a second run's "prices written" was two unrelated things summed.
+ */
+function describePrices(
+  counters: Pick<
+    SourceIngestCounters,
+    'pricesRecorded' | 'pricesWritten' | 'pricesConfirmed'
+  >
+): Record<string, unknown> {
+  return {
+    pricesRecorded: counters.pricesRecorded,
+    pricesPublished: counters.pricesWritten,
+    pricesConfirmed: counters.pricesConfirmed,
+  };
+}
+
 /** What the write half did, for the run's own report. */
 function describeWrites(written: RunReportResult): Record<string, unknown> {
   return {
     productsWritten: written.products,
+    ...describePrices({
+      pricesRecorded: written.pricesRecorded,
+      pricesWritten: written.pricesPublished,
+      pricesConfirmed: written.pricesConfirmed,
+    }),
     placesCreated: written.placesCreated,
     placesRefreshed: written.placesRefreshed,
     scopesDeclared: written.scopesDeclared,

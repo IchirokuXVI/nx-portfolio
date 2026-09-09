@@ -5,7 +5,7 @@ import {
   isReverted,
   isTerminalRun,
   PRICE_WRITING_MODES,
-  runCounterKeys,
+  runPriceCounters,
   runProgress,
   spawnBlockReason,
   TERMINAL_RUN_STATUSES,
@@ -35,6 +35,10 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     stageLabel: null,
     abortRequestedAt: null,
     error: null,
+    skipped: 0,
+    warnings: [],
+    documentSha256: null,
+    report: {},
     correlationId: null,
     requestedByUserId: null,
     revertedAt: null,
@@ -239,28 +243,49 @@ describe('canRevert', () => {
 });
 
 /**
- * What the run screen calls two of its counters (admin plan 0014, section 3).
+ * What a run did with prices, read from the run's own report.
  *
- * A walk writes prices now, so on a run that writes any, `updated` and
- * `unchanged` are prices written and prices confirmed, which is what the ingest
- * actually counted. On a store discovery they are shops, and naming a shop a
- * price would be worse than saying nothing.
+ * The screen used to rename `updated` and `unchanged` for a price writing mode,
+ * and a LIDL walk of 188 products nobody had matched read "prices written: 0"
+ * while its source rows carried 8,154 prices. `updated` is rows the ladder
+ * changed, and the harvester adds its price inserts to it as well.
  */
-describe('runCounterKeys', () => {
-  it.each(['CATALOG_DISCOVERY', 'FILE_IMPORT'] as const)(
-    'reads a %s run counters as prices',
-    (mode) => {
-      expect(runCounterKeys(run({ mode }))).toEqual({
-        updated: 'pricesWritten',
-        unchanged: 'pricesConfirmed',
-      });
-    }
-  );
+describe('runPriceCounters', () => {
+  it('reads the three numbers the report carries', () => {
+    expect(
+      runPriceCounters(
+        run({
+          report: {
+            pricesRecorded: 8154,
+            pricesPublished: 0,
+            pricesConfirmed: 0,
+          },
+        })
+      )
+    ).toEqual({ recorded: 8154, published: 0, confirmed: 0 });
+  });
 
-  it('leaves a store discovery counters neutral', () => {
-    expect(runCounterKeys(run({ mode: 'STORE_DISCOVERY' }))).toEqual({
-      updated: 'updated',
-      unchanged: 'unchanged',
-    });
+  /**
+   * The counters are not consulted, which is the whole point. A run whose rows
+   * all changed states 188 changed rows and no price, and the two must not be
+   * read as one number.
+   */
+  it('ignores the run counters', () => {
+    expect(
+      runPriceCounters(
+        run({
+          updated: 188,
+          unchanged: 42,
+          report: { pricesRecorded: 8154 },
+        })
+      )
+    ).toEqual({ recorded: 8154, published: 0, confirmed: 0 });
+  });
+
+  it.each([
+    ['a report with no price in it', {}],
+    ['a report whose numbers are not numbers', { pricesRecorded: 'many' }],
+  ])('answers null for %s', (_name, report) => {
+    expect(runPriceCounters(run({ report }))).toBeNull();
   });
 });
