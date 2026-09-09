@@ -16,6 +16,7 @@ import eljamon from './__fixtures__/eljamon.vision.harvest-document.json';
 import type { CatalogClient } from './catalog-client.service';
 import { FileImportRunner } from './file-import.runner';
 import { entryKey } from './matching';
+import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import { SourceIngest } from './source-ingest';
 
@@ -136,7 +137,13 @@ function build(options: {
     catalog as unknown as CatalogClient
   );
   return {
-    runner: new FileImportRunner(ingest),
+    // The scopes a version 2 document declares are resolved through this before
+    // anything is written (plan 0103, section 5.1). A leaflet declares none, so
+    // most cases here never reach it.
+    runner: new FileImportRunner(
+      ingest,
+      new PriceScopeResolver(catalog as unknown as CatalogClient)
+    ),
     context,
     saved,
     priceRows,

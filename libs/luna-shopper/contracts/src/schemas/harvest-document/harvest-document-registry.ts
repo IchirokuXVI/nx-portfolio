@@ -2,6 +2,10 @@ import {
   HARVEST_DOCUMENT_1_SCHEMA_ID,
   HARVEST_DOCUMENT_1_VERSION,
 } from './harvest-document-1.schema';
+import {
+  HARVEST_DOCUMENT_2_SCHEMA_ID,
+  HARVEST_DOCUMENT_2_VERSION,
+} from './harvest-document-2.schema';
 
 /**
  * Every file import schema version this backend can read, by the
@@ -16,7 +20,17 @@ import {
  */
 export const HARVEST_DOCUMENT_SCHEMA_IDS: Record<number, string> = {
   [HARVEST_DOCUMENT_1_VERSION]: HARVEST_DOCUMENT_1_SCHEMA_ID,
+  [HARVEST_DOCUMENT_2_VERSION]: HARVEST_DOCUMENT_2_SCHEMA_ID,
 };
+
+/**
+ * The version this backend writes when it produces a file.
+ *
+ * Reading is every version above; writing is one. A producer that wrote the
+ * oldest version it could would never be able to state a price per region,
+ * which is the whole reason version 2 exists (plan 0103, section 5).
+ */
+export const HARVEST_DOCUMENT_CURRENT_VERSION = HARVEST_DOCUMENT_2_VERSION;
 
 /** The versions a document may name, for an error message that lists them. */
 export const HARVEST_DOCUMENT_VERSIONS: number[] = Object.keys(

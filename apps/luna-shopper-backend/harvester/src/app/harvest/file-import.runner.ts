@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   HarvestWarningCode,
+  PriceScopeKind,
   PriceSourceKind,
   SourceEntryStatus,
   type HarvestDocumentProduct,
@@ -9,6 +10,7 @@ import {
 import { readHarvestDocument } from './harvest-document.reader';
 import { resolveImportWindow, type ImportWindow } from './import-window';
 import { entryKey } from './matching';
+import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import {
   SourceIngest,
@@ -62,7 +64,10 @@ const DEFAULT_CURRENCY = 'EUR';
 export class FileImportRunner {
   private readonly logger = new Logger(FileImportRunner.name);
 
-  constructor(private readonly ingest: SourceIngest) {}
+  constructor(
+    private readonly ingest: SourceIngest,
+    private readonly scopes: PriceScopeResolver
+  ) {}
 
   async run(context: RunContext, input: FileImportInput): Promise<void> {
     // Validated again here, because the harvester owns the schema version and a
@@ -129,6 +134,25 @@ export class FileImportRunner {
       }
     });
 
+    // The groups of shops this file prices for, resolved before anything is
+    // written (plan 0103, section 5.1). A document with none is every leaflet
+    // and every version 1 file: its prices name no scope and fall to the one
+    // the operator chose at the spawn.
+    const scopes = this.scopes.forRun(input.supermarketId);
+    for (const scope of document.scopes ?? []) {
+      await scopes.declare({
+        key: scope.key,
+        kind: scope.kind as PriceScopeKind,
+        name: scope.name ?? null,
+      });
+    }
+    if (scopes.createdCount > 0) {
+      this.logger.log(
+        `Run ${context.runId}: created ${scopes.createdCount} price scope(s) ` +
+          'the document named and catalog did not hold'
+      );
+    }
+
     await context.setStage(
       'INGEST',
       `Recording ${observations.length} product(s)`
@@ -137,6 +161,7 @@ export class FileImportRunner {
       supermarketId: input.supermarketId,
       defaultPriceScopeId: input.priceScopeId,
       sourceKind: input.sourceKind,
+      scopeIdFor: scopes.idFor,
       observations,
     });
 
@@ -220,37 +245,40 @@ export class FileImportRunner {
 }
 
 /**
- * Every price a product states, from the two blocks 6.1 allows.
+ * Every price a product states, one per group of shops it named.
  *
- * A version 1 product states at most one, for no particular group of shops, so
- * it falls to the scope the operator chose at the spawn. Version 2 is what
- * carries several (plan 0103, section 5.1), and it arrives here already
- * normalized into the same shape.
+ * The document arrives normalized into the version 2 shape (plan 0103, D7), so
+ * a version 1 product is already one entry naming no scope, and there is no
+ * branch here on which version the file was written for.
+ *
+ * **A price's own window beats the one resolved above it.** A region can date a
+ * product differently from its neighbour, which is the thing section 4 of plan
+ * 0089 says the model has to be able to store.
  */
 function pricesOf(
   product: HarvestDocumentProduct,
   window: ImportWindow | null
 ): SourceObservation['prices'] {
-  if (!product.price && !product.unit_price) {
-    return [];
-  }
-  return [
-    {
-      scopeKey: null,
+  return (product.prices ?? []).map((price) => {
+    const own = price.validity
+      ? resolveImportWindow({
+          documentFrom: price.validity.from ?? null,
+          documentUntil: price.validity.until ?? null,
+        })
+      : window;
+    return {
+      scopeKey: price.scope ?? null,
       // Null when the source stated only a comparison figure. The ingest then
       // writes the unit price and no till price, which is plan 0081 section
       // 6.1's one surviving decision.
-      price: product.price?.amount ?? null,
-      currency:
-        product.price?.currency ??
-        product.unit_price?.currency ??
-        DEFAULT_CURRENCY,
-      unitPrice: product.unit_price?.amount ?? null,
-      unitPriceLabel: product.unit_price?.label ?? null,
-      validFrom: window?.validFrom ?? null,
-      validUntil: window?.validUntil ?? null,
-    },
-  ];
+      price: price.amount,
+      currency: price.currency || DEFAULT_CURRENCY,
+      unitPrice: price.unit_price?.amount ?? null,
+      unitPriceLabel: price.unit_price?.label ?? null,
+      validFrom: own?.validFrom ?? null,
+      validUntil: own?.validUntil ?? null,
+    };
+  });
 }
 
 /** The keys more than one product in this document resolves to (D2). */
