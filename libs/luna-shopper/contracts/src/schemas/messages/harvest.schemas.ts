@@ -769,7 +769,9 @@ const listEntriesRequest = object(
   HARVEST_SCHEMA_IDS.listEntriesRequest,
   {
     ...adminCredentialProperties,
-    supermarketId: nonEmptyString(),
+    // Absent lists every chain's rows. The chain narrows the queue, it does not
+    // address it, and a row names the chain it came from.
+    supermarketId: string(),
     // Absent lists the two that are waiting for a person, which is the queue.
     status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
@@ -778,7 +780,7 @@ const listEntriesRequest = object(
     limit: integer({ minimum: 1 }),
     order: string(),
   },
-  ['userId', 'supermarketId']
+  ['userId']
 );
 const entryIdRequest = object(
   HARVEST_SCHEMA_IDS.entryIdRequest,

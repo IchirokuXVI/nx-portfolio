@@ -552,7 +552,7 @@ export class DiscoveredPlaceGroupQueryDto {
 }
 
 /**
- * The one queue, per chain (plan 0086, section 10).
+ * The one queue, of one chain or of every chain (plan 0086, section 10).
  *
  * `supermarketId` is **on the DTO** rather than a `@Query('supermarketId')`
  * argument beside it. `createValidationPipe` sets `whitelist` with
@@ -561,9 +561,14 @@ export class DiscoveredPlaceGroupQueryDto {
  * parameter of its own.
  */
 export class SourceEntryListQueryDto extends PageQueryDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'One chain’s rows. Absent lists every chain’s: the chain narrows the queue rather than addressing it, and a row names the chain it came from.',
+  })
+  @IsOptional()
   @IsUUID()
-  supermarketId!: string;
+  supermarketId?: string;
 
   @ApiPropertyOptional({
     enum: SourceEntryStatus,

@@ -453,11 +453,12 @@ export class RunPage {
   /**
    * The queue, opened on this run's chain.
    *
-   * The chain rides in the query string, which is what the queue reads to open
-   * itself rather than asking again. An operator arriving from a run already
-   * chose that chain when they uploaded the document, and making them pick it a
-   * second time between the run and its own queue is asking them to remember
-   * something the URL already knows.
+   * The chain rides in the query string, and the queue starts with its chain
+   * filter set to it rather than on every chain's rows. An operator arriving
+   * from a run already chose that chain when they uploaded the document, and
+   * handing them the whole catalog's queue between the run and its own rows is
+   * throwing away something the URL already knows. The filter can be cleared
+   * from there like any other.
    *
    * `null` for a run with no chain, which a file import never is: the spawn
    * refuses one without a `supermarketId`. The guard is here because a link

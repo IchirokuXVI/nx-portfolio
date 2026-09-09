@@ -681,18 +681,16 @@
     },
     "entries": {
       "heading": "Source products",
-      "empty": "Every product this chain named has been decided.",
+      "empty": "Every product a source named here has been decided.",
       "accept": "Yes, it is this product",
       "openSibling": "Open the row it points at",
       "reject": "Not a product we track",
       "timesSeen": "Seen {{count}} times",
       "extra": "Everything else the source sent",
       "lastRun": "The run that last saw it",
-      "choose": {
-        "body": "A source product belongs to the chain that named it, so choose which chain to work through. The queue reads that chain's products that nobody has decided yet, whatever named them.",
-        "chain": "Chain"
-      },
       "filter": {
+        "chain": "Chain",
+        "anyChain": "Every chain, newest first. Pick one to work through a single chain, and each row says which chain named it until you do.",
         "status": "State",
         "queued": "Waiting for a decision",
         "sourceKind": "What named it",

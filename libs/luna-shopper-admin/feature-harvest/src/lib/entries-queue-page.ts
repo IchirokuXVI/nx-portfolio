@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -95,10 +96,15 @@ const SCOPE_PAGE = 100;
  *
  * Four things on it are the design rather than details of it.
  *
- * **The chain comes first**, as every one of the three did, because a row is
- * keyed on (`supermarketId`, `externalId`) and a chain's own name for a product
- * means nothing outside that chain. There is no route that answers "every
- * chain's queued rows" and no screen that could use one.
+ * **The chain is a filter, beside the other two.** It used to be a gate: the
+ * screen opened on a chooser, and once a chain was chosen there was no way back
+ * to another one short of reloading the page. The key of a row is
+ * (`supermarketId`, `externalId`), so a row's key means nothing outside its
+ * chain, but the row names its chain and the queue is one queue. Nothing is
+ * chosen by default, and then the read is every chain's rows, newest first,
+ * which is the order the queue reads in anyway. A row draws its chain's name
+ * while no chain is chosen, because that is when the badge says something the
+ * filters do not.
  *
  * **The source kind is a badge and a filter**, because it is the one thing that
  * tells a Mercadona product from a Mercadona leaflet tile of the same product,
@@ -129,57 +135,62 @@ const SCOPE_PAGE = 100;
     ConfirmDialog,
   ],
   template: `
-    @if (chosen() === '') {
-      <section class="choose">
-        <h1>{{ 'harvest.entries.heading' | rokuT }}</h1>
-        <p class="lead">{{ 'harvest.entries.choose.body' | rokuT }}</p>
+    <section class="filters">
+      <div class="field">
+        <label for="entries-chain">{{
+          'harvest.entries.filter.chain' | rokuT
+        }}</label>
+        <lib-reference-picker
+          (valueChange)="open($event)"
+          [controlId]="'entries-chain'"
+          [lookup]="references"
+          [nullable]="true"
+          [resource]="'supermarkets'"
+          [value]="chosen()"
+        />
+        @if (chosen() === '') {
+          <p class="hint">{{ 'harvest.entries.filter.anyChain' | rokuT }}</p>
+        }
+      </div>
 
-        <div class="field">
-          <span>{{ 'harvest.entries.choose.chain' | rokuT }}</span>
-          <lib-reference-picker
-            (valueChange)="open($event)"
-            [controlId]="'entries-chain'"
-            [lookup]="references"
-            [resource]="'supermarkets'"
-            [value]="chosen()"
-          />
-        </div>
-      </section>
-    } @else {
-      <section class="filters">
-        <label>
-          <span>{{ 'harvest.entries.filter.status' | rokuT }}</span>
-          <select (ngModelChange)="reload()" [(ngModel)]="status" name="status">
-            <option value="">
-              {{ 'harvest.entries.filter.queued' | rokuT }}
+      <label>
+        <span>{{ 'harvest.entries.filter.status' | rokuT }}</span>
+        <select
+          (ngModelChange)="chooseStatus($event)"
+          [ngModel]="status()"
+          name="status"
+        >
+          <option value="">
+            {{ 'harvest.entries.filter.queued' | rokuT }}
+          </option>
+          @for (option of statuses; track option) {
+            <option [value]="option">
+              {{ 'harvest.entryStatus.' + option | rokuT }}
             </option>
-            @for (option of statuses; track option) {
-              <option [value]="option">
-                {{ 'harvest.entryStatus.' + option | rokuT }}
-              </option>
-            }
-          </select>
-        </label>
+          }
+        </select>
+      </label>
 
-        <label>
-          <span>{{ 'harvest.entries.filter.sourceKind' | rokuT }}</span>
-          <select
-            (ngModelChange)="reload()"
-            [(ngModel)]="sourceKind"
-            name="sourceKind"
-          >
-            <option value="">
-              {{ 'harvest.entries.filter.anyKind' | rokuT }}
+      <label>
+        <span>{{ 'harvest.entries.filter.sourceKind' | rokuT }}</span>
+        <select
+          (ngModelChange)="chooseKind($event)"
+          [ngModel]="sourceKind()"
+          name="sourceKind"
+        >
+          <option value="">
+            {{ 'harvest.entries.filter.anyKind' | rokuT }}
+          </option>
+          @for (option of kinds; track option) {
+            <option [value]="option">
+              {{ 'harvest.sourceKind.' + option | rokuT }}
             </option>
-            @for (option of kinds; track option) {
-              <option [value]="option">
-                {{ 'harvest.sourceKind.' + option | rokuT }}
-              </option>
-            }
-          </select>
-        </label>
-      </section>
+          }
+        </select>
+      </label>
+    </section>
 
+    @if (queue !== null) {
       <lib-queue-frame
         (clearSelection)="queue!.clearSelection()"
         (confirm)="primary()"
@@ -220,6 +231,11 @@ const SCOPE_PAGE = 100;
         @if (row(); as entry) {
           <h2>{{ entry.name }}</h2>
           <p class="identity">
+            <!-- The chain, while none is chosen, because that is when it says
+                 something the filters do not. -->
+            @if (chosen() === '' && chainName(entry.supermarketId); as chain) {
+              <span class="chain">{{ chain }}</span>
+            }
             @if (entry.sourceKind; as kind) {
               <span [class]="kind" class="kind">{{
                 'harvest.sourceKind.' + kind | rokuT
@@ -408,9 +424,13 @@ const SCOPE_PAGE = 100;
         </section>
 
         <!-- Section 2's columns for this screen: whatever the review view leads
-             with. The kind badge, the name, the brand and size, the barcode,
-             the proposal and how many runs have seen it. -->
+             with. The chain where the queue holds several, the kind badge, the
+             name, the brand and size, the barcode, the proposal and how many
+             runs have seen it. -->
         <ng-template #queueRow let-row>
+          @if (chosen() === '' && chainName(row.supermarketId); as chain) {
+            <span class="chain">{{ chain }}</span>
+          }
           @if (row.sourceKind; as kind) {
             <span [class]="kind" class="kind">{{
               'harvest.sourceKind.' + kind | rokuT
@@ -496,16 +516,14 @@ const SCOPE_PAGE = 100;
       gap: var(--admin-space-3);
     }
 
-    .choose {
+    .field {
       display: flex;
       flex-direction: column;
-      gap: var(--admin-space-3);
-      align-items: flex-start;
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
+      gap: var(--admin-space-1);
+      /* The picker is a search box until a chain is chosen, and a name with two
+         buttons afterwards. Both are wider than a select, and neither may push
+         the two selects off the row. */
+      min-inline-size: 16rem;
     }
 
     h2 {
@@ -520,7 +538,6 @@ const SCOPE_PAGE = 100;
       color: var(--admin-ink-muted);
     }
 
-    .lead,
     .hint,
     .brand,
     .size,
@@ -540,18 +557,29 @@ const SCOPE_PAGE = 100;
       gap: var(--admin-space-3);
     }
 
+    .filters {
+      align-items: flex-start;
+    }
+
     .identity {
       align-items: baseline;
       margin-block-end: var(--admin-space-3);
     }
 
-    .kind {
+    .kind,
+    .chain {
       padding: var(--admin-space-1) var(--admin-space-2);
       border-radius: var(--admin-radius);
       background: var(--admin-surface);
       font-size: 0.75rem;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+    }
+
+    .chain {
+      /* A chain is a proper name, so it keeps its own capitals. */
+      text-transform: none;
+      font-weight: 600;
     }
 
     .kind.OFFICIAL_LEAFLET {
@@ -788,8 +816,18 @@ export class EntriesQueuePage {
     return this._queue();
   }
 
-  /** The chain's scopes by id, so a price line reads as a name and not a uuid. */
+  /**
+   * Scopes by id, so a price line reads as a name and not a uuid.
+   *
+   * Across every chain whose rows this page has drawn, not one chain's, because
+   * a queue with no chain filter holds rows of several.
+   */
   private readonly _scopeNames = signal<ReadonlyMap<string, string>>(new Map());
+  /** The chains already read, so neither name is asked for twice. */
+  private readonly _scopesAsked = new Set<string>();
+  /** Chains by id, for the badge a row wears while no chain is chosen. */
+  private readonly _chainNames = signal<ReadonlyMap<string, string>>(new Map());
+  private readonly _chainsAsked = new Set<string>();
 
   /**
    * What the size input held before the operator touched it.
@@ -807,12 +845,28 @@ export class EntriesQueuePage {
 
   constructor() {
     // The chain a run's own link named, so an operator arriving from the run
-    // that queued these rows is not asked to pick it again. Absent everywhere
-    // else, and then the chooser is the first thing this screen draws.
-    const named = this._route.snapshot.queryParamMap.get('supermarketId') ?? '';
-    if (named !== '') {
-      this.open(named);
-    }
+    // that queued these rows reads that chain and not every chain. Absent
+    // everywhere else, and then the queue opens on all of them.
+    this.chosen.set(
+      this._route.snapshot.queryParamMap.get('supermarketId') ?? ''
+    );
+    this.reload();
+
+    // The chain behind each row's id, for the badge. Read off the rows rather
+    // than at the moment a chain is chosen, because with no chain chosen the
+    // rows in front of the operator belong to several chains and which chains
+    // those are changes with every page.
+    effect(() => void this._readChains(this.queue?.items() ?? []));
+
+    // The scopes of the chain whose row is in front, for the price lines. One
+    // read per chain, kept, so walking a mixed queue does not re-read a chain
+    // the operator has already passed through.
+    effect(() => {
+      const chain = this.row()?.supermarketId ?? '';
+      if (chain !== '') {
+        void this._ensureScopes(chain);
+      }
+    });
   }
 
   readonly row = computed<SourceEntryRow | null>(() => {
@@ -938,35 +992,50 @@ export class EntriesQueuePage {
   });
 
   /**
-   * Open the queue for one chain.
+   * Narrow the queue to one chain, or widen it back to every chain.
    *
-   * The scopes are read once beside it, because a price line names its scope and
-   * the row carries only its id. One read per chain rather than one per line,
-   * and a scope the read did not reach falls back to the id rather than to
-   * nothing.
+   * An empty id is the second of those and not a no-op, which is what the
+   * picker's own clear sends. The scope names are read off the row in front
+   * rather than here, because a queue over every chain draws rows of several.
    */
   open(supermarketId: string): void {
-    if (supermarketId === '') {
-      return;
-    }
-
     this.chosen.set(supermarketId);
-    void this._readScopes(supermarketId);
     this.reload();
+  }
+
+  /**
+   * The other two filters, each taking what the control emitted.
+   *
+   * **The value is the argument and never the bound signal.** An explicit
+   * `(ngModelChange)` beside a two way binding is a second listener on the same
+   * output, and prettier's attribute order puts it first, so a handler that read
+   * `status()` would read the choice the operator has just moved away from and
+   * the screen would be one read behind with nothing failing anywhere.
+   */
+  chooseStatus(status: SourceEntryStatus | ''): void {
+    this.status.set(status);
+    this.reload();
+  }
+
+  chooseKind(sourceKind: OfficialSourceKind | ''): void {
+    this.sourceKind.set(sourceKind);
+    this.reload();
+  }
+
+  /** The chain's name for the badge, or `''` while nothing has named it. */
+  chainName(supermarketId: string): string {
+    return this._chainNames().get(supermarketId) ?? '';
   }
 
   /**
    * Read the queue again, from the top.
    *
-   * Both filters are the server's, so changing either is a fresh read rather
-   * than a filter applied to what is in hand: the queue holds one page, and
-   * filtering that page would answer from a twentieth of the rows.
+   * All three filters are the server's, so changing any of them is a fresh read
+   * rather than a filter applied to what is in hand: the queue holds one page,
+   * and filtering that page would answer from a twentieth of the rows.
    */
   reload(): void {
     const supermarketId = this.chosen();
-    if (supermarketId === '') {
-      return;
-    }
 
     this.written.set(null);
     this.report.set(null);
@@ -976,7 +1045,9 @@ export class EntriesQueuePage {
           const status = this.status();
           const sourceKind = this.sourceKind();
           const page = await this._service.listEntries({
-            supermarketId,
+            // Absent asks for every chain's rows, which is what an empty
+            // filter means.
+            ...(supermarketId === '' ? {} : { supermarketId }),
             // No status asked for is the queue itself: `CANDIDATE` and
             // `UNRESOLVED` together, which is what is waiting for a person.
             ...(status === '' ? {} : { status }),
@@ -1270,22 +1341,74 @@ export class EntriesQueuePage {
     this.defaultUnit.set('');
   }
 
-  private async _readScopes(supermarketId: string): Promise<void> {
+  /**
+   * Read one chain's scopes, once, and keep them.
+   *
+   * A price line names its scope and the row carries only its id, so the names
+   * have to come from somewhere; this is one read per chain rather than one per
+   * line. The map is merged rather than replaced, because a queue over every
+   * chain walks through rows of several and replacing it would blank the names
+   * of the chain the operator just came from.
+   */
+  private async _ensureScopes(supermarketId: string): Promise<void> {
+    if (this._scopesAsked.has(supermarketId)) {
+      return;
+    }
+    this._scopesAsked.add(supermarketId);
+
     try {
       const page = await this._scopes.list({
         filters: { supermarketId },
         limit: SCOPE_PAGE,
       });
-      this._scopeNames.set(
-        new Map(
-          page.items.map((scope) => [scope.id, PRICE_SCOPES.title(scope)])
-        )
+      this._scopeNames.update(
+        (names) =>
+          new Map([
+            ...names,
+            ...page.items.map(
+              (scope) =>
+                [scope.id, PRICE_SCOPES.title(scope)] as [string, string]
+            ),
+          ])
       );
     } catch {
       // A price line falls back to its scope id, which is worse to read and is
-      // still the truth. A failed scope read is not a reason to refuse a queue.
-      this._scopeNames.set(new Map());
+      // still the truth. A failed scope read is not a reason to refuse a queue,
+      // and the chain is asked again the next time one of its rows comes up.
+      this._scopesAsked.delete(supermarketId);
     }
+  }
+
+  /**
+   * Name the chains the loaded rows came from, once each.
+   *
+   * Resolved one id at a time through the directory rather than listed, because
+   * what has to be named is the handful of chains this page happens to hold and
+   * not every chain in the catalog. A chain that does not answer draws no badge
+   * rather than a uuid.
+   */
+  private async _readChains(entries: readonly Entry[]): Promise<void> {
+    const missing = [
+      ...new Set(entries.map((entry) => entry.supermarketId)),
+    ].filter((id) => id !== '' && !this._chainsAsked.has(id));
+    if (missing.length === 0) {
+      return;
+    }
+
+    for (const id of missing) {
+      this._chainsAsked.add(id);
+    }
+
+    const found = await Promise.all(
+      missing.map(async (id) => {
+        const option = await this.references.resolve('supermarkets', id);
+        return [id, option?.title ?? ''] as [string, string];
+      })
+    );
+
+    this._chainNames.update(
+      (names) => new Map([...names, ...found.filter(([, name]) => name !== '')])
+    );
   }
 }
 

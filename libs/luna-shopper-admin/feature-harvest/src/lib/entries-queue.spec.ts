@@ -30,6 +30,12 @@ import { EntriesQueuePage } from './entries-queue-page';
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
 const DEZA = '33333333-3333-4333-8333-333333333333';
 
+/** What the directory answers for the two chains the seed holds rows for. */
+const CHAIN_NAMES: Record<string, string> = {
+  [MERCADONA]: 'Mercadona',
+  [DEZA]: 'Deza',
+};
+
 const drain = async () => {
   for (let i = 0; i < 10; i++) {
     await Promise.resolve();
@@ -79,7 +85,10 @@ async function render() {
         provide: ResourceReferences,
         useValue: {
           search: async () => [],
-          resolve: async () => null,
+          resolve: async (resource: string, id: string) =>
+            resource === 'supermarkets' && CHAIN_NAMES[id] !== undefined
+              ? { id, title: CHAIN_NAMES[id] }
+              : null,
         },
       },
       {
@@ -136,17 +145,73 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-describe('the one queue, before a chain is chosen', () => {
+describe('the one queue, with no chain chosen', () => {
   /**
-   * A row is keyed on (`supermarketId`, `externalId`), so there is no route that
-   * answers every chain's rows. That is why this screen opens on a chooser
-   * rather than on an empty list.
+   * The chain is a filter and not an address. A row's key means nothing outside
+   * its chain, but the row names its chain, so the queue opens on every chain's
+   * rows rather than on a chooser that has to be answered before anything can
+   * be seen.
    */
-  it('has no queue and reads nothing', async () => {
+  it('reads every chain rather than asking which one first', async () => {
     const { fixture, calls } = await render();
 
-    expect(fixture.componentInstance.queue).toBeNull();
-    expect(named(calls, 'listEntries').length).toBe(0);
+    expect(named(calls, 'listEntries')[0][0]).toEqual({ cursor: undefined });
+    expect(
+      fixture.componentInstance.queue?.items().map((entry) => entry.id)
+    ).toEqual([
+      'entry-milk',
+      'entry-bread',
+      'entry-aceite',
+      'entry-galletas',
+      'entry-leche-leaflet',
+    ]);
+  });
+
+  /**
+   * The chain used to be a gate: once one was chosen there was no way to another
+   * one short of reloading the page. Both directions are one act now, and
+   * clearing the picker is the second of them rather than a no-op.
+   */
+  it('narrows to one chain, and widens back to every chain', async () => {
+    const { fixture, page } = await opened(DEZA);
+
+    expect(page.queue?.items().map((entry) => entry.id)).toEqual([
+      'entry-aceite',
+      'entry-galletas',
+    ]);
+
+    page.open(MERCADONA);
+    await drain();
+    expect(page.queue?.items().map((entry) => entry.id)).toEqual([
+      'entry-milk',
+      'entry-bread',
+      'entry-leche-leaflet',
+    ]);
+
+    page.open('');
+    await drain();
+    fixture.detectChanges();
+    expect(page.queue?.items().length).toBe(5);
+  });
+
+  /**
+   * A chain's own name for a product means nothing outside that chain, so a
+   * mixed queue has to say which chain each row came from. Once a chain is
+   * chosen the filter says it, and the badge would be the same word on every
+   * row.
+   */
+  it('names each row’s chain, and stops once one chain is chosen', async () => {
+    const { fixture } = await render();
+    await drain();
+    fixture.detectChanges();
+
+    expect(text(fixture)).toContain('Mercadona');
+
+    fixture.componentInstance.open(DEZA);
+    await drain();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('.chain').length).toBe(0);
   });
 });
 
@@ -159,7 +224,9 @@ describe('the one queue, reading', () => {
   it('asks for the queue by sending no status at all', async () => {
     const { calls } = await opened(DEZA);
 
-    expect(named(calls, 'listEntries')[0][0]).toEqual({
+    // The last, because the first is the read the screen opens with: every
+    // chain's rows, before the operator narrowed it to this one.
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toEqual({
       supermarketId: DEZA,
       cursor: undefined,
     });
@@ -172,6 +239,28 @@ describe('the one queue, reading', () => {
       'entry-aceite',
       'entry-galletas',
     ]);
+  });
+
+  /**
+   * Driven through the control rather than through the method, which is the
+   * only way this can fail: an explicit `(ngModelChange)` beside a two way
+   * binding fires **before** the binding writes the signal, so a handler that
+   * read the signal would send the status the operator has just moved away from
+   * and a spec that set the signal itself would pass forever.
+   */
+  it('sends the status the operator just chose, not the one before it', async () => {
+    const { fixture, calls } = await opened(DEZA);
+
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="status"]'
+    );
+    select.value = 'ACTIVE';
+    select.dispatchEvent(new Event('change'));
+    await drain();
+
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toMatchObject({
+      status: 'ACTIVE',
+    });
   });
 
   it('asks for one status by name when the filter names one', async () => {

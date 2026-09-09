@@ -128,7 +128,6 @@ export class SourceEntryService {
     const qb = this.entries
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.prices', 'p')
-      .where('e."supermarketId" = :sid', { sid: req.supermarketId })
       // The **property** path, not a quoted column. `take` beside a
       // `leftJoinAndSelect` makes TypeORM page through a DISTINCT subquery, and
       // it rewrites an ORDER BY into that subquery by prefixing the alias:
@@ -137,6 +136,11 @@ export class SourceEntryService {
       .orderBy('e.lastSeenAt', 'DESC')
       .addOrderBy('e.id', 'DESC')
       .take(limit + 1);
+    // Absent, and the queue is every chain's, which `ix_source_catalog_entries_last_seen`
+    // already orders. The chain narrows the read rather than addressing it.
+    if (req.supermarketId) {
+      qb.andWhere('e."supermarketId" = :sid', { sid: req.supermarketId });
+    }
     if (req.status) {
       qb.andWhere('e.status = :status', { status: req.status });
     } else {

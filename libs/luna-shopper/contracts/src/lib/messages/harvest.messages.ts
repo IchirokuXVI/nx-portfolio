@@ -690,20 +690,26 @@ export interface DiscoveredPlaceGroupsResult {
 // --- Source entry requests (plan 0086, sections 7 and 10) -------------------
 
 /**
- * The queue, one chain at a time.
+ * The queue, of one chain or of every chain.
  *
- * The chain is required because the table is unique on (`supermarketId`,
- * `externalId`) and a row only means anything within one chain. Absent `status`
- * lists the two that are waiting for a person, which is what the back office
- * asks for; the other two are reachable so a decision can be looked up and
- * undone.
+ * **The chain narrows the read, it does not address it.** The table is unique on
+ * (`supermarketId`, `externalId`), so a row's key means nothing outside its
+ * chain, but the row itself names its chain and the queue is one queue: an
+ * operator working it through has no reason to be asked which chain's rows are
+ * waiting before he can see that any are. Absent `supermarketId` lists every
+ * chain's, newest first, which is the order the queue reads in anyway.
+ *
+ * Absent `status` lists the two that are waiting for a person, which is what the
+ * back office asks for; the other two are reachable so a decision can be looked
+ * up and undone.
  *
  * Pages on (`lastSeenAt`, `id`) descending, which is the order a queue reads in.
  * `unmatchedOnly` is gone: it was the `NOT EXISTS` over `item_source_refs`, and
  * `status` says it now.
  */
 export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
-  supermarketId: string;
+  /** One chain's rows. Absent lists every chain's. */
+  supermarketId?: string;
   status?: SourceEntryStatus;
   /**
    * Which kind of observation to show, so an operator working through a
