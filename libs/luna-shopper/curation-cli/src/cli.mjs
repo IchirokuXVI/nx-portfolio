@@ -28,13 +28,17 @@
  *        --implementation suggestions --main-url http://localhost:3000 \
  *        --run-dir .curation-runs/smoke --chain <one supermarket id>
  *      Watch stderr: it names the slot, then the run id and the row count, then
- *      one `n/total - name` line per row. Stop it with Ctrl+C after a handful.
+ *      one `n/total - name` line per row. Stop it with Ctrl+C after a handful:
+ *      the row in flight is dropped, the report is written over the rows that
+ *      were decided, and the slot comes down. A second Ctrl+C stops the process
+ *      at once and names the slot it is leaving up.
  *   4. bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
  *      The rehearsal slot is gone, and slot 0 is exactly as step 1 left it. A
- *      Ctrl+C skips the teardown, so a slot left behind here is taken down with
+ *      slot left behind by the second Ctrl+C is taken down with
  *      `luna-slot.sh --ephemeral --down <the number step 3 named>`.
  *   5. head -3 .curation-runs/smoke/decisions.jsonl
- *      The header line, then one record per decided row.
+ *      The header line, then one record per decided row, and
+ *      `report.json` beside it whether the run finished or was stopped.
  *
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
@@ -153,9 +157,13 @@ export async function resolveImplementation({ flag, isTty, askLine, stdout }) {
 export function spawnCapture(
   command,
   args,
-  { input, env, cwd, timeoutMs } = {}
+  { input, env, cwd, timeoutMs, signal } = {}
 ) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error('the run was stopped'));
+      return;
+    }
     const child = spawnProcess(command, args, {
       cwd,
       env,
@@ -165,6 +173,16 @@ export function spawnCapture(
     let stdout = '';
     let stderr = '';
     let timer = null;
+
+    // A stopped run does not wait for the child it was in the middle of. The
+    // child is killed rather than left running, because a `claude` call that
+    // outlived the run would bill for a row nobody records.
+    const onStop = () => {
+      child.kill();
+      reject(signal.reason ?? new Error('the run was stopped'));
+    };
+    signal?.addEventListener('abort', onStop, { once: true });
+    const forget = () => signal?.removeEventListener('abort', onStop);
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -178,12 +196,14 @@ export function spawnCapture(
       if (timer) {
         clearTimeout(timer);
       }
+      forget();
       reject(error);
     });
     child.on('close', (code) => {
       if (timer) {
         clearTimeout(timer);
       }
+      forget();
       resolve({ code: code ?? 0, stdout, stderr });
     });
 
@@ -213,6 +233,54 @@ function askLine() {
   });
 }
 
+/**
+ * Ctrl+C once stops the run, twice stops the process.
+ *
+ * The first one aborts the signal every step of the run holds: the model call
+ * in flight is killed, the walk stops at that row, the decider writes the
+ * report over the rows it did decide, and the rehearsal slot comes down. That
+ * is the whole reason this exists. The default handling ends the process where
+ * it stands, which left a run with no `report.json` and a slot still up.
+ *
+ * The second one is the escape hatch, for a teardown that is itself stuck. It
+ * ends the process at once and names the slot it is abandoning, because the
+ * slot was taken ephemerally: nothing recorded it, so nothing else can say
+ * which number to take down.
+ *
+ * Everything it touches is injected, so the whole of it runs under `node
+ * --test` without a signal being sent to the test process.
+ */
+export function installInterrupt({
+  controller,
+  stderr,
+  on = (event, handler) => process.on(event, handler),
+  off = (event, handler) => process.off(event, handler),
+  exit = (code) => process.exit(code),
+  slotOf = () => null,
+}) {
+  let asked = false;
+  const handler = () => {
+    if (!asked) {
+      asked = true;
+      stderr.write(
+        '\nstopping: the row in flight is dropped, the report is written over the rows already decided, and the rehearsal slot comes down. Press Ctrl+C again to stop now.\n'
+      );
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      return;
+    }
+    const slot = slotOf();
+    stderr.write('\nstopping now: no report, and the slot is left running.\n');
+    if (slot !== null) {
+      stderr.write(
+        `take it down with: bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --down ${slot}\n`
+      );
+    }
+    exit(130);
+  };
+  on('SIGINT', handler);
+  return () => off('SIGINT', handler);
+}
+
 export async function main(
   argv,
   {
@@ -224,6 +292,7 @@ export async function main(
     ask = askLine,
     repoRoot = REPO_ROOT,
     platform = process.platform,
+    interrupt = installInterrupt,
   } = {}
 ) {
   const flags = parseArgs(argv);
@@ -277,6 +346,14 @@ export async function main(
     typeof flags['run-dir'] === 'string' ? flags['run-dir'] : defaultRunDir();
   mkdirSync(runDir, { recursive: true });
 
+  // One controller for the whole run: the engine, the wait for the gateway and
+  // the walk all hold this signal, so one Ctrl+C reaches whichever of them is
+  // in flight. The handler itself goes on further down, once the questions are
+  // asked: a Ctrl+C at a prompt is an answer of "not this run", and the default
+  // handling of it is the right one.
+  const controller = new AbortController();
+  let slot = null;
+
   const usage = emptyUsage();
   let engine;
   if (engineName === 'claude') {
@@ -287,6 +364,7 @@ export async function main(
       timeoutMs: CLAUDE_TIMEOUT_MS,
       stderr,
       usage,
+      signal: controller.signal,
     });
   } else if (engineName === 'api') {
     const apiKey = await confirmApiBilling({
@@ -295,7 +373,12 @@ export async function main(
       askLine: ask,
       stdout,
     });
-    engine = makeApiEngine({ apiKey, model, usage });
+    engine = makeApiEngine({
+      apiKey,
+      model,
+      usage,
+      signal: controller.signal,
+    });
   }
 
   const slots = makeSlots({
@@ -313,26 +396,45 @@ export async function main(
           .filter(Boolean)
       : REHEARSAL_SERVICES;
 
-  await runCuration({
-    slots,
-    makeDeciderFor: ({ runDir: dir }) =>
-      makeDecider({ spawn, cliPath, runDir: dir, mainPassword }),
-    engine,
-    runDir,
-    mainUrl,
-    mainUser,
-    model,
-    chain: typeof flags.chain === 'string' ? flags.chain : null,
-    services,
-    waitForGateway,
-    stripFence,
-    stdout,
+  const releaseInterrupt = interrupt({
+    controller,
     stderr,
-    dumpPath: `${runDir}/rehearsal-catalog.sql`,
-    usage,
+    slotOf: () => slot,
   });
 
-  return 0;
+  let outcome;
+  try {
+    outcome = await runCuration({
+      slots,
+      makeDeciderFor: ({ runDir: dir }) =>
+        makeDecider({ spawn, cliPath, runDir: dir, mainPassword }),
+      engine,
+      runDir,
+      mainUrl,
+      mainUser,
+      model,
+      chain: typeof flags.chain === 'string' ? flags.chain : null,
+      services,
+      waitForGateway,
+      stripFence,
+      stdout,
+      stderr,
+      dumpPath: `${runDir}/rehearsal-catalog.sql`,
+      usage,
+      signal: controller.signal,
+      onSlot: (taken) => {
+        slot = taken;
+      },
+    });
+  } finally {
+    // The listener is what keeps the process alive after the run, so it is
+    // taken off whether the run ended, failed or was stopped.
+    releaseInterrupt();
+  }
+
+  // A stopped run wrote its report, and it is still not a finished run: 130 is
+  // what a shell reads as "ended by Ctrl+C".
+  return outcome?.stopped ? 130 : 0;
 }
 
 const invokedDirectly =

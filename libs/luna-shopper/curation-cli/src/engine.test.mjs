@@ -402,6 +402,48 @@ test('the API engine retries a 429 and a 5xx', async () => {
   assert.equal(calls, 3);
 });
 
+test('a stopped run makes no further attempt at the model', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const engine = makeClaudeEngine({
+    spawn: async () => {
+      calls += 1;
+      // The keystroke reaches the whole terminal, so this child dies of it and
+      // reports a plain non-zero exit.
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      return { code: 130, stdout: '', stderr: '' };
+    },
+    env: {},
+    scratchDir: '/tmp/scratch',
+    sleep: async () => undefined,
+    retryDelays: [1, 1, 1],
+    signal: controller.signal,
+  });
+
+  await assert.rejects(() => engine.ask('x'), /stopped with Ctrl\+C/);
+  assert.equal(calls, 1);
+});
+
+test('the api engine hands the signal to the request and stops retrying', async () => {
+  const controller = new AbortController();
+  const seen = [];
+  const engine = makeApiEngine({
+    apiKey: 'k',
+    fetchImpl: async (url, options) => {
+      seen.push(options.signal);
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      throw new Error('aborted');
+    },
+    sleep: async () => undefined,
+    retryDelays: [1, 1],
+    signal: controller.signal,
+  });
+
+  await assert.rejects(() => engine.ask('x'), /stopped with Ctrl\+C/);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0], controller.signal);
+});
+
 test('the small helpers carried over from the plan 0098 tool still hold', () => {
   assert.equal(stripFence('```json\n{"a":1}\n```'), '{"a":1}');
   assert.equal(stripFence('  {"a":1} '), '{"a":1}');

@@ -131,6 +131,18 @@ export async function decideRow({
  * a failure the rehearsal catalog is dumped first, because `--down` removes the
  * slot's volumes and a failed run's rehearsal state is the one thing that
  * cannot be rebuilt afterwards.
+ *
+ * **A stopped run ends the same way a finished one does.** `signal` is aborted
+ * by the first Ctrl+C (see `cli.mjs`), and the walk stops at the row it is on
+ * rather than at the process: the report is written over the rows that were
+ * decided, and the slot comes down. The rows that were never reached are not
+ * lost, because the decider records a decision per row and the queue is read
+ * from the main API, so nothing was written there before `--apply`.
+ *
+ * A stop is recognized by asking the signal, never by reading an error. Ctrl+C
+ * reaches the whole terminal, so whichever child was in flight dies of the same
+ * keystroke and reports it in its own words; a step that failed while the run
+ * was stopping is the stop, and the walk breaks rather than throwing.
  */
 export async function runCuration({
   slots,
@@ -148,10 +160,16 @@ export async function runCuration({
   stderr,
   dumpPath,
   usage = emptyUsage(),
+  signal = null,
+  onSlot = null,
 }) {
   const taken = await slots.list();
   const slot = pickFreeSlot(taken);
   const url = rehearsalUrl(slot);
+
+  // The number goes to the caller before the slot is brought up, so a second
+  // Ctrl+C can name the slot it is leaving behind.
+  onSlot?.(slot);
 
   stderr.write(
     `rehearsing on slot ${slot} (${url}), services ${services.join(', ')}\n`
@@ -160,8 +178,10 @@ export async function runCuration({
   await slots.up(slot, services);
 
   let failed = null;
+  let stopped = false;
+  let runId = null;
   try {
-    await waitForGateway({ url });
+    await waitForGateway({ url, signal });
 
     const decider = makeDeciderFor({ runDir });
     // Both admin logins are verified inside `start`. A failure here is a run
@@ -174,35 +194,66 @@ export async function runCuration({
       chain,
     });
 
+    runId = opened.runId;
     const total = opened.remaining ?? 0;
     stderr.write(`run ${opened.runId}: ${total} rows\n`);
 
     for (;;) {
-      const row = await decider.next();
-      if (row?.done) {
+      if (signal?.aborted) {
+        stopped = true;
         break;
       }
-      const { name } = rowIdentity(row);
-      const position = Math.max(1, total - (row.remaining ?? 0) + 1);
-      stderr.write(`${position}/${total} - ${name}\n`);
+      try {
+        const row = await decider.next();
+        if (row?.done) {
+          break;
+        }
+        const { name } = rowIdentity(row);
+        const position = Math.max(1, total - (row.remaining ?? 0) + 1);
+        stderr.write(`${position}/${total} - ${name}\n`);
 
-      const answer = await decideRow({
-        row,
-        prompt: opened.prompt,
-        // A decider that answers no schema is driven exactly as before, which
-        // is what keeps the two implementations independent of each other.
-        schema: opened.schema ?? null,
-        engine,
-        decider,
-        stripFence,
-      });
-      stdout.write(`${JSON.stringify(answer)}\n`);
+        const answer = await decideRow({
+          row,
+          prompt: opened.prompt,
+          // A decider that answers no schema is driven exactly as before, which
+          // is what keeps the two implementations independent of each other.
+          schema: opened.schema ?? null,
+          engine,
+          decider,
+          stripFence,
+        });
+        stdout.write(`${JSON.stringify(answer)}\n`);
+      } catch (error) {
+        if (!signal?.aborted) {
+          throw error;
+        }
+        stopped = true;
+        break;
+      }
     }
 
+    if (stopped) {
+      stderr.write(`stopped: the report covers the rows decided so far\n`);
+    }
+
+    // Written for a stopped run too, and that is the whole point of stopping
+    // this way: `end` reads the decisions file, so it reports over however many
+    // rows the walk reached.
     const report = await decider.end(usage);
     stderr.write(`report: ${report.report}\n`);
-    return { slot, runId: opened.runId, report, usage };
+    return { slot, runId: opened.runId, report, usage, stopped };
   } catch (error) {
+    // A stop that arrived before the first row (during the wait for the
+    // gateway, or while the run was opening) has no decisions to report, so
+    // there is nothing to write and nothing to say beyond the teardown below.
+    if (signal?.aborted) {
+      stderr.write(
+        runId === null
+          ? 'stopped before the run opened; nothing was decided\n'
+          : `stopped, and the report could not be written: ${error.message ?? error}\n`
+      );
+      return { slot, runId, report: null, usage, stopped: true };
+    }
     failed = error;
     throw error;
   } finally {

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import {
   REPO_ROOT,
   defaultRunDir,
+  installInterrupt,
   main,
   parseArgs,
   resolveImplementation,
@@ -131,6 +134,50 @@ test('--apply takes no slot and makes no model call', async () => {
   assert.equal(stdout.text().trim(), '{"results":[],"priceSkips":[]}');
 });
 
+// The signal has to reach the run itself, and the exit code has to say the run
+// did not finish. Both are wiring, and only `main` holds it.
+test('a run stopped with Ctrl+C ends at 130 with the slot taken down', async () => {
+  const spawned = [];
+  const released = [];
+  const runDir = mkdtempSync(join(tmpdir(), 'curation-stop-'));
+
+  const code = await main(
+    [
+      '--implementation',
+      'suggestions',
+      '--run-dir',
+      runDir,
+      '--main-url',
+      'http://localhost:3000',
+    ],
+    {
+      env: {},
+      stdout: sink(),
+      stderr: sink(),
+      isTty: false,
+      spawn: async (command, args) => {
+        spawned.push([command, ...args].join(' '));
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      repoRoot: '/repo',
+      platform: 'linux',
+      // The keystroke lands before the gateway answers, which is the earliest
+      // a run can be stopped and the case with nothing to report.
+      interrupt: ({ controller }) => {
+        controller.abort(new Error('the run was stopped with Ctrl+C'));
+        return () => released.push(true);
+      },
+    }
+  );
+
+  assert.equal(code, 130);
+  // The listener is what would keep the process alive after the run.
+  assert.deepEqual(released, [true]);
+  assert.ok(spawned.some((call) => call.includes('--ephemeral --down 1')));
+  assert.ok(!spawned.some((call) => call.startsWith('claude ')));
+  rmSync(runDir, { recursive: true, force: true });
+});
+
 test('an unknown engine is refused before anything is started', async () => {
   const spawned = [];
   await assert.rejects(
@@ -202,6 +249,104 @@ test('spawnCapture writes stdin and reads stdout back', async () => {
   );
   assert.equal(answer.code, 0);
   assert.equal(answer.stdout, 'HELLO');
+});
+
+test('a stopped run kills the child it was waiting on', async () => {
+  const controller = new AbortController();
+  const pending = spawnCapture(
+    process.execPath,
+    ['-e', 'setTimeout(() => {}, 60000)'],
+    { signal: controller.signal }
+  );
+  controller.abort(new Error('the run was stopped with Ctrl+C'));
+  await assert.rejects(() => pending, /stopped with Ctrl\+C/);
+});
+
+test('a child is never started for a run that is already stopped', async () => {
+  const controller = new AbortController();
+  controller.abort(new Error('the run was stopped with Ctrl+C'));
+  await assert.rejects(
+    () =>
+      spawnCapture(process.execPath, ['-e', 'process.exit(0)'], {
+        signal: controller.signal,
+      }),
+    /stopped with Ctrl\+C/
+  );
+});
+
+test('the first Ctrl+C stops the run and the second stops the process', () => {
+  const controller = new AbortController();
+  const stderr = sink();
+  const exits = [];
+  let handler = null;
+  const release = installInterrupt({
+    controller,
+    stderr,
+    on: (event, fn) => {
+      assert.equal(event, 'SIGINT');
+      handler = fn;
+    },
+    off: () => {
+      handler = null;
+    },
+    exit: (code) => exits.push(code),
+    slotOf: () => 3,
+  });
+
+  handler();
+  assert.equal(controller.signal.aborted, true);
+  assert.match(stderr.text(), /the report is written/);
+  assert.match(stderr.text(), /again to stop now/);
+  assert.deepEqual(exits, []);
+
+  handler();
+  assert.deepEqual(exits, [130]);
+  // The slot was taken ephemerally, so nothing else can say which number the
+  // abandoned one is.
+  assert.match(stderr.text(), /--ephemeral --down 3/);
+
+  release();
+  assert.equal(handler, null);
+});
+
+// The handler is only useful if it is on the process that receives the signal,
+// and the injection every other test uses cannot say that it is.
+test('the handler goes on the process itself, and comes off again', () => {
+  const controller = new AbortController();
+  const before = process.listenerCount('SIGINT');
+  const release = installInterrupt({ controller, stderr: sink() });
+  assert.equal(process.listenerCount('SIGINT'), before + 1);
+
+  // One only: a second would reach `process.exit` and take the test run with
+  // it, which is exactly what the second Ctrl+C is for.
+  process.emit('SIGINT');
+  assert.equal(controller.signal.aborted, true);
+
+  release();
+  assert.equal(process.listenerCount('SIGINT'), before);
+});
+
+test('the second Ctrl+C names no slot when none was taken yet', () => {
+  const stderr = sink();
+  const exits = [];
+  let handler = null;
+  installInterrupt({
+    controller: new AbortController(),
+    stderr,
+    on: (event, fn) => {
+      handler = fn;
+    },
+    off: () => {
+      handler = null;
+    },
+    exit: (code) => exits.push(code),
+    slotOf: () => null,
+  });
+
+  handler();
+  handler();
+  assert.deepEqual(exits, [130]);
+  assert.ok(!stderr.text().includes('--ephemeral --down'));
 });
 
 test('the manual smoke run is documented at the top of this CLI', () => {
