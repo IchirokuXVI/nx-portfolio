@@ -396,7 +396,7 @@ export class AdminCatalogItemsController {
   /** The only place an item joins a product group, and it is a person doing it. */
   @Patch(':id')
   @ApiContractResponse(ITEM_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, conflict: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string,

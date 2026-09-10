@@ -15628,6 +15628,16 @@
               }
             }
           },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
