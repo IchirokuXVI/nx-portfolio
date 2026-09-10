@@ -47,6 +47,7 @@ and returns the minimal decision JSON.
    compose stack is still always the whole of it: the databases are cheap
    beside seven Node processes, and a service started later would otherwise
    find its own missing.
+
 4. **Verify both admins before the first model call**, through the decider's
    `start`: main gateway with `--main-user` (default `dev-admin`, password
    `dev-admin-password`, both overridable), rehearsal gateway with the
@@ -75,7 +76,7 @@ against the main gateway with the decisions file.
 
 - **`--engine claude`, the default.** Each model call spawns the locally
   installed Claude Code CLI: `claude -p --output-format json --model
-  claude-sonnet-5`, prompt on stdin, 120 second timeout. The child environment
+claude-sonnet-5`, packet on stdin, 120 second timeout. The child environment
   is a copy of `process.env` with **`ANTHROPIC_API_KEY` deleted**, so the call
   bills the operator's logged in Claude session even when a key is exported
   globally; when a key was present, one stderr notice says it is being
@@ -83,6 +84,39 @@ against the main gateway with the decisions file.
   verified empirically with one tiny live call during implementation, not
   assumed. Retries and the invalid JSON retry-once semantics follow the plan
   0098 tool.
+- **The spawn carries the task and nothing else.** A default `claude -p`
+  reloads Claude Code's tool schemas, its skills, and the `CLAUDE.md` and
+  memory index of the directory it runs in, on every call. Measured from this
+  repository, a call whose whole reply is the word `ok` cost **45,805** input
+  tokens. So the engine passes `MINIMAL_ARGS` (`--tools ""`,
+  `--disable-slash-commands`, `--strict-mcp-config`,
+  `--no-session-persistence`). It also runs the spawn in a scratch directory
+  that has no `CLAUDE.md`. The same call then costs **2,546** tokens. Both
+  halves are needed and neither substitutes for the other. The flags alone
+  from the repo root cost 24,034, and the scratch cwd alone costs 23,244.
+  **`--bare` is not the shortcut it looks like.** It skips `CLAUDE.md` and
+  auto-memory, but it also refuses OAuth and demands `ANTHROPIC_API_KEY`, which
+  is the billing this engine exists to avoid.
+- **The rules are the system prompt, not the first half of the packet.** The
+  decider's `start` answers `prompt`, and the engine passes it as
+  `--system-prompt`, which **replaces** Claude Code's own rather than appending
+  to it. The user half is the packet alone. The rules used to be joined onto
+  the packet _and_ passed as the api engine's system block, so that engine paid
+  for them twice.
+- **The shape is a schema, not a paragraph.** `start` answers `schema` beside
+  `prompt`, built from the same live vocabularies, and the engines pass it as
+  `--json-schema` or as `output_config.format`. A category or unit the catalog
+  does not have becomes unanswerable rather than described in prose and refused
+  afterwards. It governs the shape only. The conditional rules stay with the
+  validators: `itemId` on a `LINK` and nowhere else, exactly one of `itemId`
+  and `itemRef`, an id that was actually offered. So a schema valid answer is
+  still an answer the decider can refuse.
+- **One session per row, never a resumed one.** Separate `claude -p` processes
+  share the server side prompt cache, so the unchanging prefix comes back as
+  `read 2544, write 0` at $0.00055 a call. A session holds no state on the
+  server. Every request resends the whole conversation. So reuse cannot
+  amortise that prefix and can only add history to it. Measured on a two turn
+  resume, turn 2 re-sent everything and read nothing from cache.
 - **`--engine api`.** The raw Messages API path from the plan 0098 tool,
   unchanged, behind a gate: when `ANTHROPIC_API_KEY` is set, the CLI prints
   that the run bills the API with that key and requires the operator to type

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  buildDecisionSchema,
   buildSystemPrompt,
   canonicalSlug,
   deriveUnitFamilies,
@@ -139,4 +140,31 @@ test('the system prompt carries the rules and the unit vocabulary', () => {
   // The grouping rules come from the markdown file beside the source.
   assert.match(prompt, /Brand never separates items/);
   assert.match(prompt, /groupRef/);
+});
+
+test('the decision schema takes its enum from the same unit vocabulary', () => {
+  const schema = buildDecisionSchema({ units: ['LITER', 'UNIT'] });
+
+  assert.deepEqual(schema.properties.decision.enum, [
+    'ASSIGN',
+    'CREATE_GROUP',
+    'REVIEW',
+  ]);
+  assert.deepEqual(schema.properties.group.properties.referenceUnit.enum, [
+    'LITER',
+    'UNIT',
+    null,
+  ]);
+  assert.deepEqual(schema.properties.group.properties.synonyms.properties.es, {
+    type: 'array',
+    items: { type: 'string' },
+  });
+  // Which unit family a reference unit must sit in depends on the product, so
+  // the enum narrows the vocabulary and the validators still decide the rest.
+  assert.deepEqual(schema.required, [
+    'decision',
+    'confidence',
+    'issues',
+    'reasoning',
+  ]);
 });

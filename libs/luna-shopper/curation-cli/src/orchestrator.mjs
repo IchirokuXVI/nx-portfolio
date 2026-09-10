@@ -75,12 +75,23 @@ export function parseDecision(text, { stripFence }) {
  * reason, and the second answer goes in with `--final`, which records a REVIEW
  * rather than asking a third time.
  */
-export async function decideRow({ row, prompt, engine, decider, stripFence }) {
+export async function decideRow({
+  row,
+  prompt,
+  schema = null,
+  engine,
+  decider,
+  stripFence,
+}) {
   const { id } = rowIdentity(row);
   const packet = toPacket(row);
   const body = JSON.stringify(packet, null, 2);
 
-  const first = await engine.ask(`${prompt}\n\n${body}`, { system: prompt });
+  // The rules go in the system half and the packet in the user half, and the
+  // rules are never repeated in the user half. Both engines send the system
+  // half on every call, so the one thing that changes between calls is the
+  // packet, and the unchanging remainder is what the server side cache serves.
+  const first = await engine.ask(body, { system: prompt, schema });
   const decision = parseDecision(first.text, { stripFence });
 
   let answer;
@@ -98,8 +109,8 @@ export async function decideRow({ row, prompt, engine, decider, stripFence }) {
     reason = 'the reply is not one JSON object';
   }
 
-  const retryPrompt = `${prompt}\n\n${body}\n\n${RETRY_INSTRUCTION.replace('{error}', reason || 'it broke the schema')}`;
-  const second = await engine.ask(retryPrompt, { system: prompt });
+  const retryBody = `${body}\n\n${RETRY_INSTRUCTION.replace('{error}', reason || 'it broke the schema')}`;
+  const second = await engine.ask(retryBody, { system: prompt, schema });
   const retried = parseDecision(second.text, { stripFence });
 
   // A second unusable reply is still a decided row: `--final` records it as a
@@ -178,6 +189,9 @@ export async function runCuration({
       const answer = await decideRow({
         row,
         prompt: opened.prompt,
+        // A decider that answers no schema is driven exactly as before, which
+        // is what keeps the two implementations independent of each other.
+        schema: opened.schema ?? null,
         engine,
         decider,
         stripFence,

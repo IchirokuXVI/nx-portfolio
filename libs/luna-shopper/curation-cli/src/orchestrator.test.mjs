@@ -93,10 +93,13 @@ function fakeDecider({
 /** A model that answers whatever the test queued, in order. */
 function fakeEngine(replies) {
   const prompts = [];
+  const options = [];
   return {
     prompts,
-    ask: async (prompt) => {
+    options,
+    ask: async (prompt, opts = {}) => {
       prompts.push(prompt);
+      options.push(opts);
       const reply = replies.shift();
       if (reply === undefined) {
         throw new Error('the test queued no more replies');
@@ -149,6 +152,7 @@ test('one row is one model call when the reply can be used', async () => {
   const answer = await decideRow({
     row: ROW,
     prompt: 'THE RULES',
+    schema: { type: 'object' },
     engine,
     decider,
     stripFence,
@@ -156,7 +160,12 @@ test('one row is one model call when the reply can be used', async () => {
 
   assert.equal(answer.accepted, true);
   assert.equal(engine.prompts.length, 1);
-  assert.match(engine.prompts[0], /^THE RULES\n\n\{/);
+  // The packet alone in the user half, the rules in the system half, and the
+  // rules never in both: sending them twice is what the split exists to stop.
+  assert.match(engine.prompts[0], /^\{/);
+  assert.ok(!engine.prompts[0].includes('THE RULES'));
+  assert.equal(engine.options[0].system, 'THE RULES');
+  assert.deepEqual(engine.options[0].schema, { type: 'object' });
   // The rules and the row, and nothing about the run.
   assert.ok(!engine.prompts[0].includes('remaining'));
   assert.deepEqual(decider.calls, [

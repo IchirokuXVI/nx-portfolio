@@ -27,6 +27,7 @@ import {
 } from './gateway.mjs';
 import { buildItemPacket, toCandidate } from './packet.mjs';
 import {
+  buildDecisionSchema,
   buildSystemPrompt,
   canonicalSlug,
   deriveUnitFamilies,
@@ -134,6 +135,7 @@ export async function start({
     remaining: total,
     ungrouped,
     prompt: buildSystemPrompt({ units }),
+    schema: buildDecisionSchema({ units }),
   };
 }
 

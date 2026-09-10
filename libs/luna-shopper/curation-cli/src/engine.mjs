@@ -9,6 +9,10 @@
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 /** The model both engines default to. */
 export const DEFAULT_MODEL = 'claude-sonnet-5';
 
@@ -24,6 +28,44 @@ const MAX_TOKENS = 8000;
 
 /** The word the operator has to type before an API billed run starts. */
 export const API_CONFIRMATION = 'API_KEY';
+
+/**
+ * The flags that empty a `claude -p` call of everything except the task.
+ *
+ * A default call carries Claude Code's tool schemas, its skills, and the
+ * `CLAUDE.md` and memory index of whatever directory it runs in. Measured from
+ * this repository, a call whose whole reply is the word `ok` costs **45,805**
+ * input tokens; with these flags and a scratch cwd it costs **2,546**.
+ *
+ * Both halves are needed and neither substitutes for the other: the flags do
+ * not stop `CLAUDE.md` loading (24,034 tokens from the repo root with them) and
+ * a scratch cwd does not strip the tool schemas (23,244 tokens with those). The
+ * cwd half is `scratchDir` below.
+ *
+ * `--bare` looks like the one flag for all of this and must not be used: it
+ * skips `CLAUDE.md` discovery and auto-memory, but it also refuses OAuth and
+ * demands `ANTHROPIC_API_KEY`, which is the billing this engine exists to
+ * avoid. A `--bare` call with no key set returns an empty reply and zero usage.
+ */
+export const MINIMAL_ARGS = [
+  '--tools',
+  '',
+  '--disable-slash-commands',
+  '--strict-mcp-config',
+  '--no-session-persistence',
+];
+
+/**
+ * A directory with no `CLAUDE.md`, which is what the spawn runs in.
+ *
+ * One per engine rather than one per call: the flags and the system prompt are
+ * identical on every call, so an unchanging prefix is what lets the server side
+ * cache serve it. Measured across three separate processes, the 2,546 token
+ * prefix came back as `read 2544, write 0` every time, at $0.00055 a call.
+ */
+export function makeScratchDir() {
+  return mkdtempSync(join(tmpdir(), 'curation-claude-'));
+}
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -134,20 +176,42 @@ export function makeClaudeEngine({
   usage = null,
   sleep = defaultSleep,
   retryDelays = RETRY_DELAYS,
+  scratchDir = null,
 }) {
   const { env: childEnv, hadKey } = claudeChildEnv(env);
   let noticed = false;
+  // Made on the first call rather than here, so constructing an engine that is
+  // never asked anything leaves no directory behind.
+  let cwd = scratchDir;
 
   return {
     name: 'claude',
     model,
-    async ask(prompt) {
+    async ask(prompt, { system = null, schema = null } = {}) {
       if (hadKey && !noticed) {
         noticed = true;
         stderr.write(
           'ANTHROPIC_API_KEY is set and is being ignored: this run bills your Claude session. Use --engine api to bill the key.\n'
         );
       }
+
+      if (cwd === null) {
+        cwd = makeScratchDir();
+      }
+
+      // `--system-prompt` replaces Claude Code's own system prompt rather than
+      // appending to it, which is what makes the decider's rules the whole of
+      // the model's standing context. `--append-system-prompt` would keep both.
+      const args = [
+        '-p',
+        '--output-format',
+        'json',
+        '--model',
+        model,
+        ...(system ? ['--system-prompt', system] : []),
+        ...(schema ? ['--json-schema', JSON.stringify(schema)] : []),
+        ...MINIMAL_ARGS,
+      ];
 
       let lastError = 'the call failed';
       for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
@@ -156,11 +220,12 @@ export function makeClaudeEngine({
         }
         let answer;
         try {
-          answer = await spawn(
-            'claude',
-            ['-p', '--output-format', 'json', '--model', model],
-            { input: prompt, env: childEnv, timeoutMs }
-          );
+          answer = await spawn('claude', args, {
+            input: prompt,
+            env: childEnv,
+            cwd,
+            timeoutMs,
+          });
         } catch (error) {
           lastError = String(error?.message ?? error);
           continue;
@@ -238,12 +303,18 @@ export function makeApiEngine({
   return {
     name: 'api',
     model,
-    async ask(prompt, { system = null } = {}) {
+    async ask(prompt, { system = null, schema = null } = {}) {
       const body = JSON.stringify({
         model,
         max_tokens: MAX_TOKENS,
         thinking: { type: 'adaptive' },
-        output_config: { effort: 'medium' },
+        output_config: {
+          effort: 'medium',
+          // The same schema the claude engine passes as `--json-schema`, in the
+          // shape the Messages API takes it. Both engines are held to the
+          // decider's shape, so a run cannot depend on which one drove it.
+          ...(schema ? { format: { type: 'json_schema', schema } } : {}),
+        },
         ...(system
           ? {
               system: [
