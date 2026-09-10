@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { withRetries } from './retry.mjs';
+import { askEntry, askManyInOrder, withRetries } from './retry.mjs';
 
 test('an attempt that answers is the answer, and nothing waits', async () => {
   let waits = 0;
@@ -106,4 +106,125 @@ test('a run stopped before the first attempt asks nothing at all', async () => {
   );
 
   assert.equal(calls, 0);
+});
+
+/**
+ * An `ask` that answers after a delay of the caller's choosing and records how
+ * many calls were in flight at once, which is what "one at a time" is asserted
+ * against.
+ */
+function recordingAsk({ delayFor = () => 0, failOn = [] } = {}) {
+  const seen = { started: [], finished: [], options: [], peak: 0 };
+  let inFlight = 0;
+  const ask = async (prompt, options = {}) => {
+    seen.started.push(prompt);
+    seen.options.push(options);
+    inFlight += 1;
+    seen.peak = Math.max(seen.peak, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, delayFor(prompt)));
+    inFlight -= 1;
+    seen.finished.push(prompt);
+    if (failOn.includes(prompt)) {
+      throw new Error(`The test engine gave up: ${prompt} went wrong.`);
+    }
+    return { text: `answer to ${prompt}` };
+  };
+  return { ask, seen };
+}
+
+test('the shared default holds one request in flight and answers in input order', async () => {
+  // The first prompt is the slowest, so an implementation that answered in
+  // completion order would answer this list backwards.
+  const { ask, seen } = recordingAsk({
+    delayFor: (prompt) => (prompt === 'a' ? 20 : 1),
+  });
+
+  const answers = await askManyInOrder(ask, ['a', 'b', 'c']);
+
+  assert.equal(seen.peak, 1);
+  assert.deepEqual(seen.started, ['a', 'b', 'c']);
+  assert.deepEqual(answers, [
+    { text: 'answer to a' },
+    { text: 'answer to b' },
+    { text: 'answer to c' },
+  ]);
+});
+
+test('a prompt the engine gave up on is an entry, and the rest still answer', async () => {
+  const { ask } = recordingAsk({ failOn: ['b'] });
+
+  const answers = await askManyInOrder(ask, ['a', 'b', 'c']);
+
+  // `ask` throws when it gives up, and a batch that threw would discard every
+  // answer beside the one that failed.
+  assert.equal(answers.length, 3);
+  assert.equal(answers[0].text, 'answer to a');
+  assert.equal(answers[2].text, 'answer to c');
+  assert.equal(answers[1].text, undefined);
+  assert.match(String(answers[1].error), /b went wrong/);
+});
+
+test('the same options reach every prompt, and nothing else does', async () => {
+  const { ask, seen } = recordingAsk();
+  const options = { system: 'THE RULES', schema: { type: 'object' } };
+
+  await askManyInOrder(ask, ['a', 'b'], options);
+
+  // `askMany` receives a list of prompts and nothing else: no row count, no
+  // queue length, nothing about the run.
+  assert.deepEqual(seen.options, [options, options]);
+});
+
+test('a stop rejects with the signal reason rather than answering entries', async () => {
+  const controller = new AbortController();
+  const { ask, seen } = recordingAsk();
+  const stopping = async (prompt, options) => {
+    const answer = await ask(prompt, options);
+    if (prompt === 'b') {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+    }
+    return answer;
+  };
+
+  // A stopped run is not a run that failed three times, so it is an answer
+  // about the run rather than an array of answers about prompts.
+  await assert.rejects(
+    () => askManyInOrder(stopping, ['a', 'b', 'c', 'd'], {}, controller.signal),
+    /stopped with Ctrl\+C/
+  );
+  assert.deepEqual(seen.started, ['a', 'b']);
+});
+
+test('a batch stopped before it starts asks nothing at all', async () => {
+  const controller = new AbortController();
+  controller.abort(new Error('the run was stopped with Ctrl+C'));
+  const { ask, seen } = recordingAsk();
+
+  await assert.rejects(
+    () => askManyInOrder(ask, ['a', 'b'], {}, controller.signal),
+    /stopped with Ctrl\+C/
+  );
+  assert.deepEqual(seen.started, []);
+});
+
+test('an empty list is an empty answer and asks nothing', async () => {
+  const { ask, seen } = recordingAsk();
+  assert.deepEqual(await askManyInOrder(ask, []), []);
+  assert.deepEqual(seen.started, []);
+});
+
+test('askEntry reports a failure and lets a stop through', async () => {
+  const controller = new AbortController();
+  const failing = async () => {
+    throw new Error('it went wrong');
+  };
+
+  const entry = await askEntry(failing, 'a');
+  assert.match(String(entry.error), /it went wrong/);
+
+  controller.abort(new Error('the run was stopped with Ctrl+C'));
+  await assert.rejects(
+    () => askEntry(failing, 'a', {}, controller.signal),
+    /stopped with Ctrl\+C/
+  );
 });

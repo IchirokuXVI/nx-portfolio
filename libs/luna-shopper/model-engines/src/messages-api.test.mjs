@@ -276,3 +276,67 @@ test('textOf skips a thinking block and answers null when there is no text', () 
   assert.equal(textOf({ content: [] }), null);
   assert.equal(textOf({}), null);
 });
+
+test('the api engine holds one request in flight and says so', async () => {
+  const sent = [];
+  const engine = makeApiEngine({
+    fetchImpl: async (url, options) => {
+      const body = JSON.parse(options.body);
+      sent.push(body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [
+            { type: 'text', text: `answer to ${body.messages[0].content}` },
+          ],
+          usage: { input_tokens: 10, output_tokens: 3 },
+        }),
+      };
+    },
+    apiKey: 'sk-test',
+  });
+
+  assert.equal(engine.batchSize, 1);
+
+  const options = { system: 'THE RULES', schema: { type: 'object' } };
+  const answers = await engine.askMany(['first', 'second'], options);
+
+  assert.deepEqual(answers, [
+    { text: 'answer to first' },
+    { text: 'answer to second' },
+  ]);
+  // One request per prompt, in input order, and each one is the request the
+  // single path sends with only the user message differing.
+  assert.equal(sent.length, 2);
+  assert.deepEqual(
+    { ...sent[0], messages: null },
+    { ...sent[1], messages: null }
+  );
+  assert.deepEqual(sent[0].system[0].cache_control, { type: 'ephemeral' });
+});
+
+test('one api prompt that gave up is an entry, and the others answer', async () => {
+  const engine = makeApiEngine({
+    fetchImpl: async (url, options) => {
+      if (JSON.parse(options.body).messages[0].content === 'second') {
+        // A 401 is fatal, so the entry is settled without spending a backoff.
+        return { ok: false, status: 401, json: async () => ({}) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ content: [{ type: 'text', text: 'ok' }] }),
+      };
+    },
+    apiKey: 'sk-test',
+    sleep: async () => undefined,
+    retryDelays: [1, 1],
+  });
+
+  const answers = await engine.askMany(['first', 'second', 'third']);
+
+  assert.equal(answers[0].text, 'ok');
+  assert.match(String(answers[1].error), /The api engine gave up: HTTP 401/);
+  assert.equal(answers[2].text, 'ok');
+});

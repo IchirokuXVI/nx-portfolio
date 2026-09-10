@@ -365,3 +365,73 @@ test('a spawn that throws once is retried, and a stop during one is not', async 
   });
   await assert.rejects(() => stopped.ask('x'), /stopped with Ctrl\+C/);
 });
+
+test('the claude engine holds one request in flight and says so', async () => {
+  const seen = [];
+  const engine = makeClaudeEngine({
+    spawn: async (command, args, options) => {
+      seen.push({ args, input: options.input });
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+  });
+
+  // One is the honest answer for an adapter with no reason to do more, and a
+  // caller reads it rather than asking which adapter it is holding.
+  assert.equal(engine.batchSize, 1);
+
+  const options = { system: 'THE RULES', schema: { type: 'object' } };
+  const answers = await engine.askMany(['first', 'second'], options);
+
+  assert.deepEqual(
+    answers.map((entry) => entry.text),
+    [
+      '{"decision":"REVIEW","confidence":0.4}',
+      '{"decision":"REVIEW","confidence":0.4}',
+    ]
+  );
+  // One spawn per prompt, in input order.
+  assert.deepEqual(
+    seen.map((call) => call.input),
+    ['first', 'second']
+  );
+
+  // And nothing about one call changed: a batched call sends exactly the flags
+  // a single one sends.
+  const single = [];
+  const alone = makeClaudeEngine({
+    spawn: async (command, args, spawnOptions) => {
+      single.push({ args, input: spawnOptions.input });
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+  });
+  await alone.ask('first', options);
+  assert.deepEqual(seen[0].args, single[0].args);
+});
+
+test('one claude prompt that gave up is an entry, and the others answer', async () => {
+  const engine = makeClaudeEngine({
+    spawn: async (command, args, options) => {
+      if (options.input === 'second') {
+        return { code: 1, stdout: '', stderr: 'it went wrong' };
+      }
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1, 1],
+  });
+
+  const answers = await engine.askMany(['first', 'second', 'third']);
+
+  assert.equal(typeof answers[0].text, 'string');
+  assert.match(String(answers[1].error), /The claude engine gave up: exit 1/);
+  assert.equal(typeof answers[2].text, 'string');
+});

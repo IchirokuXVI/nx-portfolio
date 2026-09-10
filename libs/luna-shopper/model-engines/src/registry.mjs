@@ -101,12 +101,23 @@ export const ENGINES = [
     // Nothing to confirm: there is no billing for a model running on the
     // operator's own machine.
     gate: null,
-    create: ({ fetchImpl, env, model, usage = null, signal = null }) =>
+    create: ({
+      fetchImpl,
+      env,
+      model,
+      usage = null,
+      stderr = process.stderr,
+      signal = null,
+    }) =>
       makeOllamaEngine({
         ...(fetchImpl ? { fetchImpl } : {}),
         env,
         model,
         usage,
+        // The one line an `OLLAMA_BATCH` above the measured optimum writes goes
+        // where the claude entry's ignored key notice goes, and is injectable
+        // for the same reason: a test reads it rather than the terminal.
+        stderr,
         signal,
       }),
   },
