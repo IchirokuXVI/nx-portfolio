@@ -56,6 +56,8 @@ import {
   type SetGeneratedListLineOutstandingRequest,
   type SetGeneratedListOriginQuantityRequest,
   type SetGeneratedListOriginQuantityResult,
+  type SetGeneratedListOriginSettledRequest,
+  type SetGeneratedListOriginSettledResult,
   type SettleGeneratedListLineRequest,
   type SplitGeneratedListLineRequest,
   type SplitGeneratedListLineResult,
@@ -87,6 +89,7 @@ import {
   RevokeShareLinkDto,
   SetGeneratedListLineOutstandingDto,
   SetGeneratedListOriginQuantityDto,
+  SetGeneratedListOriginSettledDto,
   SettleGeneratedListLineDto,
   SplitGeneratedListLineDto,
 } from './generated-list-sharing.dto';
@@ -982,16 +985,21 @@ export class GeneratedListParticipantController {
   }
 
   /**
-   * Move what is still to get on a line (plan 0056, section 3).
+   * Move what is still to get on a line (plan 0056, rewritten by plan 0104).
    *
-   * **No `seesZoneData` check**, like the pick swap and the reopen: raising
-   * touches the basket line alone, and lowering is a settle, which is authorized
-   * by the basket **owner's** standing on each origin rather than the actor's
-   * (plan 0051, section 6.4). A guest still cannot cause a write anywhere the
-   * owner could not have written themselves, and the answer redacts the names of
-   * the origins it reached exactly as the settle's does. The guest is the person
-   * at the shelf looking at the sale, so this is the one route where refusing
-   * them would refuse the gesture the feature is named for.
+   * **No `seesZoneData` check**, like the pick swap and the reopen: both
+   * directions are authorized by the basket **owner's** standing on each origin
+   * rather than the actor's (plan 0051, section 6.4), because lowering is a
+   * settle and raising is a reopen. A guest still cannot cause a write anywhere
+   * the owner could not have written themselves, and the answer redacts the
+   * names of the origins it reached exactly as the settle's does. The guest is
+   * the person at the shelf putting a tin back, so this is the one route where
+   * refusing them would refuse the gesture the feature is named for.
+   *
+   * The reel has two ends, and the top one is what the lists asked for: an
+   * `outstanding` above the line's own `quantity` is a 400 rather than a clamp,
+   * because a client asking for a number the rule forbids has a stale idea of
+   * the line.
    *
    * Two ways to be refused with a state rather than a fault, and they are told
    * apart by code: `stale_quantity` when somebody else moved the line while it
@@ -1151,6 +1159,61 @@ export class GeneratedListParticipantController {
     };
     return this.nats.send<SetGeneratedListOriginQuantityResult>(
       GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity,
+      req
+    );
+  }
+
+  /**
+   * Set how many of a line one list has got (plan 0104, section 4).
+   *
+   * **The opposite of the route above it**, and a route of its own for that
+   * reason. That one says what a household asked for; this one says how much of
+   * it this basket bought for them. They are the two reels on one row of the
+   * settle sheet, and a single body with both numbers optional would let a
+   * client send them together and mean neither.
+   *
+   * So everything the sibling refuses to do, this does: a settlement is written,
+   * the bought indicator moves, and the household hears `line.settled`. Raising
+   * settles the difference against that list alone and lowering takes that
+   * list's newest purchases back, both through the implementations that already
+   * own those acts.
+   *
+   * Gated on plan 0051 section 5.2 like every other origin route, and refused
+   * outright rather than redacted: the request names a list, and so does every
+   * field of the answer.
+   */
+  @Post(':id/lines/:lineId/origins/settled')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOriginSettled, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+    staleQuantity: true,
+    finishedBasket: true,
+  })
+  setOriginSettled(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: SetGeneratedListOriginSettledDto
+  ): Promise<SetGeneratedListOriginSettledResult> {
+    this.requireZoneData(participant);
+    const req: SetGeneratedListOriginSettledRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+      // The body names the zone line and the path names the basket line, so the
+      // two `lineId`s are separated here rather than in a message where nothing
+      // sits beside them to say which is which.
+      sourceLineId: dto.lineId,
+      settled: dto.settled,
+      from: dto.from,
+    };
+    return this.nats.send<SetGeneratedListOriginSettledResult>(
+      GENERATED_LIST_SHARING_PATTERNS.setOriginSettled,
       req
     );
   }

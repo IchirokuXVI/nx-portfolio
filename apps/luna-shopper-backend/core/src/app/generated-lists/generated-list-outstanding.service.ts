@@ -2,10 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   isLiveGeneratedList,
-  LINE_QUANTITY_MAX,
-  RealtimeEvent,
   SettlementOutcome,
-  type GeneratedListLineMovedEvent,
   type GeneratedListSettleResult,
   type SetGeneratedListLineOutstandingRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -16,58 +13,63 @@ import {
   StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { GeneratedList, GeneratedListLine } from '../entities';
-import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 
 /**
- * What is outstanding is a number you can move (plan 0056).
+ * What is outstanding is a number you can move (plan 0056, rewritten by plan
+ * 0104).
  *
  * ## The rule, stated where it is implemented
  *
- * **The number on a basket line is what is still to get. Raising it means this
- * basket will buy more. Lowering it means that many were bought.**
+ * **The number on a basket line is what is still to get, and it runs between
+ * zero and what the lists asked for. Lowering it means that many were bought.
+ * Raising it takes purchases back, one unit at a time.**
  *
- * That asymmetry is the whole design rather than two behaviours bolted onto one
- * control. Outstanding goes down when units are dealt with, and the only thing
- * that deals with a unit is buying it; outstanding goes up when the basket
- * decides to carry more than the households asked for, which is a sale on the
- * shelf and not a purchase.
+ * Plan 0056 put a different asymmetry here: raising meant the basket had decided
+ * to buy more than the households asked for. The person holding the phone does
+ * not see two meanings. They see one number, and the thing they reach for when
+ * they put a tin back on the shelf is the same thing they reach for when they
+ * want more of it, so the raise is now the undo and the sale is gone (plan 0104,
+ * section 2.1).
  *
- * The rejected alternative was a control that edits `quantity` in both
- * directions. It is wrong in the case this exists for: a shopper who takes three
- * of five off the shelf and edits the line down to two has said nothing about
- * buying anything, and the household's list still believes five are wanted. The
- * number they touched would mean "demand" while the number beside it means
- * "outstanding", and the screen would carry two quantities to tell apart while
- * holding a trolley.
+ * The rejected alternative was to keep the raise and add a separate revert
+ * control. It fails on the screen rather than in the model: one number that goes
+ * up for two unrelated reasons is the thing the client half was written to
+ * remove.
  *
- * ## Lowering is the settle, not a second one
+ * **Nothing here writes `quantity`.** That number is moved only by what the
+ * lists ask for, which is `setOriginQuantity` (plan 0092). Lines carrying more
+ * than the sum of their origins already exist and keep it: such a row is still
+ * legal, still served, and still the ceiling of its own reel.
  *
- * {@link GeneratedListSettleService.settle} is **called**, unchanged. The
- * default allocation, the owner's access check per origin, the skip report, the
- * zone `line.settled` events, the claim release on a finished line and the
- * `lastEditedByParticipantId` write all come with it, and the answer is the same
- * {@link GeneratedListSettleResult} the settle route returns. A separate path
- * that wrote settlements its own way is how two ways of buying the same tin end
- * up disagreeing about who bought it.
+ * ## Both directions are somebody else's implementation
  *
- * Which is why this service is small: only the raise is new, and the raise
- * touches one row.
+ * {@link GeneratedListSettleService.settle} is **called** for a lower and
+ * {@link GeneratedListReopenService.revertUnits} for a raise, both unchanged.
+ * The default allocation, the owner's access check per origin, the skip report,
+ * the zone events, the claim moves and the `lastEditedByParticipantId` write all
+ * come with them. A separate path that wrote settlements its own way is how two
+ * ways of buying the same tin end up disagreeing about who bought it.
+ *
+ * Which is why this service is small: it is the bound, the `from` bargain and
+ * the choice between the two.
  *
  * ## Why the inversion section 3.2 fears cannot happen here
  *
  * Two phones in one shop both read outstanding 5. One drags to 3, settling 2.
  * The other, a second behind, drags to 4 meaning "I got one" — and against a
- * current of 3 that reads as **raise by one**, so a purchase becomes a demand
- * nobody expressed. {@link SetGeneratedListLineOutstandingRequest.from} is what
+ * current of 3 that reads as **raise by one**, so a purchase becomes a take back
+ * nobody asked for. {@link SetGeneratedListLineOutstandingRequest.from} is what
  * refuses it, and the two branches make the refusal total rather than likely:
  *
- * - A **raise** re-reads the line under a write lock inside its own transaction
- *   and checks `from` again there, so it cannot be applied to a line that moved.
+ * - A **raise** re-reads the line under a write lock inside the revert's own
+ *   transaction and checks `from` again there, so it cannot be applied to a line
+ *   that moved.
  * - A **lower** can never become a raise whatever happens in between, because it
  *   reaches the settle as a `BOUGHT` outcome with a positive quantity, and the
  *   settle clamps that to whatever is outstanding when it looks. The worst a
@@ -77,7 +79,6 @@ import { GeneratedListService } from './generated-list.service';
 @Injectable()
 export class GeneratedListOutstandingService {
   constructor(
-    private readonly dataSource: DataSource,
     @InjectRepository(GeneratedList)
     private readonly lists: Repository<GeneratedList>,
     @InjectRepository(GeneratedListLine)
@@ -85,7 +86,7 @@ export class GeneratedListOutstandingService {
     private readonly sharing: GeneratedListSharingService,
     private readonly generated: GeneratedListService,
     private readonly settleService: GeneratedListSettleService,
-    private readonly events: CoreEventsPublisher
+    private readonly reopenService: GeneratedListReopenService
   ) {}
 
   async setOutstanding(
@@ -137,6 +138,17 @@ export class GeneratedListOutstandingService {
       throw new ForbiddenException('Not a participant of this basket');
     }
 
+    if (req.outstanding > line.quantity) {
+      // The top of the reel is what the lists asked for, and there is nothing
+      // above it (plan 0104, section 2). A `ValidationException` rather than a
+      // clamp: a client that asks for a number the rule forbids has a stale idea
+      // of the line, and answering it with a different number would teach it
+      // that its idea was right.
+      throw new ValidationException('That is more than this line asks for', {
+        messageArgs: { field: 'outstanding' },
+      });
+    }
+
     const current = outstandingOf(line);
     if (req.from !== current) {
       // The number as it now stands travels in the message (plan 0057,
@@ -152,11 +164,11 @@ export class GeneratedListOutstandingService {
     if (req.outstanding === current) {
       // A drag that landed where it started is not an error (section 3), and it
       // writes nothing, announces nothing and is a success.
-      return this.answerWithoutSettling(req, line);
+      return this.answer(req, line, 0);
     }
 
     if (req.outstanding > current) {
-      return this.raise(req, list, line, current);
+      return this.revert(req, list, line, current);
     }
 
     // Lowering is a settle, so it *is* the settle: the whole of section 3's
@@ -175,96 +187,54 @@ export class GeneratedListOutstandingService {
   }
 
   /**
-   * Raising: this basket will buy more, and nothing has been bought.
+   * Raising: this many purchases go back, newest first (plan 0104, section 3).
    *
-   * `settledQuantity` is untouched, every `LineSettlement` stands and no zone is
-   * read or written. A raise on a **finished** line therefore takes it from done
-   * to partly settled, because it now wants more than it has got — which looks
-   * like undoing a purchase and is not one (section 3.1). Undoing a purchase is
-   * plan 0054's reopen, and the two are offered as different things.
+   * The reopen's own walk, called with a number of units rather than with
+   * everything the line has settled. So the units land back on the lists they
+   * came off, the history is marked rather than deleted, a purchase larger than
+   * the take back is split, and a line that had been finished claims its origins
+   * again — all of it the reopen's, none of it written twice.
+   *
+   * **The answer carries the line**, as it always did, and the client redraws
+   * from it rather than from what it asked for: a `NOT_AVAILABLE` close has no
+   * units to divide, so a raise that reaches one takes the whole close back and
+   * the number lands above where it was dragged (section 3.3).
    */
-  private async raise(
+  private async revert(
     req: SetGeneratedListLineOutstandingRequest,
     list: GeneratedList,
     line: GeneratedListLine,
     current: number
   ): Promise<GeneratedListSettleResult> {
-    await this.dataSource.transaction(async (manager) => {
-      const basketLines = manager.getRepository(GeneratedListLine);
-      // Re-read under a write lock and check `from` again against what it says.
-      // The first check was against a row read outside any transaction, so on
-      // its own it is a check against a number that may already be stale; this
-      // is the one that makes section 3.2 an invariant rather than a likelihood.
-      const locked = await basketLines.findOne({
-        where: { id: line.id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!locked) {
-        throw new NotFoundException('Line not found');
-      }
-      const held = outstandingOf(locked);
-      if (held !== current) {
-        throw new StaleQuantityException(
-          'This line has moved since you read it',
-          { messageArgs: { current: held } }
-        );
-      }
-
-      const raised = locked.quantity + (req.outstanding - held);
-      if (raised > LINE_QUANTITY_MAX) {
-        // Applied to the resulting `quantity` and not to the outstanding number,
-        // so a partly settled line cannot be raised past the same limit an
-        // unsettled one has (section 5).
-        throw new ValidationException('That is more than a line can ask for', {
-          messageArgs: { field: 'outstanding' },
-        });
-      }
-
-      locked.quantity = raised;
-      locked.lastEditedByParticipantId = req.participantId;
-      locked.lastEditedAt = new Date();
-      await basketLines.save(locked);
-      // Carried back onto the row this call is holding, so the view composed
-      // after the transaction describes the line as it now stands.
-      line.quantity = locked.quantity;
-      line.lastEditedByParticipantId = locked.lastEditedByParticipantId;
-      line.lastEditedAt = locked.lastEditedAt;
+    const reverted = await this.reopenService.revertUnits(list, line, {
+      participantId: req.participantId,
+      units: req.outstanding - current,
+      // Checked again under the write lock the revert takes, which is what makes
+      // section 3.2 an invariant rather than a likelihood: the check above was
+      // against a row read outside any transaction.
+      expectOutstanding: current,
     });
-
-    // The basket's own room and nothing else (section 7). No zone hears a raise,
-    // because no zone list moved: the households still want what they asked for,
-    // and this basket has decided to carry more than that.
-    //
-    // Redacted to the least privileged reader in the room, because a broadcast
-    // cannot be projected per socket. Nothing is lost by that: the three gated
-    // fields do not move when a quantity does, so a reader who passes plan 0051
-    // section 5.2 merges the mutable fields onto the line they already hold.
-    const announcement: GeneratedListLineMovedEvent = {
-      generatedListId: list.id,
-      line: await this.generated.basketLineViewFor(line, false),
-    };
-    this.events.emitToGeneratedList(
-      RealtimeEvent.GeneratedListLineUpdated,
-      list.id,
-      announcement
-    );
-
-    return this.answerWithoutSettling(req, line);
+    return this.answer(req, line, reverted.skippedCount);
   }
 
   /**
    * The settle's own answer shape for an act that settled nothing (section 7).
    *
-   * One response shape in both directions, so a client has one thing to handle,
-   * and every number in it is true of a raise: no origin was skipped because
-   * none was reached, and no settlement was written because nothing was bought.
-   * The two named arrays follow plan 0051 section 5.2 exactly as the settle's do,
-   * present only for a reader entitled to names, so that a guest's raise and a
-   * guest's settle answer with the same fields.
+   * One response shape in both directions, so a client has one thing to handle.
+   * `settlements` is empty because nothing was bought: a revert takes rows away,
+   * and a ref names where units landed. The two named arrays follow plan 0051
+   * section 5.2 exactly as the settle's do, present only for a reader entitled to
+   * names, so that a guest's raise and a guest's settle answer with the same
+   * fields.
+   *
+   * A skipped origin **is** reported, in the count that survives the redaction:
+   * a raise whose origin list has since been deleted has nowhere to put its
+   * units back, and the shopper has to know something did not land.
    */
-  private async answerWithoutSettling(
+  private async answer(
     req: SetGeneratedListLineOutstandingRequest,
-    line: GeneratedListLine
+    line: GeneratedListLine,
+    skippedCount: number
   ): Promise<GeneratedListSettleResult> {
     const seesZoneData = await this.seesZoneData(
       req.participantId,
@@ -272,9 +242,9 @@ export class GeneratedListOutstandingService {
     );
     const view = await this.generated.basketLineViewFor(line, seesZoneData);
     if (!seesZoneData) {
-      return { line: view, skippedCount: 0 };
+      return { line: view, skippedCount };
     }
-    return { line: view, skippedCount: 0, settlements: [], skipped: [] };
+    return { line: view, skippedCount, settlements: [], skipped: [] };
   }
 
   /**
@@ -301,8 +271,8 @@ export class GeneratedListOutstandingService {
  * What is still to get on a basket line: the number this whole plan is about.
  *
  * Floored at zero rather than trusted to be non negative, exactly as the settle
- * floors it, because `settledQuantity` above `quantity` is a state a raise can
- * never produce but a reader should never have to reason about.
+ * floors it, because `settledQuantity` above `quantity` is a state no write here
+ * can produce but a reader should never have to reason about.
  */
 function outstandingOf(line: GeneratedListLine): number {
   return Math.max(0, line.quantity - line.settledQuantity);

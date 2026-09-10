@@ -117,6 +117,13 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   setOriginQuantityResult: schemaId(
     'msg/generatedList.setOriginQuantity/response'
   ),
+  /** How many of a line one list has got, and what the caller believed. */
+  setOriginSettledRequest: schemaId(
+    'msg/generatedList.setOriginSettled/request'
+  ),
+  setOriginSettledResult: schemaId(
+    'msg/generatedList.setOriginSettled/response'
+  ),
 } as const;
 
 const shareLinkView = object(
@@ -672,6 +679,36 @@ const setOriginQuantityResult = object(
   ['line', 'origin', 'listQuantity']
 );
 
+/**
+ * What setting one list's bought amount did (plan 0104, section 4).
+ *
+ * **Both numbers on the row**, which is why the origin detail is here beside the
+ * line: the sheet draws "asked for" and "got" together, and one computed from
+ * the other would drift the moment a close, a split or another shopper moved
+ * something the client could not see.
+ *
+ * `skipped` is required rather than optional, unlike {@link settleResult}'s:
+ * this route is refused outright to a reader who does not pass plan 0051
+ * section 5.2, so there is no redacted projection of it to fall back to.
+ */
+const setOriginSettledResult = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginSettledResult,
+  {
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+    // Null when the origin's zone line has been deleted underneath the basket,
+    // which plan 0050 section 1 makes an ordinary thing to have in a history.
+    origin: {
+      oneOf: [
+        ref(GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginDetail),
+        { type: 'null' },
+      ],
+    },
+    skippedCount: integer({ minimum: 0 }),
+    skipped: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.settleSkip)),
+  },
+  ['line', 'origin', 'skippedCount', 'skipped']
+);
+
 // --- Requests --------------------------------------------------------------
 
 const shareRequest = object(
@@ -978,6 +1015,36 @@ const setOriginQuantityRequest = object(
   ]
 );
 
+/**
+ * Set how many of a line one list has got (plan 0104, section 4).
+ *
+ * `sourceLineId` is **required**, unlike {@link setOriginQuantityRequest}'s: a
+ * list holding no line of this cannot have got any of it, and raising what it
+ * asks for is the other message.
+ *
+ * Neither bound is expressed here. The ceiling is that origin's own
+ * `contributed` and the floor is zero, and only the service can know the first.
+ */
+const setOriginSettledRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginSettledRequest,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    sourceLineId: nonEmptyString(),
+    settled: integer({ minimum: 0 }),
+    from: integer({ minimum: 0 }),
+  },
+  [
+    'generatedListId',
+    'lineId',
+    'participantId',
+    'sourceLineId',
+    'settled',
+    'from',
+  ]
+);
+
 export const generatedListSharingSchemas: JsonSchema[] = [
   shareLinkView,
   shareLinkResult,
@@ -1026,6 +1093,8 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   lineOriginsResult,
   setOriginQuantityRequest,
   setOriginQuantityResult,
+  setOriginSettledRequest,
+  setOriginSettledResult,
   setOutstandingRequest,
 ];
 
@@ -1121,5 +1190,11 @@ export const generatedListSharingMessageContracts: Record<
     // Deliberately **not** the settle result (plan 0057, section 6): no
     // settlement refs and no skip report, because this bought nothing.
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginQuantityResult,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.setOriginSettled]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginSettledRequest,
+    // The settle's skip report **is** here, unlike on the message above, and
+    // for the same reason it is absent there: this one buys things.
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginSettledResult,
   },
 };

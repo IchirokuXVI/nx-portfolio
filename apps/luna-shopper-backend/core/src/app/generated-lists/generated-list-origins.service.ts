@@ -25,7 +25,13 @@ import {
   StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, In, Repository, type EntityManager } from 'typeorm';
+import {
+  DataSource,
+  In,
+  IsNull,
+  Repository,
+  type EntityManager,
+} from 'typeorm';
 import {
   GeneratedList,
   GeneratedListLine,
@@ -1016,11 +1022,26 @@ export class GeneratedListOriginsService {
    * anything, and this number is a floor on what a household can be said to have
    * wanted, so a shop that did not have the milk cannot raise it.
    */
-  private async settledPerOrigin(
+  /**
+   * **Standing rows only.** A settlement somebody took back is excluded from
+   * every consumption total (plan 0054, section 3.3), and this is one: it is
+   * both the floor a contribution cannot be lowered below and, since plan 0104
+   * section 4, the number that route sets. Counting a reverted purchase here
+   * would hold units against a list that gave them back.
+   *
+   * Public because {@link GeneratedListOriginSettledService} sets exactly this
+   * number and must read it the same way. Two implementations would disagree
+   * about a reverted row on the day one of them was changed.
+   */
+  async settledPerOrigin(
     generatedListLineId: string
   ): Promise<Map<string, number>> {
     const rows = await this.settlements.find({
-      where: { generatedListLineId, outcome: SettlementOutcome.BOUGHT },
+      where: {
+        generatedListLineId,
+        outcome: SettlementOutcome.BOUGHT,
+        revertedAt: IsNull(),
+      },
     });
     const perLine = new Map<string, number>();
     for (const row of rows) {
@@ -1093,8 +1114,14 @@ export class GeneratedListOriginsService {
     return { boughtCount, lastOutcome: latest?.outcome ?? null };
   }
 
-  /** One origin row, named and numbered as the read presents it (section 3.1). */
-  private async detailOf(
+  /**
+   * One origin row, named and numbered as the read presents it (section 3.1).
+   *
+   * Public for the reason {@link settledPerOrigin} is: plan 0104 section 4
+   * answers with this exact shape, and a second composer of it would be a second
+   * chance to forget a field.
+   */
+  async detailOf(
     list: GeneratedList,
     line: GeneratedListLine,
     origin: GeneratedListLineOrigin,

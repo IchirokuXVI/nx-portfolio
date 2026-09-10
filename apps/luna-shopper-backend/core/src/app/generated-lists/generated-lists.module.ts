@@ -17,6 +17,7 @@ import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
@@ -83,8 +84,10 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // own for the same reason: it is the other operation here that reaches a
     // zone list, with its own transaction and its own announcements.
     GeneratedListReopenService,
-    // Moving what is still to get (plan 0056). Small, because only the raise is
-    // new: lowering calls the settle above it rather than settling its own way.
+    // Moving what is still to get (plan 0056, rewritten by plan 0104). Small,
+    // because neither direction is implemented in it: lowering calls the settle
+    // above it and raising calls the reopen's walk, rather than either of them
+    // settling its own way.
     GeneratedListOutstandingService,
     GeneratedListBasketService,
     // A line split by the product that was got (plan 0094). A provider of its
@@ -99,6 +102,11 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // line out of the basket, because raising a list from zero is what sending
     // a line there means, and plan 0058's separate bind service went with it.
     GeneratedListOriginsService,
+    // What one list **got**, which is deliberately not the service above it
+    // (plan 0104, section 4): that one says what a household asked for, this one
+    // says how much of it this basket bought for them, and the two move in
+    // opposite directions on the same row of the same sheet.
+    GeneratedListOriginSettledService,
     // The purchases waiting for a list to arrive (plan 0092 section 4.3, filled
     // by plan 0093). It does nothing yet, and it is provided rather than left
     // out so the two origin inserts already call the one method.

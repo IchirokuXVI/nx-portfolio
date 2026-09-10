@@ -193,6 +193,51 @@ export class SetGeneratedListOriginQuantityDto {
   from!: number;
 }
 
+/**
+ * Set how many of a basket line one list has got (plan 0104, section 4).
+ *
+ * **Not {@link SetGeneratedListOriginQuantityDto}, and the difference is the
+ * whole point.** That body says what a household asked for; this one says what
+ * this basket bought for them. They are two rows of one sheet moving in opposite
+ * directions, so they are two bodies on two routes rather than one body with two
+ * optional numbers a client could send together and mean neither by.
+ *
+ * The zone line is named rather than optional, unlike the sibling above: a list
+ * that holds no line of this cannot have got any of it, and raising what it asks
+ * for is the other route.
+ */
+export class SetGeneratedListOriginSettledDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The zone line whose list bought some of this. It must already be one this basket line came from.',
+  })
+  @IsUUID()
+  lineId!: string;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'How many of this line this basket has bought for that list, after this write. Raising it settles the difference against that list alone; lowering it takes that list’s newest purchases back. At most what the list asked for: a shopper who bought more raises that first.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  settled!: number;
+
+  @ApiProperty({
+    minimum: 0,
+    maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    description:
+      'What you believed that number was. A mismatch is refused with `stale_quantity` rather than applied, because a gesture whose meaning depends on where it started must never be applied to a number that moved underneath it.',
+  })
+  @IsInt()
+  @Min(0)
+  @Max(GENERATED_LIST_LIMITS.maxQuantity)
+  from!: number;
+}
+
 export class GeneratedListAllocationDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
@@ -347,15 +392,16 @@ export class BasketSuggestQueryDto {
  * Bounded by `LINE_QUANTITY_MAX` rather than by `GENERATED_LIST_LIMITS.maxQuantity`
  * above it, and the two are different bounds on different things: that one caps
  * the units **one settle** may claim, and this is how many a line may ask for,
- * which is the limit a zone line already has. The service applies it again to
- * the resulting `quantity`, which is the number it is really about.
+ * which is the limit a zone line already has. It is the shape's own bound and
+ * not the rule: since plan 0104 the real ceiling is the line's own `quantity`,
+ * which only the service can know, and a number above it is refused there.
  */
 export class SetGeneratedListLineOutstandingDto {
   @ApiProperty({
     minimum: 0,
     maximum: LINE_QUANTITY_MAX,
     description:
-      'How many are still to get after this. Above the current amount the basket will buy more and nothing is settled; below it, the difference was bought. Zero finishes the line, exactly as “got all” does.',
+      'How many are still to get after this. Below the current amount, the difference was bought; above it, that many purchases are taken back, newest first. Zero finishes the line, exactly as “got all” does, and the ceiling is what the lists asked for.',
   })
   @IsInt()
   @Min(0)
