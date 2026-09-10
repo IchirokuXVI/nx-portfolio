@@ -27,7 +27,7 @@
       "x": 920,
       "y": -430,
       "w": 410,
-      "text": "THE SHEET: ORDER, GROUP BY, PRICES FROM, LISTS. Radios for each choice that is one of several, checkboxes for the lists, never a segmented control (0030 section 6.1). Grouping is one radio group: nothing, category or list. The primary button says how many lines the choice leaves. Reset is in the title row.\nPRICES FROM is two radios: any of your shops, or one shop. A profile can hold fifty shops, so the one shop is not listed here: Change opens the picker, a sheet of its own, grouped by chain and searched like the supermarkets page."
+      "text": "THE SHEET: ORDER, GROUP BY, PRICES FROM, LISTS. Radios for each choice that is one of several, checkboxes for the lists, never a segmented control (0030 section 6.1). Grouping is one radio group: nothing, category or list. The primary button says how many lines the choice leaves. Reset is in the title row.\nPRICES FROM is two radios: any of your shops, or one shop. A profile can hold fifty shops, so the one shop is not listed here: Change opens the picker, a sheet of its own built from the supermarkets page's pieces (0059): the search across every chain, the chain buttons with their counts, then the open chain's shops grouped by postal code. Chain first, then shop, or search; one radio per row."
     },
     {
       "id": "grouping",
