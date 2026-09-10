@@ -42,6 +42,14 @@ export const API_CONFIRMATION = 'API_KEY';
  * a scratch cwd does not strip the tool schemas (23,244 tokens with those). The
  * cwd half is `scratchDir` below.
  *
+ * `--safe-mode` is the third piece, and it is about the operator's own machine
+ * rather than about this repository: a `SessionStart` hook fires on every
+ * `claude -p` call, and a plugin that injects text is then billed once per row.
+ * One installed here cost a measured **1,980 input tokens a call**, which is
+ * more than the packet. The flag drops hooks, plugins and output styles and
+ * leaves session authentication alone, so nothing this engine needs goes with
+ * them. It does **not** stop the structured output retry below.
+ *
  * `--bare` looks like the one flag for all of this and must not be used: it
  * skips `CLAUDE.md` discovery and auto-memory, but it also refuses OAuth and
  * demands `ANTHROPIC_API_KEY`, which is the billing this engine exists to
@@ -53,7 +61,46 @@ export const MINIMAL_ARGS = [
   '--disable-slash-commands',
   '--strict-mcp-config',
   '--no-session-persistence',
+  '--safe-mode',
 ];
+
+/**
+ * What `--json-schema` costs when the model gets the call shape wrong.
+ *
+ * `--json-schema` is not a response format here. The CLI turns it into a
+ * synthetic tool named `StructuredOutput` and makes the model call it, so a
+ * tool input that fails the schema comes back as an error tool result and the
+ * CLI **sends the whole prompt a second time**. That second request is billed
+ * and is nearly invisible: `is_error` stays false, `stop_reason` stays
+ * `tool_use`, and `usage.iterations[]` lists only the last request, so the one
+ * signal is `usage.input_tokens` exceeding `iterations[0].input_tokens` by
+ * about a whole prompt.
+ *
+ * Measured on the suggestions prompt and schema, six calls each: sonnet 5
+ * retried **five times out of six** and haiku 4.5 **none**. Over a thirty row
+ * run it was 21 of 30, and 39% of the sonnet dollars. What sonnet sends on the
+ * failing call is the right decision in the wrong wrapper: the payload
+ * stringified under `parameters`, `input` or `StructuredOutput`, or the literal
+ * `{"$PARAMETER_NAME":"$PARAMETER_VALUE"}` template. It is a serialization
+ * failure and not a judgment one.
+ *
+ * These four sentences fix it: measured 0 retries in 16 calls afterwards, the
+ * same decisions, and $0.0367 a call down to $0.0157 with `--safe-mode`. There
+ * is no flag for retry count or for validation strictness, so a sentence is the
+ * whole of the fix. It is sent only when a schema is, because without one there
+ * is no tool to name.
+ */
+export const TOOL_SHAPE_HINT = [
+  '',
+  '## How to send your answer',
+  '',
+  'You answer by calling the `StructuredOutput` tool exactly once. The object',
+  'described above **is** the argument set of that call: pass every field of it',
+  'as a top level argument. Never wrap them under a `parameter`, `parameters`,',
+  '`input` or `StructuredOutput` key, and never pass the object as a JSON',
+  'string. Never emit a placeholder name such as `$PARAMETER_VALUE`, and do not',
+  'write the JSON as text before you call the tool.',
+].join('\n');
 
 /**
  * A directory with no `CLAUDE.md`, which is what the spawn runs in.
@@ -250,13 +297,19 @@ export function makeClaudeEngine({
       // `--system-prompt` replaces Claude Code's own system prompt rather than
       // appending to it, which is what makes the decider's rules the whole of
       // the model's standing context. `--append-system-prompt` would keep both.
+      //
+      // The hint goes on here rather than in a decider's `prompt.md` because it
+      // is a fact about this CLI and not about the work: it is wrong for the
+      // api engine, which has no such tool, and both deciders need it.
+      const withHint =
+        system && schema ? `${system}\n${TOOL_SHAPE_HINT}` : system;
       const args = [
         '-p',
         '--output-format',
         'json',
         '--model',
         model,
-        ...(system ? ['--system-prompt', system] : []),
+        ...(withHint ? ['--system-prompt', withHint] : []),
         ...(schema ? ['--json-schema', JSON.stringify(schema)] : []),
         ...MINIMAL_ARGS,
       ];

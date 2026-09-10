@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   API_CONFIRMATION,
   MINIMAL_ARGS,
+  TOOL_SHAPE_HINT,
   addUsage,
   claudeChildEnv,
   confirmApiBilling,
@@ -33,7 +34,7 @@ test('the claude engine carries the rules and the shape as flags, not as prose',
   // would keep both, which is the whole overhead this engine removes.
   const at = seen[0].args.indexOf('--system-prompt');
   assert.ok(at > 0);
-  assert.equal(seen[0].args[at + 1], 'THE RULES');
+  assert.ok(seen[0].args[at + 1].startsWith('THE RULES'));
   assert.ok(!seen[0].args.includes('--append-system-prompt'));
 
   const schemaAt = seen[0].args.indexOf('--json-schema');
@@ -42,6 +43,66 @@ test('the claude engine carries the rules and the shape as flags, not as prose',
 
   // The packet is the whole of stdin: the rules reach the model once.
   assert.equal(seen[0].options.input, 'the packet');
+});
+
+test('a schema brings the tool shape hint with it, and nothing else does', async () => {
+  const seen = [];
+  const spawn = async (command, args) => {
+    seen.push(args);
+    return { code: 0, stdout: ENVELOPE, stderr: '' };
+  };
+  const engine = makeClaudeEngine({
+    spawn,
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+  });
+
+  await engine.ask('the packet', {
+    system: 'THE RULES',
+    schema: { type: 'object' },
+  });
+  await engine.ask('the packet', { system: 'THE RULES' });
+
+  const systemOf = (args) => args[args.indexOf('--system-prompt') + 1];
+
+  // `--json-schema` is a synthetic `StructuredOutput` tool, and a call whose
+  // arguments do not fit the schema costs a second request carrying the whole
+  // prompt again. The hint is what stops that, so it travels with the schema.
+  assert.equal(systemOf(seen[0]), `THE RULES\n${TOOL_SHAPE_HINT}`);
+  assert.match(systemOf(seen[0]), /StructuredOutput/);
+
+  // Without a schema there is no such tool, so naming one would only mislead.
+  assert.equal(systemOf(seen[1]), 'THE RULES');
+});
+
+test('the api engine is never told about a tool it does not have', async () => {
+  const sent = [];
+  const engine = makeApiEngine({
+    fetchImpl: async (url, options) => {
+      sent.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        json: async () => ({
+          content: [{ type: 'text', text: '{}' }],
+          usage: {},
+        }),
+      };
+    },
+    apiKey: 'sk-test',
+  });
+
+  await engine.ask('the packet', {
+    system: 'THE RULES',
+    schema: { type: 'object' },
+  });
+
+  // It holds the schema through `output_config`, where the model answers in the
+  // response and calls nothing. A hint about `StructuredOutput` would name a
+  // tool that is not there.
+  assert.equal(
+    JSON.stringify(sent[0].system).includes('StructuredOutput'),
+    false
+  );
 });
 
 test('the claude engine omits both flags when it is given neither', async () => {
@@ -123,6 +184,9 @@ test('MINIMAL_ARGS empties the call and never reaches for --bare', () => {
     '--disable-slash-commands',
     '--strict-mcp-config',
     '--no-session-persistence',
+    // A SessionStart hook fires on every call and a plugin that injects text is
+    // billed once a row. One installed here cost 1,980 input tokens a call.
+    '--safe-mode',
   ]) {
     assert.ok(MINIMAL_ARGS.includes(flag), flag);
   }
