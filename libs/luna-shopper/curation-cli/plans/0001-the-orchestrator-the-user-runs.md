@@ -111,12 +111,21 @@ claude-sonnet-5`, packet on stdin, 120 second timeout. The child environment
   validators: `itemId` on a `LINK` and nowhere else, exactly one of `itemId`
   and `itemRef`, an id that was actually offered. So a schema valid answer is
   still an answer the decider can refuse.
-- **One session per row, never a resumed one.** Separate `claude -p` processes
-  share the server side prompt cache, so the unchanging prefix comes back as
-  `read 2544, write 0` at $0.00055 a call. A session holds no state on the
-  server. Every request resends the whole conversation. So reuse cannot
-  amortise that prefix and can only add history to it. Measured on a two turn
-  resume, turn 2 re-sent everything and read nothing from cache.
+- **The prompt cache is turned off, because here it only ever costs.**
+  `claude -p` puts its cache breakpoint at the end of the request, after the
+  packet, and no flag moves it. Every row is a different packet, so the prefix
+  never matches. Measured over four consecutive rows, every call wrote about
+  3,478 tokens and read **zero**. A cache write is $4 per MTok against $2 for
+  ordinary input, so paying it for an entry nothing reads doubles the bill. So
+  `claudeChildEnv` sets `DISABLE_PROMPT_CACHING`, and the same four rows then
+  sent 3,478 as plain input and wrote nothing. Separate processes do share the
+  cache, but only for a request that matches byte for byte, which two rows
+  never do. **The api engine is the one that caches properly**, because it puts
+  `cache_control` on the system block alone and leaves the packet outside it.
+- **One session per row, never a resumed one.** A session holds no state on the
+  server. Every request resends the whole conversation, so reuse cannot
+  amortise anything and can only add history. Measured on a two turn resume,
+  turn 2 re-sent everything and read nothing from cache.
 - **`--engine api`.** The raw Messages API path from the plan 0098 tool,
   unchanged, behind a gate: when `ANTHROPIC_API_KEY` is set, the CLI prints
   that the run bills the API with that key and requires the operator to type

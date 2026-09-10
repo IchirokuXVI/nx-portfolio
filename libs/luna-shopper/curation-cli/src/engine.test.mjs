@@ -161,6 +161,20 @@ test('the claude child environment has no API key in it', () => {
   assert.ok(!('ANTHROPIC_API_KEY' in env));
 });
 
+test('the child environment turns the prompt cache off', () => {
+  // `claude -p` breakpoints after the packet and takes no flag to move it, so
+  // with a different packet every row the prefix never matches: measured, four
+  // consecutive rows each wrote ~3,478 tokens and read zero. A write is $4 per
+  // MTok against $2 for input, so an entry nothing reads costs double.
+  const { env } = claudeChildEnv({ PATH: '/usr/bin' });
+  assert.equal(env.DISABLE_PROMPT_CACHING, '1');
+});
+
+test('the cache stays off even when the operator set it on', () => {
+  const { env } = claudeChildEnv({ DISABLE_PROMPT_CACHING: '0' });
+  assert.equal(env.DISABLE_PROMPT_CACHING, '1');
+});
+
 test('an empty API key is not a key', () => {
   assert.equal(claudeChildEnv({ ANTHROPIC_API_KEY: '' }).hadKey, false);
   assert.equal(claudeChildEnv({}).hadKey, false);

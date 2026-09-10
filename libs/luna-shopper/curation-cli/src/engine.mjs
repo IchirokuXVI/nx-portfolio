@@ -119,12 +119,27 @@ export function textOf(payload) {
  * `ANTHROPIC_API_KEY` is deleted, so the call bills the operator's logged in
  * Claude session even when a key is exported globally. An operator who wants
  * the key billed says so with `--engine api`, and types a word to prove it.
+ *
+ * **`DISABLE_PROMPT_CACHING` is set, and the cache is a loss here without it.**
+ * `claude -p` puts its cache breakpoint at the end of the request, after the
+ * packet, and it takes no flag that moves it. Every row is a different packet,
+ * so the prefix never matches: measured over four consecutive rows, every call
+ * wrote about 3,478 tokens and read **zero**. A write is $4 per MTok against $2
+ * for ordinary input, so paying it for an entry nothing ever reads doubles the
+ * bill. With the variable set the same four rows sent 3,478 as plain input and
+ * wrote nothing.
+ *
+ * An earlier reading of `read 2544, write 0` came from asking the same question
+ * four times, where the whole request matched byte for byte. That is not this
+ * workload. The api engine is the one that caches properly, because it can put
+ * `cache_control` on the system block alone and leave the packet outside it.
  */
 export function claudeChildEnv(env) {
   const copy = { ...env };
   const hadKey =
     typeof copy.ANTHROPIC_API_KEY === 'string' && copy.ANTHROPIC_API_KEY !== '';
   delete copy.ANTHROPIC_API_KEY;
+  copy.DISABLE_PROMPT_CACHING = '1';
   return { env: copy, hadKey };
 }
 
