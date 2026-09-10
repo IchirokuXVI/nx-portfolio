@@ -36,17 +36,6 @@ export const StorageKeys = {
    */
   installed: `installed:${APP_KEY}`,
   /**
-   * Whether a silence ends the recording and sends it (plan 0038's original
-   * behaviour, now a choice).
-   *
-   * Off unless it is stored, because the plain recorder is the one somebody who has
-   * never opened settings should get: a microphone that sends on its own surprises
-   * people who paused to think about the next item.
-   */
-  voiceSendOnSilence: `voice-send-on-silence:${APP_KEY}`,
-  /** Whether the microphone reopens after a recording is sent. Off unless stored. */
-  voiceKeepListening: `voice-keep-listening:${APP_KEY}`,
-  /**
    * That this document already spent its one reload on a build the server refuses
    * (plan 0072 D4).
    *

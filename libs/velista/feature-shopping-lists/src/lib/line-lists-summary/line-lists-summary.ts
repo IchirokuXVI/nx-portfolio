@@ -3,10 +3,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
+  input,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -14,47 +15,38 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { BasketStore, GatewayError } from '@portfolio/velista/data-access';
 import {
-  APP_BASE_PATH,
-  outstanding,
   type BasketLine,
   type BasketLineOriginDetail,
   type BasketListRef,
   type BasketOriginCandidate,
 } from '@portfolio/velista/models';
-import {
-  generatedListIdOf,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
-import { QuantityReel, SheetShell } from '@portfolio/velista/ui';
+import { QuantityReel } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
-import { settleSheetPath } from '../basket-paths';
 
-/** How the origins read has got on. Four states, not two booleans. */
+/** How the origins read has got on. Three states, not two booleans. */
 type OriginsLoad = 'loading' | 'loaded' | 'failed';
 
 /**
- * The bound the contribution field carries on the wire
+ * The bound the two contribution fields carry on the wire
  * (`SetGeneratedListOriginQuantityDto.quantity`).
  *
  * Stated here rather than reached for from the line's own limits, because it is a
- * different number for a different reason: `LINE_QUANTITY_MAX` is what a zone line may
- * ask for, and this is what one list may put into one basket line. A reel bounded above
- * what the server accepts is a control that can only produce a refusal.
+ * different number for a different reason: `LINE_QUANTITY_MAX` is what a zone line
+ * may ask for, and this is what one list may put into one basket line. A reel
+ * bounded above what the server accepts is a control that can only produce a
+ * refusal.
  */
 const ORIGIN_QUANTITY_MAX = 9999;
 
-/** The floor of every reel here. Zero takes the list off the line (backend 0057, 5.3). */
-const ORIGIN_QUANTITY_MIN = 0;
-
 /**
- * What one row of this sheet says, whichever of the three collections it came from.
+ * What one row of the summary says, whichever of the three collections it came from.
  *
  * One shape for all of them, because they are drawn identically and differ only in
  * what they start at, what the caption under the name says, and what raising one
  * does. Three view models would have made the template branch on which collection a
  * row came from, which is exactly the fact a reader is not supposed to have to hold.
  */
-interface UnitsRow {
+interface SummaryRow {
   /**
    * What identifies a row here.
    *
@@ -69,26 +61,30 @@ interface UnitsRow {
   /**
    * The zone line this row writes to, or null for a list holding none.
    *
-   * Null is what makes the write a **creation** (backend `0092`, section 4.2): there
-   * is nothing to name, so the request omits it and the server adds the line through
-   * the ordinary add. It is not a missing value to be filled in.
+   * Null is what makes the asked for write a **creation** (backend `0092`, section
+   * 4.2): there is nothing to name, so the request omits it and the server adds the
+   * line through the ordinary add. It is also what makes the row's second reel
+   * impossible: a list holding no line of this cannot have got any of it.
    */
   readonly sourceLineId: string | null;
   /** The list's name, or the fallback phrase when the basket was told none. */
   readonly label: string;
   /**
-   * The reel's accessible name, which is the list and the zone where the list alone
-   * would name two of them (section 8).
+   * The name the asked for reel announces (section 7).
    *
-   * Somebody moving by control hears "Flat, 2" rather than "quantity, 2" five times,
-   * which is the whole of what that section asks for.
+   * Two reels on one row need two names that differ **before** the number, so
+   * somebody moving by control hears "Flat, asked for, 4" and then "Flat, got, 2"
+   * rather than the same word twice.
    */
-  readonly reelLabel: string;
+  readonly askedLabel: string;
+  /** The name the got reel announces. See {@link askedLabel}. */
+  readonly gotLabel: string;
   /**
    * The zone, drawn under the name **only** when another row shares that name.
    *
-   * The same rule the skip report uses: a reader with one list called Food is not made
-   * to read which house it is in, and a reader with two has no other way to tell.
+   * The same rule the skip report uses: a reader with one list called Food is not
+   * made to read which house it is in, and a reader with two has no other way to
+   * tell.
    */
   readonly zoneName: string | null;
   /**
@@ -102,11 +98,11 @@ interface UnitsRow {
   /** Whether the run drew from this list, which is what sorts the rows first. */
   readonly fromRun: boolean;
   /** What this list asked for through this basket. Zero until somebody raises it. */
-  readonly contributed: number;
-  /** What the zone line asks for now, which is a different number the moment either moves. */
+  readonly asked: number;
+  /** What this basket has bought for this list, which is the row's second number. */
+  readonly got: number;
+  /** What the zone line asks for now, a different number the moment either moves. */
   readonly listQuantity: number;
-  /** What this basket has already bought for this list, which is the floor. */
-  readonly settledHere: number;
   /**
    * The caption under the name about the list's own line, as a key, or null.
    *
@@ -116,16 +112,16 @@ interface UnitsRow {
    * nothing at all for a list that holds no such line.
    */
   readonly listCaption: RowCaption | null;
-  /** Whether the zone line is still waiting for its list to agree (section 4.2). */
+  /** Whether the zone line is still waiting for its list to agree (backend `0092`). */
   readonly pending: boolean;
   /** That list's own wording of the line, for a candidate matched on text alone. */
   readonly matchedOnText: string | null;
   /**
-   * Why this row has no reel, as a translation key, or null when it may be moved.
+   * Why this row has no controls, as a translation key, or null when it may move.
    *
-   * `0030` says a control you may not use is not drawn, and this is the other half of
-   * that: the **information** is a fact about a list this reader is entitled to, so it
-   * stays, and the row says in words why nothing can be done with it.
+   * `0030` says a control you may not use is not drawn, and this is the other half
+   * of that: the **information** is a fact about a list this reader is entitled to,
+   * so it stays, and the row says in words why nothing can be done with it.
    */
   readonly reason: string | null;
   /**
@@ -133,11 +129,11 @@ interface UnitsRow {
    *
    * A list rather than one sentence, because a write that lands can have two things
    * to say: that a list received units bought before it was on the line, and that
-   * there are units left over which a second list would take (section 6).
+   * there are units left over which a second list would take.
    */
   readonly notices: readonly RowNotice[];
-  /** What the reel should show, which is the floor after a refusal and the contribution otherwise. */
-  readonly shown: number;
+  /** What the asked for reel shows: the floor after a refusal, the number otherwise. */
+  readonly shownAsked: number;
 }
 
 /** One sentence on one row, with whatever it names. */
@@ -152,9 +148,9 @@ interface RowNotice extends RowCaption {
   /**
    * Whether this is a refusal or a thing that happened.
    *
-   * Section 6 puts the write's own news in **the slot** a refusal uses, and a slot is
-   * not a colour: "Added to Flat. 4 recorded as bought there" drawn in the refusal's
-   * red would read as a failure to somebody who had just succeeded.
+   * A write's own news goes in **the slot** a refusal uses, and a slot is not a
+   * colour: "Added to Flat. 4 recorded as bought there" drawn in the refusal's red
+   * would read as a failure to somebody who had just succeeded.
    */
   readonly tone: 'refusal' | 'news';
 }
@@ -165,7 +161,8 @@ interface RowNotice extends RowCaption {
  * Two entries where `0055` had three, and the third is gone rather than renamed:
  * backend `0092` section 3.2 made a pending line and a line at zero adoptable, so
  * `NOT_APPROVED` and `SETTLED` are no longer answered and no longer drawn. Anything
- * this build cannot read arrives as `UNAVAILABLE` from the mapper and says only that.
+ * this build cannot read arrives as `UNAVAILABLE` from the mapper and says only
+ * that.
  */
 const UNAVAILABLE_KEY: Readonly<Record<string, string>> = {
   CLAIMED: 'basket.units.claimed',
@@ -174,79 +171,84 @@ const UNAVAILABLE_KEY: Readonly<Record<string, string>> = {
 };
 
 /**
- * What every list asked for, on one sheet (velista `0068`, widening `0055`).
+ * What every list asked for and what every list got, under the product on the settle
+ * sheet (velista `0073`, section 3).
  *
- * A basket line of three litres of milk is the flat wanting two and the parents'
- * house wanting one, and somebody who added batteries in an aisle wanting three for
- * the flat and two for their parents. This is the sheet that shows that split, for
- * **every** list the reader can write, and lets them move each number.
+ * ## Why it is a component and not more of `SettleSheet`
  *
- * ## One sheet, because it is one question and one write
+ * The plan puts these rows on the settle sheet, and this is them: the sheet draws
+ * one element under its product entry. Keeping the read, the two writes and the row
+ * model behind that element is what makes section 3.4 true by construction rather
+ * than by care — **the settle buttons never wait for this** — because a read that
+ * belongs to a child cannot hold up a parent's template. It also keeps the sheet's
+ * own file readable, which five panes had already stretched.
  *
- * There were two. The units sheet showed what each list asked for, but only lists
- * already holding the line; the send sheet offered every list, but once, to an added
- * line, and only as a name to tap. Backend `0092` made both one write, so a list with
- * no such line is a row at zero exactly like the others, and raising it from zero is
- * what "send this line to that list" now means.
+ * ## Two reels on one row, and they are opposite acts
  *
- * ## Nothing on this sheet buys anything
+ * **Asked for** is what that list wants through this basket. It writes
+ * `BasketStore.setOriginQuantity`, floored at what that list has already got and
+ * bounded by what the wire accepts, and it buys nothing whichever way it goes.
  *
- * The single thing to keep right, because the identical control one screen up means the
- * opposite. On the row a reel dragged down records a purchase (`0054`); here it is a
- * household changing its mind, and backend `0057` section 1 writes no settlement, sets
- * no bought indicator and emits no `line.settled` for it.
+ * **Got** is what this basket has bought for that list. It writes
+ * `BasketStore.setOriginSettled` (backend `0104`, section 4), floored at zero and
+ * capped at what that list asked for. Raising it takes the line's outstanding number
+ * down by the same amount and is the same purchase the row's number one screen up
+ * writes; lowering it takes a purchase back for that list alone.
  *
- * The screen says so three ways. A permanent sentence under the title, in words. No
- * caption while the thumb is down, where the row's reel narrates "2 bought", so the
- * gesture that reports a purchase and the gesture that does not are told apart by
- * whether they narrate one. And the copy on every row is about **asking for** rather
- * than about getting: the **Asked for** column never moves on a purchase, and the
- * **Bought** column never moves from this sheet.
+ * This replaced two controls that said the same thing in two places: the allocate
+ * pane, which said who got how many of what was just bought, and the units sheet,
+ * which said who wanted how many. They were the same rows drawn twice.
  *
- * ## One write per row, on release, and never a save button
+ * ## One write per reel, on release, and never a save button
  *
- * A sheet that collected five numbers and applied them together would have to explain a
- * partial failure. Applying them one at a time means the row that failed is the row that
- * says so, which is section 5 and is why every failure here lands on a row rather than
- * on the sheet.
+ * A sheet that collected ten numbers and applied them together would have to explain
+ * a partial failure. Applying them one at a time means the row that failed is the
+ * row that says so, which is why every failure here lands on a row rather than on
+ * the sheet.
  *
  * ## A row raised stays where it is
  *
  * The three collections are the **read's** partition and nothing rewrites them, so a
- * list raised from the closed run becomes an origin and keeps its place rather than
- * jumping to the top of the sheet under somebody's thumb. What the answer changes is
- * the row's numbers, held in {@link _written} beside the read, and the next read is
- * what re-groups.
+ * list raised from the closed section becomes an origin and keeps its place rather
+ * than jumping to the top under somebody's thumb. What an answer changes is the
+ * row's numbers, held in {@link _written} beside the read, and the next read is what
+ * re-groups.
  *
  * ## What `from` is, and what it is not
  *
- * Every write carries the contribution this client last **read**, never a number that
- * happens to be on screen. The reel reports where its own gesture started, which is the
- * same number until a refusal moves the displayed value to the floor, and sending that
- * would turn one refusal into a silent overwrite of somebody else's arithmetic.
+ * Every write carries the number this client last **read**, never a number that
+ * happens to be on screen. A reel reports where its own gesture started, which is
+ * the same number until a refusal moves the displayed value to the floor, and
+ * sending that would turn one refusal into a silent overwrite of somebody else's
+ * arithmetic.
  */
 @Component({
-  selector: 'lib-line-units-sheet',
-  imports: [NgTemplateOutlet, RokuTranslatorPipe, QuantityReel, SheetShell],
-  templateUrl: './line-units-sheet.html',
-  styleUrl: './line-units-sheet.scss',
+  selector: 'lib-line-lists-summary',
+  imports: [NgTemplateOutlet, RokuTranslatorPipe, QuantityReel],
+  templateUrl: './line-lists-summary.html',
+  styleUrl: './line-lists-summary.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class LineUnitsSheet {
+export class LineListsSummary {
   private readonly _store = inject(BasketStore);
-  private readonly _sheet = inject(SheetNavigation);
-  private readonly _route = inject(ActivatedRoute);
-  private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
-  /** The bounds every reel on this sheet carries, stated once for the template. */
-  protected readonly reelMin = ORIGIN_QUANTITY_MIN;
-  protected readonly reelMax = ORIGIN_QUANTITY_MAX;
+  /** The basket line these rows are about. */
+  readonly lineId = input.required<string>();
 
-  /** The basket underneath, which is what the settle sheet's URL is built from. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
-  private readonly _lineId = this._route.snapshot.paramMap.get('lineId') ?? '';
+  /**
+   * Whether the trip is over, which takes the controls off and leaves the numbers.
+   *
+   * The same treatment the row one screen up gives a finished basket: everything it
+   * **says** stays, because a finished basket is the receipt for a trip somebody
+   * took, and every control goes, because the server refuses all of these writes on
+   * one (velista `0057`, section 6). Absent rather than disabled, per `0030`.
+   */
+  readonly finished = input(false);
+
+  /** The ceiling the asked for reel carries, stated once for the template. */
+  protected readonly askedMax = ORIGIN_QUANTITY_MAX;
 
   private readonly _state = signal<OriginsLoad>('loading');
   private readonly _origins = signal<readonly BasketLineOriginDetail[]>([]);
@@ -264,20 +266,10 @@ export class LineUnitsSheet {
     ReadonlyMap<string, BasketLineOriginDetail>
   >(new Map());
 
-  /** Whether the lists that asked for nothing are showing. Closed by default (4.3). */
+  /** Whether the lists that asked for nothing are showing. Closed by default. */
   private readonly _restOpen = signal(false);
 
-  /**
-   * What each open reel is currently under the thumb, by row.
-   *
-   * The total at the top is what the reader is actually deciding, so it has to move
-   * while a thumb is down (section 4.1) and the committed numbers cannot answer that.
-   * A row leaves this map the moment its overlay closes, which is also the moment its
-   * write goes out.
-   */
-  private readonly _previews = signal<ReadonlyMap<string, number>>(new Map());
-
-  /** The rows with a write in flight, which is what makes their reel readonly. */
+  /** The rows with a write in flight, which makes both their reels readonly. */
   private readonly _busy = signal<ReadonlySet<string>>(new Set());
 
   /** The last thing each row's write had to say, in the row's own words. */
@@ -286,22 +278,22 @@ export class LineUnitsSheet {
   );
 
   /**
-   * Rows whose write was refused with `forbidden`, which loses them their reel.
+   * Rows whose write was refused with `forbidden`, which loses them their reels.
    *
    * Held here rather than folded into the origin, because it is this session's own
    * observation and not something the read said: the next reload answers `writable`
-   * for itself, and the two must not be able to disagree in the direction that draws a
-   * control the server refuses.
+   * for itself, and the two must not be able to disagree in the direction that draws
+   * a control the server refuses.
    */
   private readonly _forbidden = signal<ReadonlySet<string>>(new Set());
 
   /**
-   * Where a reel should sit after a refused lower, by row.
+   * Where the asked for reel should sit after a refused lower, by row.
    *
-   * Section 5: a contribution refused for going under what has already been bought
-   * returns to the floor rather than to where it started, because the floor is where
-   * the reader was heading. The **next** `from` is still the real contribution, which
-   * is why this is a display value and lives apart from the origin.
+   * A contribution refused for going under what has already been bought returns to
+   * the floor rather than to where it started, because the floor is where the reader
+   * was heading. The **next** `from` is still the real contribution, which is why
+   * this is a display value and lives apart from the origin.
    */
   private readonly _floors = signal<ReadonlyMap<string, number>>(new Map());
 
@@ -309,13 +301,40 @@ export class LineUnitsSheet {
   protected readonly restOpen = this._restOpen.asReadonly();
   protected readonly busy = this._busy.asReadonly();
 
-  /** The line this sheet is about, read live so a write updates it under us. */
-  protected readonly line = computed<BasketLine | null>(
-    () => this._store.lines().find((row) => row.id === this._lineId) ?? null
+  /** The line this summary is about, read live so a write updates it under us. */
+  private readonly _line = computed<BasketLine | null>(
+    () => this._store.lines().find((row) => row.id === this.lineId()) ?? null
   );
 
-  /** The sheet's accessible title, which is the line's own words. */
-  protected readonly title = computed(() => this.line()?.content ?? '');
+  /**
+   * Whether the read has been asked for.
+   *
+   * A field and not a signal: nothing draws it, and an effect that wrote a signal it
+   * also reads would be a loop.
+   */
+  private _readAsked = false;
+
+  constructor() {
+    // Read once the basket is ready, and never before: the line this is about does
+    // not exist until then, and a read fired at construction would be about an id
+    // the store has nothing to say for yet.
+    effect(() => {
+      if (this._readAsked || this._store.state() !== 'ready') {
+        return;
+      }
+      this._readAsked = true;
+      void this._read(true);
+    });
+  }
+
+  /** Ask again after a failed read. The only thing the failed state offers. */
+  protected retry(): void {
+    void this._read(true);
+  }
+
+  protected toggleRest(): void {
+    this._restOpen.update((open) => !open);
+  }
 
   /**
    * The lists sharing a name, so only those rows are made to name their zone.
@@ -347,28 +366,29 @@ export class LineUnitsSheet {
   });
 
   /**
-   * The lists that asked for some of this, one row each (section 4.2).
+   * The lists that asked for some of this, one row each.
    *
    * An origin at zero is not one of them: it asked for nothing, which is the same
    * answer as a list that never did, so it sits with them behind the control below.
    */
-  protected readonly asked = computed<readonly UnitsRow[]>(() =>
+  protected readonly asked = computed<readonly SummaryRow[]>(() =>
     this._originRows()
-      .filter((row) => row.contributed > 0)
+      .filter((row) => row.asked > 0)
       .sort(byRunThenName)
   );
 
   /**
-   * The lists that asked for nothing, in the order section 4.3 states.
+   * The lists that asked for nothing, in the order `0068` section 4.3 states.
    *
    * Two runs with no heading between them, because they are one answer to the reader
    * ("these lists are not asking for any of this") and two different writes: the
-   * first holds a line this raise would take over, and the second has none and gets
-   * one made.
+   * first holds a line a raise would take over, and the second has none and gets one
+   * made. It survives the move off the units sheet because raising one from zero is
+   * the only way an added line reaches a household (`0056`, folded into `0068`).
    */
-  protected readonly rest = computed<readonly UnitsRow[]>(() => [
+  protected readonly rest = computed<readonly SummaryRow[]>(() => [
     ...this._originRows()
-      .filter((row) => row.contributed === 0)
+      .filter((row) => row.asked === 0)
       .sort(byRunThenName),
     ...[...this._candidateRows()].sort(byRunThenName),
     ...[...this._otherRows()].sort(byRunThenName),
@@ -379,142 +399,70 @@ export class LineUnitsSheet {
     () => this.asked().length === 0 && this.rest().length === 0
   );
 
-  /**
-   * How far every open reel is from the number behind it, summed.
-   *
-   * The one thing that makes the total move under a thumb. A row with no overlay open
-   * contributes nothing, so this is zero whenever nobody is touching anything.
-   */
-  private readonly _pendingDelta = computed(() => {
-    const previews = this._previews();
-    if (previews.size === 0) {
-      return 0;
-    }
-
-    let delta = 0;
-    for (const row of [...this.asked(), ...this.rest()]) {
-      const preview = previews.get(row.key);
-      if (preview !== undefined) {
-        delta += preview - row.contributed;
-      }
-    }
-    return delta;
-  });
-
-  /**
-   * What this basket will buy, live (section 4.1).
-   *
-   * The outstanding amount, which is the number a shopper is deciding, plus wherever
-   * the open reels currently are. It is at the **top** rather than under the rows so it
-   * stays visible while a thumb is on a reel at the bottom of the sheet.
-   */
-  protected readonly total = computed(() => {
-    const line = this.line();
-    return Math.max(
-      0,
-      (line === null ? 0 : outstanding(line)) + this._pendingDelta()
-    );
-  });
-
-  /** What the lists between them are asking for, live. */
-  protected readonly listsWant = computed(
-    () => this._contributed() + this._pendingDelta()
+  /** What the rows say the lists asked for, as the last read and write left them. */
+  private readonly _contributed = computed(() =>
+    this._originRows().reduce((sum, row) => sum + row.asked, 0)
   );
 
+  /** What the lists between them are asking for, for the sentence under the rows. */
+  protected readonly listsWant = this._contributed;
+
   /**
-   * How much of the line nobody asked for, which `0054` allows and backend `0057`
-   * section 5.1 preserves across every write here.
+   * How much of the line nobody asked for.
    *
-   * Constant while a thumb is down, and correctly so: raising a contribution raises the
-   * basket line by the same amount, so the difference between the two does not move.
-   * Without this second sentence the arithmetic on the screen does not add up and reads
-   * as a defect.
+   * Nothing creates this any more (backend `0104`, section 2.1), because the row's
+   * number can no longer be raised above what the lists asked for. The lines that
+   * already have it are still readable, which is what this sentence is for.
    */
   protected readonly extra = computed(() => {
-    const line = this.line();
+    const line = this._line();
     return line === null ? 0 : Math.max(0, line.quantity - this._contributed());
   });
 
-  /** What the rows say the lists asked for, as the last read and write left them. */
-  private readonly _contributed = computed(() =>
-    this._originRows().reduce((sum, row) => sum + row.contributed, 0)
-  );
-
-  constructor() {
-    void this._read(true);
-  }
-
-  /** Ask again after a failed read. The only thing the failed state offers. */
-  protected retry(): void {
-    void this._read(true);
-  }
-
-  protected toggleRest(): void {
-    this._restOpen.update((open) => !open);
-  }
-
   /**
-   * A reel moved under a thumb, or its overlay closed.
+   * One row's asked for number, set.
    *
-   * Null means closed, which is also the moment {@link commit} runs, so the total goes
-   * from following the thumb to following the line without a frame in between where it
-   * counts the same units twice.
-   */
-  protected onPreview(row: UnitsRow, value: number | null): void {
-    this._previews.update((held) => {
-      const next = new Map(held);
-      if (value === null) {
-        next.delete(row.key);
-      } else {
-        next.set(row.key, value);
-      }
-      return next;
-    });
-  }
-
-  /**
-   * One row's number, set (section 5).
-   *
-   * `from` is {@link UnitsRow.contributed} and never the reel's own starting number.
-   * They are the same until a refusal moves the displayed value to the floor, and after
-   * one the reel's number is a suggestion while the contribution is still what the
-   * server last told us. Sending the suggestion would turn a refusal into an overwrite.
+   * `from` is {@link SummaryRow.asked} and never the reel's own starting number.
+   * They are the same until a refusal moves the displayed value to the floor, and
+   * after one the reel's number is a suggestion while the contribution is still what
+   * the server last told us. Sending the suggestion would turn a refusal into an
+   * overwrite.
    *
    * The zone line is **omitted** for a list holding none, which is the whole of what
    * makes this the same call as sending a line somewhere: the server creates the line
    * and answers the id it landed on, which is not always the one a fresh add would
    * have made (backend `0092`, section 4.2).
    */
-  protected async commit(
-    row: UnitsRow,
+  protected async commitAsked(
+    row: SummaryRow,
     change: { from: number; to: number }
   ): Promise<void> {
-    if (row.reason !== null || change.to === row.contributed) {
+    if (row.reason !== null || change.to === row.asked) {
       return;
     }
 
     this._clear(row.key);
     this._setBusy(row.key, true);
 
-    const result = await this._store.setOriginQuantity(this._lineId, {
+    const result = await this._store.setOriginQuantity(this.lineId(), {
       listId: row.listId,
       ...(row.sourceLineId === null ? {} : { lineId: row.sourceLineId }),
       quantity: change.to,
-      from: row.contributed,
+      from: row.asked,
     });
 
     this._setBusy(row.key, false);
 
     if (result === null) {
-      await this._report(row);
+      await this._reportAsked(row);
       return;
     }
 
     if (result.origin === null) {
       // Zero drops the origin (backend 0057, section 5.3), and the list goes back to
       // asking for nothing. Re-read rather than move the row by hand: whether it can
-      // be raised again is a question about claims and approvals that only the server
-      // can answer.
+      // be raised again is a question about claims and approvals that only the
+      // server can answer.
       await this._read(false);
       return;
     }
@@ -523,38 +471,84 @@ export class LineUnitsSheet {
   }
 
   /**
-   * Cancel, Escape, the scrim and the back gesture, all onto the settle sheet.
+   * One row's got number, set. A purchase, or a purchase taken back.
    *
-   * This sheet is opened **over** that one, so back has to land there rather than on the
-   * basket (`0031`). The whole URL and never a relative climb, for the reason every
-   * sheet here names its page in full: the number of segments in somebody else's path is
-   * not something this component's correctness may depend on.
+   * The opposite act to {@link commitAsked} on the same row, which is why it is the
+   * other call: raising settles the difference against this list alone and lowering
+   * takes that list's newest purchases back.
+   *
+   * **Everything drawn afterwards comes out of the answer.** A `NOT_AVAILABLE` close
+   * has no units to divide, so any raise takes the whole close back and the line's
+   * outstanding number lands above where this reel was dragged (backend `0104`,
+   * section 5). The store applies the answered line, so the number above the rows is
+   * right without this knowing the rule.
    */
-  protected close(): void {
-    void this._sheet.dismiss(
-      settleSheetPath(
-        this._locale(),
-        this._basePath,
-        this._generatedListId(),
-        this._lineId
-      )
-    );
+  protected async commitGot(
+    row: SummaryRow,
+    change: { from: number; to: number }
+  ): Promise<void> {
+    if (
+      row.reason !== null ||
+      row.sourceLineId === null ||
+      change.to === row.got
+    ) {
+      return;
+    }
+
+    this._clear(row.key);
+    this._setBusy(row.key, true);
+
+    const result = await this._store.setOriginSettled(this.lineId(), {
+      lineId: row.sourceLineId,
+      settled: change.to,
+      from: row.got,
+    });
+
+    this._setBusy(row.key, false);
+
+    if (result === null) {
+      await this._reportGot(row);
+      return;
+    }
+
+    const origin = result.origin;
+    if (origin === null) {
+      // The zone line went out from under the basket. Only a fresh read can say what
+      // the row is now, and it may no longer be a row at all.
+      await this._read(false);
+      return;
+    }
+
+    this._written.update((held) => new Map(held).set(row.key, origin));
+
+    if (result.skippedCount > 0) {
+      // A settle that could not reach every origin is still a settle, and somebody
+      // who has bought the thing has to be told part of it did not land (backend
+      // `0051`, section 6.4). The same sentence the sheet draws for its own settles.
+      this._notice(row.key, 'basket.settle.missed', {
+        count: result.skippedCount,
+      });
+    }
   }
 
   /**
    * Read every list this reader may write.
    *
-   * `first` is what decides whether a failure takes the screen. The opening read has
-   * nothing to keep, so it fails to a sentence and a retry; a re-read after a write has
-   * rows on screen that are still true, and replacing them with a spinner would take
-   * away the numbers somebody is in the middle of correcting.
+   * `first` is what decides whether a failure takes the block. The opening read has
+   * nothing to keep, so it fails to a sentence and a retry; a re-read after a write
+   * has rows on screen that are still true, and replacing them with a spinner would
+   * take away the numbers somebody is in the middle of correcting.
+   *
+   * The settle buttons above are unaffected either way, which is section 3.4: a
+   * shopper who opened the sheet to press "Got all" must not be held up by a read
+   * about lists.
    */
   private async _read(first: boolean): Promise<void> {
     if (first) {
       this._state.set('loading');
     }
 
-    const answer = await this._store.loadLineOrigins(this._lineId);
+    const answer = await this._store.loadLineOrigins(this.lineId());
 
     if (answer === null) {
       if (first) {
@@ -576,25 +570,26 @@ export class LineUnitsSheet {
   }
 
   /**
-   * Take what a write answered, and say what it did that the numbers do not.
+   * Take what an asked for write answered, and say what it did that the numbers do
+   * not.
    *
-   * The row keeps its place: what changes is the numbers behind it. The two sentences
-   * this draws are section 6's, and both are drawn from the answer rather than
-   * inferred, because "the flat now knows about batteries and needs none" is a strange
-   * enough outcome that it has to be said in words the moment it happens.
+   * The row keeps its place: what changes is the numbers behind it. Both sentences
+   * are drawn from the answer rather than inferred, because "the flat now knows
+   * about batteries and needs none" is a strange enough outcome that it has to be
+   * said in words the moment it happens.
    *
    * Both are said **only on the answer that put this list on the line**. A later edit
-   * of a row that has always been bought against is not news, and repeating "some are
-   * still waiting" on every drag would turn a fact into wallpaper.
+   * of a row that has always been bought against is not news, and repeating "some
+   * are still waiting" on every drag would turn a fact into wallpaper.
    */
   private _record(
-    row: UnitsRow,
+    row: SummaryRow,
     origin: BasketLineOriginDetail,
     line: BasketLine
   ): void {
     this._written.update((held) => new Map(held).set(row.key, origin));
 
-    if (row.contributed > 0) {
+    if (row.asked > 0) {
       return;
     }
 
@@ -610,9 +605,9 @@ export class LineUnitsSheet {
       });
     }
 
-    // And what those purchases could not fill, because this list asked for fewer than
-    // were waiting. Said so the shopper knows a second list would take the rest,
-    // rather than leaving them to work it out from two numbers on two screens.
+    // And what those purchases could not fill, because this list asked for fewer
+    // than were waiting. Said so the shopper knows a second list would take the
+    // rest, rather than leaving them to work it out from two numbers on two screens.
     if (line.waitingSettled > 0) {
       said.push({
         key: 'basket.units.stillWaiting',
@@ -627,46 +622,46 @@ export class LineUnitsSheet {
   }
 
   /**
-   * Say what went wrong, on the row it went wrong on, with the sheet still open.
+   * Say what went wrong on an asked for write, on the row it went wrong on.
    *
-   * Each of these leaves the reader somewhere different: a number somebody else moved
-   * first, a raise that landed on a list already holding this line, a number under
-   * what has already been bought, access that has gone since the sheet opened, and a
-   * list whose own answer about this line changed underneath the read.
+   * Each of these leaves the reader somewhere different: a number somebody else
+   * moved first, a raise that landed on a list already holding this line, a number
+   * under what has already been bought, access that has gone since the sheet opened,
+   * and a list whose own answer about this line changed underneath the read.
    */
-  private async _report(row: UnitsRow): Promise<void> {
+  private async _reportAsked(row: SummaryRow): Promise<void> {
     const error = this._store.error();
     const key = basketErrorKey(error, 'basket.origins');
     const code = error instanceof GatewayError ? error.code : null;
 
     if (code === 'forbidden') {
-      // The row keeps its numbers and loses its control, in place. They are still facts
-      // about a list this reader is entitled to; what has gone is the ability to write.
+      // The row keeps its numbers and loses its controls, in place. They are still
+      // facts about a list this reader is entitled to; what has gone is the ability
+      // to write.
       this._forbidden.update((held) => new Set(held).add(row.key));
       return;
     }
 
     if (code === 'below_settled') {
-      this._floors.update((held) =>
-        new Map(held).set(row.key, row.settledHere)
-      );
-      this._notice(row.key, key, { count: row.settledHere });
+      this._floors.update((held) => new Map(held).set(row.key, row.got));
+      this._notice(row.key, key, { count: row.got });
       return;
     }
 
     if (code === 'stale_quantity') {
-      // The store has already refetched the basket, which is the line. The lists are a
-      // second read and this is where it happens, so the sentence can name the number
-      // this list is actually at rather than saying only that something failed.
+      // The store has already refetched the basket, which is the line. The lists are
+      // a second read and this is where it happens, so the sentence can name the
+      // number this list is actually at rather than saying only that something
+      // failed.
       await this._read(false);
       if (row.sourceLineId === null) {
-        // A raise on a list this read said held no such line, refused because it does
-        // (backend `0092`, section 4.2). Nothing moved underneath the reader's
+        // A raise on a list this read said held no such line, refused because it
+        // does (backend `0092`, section 4.2). Nothing moved underneath the reader's
         // arithmetic, so the sentence is about the list rather than about a number.
         this._notice(row.key, 'basket.units.alreadyHere', {});
         return;
       }
-      this._notice(row.key, key, { count: this._contributionOf(row.key) });
+      this._notice(row.key, key, { count: this._askedOf(row.key) });
       return;
     }
 
@@ -683,12 +678,44 @@ export class LineUnitsSheet {
     this._notice(row.key, key, {});
   }
 
-  /** What the fresh read says this row asked for, zero if it no longer asks. */
-  private _contributionOf(key: string): number {
-    return this._originRows().find((row) => row.key === key)?.contributed ?? 0;
+  /**
+   * Say what went wrong on a got write.
+   *
+   * Fewer cases than its sibling, because fewer are reachable: this write names a
+   * line that is already an origin, so nothing here adopts, creates or drops one. A
+   * stale number is re-read for the same reason the other one is, and a `forbidden`
+   * takes the controls off the row and leaves what it says.
+   */
+  private async _reportGot(row: SummaryRow): Promise<void> {
+    const error = this._store.error();
+    const key = basketErrorKey(error, 'basket.originSettled');
+    const code = error instanceof GatewayError ? error.code : null;
+
+    if (code === 'forbidden') {
+      this._forbidden.update((held) => new Set(held).add(row.key));
+      return;
+    }
+
+    if (code === 'stale_quantity') {
+      await this._read(false);
+      this._notice(row.key, key, { count: this._gotOf(row.key) });
+      return;
+    }
+
+    this._notice(row.key, key, {});
   }
 
-  /** Why the fresh read says this row cannot be raised, or null if it can. */
+  /** What the fresh read says this row asked for, zero if it no longer asks. */
+  private _askedOf(key: string): number {
+    return this._originRows().find((row) => row.key === key)?.asked ?? 0;
+  }
+
+  /** What the fresh read says this basket has bought for this row's list. */
+  private _gotOf(key: string): number {
+    return this._originRows().find((row) => row.key === key)?.got ?? 0;
+  }
+
+  /** Why the fresh read says this row cannot be moved, or null if it can. */
   private _reasonOf(key: string): string | null {
     return (
       [...this.asked(), ...this.rest()].find((row) => row.key === key)
@@ -733,7 +760,7 @@ export class LineUnitsSheet {
   }
 
   /** The lists already on the line, whatever they now ask for. */
-  private readonly _originRows = computed<readonly UnitsRow[]>(() =>
+  private readonly _originRows = computed<readonly SummaryRow[]>(() =>
     this._origins().map((origin) => {
       const now = this._written().get(origin.lineId) ?? origin;
       return this._row({
@@ -743,9 +770,9 @@ export class LineUnitsSheet {
         listName: now.listName,
         zoneName: now.zoneName,
         fromRun: now.fromRun,
-        contributed: now.contributed,
+        asked: now.contributed,
+        got: now.settledHere,
         listQuantity: now.listQuantity,
-        settledHere: now.settledHere,
         pending: now.approvalStatus === 'PENDING',
         matchedOnText: null,
         // What the list's own line asks for now, when it has drifted from what it
@@ -761,14 +788,14 @@ export class LineUnitsSheet {
               },
         // `writable` is the server's answer about the **owner's** access, which is
         // what authorizes every write made from this basket. A row it says no to
-        // keeps its numbers and loses its control.
+        // keeps its numbers and loses its controls.
         reason: now.writable ? null : 'basket.units.noAccess',
       });
     })
   );
 
   /** The lists holding the same thing that have not been raised yet. */
-  private readonly _candidateRows = computed<readonly UnitsRow[]>(() =>
+  private readonly _candidateRows = computed<readonly SummaryRow[]>(() =>
     this._candidates().map((candidate) => {
       const now = this._written().get(candidate.lineId);
       return this._row({
@@ -781,9 +808,9 @@ export class LineUnitsSheet {
         // Nothing yet, which is what makes moving one off zero an adoption: it takes
         // over the demand the list already has before it adds any (backend `0092`,
         // section 4.1), so raising it to what it asks for moves that list by nothing.
-        contributed: now?.contributed ?? 0,
+        asked: now?.contributed ?? 0,
+        got: now?.settledHere ?? 0,
         listQuantity: now?.listQuantity ?? candidate.listQuantity,
-        settledHere: now?.settledHere ?? 0,
         pending: now?.approvalStatus === 'PENDING',
         // Drawn distinctly on purpose (backend 0057, section 8): the run merges on
         // normalized text as its last resort, so a match made that way is one the
@@ -805,7 +832,7 @@ export class LineUnitsSheet {
   );
 
   /** The lists holding no such line, which raising creates one on. */
-  private readonly _otherRows = computed<readonly UnitsRow[]>(() =>
+  private readonly _otherRows = computed<readonly SummaryRow[]>(() =>
     this._others().map((other) => {
       const key = `list:${other.listId}`;
       const now = this._written().get(key);
@@ -819,9 +846,9 @@ export class LineUnitsSheet {
         listName: now?.listName ?? other.listName,
         zoneName: now?.zoneName ?? other.zoneName,
         fromRun: other.fromRun,
-        contributed: now?.contributed ?? 0,
+        asked: now?.contributed ?? 0,
+        got: now?.settledHere ?? 0,
         listQuantity: now?.listQuantity ?? 0,
-        settledHere: now?.settledHere ?? 0,
         pending: now?.approvalStatus === 'PENDING',
         matchedOnText: null,
         // Nothing to say: the list asks for none of this and holds no line to have
@@ -835,14 +862,14 @@ export class LineUnitsSheet {
   /** One row, from whichever collection it came out of. */
   private _row(
     source: Pick<
-      UnitsRow,
+      SummaryRow,
       | 'key'
       | 'listId'
       | 'sourceLineId'
       | 'fromRun'
-      | 'contributed'
+      | 'asked'
+      | 'got'
       | 'listQuantity'
-      | 'settledHere'
       | 'pending'
       | 'matchedOnText'
       | 'listCaption'
@@ -851,11 +878,11 @@ export class LineUnitsSheet {
       readonly listName: string | null;
       readonly zoneName: string | null;
     }
-  ): UnitsRow {
+  ): SummaryRow {
     const named = source.listName !== null && source.listName !== '';
-    // Named where a name is known. A reader who reaches this sheet passes the all or
-    // nothing rule, so the names are theirs by construction; the fallback covers a list
-    // deleted since rather than a redacted one.
+    // Named where a name is known. A reader who sees this summary passes the all or
+    // nothing rule, so the names are theirs by construction; the fallback covers a
+    // list deleted since rather than a redacted one.
     const label = named
       ? (source.listName as string)
       : this._translator.t('basket.unnamed', undefined, this._locale());
@@ -863,20 +890,32 @@ export class LineUnitsSheet {
       named && this._ambiguous().has(source.listName as string)
         ? source.zoneName
         : null;
+    const locale = this._locale();
+    // The zone is part of the reel's name where the list alone would name two of
+    // them, which is the same rule the visible caption follows.
+    const whose =
+      zoneName === null || zoneName === '' ? label : `${label} (${zoneName})`;
 
     return {
       key: source.key,
       listId: source.listId,
       sourceLineId: source.sourceLineId,
       label,
-      reelLabel:
-        zoneName === null || zoneName === '' ? label : `${label} (${zoneName})`,
+      askedLabel: this._translator.t(
+        'basket.units.askedLabel',
+        undefined,
+        locale,
+        { name: whose }
+      ),
+      gotLabel: this._translator.t('basket.units.gotLabel', undefined, locale, {
+        name: whose,
+      }),
       zoneName,
       zoneKey: source.zoneName ?? '',
       fromRun: source.fromRun,
-      contributed: source.contributed,
+      asked: source.asked,
+      got: source.got,
       listQuantity: source.listQuantity,
-      settledHere: source.settledHere,
       listCaption: source.listCaption,
       pending: source.pending,
       matchedOnText: source.matchedOnText,
@@ -884,22 +923,22 @@ export class LineUnitsSheet {
         ? 'basket.units.noAccess'
         : source.reason,
       notices: this._notices().get(source.key) ?? [],
-      shown: this._floors().get(source.key) ?? source.contributed,
+      shownAsked: this._floors().get(source.key) ?? source.asked,
     };
   }
 }
 
 /**
- * The run's own lists first, then by zone and by list name (section 4.2).
+ * The run's own lists first, then by zone and by list name (backend `0092`).
  *
- * The server sorts nothing and says so (backend `0092`, section 3), because the order
- * is a fact about the person reading rather than about the data: somebody adding bread
- * in an aisle almost always means one of the lists the basket came from.
+ * The server sorts nothing and says so, because the order is a fact about the person
+ * reading rather than about the data: somebody adding bread in an aisle almost
+ * always means one of the lists the basket came from.
  *
  * By zone before list, so two lists in one household stay together, and by the
  * reader's own locale, so accented names fall where a Spanish speaker expects.
  */
-function byRunThenName(left: UnitsRow, right: UnitsRow): number {
+function byRunThenName(left: SummaryRow, right: SummaryRow): number {
   if (left.fromRun !== right.fromRun) {
     return left.fromRun ? -1 : 1;
   }

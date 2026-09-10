@@ -467,19 +467,100 @@ describe('HarvestRunService.spawn', () => {
     ).rejects.toBeInstanceOf(ValidationException);
   });
 
-  it('refuses a LIDL walk that names a price scope', async () => {
-    // The opposite rule to Mercadona's, and it has to be a refusal (plan 0089,
-    // section 8): the chain publishes a price for each of its 59 regions and
-    // the run creates one scope per region, so a scope on the request would
-    // write every region's price into that one. A wrong number, not a missing
-    // one.
-    const { service } = build({ source: { adapterKey: 'lidl-api' } });
+  it('accepts a price scope on a LIDL walk as the fallback, and no longer refuses it', async () => {
+    // The reversal of plan 0089, section 8, decided in plan 0103, D5. That
+    // refusal was right while an ingest call could carry one scope: a scope on
+    // the request really would have been written into all 59 regions. A price
+    // now carries its own scope key, so the one on the run is only what an
+    // unscoped price falls back to (plan 0103, section 3.2), and refusing it
+    // buys nothing.
+    const { service, store } = build({ source: { adapterKey: 'lidl-api' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeId: 'a-scope',
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        priceScopeId: 'a-scope',
+      })
+    );
+  });
+
+  it('starts a carrefour walk that names a price scope', async () => {
+    // The regression test for the defect of plan 0103, section 1.2. The spawn
+    // required a scope for `carrefour-web` and the back office offered the
+    // picker for `mercadona-api` alone, so this run arrived with an empty scope
+    // and was refused for a field the operator was never shown. Both sides read
+    // one table now.
+    const { service, store } = build({
+      source: { adapterKey: 'carrefour-web' },
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeId: 'a-scope',
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        priceScopeId: 'a-scope',
+      })
+    );
+  });
+
+  it('starts a backfill for a chain that has product pages, with no scope', async () => {
+    // `hasProductPages` is what a backfill is allowed by, and it reads pages
+    // rather than walking an assortment, so it writes no price and needs no
+    // scope (plan 0090, section 12.1).
+    const { service, store } = build({
+      source: { adapterKey: 'carrefour-web' },
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      detailBackfill: true,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ detailBackfill: true }),
+      })
+    );
+  });
+
+  it('refuses a backfill for a chain with no product pages to read', async () => {
+    const { service } = build({ source: { adapterKey: 'mercadona-api' } });
     await expect(
       service.spawn({
         userId: ADMIN,
         mode: HarvestRunMode.CATALOG_DISCOVERY,
         supermarketId: SUPERMARKET,
         priceScopeId: 'a-scope',
+        detailBackfill: true,
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('refuses a carrefour walk with no scope to write the prices for', async () => {
+    // `writesPrices` and not `scopesItsOwn`, which is the same rule Mercadona
+    // answers to. It was already the backend's rule and is now read from the
+    // table rather than from a second list of names.
+    const { service } = build({ source: { adapterKey: 'carrefour-web' } });
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
       })
     ).rejects.toBeInstanceOf(ValidationException);
   });

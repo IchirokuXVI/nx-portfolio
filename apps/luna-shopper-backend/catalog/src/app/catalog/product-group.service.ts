@@ -27,9 +27,13 @@ import {
 } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import {
+  GROUP_SEARCH_TEXT,
+  literalMatchSql,
   parseSearchTerm,
   TRIGRAM_THRESHOLD,
   TRIGRAM_WEIGHT,
+  wholeWordMatchSql,
+  type SearchTerm,
 } from './search-term';
 
 const PG_UNIQUE_VIOLATION = '23505';
@@ -185,15 +189,22 @@ export class ProductGroupService {
     // into. The offset is still opaque to the caller, so this stays a decision
     // the service can revisit without a contract change.
     const offset = Number(cursor?.value ?? 0) || 0;
+    const values: unknown[] = [];
+    const bind = (value: unknown): string => `$${values.push(value)}`;
+    const query = bind(term.tsquery);
+    const raw = bind(term.raw);
     const rows = await this.groups.query(
       `
-      SELECT g.*, ${RANK_SQL} AS "relevance"
+      SELECT g.*, ${rankSql(query, raw)} AS "relevance"
       FROM "product_groups" g
-      WHERE ${MATCH_SQL}
-      ORDER BY "relevance" DESC, ${EXACT_SQL} DESC, g."id" ASC
-      LIMIT $4 OFFSET $5
+      WHERE ${matchSql(term, query, raw, bind)}
+      ORDER BY (${wholeWordMatchSql(GROUP_SEARCH_TEXT, term.words, bind)}) DESC,
+               "relevance" DESC,
+               ${exactSql(raw)} DESC,
+               g."id" ASC
+      LIMIT ${bind(limit + 1)} OFFSET ${bind(offset)}
       `,
-      [term.tsquery, term.raw, TRIGRAM_THRESHOLD, limit + 1, offset]
+      values
     );
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit) as ProductGroup[];
@@ -265,27 +276,55 @@ function normalizeSynonyms(
 /**
  * The three SQL fragments the ranked group read is built from.
  *
- * `$1` is the `to_tsquery` expression, `$2` the raw term for the trigram and
- * exact comparisons, `$3` the trigram threshold. They are shared between the
- * WHERE and the ORDER BY so the thing that decides whether a row matches and the
- * thing that decides where it sits cannot describe different rows.
+ * They take their placeholders rather than naming `$1` and `$2` themselves,
+ * because the literal recheck binds one parameter per typed word and the fuzzy
+ * branch binds none at all when the query is too short for it: the numbering is
+ * no longer fixed. They are still shared between the WHERE and the ORDER BY, so
+ * the thing that decides whether a row matches and the thing that decides where
+ * it sits cannot describe different rows.
  */
-const MATCH_SQL = `(
-  g."search_es" @@ to_tsquery('spanish', $1)
-  OR g."search_en" @@ to_tsquery('english', $1)
-  OR similarity(g."name" ->> 'es', $2) > $3
-  OR similarity(g."name" ->> 'en', $2) > $3
-)`;
+function matchSql(
+  term: SearchTerm,
+  query: string,
+  raw: string,
+  bind: (value: unknown) => string
+): string {
+  const fuzzy = term.fuzzy
+    ? `OR similarity(g."name" ->> 'es', ${raw}) > ${bind(TRIGRAM_THRESHOLD)}
+       OR similarity(g."name" ->> 'en', ${raw}) > ${bind(TRIGRAM_THRESHOLD)}`
+    : '';
+  return `(
+    (
+      (
+        g."search_es" @@ to_tsquery('spanish', ${query})
+        OR g."search_en" @@ to_tsquery('english', ${query})
+      )
+      AND ${literalMatchSql(GROUP_SEARCH_TEXT, term.words, bind)}
+    )
+    ${fuzzy}
+  )`;
+}
 
-const RANK_SQL = `GREATEST(
-  ts_rank(g."search_es", to_tsquery('spanish', $1)),
-  ts_rank(g."search_en", to_tsquery('english', $1)),
-  GREATEST(
-    similarity(g."name" ->> 'es', $2),
-    similarity(g."name" ->> 'en', $2)
-  ) * ${TRIGRAM_WEIGHT}
-)`;
+/**
+ * The normalization argument is `1`, which divides the score by the logarithm of
+ * the document length. Without it `ts_rank` counts matches and ignores how much
+ * else the document says, so a long name that mentions the word twice in passing
+ * outranked the short one the word actually names.
+ */
+function rankSql(query: string, raw: string): string {
+  return `GREATEST(
+    ts_rank(g."search_es", to_tsquery('spanish', ${query}), 1),
+    ts_rank(g."search_en", to_tsquery('english', ${query}), 1),
+    GREATEST(
+      similarity(g."name" ->> 'es', ${raw}),
+      similarity(g."name" ->> 'en', ${raw})
+    ) * ${TRIGRAM_WEIGHT}
+  )`;
+}
 
-const EXACT_SQL = `(
-  lower(g."name" ->> 'es') = lower($2) OR lower(g."name" ->> 'en') = lower($2)
-)`;
+function exactSql(raw: string): string {
+  return `(
+    lower(g."name" ->> 'es') = lower(${raw})
+    OR lower(g."name" ->> 'en') = lower(${raw})
+  )`;
+}

@@ -268,9 +268,11 @@ export class HarvestMemory implements HarvestServiceI {
     query: EntryQuery
   ): Promise<Wire.HarvestSourceCatalogEntryPage> {
     const term = (query.query ?? '').trim().toLowerCase();
+    const chain = query.supermarketId ?? '';
     const matching = this._entries.filter(
       (entry) =>
-        entry.supermarketId === query.supermarketId &&
+        // Absent lists every chain's rows, as the route does.
+        (chain === '' || entry.supermarketId === chain) &&
         (query.status === undefined
           ? entry.status === 'CANDIDATE' || entry.status === 'UNRESOLVED'
           : entry.status === query.status) &&

@@ -29,11 +29,14 @@ import {
   type SetGeneratedListLineOutstandingRequest,
   type SetGeneratedListOriginQuantityRequest,
   type SetGeneratedListOriginQuantityResult,
+  type SetGeneratedListOriginSettledRequest,
+  type SetGeneratedListOriginSettledResult,
   type SettleGeneratedListLineRequest,
   type SplitGeneratedListLineRequest,
   type SplitGeneratedListLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
+import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
@@ -61,6 +64,7 @@ export class GeneratedListSharingController {
     private readonly outstanding: GeneratedListOutstandingService,
     private readonly basket: GeneratedListBasketService,
     private readonly origins: GeneratedListOriginsService,
+    private readonly originSettled: GeneratedListOriginSettledService,
     private readonly split: GeneratedListSplitService
   ) {}
 
@@ -156,12 +160,15 @@ export class GeneratedListSharingController {
   }
 
   /**
-   * Move what is still to get on a basket line (plan 0056, section 3).
+   * Move what is still to get on a basket line (plan 0056, rewritten by plan
+   * 0104).
    *
-   * One message read in two directions: raising means this basket will buy more,
-   * lowering means that many were bought. The lower half is the settle above,
-   * called rather than reimplemented, so both ways of buying a tin write the
-   * same rows and agree about who bought it.
+   * One message with two ends: it runs from zero to what the lists asked for,
+   * lowering means that many were bought, and raising takes purchases back one
+   * unit at a time. Neither half is written here. The lower one is the settle
+   * above and the upper one is the reopen beside it, called rather than
+   * reimplemented, so every way of buying a tin writes the same rows and agrees
+   * about who bought it.
    */
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.setOutstanding)
   setOutstanding(
@@ -267,5 +274,25 @@ export class GeneratedListSharingController {
     @Payload() req: SetGeneratedListOriginQuantityRequest
   ): Promise<SetGeneratedListOriginQuantityResult> {
     return this.origins.setOriginQuantity(req);
+  }
+
+  /**
+   * Set how many of a basket line one list has got (plan 0104, section 4).
+   *
+   * **The other number on the same row, and the opposite one.** The message
+   * above says what a household asked for and this says what it got, which is
+   * why they are two messages: one with two optional fields would let a client
+   * send both and mean neither. This one writes settlements, sets the bought
+   * indicator and moves `settledQuantity`, because saying the flat got two of
+   * these is saying the flat bought two of these.
+   *
+   * Raising is the settle with an allocation naming one list, lowering is the
+   * reopen's walk restricted to one origin, and neither is written again here.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.setOriginSettled)
+  setOriginSettled(
+    @Payload() req: SetGeneratedListOriginSettledRequest
+  ): Promise<SetGeneratedListOriginSettledResult> {
+    return this.originSettled.setOriginSettled(req);
   }
 }

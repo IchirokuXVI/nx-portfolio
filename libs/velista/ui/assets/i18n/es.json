@@ -319,6 +319,7 @@
       "google": "Continuar con Google",
       "emailSignIn": "Entrar con correo",
       "newZone": "Nuevo grupo",
+      "joinZone": "Unirse a grupo",
       "generateList": "Obtener lista de la compra",
       "history": "Historial",
       "account": "Tu cuenta",
@@ -417,13 +418,15 @@
       "stopListening": "Dejar de escuchar",
       "discard": "Descartar esta grabación",
       "listening": "Escuchando",
-      "sending": "Enviando lo que has dicho",
       "heard": "He oído",
       "micRefused": "Velista no puede oírte. El micrófono está desactivado para esta aplicación, así que actívalo en el navegador, o escríbelo",
       "micMissing": "Este dispositivo no tiene micrófono, así que escríbelo",
       "notHeard": "No te he entendido",
       "voiceFailed": "Eso no se ha enviado. No se ha añadido nada, así que inténtalo otra vez o escríbelo",
       "voiceBusy": "Mucha gente está preguntando a la vez. Inténtalo dentro de {{count}} segundos",
+      "voiceBusyNoNumber": "Mucha gente está preguntando a la vez. Inténtalo dentro de un momento, o escríbelo",
+      "voiceUnavailable": "El asistente está apagado aquí, así que no se ha añadido nada. Es cosa nuestra, no tuya, y volver a intentarlo no lo cambiará",
+      "voiceUnsure": "Algo ha fallado por nuestra parte después de enviarlo. Mira la lista antes de repetirlo, por si ya se ha añadido",
       "dismissHeard": "Cerrar",
       "suggestions": "Productos que coinciden",
       "groupAdds": "añade sus {{count}} productos",
@@ -712,17 +715,6 @@
       "gone": "Esa cuenta ya no existe",
       "failed": "No se pudo completar. Inténtalo de nuevo"
     },
-    "voice": {
-      "section": "Voz",
-      "sendOnSilence": {
-        "label": "Enviar cuando deje de hablar",
-        "hint": "La grabación termina sola tras un momento de silencio, en vez de esperar a que pulses parar. Útil con las manos ocupadas, y te cortará si te paras a pensar."
-      },
-      "keepListening": {
-        "label": "Seguir escuchando tras enviar",
-        "hint": "El micrófono sigue abierto cuando una grabación va de camino, para que puedas nombrar varias cosas seguidas. La papelera lo cierra."
-      }
-    },
     "app": {
       "section": "La app",
       "install": "Instalar la app",
@@ -998,13 +990,14 @@
       "partly": "{{settled}} de {{total}} conseguidos",
       "wanted": "×{{count}}",
       "free": "Sin producto elegido",
-      "busy": "Guardando"
+      "busy": "Guardando",
+      "takenBack_one": "1 devuelto",
+      "takenBack_other": "{{count}} devueltos"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
       "bought_one": "{{count}} comprado",
-      "bought_other": "{{count}} comprados",
-      "buying": "comprando {{next}} en vez de {{current}}"
+      "bought_other": "{{count}} comprados"
     },
     "touched": {
       "got": "{{name}} lo consiguió",
@@ -1057,27 +1050,13 @@
       "asOf": "Precios de {{when}}",
       "asOfStale": "Precios de {{when}}, y alguno puede estar desactualizado"
     },
-    "allocate": {
-      "open": "Repartir entre listas",
-      "title": "{{name}} · {{count}} conseguidos",
-      "hint": "Qué lista se lleva cuántos. Empieza por la más antigua, que es lo que habría hecho un solo toque.",
-      "wanted": "quería {{count}}",
-      "total": "Repartidos",
-      "totalValue": "{{allocated}} de {{total}}",
-      "over": "Eso es más de lo que has conseguido",
-      "submit": "Registrarlo",
-      "cancel": "Cancelar"
-    },
     "units": {
-      "open": "Cambiar lo que ha pedido cada lista",
-      "title": "{{name}}",
-      "notBuying": "Cambiar esto cambia lo que quiere cada lista. Aquí no se marca nada como comprado.",
-      "buying_one": "Se compra {{count}}",
-      "buying_other": "Se compran {{count}}",
       "extra": "{{lists}} para estas listas y {{extra}} de más",
       "lists": "Listas que han pedido esto",
       "askedFor": "Pedido",
-      "bought": "Comprado",
+      "got": "Conseguido",
+      "askedLabel": "{{name}}, pedido",
+      "gotLabel": "{{name}}, conseguido",
       "more_one": "1 lista más",
       "more_other": "{{count}} listas más",
       "listAsks": "en su lista pide {{count}}",
@@ -1095,8 +1074,7 @@
       "loading": "Leyendo las listas",
       "failed": "No se han podido leer las listas",
       "retry": "Reintentar",
-      "empty": "No hay ninguna lista en la que puedas poner esto",
-      "close": "Listo"
+      "empty": "No hay ninguna lista en la que puedas poner esto"
     },
     "send": {
       "pending": "Esperando a que esa lista lo acepte"

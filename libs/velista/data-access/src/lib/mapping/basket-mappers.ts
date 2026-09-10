@@ -13,12 +13,14 @@ import {
   type BasketListRef,
   type BasketOriginCandidate,
   type BasketOriginQuantityResult,
+  type BasketOriginSettledResult,
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketPriceScope,
   type BasketProduct,
   type BasketSession,
   type BasketSettleResult,
+  type BasketSettleSkip,
   type BasketShareLink,
   type BasketSplitResult,
   type BasketView,
@@ -672,6 +674,38 @@ export function toBasketShareLink(raw: unknown): BasketShareLink | null {
 }
 
 /**
+ * From `SetGeneratedListOriginSettledResult` (`POST .../lines/:lineId/origins/settled`),
+ * velista `0073`, backend `0104` section 4.
+ *
+ * `skipped` is read unconditionally where {@link toBasketSettleResult} reads it only
+ * when the key is there, and the difference is the contract rather than an oversight:
+ * this route is refused outright to a reader who does not pass the all or nothing
+ * rule, so an answer that arrived at all carries the names.
+ *
+ * `origin` is null on purpose rather than dropped, for
+ * {@link toBasketOriginQuantityResult}'s reason: the zone line can have gone
+ * underneath the basket, and the sheet has to redraw the row rather than leave it at
+ * a number nothing stands behind.
+ */
+export function toBasketOriginSettledResult(
+  raw: unknown
+): BasketOriginSettledResult | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const line = toBasketLine(raw['line']);
+  return line === null
+    ? null
+    : {
+        line,
+        origin: toBasketLineOriginDetail(raw['origin']),
+        skippedCount: numOr(raw['skippedCount'], 0),
+        skipped: mapArray(raw['skipped'], toBasketSettleSkip),
+      };
+}
+
+/**
  * From `GeneratedListSettleResult` (`POST .../lines/:lineId/settle`).
  *
  * `skippedCount` is always a number and `skipped` stays absent for a reader who
@@ -698,25 +732,29 @@ export function toBasketSettleResult(raw: unknown): BasketSettleResult | null {
     return result;
   }
 
-  return {
-    ...result,
-    skipped: mapArray(raw['skipped'], (entry) => {
-      if (!isRecord(entry)) {
-        return null;
-      }
-      const listId = str(entry['listId']);
-      // The names come off the report and are never looked up (plan 0049,
-      // section 1.2). `str` answers null for an absent or non string field,
-      // which is the same answer the wire gives for a list deleted since the
-      // run, and the screen draws the bare count for both.
-      return listId === null
-        ? null
-        : {
-            listId,
-            reason: strOr(entry['reason'], 'ACCESS_GONE'),
-            listName: str(entry['listName']),
-            zoneName: str(entry['zoneName']),
-          };
-    }),
-  };
+  return { ...result, skipped: mapArray(raw['skipped'], toBasketSettleSkip) };
+}
+
+/**
+ * One entry of a skip report, for whichever of the two results carries one.
+ *
+ * The names come off the report and are never looked up (plan 0049, section 1.2).
+ * `str` answers null for an absent or non string field, which is the same answer the
+ * wire gives for a list deleted since the run, and the screen draws the bare count
+ * for both.
+ */
+function toBasketSettleSkip(raw: unknown): BasketSettleSkip | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const listId = str(raw['listId']);
+  return listId === null
+    ? null
+    : {
+        listId,
+        reason: strOr(raw['reason'], 'ACCESS_GONE'),
+        listName: str(raw['listName']),
+        zoneName: str(raw['zoneName']),
+      };
 }

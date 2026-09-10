@@ -68,25 +68,47 @@ export const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
 ];
 
 /**
- * What a run's `updated` and `unchanged` counters are called on its own screen
- * (admin plan 0014, section 3).
+ * What a run did with prices, in the three numbers its report carries.
  *
- * A walk writes prices now, so on a price writing run those two counters are
- * prices written and prices confirmed, which is what the ingest actually counted
- * (backend plan 0086, section 5). On a store discovery they are shops, so they
- * keep the neutral labels: naming a shop a price would be worse than saying
- * nothing.
+ * `recorded` is every price the chain stated, kept on the chain's own source
+ * rows, and it is what the source products screen shows. `published` is what
+ * reached catalog, which only a row bound to a product earns. `confirmed` is
+ * what catalog already held at that value.
  *
- * The keys rather than the words, because the words are translated where they
- * are drawn and this library holds no copy of them.
+ * They are read from the report and not from `updated` and `unchanged`, which
+ * is where the screen took them before and why a LIDL walk read "prices
+ * written: 0" beside 8,154 prices on its own rows. Those two counters are rows
+ * the ladder changed and rows it left alone, and the harvester adds its price
+ * inserts to them as well, so the number was two unrelated things summed.
+ *
+ * Null when the report names none of the three: a store discovery writes no
+ * price, and a run that finished before the harvester reported them has nothing
+ * to show rather than three zeros that would read as a run that found nothing.
  */
-export function runCounterKeys(run: HarvestRun): {
-  readonly updated: string;
-  readonly unchanged: string;
-} {
-  return PRICE_WRITING_MODES.includes(run.mode)
-    ? { updated: 'pricesWritten', unchanged: 'pricesConfirmed' }
-    : { updated: 'updated', unchanged: 'unchanged' };
+export interface RunPriceCounters {
+  readonly recorded: number;
+  readonly published: number;
+  readonly confirmed: number;
+}
+
+export function runPriceCounters(run: HarvestRun): RunPriceCounters | null {
+  const recorded = countIn(run.report, 'pricesRecorded');
+  const published = countIn(run.report, 'pricesPublished');
+  const confirmed = countIn(run.report, 'pricesConfirmed');
+  if (recorded === null && published === null && confirmed === null) {
+    return null;
+  }
+  return {
+    recorded: recorded ?? 0,
+    published: published ?? 0,
+    confirmed: confirmed ?? 0,
+  };
+}
+
+/** One number out of the report bag, which is free form and untyped. */
+function countIn(report: Record<string, unknown>, key: string): number | null {
+  const value = report[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /** Whether this run's writes have already been taken back. */

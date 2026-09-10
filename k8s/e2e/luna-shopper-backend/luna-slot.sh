@@ -12,6 +12,9 @@
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down    stop it all, and give the slot back
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list    every worktree's slot, and what is live
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --unlock  drop a --keep-data lock
+#   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up <n>
+#                                                           run a slot and
+#                                                           configure nothing
 #
 # --- a slot is borrowed, and an .env is yours --------------------------------
 #
@@ -77,6 +80,19 @@
 #   from. Only the OAuth and mail round trips are affected by getting it wrong;
 #   ordinary API calls from any slot work regardless.
 #
+# --- one checkout, two slots: --ephemeral ------------------------------------
+#
+# Everything above is per WORKTREE: eight .env files and one claim, so a checkout
+# runs one slot and moving it means rewriting them. `--ephemeral --up <n>` is the
+# way to run a second slot from a checkout that is already using one. It writes
+# none of those files and claims nothing; the values the slot decides are handed
+# to the processes it starts through their environment, which every reader in
+# this repository already ranks above a .env file. The files on disk are read (so
+# a hand edited key still applies) and never written.
+#
+# The slot number is required with every ephemeral verb, because nothing records
+# it. Slot 0 is refused: it is the developer's own.
+#
 # This script (re)writes, all git ignored, so it is safe per worktree:
 #   - k8s/e2e/luna-shopper-backend/.env.slot   (compose: project name + host ports)
 #   - apps/luna-shopper-backend/.env.luna-shopper-backend       (shared service vars)
@@ -97,6 +113,41 @@ cd "$root"
 SLOT_ENV="$here/.env.slot"
 RUN_DIR="$here/.run"
 PROBE="$root/tools/dev/probe-ports.mjs"
+
+# --- ephemeral mode ----------------------------------------------------------
+#
+# `--ephemeral <verb> <slot>` runs a slot without configuring this checkout for
+# it: nothing under the worktree is written, no claim is made, and the values the
+# slot decides reach the services through their ENVIRONMENT instead of through
+# their .env files.
+#
+# It exists so one checkout can hold slot 0 and drive another slot beside it. The
+# ordinary mode cannot do that: it owns eight .env files and one claim per
+# worktree, so taking a second slot means overwriting the first one's values and
+# handing the claim over, which is exactly what the curation toolchain used to do
+# to a developer's own stack while it rehearsed.
+#
+# It works because a variable already set beats a .env file everywhere this
+# repository reads one. Nx loads `{projectRoot}/.env` with dotenv's `override`
+# off, @nestjs/config assigns only the keys absent from `process.env`, and the
+# db tooling's own loader is dotenv again. So the .env files on disk stay exactly
+# as they are, keep supplying every key this mode does not set, and lose to it on
+# the keys it does.
+#
+# Three consequences, and none of them is a detail:
+#
+#   The slot number and the verb are both REQUIRED. Nothing is recorded, so there
+#   is nothing to read back: an --ephemeral run cannot infer which slot it means.
+#
+#   The rendered files, the compose descriptor, the logs and the pid files live
+#   in a directory OUTSIDE the repository, one per slot, so a --down after an --up
+#   in another terminal still finds them. --down removes it.
+#
+#   Slot 0 is refused. It is the developer's own, and an --ephemeral --down 0
+#   would take their databases with it.
+EPHEMERAL=''
+EPHEMERAL_ROOT="${TMPDIR:-/tmp}/luna-slot-ephemeral"
+EPHEMERAL_DIR=''
 
 # The five Nest services, in the order --up starts them. Their ports are not passed
 # on the command line: each service reads PORT out of its own .env, which this
@@ -223,9 +274,19 @@ merge_env() {
   local disk="$target"
   [[ -f "$disk" ]] || disk='/dev/null'
 
+  # An --ephemeral run reads the same file and writes somewhere else, which is the
+  # whole of what "changes nothing" means here. Every hand edit on disk is still
+  # preserved into the result, because the result is what the services are given;
+  # the file it came from is never touched.
+  local out="$target"
+  if [[ -n "$EPHEMERAL" ]]; then
+    out="$(ephemeral_target "$target")"
+    mkdir -p "$(dirname "$out")"
+  fi
+
   # Beside the target rather than in /tmp, so the rename is on one filesystem and
   # a half written file can never be what a service reads.
-  local tmp="$target.luna-slot.tmp"
+  local tmp="$out.luna-slot.tmp"
 
   awk -v derived="$derived" -v keep="$KEEP_ENV" -v mode="$MERGE_MODE" '
     BEGIN {
@@ -289,8 +350,76 @@ merge_env() {
     }
   ' "$disk" - > "$tmp"
 
-  mv -f "$tmp" "$target"
-  warn_foreign_ports "$target" "$derived"
+  mv -f "$tmp" "$out"
+  warn_foreign_ports "$out" "$derived"
+}
+
+# Where an --ephemeral run puts the file the ordinary mode would have written.
+#
+# The path under the repository is kept as the path under the ephemeral
+# directory, so gateway/.env and auth/.env stay two files and every message can
+# say which one it means.
+ephemeral_target() {
+  echo "$EPHEMERAL_DIR/env/${1#"$root/"}"
+}
+
+# Every KEY=VALUE of a rendered file, exported into the current shell.
+#
+# This is the half that replaces the .env on disk: what the ordinary mode leaves
+# in a file for Nx to load, an --ephemeral run puts in the environment of the
+# process it starts, where it outranks that file.
+#
+# Called inside a subshell, always, so the exports die with the command they were
+# made for and one service's PORT cannot reach the next.
+#
+# The parsing matches merge_env's, plus dotenv's one pair of surrounding quotes:
+# an uncommented `^[A-Za-z_][A-Za-z0-9_]*=` line is a key, the value is the rest
+# of the line verbatim, and a value wrapped in matching quotes loses them, the
+# way dotenv would have unwrapped them on the way in.
+export_env_file() {
+  local file="$1" line key value
+  [[ -f "$file" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    value="${value%$'\r'}"
+    if [[ ${#value} -ge 2 ]] &&
+      { [[ "$value" == '"'*'"' ]] || [[ "$value" == "'"*"'" ]]; }; then
+      value="${value:1:${#value}-2}"
+    fi
+    export "$key=$value"
+  done < "$file"
+}
+
+# The environment one service is served with: the shared file, then its own.
+#
+# Its own second, so a key in both is the service's. Nothing in the templates
+# collides today, and the order is stated rather than left to luck.
+export_service_env() {
+  export_env_file "$(ephemeral_target "$root/apps/luna-shopper-backend/.env.luna-shopper-backend")"
+  export_env_file "$(ephemeral_target "$root/apps/luna-shopper-backend/$1/.env")"
+}
+
+# What stack.sh needs from an ephemeral slot, and nothing else.
+#
+# Its migrations, the dev admin command and the reference seed all resolve a
+# database from the environment through the same dotenv loader, so the four URLs
+# are enough and the seven PORTs would only be noise, one of them wrong for
+# whatever ran last. LUNA_SLOT_ENV is exported at parse time and points compose
+# at this slot's descriptor rather than the worktree's.
+export_stack_env() {
+  local svc var value
+  # What tells stack.sh not to write the .env files this run is deliberately
+  # doing without, and not to refuse over their absence either.
+  export LUNA_EPHEMERAL=1
+  for svc in auth core catalog harvester; do
+    var="$(printf '%s' "$svc" | tr '[:lower:]' '[:upper:]')_DB_URL"
+    value="$(sed -n "s/^${var}=//p" \
+      "$(ephemeral_target "$root/apps/luna-shopper-backend/$svc/.env")" \
+      2>/dev/null | head -n 1)"
+    [[ -n "$value" ]] && export "$var=$value"
+  done
 }
 
 # The net under the inclusive DERIVED_KEYS list.
@@ -415,6 +544,9 @@ usage:
   luna-slot.sh --down [--keep-slot]  stop it all, and give the slot back
   luna-slot.sh --list              every worktree's slot, and what is live
   luna-slot.sh --unlock [<slot>]   drop a --keep-data lock, and nothing else
+  luna-slot.sh --ephemeral --up <slot>   run a slot without configuring this
+                                         checkout for it: no .env is written and
+                                         no claim is made
 
 Source changes need none of this: `nx serve` watches each service and the
 libraries it consumes and restarts that one process itself. --restart is for a
@@ -447,6 +579,18 @@ options:
                          its own: with nothing being reset there is nothing to
                          keep.
   --timeout <secs>       how long --up waits for each service (default 180)
+  --ephemeral            run a slot without configuring this checkout for it.
+                         Nothing under the worktree is written and no claim is
+                         made: the values the slot decides are given to the
+                         services through their environment, where they outrank
+                         the .env files, which are read and left alone. So one
+                         checkout can hold slot 0 and drive another slot beside
+                         it. It takes --up, --down and --restart, the slot number
+                         is required with each (nothing records it), and slot 0
+                         is refused. The rendered files, the logs and the pid
+                         files live outside the repository, under
+                         $TMPDIR/luna-slot-ephemeral/slot<n>, which --down
+                         removes.
 
 The Angular slots are a separate numbering: any of them can call this backend,
 and several can at the same time. Backend slot 3 does not imply front end slot 3.
@@ -919,6 +1063,15 @@ HARVESTER_FILE_IMPORT_MAX_BYTES=10485760
 # semantic version to exercise the retirement path, and note the value is
 # validated at boot, so a typo fails the process rather than retiring nobody.
 MIN_CLIENT_VERSION=
+# Scales every rate limit at once (plan 0004, section 8). The numbers in the code
+# are sized for one honest client on the internet, and this machine is not that:
+# a browser, the e2e suites, the seeding scripts and the curation CLI reach one
+# gateway from one address and therefore share one bucket, so five logins a
+# minute is spent by a CLI that signs in on every run and the next real login is
+# refused. Twenty is loose enough that nothing local meets a limit and still a
+# limit, so a runaway loop is stopped. Absent means 1, which is how both clusters
+# run; no values file carries this key.
+THROTTLE_MULTIPLIER=20
 EOF
   telemetry_env gateway
   } | merge_env "$root/apps/luna-shopper-backend/gateway/.env" "${DERIVED_KEYS[gateway]} $TELEMETRY_DERIVED"
@@ -1197,9 +1350,14 @@ EOF
   # of them, and has nothing to announce: the slot is being given back, not taken.
   [[ "$MERGE_MODE" == 'strip' ]] && return 0
 
+  local headline="Configured this worktree for Luna Shopper slot ${slot}."
+  if [[ -n "$EPHEMERAL" ]]; then
+    headline="Rendered Luna Shopper slot ${slot} into ${EPHEMERAL_DIR}. This checkout is unchanged."
+  fi
+
   cat <<EOF
 
-Configured this worktree for Luna Shopper slot ${slot}.
+${headline}
   compose project : ${project}
   auth-db         : localhost:${AUTH_DB_PORT}      core-db  : localhost:${CORE_DB_PORT}
   catalog-db      : localhost:${CATALOG_DB_PORT}
@@ -1223,7 +1381,7 @@ Start the whole thing (compose, migrations, all seven services):
   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up
 
 Or just the infrastructure, the way it has always worked:
-  docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \\
+  docker compose --env-file ${SLOT_ENV} \\
     -f k8s/e2e/luna-shopper-backend/compose.yml up -d
 EOF
 }
@@ -1313,8 +1471,10 @@ current_app_slot() {
 # it. One source of truth: nothing passes a port on the command line, so a service
 # and the wait that watches for it cannot disagree.
 service_port() {
-  sed -n "s/^PORT=\([0-9]\+\)[[:space:]]*$/\1/p" \
-    "$root/apps/luna-shopper-backend/$1/.env" 2>/dev/null | head -n 1
+  local file="$root/apps/luna-shopper-backend/$1/.env"
+  # An --ephemeral run wrote no .env, and the one on disk is another slot's.
+  [[ -n "$EPHEMERAL" ]] && file="$(ephemeral_target "$file")"
+  sed -n "s/^PORT=\([0-9]\+\)[[:space:]]*$/\1/p" "$file" 2>/dev/null | head -n 1
 }
 
 # The services a `--services a,b` names, or all of them when it names none.
@@ -1361,8 +1521,18 @@ serve_services() {
       return 1
     fi
 
-    echo "==> serving $svc on :$port  (log: k8s/e2e/luna-shopper-backend/.run/$svc.log)"
-    npx nx run "luna-shopper-backend-$svc:serve" > "$RUN_DIR/$svc.log" 2>&1 &
+    echo "==> serving $svc on :$port  (log: $RUN_DIR/$svc.log)"
+    if [[ -n "$EPHEMERAL" ]]; then
+      # The subshell is the isolation: this slot's values are exported into it
+      # and nowhere else, and `exec` puts the command in the place of the shell
+      # so the recorded pid is the one stop_services would have recorded anyway.
+      (
+        export_service_env "$svc"
+        exec npx nx run "luna-shopper-backend-$svc:serve"
+      ) > "$RUN_DIR/$svc.log" 2>&1 &
+    else
+      npx nx run "luna-shopper-backend-$svc:serve" > "$RUN_DIR/$svc.log" 2>&1 &
+    fi
     echo $! > "$RUN_DIR/$svc.pid"
     disown $! 2>/dev/null || true
     _ports+=("$port")
@@ -1448,7 +1618,13 @@ up() {
   # the infrastructure is; it reads the same .env.slot this script just wrote.
   local -a stack=(bash "$here/stack.sh")
   [[ -n "$profile" ]] && stack+=(--profile "$profile")
-  "${stack[@]}" up
+  if [[ -n "$EPHEMERAL" ]]; then
+    # In a subshell, so the four database URLs reach the migrations and stop
+    # there rather than following the services that are served below.
+    ( export_stack_env; "${stack[@]}" up )
+  else
+    "${stack[@]}" up
+  fi
 
   local -a ports=()
   serve_services wanted ports || return 1
@@ -1461,7 +1637,13 @@ up() {
     echo "  realtime http://localhost:${LUNA_REALTIME_PORT}"
     echo "  mailpit  http://localhost:${LUNA_MAILPIT_UI_PORT}"
     echo
-    echo "Serve the matching front end with:  tools/dev/ng-slot.sh --up $LUNA_SLOT"
+    if [[ -n "$EPHEMERAL" ]]; then
+      echo "Nothing in this checkout was changed, and no worktree claims the slot, so"
+      echo "the number is only held by the ports being open. Take it down with:"
+      echo "  bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --down $LUNA_SLOT"
+    else
+      echo "Serve the matching front end with:  tools/dev/ng-slot.sh --up $LUNA_SLOT"
+    fi
     return 0
   fi
 
@@ -1519,6 +1701,12 @@ kill_port() {
 restart_services() {
   local services_csv="$1" timeout="$2"
 
+  # Same as --down: nothing was recorded, so the descriptor is rendered again
+  # from the number on the command line.
+  if [[ -n "$EPHEMERAL" ]]; then
+    write_config "$EPHEMERAL_SLOT" "$DEFAULT_APP_SLOT" > /dev/null
+  fi
+
   if ! require_config; then
     echo "this worktree has no slot configured, so there is nothing to restart." >&2
     return 1
@@ -1545,7 +1733,7 @@ restart_services() {
     echo "restarted: ${wanted[*]}"
     return 0
   fi
-  echo "timed out; see k8s/e2e/luna-shopper-backend/.run/*.log" >&2
+  echo "timed out; see $RUN_DIR/*.log" >&2
   return 1
 }
 
@@ -1648,6 +1836,14 @@ release_slot() {
 down() {
   local profile="$1" keep_data="$2" keep_slot="$3"
 
+  # An ephemeral slot records nothing, so its descriptor is rendered again rather
+  # than read back. Everything in it is derived from the number, which was given
+  # on the command line, so this produces the same file the --up produced even
+  # when the directory it lived in is gone.
+  if [[ -n "$EPHEMERAL" ]]; then
+    write_config "$EPHEMERAL_SLOT" "$DEFAULT_APP_SLOT" > /dev/null
+  fi
+
   if ! require_config; then
     echo "this worktree has no slot configured, so there is nothing of its own to stop." >&2
     echo "Run --list to see which worktrees do." >&2
@@ -1689,6 +1885,20 @@ down() {
     # release and leave the claim standing for good, which is the defect this
     # whole verb exists to fix.
     "${stack[@]}" down || echo "  (compose could not take the stack down; the slot is given back anyway)" >&2
+  fi
+
+  # An ephemeral slot was never claimed, so there is no claim to give back and no
+  # .env of this worktree's that has anything of this slot's in it to strip. What
+  # there is to remove is the directory outside the repository, and with it the
+  # rendered files, the logs and the pid files.
+  if [[ -n "$EPHEMERAL" ]]; then
+    if [[ -n "$keep_data" ]]; then
+      echo "  the rendered environment is kept in $EPHEMERAL_DIR beside the databases."
+    else
+      rm -rf "$EPHEMERAL_DIR"
+      echo "  nothing in this checkout was changed, and the slot's rendered environment is gone."
+    fi
+    return 0
   fi
 
   # Slot 0 is the developer's own. Nothing takes it, so there is nothing to give
@@ -1863,6 +2073,7 @@ while (( $# )); do
     --app-slot=*) app_slot="${1#*=}"; shift ;;
     --keep-data) keep_data=1; shift ;;
     --keep-slot) keep_slot=1; shift ;;
+    --ephemeral) EPHEMERAL=1; shift ;;
     --reset-env) reset_env=1; shift ;;
     --keep-env) KEEP_ENV="${2:-}"; shift 2 ;;
     --keep-env=*) KEEP_ENV="${1#*=}"; shift ;;
@@ -1896,6 +2107,64 @@ if [[ -n "$KEEP_ENV" && -z "$reset_env" ]]; then
   exit 2
 fi
 [[ -n "$reset_env" ]] && MERGE_MODE='reset'
+
+# --- ephemeral: everything it needs stated, because nothing is remembered ------
+#
+# The verb and the slot are both required, and neither has a default that could
+# be inferred: an ephemeral run writes no claim, so a later command has nothing to
+# read back and a guess would act on the wrong slot. Refusing here is one line of
+# output; guessing is somebody else's databases.
+EPHEMERAL_SLOT=''
+if [[ -n "$EPHEMERAL" ]]; then
+  case "${action:-}" in
+    up | down | restart) ;;
+    '')
+      echo "--ephemeral needs a verb and a slot: --ephemeral --up 3, --down 3 or --restart 3." >&2
+      exit 2
+      ;;
+    *)
+      echo "--ephemeral applies to --up, --down and --restart only." >&2
+      echo "--list reads every slot already, and --configure and --unlock are about" >&2
+      echo "state an ephemeral run does not write." >&2
+      exit 2
+      ;;
+  esac
+
+  if [[ ! "$slot_arg" =~ ^[0-9]+$ ]]; then
+    echo "--ephemeral needs the slot number written out: nothing records it, so" >&2
+    echo "--down and --restart cannot read back which slot an --up took." >&2
+    echo "Pick one --list says is free, for example: --ephemeral --up 3" >&2
+    exit 2
+  fi
+  if (( slot_arg < MIN_AUTO_SLOT || slot_arg > MAX_SLOT )); then
+    echo "--ephemeral takes a slot from $MIN_AUTO_SLOT to $MAX_SLOT, and $slot_arg is not one." >&2
+    (( slot_arg == 0 )) && {
+      echo "Slot 0 is the developer's own stack. Running it without a claim would" >&2
+      echo "hide it from --list, and an --ephemeral --down 0 would take its" >&2
+      echo "databases with it. Use the ordinary luna-slot.sh --up 0 for slot 0." >&2
+    }
+    exit 2
+  fi
+  if [[ -n "$keep_slot" ]]; then
+    echo "--keep-slot means nothing with --ephemeral: no claim was made, so there is" >&2
+    echo "no number to hold. Naming the same slot again takes it again." >&2
+    exit 2
+  fi
+
+  EPHEMERAL_SLOT="$slot_arg"
+  EPHEMERAL_DIR="$EPHEMERAL_ROOT/slot$EPHEMERAL_SLOT"
+  # Both of them move out of the worktree, which is what makes the run leave it
+  # alone: SLOT_ENV is the compose descriptor and the claim in one file, and
+  # RUN_DIR is where --up puts the logs and the pid files.
+  SLOT_ENV="$EPHEMERAL_DIR/.env.slot"
+  RUN_DIR="$EPHEMERAL_DIR/run"
+  mkdir -p "$RUN_DIR"
+  # stack.sh reads it instead of the worktree's .env.slot, so compose gets this
+  # slot's project name and ports rather than whatever this checkout is set to.
+  # Without it an --ephemeral --down would take the containers of the slot this
+  # worktree claims, which is the one thing this mode exists to never touch.
+  export LUNA_SLOT_ENV="$SLOT_ENV"
+fi
 
 # --auto is resolved inside up(), which keeps a claim this worktree already holds
 # rather than abandoning it. Every other verb takes the lowest free slot outright.

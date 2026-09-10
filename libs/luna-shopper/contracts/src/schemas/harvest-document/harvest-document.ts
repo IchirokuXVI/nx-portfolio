@@ -88,8 +88,57 @@ export interface HarvestDocumentProducer {
 export interface HarvestDocumentHints {
   chain_id?: string | null;
   price_scope_id?: string | null;
+  /**
+   * What produced this file, so the upload screen can preselect (plan 0103,
+   * section 4.3).
+   *
+   * **The hint is the claim and the document is the proof.** It decides
+   * nothing: whether a default price scope is needed is read from the products,
+   * because a mislabelled file must still import correctly. One of
+   * `ADAPTER_KEYS`, and omitted by a producer that does not know the enum.
+   */
+  adapter_key?: string | null;
   /** One of the three official `PriceSourceKind` values. */
   source_kind?: 'OFFICIAL_API' | 'OFFICIAL_WEB' | 'OFFICIAL_LEAFLET' | null;
+}
+
+/**
+ * One group of shops that pays one price (plan 0103, section 5.1).
+ *
+ * **`key` is document local and never a uuid.** It is matched against
+ * `PriceScope.externalKey` on the importing side, which is the source's own key
+ * and survives a move to another cluster, where an id does not.
+ */
+export interface HarvestDocumentScope {
+  key: string;
+  kind: 'NATIONAL' | 'REGION' | 'POSTAL_CODE' | 'STORE';
+  name?: string | null;
+}
+
+/**
+ * One price of one product, for the group of shops that pays it.
+ *
+ * `scope` refers to a {@link HarvestDocumentScope.key} and is optional: a price
+ * naming none belongs to the scope the operator chose at the spawn, which is
+ * every leaflet. A `scope` naming no declared key is a validation failure,
+ * because a price pointing at nothing is a number with no meaning.
+ */
+export interface HarvestDocumentPrice {
+  scope?: string | null;
+  /**
+   * The till price for **one unit**, in `currency`.
+   *
+   * Null when the source stated only a comparison figure, a per kilogram price
+   * with no pack price. The import then writes the unit price and no till
+   * price, which is plan 0081 section 6.1's one surviving decision.
+   */
+  amount: number | null;
+  currency: string;
+  unit_price?: Omit<HarvestDocumentUnitPrice, 'currency'> | null;
+  /** This price's own window, over the product's and the document's. */
+  validity?: HarvestDocumentValidity | null;
+  /** ISO 8601. Defaults to the product's, then to the producer's. */
+  observed_at?: string | null;
 }
 
 /**
@@ -126,12 +175,22 @@ export interface HarvestDocumentProduct {
   ean?: string | null;
   size?: HarvestDocumentSize | null;
   /**
-   * The till price for **one unit**. Absent means no price is written, which is
-   * the truth for a site that prints none and for a tile whose only number a
-   * shopper cannot pay for one unit.
+   * The till price for **one unit**, version 1 only.
+   *
+   * Version 2 states {@link HarvestDocumentProduct.prices} instead, and the
+   * reader normalizes this pair into one entry of it, so nothing past the
+   * reader sees either field (plan 0103, D7).
    */
   price?: HarvestDocumentMoney | null;
   unit_price?: HarvestDocumentUnitPrice | null;
+  /**
+   * Every price the source stated for this product, one per group of shops it
+   * named. Version 2, and what the reader normalizes version 1 into.
+   *
+   * An empty array is a product the source named and priced nowhere, which is
+   * every DEZA product and 21 of a LIDL week. It is not a price of zero.
+   */
+  prices?: HarvestDocumentPrice[] | null;
   /** This product's own window, over the document's. */
   validity?: HarvestDocumentValidity | null;
   /** ISO 8601. Defaults to `producer.produced_at`, then to the import's start. */
@@ -152,7 +211,10 @@ export interface HarvestDocumentProduct {
 
 /** One file, and every product a source described in it. */
 export interface HarvestDocument {
-  /** The integer `1` for this version. An unknown version is refused by name. */
+  /**
+   * The version this document was written for. An unknown one is refused by
+   * name rather than checked against a shape it was not written for.
+   */
   schema_version: number;
   /**
    * The digest of the file the products were read out of (plan 0081, section 7):
@@ -161,6 +223,14 @@ export interface HarvestDocument {
   sha256: string;
   producer?: HarvestDocumentProducer | null;
   hints?: HarvestDocumentHints | null;
+  /**
+   * The groups of shops this file prices for, version 2 (plan 0103, section
+   * 5.1).
+   *
+   * Absent, every price belongs to the scope the operator chose at the spawn,
+   * which is every leaflet ever uploaded and every version 1 document.
+   */
+  scopes?: HarvestDocumentScope[] | null;
   /** The window for every product that states none of its own. */
   validity?: HarvestDocumentValidity | null;
   /** At least one, or there is nothing to run. */

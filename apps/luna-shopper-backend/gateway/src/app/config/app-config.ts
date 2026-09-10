@@ -132,6 +132,15 @@ export const gatewayValidationSchema = Joi.object({
   // reset endpoint that looked perfectly healthy. Failing at boot is the loud
   // version of a failure that is otherwise entirely silent.
   ...redisValidationSchema,
+
+  // Scales every rate limit at once, for a development stack that shares one
+  // bucket between a browser, the e2e suites and the CLIs (plan 0004,
+  // section 8). Absent means 1, which is how both clusters run: the raise lives
+  // in the .env luna-slot.sh writes and in the local compose file, never in a
+  // values file. Validated here so a typo fails boot, and read straight from
+  // `process.env` by the platform library, because the per route limits are
+  // arguments to a decorator that runs before this container exists.
+  THROTTLE_MULTIPLIER: Joi.number().min(1).default(1),
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
   AUTH_JWT_PUBLIC_KEY_FILE: Joi.string(),
 

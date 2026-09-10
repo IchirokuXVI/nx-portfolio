@@ -11710,6 +11710,114 @@
         ]
       }
     },
+    "/v1/generated-lists/{id}/lines/{lineId}/origins/settled": {
+      "post": {
+        "operationId": "GeneratedListParticipantController_setOriginSettled_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGeneratedListOriginSettledDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.setOriginSettled` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.generatedList.setOriginSettled.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.\n\n`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
     "/v1/generated-lists/{id}/participants/mine": {
       "get": {
         "operationId": "GeneratedListParticipantController_listParticipants_v1",
@@ -15628,6 +15736,16 @@
               }
             }
           },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -19287,8 +19405,9 @@
         "parameters": [
           {
             "name": "supermarketId",
-            "required": true,
+            "required": false,
             "in": "query",
+            "description": "One chain’s rows. Absent lists every chain’s: the chain narrows the queue rather than addressing it, and a row names the chain it came from.",
             "schema": {
               "format": "uuid",
               "type": "string"
@@ -22174,7 +22293,7 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100000,
-            "description": "How many are still to get after this. Above the current amount the basket will buy more and nothing is settled; below it, the difference was bought. Zero finishes the line, exactly as “got all” does."
+            "description": "How many are still to get after this. Below the current amount, the difference was bought; above it, that many purchases are taken back, newest first. Zero finishes the line, exactly as “got all” does, and the ceiling is what the lists asked for."
           },
           "from": {
             "type": "number",
@@ -22217,6 +22336,33 @@
         "required": [
           "listId",
           "quantity",
+          "from"
+        ]
+      },
+      "SetGeneratedListOriginSettledDto": {
+        "type": "object",
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The zone line whose list bought some of this. It must already be one this basket line came from."
+          },
+          "settled": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "How many of this line this basket has bought for that list, after this write. Raising it settles the difference against that list alone; lowering it takes that list’s newest purchases back. At most what the list asked for: a shopper who bought more raises that first."
+          },
+          "from": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "What you believed that number was. A mismatch is refused with `stale_quantity` rather than applied, because a gesture whose meaning depends on where it started must never be applied to a number that moved underneath it."
+          }
+        },
+        "required": [
+          "lineId",
+          "settled",
           "from"
         ]
       },
@@ -23064,7 +23210,7 @@
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The scope the prices are written for. Most leaflets are nationwide, so usually the chain NATIONAL scope, which then reaches every scope of that chain."
+            "description": "The scope a price that names no group of shops is written for. Most leaflets are nationwide, so usually the chain NATIONAL scope, which then reaches every scope of that chain. Required only when the document actually carries such a price: a file that scopes every price of its own needs no default, and one that states no price needs no scope at all."
           },
           "sourceKind": {
             "type": "string",
@@ -23093,7 +23239,6 @@
         },
         "required": [
           "supermarketId",
-          "priceScopeId",
           "sourceKind",
           "document"
         ]
@@ -27052,7 +27197,9 @@
           "CANDIDATE_MATCH",
           "NO_MATCH",
           "ALREADY_QUEUED",
-          "EXTRACTOR"
+          "EXTRACTOR",
+          "UNKNOWN_PRICE_SCOPE",
+          "NO_PRICE_SCOPE"
         ]
       },
       "enums.ItemCategory": {
@@ -28355,6 +28502,48 @@
           "lines"
         ],
         "additionalProperties": false
+      },
+      "harvest.AdapterCapabilityTable": {
+        "type": "object",
+        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.",
+        "const": {
+          "mercadona-api": {
+            "writesPrices": true,
+            "scopesItsOwn": false,
+            "listsItsOwnStores": false,
+            "hasProductPages": false
+          },
+          "deza-web": {
+            "writesPrices": false,
+            "scopesItsOwn": false,
+            "listsItsOwnStores": false,
+            "hasProductPages": false
+          },
+          "carrefour-web": {
+            "writesPrices": true,
+            "scopesItsOwn": false,
+            "listsItsOwnStores": false,
+            "hasProductPages": true
+          },
+          "lidl-api": {
+            "writesPrices": true,
+            "scopesItsOwn": true,
+            "listsItsOwnStores": true,
+            "hasProductPages": true
+          },
+          "osm-places": {
+            "writesPrices": false,
+            "scopesItsOwn": false,
+            "listsItsOwnStores": false,
+            "hasProductPages": false
+          },
+          "manual": {
+            "writesPrices": false,
+            "scopesItsOwn": false,
+            "listsItsOwnStores": false,
+            "hasProductPages": false
+          }
+        }
       },
       "harvest.DiscoveredPlaceCounts": {
         "type": "object",
@@ -30265,6 +30454,41 @@
           "line",
           "origin",
           "listQuantity"
+        ],
+        "additionalProperties": false
+      },
+      "msg.generatedList.setOriginSettled.response": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/generated-list-sharing.LineOriginDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skippedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.SettleSkip"
+            }
+          }
+        },
+        "required": [
+          "line",
+          "origin",
+          "skippedCount",
+          "skipped"
         ],
         "additionalProperties": false
       },

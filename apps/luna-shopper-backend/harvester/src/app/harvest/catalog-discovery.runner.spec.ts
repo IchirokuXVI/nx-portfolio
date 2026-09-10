@@ -7,6 +7,7 @@ import type { DezaCatalogRunner } from './deza-catalog.runner';
 import type { LidlCatalogRunner } from './lidl-catalog.runner';
 import type { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import type { RunContext } from './run-context';
+import { RecordingRunReport } from './run-report';
 
 /**
  * The dispatch (plan 0085, section 9).
@@ -18,6 +19,7 @@ import type { RunContext } from './run-context';
  */
 describe('CatalogDiscoveryRunner', () => {
   const context = {} as RunContext;
+  const report = new RecordingRunReport();
   const input: CatalogDiscoveryInput = { supermarketId: 'chain-1' };
 
   function build() {
@@ -42,7 +44,7 @@ describe('CatalogDiscoveryRunner', () => {
   it('sends a mercadona-api source down the Mercadona path', async () => {
     const { runner, mercadona, deza } = build();
 
-    await runner.run(context, input, source('mercadona-api'));
+    await runner.run(context, report, input, source('mercadona-api'));
 
     expect(mercadona.run).toHaveBeenCalledTimes(1);
     expect(deza.run).not.toHaveBeenCalled();
@@ -51,7 +53,7 @@ describe('CatalogDiscoveryRunner', () => {
   it('sends a deza-web source down the DEZA path', async () => {
     const { runner, mercadona, deza } = build();
 
-    await runner.run(context, input, source('deza-web'));
+    await runner.run(context, report, input, source('deza-web'));
 
     expect(deza.run).toHaveBeenCalledTimes(1);
     expect(mercadona.run).not.toHaveBeenCalled();
@@ -60,7 +62,7 @@ describe('CatalogDiscoveryRunner', () => {
   it('sends a lidl-api source down the LIDL path', async () => {
     const { runner, mercadona, lidl } = build();
 
-    await runner.run(context, input, source('lidl-api'));
+    await runner.run(context, report, input, source('lidl-api'));
 
     expect(lidl.run).toHaveBeenCalledTimes(1);
     expect(mercadona.run).not.toHaveBeenCalled();
@@ -71,11 +73,11 @@ describe('CatalogDiscoveryRunner', () => {
 
     // `osm-places` belongs to a store discovery and `manual` means a person
     // types the prices. Reaching here with either is a misconfigured source.
-    await expect(runner.run(context, input, source('manual'))).rejects.toThrow(
-      /supermarketSource\.upsert/
-    );
     await expect(
-      runner.run(context, input, source('osm-places'))
+      runner.run(context, report, input, source('manual'))
+    ).rejects.toThrow(/supermarketSource\.upsert/);
+    await expect(
+      runner.run(context, report, input, source('osm-places'))
     ).rejects.toThrow(/no catalog discovery/);
   });
 });

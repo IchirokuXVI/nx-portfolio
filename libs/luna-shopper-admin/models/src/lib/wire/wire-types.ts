@@ -362,7 +362,7 @@ export type ImportDiscoveredPlaceDto = {
  */
 export type ImportHarvestDocumentDto = {
   supermarketId: string;
-  priceScopeId: string;
+  priceScopeId?: string;
   sourceKind: 'OFFICIAL_API' | 'OFFICIAL_WEB' | 'OFFICIAL_LEAFLET';
   validFrom?: string;
   validUntil?: string;
@@ -631,6 +631,15 @@ export type SetGeneratedListOriginQuantityDto = {
   listId: string;
   lineId?: string;
   quantity: number;
+  from: number;
+};
+
+/**
+ * `SetGeneratedListOriginSettledDto` in the gateway's OpenAPI document.
+ */
+export type SetGeneratedListOriginSettledDto = {
+  lineId: string;
+  settled: number;
   from: number;
 };
 
@@ -2189,7 +2198,9 @@ export type EnumsHarvestWarningCode =
   | 'CANDIDATE_MATCH'
   | 'NO_MATCH'
   | 'ALREADY_QUEUED'
-  | 'EXTRACTOR';
+  | 'EXTRACTOR'
+  | 'UNKNOWN_PRICE_SCOPE'
+  | 'NO_PRICE_SCOPE';
 
 /**
  * `enums.ItemCategory` in the gateway's OpenAPI document.
@@ -2687,6 +2698,58 @@ export type GeneratedListGeneratedListView = {
   sourceSnapshot: GeneratedListGeneratedListSourceSnapshot;
   lines: GeneratedListGeneratedListLineView[];
 };
+
+/**
+ * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
+ *
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.
+ */
+export const HarvestAdapterCapabilityTable = {
+  'mercadona-api': {
+    writesPrices: true,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: false,
+  },
+  'deza-web': {
+    writesPrices: false,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: false,
+  },
+  'carrefour-web': {
+    writesPrices: true,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: true,
+  },
+  'lidl-api': {
+    writesPrices: true,
+    scopesItsOwn: true,
+    listsItsOwnStores: true,
+    hasProductPages: true,
+  },
+  'osm-places': {
+    writesPrices: false,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: false,
+  },
+  manual: {
+    writesPrices: false,
+    scopesItsOwn: false,
+    listsItsOwnStores: false,
+    hasProductPages: false,
+  },
+} as const;
+
+/**
+ * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
+ *
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.
+ */
+export type HarvestAdapterCapabilityTable =
+  typeof HarvestAdapterCapabilityTable;
 
 /**
  * `harvest.DiscoveredPlaceCounts` in the gateway's OpenAPI document.
@@ -3248,6 +3311,16 @@ export type MsgGeneratedListSetOriginQuantityResponse = {
   line: GeneratedListSharingBasketLineView;
   origin: GeneratedListSharingLineOriginDetail | null;
   listQuantity: number;
+};
+
+/**
+ * `msg.generatedList.setOriginSettled.response` in the gateway's OpenAPI document.
+ */
+export type MsgGeneratedListSetOriginSettledResponse = {
+  line: GeneratedListSharingBasketLineView;
+  origin: GeneratedListSharingLineOriginDetail | null;
+  skippedCount: number;
+  skipped: GeneratedListSharingSettleSkip[];
 };
 
 /**

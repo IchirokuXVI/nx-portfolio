@@ -7,6 +7,8 @@ import type {
   BasketLinkPreview,
   BasketOriginQuantityRequest,
   BasketOriginQuantityResult,
+  BasketOriginSettledRequest,
+  BasketOriginSettledResult,
   BasketOutstandingRequest,
   BasketParticipant,
   BasketSession,
@@ -262,6 +264,34 @@ export interface BasketServiceI {
     lineId: string,
     body: BasketOriginQuantityRequest
   ): Promise<BasketOriginQuantityResult>;
+
+  /**
+   * Set how many of a line one list has got
+   * (`POST .../lines/:lineId/origins/settled`), velista `0073`, backend `0104`.
+   *
+   * **Everything {@link setOriginQuantity} refuses to do, this does.** Raising
+   * settles the difference against that list alone, lowering takes that list's
+   * newest purchases back, a settlement is written either way and the household
+   * hears `line.settled`. The two are separate calls because they are opposite acts
+   * on one row, and a caller that could send both numbers at once would mean neither.
+   *
+   * Bounded by the origin's own `contributed` above and by zero below, and the server
+   * is what holds both: a list cannot have got more of a line than it asked for.
+   *
+   * **Read the line out of the answer and never out of what was asked for.** A
+   * `NOT_AVAILABLE` close has no units to divide, so any raise takes the whole close
+   * back and the outstanding number can land above where the control was dragged
+   * (backend `0104`, section 5).
+   *
+   * Zone data, so the server refuses it outright to a guest and to a registered
+   * participant who does not pass the all or nothing rule, which is why its `skipped`
+   * report is required rather than optional.
+   */
+  setOriginSettled(
+    generatedListId: string,
+    lineId: string,
+    body: BasketOriginSettledRequest
+  ): Promise<BasketOriginSettledResult>;
 
   /** Everybody on the basket (`GET .../participants/mine`), for presence. */
   listParticipants(

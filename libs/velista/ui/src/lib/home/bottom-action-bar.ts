@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, output } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { BasketIcon, JoinCodeIcon } from '../icons/icons';
+import { BasketIcon, ClockIcon } from '../icons/icons';
 
 /**
  * The persistent actions on the signed-in screen.
@@ -38,6 +38,18 @@ import { BasketIcon, JoinCodeIcon } from '../icons/icons';
  * group page already offers New list with the zone already chosen (plan 0019,
  * section 4).
  *
+ * ## The second action is the history, and it used to be Join with a code
+ *
+ * A square glyph beside the primary action carries no label, so it has to be a thing
+ * the person is looking for often enough to learn. Joining a group is not: it happens
+ * once per group, from a code somebody sent, and the report on this screen was that
+ * nobody could say what the button did. Both ways into a group are on the groups
+ * header now, side by side and both spelled out.
+ *
+ * What sits here instead is the shopping list history, which is reached often and from
+ * this screen. It is enabled always: an empty history is a screen that says so, and the
+ * person with no basket today is the one most likely to be looking for last week's.
+ *
  * ## It is also the shell every bottom bar in the app is
  *
  * The shopping list history ended in a bar of its own that looked like this one and was
@@ -57,7 +69,7 @@ import { BasketIcon, JoinCodeIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-bottom-action-bar',
-  imports: [RokuTranslatorPipe, BasketIcon, JoinCodeIcon],
+  imports: [RokuTranslatorPipe, BasketIcon, ClockIcon],
   template: `
     <div class="bar">
       <!--
@@ -72,12 +84,13 @@ import { BasketIcon, JoinCodeIcon } from '../icons/icons';
         </button>
 
         <button
-          (click)="joinZone.emit()"
-          [attr.aria-label]="'home.action.joinCode' | rokuT"
+          (click)="openHistory.emit()"
+          [attr.aria-label]="'home.action.history' | rokuT"
+          [attr.title]="'home.action.history' | rokuT"
           class="secondary"
           type="button"
         >
-          <lib-join-code-icon class="glyph" />
+          <lib-clock-icon class="glyph" />
         </button>
       </ng-content>
     </div>
@@ -89,5 +102,15 @@ export class BottomActionBar {
   /** Open the generation sheet. The container owns the route (plan 0045, section 4). */
   readonly getList = output<void>();
 
-  readonly joinZone = output<void>();
+  /**
+   * Open the shopping list history.
+   *
+   * **It is never disabled and never absent**, whatever the dashboard holds. The
+   * history is the one screen that answers "what did I shop before", and somebody with
+   * no basket right now is exactly the person asking. The strip above the bar carries a
+   * link to the same screen, but only when a basket is being shopped and only when
+   * there is more than one, so without this button the history had two entry points
+   * that both needed a basket to exist.
+   */
+  readonly openHistory = output<void>();
 }

@@ -1,23 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
 import {
   CarrefourClient,
   isSkippable,
 } from '@portfolio/luna-shopper/carrefour';
-import {
-  ItemSourceMatch,
-  PriceSourceKind,
-  SourceEntryStatus,
-} from '@portfolio/luna-shopper/contracts';
-import { IsNull, Not, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import { SourceCatalogEntry, type SupermarketSource } from '../entities';
-import { CatalogClient } from './catalog-client.service';
+import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
-import { ItemMatchIndex } from './matching';
 import type { RunContext } from './run-context';
-import { loadCatalogItems } from './source-snapshot';
+import type { RunReport } from './run-report';
 
 /**
  * The EAN backfill (plan 0090, section 12.1).
@@ -43,16 +34,18 @@ import { loadCatalogItems } from './source-snapshot';
  * no EAN is exactly the state it started in, and starting it again picks up
  * where it stopped without a checkpoint to replay.
  *
- * ## What it writes, and what it refuses to write
+ * ## What it reports, and what it refuses to report
  *
- * The EAN, and a decision only where nobody has made one. A row that is
- * `UNRESOLVED` or a fuzzy `CANDIDATE` that no person has judged is promoted to
- * `ACTIVE` when its new EAN names a catalog item, because plan 0086 says an EAN
- * or a person is what makes a row `ACTIVE` and this is the EAN. A `REJECTED`
- * row, an `ACTIVE` one and anything carrying a `decidedAt` are left exactly as
- * they are: a run does not reopen a decision a person made.
+ * The EAN, on a product reported exactly as a walk reports one (plan 0103,
+ * section 6.2). It used to load the rows itself, write the EAN itself and
+ * promote the row itself, holding a repository and a `CatalogClient` for it.
+ * The rows it reads pages for are prepared by the orchestrator now, and the
+ * promotion is the ladder's: rung 1 promotes an undecided row when a new EAN
+ * names a catalog item, which is plan 0086's rule stated in the one place that
+ * writes rows. A `REJECTED` row, an `ACTIVE` one and anything carrying a
+ * `decidedAt` are left exactly as they are.
  *
- * It writes **no price**. The prices are already on `source_entry_prices`,
+ * It reports **no price**. The prices are already on `source_entry_prices`,
  * written by the crawl, and the next crawl sends the ones these newly `ACTIVE`
  * rows are now owed. A backfill that wrote prices would be a second path into
  * the thing plan 0080 made one path.
@@ -61,15 +54,11 @@ import { loadCatalogItems } from './source-snapshot';
 export class CarrefourDetailRunner implements CatalogRunner {
   private readonly logger = new Logger(CarrefourDetailRunner.name);
 
-  constructor(
-    @InjectRepository(SourceCatalogEntry)
-    private readonly entries: Repository<SourceCatalogEntry>,
-    private readonly catalog: CatalogClient,
-    private readonly config: ConfigService
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
   async run(
     context: RunContext,
+    report: RunReport,
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
@@ -77,49 +66,36 @@ export class CarrefourDetailRunner implements CatalogRunner {
 
     try {
       await context.setStage('BACKFILL', 'Finding products with no EAN');
-      // The rows this run has anything to do: this chain's web rows that carry
-      // a product page and no EAN. Everything else is already answered.
-      const pending = await this.entries.find({
-        where: {
-          supermarketId: input.supermarketId,
-          sourceKind: PriceSourceKind.OFFICIAL_WEB,
-          ean: IsNull(),
-          url: Not(IsNull()),
-        },
-        order: { createdAt: 'ASC' },
-        take: readBudget(source.config),
-      });
+      // The rows this run has anything to do, prepared by the orchestrator: this
+      // chain's rows that carry a product page and no EAN (plan 0103, 6.2).
+      const pending = input.backfill ?? [];
       await context.setTotalPlanned(pending.length);
       this.logger.log(
         `Run ${context.runId}: ${pending.length} product(s) with no EAN yet`
       );
       if (pending.length === 0) {
         await context.flush();
-        await context.setReport({ pending: 0, eansWritten: 0, resolved: 0 });
+        await context.setReport({ pending: 0, eansWritten: 0 });
         return;
       }
-
-      // One index for the whole run. Asking catalog per product would be a NATS
-      // round trip on top of every one of thousands of page loads.
-      const items = new ItemMatchIndex(await loadCatalogItems(this.catalog));
 
       await context.setStage(
         'DETAIL',
         `Reading ${pending.length} product page(s)`
       );
+      const observedAt = new Date();
       let eansWritten = 0;
-      let resolved = 0;
       let missing = 0;
       let skipped = 0;
 
       for (const row of pending) {
         if (context.signal.aborted) {
-          // An aborted backfill keeps every EAN it already wrote. There is
+          // An aborted backfill keeps every EAN it already reported. There is
           // nothing to roll back and nothing to replay.
           break;
         }
         try {
-          const detail = await client.readDetail(row.url as string);
+          const detail = await client.readDetail(row.url);
           if (!detail?.ean) {
             // **A missing EAN is a value, not an error.** Some pages carry
             // none; the row stays as it is and the fuzzy rung does its job.
@@ -127,11 +103,27 @@ export class CarrefourDetailRunner implements CatalogRunner {
             await context.report({ processed: 1, notFound: 1 });
             continue;
           }
-          const promoted = await this.write(row, detail.ean, items);
+          // Reported exactly as a walk reports a product, minus the price. Rung
+          // 1 rewrites the source group, which is where the EAN lands, and
+          // promotes the row when that EAN names an item.
+          report.product({
+            externalId: row.externalId,
+            // The row as the crawl described it, plus the one field this page
+            // answers. The page carries no name, brand or size of its own.
+            name: row.name,
+            brand: row.brand,
+            ean: detail.ean,
+            unitSize: row.unitSize,
+            sizeFormat: row.sizeFormat,
+            categoryPath: row.categoryPath,
+            url: row.url,
+            observedAt,
+            extra: null,
+            // The crawl already wrote this chain's prices, and the next one
+            // sends the ones these newly `ACTIVE` rows are owed.
+            prices: [],
+          });
           eansWritten += 1;
-          if (promoted) {
-            resolved += 1;
-          }
           await context.report({ processed: 1, updated: 1 });
         } catch (error) {
           this.logger.warn(
@@ -159,17 +151,17 @@ export class CarrefourDetailRunner implements CatalogRunner {
       await context.setReport({
         pending: pending.length,
         eansWritten,
-        resolved,
         noEanOnTheirPage: missing,
         // Pages the storefront refused. Their rows keep no EAN, which is the
         // state they were already in, so the next backfill takes them again.
         refusedPages: skipped,
         pageLoads: client.loads,
       });
+      // How many of those EANs resolved a row to an item is the ladder's answer
+      // and no longer this runner's, so it is not counted here (plan 0103, D1).
       this.logger.log(
-        `Run ${context.runId}: ${eansWritten} EAN(s) written, ${resolved} ` +
-          `row(s) resolved to an item, ${missing} page(s) printed none, ` +
-          `${skipped} refused`
+        `Run ${context.runId}: ${eansWritten} EAN(s) read, ${missing} ` +
+          `page(s) printed none, ${skipped} refused`
       );
     } finally {
       await client.close();
@@ -193,52 +185,6 @@ export class CarrefourDetailRunner implements CatalogRunner {
       signal: context.signal,
     });
   }
-
-  /**
-   * Write the EAN, and resolve the row only when nobody has decided it.
-   *
-   * The two groups of `source_catalog_entries` are the contract (plan 0086,
-   * section 3.1): the source's columns, which every run rewrites, and the
-   * decision columns, which a run only reads. This writes one of the first
-   * group always, and one of the second **only** for a row that carries no
-   * decision at all, which is the case the EAN rung exists for.
-   */
-  private async write(
-    row: SourceCatalogEntry,
-    ean: string,
-    items: ItemMatchIndex
-  ): Promise<boolean> {
-    row.ean = ean;
-    const undecided =
-      row.decidedAt === null &&
-      (row.status === SourceEntryStatus.UNRESOLVED ||
-        row.status === SourceEntryStatus.CANDIDATE);
-    const match = undecided
-      ? items.match({
-          ean,
-          name: row.name,
-          brand: row.brand,
-          unitSize: row.unitSize === null ? null : Number(row.unitSize),
-        })
-      : null;
-    // Only the EAN rung promotes here. A name match on this pass would be a
-    // fuzzy proposal made by a run whose whole reason for existing is that it
-    // now has the identifier that makes fuzziness unnecessary.
-    const promoted = match?.matchedBy === ItemSourceMatch.EAN;
-    if (promoted && match) {
-      row.itemId = match.itemId;
-      row.status = SourceEntryStatus.ACTIVE;
-      row.matchedBy = ItemSourceMatch.EAN;
-      row.confidence = match.confidence;
-      row.decidedAt = new Date();
-    }
-    // `lastSeenAt`, `lastRunId` and `timesSeen` are deliberately untouched.
-    // This run did not observe the product in the assortment, it read one field
-    // off its page, and a revert of this run must find nothing of its own to
-    // delete.
-    await this.entries.save(row);
-    return promoted;
-  }
 }
 
 /** The storefront, from the source row rather than the environment (plan 0083). */
@@ -255,15 +201,6 @@ function readDelay(config: Record<string, unknown>): number | undefined {
   return Number.isFinite(delay) && delay > 0 ? Math.floor(delay) : undefined;
 }
 
-/**
- * How many product pages one backfill run may read, **the owner's number**.
- *
- * Unset means every row that still needs one, which is the overnight run
- * section 12.1 describes. A number is how an operator takes a bite instead: the
- * chain holds one run at a time, so a bounded backfill is what leaves room for
- * tomorrow's price crawl without anybody having to abort anything.
- */
-function readBudget(config: Record<string, unknown>): number | undefined {
-  const budget = Number(config['detailBudget']);
-  return Number.isFinite(budget) && budget > 0 ? Math.floor(budget) : undefined;
-}
+// `detailBudget`, the owner's cap on how many pages one backfill may read,
+// moved to `run-executor.service.ts` with the row loading it bounds (plan 0103,
+// section 6.2). It reads the same key of the same source row.

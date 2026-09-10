@@ -189,19 +189,37 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    */
   setOriginQuantity: 'generatedList.setOriginQuantity',
   /**
-   * Move what is still to get on a basket line (plan 0056, section 3).
+   * Set how many of a basket line **one list has got** (plan 0104, section 4).
    *
-   * **One number read in two directions**, which is the whole design: raising it
-   * means this basket will buy more, and lowering it means that many were
-   * bought. Not two behaviours bolted onto one control, and not an edit of the
+   * It sits beside {@link setOriginQuantity} and is deliberately not the same
+   * message. One says what a list asked for and the other says what it got, they
+   * move in opposite directions on the same row of the same sheet, and a single
+   * message with two optional fields would let a client send both and mean
+   * neither.
+   *
+   * Raising it settles the difference against that origin alone, through the
+   * settle; lowering it takes that origin's newest purchases back. Both are the
+   * existing implementations called with one list named, so the allocation, the
+   * events, the claim moves and the skip report are theirs.
+   */
+  setOriginSettled: 'generatedList.setOriginSettled',
+  /**
+   * Move what is still to get on a basket line (plan 0056, rewritten by plan
+   * 0104).
+   *
+   * **One number with two ends**, which is the whole design: it runs from zero
+   * to what the lists asked for, lowering it means that many were bought, and
+   * raising it takes purchases back one unit at a time. Not an edit of the
    * line's `quantity`, which would leave the shopper holding a screen with two
-   * numbers to tell apart while pushing a trolley.
+   * numbers to tell apart while pushing a trolley, and no longer a way to make
+   * the basket buy more than was asked for.
    *
-   * Lowering **calls the settle** rather than reimplementing it, so the default
-   * allocation, the owner's access check per origin, the skip report, the zone
-   * events and the claim release all come with it unchanged. A second path that
-   * wrote settlements its own way is how two ways of buying the same tin end up
-   * disagreeing about who bought it.
+   * Both directions **call** somebody else rather than reimplementing them:
+   * lowering is the settle, raising is the reopen's walk with a number of units.
+   * So the default allocation, the owner's access check per origin, the skip
+   * report, the zone events and the claim moves all come with them unchanged. A
+   * second path that wrote settlements its own way is how two ways of buying the
+   * same tin end up disagreeing about who bought it.
    */
   setOutstanding: 'generatedList.setOutstanding',
 } as const;
@@ -753,7 +771,21 @@ export interface GeneratedListSettleResult {
 }
 
 /**
- * Move what is still to get on a basket line (plan 0056, section 3).
+ * Move what is still to get on a basket line (plan 0056, rewritten by plan
+ * 0104).
+ *
+ * ## The number has two ends
+ *
+ * It runs from zero to `line.quantity`. Zero is the whole line dealt with, which
+ * is what "got all" already does; the top is what the lists asked for, and there
+ * is nothing above it. An {@link outstanding} above it is refused rather than
+ * clamped (plan 0104, section 2).
+ *
+ * Lowering it records a purchase. **Raising it takes purchases back**, newest
+ * first, and puts the units back on the lists they came off. Plan 0056 read a
+ * raise as "this basket will buy more", and that meaning is gone: a basket can
+ * no longer decide to buy more than was asked for, and nothing on this route
+ * writes `quantity` any more.
  *
  * ## Both numbers are absolute, and that is the point
  *
@@ -790,9 +822,9 @@ export interface SetGeneratedListLineOutstandingRequest {
    * Where the control was let go: how many are still to get after this.
    *
    * Floors at zero, which is the whole line settled and what the "got all"
-   * button already does. Capped by `LINE_QUANTITY_MAX` applied to the resulting
-   * `quantity` rather than to this number, so a partly settled line cannot be
-   * raised past the limit an unsettled one has.
+   * button already does, and is capped at the line's own `quantity`, which is
+   * what the lists asked for. Above that is a `validation` failure rather than a
+   * clamp (plan 0104, section 2).
    */
   outstanding: number;
   /**
@@ -1438,6 +1470,89 @@ export interface SetGeneratedListOriginQuantityResult {
    * line already below what it contributed lands at zero rather than below it.
    */
   listQuantity: number;
+}
+
+/**
+ * Set how many of a basket line one list has got (plan 0104, section 4).
+ *
+ * ## Why it is not {@link SetGeneratedListOriginQuantityRequest}
+ *
+ * One says what a list **asked for** and this says what it **got**. They move in
+ * opposite directions on the same row of the same sheet, and a single message
+ * with two optional fields would let a client send both and mean neither. So
+ * they are two messages, and each one is unambiguous on its own.
+ *
+ * Raising settles the difference against that origin alone, through the ordinary
+ * settle with an allocation naming one list, so the allocation, the events, the
+ * claim release and the skip report are the settle's own and not a second copy
+ * of them. Lowering reverts that origin's newest purchases, by the same walk a
+ * raised basket row uses (section 3).
+ *
+ * ## Who may
+ *
+ * The all or nothing rule of plan 0051 section 5.2, which is what
+ * {@link SetGeneratedListOriginQuantityRequest} and the allocation already
+ * require: this message names a list, and naming a list is naming zone data.
+ *
+ * A guest is refused, and that is not a restriction on shopping. A guest still
+ * settles the whole line, or part of it, through the settle route, and the
+ * default allocation decides where the units land exactly as it does today.
+ */
+export interface SetGeneratedListOriginSettledRequest {
+  generatedListId: string;
+  /** The basket line, not the zone line. */
+  lineId: string;
+  /** The actor, resolved from their credential by the gateway's guard. */
+  participantId: string;
+  /** The origin's zone line. */
+  sourceLineId: string;
+  /**
+   * How many of this line this basket has bought for that list, after this
+   * write.
+   *
+   * Bounded by `0` and the origin's `contributed`. Above it is a `validation`
+   * failure: a list cannot have got more of a line than it asked for through
+   * this basket, and a shopper who bought more than that raises what the list
+   * asked for first.
+   */
+  settled: number;
+  /**
+   * What the caller believed that number was, refused on a mismatch with
+   * `stale_quantity` and the current value in `messageArgs.current`.
+   *
+   * The same bargain plan 0056 section 3.2 makes one screen up, and for the same
+   * reason: a gesture whose meaning depends on where it started must never be
+   * applied to a number that moved underneath it.
+   */
+  from: number;
+}
+
+/**
+ * What setting one list's bought amount did (plan 0104, section 4).
+ *
+ * **Both numbers on the row come back from the server**, which is why the origin
+ * detail is here beside the line: the sheet draws "asked for" and "got" on one
+ * row, and a sheet that computed either of them from the other would drift the
+ * moment a close, a split or another shopper moved something it could not see.
+ */
+export interface SetGeneratedListOriginSettledResult {
+  /** The basket line as it now stands. */
+  line: GeneratedListBasketLineView;
+  /**
+   * The origin as it now stands, or null when its zone line has been deleted
+   * underneath the basket, which plan 0050 section 1 makes an ordinary thing to
+   * have in a history rather than an error.
+   */
+  origin: GeneratedListLineOriginDetail | null;
+  /** How many origins this act could not reach. */
+  skippedCount: number;
+  /**
+   * Which, and why. Always present rather than optional, unlike
+   * {@link GeneratedListSettleResult.skipped}: this route is refused outright to
+   * a reader who does not pass plan 0051 section 5.2, so there is no redacted
+   * projection of it to fall back to.
+   */
+  skipped: GeneratedListSettleSkip[];
 }
 
 // --- A participant adds a line, and searches for one (plan 0055) -----------

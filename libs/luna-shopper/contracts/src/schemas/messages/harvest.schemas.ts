@@ -10,6 +10,7 @@ import {
   SourceLocationStatus,
 } from '../../lib/enums/harvest.enums';
 import {
+  ADAPTER_CAPABILITIES,
   ADAPTER_KEYS,
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
@@ -57,6 +58,7 @@ export const HARVEST_SCHEMA_IDS = {
   sourceLocationStatus: schemaId('enums/SourceLocationStatus'),
   adapterKey: schemaId('enums/AdapterKey'),
   harvestWarningCode: schemaId('enums/HarvestWarningCode'),
+  adapterCapabilityTable: schemaId('harvest/AdapterCapabilityTable'),
 
   harvestRunWarning: schemaId('harvest/HarvestRunWarning'),
   harvestRunView: schemaId('harvest/HarvestRunView'),
@@ -769,7 +771,9 @@ const listEntriesRequest = object(
   HARVEST_SCHEMA_IDS.listEntriesRequest,
   {
     ...adminCredentialProperties,
-    supermarketId: nonEmptyString(),
+    // Absent lists every chain's rows. The chain narrows the queue, it does not
+    // address it, and a row names the chain it came from.
+    supermarketId: string(),
     // Absent lists the two that are waiting for a person, which is the queue.
     status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
@@ -778,7 +782,7 @@ const listEntriesRequest = object(
     limit: integer({ minimum: 1 }),
     order: string(),
   },
-  ['userId', 'supermarketId']
+  ['userId']
 );
 const entryIdRequest = object(
   HARVEST_SCHEMA_IDS.entryIdRequest,
@@ -1017,7 +1021,26 @@ const discoveryRequestIdRequest = object(
   ['userId', 'requestId']
 );
 
+/**
+ * What every adapter can tell us, published as a value rather than a shape
+ * (plan 0103, section 4.1).
+ *
+ * `const` and not `properties`, because the table itself is the contract. The
+ * spawn enforces these four booleans and the back office draws its form from
+ * them, so the document has to carry the answers and not only the question. The
+ * value is {@link ADAPTER_CAPABILITIES} itself, so the schema cannot state a
+ * capability the backend does not enforce.
+ */
+const adapterCapabilityTable: JsonSchema = {
+  $id: HARVEST_SCHEMA_IDS.adapterCapabilityTable,
+  type: 'object',
+  description:
+    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.',
+  const: ADAPTER_CAPABILITIES,
+};
+
 export const harvestSchemas: JsonSchema[] = [
+  adapterCapabilityTable,
   enumOf(HARVEST_SCHEMA_IDS.harvestRunMode, Object.values(HarvestRunMode)),
   enumOf(
     HARVEST_SCHEMA_IDS.harvestRunTrigger,

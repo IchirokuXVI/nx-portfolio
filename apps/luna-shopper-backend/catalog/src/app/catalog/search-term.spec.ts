@@ -17,6 +17,24 @@ describe('parseSearchTerm', () => {
     expect(parseSearchTerm('lech ent')?.tsquery).toBe('lech:* & ent:*');
   });
 
+  it('keeps the words as typed, for the literal recheck beside the tsquery', () => {
+    // The tsquery above is matched against a stemmed document, which is what
+    // answered "leche" with lechuga and "sal" with salted caramel. These are
+    // the words the SQL requires to appear as they were written.
+    expect(parseSearchTerm('Leche Entera')?.words).toEqual(['Leche', 'Entera']);
+    expect(parseSearchTerm('salmón, 200g')?.words).toEqual(['salmón', '200g']);
+  });
+
+  it('lets the fuzzy branch answer a word and not a fragment', () => {
+    // Three characters is where the composer starts asking, and trigram
+    // distance says nothing useful about three characters.
+    expect(parseSearchTerm('sal')?.fuzzy).toBe(false);
+    expect(parseSearchTerm('pasqual')?.fuzzy).toBe(true);
+    // The whole query is measured, not each word: two short words are still
+    // enough to misspell.
+    expect(parseSearchTerm('sal fina')?.fuzzy).toBe(true);
+  });
+
   it('carries no barcode for words', () => {
     expect(parseSearchTerm('leche entera')?.ean).toBeNull();
   });

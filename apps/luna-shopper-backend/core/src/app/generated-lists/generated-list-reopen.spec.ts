@@ -181,6 +181,11 @@ function build(options: {
       }
       if (entity === GeneratedListLine) {
         return {
+          // A **copy**, as a second read of the same row is in production: the
+          // revert locks its own instance and has to carry what it wrote back
+          // onto the one the response is composed from. Handing the same object
+          // out twice would hide a missing write back.
+          findOne: async () => ({ ...basketLine }),
           save: async (row: Partial<GeneratedListLine>) => {
             Object.assign(basketLine, row);
             return row;

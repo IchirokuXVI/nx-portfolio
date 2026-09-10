@@ -1,22 +1,11 @@
 import type { ConfigService } from '@nestjs/config';
-import {
-  PriceSourceKind,
-  SourceEntryStatus,
-} from '@portfolio/luna-shopper/contracts';
-import type { Repository } from 'typeorm';
-import type {
-  SourceCatalogEntry,
-  SourceEntryPrice,
-  SupermarketSource,
-} from '../entities';
-import type { CatalogClient } from './catalog-client.service';
+import type { SupermarketSource } from '../entities';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import type { RunContext } from './run-context';
-import { SourceIngest } from './source-ingest';
+import { RecordingRunReport } from './run-report';
 
 /**
- * The walk, end to end, over a stubbed `fetch` and no network (plan 0086,
- * section 5).
+ * The walk, end to end, over a stubbed `fetch` and no network.
  *
  * **No run here fetches anything.** A real catalog discovery is 4,383 requests
  * over eighteen minutes and is never started from a test; the payloads below
@@ -29,9 +18,11 @@ import { SourceIngest } from './source-ingest';
  * another project's sources by path, and what this file is about is the
  * runner's wiring rather than the parsing.
  *
- * What is pinned is what plan 0086 changed: the walk writes the price it
- * fetched, for the `ACTIVE` rows only, and it says what the warehouse carries.
- * The negative half of that claim is made **only by a walk that finished**.
+ * **There is no repository fake, no `CatalogClient` fake and no ingest here**,
+ * and that is the point of plan 0103. The runner fetches and reports, so a
+ * recording `RunReport` is the whole of what a spec has to give it, and what is
+ * asserted is what the run said rather than what somebody wrote. What happens
+ * to a report afterwards is `run-report.sink.spec.ts`.
  */
 
 const CHAIN = '11111111-1111-4111-8111-111111111111';
@@ -111,10 +102,6 @@ function detailed(id: string, ean: string | null) {
   };
 }
 
-interface Fetched {
-  urls: string[];
-}
-
 /**
  * A `fetch` that answers from the fixtures and records every URL.
  *
@@ -125,7 +112,7 @@ interface Fetched {
 function stubFetch(options: {
   detailFor?: (externalId: string) => unknown | null;
   onRequest?: (count: number, url: string) => void;
-}): Fetched & { fetchImpl: typeof fetch } {
+}): { urls: string[]; fetchImpl: typeof fetch } {
   const urls: string[] = [];
   const fetchImpl = (async (input: string | URL) => {
     const url = String(input);
@@ -158,76 +145,7 @@ function stubFetch(options: {
   return { urls, fetchImpl };
 }
 
-function build(options: {
-  rows?: Partial<SourceCatalogEntry>[];
-  items?: unknown[];
-  controller?: AbortController;
-}) {
-  const stored = (options.rows ?? []).map(
-    (row, index) =>
-      ({
-        id: `held-${index + 1}`,
-        supermarketId: CHAIN,
-        sourceKind: PriceSourceKind.OFFICIAL_API,
-        status: SourceEntryStatus.UNRESOLVED,
-        timesSeen: 1,
-        itemId: null,
-        candidateEntryId: null,
-        matchedBy: null,
-        confidence: 0,
-        decidedAt: null,
-        brand: null,
-        ean: null,
-        unitSize: null,
-        sizeFormat: null,
-        categoryPath: [],
-        url: null,
-        extra: null,
-        ...row,
-      }) as SourceCatalogEntry
-  );
-  const saved: SourceCatalogEntry[] = [];
-  let created = 0;
-
-  const entries = {
-    // The ingest reads every row of the chain; the availability pass reads the
-    // ACTIVE ones of this source kind, which is a `where` this fake honours.
-    find: jest.fn(async (query?: { where?: Partial<SourceCatalogEntry> }) => {
-      const all = [...stored, ...saved.filter((row) => !stored.includes(row))];
-      const where = query?.where ?? {};
-      return all.filter(
-        (row) =>
-          (where.status === undefined || row.status === where.status) &&
-          (where.sourceKind === undefined ||
-            row.sourceKind === where.sourceKind)
-      );
-    }),
-    create: jest.fn((row: SourceCatalogEntry) => {
-      created += 1;
-      return { id: `new-${created}`, ...row };
-    }),
-    save: jest.fn(async (row: SourceCatalogEntry) => {
-      if (!saved.includes(row) && !stored.includes(row)) {
-        saved.push(row);
-      }
-      return row;
-    }),
-  } as unknown as Repository<SourceCatalogEntry>;
-
-  const priceUpsert = jest.fn(async () => undefined);
-  const prices = {
-    upsert: priceUpsert,
-  } as unknown as Repository<SourceEntryPrice>;
-
-  const catalog = {
-    searchItems: jest.fn(async () => ({
-      items: options.items ?? [],
-      nextCursor: null,
-    })),
-    addPrices: jest.fn(async () => ({ inserted: 1, confirmed: 0 })),
-    setAvailability: jest.fn(async () => ({ updated: 1 })),
-  };
-
+function build(options: { controller?: AbortController } = {}) {
   const controller = options.controller ?? new AbortController();
   const context = {
     runId: RUN,
@@ -240,24 +158,11 @@ function build(options: {
     flush: jest.fn(async () => undefined),
   } as unknown as RunContext;
 
-  const ingest = new SourceIngest(
-    entries,
-    prices,
-    catalog as unknown as CatalogClient
-  );
-  const runner = new MercadonaCatalogRunner(
-    entries,
-    ingest,
-    catalog as unknown as CatalogClient,
-    {
-      getOrThrow: () => ({
-        userAgent: 'test',
-        mercadonaBaseUrl: BASE,
-      }),
-    } as unknown as ConfigService
-  );
+  const runner = new MercadonaCatalogRunner({
+    getOrThrow: () => ({ userAgent: 'test', mercadonaBaseUrl: BASE }),
+  } as unknown as ConfigService);
 
-  return { runner, context, catalog, saved, stored, priceUpsert, controller };
+  return { runner, context, report: new RecordingRunReport(), controller };
 }
 
 const source = (): SupermarketSource =>
@@ -276,7 +181,7 @@ function withFetch(fetchImpl: typeof fetch): () => void {
   };
 }
 
-describe('MercadonaCatalogRunner (plan 0086)', () => {
+describe('MercadonaCatalogRunner (plan 0103)', () => {
   let restore: (() => void) | undefined;
 
   afterEach(() => {
@@ -284,51 +189,37 @@ describe('MercadonaCatalogRunner (plan 0086)', () => {
     restore = undefined;
   });
 
-  it('writes a price for the ACTIVE rows it saw and for nothing else', async () => {
-    const { fetchImpl } = stubFetch({
-      // Only the first product's EAN is one the catalog holds, so only it
-      // reaches ACTIVE through rung 2.
-      detailFor: (id) =>
-        detailed(id, id === WALKED[0] ? '8480000135636' : null),
-    });
+  it('reports every product it walked, with the price the detail stated', async () => {
+    const { fetchImpl } = stubFetch({});
     restore = withFetch(fetchImpl);
-    const { runner, context, catalog, saved } = build({
-      items: [
-        {
-          id: 'item-oil',
-          name: { es: 'Nothing alike', en: null },
-          brand: null,
-          ean: '8480000135636',
-          unitSize: null,
-        },
-      ],
-    });
+    const { runner, context, report } = build();
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source()
     );
 
-    expect(saved.map((row) => row.externalId).sort()).toEqual(WALKED);
-    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
-    const sent = catalog.addPrices.mock.calls[0][1] as { itemId: string }[];
-    // One price, for the one product an EAN resolved. The other is queued and a
-    // fuzzy row is never owed a price.
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ itemId: 'item-oil', price: 8.75 });
-    expect(catalog.addPrices.mock.calls[0][3]).toBe(
-      PriceSourceKind.OFFICIAL_API
+    expect(report.products.map((product) => product.externalId).sort()).toEqual(
+      WALKED
     );
+    // One price, naming no scope of its own: Mercadona prices one warehouse, so
+    // the price falls to the scope the run was started with.
+    expect(report.products[0].prices).toEqual([
+      expect.objectContaining({ scopeKey: null, price: 8.75 }),
+    ]);
+    expect(report.products[0].ean).toBe('8480000135636');
   });
 
   it('keeps the heartbeat moving while it walks the tree', async () => {
     const { fetchImpl } = stubFetch({});
     restore = withFetch(fetchImpl);
-    const { runner, context } = build({});
+    const { runner, context, report } = build();
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source()
     );
@@ -341,43 +232,23 @@ describe('MercadonaCatalogRunner (plan 0086)', () => {
     ).toBeGreaterThanOrEqual(WALKED.length);
   });
 
-  it('says a tracked product the walk did not list is not stocked', async () => {
+  it('says the assortment is whole, so a product it did not name is not stocked', async () => {
     const { fetchImpl } = stubFetch({});
     restore = withFetch(fetchImpl);
-    const { runner, context, catalog } = build({
-      rows: [
-        {
-          // A product an earlier walk found and a person accepted, which this
-          // walk's tree no longer lists at all.
-          externalId: '9999',
-          name: 'Discontinuado',
-          status: SourceEntryStatus.ACTIVE,
-          itemId: 'item-gone',
-        },
-      ],
-      items: [
-        {
-          id: 'item-oil',
-          name: { es: 'Nothing alike', en: null },
-          brand: null,
-          ean: '8480000135636',
-          unitSize: null,
-        },
-      ],
-    });
+    const { runner, context, report } = build();
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source()
     );
 
-    const written = catalog.setAvailability.mock.calls[0][1] as {
-      itemId: string;
-      available: boolean;
-    }[];
-    expect(written).toContainEqual({ itemId: 'item-gone', available: false });
-    expect(written).toContainEqual({ itemId: 'item-oil', available: true });
+    // The runner used to load every tracked row itself and call the ones it had
+    // not seen out of stock. The fact is already in the report, so it says only
+    // that the walk was whole and the orchestrator does the diff (plan 0103,
+    // section 6.1). `null` is the run's own scope.
+    expect(report.completed).toEqual([null]);
   });
 
   it('an aborted walk keeps what it fetched and asserts no absence', async () => {
@@ -397,55 +268,29 @@ describe('MercadonaCatalogRunner (plan 0086)', () => {
       },
     });
     restore = withFetch(fetchImpl);
-    const { runner, context, catalog, saved } = build({
-      controller,
-      rows: [
-        {
-          externalId: '9999',
-          name: 'Discontinuado',
-          status: SourceEntryStatus.ACTIVE,
-          itemId: 'item-gone',
-        },
-      ],
-      items: [
-        {
-          id: 'item-oil',
-          name: { es: 'Nothing alike', en: null },
-          brand: null,
-          ean: '8480000135636',
-          unitSize: null,
-        },
-      ],
-    });
+    const { runner, context, report } = build({ controller });
 
     await runner.run(
       context,
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source()
     );
 
     // What it did fetch is kept: prices already fetched are valid data.
-    expect(saved.length).toBeGreaterThan(0);
-    const written = (catalog.setAvailability.mock.calls[0]?.[1] ?? []) as {
-      itemId: string;
-      available: boolean;
-    }[];
-    // The run did not walk the whole tree, so it says nothing negative about
-    // anything, including the row it never observed.
-    expect(written.every((entry) => entry.available)).toBe(true);
-    expect(written).not.toContainEqual({
-      itemId: 'item-gone',
-      available: false,
-    });
+    expect(report.products.length).toBeGreaterThan(0);
+    // It did not walk the whole tree, so it says nothing negative about
+    // anything. Under-claiming is the safe way to be wrong here.
+    expect(report.completed).toEqual([]);
   });
 
   it('refuses to walk with no price scope to write the prices for', async () => {
     const { fetchImpl } = stubFetch({});
     restore = withFetch(fetchImpl);
-    const { runner, context } = build({});
+    const { runner, context, report } = build();
 
     await expect(
-      runner.run(context, { supermarketId: CHAIN }, source())
+      runner.run(context, report, { supermarketId: CHAIN }, source())
     ).rejects.toThrow(/price scope/i);
   });
 });

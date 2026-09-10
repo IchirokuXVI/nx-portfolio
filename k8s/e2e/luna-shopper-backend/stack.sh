@@ -80,7 +80,15 @@ cd "$root"
 
 COMPOSE_FILE="$here/compose.yml"
 APPS_FILE="$here/compose.apps.yml"
-SLOT_ENV="$here/.env.slot"
+
+# The slot descriptor compose is pointed at.
+#
+# Normally this checkout's own, written by luna-slot.sh. LUNA_SLOT_ENV overrides
+# it, and `luna-slot.sh --ephemeral` is what sets it: an ephemeral run writes no
+# .env.slot in the worktree, so its descriptor lives outside the repository and
+# compose has to be told where. Without the override an ephemeral --down would
+# take down the containers of the slot this worktree claims instead of its own.
+SLOT_ENV="${LUNA_SLOT_ENV:-$here/.env.slot}"
 
 # The profile named by -p, or empty. Parsed at the bottom, before dispatch.
 PROFILE=""
@@ -250,30 +258,13 @@ EOF
   fi
 }
 
-bootstrap_config() {
-  local missing=() present=() file
-  for file in "${ENV_FILES[@]}"; do
-    if [[ -f "$root/$file" ]]; then
-      present+=("$file")
-    else
-      missing+=("$file")
-    fi
-  done
-
-  # A fresh checkout: there is no configuration to preserve, so write all of it.
-  # This is the case that used to fail, and it is the common one.
-  if (( ${#present[@]} == 0 )); then
-    echo "==> no service .env files found: configuring this checkout for slot 0 (the default ports)"
-    if [[ ! -f "$KEYPAIR" || ! -f "$ADMIN_KEYPAIR" ]]; then
-      require_openssl || return 1
-    fi
-    bash "$here/luna-slot.sh" 0
-    return 0
-  fi
-
-  # Past this point something is already configured, and luna-slot.sh rewrites
-  # all eight files, so running it now would silently discard hand edits in the
-  # ones that do exist. From here we only ever add what is absent.
+# The two dev keypairs, made if they are absent and made readable either way.
+#
+# Its own function because two callers need it and only one of them is about the
+# .env files: an ephemeral slot brings its configuration in the environment, but
+# the keys are files, named by a path every service resolves, and no slot can
+# boot without them.
+ensure_keypairs() {
   if [[ ! -f "$KEYPAIR" ]]; then
     require_openssl || return 1
     echo "==> generating the missing dev JWT keypair in apps/luna-shopper-backend/secrets"
@@ -297,6 +288,44 @@ bootstrap_config() {
   if [[ -f "${KEYPAIR%.key}.pub" ]]; then chmod 0644 "${KEYPAIR%.key}.pub"; fi
   if [[ -f "$ADMIN_KEYPAIR" ]]; then chmod 0644 "$ADMIN_KEYPAIR"; fi
   if [[ -f "${ADMIN_KEYPAIR%.key}.pub" ]]; then chmod 0644 "${ADMIN_KEYPAIR%.key}.pub"; fi
+}
+
+bootstrap_config() {
+  local missing=() present=() file
+
+  # An ephemeral slot (luna-slot.sh --ephemeral) carries its whole configuration
+  # in the environment, so the .env files under this checkout are neither read
+  # for it nor written for it. Their absence is therefore not something to fix
+  # and not something to refuse over: writing them would configure a checkout
+  # that asked not to be, and refusing would stop a run that needs none of them.
+  # The keypairs are the exception, because they are files.
+  if [[ -n "${LUNA_EPHEMERAL:-}" ]]; then
+    ensure_keypairs || return 1
+    return 0
+  fi
+  for file in "${ENV_FILES[@]}"; do
+    if [[ -f "$root/$file" ]]; then
+      present+=("$file")
+    else
+      missing+=("$file")
+    fi
+  done
+
+  # A fresh checkout: there is no configuration to preserve, so write all of it.
+  # This is the case that used to fail, and it is the common one.
+  if (( ${#present[@]} == 0 )); then
+    echo "==> no service .env files found: configuring this checkout for slot 0 (the default ports)"
+    if [[ ! -f "$KEYPAIR" || ! -f "$ADMIN_KEYPAIR" ]]; then
+      require_openssl || return 1
+    fi
+    bash "$here/luna-slot.sh" 0
+    return 0
+  fi
+
+  # Past this point something is already configured, and luna-slot.sh rewrites
+  # all eight files, so running it now would silently discard hand edits in the
+  # ones that do exist. From here we only ever add what is absent.
+  ensure_keypairs || return 1
 
   if (( ${#missing[@]} == 0 )); then
     return 0

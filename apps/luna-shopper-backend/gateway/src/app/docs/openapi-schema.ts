@@ -2,6 +2,7 @@ import {
   ADMIN_DASHBOARD_SCHEMA_IDS,
   allSchemas,
   AUTH_SCHEMA_IDS,
+  HARVEST_SCHEMA_IDS,
   STATS_SCHEMA_IDS,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -311,6 +312,23 @@ export function hoistAdminDashboard(): string {
       },
     },
   });
+}
+
+/**
+ * Publishes what every adapter can tell us (plan 0103, section 4.1).
+ *
+ * **The one component that is not the shape of a response.** Every other schema
+ * here describes what some route answers with; this one carries a `const` and is
+ * therefore the answer itself. It is published because the back office enforces
+ * the same four booleans the spawn does, and a capability stated in two files is
+ * how the two came to disagree in the first place: the backend required a price
+ * scope for `carrefour-web` and the form never offered one.
+ *
+ * It is hoisted explicitly rather than by a response decorator, because no
+ * response references it. Nothing else would pull it into the document.
+ */
+export function hoistAdapterCapabilities(): string {
+  return hoistContractSchema(HARVEST_SCHEMA_IDS.adapterCapabilityTable);
 }
 
 /** Publishes the shared RFC 7807 error body. */

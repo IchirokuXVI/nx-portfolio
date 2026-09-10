@@ -2,7 +2,7 @@
 
 @include sheet-form.sheet-form;
 
-// The quantity sits beside its label rather than under it: the stepper is small and a
+// The quantity sits beside its label rather than under it: the reel is small and a
 // label on its own line above it would leave the sheet with a lot of vertical air for
 // one number.
 .quantity-row {
@@ -18,8 +18,8 @@
 }
 
 // The quantity in `content` mode: present, readable, and plainly not a control. It sits
-// where the stepper would, at the stepper's text size, so the sheet does not jump
-// between the two modes for anybody who sees both.
+// where the reel would, at the reel's text size, so the sheet does not jump between
+// the two modes for anybody who sees both.
 .shown {
   margin: 0;
   padding-block: var(--app-space-2);

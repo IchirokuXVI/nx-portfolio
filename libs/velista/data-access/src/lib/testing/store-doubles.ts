@@ -523,19 +523,32 @@ export interface FakeListStateOptions {
  * `loadCount` is what an acceptance criterion actually turns on: a caller whose
  * membership is still PENDING must cause **no** request for the lists, and asserting
  * on the double is the only way to prove a request was not made (section 3.3).
+ *
+ * The two reads are counted apart, because the real store treats them apart and a page
+ * choosing the wrong one is a visible defect either way: a `load` where a `refresh`
+ * belongs blinks the rows away and back, and a `refresh` where a `load` belongs leaves
+ * a skeletonless page with nothing in it. `readCount` is for a spec that cares only
+ * that the server was asked at all.
  */
 export function fakeListStore(options: FakeListStateOptions = {}) {
   const lists = signal<readonly ShoppingListSummary[]>(options.lists ?? []);
   const state = signal<ListLoadState>(options.state ?? 'loaded');
   const error = signal<unknown>(options.error ?? null);
   const loads = signal(0);
+  const refreshes = signal(0);
 
   const created: { zoneId: string; name: string; shareWithZone: boolean }[] =
     [];
 
   return {
-    /** How many times a page asked for this zone's lists. Starts at zero. */
+    /** How many times a page asked for this zone's lists from cold. Starts at zero. */
     loadCount: loads.asReadonly(),
+
+    /** How many times a page read them again without dropping what was on screen. */
+    refreshCount: refreshes.asReadonly(),
+
+    /** Both kinds of read together. */
+    readCount: computed(() => loads() + refreshes()),
 
     /** Every list this page asked to create. */
     creations: created as readonly {
@@ -558,7 +571,7 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
       loads.update((count) => count + 1);
     },
     refresh: async () => {
-      loads.update((count) => count + 1);
+      refreshes.update((count) => count + 1);
     },
 
     createList: async (

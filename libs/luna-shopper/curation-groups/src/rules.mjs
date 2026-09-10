@@ -187,3 +187,57 @@ export function buildSystemPrompt({
     '',
   ].join('\n');
 }
+
+/**
+ * The shape of one decision, as JSON Schema, from the same unit vocabulary.
+ *
+ * `start` answers this beside the prompt; see the twin in
+ * `curation-suggestions/src/rules.mjs` for why it is built from the live
+ * vocabulary and why it governs the shape only. The conditional rules stay with
+ * the validators here too: exactly one of `groupId` and `groupRef` belongs on
+ * an `ASSIGN`, `group` belongs on a `CREATE_GROUP` and nowhere else, and
+ * `referenceUnit` has to sit in the same family as the product's own unit,
+ * which no enum can express.
+ */
+export function buildDecisionSchema({ units = loadUnits() } = {}) {
+  const nullableString = { type: ['string', 'null'] };
+  const synonymList = { type: 'array', items: { type: 'string' } };
+  return {
+    type: 'object',
+    properties: {
+      decision: {
+        type: 'string',
+        enum: ['ASSIGN', 'CREATE_GROUP', 'REVIEW'],
+      },
+      groupId: nullableString,
+      groupRef: nullableString,
+      group: {
+        type: ['object', 'null'],
+        properties: {
+          nameEs: nullableString,
+          nameEn: nullableString,
+          slug: nullableString,
+          referenceUnit: { type: ['string', 'null'], enum: [...units, null] },
+          synonyms: {
+            type: ['object', 'null'],
+            properties: { es: synonymList, en: synonymList },
+          },
+        },
+      },
+      confidence: { type: 'number', minimum: 0, maximum: 1 },
+      issues: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            code: { type: 'string' },
+            detail: { type: 'string' },
+          },
+          required: ['code', 'detail'],
+        },
+      },
+      reasoning: { type: 'string' },
+    },
+    required: ['decision', 'confidence', 'issues', 'reasoning'],
+  };
+}

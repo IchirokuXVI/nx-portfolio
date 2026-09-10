@@ -24,6 +24,7 @@ import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
+import { PriceScopeResolver } from './price-scope-resolver';
 import { RunExecutor } from './run-executor.service';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntryPriceWriter } from './source-entry-write';
@@ -75,7 +76,14 @@ import { SupermarketSourceService } from './supermarket-source.service';
     LidlStoreDiscoveryRunner,
     StoreDiscoveryRunner,
     // The second half of every run, whatever the first half was (plan 0086, D5).
+    //
+    // **No runner is given it, or any other writer** (plan 0103, section 2.1).
+    // A runner is constructed with its fetching seam and its configuration and
+    // nothing else, which is what makes the rule real rather than a convention:
+    // a runner that wants to write has nothing to write with, and the compiler
+    // says so. `RunExecutor` holds all of these and drains the report.
     SourceIngest,
+    PriceScopeResolver,
     MercadonaCatalogRunner,
     DezaCatalogRunner,
     CarrefourCatalogRunner,

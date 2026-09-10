@@ -39,8 +39,17 @@ export type BasketOperation =
   | 'basket.people'
   /** Saying how many are still to get, from the row's own number (velista 0054). */
   | 'basket.outstanding'
-  /** The units sheet: reading every list on a line, and changing what one asked for. */
-  | 'basket.origins';
+  /** The summary: reading every list on a line, and changing what one asked for. */
+  | 'basket.origins'
+  /**
+   * Changing what one list **got**, from the summary's second reel (velista 0073).
+   *
+   * Apart from `basket.origins` because it is the opposite act on the same rows: that
+   * one changes what a household asked for and buys nothing, and this one records a
+   * purchase or takes one back. A conflict on it is somebody else finishing the line,
+   * which is the settle's sentence and not the generic one.
+   */
+  | 'basket.originSettled';
 
 /** The message any failure falls back to, including one with no code at all. */
 const GENERIC = 'basket.error.failed';
@@ -96,6 +105,7 @@ export function basketErrorKey(
       switch (operation) {
         case 'basket.settle':
         case 'basket.outstanding':
+        case 'basket.originSettled':
           // Somebody else finished this line between the sheet opening and the tap
           // landing, which luna `0054` section 4 is what makes reachable as a
           // conflict: it used to arrive as `validation_failed`, indistinguishable
@@ -137,6 +147,7 @@ export function basketErrorKey(
         case 'basket.reopen':
         case 'basket.outstanding':
         case 'basket.origins':
+        case 'basket.originSettled':
           // Access to one of the lists behind this line moved since the basket was
           // generated. The line is still on the screen and still readable, so this
           // says what changed rather than taking the basket away.

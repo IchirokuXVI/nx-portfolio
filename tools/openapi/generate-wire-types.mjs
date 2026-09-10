@@ -247,6 +247,20 @@ export function generate(document) {
 function declaration(name, schema, names) {
   const identifier = names.get(name);
   const comment = describe(name, schema);
+
+  // A schema carrying `const` is a value, not a shape, so it is emitted as one
+  // (backend plan 0103, section 4.1). The adapter capability table is the case
+  // this exists for: the back office enforces the same four booleans the spawn
+  // does, and a table written out a second time by hand is the drift the plan
+  // removed. The type alias comes off the value, so the two cannot disagree.
+  if (schema.const !== undefined) {
+    const value = JSON.stringify(schema.const, null, 2);
+    return (
+      `${comment}export const ${identifier} = ${value} as const;\n\n` +
+      `${comment}export type ${identifier} = typeof ${identifier};`
+    );
+  }
+
   const body = typeFor(schema, names, '');
 
   // Always an alias, never an interface, and the difference matters. TypeScript

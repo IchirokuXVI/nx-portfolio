@@ -22,9 +22,12 @@ import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resour
 import {
   failureBlockReason,
   spawnBlockReason,
+  // A value import, not a type one: the adapter capability table is a `const`
+  // in the generated file, because the gateway publishes the answers and not
+  // only the question (backend plan 0103, section 4.1).
+  Wire,
   type HarvestRun,
   type HarvestRunMode,
-  type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   HarvestNotice,
@@ -65,15 +68,42 @@ const MODES: readonly HarvestRunMode[] = [
 /** How far the scope read walks looking for the chain's `NATIONAL` one. */
 const SCOPE_PAGE = 100;
 
+/** The four facts the gateway publishes about a source. */
+interface AdapterCapabilities {
+  readonly writesPrices: boolean;
+  readonly scopesItsOwn: boolean;
+  readonly listsItsOwnStores: boolean;
+  readonly hasProductPages: boolean;
+}
+
+const UNKNOWN_ADAPTER: AdapterCapabilities = {
+  writesPrices: false,
+  scopesItsOwn: false,
+  listsItsOwnStores: false,
+  hasProductPages: false,
+};
+
 /**
- * The adapter whose walk writes prices and therefore needs a scope to write
- * them to (backend plan 0086, section 9).
+ * What an adapter can tell us, read from the table the gateway publishes
+ * (backend plan 0103, section 4.1).
  *
- * DEZA's site prints no price anywhere, so its walk writes none and the spawn
- * accepts a scope for it and ignores it. A field that does nothing is a lie in a
- * form, so it is not offered.
+ * **An adapter this build does not know answers no to everything.** A back
+ * office one release behind a backend that added an adapter then draws a plain
+ * form rather than a broken one, and the spawn is still the thing that refuses a
+ * bad request.
+ *
+ * This replaced a constant naming `mercadona-api`, which was the second place
+ * the capability was stated and disagreed with the first: the spawn also
+ * required a scope for `carrefour-web`, the form never offered the picker for
+ * it, and a Carrefour walk was refused with a message about a field nobody was
+ * shown (admin plan 0025, section 1).
  */
-const SCOPED_ADAPTER = 'mercadona-api';
+export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
+  return (
+    Wire.HarvestAdapterCapabilityTable[adapterKey as Wire.EnumsAdapterKey] ??
+    UNKNOWN_ADAPTER
+  );
+}
 
 /**
  * The runs screen: what has run, what is running, and how to start one.
@@ -129,21 +159,40 @@ const SCOPED_ADAPTER = 'mercadona-api';
         <!-- An import states its chain on the upload screen, beside the
              document that says which chain printed it (admin plan 0010). -->
         @if (!uploading()) {
-          <label>
+          <div class="field">
             <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
-            <input
-              (ngModelChange)="onChainChange()"
-              [(ngModel)]="supermarketId"
-              name="supermarketId"
-              type="text"
+            <lib-reference-picker
+              (valueChange)="chooseChain($event)"
+              [controlId]="'run-chain'"
+              [lookup]="references"
+              [resource]="'supermarkets'"
+              [value]="supermarketId()"
             />
-          </label>
+          </div>
         }
 
-        <!-- A walk writes prices now, so a Mercadona walk needs to be told
-             which scope to write them to and the spawn refuses one without it
-             (backend plan 0086, section 9). Shown on the adapter rather than on
-             the mode, because a DEZA walk is the same mode and writes none. -->
+        <!-- A backfill is a second pass over the same product pages asking for
+             the EAN, so it is offered only where there are pages to read
+             (backend plan 0103, section 4.2). -->
+        @if (offersBackfill()) {
+          <label class="switch">
+            <input
+              [(ngModel)]="detailBackfill"
+              name="detailBackfill"
+              type="checkbox"
+            />
+            <span>{{ 'harvest.runs.start.detailBackfill' | rokuT }}</span>
+          </label>
+          <p class="attribution">
+            {{ 'harvest.runs.start.detailBackfillHelp' | rokuT }}
+          </p>
+        }
+
+        <!-- A walk that states prices needs to be told where to write them, and
+             the spawn refuses one without it. Read from the adapter's
+             capabilities rather than from its name (backend plan 0103, section
+             4.2): a chain that prints no price is not asked, and neither is one
+             that names the scope of every price it prints. -->
         @if (needsScope()) {
           <div class="field">
             <span>{{ 'harvest.runs.start.priceScope' | rokuT }}</span>
@@ -161,7 +210,9 @@ const SCOPED_ADAPTER = 'mercadona-api';
           </div>
         }
 
-        @if (mode() === 'STORE_DISCOVERY') {
+        <!-- A chain that publishes its own shop list names every one of them
+             in a handful of requests, so there is nothing to centre on. -->
+        @if (needsCentre()) {
           <label>
             <span>{{ 'harvest.runs.start.postalCode' | rokuT }}</span>
             <input [(ngModel)]="postalCode" name="postalCode" type="text" />
@@ -197,16 +248,32 @@ const SCOPED_ADAPTER = 'mercadona-api';
       }
 
       @if (blockedKey(); as key) {
-        <p class="failure" role="alert">{{ key | rokuT }}</p>
+        <div class="failure" role="alert">
+          <p>{{ key | rokuT }}</p>
+          <!-- The server's own words, under the screen's. The refusals that
+               reach here are written for whoever is operating the harvester,
+               and they name the row or the switch that has to change. -->
+          @if (blockedDetails().length > 0) {
+            <ul>
+              @for (line of blockedDetails(); track line) {
+                <li>{{ line }}</li>
+              }
+            </ul>
+          }
+        </div>
       }
     </section>
 
     <section class="filters">
       <label>
         <span>{{ 'harvest.runs.filter.reverted' | rokuT }}</span>
+        <!-- One way, with the handler setting the signal itself. A banana box
+             beside an explicit ngModelChange fires this handler first and
+             writes the signal second, so the read below it would go out with
+             the filter the operator just moved away from. -->
         <select
-          (ngModelChange)="onRevertedChange()"
-          [(ngModel)]="reverted"
+          (ngModelChange)="onRevertedChange($event)"
+          [ngModel]="reverted()"
           name="reverted"
         >
           @for (option of revertedOptions; track option) {
@@ -328,6 +395,14 @@ const SCOPED_ADAPTER = 'mercadona-api';
       inline-size: 100%;
     }
 
+    /* The server's own sentences, indented under the screen's own. Marked as a
+       list because there can be several, which is what a refusal by field is. */
+    .failure ul {
+      margin-block-start: var(--admin-space-2);
+      padding-inline-start: var(--admin-space-4);
+      font-size: 0.8125rem;
+    }
+
     .state {
       padding: var(--admin-space-6);
       border: 1px dashed var(--admin-border);
@@ -368,6 +443,14 @@ export class RunsPage {
   readonly country = signal('');
   /** The chosen chain's adapter, once a source read has answered. `''` until. */
   readonly adapterKey = signal('');
+  /**
+   * Read product pages for the EAN instead of walking the assortment (backend
+   * plan 0090, section 12.1).
+   *
+   * Offered only for a chain that has a product page to read, because the spawn
+   * refuses it for every other one.
+   */
+  readonly detailBackfill = signal(false);
 
   /**
    * The reverted filter (backend plan 0082, section 6), as three choices rather
@@ -399,19 +482,48 @@ export class RunsPage {
    */
   readonly uploading = computed(() => this.mode() === 'FILE_IMPORT');
 
+  /** The four facts about the chosen chain's adapter, or all four false. */
+  readonly capabilities = computed(() => capabilitiesOf(this.adapterKey()));
+
   /**
    * Whether this walk has to be told which scope to write its prices to.
    *
-   * The adapter decides, not the mode: `CATALOG_DISCOVERY` runs against either
-   * `mercadona-api` or `deza-web` since backend plan 0085, and only the first
-   * writes a price. The spawn refuses a Mercadona walk without a scope and
-   * accepts and ignores one for DEZA, so the field appears exactly where it is
-   * required.
+   * The adapter decides, not the mode: `CATALOG_DISCOVERY` runs against four
+   * adapters now, and they do not agree about prices. A source that states none
+   * is not asked, and neither is one that names the scope of every price it
+   * states, because a LIDL price carries its own region and a field that only
+   * catches the leftovers is not worth a picker.
+   *
+   * A backfill reads product pages for an EAN and writes no price, so it needs
+   * no scope even for a chain whose walk does.
    */
-  readonly needsScope = computed(
-    () =>
+  readonly needsScope = computed(() => {
+    const capabilities = this.capabilities();
+    return (
       this.mode() === 'CATALOG_DISCOVERY' &&
-      this.adapterKey() === SCOPED_ADAPTER
+      !this.detailBackfill() &&
+      capabilities.writesPrices &&
+      !capabilities.scopesItsOwn
+    );
+  });
+
+  /**
+   * Whether this store discovery has to be told where to look.
+   *
+   * A chain that publishes its own shop list names every one of them in a
+   * handful of requests, so there is nothing to centre on and the spawn takes
+   * neither field (backend plan 0089, section 9).
+   */
+  readonly needsCentre = computed(
+    () =>
+      this.mode() === 'STORE_DISCOVERY' &&
+      !this.capabilities().listsItsOwnStores
+  );
+
+  /** Whether this chain has product pages an EAN backfill could read. */
+  readonly offersBackfill = computed(
+    () =>
+      this.mode() === 'CATALOG_DISCOVERY' && this.capabilities().hasProductPages
   );
 
   /** The chain the scope picker reads within, which it cannot read without. */
@@ -449,10 +561,23 @@ export class RunsPage {
    * The adapter is read rather than guessed, because it is what decides whether
    * the scope picker is offered at all, and the scope is cleared with it: a
    * scope of the previous chain is not a scope of this one.
+   *
+   * **The chain arrives as an argument, and that is the fix rather than a
+   * detail of it.** This was a text input carrying `[(ngModel)]` and an
+   * `(ngModelChange)` beside it, and the two listeners fire in the order the
+   * template names them: the handler ran first and read the signal the banana
+   * box had not written yet. So the form asked the source route about the
+   * previous chain, and a Mercadona walk drew no scope field until a second
+   * chain was chosen, which is when the answer for the first one arrived.
    */
-  onChainChange(): void {
+  chooseChain(supermarketId: string): void {
+    this.supermarketId.set(supermarketId);
     this.priceScopeId.set('');
     this.adapterKey.set('');
+    // A backfill of the previous chain's pages is not a backfill of this one,
+    // and the switch is hidden while the adapter is unknown, so a value left
+    // set here would be sent by a form that never showed it.
+    this.detailBackfill.set(false);
     void this._readAdapter();
   }
 
@@ -474,7 +599,10 @@ export class RunsPage {
       const source = await this._service.readSource(supermarketId);
       this.adapterKey.set(source.adapterKey);
       this.shell.observeReachable();
-      if (source.adapterKey === SCOPED_ADAPTER) {
+      // Preselected for the chains that will be asked for one, which is the
+      // same rule the picker itself is drawn by.
+      const capabilities = capabilitiesOf(source.adapterKey);
+      if (capabilities.writesPrices && !capabilities.scopesItsOwn) {
         await this._preselectNationalScope(supermarketId);
       }
     } catch {
@@ -541,17 +669,56 @@ export class RunsPage {
     if (reason !== null) {
       return reasonKey(reason);
     }
-    return error.status === 409
-      ? 'harvest.runs.start.alreadyRunning'
+    if (error.status === 409) {
+      return 'harvest.runs.start.alreadyRunning';
+    }
+    // Two sentences for the same status, and which one is true depends on
+    // whether the server explained itself. Saying it did not while its own
+    // words are drawn under the line is the failure this replaces.
+    return this.blockedDetails().length > 0
+      ? 'harvest.runs.start.refused'
       : 'harvest.runs.start.failed';
+  });
+
+  /**
+   * What the server said about the refusal, in its own words.
+   *
+   * Empty when it sent none, which is the case the screen has its own sentence
+   * for. Most spawn refusals are not that case: the harvester answers a chain
+   * with no source row, a source switched off, a walk with no scope and a
+   * document already imported with a `ValidationException` or a
+   * `ConflictException`, and the fact that names the row to fix rides in
+   * `detail` rather than in `message`, which is the same generic line for every
+   * failure sharing a code.
+   *
+   * The per field messages come first where there are any, because a gateway
+   * DTO refusal leaves `detail` as the status text rather than as a sentence.
+   */
+  readonly blockedDetails = computed<readonly string[]>(() => {
+    const error = this._spawnError();
+    if (error === null) {
+      return [];
+    }
+
+    const fields = Object.values(error.fieldErrors).flat();
+    if (fields.length > 0) {
+      return fields;
+    }
+    return error.detail === '' ? [] : [error.detail];
   });
 
   constructor() {
     void this.load();
   }
 
-  /** The filter is a server side one, so changing it is a fresh read. */
-  onRevertedChange(): void {
+  /**
+   * The filter is a server side one, so changing it is a fresh read.
+   *
+   * The chosen value is the argument for the reason the template gives: read
+   * off the signal instead, this would send the filter that was there before.
+   */
+  onRevertedChange(filter: RevertedFilter): void {
+    this.reverted.set(filter);
     void this.load();
   }
 
@@ -616,14 +783,17 @@ export class RunsPage {
    */
   private _input(): Wire.SpawnHarvestRunDto {
     const input: Wire.SpawnHarvestRunDto = { mode: this.mode() };
+    if (this.offersBackfill() && this.detailBackfill()) {
+      input.detailBackfill = true;
+    }
     const optional = {
       supermarketId: this.supermarketId().trim(),
       // Sent only where it means something. `deza-web` accepts one and ignores
       // it, so sending it there would be this screen asserting a fact about a
       // run that has none.
       priceScopeId: this.needsScope() ? this.priceScopeId() : '',
-      postalCode: this.postalCode().trim(),
-      country: this.country().trim(),
+      postalCode: this.needsCentre() ? this.postalCode().trim() : '',
+      country: this.needsCentre() ? this.country().trim() : '',
     };
 
     return Object.entries(optional).reduce<Wire.SpawnHarvestRunDto>(

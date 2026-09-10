@@ -879,6 +879,56 @@ describe('HomePage', () => {
       );
     });
 
+    // Joining moved out of the dock, where it was an unlabelled glyph nobody could
+    // read, onto the groups header beside New group. Both are asserted in order,
+    // because "just like New group" is the point: same place, same shape, spelled out.
+    it('offers both ways into a group on the groups header', async () => {
+      const fixture = await render();
+      const router = TestBed.inject(Router);
+      const navigate = jest
+        .spyOn(router, 'navigate')
+        .mockResolvedValue(true as never);
+
+      const actions = queryAll(
+        fixture,
+        '.zones-actions .new-zone'
+      ) as HTMLButtonElement[];
+      expect(actions).toHaveLength(2);
+
+      actions[0]?.click();
+      actions[1]?.click();
+
+      expect(navigate.mock.calls.map(([commands]) => commands)).toEqual([
+        ['sheet', 'zones', 'join'],
+        ['sheet', 'zones', 'new'],
+      ]);
+    });
+
+    // The dock's second action, with no basket anywhere on the page: it is still
+    // drawn, still enabled, and it reaches the history. The strip that used to be the
+    // only other entry point needs a basket to exist, so this is the case that matters.
+    it('opens the history from the dock, with no basket in sight', async () => {
+      const fixture = await render();
+      const router = TestBed.inject(Router);
+      const navigate = jest
+        .spyOn(router, 'navigate')
+        .mockResolvedValue(true as never);
+
+      expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
+
+      const history = query(
+        fixture,
+        'lib-bottom-action-bar .secondary'
+      ) as HTMLButtonElement;
+      expect(history.disabled).toBe(false);
+
+      history.click();
+
+      expect(navigate.mock.calls.map(([commands]) => commands)).toEqual([
+        ['..', 'shopping-lists'],
+      ]);
+    });
+
     it('has an outlet for the sheet to render into', async () => {
       // Rule E1: the sheets are child routes, so the page beneath stays mounted and
       // keeps its scroll. Without an outlet the route would match and draw nothing.

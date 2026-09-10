@@ -202,4 +202,11 @@ part of the render and would trip that very check.
   # The floor for `retryAfterSeconds` when neither the provider's own RetryInfo
   # nor the local window can supply one, so the field is never absent (rule A5).
   ASSISTANT_RETRY_AFTER_FALLBACK: {{ $assistant.retryAfterFallbackSeconds | default 30 | quote }}
+  # How long one whole turn may run before the loop stops rather than calling
+  # another tool. It is one decision with the assistant's `slowPaths` timeout on
+  # the gateway route, which must stay above this plus a provider timeout: the
+  # deadline stops new work and does not abort a call in flight, and a proxy that
+  # gives up first is what let the assistant write lines after the app had told
+  # its reader that nothing arrived. Raise one and raise the other.
+  ASSISTANT_TURN_TIMEOUT_MS: {{ $assistant.turnTimeoutMs | default 60000 | quote }}
 {{- end }}

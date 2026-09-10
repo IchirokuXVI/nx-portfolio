@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   HarvestWarningCode,
+  PriceScopeKind,
   PriceSourceKind,
   SourceEntryStatus,
   type HarvestDocumentProduct,
@@ -9,10 +10,12 @@ import {
 import { readHarvestDocument } from './harvest-document.reader';
 import { resolveImportWindow, type ImportWindow } from './import-window';
 import { entryKey } from './matching';
+import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import {
   SourceIngest,
   type SourceEntryOutcome,
+  type SourceIngestCounters,
   type SourceObservation,
 } from './source-ingest';
 
@@ -62,9 +65,24 @@ const DEFAULT_CURRENCY = 'EUR';
 export class FileImportRunner {
   private readonly logger = new Logger(FileImportRunner.name);
 
-  constructor(private readonly ingest: SourceIngest) {}
+  constructor(
+    private readonly ingest: SourceIngest,
+    private readonly scopes: PriceScopeResolver
+  ) {}
 
-  async run(context: RunContext, input: FileImportInput): Promise<void> {
+  /**
+   * Read the document and record what it says, answering what the ingest
+   * counted.
+   *
+   * The counters are answered rather than written here, because the run's
+   * report is the orchestrator's to compose and an import must name its prices
+   * the same way a walk does. Dropping them was how a run that recorded prices
+   * came to report none of them.
+   */
+  async run(
+    context: RunContext,
+    input: FileImportInput
+  ): Promise<SourceIngestCounters> {
     // Validated again here, because the harvester owns the schema version and a
     // broker message is not a trusted input (section 6.2). The gateway already
     // refused a malformed document; this refuses one that arrived some other way.
@@ -101,7 +119,8 @@ export class FileImportRunner {
 
     await context.setStage('READ', 'Reading the document');
     const started = new Date();
-    const fallbackObservedAt = parseInstant(document.producer?.produced_at) ?? started;
+    const fallbackObservedAt =
+      parseInstant(document.producer?.produced_at) ?? started;
     const duplicates = duplicateKeysIn(document.products);
 
     const observations = document.products.map((product) =>
@@ -128,19 +147,40 @@ export class FileImportRunner {
       }
     });
 
+    // The groups of shops this file prices for, resolved before anything is
+    // written (plan 0103, section 5.1). A document with none is every leaflet
+    // and every version 1 file: its prices name no scope and fall to the one
+    // the operator chose at the spawn.
+    const scopes = this.scopes.forRun(input.supermarketId);
+    for (const scope of document.scopes ?? []) {
+      await scopes.declare({
+        key: scope.key,
+        kind: scope.kind as PriceScopeKind,
+        name: scope.name ?? null,
+      });
+    }
+    if (scopes.createdCount > 0) {
+      this.logger.log(
+        `Run ${context.runId}: created ${scopes.createdCount} price scope(s) ` +
+          'the document named and catalog did not hold'
+      );
+    }
+
     await context.setStage(
       'INGEST',
       `Recording ${observations.length} product(s)`
     );
-    const { outcomes } = await this.ingest.ingest(context, {
+    const { outcomes, counters } = await this.ingest.ingest(context, {
       supermarketId: input.supermarketId,
-      priceScopeId: input.priceScopeId,
+      defaultPriceScopeId: input.priceScopeId,
       sourceKind: input.sourceKind,
+      scopeIdFor: scopes.idFor,
       observations,
     });
 
     await this.recordOutcomes(context, document.products, outcomes);
     await context.flush();
+    return counters;
   }
 
   /**
@@ -159,7 +199,8 @@ export class FileImportRunner {
     }
   ): SourceObservation {
     const sizeFormat = product.size?.label ?? product.size?.unit ?? null;
-    const externalId = product.external_id ?? entryKey(product.name, sizeFormat);
+    const externalId =
+      product.external_id ?? entryKey(product.name, sizeFormat);
     // The product's own window beats the document's, and neither is required.
     const window = product.validity
       ? resolveImportWindow({
@@ -182,9 +223,9 @@ export class FileImportRunner {
       // Stored and shown, never interpreted (D6). Whatever the producer knew
       // that the import does not read is in here and stays in here.
       extra: product.extra ?? null,
-      price: context.duplicates.has(externalId)
-        ? null
-        : priceOf(product, window),
+      prices: context.duplicates.has(externalId)
+        ? []
+        : pricesOf(product, window),
     };
   }
 
@@ -217,26 +258,41 @@ export class FileImportRunner {
   }
 }
 
-/** The window a price row carries, from the two blocks 6.1 allows. */
-function priceOf(
+/**
+ * Every price a product states, one per group of shops it named.
+ *
+ * The document arrives normalized into the version 2 shape (plan 0103, D7), so
+ * a version 1 product is already one entry naming no scope, and there is no
+ * branch here on which version the file was written for.
+ *
+ * **A price's own window beats the one resolved above it.** A region can date a
+ * product differently from its neighbour, which is the thing section 4 of plan
+ * 0089 says the model has to be able to store.
+ */
+function pricesOf(
   product: HarvestDocumentProduct,
   window: ImportWindow | null
-): SourceObservation['price'] {
-  if (!product.price && !product.unit_price) {
-    return null;
-  }
-  return {
-    // Null when the source stated only a comparison figure. The ingest then
-    // writes the unit price and no till price, which is plan 0081 section 6.1's
-    // one surviving decision.
-    price: product.price?.amount ?? null,
-    currency:
-      product.price?.currency ?? product.unit_price?.currency ?? DEFAULT_CURRENCY,
-    unitPrice: product.unit_price?.amount ?? null,
-    unitPriceLabel: product.unit_price?.label ?? null,
-    validFrom: window?.validFrom ?? null,
-    validUntil: window?.validUntil ?? null,
-  };
+): SourceObservation['prices'] {
+  return (product.prices ?? []).map((price) => {
+    const own = price.validity
+      ? resolveImportWindow({
+          documentFrom: price.validity.from ?? null,
+          documentUntil: price.validity.until ?? null,
+        })
+      : window;
+    return {
+      scopeKey: price.scope ?? null,
+      // Null when the source stated only a comparison figure. The ingest then
+      // writes the unit price and no till price, which is plan 0081 section
+      // 6.1's one surviving decision.
+      price: price.amount,
+      currency: price.currency || DEFAULT_CURRENCY,
+      unitPrice: price.unit_price?.amount ?? null,
+      unitPriceLabel: price.unit_price?.label ?? null,
+      validFrom: own?.validFrom ?? null,
+      validUntil: own?.validUntil ?? null,
+    };
+  });
 }
 
 /** The keys more than one product in this document resolves to (D2). */
@@ -327,7 +383,9 @@ function parseInstant(value: unknown): Date | null {
  * page renders, and dropping the number the producer put there would lose it for
  * no reason.
  */
-function pageOf(extra: Record<string, unknown> | null | undefined): number | null {
+function pageOf(
+  extra: Record<string, unknown> | null | undefined
+): number | null {
   const page = extra?.['page'];
   return typeof page === 'number' ? page : null;
 }

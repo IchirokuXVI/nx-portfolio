@@ -1,6 +1,7 @@
 export { EL_JAMON_ITEMS, SUPERCASH_ITEMS } from './authored';
 export { REFERENCE_GROUPS } from './groups';
 export {
+  authoredItemId,
   groupId,
   itemId,
   locationId,

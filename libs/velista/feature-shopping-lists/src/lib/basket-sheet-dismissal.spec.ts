@@ -19,7 +19,6 @@ import {
 import { SheetShell } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { FinishSheet } from './finish-sheet/finish-sheet';
-import { LineUnitsSheet } from './line-units-sheet/line-units-sheet';
 import { PeopleSheet } from './people-sheet/people-sheet';
 import { SettleSheet } from './settle-sheet/settle-sheet';
 import { ShareSheet } from './share-sheet/share-sheet';
@@ -53,31 +52,6 @@ const SHEETS: readonly {
   { name: 'PeopleSheet', component: PeopleSheet, path: 'people', params: {} },
   { name: 'ShareSheet', component: ShareSheet, path: 'share', params: {} },
   { name: 'FinishSheet', component: FinishSheet, path: 'finish', params: {} },
-];
-
-/**
- * The sheet a line's settle sheet leads on to, and the URL it goes back to.
- *
- * A second table rather than one more row in the first, because it closes onto a
- * **different** screen and that is the whole point of it: it is reached from the
- * settle sheet, so leaving it onto the basket would take somebody two screens back
- * from one gesture. Everything else about the rule is the same, which is why the
- * assertions below read almost identically.
- *
- * It is a table of one since velista `0068` folded the send sheet into it, and it
- * stays a table: what it asserts is a rule about sheets over sheets rather than a
- * fact about this one.
- */
-const LINE_SHEETS: readonly {
-  readonly name: string;
-  readonly component: Type<unknown>;
-  readonly path: string;
-}[] = [
-  {
-    name: 'LineUnitsSheet',
-    component: LineUnitsSheet,
-    path: 'lines/:lineId/units',
-  },
 ];
 
 /**
@@ -286,54 +260,16 @@ describe('the sheets over the basket', () => {
   });
 
   /**
-   * The two sheets reached **from** the settle sheet (velista 0055 and 0056).
+   * **There is no sheet over a sheet in the basket any more** (velista `0073`).
    *
-   * One screen back from one gesture, which is the whole rule: somebody who opened
-   * the units sheet from the settle sheet expects cancel to put them back on the
-   * settle sheet, not on the basket two screens down. The URL is asserted whole, for
-   * the reason the table above asserts its own whole: a half climbed path is the
-   * defect this file exists for, and it renders as a 404 rather than as an error.
+   * This file used to carry a second table for the sheets reached *from* the settle
+   * sheet, asserting that each closed onto the settle sheet's whole URL rather than
+   * onto the basket two screens down. There were two; `0068` folded the send sheet
+   * into the units sheet, and `0073` folded the units sheet into the settle sheet
+   * itself, so the table has no rows and `describe.each` cannot take an empty one.
+   *
+   * The rule it asserted is not retired, only unreachable: a sheet declared beside
+   * this one and opened from it brings back the table and these three assertions with
+   * it.
    */
-  describe.each(LINE_SHEETS)('$name, declared at $path', ({ component }) => {
-    const settleUrl = (basePath: string) =>
-      `${basePath}/en/shopping-lists/${BASKET_ID}/sheet/lines/${LINE_ID}/settle`;
-
-    it('closes onto the settle sheet it was opened from, whole', async () => {
-      const { fixture, sheets } = await render(
-        component,
-        { lineId: LINE_ID },
-        '/velista'
-      );
-
-      await close(fixture);
-
-      expect(sheets.dismiss).toHaveBeenCalledWith(settleUrl('/velista'));
-    });
-
-    it('names the settle sheet in the standalone build too', async () => {
-      const { fixture, sheets } = await render(
-        component,
-        { lineId: LINE_ID },
-        ''
-      );
-
-      await close(fixture);
-
-      expect(sheets.dismiss).toHaveBeenCalledWith(settleUrl(''));
-    });
-
-    it('dismisses rather than navigating, so back cannot reopen it', async () => {
-      const { fixture, sheets, router } = await render(
-        component,
-        { lineId: LINE_ID },
-        '/velista'
-      );
-
-      await close(fixture);
-
-      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
-      expect(router.navigate).not.toHaveBeenCalled();
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
-    });
-  });
 });

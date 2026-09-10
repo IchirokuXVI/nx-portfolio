@@ -1,6 +1,7 @@
 import { demoWorld } from '@portfolio/luna-shopper/test-fixtures';
 import {
   MERCADONA_SUPERMARKET_ID,
+  authoredItemId,
   groupId,
   itemId,
   supermarketItemId,
@@ -146,12 +147,87 @@ describe('reference catalog', () => {
     });
 
     it('gives every row across the whole set a distinct id', () => {
+      // Products rather than entries: an entry naming a `sameAs` deliberately
+      // shares the target's id, so counting entries would report the merge as a
+      // collision. The per chain price rows below stay one per entry.
+      const productIds = new Set(
+        EVERY_ITEM.map(({ store, it }) => authoredItemId(store, it))
+      );
       const ids = [
         ...REFERENCE_GROUPS.map((g) => groupId(g.slug)),
-        ...EVERY_ITEM.map(({ store, it }) => itemId(store, it.slug)),
+        ...productIds,
         ...EVERY_ITEM.map(({ store, it }) => supermarketItemId(store, it.slug)),
       ];
       expect(new Set(ids).size).toBe(ids.length);
+    });
+  });
+
+  describe('one product sold by two chains', () => {
+    const ALIASED = EVERY_ITEM.filter(({ it }) => it.sameAs);
+
+    it('names a target that exists', () => {
+      for (const { it } of ALIASED) {
+        const target = ALL_ITEMS.find(
+          ([store]) => store === it.sameAs?.store
+        )?.[1].find((other) => other.slug === it.sameAs?.slug);
+        expect(`${it.slug} -> ${it.sameAs?.store}/${it.sameAs?.slug}`).toBe(
+          `${it.slug} -> ${it.sameAs?.store}/${target?.slug}`
+        );
+      }
+    });
+
+    it('takes the target id rather than deriving its own', () => {
+      for (const { store, it } of ALIASED) {
+        expect(authoredItemId(store, it)).toBe(
+          itemId(it.sameAs?.store as string, it.sameAs?.slug as string)
+        );
+        expect(authoredItemId(store, it)).not.toBe(itemId(store, it.slug));
+      }
+    });
+
+    /**
+     * Both entries write the product row, so a disagreement would be decided by
+     * whichever store the seeder reaches last. This is what stops that being a
+     * thing anybody has to know: the two state the same product, and only
+     * `receipt`, `price` and `observedAt` are allowed to differ.
+     */
+    it('agrees with its target on every product field', () => {
+      for (const { it } of ALIASED) {
+        const target = ALL_ITEMS.find(
+          ([store]) => store === it.sameAs?.store
+        )?.[1].find((other) => other.slug === it.sameAs?.slug);
+        expect(target).toBeDefined();
+        expect({
+          name: it.name,
+          group: it.group,
+          category: it.category,
+          defaultUnit: it.defaultUnit,
+          unitSize: it.unitSize,
+          brand: it.brand,
+          ean: it.ean,
+        }).toEqual({
+          name: target?.name,
+          group: target?.group,
+          category: target?.category,
+          defaultUnit: target?.defaultUnit,
+          unitSize: target?.unitSize,
+          brand: target?.brand,
+          ean: target?.ean,
+        });
+      }
+    });
+
+    it('never merges a private label, which does not cross a chain', () => {
+      const HOUSE = [
+        'Hacendado',
+        'Bosque Verde',
+        'Deliplus',
+        'Alteza',
+        'Eliges',
+      ];
+      for (const { it } of ALIASED) {
+        expect(HOUSE).not.toContain(it.brand);
+      }
     });
   });
 

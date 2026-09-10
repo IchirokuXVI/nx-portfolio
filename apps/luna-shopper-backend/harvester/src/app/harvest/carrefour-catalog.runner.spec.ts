@@ -1,10 +1,9 @@
 import type { ConfigService } from '@nestjs/config';
 import { CarrefourClient } from '@portfolio/luna-shopper/carrefour';
-import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
 import type { SupermarketSource } from '../entities';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import type { RunContext } from './run-context';
-import type { SourceIngest, SourceIngestInput } from './source-ingest';
+import { RecordingRunReport } from './run-report';
 
 /**
  * The crawl, end to end, over a fake page loader and no browser (plan 0090,
@@ -81,10 +80,9 @@ class TestRunner extends CarrefourCatalogRunner {
   readonly asked: string[] = [];
 
   constructor(
-    ingest: SourceIngest,
     protected readonly states: Record<string, Record<string, unknown>>
   ) {
-    super(ingest, {
+    super({
       getOrThrow: () => ({ userAgent: 'LunaShopperBot/1.0' }),
     } as unknown as ConfigService);
   }
@@ -151,19 +149,12 @@ const source = (config: Record<string, unknown> = {}): SupermarketSource =>
   ({ adapterKey: 'carrefour-web', config, workers: 1 }) as SupermarketSource;
 
 describe('CarrefourCatalogRunner', () => {
-  let ingested: SourceIngestInput | null;
-  let ingest: SourceIngest;
+  // A recording report and nothing else: the runner fetches and reports, so
+  // there is no ingest to fake here any more (plan 0103, section 9).
+  let report: RecordingRunReport;
 
   beforeEach(() => {
-    ingested = null;
-    ingest = {
-      ingest: jest.fn(
-        async (_context: RunContext, input: SourceIngestInput) => {
-          ingested = input;
-          return { outcomes: [], counters: {} };
-        }
-      ),
-    } as unknown as SourceIngest;
+    report = new RecordingRunReport();
   });
 
   it('pages the frontier and writes a row and a price for every card', async () => {
@@ -184,18 +175,19 @@ describe('CarrefourCatalogRunner', () => {
         ],
       }),
     };
-    const runner = new TestRunner(ingest, states);
+    const runner = new TestRunner(states);
 
     await runner.run(
       context(),
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source()
     );
 
-    expect(ingested?.sourceKind).toBe(PriceSourceKind.OFFICIAL_WEB);
-    expect(ingested?.priceScopeId).toBe(SCOPE);
-    expect(ingested?.observations).toHaveLength(2);
-    expect(ingested?.observations[0]).toMatchObject({
+    // What observed the price and which scope it falls to are the run's, not
+    // the runner's, since plan 0103: a runner reports and holds nothing.
+    expect(report.products).toHaveLength(2);
+    expect(report.products[0]).toMatchObject({
       externalId: 'p1',
       name: 'Agua CARREFOUR',
       sizeFormat: '1,5 l.',
@@ -203,7 +195,16 @@ describe('CarrefourCatalogRunner', () => {
       // The listing card carries none. The backfill is what fills it.
       ean: null,
       categoryPath: ['Bebidas'],
-      price: { price: 0.39, currency: 'EUR', unitPriceLabel: '€/l' },
+      // One price, naming no scope of its own: Carrefour publishes one price
+      // for the whole site, so it falls to the scope the run was started with.
+      prices: [
+        expect.objectContaining({
+          scopeKey: null,
+          price: 0.39,
+          currency: 'EUR',
+          unitPriceLabel: '€/l',
+        }),
+      ],
     });
   });
 
@@ -220,16 +221,17 @@ describe('CarrefourCatalogRunner', () => {
         cards: [card('p9', 'Merluza fresca', undefined)],
       }),
     };
-    await new TestRunner(ingest, states).run(
+    await new TestRunner(states).run(
       context(),
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source()
     );
 
-    expect(ingested?.observations).toHaveLength(1);
-    expect(ingested?.observations[0]).toMatchObject({
+    expect(report.products).toHaveLength(1);
+    expect(report.products[0]).toMatchObject({
       externalId: 'p9',
-      price: null,
+      prices: [],
     });
   });
 
@@ -245,10 +247,11 @@ describe('CarrefourCatalogRunner', () => {
       [child.url]: page({ totalResults: 800, children: [grandchild] }),
       '/supermercado/x/cat20009/c?offset=0': page({ totalResults: 1 }),
     };
-    const runner = new TestRunner(ingest, states);
+    const runner = new TestRunner(states);
 
     await runner.run(
       context(),
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source({ seedPath: '/seed' })
     );
@@ -264,8 +267,9 @@ describe('CarrefourCatalogRunner', () => {
       [orphan.url]: page({ totalResults: 2000, children: [] }),
     };
     const runContext = context();
-    await new TestRunner(ingest, states).run(
+    await new TestRunner(states).run(
       runContext,
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source({ seedPath: '/seed' })
     );
@@ -301,19 +305,20 @@ describe('CarrefourCatalogRunner', () => {
     for (const category of refused) {
       states[category.url] = page({ totalResults: 500 });
     }
-    const runner = new BlockingRunner(ingest, states);
+    const runner = new BlockingRunner(states);
     const runContext = context();
 
     await expect(
       runner.run(
         runContext,
+        report,
         { supermarketId: CHAIN, priceScopeId: SCOPE },
         source({ seedPath: '/seed' })
       )
     ).rejects.toThrow(/refused/);
 
     // The one product the crawl did read was written before the run failed.
-    expect(ingested?.observations).toHaveLength(1);
+    expect(report.products).toHaveLength(1);
     expect(runContext.setReport).toHaveBeenCalledWith(
       expect.objectContaining({
         blockedAfter: expect.stringMatching(/refused/),
@@ -323,8 +328,9 @@ describe('CarrefourCatalogRunner', () => {
 
   it('refuses a crawl that has nowhere to write its prices', async () => {
     await expect(
-      new TestRunner(ingest, {}).run(
+      new TestRunner({}).run(
         context(),
+        report,
         { supermarketId: CHAIN },
         source()
       )
@@ -348,15 +354,16 @@ describe('CarrefourCatalogRunner', () => {
         cards: [shared],
       }),
     };
-    await new TestRunner(ingest, states).run(
+    await new TestRunner(states).run(
       context(),
+      report,
       { supermarketId: CHAIN, priceScopeId: SCOPE },
       source({ seedPath: '/seed' })
     );
 
     // 17,135 counts category memberships and not distinct products. The first
     // sighting is the one kept, category path and all.
-    expect(ingested?.observations).toHaveLength(1);
-    expect(ingested?.observations[0].categoryPath).toEqual(['Bebidas']);
+    expect(report.products).toHaveLength(1);
+    expect(report.products[0].categoryPath).toEqual(['Bebidas']);
   });
 });

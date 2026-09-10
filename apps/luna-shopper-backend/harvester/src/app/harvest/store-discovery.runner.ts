@@ -4,6 +4,7 @@ import type { SupermarketSource } from '../entities';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
 import type { RunContext } from './run-context';
+import type { RunReport } from './run-report';
 import type {
   StoreDiscoveryRunner as StoreDiscoveryCase,
   StoreDiscoveryInput,
@@ -36,10 +37,16 @@ export class StoreDiscoveryRunner {
   // out of a method whose signature promises one.
   async run(
     context: RunContext,
+    report: RunReport,
     input: StoreDiscoveryInput,
     source: SupermarketSource | null
   ): Promise<void> {
-    await this.runnerFor(source?.adapterKey).run(context, input, source);
+    await this.runnerFor(source?.adapterKey).run(
+      context,
+      report,
+      input,
+      source
+    );
   }
 
   /**

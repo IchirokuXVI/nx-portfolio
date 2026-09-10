@@ -37,7 +37,10 @@ import { In, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { HarvestRun, SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
-import { buildHarvestDocument } from './harvest-export';
+import {
+  buildHarvestDocument,
+  type HarvestExportScope,
+} from './harvest-export';
 import { toSourceCatalogEntryView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
@@ -128,7 +131,6 @@ export class SourceEntryService {
     const qb = this.entries
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.prices', 'p')
-      .where('e."supermarketId" = :sid', { sid: req.supermarketId })
       // The **property** path, not a quoted column. `take` beside a
       // `leftJoinAndSelect` makes TypeORM page through a DISTINCT subquery, and
       // it rewrites an ORDER BY into that subquery by prefixing the alias:
@@ -137,6 +139,11 @@ export class SourceEntryService {
       .orderBy('e.lastSeenAt', 'DESC')
       .addOrderBy('e.id', 'DESC')
       .take(limit + 1);
+    // Absent, and the queue is every chain's, which `ix_source_catalog_entries_last_seen`
+    // already orders. The chain narrows the read rather than addressing it.
+    if (req.supermarketId) {
+      qb.andWhere('e."supermarketId" = :sid', { sid: req.supermarketId });
+    }
     if (req.status) {
       qb.andWhere('e.status = :status', { status: req.status });
     } else {
@@ -327,8 +334,16 @@ export class SourceEntryService {
       );
     }
 
+    // **The prices are filtered to this run**, not to one scope of it (plan
+    // 0103, section 5.3). `source_entry_prices.runId` is already indexed, and
+    // it is the column that says which run observed a row: asking for one
+    // scope instead is what made a LIDL export carry no price at all.
     const entries = await this.entries.find({
-      where: { supermarketId: run.supermarketId, lastRunId: run.id },
+      where: {
+        supermarketId: run.supermarketId,
+        lastRunId: run.id,
+        prices: { runId: run.id },
+      },
       relations: { prices: true },
       order: { lastSeenAt: 'DESC', id: 'DESC' },
     });
@@ -341,11 +356,61 @@ export class SourceEntryService {
           id: run.id,
           supermarketId: run.supermarketId,
           priceScopeId: run.priceScopeId ?? null,
+          adapterKey: await this.adapterOf(run.supermarketId),
         },
         entries,
+        scopes: await this.scopesOf(run.supermarketId, entries),
         producedAt: new Date(),
       }),
     };
+  }
+
+  /**
+   * The scopes this run's price rows name, as catalog holds them.
+   *
+   * Read by id from the chain's scopes rather than one at a time: a LIDL week
+   * names 59 of them, and a call each would be 59 round trips for a file.
+   */
+  private async scopesOf(
+    supermarketId: string,
+    entries: readonly SourceCatalogEntry[]
+  ): Promise<HarvestExportScope[]> {
+    const named = new Set(
+      entries.flatMap((entry) =>
+        (entry.prices ?? []).map((price) => price.priceScopeId)
+      )
+    );
+    if (named.size === 0) {
+      return [];
+    }
+    const held: HarvestExportScope[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.catalog.listPriceScopes(supermarketId, cursor);
+      for (const scope of page.items) {
+        if (named.has(scope.id)) {
+          held.push({
+            id: scope.id,
+            externalKey: scope.externalKey,
+            kind: scope.kind,
+            name: scope.label?.es ?? scope.label?.en ?? null,
+          });
+        }
+      }
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return held;
+  }
+
+  /**
+   * What fetches this chain, for the `adapter_key` hint.
+   *
+   * A chain with no source row answers nothing, which is normal: a file import
+   * of a chain nobody crawls is exactly the case plan 0081 section 1 allows.
+   */
+  private async adapterOf(supermarketId: string): Promise<string | null> {
+    const source = await this.sources.findBySupermarket(supermarketId);
+    return source?.adapterKey ?? null;
   }
 
   /**

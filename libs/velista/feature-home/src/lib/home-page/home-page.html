@@ -124,11 +124,22 @@
         }
 
         <section class="zones">
+          <!--
+            Both ways into a group sit here, side by side, because they are the same
+            kind of act: one makes a group, the other asks to be let into one. Joining
+            used to be the icon button in the dock, where it was a glyph with no label
+            and nobody could say what it did. The dock now carries the history instead.
+          -->
           <div class="zones-head">
             <h2 class="section-label">{{ 'home.section.zones' | rokuT }}</h2>
-            <button (click)="createZone()" class="new-zone" type="button">
-              {{ 'home.action.newZone' | rokuT }}
-            </button>
+            <div class="zones-actions">
+              <button (click)="joinZone()" class="new-zone" type="button">
+                {{ 'home.action.joinZone' | rokuT }}
+              </button>
+              <button (click)="createZone()" class="new-zone" type="button">
+                {{ 'home.action.newZone' | rokuT }}
+              </button>
+            </div>
           </div>
 
           @for (zone of page.zones; track zone.id) {
@@ -170,7 +181,7 @@
 
       <lib-bottom-action-bar
         (getList)="getShoppingList()"
-        (joinZone)="joinZone()"
+        (openHistory)="openShoppingLists()"
       />
     }
   }

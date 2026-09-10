@@ -28,6 +28,22 @@ export interface AuthoredItem {
   group: string;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
+  /**
+   * How much of `defaultUnit` one of these is: 1.5 for a 1.5 L bottle, 0.25 for
+   * a 250 g jar, 3 for a pack of three.
+   *
+   * It is where a size goes, because a name does not carry one. `Still Water
+   * 1.5 L` states the same fact twice, in the one field search reads, and it
+   * makes the bottle look like a different product from the same water in a
+   * different bottle. So the name says what the thing is and this says how much
+   * of it there is, which is the split `splitCardName` already makes for a
+   * harvested Carrefour card.
+   *
+   * Left unset when the receipt does not state a size, rather than guessed. The
+   * `receipt` field below keeps whatever was printed either way, so stripping a
+   * size from the name discards no evidence.
+   */
+  unitSize?: number;
   brand?: string;
   /** What the till printed, kept as the evidence for the normalized name. */
   receipt: string;
@@ -64,6 +80,25 @@ export interface AuthoredItem {
    * different prices per kilo and there is one product behind both.
    */
   alsoReceipt?: string[];
+  /**
+   * The entry in another store that is **the same product as this one**.
+   *
+   * A national brand carried by two chains is one product with a price in each,
+   * not two products, and the ids say so: an entry naming a `sameAs` takes that
+   * entry's item id instead of deriving its own. Its price still goes to its own
+   * chain's scope, because `supermarket_items` is keyed on the item and the
+   * scope together, so one product ends up priced in both.
+   *
+   * It is only ever right when the two agree on **brand and format**, which is
+   * rule 1 of the product rules. A private label never qualifies: Hacendado is
+   * Mercadona's and Alteza is Deza's, so two chains selling a same named store
+   * brand are selling two different things.
+   *
+   * Both entries still state the whole product, and `reference-catalog.spec.ts`
+   * asserts that they state the same one. Each keeps its own `receipt`, `price`
+   * and `observedAt`, which are the facts that differ per chain.
+   */
+  sameAs?: { store: string; slug: string };
 }
 
 /** A chain the reference catalog introduces, with its single priced store. */

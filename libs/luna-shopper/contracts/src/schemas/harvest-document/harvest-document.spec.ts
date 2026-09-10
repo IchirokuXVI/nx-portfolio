@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { HarvestDocument } from './harvest-document';
 import { HARVEST_DOCUMENT_1_VERSION } from './harvest-document-1.schema';
+import { normalizeHarvestDocument } from './harvest-document-normalize';
 import { harvestDocumentSchemaId } from './harvest-document-registry';
 import { validateHarvestDocument } from './harvest-document-validation';
 
@@ -303,5 +304,136 @@ describe('validateHarvestDocument', () => {
 
       expect(paths(document)).toEqual(['/hints/source_kind']);
     });
+  });
+});
+
+/**
+ * Version 2, and the version 1 it still reads (plan 0103, section 5).
+ *
+ * The one thing version 2 exists for is a price per group of shops, and the two
+ * cases that matter are a price naming a scope nothing declared, which is
+ * refused, and a version 1 document, which is still read for good.
+ */
+describe('the harvest document, version 2', () => {
+  const v2 = (over: Partial<HarvestDocument> = {}): HarvestDocument =>
+    ({
+      schema_version: 2,
+      sha256: 'a'.repeat(64),
+      scopes: [{ key: '58', kind: 'REGION', name: 'Sevilla' }],
+      products: [
+        {
+          id: 'p-1',
+          name: 'Uva blanca',
+          prices: [{ scope: '58', amount: 1.29, currency: 'EUR' }],
+        },
+      ],
+      ...over,
+    }) as HarvestDocument;
+
+  it('validates a document that prices two regions differently', () => {
+    const result = validateHarvestDocument(
+      v2({
+        scopes: [
+          { key: '58', kind: 'REGION', name: 'Sevilla' },
+          { key: '12', kind: 'REGION', name: 'Madrid' },
+        ],
+        products: [
+          {
+            name: 'Nevera',
+            prices: [
+              { scope: '58', amount: 74.99, currency: 'EUR' },
+              { scope: '12', amount: 77.99, currency: 'EUR' },
+            ],
+          },
+        ],
+      })
+    );
+
+    expect(result.failures).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
+  it('refuses a price naming a scope the document does not declare', () => {
+    // JSON Schema cannot say this: a `const` would have to know the keys before
+    // the document does. A price pointing at nothing is a number with no
+    // meaning (plan 0103, D4).
+    const document = v2({
+      products: [
+        {
+          id: 'p-1',
+          name: 'Uva blanca',
+          prices: [{ scope: '99', amount: 1.29, currency: 'EUR' }],
+        },
+      ],
+    });
+    const result = validateHarvestDocument(document);
+
+    expect(result.valid).toBe(false);
+    expect(result.failures).toEqual([
+      expect.objectContaining({
+        path: '/products/0/prices/0/scope',
+        productId: 'p-1',
+        productIndex: 0,
+      }),
+    ]);
+  });
+
+  it('accepts a document with no scopes at all, which is every leaflet', () => {
+    const result = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          { name: 'Uva', prices: [{ amount: 1.29, currency: 'EUR' }] },
+        ],
+      })
+    );
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts a price with no amount, which is a comparison figure alone', () => {
+    // Plan 0081 section 6.1's one surviving decision: a per kilogram price with
+    // no pack price writes the unit price and no till price.
+    const result = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            name: 'Jamón al corte',
+            prices: [
+              {
+                amount: null,
+                currency: 'EUR',
+                unit_price: { amount: 12.9, label: 'el kilo' },
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('reads version 1 for good, and turns it into the version 2 shape', () => {
+    // A leaflet extractor writes version 1, the fixtures are written in it, and
+    // a format that stops reading its own past is a format nobody trusts to
+    // export to.
+    const one = copy(read('minimal.harvest-document.json'));
+    expect(validateHarvestDocument(one).valid).toBe(true);
+
+    const normalized = normalizeHarvestDocument(one);
+
+    expect(normalized.schema_version).toBe(2);
+    // Nothing downstream of the reader knows there were two versions (D7).
+    expect(normalized.products[0]).not.toHaveProperty('price');
+    expect(normalized.products[0]).not.toHaveProperty('unit_price');
+    expect(normalized.products[0].prices).toBeDefined();
+  });
+
+  it('leaves a version 2 document exactly as it is', () => {
+    const document = v2();
+
+    expect(normalizeHarvestDocument(document)).toBe(document);
   });
 });

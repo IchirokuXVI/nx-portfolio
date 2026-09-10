@@ -483,6 +483,57 @@ export interface BasketOriginQuantityResult {
   listQuantity: number;
 }
 
+/**
+ * Setting how many of a line one list has got (velista `0073`, backend `0104`).
+ *
+ * **The opposite of {@link BasketOriginQuantityRequest}, and a second request for
+ * that reason.** That one says what a household asked for and buys nothing; this
+ * one says what this basket bought for them, and every purchase this screen
+ * records for one list goes through it. They are the two reels on one row of the
+ * settle sheet, and one body carrying both numbers optionally would let a caller
+ * send them together and mean neither.
+ *
+ * The zone line is **required**, unlike its sibling's: a list holding no line of
+ * this cannot have got any of it, and raising what it asks for is the other call.
+ *
+ * The same `from` bargain as {@link BasketOutstandingRequest}, and for the sharpest
+ * reason of the three: raising this settles and lowering takes a purchase back, so
+ * a gesture applied to a number that moved underneath it buys the opposite of what
+ * somebody meant.
+ */
+export interface BasketOriginSettledRequest {
+  /** The zone line whose list bought some of this. Already an origin of the line. */
+  lineId: string;
+  /** How many this basket has bought for that list, after this write. */
+  settled: number;
+  /** What the control believed that number was. */
+  from: number;
+}
+
+/**
+ * What one `got` write did (backend `0104`, section 4).
+ *
+ * **Both halves of the row**, which is why the origin is here beside the line: the
+ * sheet draws "asked for" and "got" together, and either computed from the other
+ * would drift the moment a close, a split or a second shopper moved something this
+ * client could not see. The line is what the outstanding number above the rows is
+ * read from, and it must be read from the answer rather than from what was asked
+ * for: taking back a `NOT_AVAILABLE` close has no units to divide, so the whole
+ * close comes back and the number lands above where the reel was dragged.
+ *
+ * `skipped` is **required** here where {@link BasketSettleResult}'s is optional:
+ * the route is refused outright to a reader who does not pass the all or nothing
+ * rule, so there is no redacted answer to fall back to.
+ */
+export interface BasketOriginSettledResult {
+  line: BasketLine;
+  /** Null when the origin's zone line was deleted underneath the basket. */
+  origin: BasketLineOriginDetail | null;
+  /** How many origins this act could not reach. Zero is the ordinary answer. */
+  skippedCount: number;
+  skipped: readonly BasketSettleSkip[];
+}
+
 /** How far this line has got, which is what the row's indicator draws. */
 export type BasketLineState =
   /** Nothing settled yet. The ordinary state of a line in a full basket. */

@@ -74,10 +74,54 @@ export function validateHarvestDocument(
   }
 
   const { valid, errors } = validateSchema(schemaId, value);
+  const failures = errors.map((error) => describeFailure(error, value));
+  // A price naming a scope nothing declared is refused, and JSON Schema cannot
+  // say so: a `const` or an `enum` would have to know the keys before the
+  // document does. It is checked here rather than left to the import, because a
+  // price pointing at nothing is a number with no meaning (plan 0103, D4).
+  const dangling = valid ? danglingScopes(value) : [];
   return {
-    valid,
-    failures: errors.map((error) => describeFailure(error, value)),
+    valid: valid && dangling.length === 0,
+    failures: [...failures, ...dangling],
   };
+}
+
+/**
+ * Every `prices[].scope` that names no `scopes[].key`.
+ *
+ * Only for a document that already matched its schema, so the shapes below are
+ * known rather than guessed.
+ */
+function danglingScopes(value: unknown): HarvestDocumentValidationFailure[] {
+  const document = value as {
+    scopes?: Array<{ key?: unknown }> | null;
+    products?: Array<{
+      id?: unknown;
+      prices?: Array<{ scope?: unknown }> | null;
+    }>;
+  };
+  const declared = new Set(
+    (document.scopes ?? [])
+      .map((scope) => scope?.key)
+      .filter((key): key is string => typeof key === 'string')
+  );
+
+  const failures: HarvestDocumentValidationFailure[] = [];
+  (document.products ?? []).forEach((product, productIndex) => {
+    (product?.prices ?? []).forEach((price, priceIndex) => {
+      const scope = price?.scope;
+      if (typeof scope !== 'string' || declared.has(scope)) {
+        return;
+      }
+      failures.push({
+        path: `/products/${productIndex}/prices/${priceIndex}/scope`,
+        productId: typeof product?.id === 'string' ? product.id : null,
+        productIndex,
+        message: `names the scope "${scope}", which this document does not declare`,
+      });
+    });
+  });
+  return failures;
 }
 
 /**

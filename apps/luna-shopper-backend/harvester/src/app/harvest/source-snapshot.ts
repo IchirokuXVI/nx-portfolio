@@ -1,4 +1,7 @@
-import type { ItemView, PriceSourceKind } from '@portfolio/luna-shopper/contracts';
+import type {
+  ItemView,
+  PriceSourceKind,
+} from '@portfolio/luna-shopper/contracts';
 import type { SourceCatalogEntry } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 

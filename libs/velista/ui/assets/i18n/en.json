@@ -319,6 +319,7 @@
       "google": "Continue with Google",
       "emailSignIn": "Sign in with email",
       "newZone": "New group",
+      "joinZone": "Join group",
       "generateList": "Get shopping list",
       "history": "History",
       "account": "Your account",
@@ -417,13 +418,15 @@
       "stopListening": "Stop listening",
       "discard": "Throw this recording away",
       "listening": "Listening",
-      "sending": "Sending what you said",
       "heard": "I heard",
       "micRefused": "Velista cannot hear you. The microphone is switched off for this app, so turn it back on in your browser, or type it instead",
       "micMissing": "There is no microphone on this device, so type it instead",
       "notHeard": "I did not catch that",
       "voiceFailed": "That did not send. Nothing was added, so try again or type it",
       "voiceBusy": "A lot of people are asking at once. Try again in {{count}} seconds",
+      "voiceBusyNoNumber": "A lot of people are asking at once. Try again in a moment, or type it",
+      "voiceUnavailable": "The assistant is switched off here, so nothing was added. That is on us, not on you, and trying again will not change it",
+      "voiceUnsure": "Something went wrong at our end after you sent that. Check the list before you say it again, in case it went on anyway",
       "dismissHeard": "Close",
       "suggestions": "Matching products",
       "groupAdds": "adds its {{count}} products",
@@ -712,17 +715,6 @@
       "gone": "That account no longer exists",
       "failed": "That did not go through. Try again"
     },
-    "voice": {
-      "section": "Voice",
-      "sendOnSilence": {
-        "label": "Send when I stop talking",
-        "hint": "The recording ends by itself after a moment of quiet, instead of waiting for you to press stop. Useful with your hands full, and it will cut you off if you pause to think."
-      },
-      "keepListening": {
-        "label": "Keep listening after sending",
-        "hint": "The microphone stays open once a recording is on its way, so you can name several things in a row. The bin closes it."
-      }
-    },
     "app": {
       "section": "The app",
       "install": "Install the app",
@@ -998,13 +990,14 @@
       "partly": "{{settled}} of {{total}} got",
       "wanted": "×{{count}}",
       "free": "No product chosen",
-      "busy": "Saving"
+      "busy": "Saving",
+      "takenBack_one": "1 taken back",
+      "takenBack_other": "{{count}} taken back"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
       "bought_one": "{{count}} bought",
-      "bought_other": "{{count}} bought",
-      "buying": "buying {{next}} instead of {{current}}"
+      "bought_other": "{{count}} bought"
     },
     "touched": {
       "got": "{{name}} got it",
@@ -1057,27 +1050,13 @@
       "asOf": "Prices from {{when}}",
       "asOfStale": "Prices from {{when}}, and some may be out of date"
     },
-    "allocate": {
-      "open": "Split between lists",
-      "title": "{{name}} · got {{count}}",
-      "hint": "Which list gets how many. Starts from oldest first, which is what one tap would have done.",
-      "wanted": "wanted {{count}}",
-      "total": "Allocated",
-      "totalValue": "{{allocated}} of {{total}}",
-      "over": "That is more than you got",
-      "submit": "Record it",
-      "cancel": "Cancel"
-    },
     "units": {
-      "open": "Change what each list asked for",
-      "title": "{{name}}",
-      "notBuying": "Changing these changes what each list wants. Nothing here is marked as bought.",
-      "buying_one": "Buying {{count}}",
-      "buying_other": "Buying {{count}}",
       "extra": "{{lists}} for these lists, plus {{extra}} extra",
       "lists": "Lists that asked for this",
       "askedFor": "Asked for",
-      "bought": "Bought",
+      "got": "Got",
+      "askedLabel": "{{name}}, asked for",
+      "gotLabel": "{{name}}, got",
       "more_one": "1 more list",
       "more_other": "{{count}} more lists",
       "listAsks": "asks for {{count}} on its list",
@@ -1095,8 +1074,7 @@
       "loading": "Reading the lists",
       "failed": "The lists could not be read",
       "retry": "Try again",
-      "empty": "There is no list you can put this on",
-      "close": "Done"
+      "empty": "There is no list you can put this on"
     },
     "send": {
       "pending": "Waiting for that list to approve it"

@@ -153,6 +153,22 @@ export const assistantValidationSchema = Joi.object({
     .integer()
     .min(1000)
     .default(30000),
+  /**
+   * How long one whole turn may run before the loop stops rather than doing more.
+   *
+   * The provider timeout above bounds one call. It bounds nothing about a turn: six
+   * tool calls means seven provider requests, so a turn's own ceiling was seven times
+   * this number plus whatever the tools took, and no caller waits that long. The
+   * client had given up long before, and the loop went on calling tools, which is how
+   * lines appeared on a list seconds after the person who asked for them was told
+   * nothing had happened and said it again.
+   *
+   * The deadline is checked before each provider call and, more importantly, before
+   * each round of tools, because the tools are what write. It is not an abort of work
+   * in flight: a call already running finishes, which is why anything routing to this
+   * service must allow this plus one provider timeout plus slack before it gives up.
+   */
+  ASSISTANT_TURN_TIMEOUT_MS: Joi.number().integer().min(5000).default(60000),
 
   ...telemetryValidationSchema,
 });
@@ -178,6 +194,8 @@ export interface AssistantConfig {
   concurrency: number;
   retryAfterFallbackSeconds: number;
   providerTimeoutMs: number;
+  /** The ceiling on one whole turn, after which the loop stops rather than doing more. */
+  turnTimeoutMs: number;
 }
 
 function trimmed(raw: string | undefined, fallback: string): string {
@@ -252,5 +270,6 @@ export const assistantConfiguration = registerAs(
     providerTimeoutMs: Number(
       process.env.ASSISTANT_PROVIDER_TIMEOUT_MS ?? 30000
     ),
+    turnTimeoutMs: Number(process.env.ASSISTANT_TURN_TIMEOUT_MS ?? 60000),
   })
 );

@@ -19,7 +19,7 @@ function sink() {
 }
 
 /** A slot driver that records the verbs it was asked for. */
-function fakeSlots({ taken = [1], claimed = null, dumpFails = false } = {}) {
+function fakeSlots({ taken = [1], dumpFails = false } = {}) {
   const verbs = [];
   return {
     verbs,
@@ -27,15 +27,11 @@ function fakeSlots({ taken = [1], claimed = null, dumpFails = false } = {}) {
       verbs.push('list');
       return taken;
     },
-    claimedSlot: () => claimed,
     up: async (slot, services) => {
       verbs.push(`up:${slot}:${services.join(',')}`);
     },
-    down: async () => {
-      verbs.push('down');
-    },
-    configure: async (slot) => {
-      verbs.push(`configure:${slot}`);
+    down: async (slot) => {
+      verbs.push(`down:${slot}`);
     },
     dumpCatalog: async (slot, path) => {
       verbs.push(`dump:${slot}`);
@@ -97,10 +93,13 @@ function fakeDecider({
 /** A model that answers whatever the test queued, in order. */
 function fakeEngine(replies) {
   const prompts = [];
+  const options = [];
   return {
     prompts,
-    ask: async (prompt) => {
+    options,
+    ask: async (prompt, opts = {}) => {
       prompts.push(prompt);
+      options.push(opts);
       const reply = replies.shift();
       if (reply === undefined) {
         throw new Error('the test queued no more replies');
@@ -153,6 +152,7 @@ test('one row is one model call when the reply can be used', async () => {
   const answer = await decideRow({
     row: ROW,
     prompt: 'THE RULES',
+    schema: { type: 'object' },
     engine,
     decider,
     stripFence,
@@ -160,7 +160,12 @@ test('one row is one model call when the reply can be used', async () => {
 
   assert.equal(answer.accepted, true);
   assert.equal(engine.prompts.length, 1);
-  assert.match(engine.prompts[0], /^THE RULES\n\n\{/);
+  // The packet alone in the user half, the rules in the system half, and the
+  // rules never in both: sending them twice is what the split exists to stop.
+  assert.match(engine.prompts[0], /^\{/);
+  assert.ok(!engine.prompts[0].includes('THE RULES'));
+  assert.equal(engine.options[0].system, 'THE RULES');
+  assert.deepEqual(engine.options[0].schema, { type: 'object' });
   // The rules and the row, and nothing about the run.
   assert.ok(!engine.prompts[0].includes('remaining'));
   assert.deepEqual(decider.calls, [
@@ -287,7 +292,11 @@ test('the run picks a free slot, brings up three services, walks and tears down'
   });
 
   assert.equal(result.slot, 3);
-  assert.deepEqual(slots.verbs, ['list', 'up:3:gateway,auth,catalog', 'down']);
+  assert.deepEqual(slots.verbs, [
+    'list',
+    'up:3:gateway,auth,catalog',
+    'down:3',
+  ]);
   assert.deepEqual(waited, ['http://localhost:43200']);
   assert.equal(decider.calls[0].options.rehearsalUrl, 'http://localhost:43200');
 
@@ -337,7 +346,7 @@ test('a login that fails ends the run before the first model call', async () => 
     'list',
     'up:2:gateway,auth,catalog',
     'dump:2',
-    'down',
+    'down:2',
   ]);
 });
 
@@ -372,7 +381,7 @@ test('a mid run failure dumps the rehearsal catalog and still tears the slot dow
     'list',
     'up:2:gateway,auth,catalog',
     'dump:2',
-    'down',
+    'down:2',
   ]);
   assert.match(stderr.text(), /dumped to \/runs\/x\/dump\.sql/);
 });
@@ -398,12 +407,15 @@ test('a dump that fails does not stop the teardown', async () => {
     /nope/
   );
 
-  assert.ok(slots.verbs.includes('down'));
+  assert.ok(slots.verbs.includes('down:2'));
   assert.match(stderr.text(), /could not be dumped: no container/);
 });
 
-test('the worktree gets the slot it claimed before the run back', async () => {
-  const slots = fakeSlots({ taken: [1], claimed: 6 });
+// The checkout is never configured for the rehearsal slot, so there is nothing
+// to put back afterwards: the teardown is one verb, and it names the slot it
+// took rather than whichever one this checkout claims.
+test('the teardown names the slot it took and restores no claim', async () => {
+  const slots = fakeSlots({ taken: [1] });
   await runCuration({
     slots,
     makeDeciderFor: () => fakeDecider({ rows: [] }),
@@ -418,8 +430,7 @@ test('the worktree gets the slot it claimed before the run back', async () => {
   assert.deepEqual(slots.verbs, [
     'list',
     'up:2:gateway,auth,catalog',
-    'down',
-    'configure:6',
+    'down:2',
   ]);
 });
 
@@ -441,4 +452,139 @@ test('every slot taken stops the run before anything is started', async () => {
     /Every slot from 1 to 9 is taken/
   );
   assert.deepEqual(slots.verbs, ['list']);
+});
+
+// ---------------------------------------------------------------------------
+// A stopped run (Ctrl+C)
+// ---------------------------------------------------------------------------
+
+test('a stopped run writes the report over the rows it decided', async () => {
+  const slots = fakeSlots({ taken: [1] });
+  const controller = new AbortController();
+  const decider = fakeDecider({
+    rows: [
+      { ...ROW, remaining: 3 },
+      { ...ROW, remaining: 2 },
+      { ...ROW, remaining: 1 },
+    ],
+  });
+  const stderr = sink();
+
+  // The keystroke lands while the model is answering the first row, which is
+  // where a run spends nearly all of its time.
+  const engine = {
+    ask: async () => {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      return { text: JSON.stringify({ decision: 'LINK' }) };
+    },
+  };
+
+  const outcome = await runCuration({
+    slots,
+    makeDeciderFor: () => decider,
+    engine,
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr,
+    dumpPath: '/runs/x/dump.sql',
+    signal: controller.signal,
+  });
+
+  assert.equal(outcome.stopped, true);
+  assert.equal(outcome.report.report, '/runs/x/report.json');
+  assert.equal(
+    decider.calls.filter((call) => call.command === 'end').length,
+    1
+  );
+  // One row decided, then the walk stopped rather than asking for a second.
+  assert.equal(
+    decider.calls.filter((call) => call.command === 'next').length,
+    1
+  );
+  assert.ok(slots.verbs.includes('down:2'));
+  // A stop is not a failure, so the rehearsal catalog is not dumped.
+  assert.ok(!slots.verbs.some((verb) => verb.startsWith('dump:')));
+  assert.match(stderr.text(), /stopped: the report covers/);
+});
+
+// Ctrl+C reaches every process in the terminal, so the child that was in
+// flight dies of the keystroke and reports it in its own words. Once the run
+// is stopping, that error is the stop.
+test('a step that fails while the run is stopping is the stop, not a failure', async () => {
+  const slots = fakeSlots({ taken: [1] });
+  const controller = new AbortController();
+  const decider = fakeDecider({ rows: [ROW, ROW] });
+  decider.next = async () => {
+    controller.abort(new Error('the run was stopped with Ctrl+C'));
+    throw new Error('next failed: exit 1');
+  };
+
+  const outcome = await runCuration({
+    slots,
+    makeDeciderFor: () => decider,
+    engine: fakeEngine([]),
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+    signal: controller.signal,
+  });
+
+  assert.equal(outcome.stopped, true);
+  assert.equal(outcome.report.report, '/runs/x/report.json');
+  assert.ok(slots.verbs.includes('down:2'));
+});
+
+test('a stop before the run opens takes the slot down and reports nothing', async () => {
+  const slots = fakeSlots({ taken: [1] });
+  const controller = new AbortController();
+  const stderr = sink();
+  const decider = fakeDecider({ rows: [ROW] });
+
+  const outcome = await runCuration({
+    slots,
+    makeDeciderFor: () => decider,
+    engine: fakeEngine([]),
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async ({ signal }) => {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      throw signal.reason;
+    },
+    stripFence,
+    stdout: sink(),
+    stderr,
+    dumpPath: '/runs/x/dump.sql',
+    signal: controller.signal,
+  });
+
+  assert.equal(outcome.stopped, true);
+  assert.equal(outcome.report, null);
+  assert.equal(outcome.runId, null);
+  assert.deepEqual(decider.calls, []);
+  assert.ok(slots.verbs.includes('down:2'));
+  assert.ok(!slots.verbs.some((verb) => verb.startsWith('dump:')));
+  assert.match(stderr.text(), /stopped before the run opened/);
+});
+
+test('the slot is named to the caller before it is brought up', async () => {
+  const seen = [];
+  await runCuration({
+    slots: fakeSlots({ taken: [1, 2] }),
+    makeDeciderFor: () => fakeDecider({ rows: [] }),
+    engine: fakeEngine([]),
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+    onSlot: (slot) => seen.push(slot),
+  });
+  assert.deepEqual(seen, [3]);
 });

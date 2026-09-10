@@ -8,6 +8,7 @@ import { DezaCatalogRunner } from './deza-catalog.runner';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import type { RunContext } from './run-context';
+import type { RunReport } from './run-report';
 
 export type { CatalogDiscoveryInput } from './catalog-runner';
 
@@ -41,10 +42,16 @@ export class CatalogDiscoveryRunner {
   // handles both, but nothing else that calls a runner should have to.
   async run(
     context: RunContext,
+    report: RunReport,
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
-    await this.runnerFor(source.adapterKey, input).run(context, input, source);
+    await this.runnerFor(source.adapterKey, input).run(
+      context,
+      report,
+      input,
+      source
+    );
   }
 
   /**

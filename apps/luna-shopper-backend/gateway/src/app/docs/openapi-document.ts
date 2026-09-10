@@ -4,7 +4,7 @@ import {
   buildSwaggerDocument,
   type SwaggerOptions,
 } from '@portfolio/luna-shopper/platform';
-import { openApiComponents } from './openapi-schema';
+import { hoistAdapterCapabilities, openApiComponents } from './openapi-schema';
 
 /**
  * One definition of the gateway's OpenAPI document, shared by the three places
@@ -20,6 +20,10 @@ import { openApiComponents } from './openapi-schema';
 export const GATEWAY_DOCS_PATH = 'docs';
 
 export function gatewaySwaggerOptions(): SwaggerOptions {
+  // The one component no response references, so nothing else pulls it in
+  // (plan 0103, section 4.1). Called here rather than from a controller so the
+  // document carries it whichever controllers a build happened to load.
+  hoistAdapterCapabilities();
   return {
     title: 'Luna Shopper API',
     description:

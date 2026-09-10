@@ -202,8 +202,18 @@ function storeDouble(world: World) {
       })
     ),
     setOutstanding: jest.fn().mockResolvedValue(null),
-    loadLineOrigins: jest.fn().mockResolvedValue(null),
+    // Answers an empty read rather than a failure, so the summary under the product
+    // loads clean in every spec that is not about it. A null here would draw the
+    // summary's own failure sentence on every one of them, which is the settle
+    // sheet's own failure assertions reading a different block's copy.
+    loadLineOrigins: jest.fn(async () => ({
+      lineId: LINE_ID,
+      origins: [],
+      candidates: [],
+      others: [],
+    })),
     setOriginQuantity: jest.fn().mockResolvedValue(null),
+    setOriginSettled: jest.fn().mockResolvedValue(null),
     loadLineTargets: jest.fn().mockResolvedValue(null),
     bindLine: jest.fn().mockResolvedValue(null),
     pendingTargets: signal(new Set<string>()),
@@ -792,13 +802,20 @@ describe('SettleSheet: the trip is finished', () => {
     expect(control(fixture, '.product-change')).toBeNull();
   });
 
-  it('offers neither the units sheet nor the send sheet', async () => {
+  it('keeps the list summary and takes its reels off', async () => {
+    // Velista `0073`. A finished basket is the receipt for a trip somebody took, so
+    // what the summary **says** is exactly what a reader opens it for; every write
+    // behind it is refused by the server, so no control is drawn (`0030`).
     const { fixture } = await render({
       lines: [line({ kind: 'ADDED', targetListId: null, origins: [] })],
       basketFinished: true,
     });
 
-    expect(control(fixture, '.actions.lists')).toBeNull();
+    const summary = control(fixture, 'lib-line-lists-summary');
+    expect(summary).not.toBeNull();
+    expect(
+      fixture.debugElement.queryAll(By.directive(QuantityReel))
+    ).toHaveLength(0);
   });
 
   it('still offers the history, which is what a receipt is read for', async () => {
@@ -1071,22 +1088,33 @@ describe('SettleSheet: how many did you get', () => {
  * `RokuTranslatorTestingModule.forTesting()` does not interpolate and the assertion
  * is about which control exists.
  */
-describe('SettleSheet: the sheet this one leads on to', () => {
-  const entries = (fixture: ComponentFixture<SettleSheet>) =>
-    [
-      ...(fixture.nativeElement as HTMLElement).querySelectorAll(
-        '.actions.lists button'
-      ),
-    ].map((button) => button.textContent?.trim());
+/**
+ * The list summary, under the product (velista `0073`, section 3).
+ *
+ * The two controls this replaced are gone: there is no "Split between lists" pane and
+ * no "Change what each list asked for" sheet, and nothing they did is now impossible.
+ * What this asserts is who gets the summary and that the settle buttons never wait for
+ * it. What the rows themselves do is `line-lists-summary.spec.ts`.
+ */
+describe('SettleSheet: what every list asked for and got', () => {
+  const summary = (fixture: ComponentFixture<SettleSheet>) =>
+    (fixture.nativeElement as HTMLElement).querySelector(
+      'lib-line-lists-summary'
+    );
 
   /** A line somebody typed into the basket in an aisle, on no list yet. */
   const added = (overrides: Partial<BasketLine> = {}) =>
     line({ kind: 'ADDED', origins: [], targetListId: null, ...overrides });
 
-  it('offers the way in to the owner', async () => {
+  it('draws it for the owner, under the product entry', async () => {
+    // Test 4's placement half. The order on the sheet is the title, what is
+    // outstanding, the product, and then the rows: the shopper has already picked
+    // the product and the lists are the next thing under it.
     const { fixture } = await render({
       lines: [
-        added({
+        line({
+          pickId: 'item-1',
+          optionIds: ['item-1'],
           origins: [
             {
               id: 'o1',
@@ -1098,80 +1126,115 @@ describe('SettleSheet: the sheet this one leads on to', () => {
           ],
         }),
       ],
+      products: new Map([
+        [
+          'item-1',
+          {
+            id: 'item-1',
+            name: { en: 'Hacendado milk' },
+            brand: null,
+            size: null,
+            unit: null,
+            offer: null,
+          },
+        ],
+      ]),
     });
 
-    expect(entries(fixture)).toEqual(['basket.units.open']);
+    const drawn = summary(fixture);
+    expect(drawn).not.toBeNull();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const product = host.querySelector('.product') as Node;
+    const actions = host.querySelector('.actions') as Node;
+    expect(
+      product.compareDocumentPosition(drawn as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      (drawn as Node).compareDocumentPosition(actions) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
-  it('offers nothing to a guest', async () => {
-    // The route names households, and the server refuses the whole of it to
-    // somebody who arrived on a link. A guest is never asked which household a tin
-    // of tomatoes belongs to.
-    const { fixture } = await render({ meKind: 'GUEST', lines: [added()] });
+  it('draws it over a line the run composed', async () => {
+    const { fixture } = await render();
 
-    expect(entries(fixture)).toEqual([]);
+    expect(summary(fixture)).not.toBeNull();
   });
 
-  it('offers nothing to a registered participant who does not pass the rule', async () => {
-    // `seesZoneData` is the server's answer on the most recent basket read, so
-    // losing `WRITE` on one source list takes the control away on the next one.
+  it('draws it over a line on nobody’s list, which is the point', async () => {
+    // The rule velista `0068` reversed and `0073` kept. A line somebody typed in an
+    // aisle used to draw nothing about lists, because there was nothing to show it;
+    // backend `0092` made every list a row at zero, so it is the line these rows are
+    // most worth reading.
+    const { fixture } = await render({ lines: [added()] });
+
+    expect(summary(fixture)).not.toBeNull();
+  });
+
+  it('draws it over a finished line, which is a correction rather than a purchase', async () => {
     const { fixture } = await render({
+      lines: [line({ settled: 4, lastOutcome: 'BOUGHT' })],
+    });
+
+    expect(summary(fixture)).not.toBeNull();
+  });
+
+  it('leaves a guest the buttons and no summary, and reads no origins', async () => {
+    // Test 8. The read names households and the server refuses the whole of it to
+    // somebody who arrived on a link, so the screen does not ask. A guest still
+    // settles the whole line or part of it through the buttons.
+    const { fixture, store } = await render({
+      meKind: 'GUEST',
+      lines: [added()],
+    });
+
+    expect(summary(fixture)).toBeNull();
+    expect(store.loadLineOrigins).not.toHaveBeenCalled();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.primary')
+    ).not.toBeNull();
+  });
+
+  it('draws nothing for a registered participant who does not pass the rule', async () => {
+    // `seesZoneData` is the server's answer on the most recent basket read, so
+    // losing `WRITE` on one source list takes the summary away on the next one.
+    const { fixture, store } = await render({
       meKind: 'REGISTERED',
       seesZoneData: false,
       lines: [added()],
     });
 
-    expect(entries(fixture)).toEqual([]);
+    expect(summary(fixture)).toBeNull();
+    expect(store.loadLineOrigins).not.toHaveBeenCalled();
   });
 
-  it('offers it over a line the run composed', async () => {
+  it('leaves the settle buttons usable when the summary read fails', async () => {
+    // Test 10, and the whole reason the rows are a component of their own: a shopper
+    // who opened this sheet to press "Got all" must not be held up, or stopped, by a
+    // read about lists.
+    const { fixture, store } = await render();
+    store.loadLineOrigins.mockResolvedValue(null);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const primary = (fixture.nativeElement as HTMLElement).querySelector(
+      '.primary'
+    ) as HTMLButtonElement | null;
+
+    expect(primary).not.toBeNull();
+    expect(primary?.disabled).toBe(false);
+  });
+
+  it('offers neither of the two controls it replaced', async () => {
+    // The allocate pane and the units sheet, by the copy each drew. A reader who
+    // passes the rule is the one both were drawn for, so this is the case that would
+    // still show them.
     const { fixture } = await render();
 
-    expect(entries(fixture)).toEqual(['basket.units.open']);
-  });
-
-  it('offers it over a line that is on nobody’s list, which is the point', async () => {
-    // The rule velista `0068` reversed. A line somebody typed in an aisle used to
-    // draw no way in here, because the sheet had nothing to show it and a second
-    // sheet sent it to one list; backend `0092` made every list a row at zero, so
-    // it is now the line the sheet is most worth opening for.
-    const { fixture } = await render({ lines: [added()] });
-
-    expect(entries(fixture)).toEqual(['basket.units.open']);
-  });
-
-  it('offers it over a line already on a list', async () => {
-    // There is no "already sent" any more: a line reaches as many lists as somebody
-    // raises, so the one it has reached does not close the sheet to the rest.
-    const { fixture } = await render({
-      lines: [
-        added({
-          targetListId: 'l1',
-          origins: [
-            {
-              id: 'o1',
-              zoneId: 'z1',
-              listId: 'l1',
-              lineId: 'zl1',
-              quantity: 1,
-            },
-          ],
-        }),
-      ],
-    });
-
-    expect(entries(fixture)).toEqual(['basket.units.open']);
-  });
-
-  it('still offers it over a finished line, which is the point', async () => {
-    // Velista `0055` raises a finished line's number and `0068` puts a line already
-    // bought onto a household's list. Neither is a purchase, so neither belongs
-    // inside the block that hides the settle targets.
-    const { fixture } = await render({
-      lines: [line({ settled: 4, lastOutcome: 'BOUGHT' })],
-    });
-
-    expect(entries(fixture)).toEqual(['basket.units.open']);
+    expect(text(fixture)).not.toContain('basket.allocate');
+    expect(text(fixture)).not.toContain('basket.units.open');
   });
 });
 
@@ -1497,10 +1560,12 @@ describe('SettleSheet: the pick sheet splits the line', () => {
       )
     );
 
+  // The reels, read through the spinbutton attributes they announce: the value
+  // and the ceiling are the control's contract, not its markup.
   const fields = (fixture: ComponentFixture<SettleSheet>) =>
     Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>(
-        '.share-field'
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '.share-reel'
       )
     );
 
@@ -1521,10 +1586,10 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     fixture.detectChanges();
   };
 
-  it('draws a stepper on every product but the line’s own, which shows the balance', async () => {
+  it('draws a reel on every product but the line’s own, which shows the balance', async () => {
     const { fixture } = await renderPane();
 
-    // Three rows, two steppers: the row that keeps the balance has no control,
+    // Three rows, two reels: the row that keeps the balance has no control,
     // because the balance is never typed.
     expect(rows(fixture)).toHaveLength(3);
     expect(fields(fixture)).toHaveLength(2);
@@ -1548,17 +1613,21 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     const { fixture } = await renderPane();
 
     put(fixture, 'i-whole', 3);
-    // Two left, so the other stepper's ceiling is two and its own value is zero.
-    expect(fields(fixture).map((field) => field.max)).toEqual(['5', '2']);
+    // Two left, so the other reel's ceiling is two and its own value is zero.
+    expect(
+      fields(fixture).map((reel) => reel.getAttribute('aria-valuemax'))
+    ).toEqual(['5', '2']);
 
-    // Typed past the ceiling, which a keyboard can do whatever `max` says. The
-    // component clamps rather than trusting the control.
+    // Driven past the ceiling, which the reel refuses but this method can be
+    // handed. The component clamps rather than trusting the control.
     put(fixture, 'i-lactose', 9);
     expect(fixture.componentInstance['balance']()).toBe(0);
-    expect(fields(fixture).map((field) => field.value)).toEqual(['3', '2']);
+    expect(
+      fields(fixture).map((reel) => reel.getAttribute('aria-valuenow'))
+    ).toEqual(['3', '2']);
   });
 
-  it('sends one share per stepper above zero, with the amount the pane opened with', async () => {
+  it('sends one share per reel above zero, with the amount the pane opened with', async () => {
     const { fixture, store } = await renderPane();
 
     put(fixture, 'i-whole', 3);
@@ -1573,7 +1642,7 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     });
   });
 
-  it('commits once, on the button, and not on a stepper move', async () => {
+  it('commits once, on the button, and not on a reel move', async () => {
     const { fixture, store } = await renderPane();
 
     put(fixture, 'i-whole', 1);
@@ -1669,12 +1738,14 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     fixture.detectChanges();
 
     // The store has already refetched, so the sentence names the amount as it
-    // now stands and the steppers go back to nothing.
+    // now stands and the reels go back to nothing.
     expect(fixture.componentInstance['errorKey']()).toBe(
       'basket.error.staleLine'
     );
     expect(fixture.componentInstance['balance']()).toBe(5);
-    expect(fields(fixture).map((field) => field.value)).toEqual(['0', '0']);
+    expect(
+      fields(fixture).map((reel) => reel.getAttribute('aria-valuenow'))
+    ).toEqual(['0', '0']);
   });
 
   it('leaves when the line it is about disappears underneath it', async () => {
