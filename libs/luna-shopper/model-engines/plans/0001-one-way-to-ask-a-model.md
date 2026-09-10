@@ -1,3 +1,5 @@
+> **PR:** [#332](https://github.com/IchirokuXVI/nx-portfolio/pull/332)
+
 # 0001 One way to ask a model
 
 Part of the curation toolchain: `curation-auth` (sessions),
