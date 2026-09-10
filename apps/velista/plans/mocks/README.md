@@ -16,6 +16,7 @@ on top of them, and the page built from both.
 | `basket/` | `0044` the shared basket: joining, settling, and the people you send it to | https://claude.ai/code/artifact/bdc42e90-243f-4cdd-aaf4-54ca73d12ef6 |
 | `shopping-lists/` | `0045` your shopping list: the card, the sheet, and the history | https://claude.ai/code/artifact/4e6d5569-dd04-4a77-a46a-8aff2e051cd9 |
 | `profiles/` | `0046` shopping profiles: where you shop, per profile | https://claude.ai/code/artifact/8c20e218-365e-45ad-a401-e96b4ed1252d |
+| `basket-filter/` | Finding a line in the basket: search, the filter sheet, grouping, one shop's prices. Plans to follow once approved | https://claude.ai/code/artifact/82b53f55-a8a6-41bc-a019-6222a23f44c5 |
 | `brand/` | The mark itself. Source of truth for both, see below | |
 
 ## How a folder is put together

@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ THE OWNER'S SHEET ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE OWNER &middot; four sections, lists last, nothing here deletes a line</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+      <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+        <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 14px;"></div>
+
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px;">
+          <div>
+            <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Filter and order</div>
+            <div style="margin-top: 2px; font-size: 13px; color: #98a0bb;">Moves and marks lines. Nothing is removed from the list.</div>
+          </div>
+          <span style="flex: none; font-size: 13px; font-weight: 600; color: #ffb454; padding-left: 12px;">Reset</span>
+        </div>
+
+        <!-- SHOW -->
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;">SHOW</div>
+        <div style="border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 12px;">
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600;">Still to get</span>
+            <span style="font-size: 12.5px; color: #6f7899; font-variant-numeric: tabular-nums;">8</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px;">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600;">Got, or not available</span>
+            <span style="font-size: 12.5px; color: #6f7899; font-variant-numeric: tabular-nums;">4</span>
+          </label>
+        </div>
+
+        <!-- ORDER -->
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;">ORDER</div>
+        <div style="border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 12px;">
+          <label style="display: flex; align-items: center; gap: 11px; min-height: 48px; padding: 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span style="flex: 1;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600;">The way you shop</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">From your last trips. New lines go last, A to Z.</span>
+            </span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">A to Z</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; background: rgba(255,255,255,0.03);">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Group by category</span>
+          </label>
+        </div>
+
+        <!-- PRICES FROM -->
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;">PRICES FROM</div>
+        <div style="border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden;">
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Any of your shops</span>
+            <span style="font-size: 12px; color: #6f7899;">the cheapest</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; min-height: 48px; padding: 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span style="flex: 1;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600;">Mercadona</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Ronda de los Tejares</span>
+            </span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; min-height: 48px; padding: 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Dia</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Av. de la Constituci&oacute;n</span>
+            </span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Carrefour</span>
+          </label>
+        </div>
+        <div style="margin: 6px 2px 12px; font-size: 12px; line-height: 1.45; color: #6f7899;">Kept for two hours, then back to any shop. Lines the shop does not list stay, at the end, and can still be got.</div>
+
+        <!-- LISTS, the owner's alone -->
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;">LISTS</div>
+        <div style="border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden;">
+          <label style="display: flex; align-items: center; gap: 11px; min-height: 48px; padding: 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span style="flex: 1;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600;">Weekly shop</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Flat 3B</span>
+            </span>
+            <span style="font-size: 12.5px; color: #6f7899; font-variant-numeric: tabular-nums;">6</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; min-height: 48px; padding: 6px 13px;">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span style="flex: 1;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600;">Groceries</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Parents&rsquo; house</span>
+            </span>
+            <span style="font-size: 12.5px; color: #6f7899; font-variant-numeric: tabular-nums;">5</span>
+          </label>
+        </div>
+        <div style="margin: 6px 2px 14px; font-size: 12px; line-height: 1.45; color: #6f7899;">Lines not yet on any list are always shown, at the end.</div>
+
+        <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Show 12 lines</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ A GUEST'S SHEET ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A GUEST &middot; no lists section, chains without shop names, category on</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+      <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+        <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 14px;"></div>
+
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px;">
+          <div>
+            <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Filter and order</div>
+            <div style="margin-top: 2px; font-size: 13px; color: #98a0bb;">Moves and marks lines. Nothing is removed from the list.</div>
+          </div>
+          <span style="flex: none; font-size: 13px; font-weight: 600; color: #ffb454; padding-left: 12px;">Reset</span>
+        </div>
+
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;">SHOW</div>
+        <div style="border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 12px;">
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600;">Still to get</span>
+            <span style="font-size: 12.5px; color: #6f7899; font-variant-numeric: tabular-nums;">8</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px;">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Got, or not available</span>
+            <span style="font-size: 12.5px; color: #6f7899; font-variant-numeric: tabular-nums;">4</span>
+          </label>
+        </div>
+
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;">ORDER</div>
+        <div style="border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 12px;">
+          <label style="display: flex; align-items: center; gap: 11px; min-height: 48px; padding: 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span style="flex: 1;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600;">The way you shop</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">From your last trips. New lines go last, A to Z.</span>
+            </span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">A to Z</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; background: rgba(255,255,255,0.03);">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600;">Group by category</span>
+          </label>
+        </div>
+
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;">PRICES FROM</div>
+        <div style="border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden;">
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600;">Any of the shops</span>
+            <span style="font-size: 12px; color: #6f7899;">the cheapest</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Mercadona</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Dia</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Carrefour</span>
+          </label>
+        </div>
+        <div style="margin: 6px 2px 14px; font-size: 12px; line-height: 1.45; color: #6f7899;">Kept for two hours, then back to any shop. Lines the shop does not list stay, at the end, and can still be got.</div>
+
+        <div style="padding: 12px 14px; margin-bottom: 14px; border-radius: 14px; background: #0a0c14; border: 1px dashed rgba(255,255,255,0.12); font-size: 12px; line-height: 1.5; color: #525a78;">
+          The lists section is not drawn for this reader, and neither are the shop names under the chains: the server never sent them. There is no flag on the sheet, the data decides (0062 section 6). A guest still gets every other control, because ordering a shop is the guest&rsquo;s job as much as the owner&rsquo;s.
+        </div>
+
+        <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Show 8 lines</button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
