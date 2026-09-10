@@ -90,6 +90,14 @@ describeIntegration('price scope priority migration (real Postgres)', () => {
    */
   async function migrateToJustBefore(): Promise<void> {
     await dataSource.runMigrations();
+    // Every test seeds the same chain, so the rows the last one left would be
+    // counted by this one. Emptied at the top of the schema, where the join
+    // table exists, and in reference order: the scope side is RESTRICT.
+    await dataSource.query(`DELETE FROM "supermarket_location_price_scopes"`);
+    await dataSource.query(`DELETE FROM "supermarket_locations"`);
+    await dataSource.query(`DELETE FROM "price_scopes"`);
+    await dataSource.query(`DELETE FROM "supermarkets"`);
+
     const after = CATALOG_MIGRATIONS.findIndex(
       (migration) => migration.name === UNDER_TEST
     );

@@ -3,7 +3,14 @@ import {
   PriceScopeKind,
   type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import {
+  BeforeInsert,
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+} from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { Supermarket } from './supermarket.entity';
 
@@ -66,4 +73,25 @@ export class PriceScope extends BaseEntity {
    */
   @Column({ type: 'integer' })
   priority!: number;
+
+  /**
+   * The default of section 2.2, applied here rather than in the one service
+   * that happens to create scopes today.
+   *
+   * "A creator that states no priority takes the default for its kind" is a
+   * property of a scope, and there are four creators: the admin route, the
+   * store scope a location makes for itself, the reference seed and a run.
+   * Written once in a service, the other three insert a null into a NOT NULL
+   * column, and the failure is a constraint violation rather than a sentence.
+   *
+   * There is no database default beside it on purpose: the right number
+   * depends on the kind, and a column default would have to pick one and be
+   * silently wrong about the other three.
+   */
+  @BeforeInsert()
+  defaultPriority(): void {
+    if (this.priority === undefined || this.priority === null) {
+      this.priority = DEFAULT_SCOPE_PRIORITY[this.kind];
+    }
+  }
 }
