@@ -293,6 +293,137 @@ describe('BasketMemory: what one list asked for', () => {
   });
 });
 
+/**
+ * What one list **got** (velista `0073`, backend `0104` section 4).
+ *
+ * The opposite write to the block above, and the fake carries the whole rule rather
+ * than a sketch of it: the settle sheet's summary is read against this, and a fake
+ * that only moved one number would let a screen ship whose arithmetic does not add up.
+ */
+describe('BasketMemory: what one list got', () => {
+  it('refuses a `from` that is not what has been bought for that list', async () => {
+    const memory = new BasketMemory();
+
+    expect(
+      await refusal(() =>
+        memory.setOriginSettled(ID, 'line-eggs', {
+          lineId: 'zl-3',
+          settled: 4,
+          from: 0,
+        })
+      )
+    ).toBe('stale_quantity');
+  });
+
+  it('refuses a zone line that is not on this basket line', async () => {
+    const memory = new BasketMemory();
+
+    expect(
+      await refusal(() =>
+        memory.setOriginSettled(ID, 'line-eggs', {
+          lineId: 'zl-nowhere',
+          settled: 1,
+          from: 0,
+        })
+      )
+    ).toBe('not_found');
+  });
+
+  it('records a purchase for that list and takes the outstanding amount down', async () => {
+    // Test 5 from the other side. Eggs stand at twelve asked for and two bought, so
+    // raising the flat to five buys three more against that list alone.
+    const memory = new BasketMemory();
+
+    const result = await memory.setOriginSettled(ID, 'line-eggs', {
+      lineId: 'zl-3',
+      settled: 5,
+      from: 2,
+    });
+
+    expect(result.origin?.settledHere).toBe(5);
+    expect(result.line.settled).toBe(5);
+    expect(result.line.quantity).toBe(12);
+    expect(result.line.lastOutcome).toBe('BOUGHT');
+    expect(result.skippedCount).toBe(0);
+  });
+
+  it('takes a purchase back when the number goes down', async () => {
+    const memory = new BasketMemory();
+
+    const result = await memory.setOriginSettled(ID, 'line-eggs', {
+      lineId: 'zl-3',
+      settled: 0,
+      from: 2,
+    });
+
+    expect(result.origin?.settledHere).toBe(0);
+    expect(result.line.settled).toBe(0);
+  });
+
+  it('never lets a list have got more than it asked for', async () => {
+    // A shopper who bought more raises what the list asked for first, which is the
+    // other reel on the same row.
+    const memory = new BasketMemory();
+
+    const result = await memory.setOriginSettled(ID, 'line-milk', {
+      lineId: 'zl-1',
+      settled: 9,
+      from: 0,
+    });
+
+    expect(result.origin?.settledHere).toBe(2);
+  });
+
+  it('takes a `NOT_AVAILABLE` close back whole on any raise', async () => {
+    // Backend `0104` section 5. The bread was closed by a shop that had none, so
+    // there are no units divided among the lists and the close comes back entire.
+    // Its size is not a column: it is what is settled beyond what the origins
+    // account for, which is why the client must redraw from the answer.
+    const memory = new BasketMemory();
+
+    const result = await memory.setOriginSettled(ID, 'line-bread', {
+      lineId: 'zl-4',
+      settled: 1,
+      from: 0,
+    });
+
+    expect(result.origin?.settledHere).toBe(1);
+    expect(result.line.settled).toBe(1);
+    // The line was closed and is now bought, which is the whole difference.
+    expect(result.line.lastOutcome).toBe('BOUGHT');
+  });
+
+  it('refuses a reader who may not see zone data', async () => {
+    const memory = new BasketMemory();
+    memory.seesZoneData = false;
+
+    expect(
+      await refusal(() =>
+        memory.setOriginSettled(ID, 'line-eggs', {
+          lineId: 'zl-3',
+          settled: 3,
+          from: 2,
+        })
+      )
+    ).toBe('forbidden');
+  });
+
+  it('refuses it once the trip is finished', async () => {
+    const memory = new BasketMemory();
+    memory.status = 'FINISHED';
+
+    expect(
+      await refusal(() =>
+        memory.setOriginSettled(ID, 'line-eggs', {
+          lineId: 'zl-3',
+          settled: 3,
+          from: 2,
+        })
+      )
+    ).toBe('generated_list_finished');
+  });
+});
+
 describe('BasketMemory: raising a list that was asking for none', () => {
   it('takes over the demand a candidate already has before it adds any', async () => {
     // Backend `0092` section 4.1. The office kitchen asks for two on its own, so a

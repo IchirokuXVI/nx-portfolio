@@ -14,6 +14,8 @@ import {
   type BasketLoad,
   type BasketOriginQuantityRequest,
   type BasketOriginQuantityResult,
+  type BasketOriginSettledRequest,
+  type BasketOriginSettledResult,
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketSettleRequest,
@@ -893,6 +895,35 @@ export class BasketStore {
       if (result.origin !== null) {
         this.rememberListNames(namesOf([result.origin]));
         this._recordApproval(lineId, result.origin.approvalStatus);
+      }
+      return result;
+    });
+  }
+
+  /**
+   * Set how many of a line one list has got (velista `0073`, backend `0104`).
+   *
+   * Through {@link _write} like every other write here, and it refetches on a
+   * `stale_quantity` for {@link setOutstanding}'s reason.
+   *
+   * **It settles**, which is the whole of what separates it from
+   * {@link setOriginQuantity}: raising records a purchase for that list and lowering
+   * takes one back, so the line it answers carries a new settled amount, a new
+   * outcome and possibly a skip report. The answered line is applied exactly as a
+   * settle's is, and callers must redraw from it rather than from the number they
+   * sent: taking back a `NOT_AVAILABLE` close has no units to divide, so the whole
+   * close comes back and what is outstanding lands above where the control was
+   * dragged.
+   */
+  async setOriginSettled(
+    lineId: string,
+    body: BasketOriginSettledRequest
+  ): Promise<BasketOriginSettledResult | null> {
+    return this._write(lineId, async (id) => {
+      const result = await this._service.setOriginSettled(id, lineId, body);
+      this.apply(result.line);
+      if (result.origin !== null) {
+        this.rememberListNames(namesOf([result.origin]));
       }
       return result;
     });

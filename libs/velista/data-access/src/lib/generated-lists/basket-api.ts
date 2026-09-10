@@ -7,6 +7,8 @@ import type {
   BasketLinkPreview,
   BasketOriginQuantityRequest,
   BasketOriginQuantityResult,
+  BasketOriginSettledRequest,
+  BasketOriginSettledResult,
   BasketOutstandingRequest,
   BasketParticipant,
   BasketSession,
@@ -26,6 +28,7 @@ import {
   toBasketLineOrigins,
   toBasketLinkPreview,
   toBasketOriginQuantityResult,
+  toBasketOriginSettledResult,
   toBasketParticipant,
   toBasketSession,
   toBasketSettleResult,
@@ -243,6 +246,35 @@ export class BasketApi implements BasketServiceI {
     return required(
       toBasketOriginQuantityResult(answer),
       'basket.setOriginQuantity'
+    );
+  }
+
+  /**
+   * Set how many of a line one list has got (velista `0073`, backend `0104`).
+   *
+   * A second route beside the one above rather than a flag on it, because the two
+   * are opposite acts: that one changes what a household asked for and buys
+   * nothing, and this one records or takes back a purchase for one list.
+   *
+   * The zone line is sent plainly, without the sibling's omit dance: it is required
+   * here, and a list holding no line of this cannot have got any of it.
+   */
+  async setOriginSettled(
+    generatedListId: string,
+    lineId: string,
+    body: BasketOriginSettledRequest
+  ): Promise<BasketOriginSettledResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/origins/settled`,
+        { lineId: body.lineId, settled: body.settled, from: body.from },
+        this._participantOptions(generatedListId, 'basket.setOriginSettled')
+      )
+    );
+
+    return required(
+      toBasketOriginSettledResult(answer),
+      'basket.setOriginSettled'
     );
   }
 

@@ -750,22 +750,12 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.SettleSheet
                   ),
               }),
-              // The sheet a line's settle sheet leads on to, and it is a child of the
-              // **basket** rather than of it: a sheet has no children, so the only
-              // place a sheet over a sheet can be declared is beside the one it was
-              // opened from. It names the settle sheet's URL as what it dismisses
-              // onto, which is what keeps one gesture one screen back.
-              //
-              // There were two, and `lines/:lineId/list` is gone (velista `0068`):
-              // the send sheet offered every list once, to an added line, as a name
-              // to tap, and this one offers every list a number, for every line.
-              sheet({
-                path: 'lines/:lineId/units',
-                loadComponent: () =>
-                  import('@portfolio/velista/feature-shopping-lists').then(
-                    (m) => m.LineUnitsSheet
-                  ),
-              }),
+              // There were three sheets about one line here and now there is one.
+              // `lines/:lineId/list` went in velista `0068`, which folded the send
+              // sheet into the units sheet, and `lines/:lineId/units` went in `0073`,
+              // which folded the units sheet into the settle sheet itself: its rows
+              // are drawn under the product, where the shopper already is, rather
+              // than behind a second navigation nobody found.
               sheet({
                 path: 'people',
                 loadComponent: () =>

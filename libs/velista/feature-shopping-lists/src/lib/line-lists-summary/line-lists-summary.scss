@@ -1,50 +1,26 @@
 @use '../basket-shared' as shared;
 
-.title {
-  margin: 0;
-  font-family: var(--app-font-display);
-  font-weight: 400;
-  font-size: var(--app-text-xl);
-  line-height: var(--app-leading-heading);
-  color: var(--app-text-primary);
-  text-wrap: balance;
+// Ruled off above and below, so the rows read as their own block between the product
+// entry and the settle buttons rather than as more of either.
+.summary {
+  display: block;
+  margin-block: var(--app-space-4);
+  padding-block: var(--app-space-3);
+  border-block: 1px solid var(--app-border-subtle);
 }
 
-// The sentence that says this is not buying (section 4.4). Quiet copy, no colour and no
-// icon: a warning treatment would make it read as a risk, and it is a fact about what
-// the controls below it mean.
-.not-buying {
-  margin: var(--app-space-1) 0 var(--app-space-4);
-  font-size: var(--app-text-xs);
-  line-height: var(--app-leading-body);
-  color: var(--app-text-muted);
-  text-wrap: pretty;
+.heading {
+  margin: 0 0 var(--app-space-2);
+  font-family: inherit;
+  font-weight: 500;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
 }
 
-// What the basket will buy, at the top and in the accent this app reads as "still to
-// do". `--app-action-quiet-fg` is the amber; `--app-status-attention-*` is violet
-// despite its name.
-.total {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-1);
-  margin: 0 0 var(--app-space-4);
-}
-
-.total-value {
-  font-size: var(--app-text-lg);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-action-quiet-fg);
-}
-
-// The second, quieter sentence: how much of the line nobody asked for. Without it the
-// arithmetic on the screen does not add up and reads as a defect (section 4.1).
-.total-extra {
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
-}
-
-.hint {
+// Named apart from the sheet's own `.hint`, `.failed` and `.secondary`, which is not
+// cosmetic: a reader looking at the settle sheet has to be able to tell a failure of
+// the settle from a failure of this read, and so does a spec asserting one.
+.summary-hint {
   margin: var(--app-space-2) 0;
   font-size: var(--app-text-xs);
   line-height: var(--app-leading-body);
@@ -52,44 +28,32 @@
   text-wrap: pretty;
 }
 
-.failed {
+.summary-failed {
   margin: var(--app-space-2) 0 0;
   font-size: var(--app-text-sm);
   color: var(--app-status-danger-fg);
 }
 
-.secondary {
+.summary-retry {
   @include shared.secondary-button;
 
   margin-block-start: var(--app-space-2);
 }
 
-.quiet {
-  @include shared.tap-target;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 100%;
-  margin-block-start: var(--app-space-4);
-  padding: var(--app-space-2);
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--app-text-sm);
+// How much of the line nobody asked for. Quiet, and under the rows rather than above
+// them: nothing creates it any more and it is a fact about lines made before `0073`.
+.extra {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-xs);
   color: var(--app-text-muted);
-  cursor: pointer;
-
-  &:hover {
-    color: var(--app-text-secondary);
-  }
 }
 
 // --- The rows ---------------------------------------------------------------
 
 // The two columns, named once above the rows rather than on each of them. Hidden
-// from the accessibility tree, because each control below already carries its own
-// name and a screen reader reading a header row would hear the words twice.
+// from the accessibility tree, because each reel below already carries a name that
+// says which column it is, and a screen reader reading a header row would hear the
+// words twice.
 .columns {
   display: flex;
   justify-content: flex-end;
@@ -101,12 +65,8 @@
   color: var(--app-text-muted);
 }
 
-.columns-asked {
-  min-inline-size: var(--app-quantity-width);
-  text-align: center;
-}
-
-.columns-bought {
+.columns-asked,
+.columns-got {
   min-inline-size: var(--app-quantity-width);
   text-align: center;
 }
@@ -120,14 +80,14 @@
   list-style: none;
 }
 
-// The reel is the right hand end of every row and keeps its size at the smallest
-// supported width: the number is the control and the text beside it is not, so the
-// name truncates rather than the target shrinking (section 8).
+// The two reels are the right hand end of every row and keep their size at the
+// smallest supported width: the numbers are the controls and the text beside them is
+// not, so the name truncates rather than a target shrinking (section 7).
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--app-space-3);
+  gap: var(--app-space-2);
   min-block-size: var(--app-touch-target);
   padding-block: var(--app-space-1);
   border-block-end: 1px solid var(--app-border-subtle);
@@ -166,8 +126,8 @@
   overflow-wrap: anywhere;
 }
 
-// Why there is no control. Attention rather than danger: nothing has gone wrong, and
-// the row is telling the reader a fact about somebody else's list.
+// Why there are no controls. Secondary rather than danger: nothing has gone wrong,
+// and the row is telling the reader a fact about somebody else's list.
 .row-reason {
   font-size: var(--app-text-xs);
   color: var(--app-text-secondary);
@@ -189,15 +149,15 @@
   text-wrap: pretty;
 
   // What a write that **landed** had to say, which is not a failure and must not be
-  // coloured as one (section 6). The quiet accent this app reads as "still to do",
-  // because that is what units waiting for a list are.
+  // coloured as one. The quiet accent this app reads as "still to do", because that
+  // is what units waiting for a list are.
   &.news {
     color: var(--app-action-quiet-fg);
   }
 }
 
-// The number on a row with no reel, drawn where the reel would have been so a column of
-// rows still reads down its right edge.
+// A number where a reel would have been, so a column of rows still reads down its
+// right edge whether or not this reader may move it.
 .row-number {
   flex: none;
   min-inline-size: var(--app-quantity-width);
@@ -205,18 +165,13 @@
   font-variant-numeric: tabular-nums;
   color: var(--app-text-secondary);
   text-align: center;
-}
 
-// What this basket has bought for the list. Quieter than the reel beside it, because
-// it is a thing to read and the reel is a thing to move, and nothing on this sheet
-// can change it.
-.row-bought {
-  flex: none;
-  min-inline-size: var(--app-quantity-width);
-  font-size: var(--app-text-base);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-muted);
-  text-align: center;
+  // A list that asked for nothing cannot have got any, so the second column holds a
+  // dash rather than a zero. Muted, because it is the absence of a number and not
+  // one.
+  &.is-empty {
+    color: var(--app-text-muted);
+  }
 }
 
 .visually-hidden {
@@ -226,7 +181,7 @@
 // --- The lists that asked for nothing ---------------------------------------
 
 // A real disclosure, full width and with a 44px target, because it is the one control
-// on this sheet that is not a number.
+// here that is not a number.
 .disclosure {
   @include shared.tap-target;
 
@@ -245,8 +200,8 @@
   cursor: pointer;
 }
 
-// Sunken, so the section reads as being behind the lists that are actually in the line
-// rather than as more of them.
+// Sunken, so the section reads as being behind the lists that are actually on the
+// line rather than as more of them.
 .rest {
   padding: var(--app-space-2) var(--app-space-3);
   border-radius: var(--app-card-radius);

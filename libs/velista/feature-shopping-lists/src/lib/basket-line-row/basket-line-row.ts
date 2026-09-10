@@ -17,7 +17,6 @@ import {
 import {
   basketLineState,
   inLocale,
-  LINE_QUANTITY_MAX,
   outstanding,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   type BasketLine,
@@ -97,14 +96,18 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
  * control, whose accessible name is the act it performs, and the body, which is the
  * control this component always was, with the composed label it always had.
  *
- * ## The number is the control (plan 0054)
+ * ## The number is the control (plan 0054, amended by `0073`)
  *
  * The trailing number stopped being a readout and became a `QuantityReel` bound to
  * what is still to get. Dragging it **down** records that many bought; dragging it
- * **up** says this basket will buy more than the households asked for. That
- * asymmetry is backend `0056` section 1's rule and not this component's, and one
- * call carries both directions: the client never decides which of the two a gesture
- * was, because two phones moving one line is exactly when it would decide wrongly.
+ * **up** takes that many back. It runs from zero to what the lists asked for, so a
+ * basket can no longer be raised above that, and a line of six dragged to zero and
+ * brought back to four is two bought and four still to get.
+ *
+ * `0054` section 5 read the raise as "this basket will buy more" and is retired
+ * rather than worked around: nobody standing in a shop read it that way. One call
+ * still carries both directions, because the client never decides which of the two a
+ * gesture was: two phones moving one line is exactly when it would decide wrongly.
  *
  * The row still opens the sheet on a tap. The reel is a separate target inside it
  * and takes the drag, the words take the tap, and `line-row` on the list page has
@@ -301,14 +304,16 @@ export class BasketLineRow {
   );
 
   /**
-   * The ceiling, which is on the **resulting quantity** and not on this number.
+   * The ceiling: **what the lists asked for**, and nothing above it (velista `0073`).
    *
-   * Backend `0056` section 5: a partly settled line cannot be raised past the same
-   * limit an unsettled one has, so what is already bought comes off the top.
+   * This was `LINE_QUANTITY_MAX` minus what is settled, which let the number run past
+   * the line's own quantity and made the raise a decision to buy more than anybody
+   * wanted. A shopper who puts a tin back reaches for the same number expecting to
+   * undo what they just did, so the reel now runs from zero to the line's quantity
+   * and up takes purchases back. A line of six dragged to zero offers a reel from
+   * zero to six.
    */
-  protected readonly ceiling = computed(
-    () => LINE_QUANTITY_MAX - this.line().settled
-  );
+  protected readonly ceiling = computed(() => this.line().quantity);
 
   /** What the reel is counting: how many are still to get, not how many to buy. */
   protected readonly reelLabel = computed(() =>

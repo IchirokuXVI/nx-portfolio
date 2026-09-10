@@ -120,6 +120,8 @@ function build(
     getLineOrigins: (id, lineId) => memory.getLineOrigins(id, lineId),
     setOriginQuantity: (id, lineId, body) =>
       memory.setOriginQuantity(id, lineId, body),
+    setOriginSettled: (id, lineId, body) =>
+      memory.setOriginSettled(id, lineId, body),
     addLine: (id, body) => memory.addLine(id, body),
     suggest: (id, query) => memory.suggest(id, query),
     listParticipants: () => memory.listParticipants(),
@@ -1067,6 +1069,62 @@ describe('BasketStore', () => {
       expect(after?.quantity).toBe((before?.quantity ?? 0) + 2);
       expect(after?.settled).toBe(before?.settled);
       expect(after?.lastOutcome).toBe(before?.lastOutcome);
+    });
+  });
+
+  /**
+   * What one list **got** (velista `0073`, backend `0104` section 4).
+   *
+   * The opposite of the block above and asserted beside it, because the one thing a
+   * reader has to be able to see at a glance is that these two calls do opposite
+   * things to the same row: that one never buys and this one always does.
+   */
+  describe('setting what one list got', () => {
+    it('records the purchase and folds the answered line into the basket', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.setOriginSettled('line-eggs', {
+        lineId: 'zl-3',
+        settled: 5,
+        from: 2,
+      });
+
+      expect(result?.origin?.settledHere).toBe(5);
+      expect(store.lines().find((row) => row.id === 'line-eggs')?.settled).toBe(
+        5
+      );
+    });
+
+    it('refuses a `from` that is not where the number stands', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.setOriginSettled('line-eggs', {
+        lineId: 'zl-3',
+        settled: 5,
+        from: 0,
+      });
+
+      expect(result).toBeNull();
+      expect((store.error() as GatewayError).code).toBe('stale_quantity');
+    });
+
+    it('marks the row busy while the write is out', async () => {
+      // Through `_write` like every other write here, which is what greys the row
+      // one screen up rather than letting two gestures race on one line.
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const pending = store.setOriginSettled('line-eggs', {
+        lineId: 'zl-3',
+        settled: 3,
+        from: 2,
+      });
+      expect(store.busyLines().has('line-eggs')).toBe(true);
+
+      await pending;
+      expect(store.busyLines().has('line-eggs')).toBe(false);
     });
   });
 
