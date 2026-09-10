@@ -196,7 +196,10 @@ test('an unknown engine is refused before anything is started', async () => {
         repoRoot: '/repo',
         platform: 'linux',
       }),
-    /Unknown engine sdk\. It is claude or api\./
+    // The names it lists belong to the registry, and `registry.test.mjs`
+    // asserts the whole sentence. What this test is about is the line below:
+    // an unknown engine is refused before anything was started.
+    /Unknown engine sdk\./
   );
   assert.deepEqual(spawned, []);
 });

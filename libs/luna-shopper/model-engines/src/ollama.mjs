@@ -100,9 +100,10 @@ function positiveInteger(value) {
 /**
  * The model's own context length, out of `/api/show`.
  *
- * The field is named for the model family (`gemma3.context_length` on the
- * measured model), so the family is read off the key rather than guessed from
- * anything else the reply carries.
+ * The field is named for the model family and not for the tag the operator
+ * typed (`gemma4.context_length` on the measured model, which was pulled as
+ * `gemma4:12b`), so the family is read off the key rather than composed from
+ * the model name.
  */
 export function modelContextLength(shown) {
   const info = shown?.model_info;

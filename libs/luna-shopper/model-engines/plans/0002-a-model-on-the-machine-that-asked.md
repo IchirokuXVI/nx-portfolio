@@ -6,9 +6,21 @@ was the right shape, so this plan is two claims at once: an adapter, and the
 answer to whether the library that was built for it needs changing to take it.
 
 It does not. Everything below is one new file, `src/ollama.mjs`, and one new row
-in `ENGINES`. No file in `curation-cli` is touched, the help text and the
-`--effort` refusal are already read off the registry, and the contract is
-unchanged.
+in `ENGINES`. The contract is unchanged, and no source file in `curation-cli` is
+touched: the help text, the `--engine` check, the `--effort` refusal and
+`entry.create` all read the registry and take the new row without a word.
+
+**One test in `curation-cli` did have to change, and it is worth saying why**,
+because a plan that claims a clean seam and then quietly edits the neighbour is a
+plan that cannot be checked. `cli.test.mjs` asserted the refusal sentence
+`Unknown engine sdk. It is claude or api.` in full. That sentence is built by
+`listNames(ENGINE_NAMES)`, which enumerates the registry, so any third row
+changes it and no version of "one new entry" leaves it alone. `registry.test.mjs`
+already asserts the same sentence, where it belongs. So the assertion in
+`cli.test.mjs` is relaxed to `Unknown engine sdk.` rather than restated, since
+what that test is for is the line under it: nothing was spawned. Duplicated
+coverage in the wrong project, not a wrong seam, and it is fixed in the direction
+that stops a fourth engine hitting it again.
 
 ## Why a third engine
 
@@ -38,16 +50,16 @@ a 965 character schema, with packets from `buildEntryPacket`.
 Eight rows were written by hand, each one a rule the curation prompt states, and
 each with the decision a careful curator makes:
 
-| Row                                          | Wanted        | Answered |
-| -------------------------------------------- | ------------- | -------- |
-| a private label of another chain (rule 6)     | CREATE/REVIEW | CREATE   |
-| same brand and same format                    | LINK          | LINK     |
-| a different format is a different product     | CREATE/REVIEW | CREATE   |
-| an EAN match                                  | LINK          | LINK     |
-| nothing to link to, and the product is plain  | CREATE        | CREATE   |
-| an unreadable promotional name                | REVIEW        | REVIEW   |
+| Row                                           | Wanted        | Answered   |
+| --------------------------------------------- | ------------- | ---------- |
+| a private label of another chain (rule 6)     | CREATE/REVIEW | CREATE     |
+| same brand and same format                    | LINK          | LINK       |
+| a different format is a different product     | CREATE/REVIEW | CREATE     |
+| an EAN match                                  | LINK          | LINK       |
+| nothing to link to, and the product is plain  | CREATE        | CREATE     |
+| an unreadable promotional name                | REVIEW        | REVIEW     |
 | a run created candidate, nameable only by ref | LINK (ref)    | LINK (ref) |
-| a near name under a different brand           | CREATE/REVIEW | CREATE   |
+| a near name under a different brand           | CREATE/REVIEW | CREATE     |
 
 Eight of eight, including the one that catches a model reaching for an id that
 does not exist yet: the run created candidate was named by `ref-1` and not by an
@@ -190,13 +202,13 @@ The shared retry loop is the one in `retry.mjs` and the giving up message stays
 `The ollama engine gave up: <reason>.` What this adapter contributes is the
 classification, and two of the four are fatal on purpose.
 
-| Failure                                             | Answer                                                   |
-| --------------------------------------------------- | -------------------------------------------------------- |
-| HTTP 404, `{"error":"model 'x' not found"}`          | fatal, naming `ollama pull <model>`                       |
-| the connection is refused                            | fatal, naming the host and `ollama serve`                 |
-| HTTP 5xx                                             | retried                                                   |
-| a truncated prompt (above)                           | fatal, naming `OLLAMA_NUM_CTX`                            |
-| the reply carried no `message.content`               | retried                                                   |
+| Failure                                     | Answer                                    |
+| ------------------------------------------- | ----------------------------------------- |
+| HTTP 404, `{"error":"model 'x' not found"}` | fatal, naming `ollama pull <model>`       |
+| the connection is refused                   | fatal, naming the host and `ollama serve` |
+| HTTP 5xx                                    | retried                                   |
+| a truncated prompt (above)                  | fatal, naming `OLLAMA_NUM_CTX`            |
+| the reply carried no `message.content`      | retried                                   |
 
 The two fatal ones are the same argument plan 0001 made about a 401: a model that
 is not pulled and a server that is not running are the same answer forty seconds
@@ -216,13 +228,13 @@ else, because an aborted `fetch` and a refused connection both arrive as a
 Ollama counts in its own three fields, and the mapping is not a rename, because
 the two providers mean different things by the input count.
 
-| Counter                    | From                                            |
-| -------------------------- | ----------------------------------------------- |
+| Counter                    | From                                                     |
+| -------------------------- | -------------------------------------------------------- |
 | `inputTokens`              | `prompt_eval_count` **minus** `prompt_eval_cached_count` |
-| `cacheReadInputTokens`     | `prompt_eval_cached_count`                       |
-| `outputTokens`             | `eval_count`                                     |
-| `cacheCreationInputTokens` | 0, always                                        |
-| `calls`                    | one per reply, by `addUsage`                     |
+| `cacheReadInputTokens`     | `prompt_eval_cached_count`                               |
+| `outputTokens`             | `eval_count`                                             |
+| `cacheCreationInputTokens` | 0, always                                                |
+| `calls`                    | one per reply, by `addUsage`                             |
 
 The subtraction is the whole of it. **`prompt_eval_count` includes the cached
 tokens** and Anthropic's `input_tokens` excludes `cache_read_input_tokens`, so
@@ -318,8 +330,9 @@ driving with is decided by the measurement below and not by this plan.
   reported as the signal's own reason and not as a connection failure;
 - the registry: `ollama` resolves, `--effort` is refused against the empty list,
   the help text lists it, and the entry is asked to confirm nothing;
-- every existing suite in `model-engines` and `curation-cli` passes unchanged,
-  which is what proves the addition was an addition.
+- every existing suite in `model-engines` and `curation-cli` passes, with the one
+  assertion named at the top of this plan relaxed and nothing else edited, which
+  is what proves the addition was an addition.
 
 **And one measurement that is not a unit test.** Before this is called done, a
 real queue is worked with `--engine ollama` against a rehearsal slot, and the
