@@ -180,3 +180,57 @@ export function buildSystemPrompt({
     '',
   ].join('\n');
 }
+
+/**
+ * The shape of one decision, as JSON Schema, from the same two vocabularies.
+ *
+ * `start` answers this beside the prompt and the orchestrator hands it to the
+ * engine, which passes it as `--json-schema` or as `output_config.format`. It
+ * is built here and from the live vocabularies for the same reason the prompt
+ * is: a category the catalog does not have must be unable to reach `decide`,
+ * rather than be described in prose and caught afterwards.
+ *
+ * It governs the **shape** only, and the validators keep owning the semantics.
+ * The conditional rules cannot be written here: `itemId` belongs on a `LINK`
+ * and nowhere else, exactly one of `itemId` and `itemRef` is allowed, and the
+ * id has to be one of the candidates this row was actually given. So every
+ * field except `decision` stays optional, and a schema valid answer is still an
+ * answer the decider can refuse.
+ */
+export function buildDecisionSchema({ categories, units }) {
+  const nullableString = { type: ['string', 'null'] };
+  return {
+    type: 'object',
+    properties: {
+      decision: { type: 'string', enum: ['LINK', 'CREATE', 'REVIEW'] },
+      itemId: nullableString,
+      itemRef: nullableString,
+      item: {
+        type: ['object', 'null'],
+        properties: {
+          nameEs: nullableString,
+          nameEn: nullableString,
+          brand: nullableString,
+          unitSize: { type: ['number', 'null'] },
+          defaultUnit: { type: ['string', 'null'], enum: [...units, null] },
+          category: { type: ['string', 'null'], enum: [...categories, null] },
+          ean: nullableString,
+        },
+      },
+      confidence: { type: 'number', minimum: 0, maximum: 1 },
+      issues: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            code: { type: 'string' },
+            detail: { type: 'string' },
+          },
+          required: ['code', 'detail'],
+        },
+      },
+      reasoning: { type: 'string' },
+    },
+    required: ['decision', 'confidence', 'issues', 'reasoning'],
+  };
+}

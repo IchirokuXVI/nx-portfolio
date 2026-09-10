@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  buildDecisionSchema,
   buildSystemPrompt,
   carriesBrand,
   carriesSize,
@@ -79,4 +80,49 @@ test('the system prompt carries the rules, both vocabularies and the labels', ()
   assert.match(prompt, /`Hacendado` belongs to Mercadona/);
   // The six naming rules the validators enforce come from the markdown file.
   assert.match(prompt, /rule/i);
+});
+
+test('the decision schema takes its enums from the same two vocabularies', () => {
+  const schema = buildDecisionSchema({
+    categories: ['DAIRY', 'PANTRY'],
+    units: ['LITER', 'UNIT'],
+  });
+
+  assert.deepEqual(schema.properties.decision.enum, [
+    'LINK',
+    'CREATE',
+    'REVIEW',
+  ]);
+  // A category the catalog does not have cannot be answered at all, rather
+  // than being described in prose and refused after the fact.
+  assert.deepEqual(schema.properties.item.properties.category.enum, [
+    'DAIRY',
+    'PANTRY',
+    null,
+  ]);
+  assert.deepEqual(schema.properties.item.properties.defaultUnit.enum, [
+    'LITER',
+    'UNIT',
+    null,
+  ]);
+  assert.deepEqual(schema.required, [
+    'decision',
+    'confidence',
+    'issues',
+    'reasoning',
+  ]);
+});
+
+test('the decision schema leaves every conditional field to the validators', () => {
+  const schema = buildDecisionSchema({
+    categories: ['DAIRY'],
+    units: ['UNIT'],
+  });
+
+  // `itemId` belongs on a LINK and nowhere else, exactly one of itemId and
+  // itemRef is allowed, and the id has to be one this row was offered. None of
+  // that is expressible here, so a schema valid answer is still refusable.
+  for (const field of ['itemId', 'itemRef', 'item']) {
+    assert.ok(!schema.required.includes(field), field);
+  }
 });

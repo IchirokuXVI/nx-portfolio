@@ -18,6 +18,7 @@ import {
 import { CANDIDATE_LIMIT, makeGateway, toCreateItemBody } from './gateway.mjs';
 import { buildEntryPacket, toCandidate } from './packet.mjs';
 import {
+  buildDecisionSchema,
   buildSystemPrompt,
   chainName,
   loadPrivateLabels,
@@ -161,6 +162,10 @@ export async function start({
       categories: vocabularies.categories,
       units: vocabularies.units,
       privateLabels,
+    }),
+    schema: buildDecisionSchema({
+      categories: vocabularies.categories,
+      units: vocabularies.units,
     }),
   };
 }
