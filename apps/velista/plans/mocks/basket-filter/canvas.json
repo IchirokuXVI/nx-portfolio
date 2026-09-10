@@ -1,54 +1,54 @@
 {
   "title": "Velista: finding a line in the basket",
-  "lede": "The design for searching, filtering, grouping and ordering the basket page (plans to follow, once this is approved). A search field and a filter sheet, reached from a tools row under the title; grouping by category; prices from one shop; the owner's list filter; and what the screen says when a filter leaves nothing. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The design for searching, filtering, grouping and ordering the basket page (plans to follow, once this is approved). A search field and a filter sheet, reached from a tools row under the title; grouping by category or by list; prices from one shop, chosen in a sheet of its own; the owner's list filter; and what the screen says when a search matches nothing. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
     { "file": "Tools.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "The tools row: at rest, searching, filtered" },
-    { "file": "FilterSheet.dc.html", "x": 0, "y": 1160, "w": 900, "h": 1010, "title": "The filter sheet, owner and guest" },
-    { "file": "Grouped.dc.html", "x": 960, "y": 1160, "w": 900, "h": 1010, "title": "Grouped by category" },
-    { "file": "Lists.dc.html", "x": 0, "y": 2330, "w": 900, "h": 1010, "title": "The list filter, and an empty result" }
+    { "file": "FilterSheet.dc.html", "x": 0, "y": 1160, "w": 1330, "h": 1010, "title": "The filter sheet, and the shop picker" },
+    { "file": "Grouped.dc.html", "x": 0, "y": 2320, "w": 1330, "h": 1010, "title": "Grouped by category, and by list" },
+    { "file": "Lists.dc.html", "x": 0, "y": 3480, "w": 900, "h": 1010, "title": "The list filter, and a search that matches nothing" }
   ],
   "annotations": [
     {
       "id": "brief",
       "x": 0,
-      "y": -470,
-      "w": 430,
-      "text": "THE PROBLEM. The basket draws its lines in server order and nothing else. With twelve lines that is fine; with forty, from three households, in a shop, it is not possible to find the one you are standing in front of.\nEverything here is used one handed, in an aisle, often by a guest who has never seen the app. So the controls are two icons and one sheet, and every state they produce is visible on the page itself, as chips, so nobody wonders why a line is missing."
+      "y": -430,
+      "w": 420,
+      "text": "THE PROBLEM. The basket draws its lines in server order and nothing else. With twelve lines that is fine; with forty, from three households, in a shop, it is not possible to find the one you are standing in front of.\nEverything here is used one handed, in an aisle, often by a guest who has never seen the app. So the controls are two icons and one sheet, and every state they produce is visible on the page itself, as chips, so nobody wonders why a line moved."
     },
     {
       "id": "tools",
-      "x": 470,
-      "y": -470,
-      "w": 430,
-      "text": "THE TOOLS ROW, NOT THE HEADER. The header already holds back, the title, the faces, share and finish: a sixth and seventh icon there would shrink the title to nothing. The search and filter icons sit in the row under it, beside the count the page already draws, and that row becomes the search field when search opens.\nSEARCH IS IN MEMORY, over the line's text and its product's name, case and accent folded. The result count is said. Cancel restores the row.\nTHE FILTER ICON COUNTS what the sheet turned on, and a chip row names each one with an x. The chip row is how the state is understood without opening the sheet, and how one thing is dropped without dropping the rest."
+      "x": 460,
+      "y": -430,
+      "w": 420,
+      "text": "THE TOOLS ROW, NOT THE HEADER. The header already holds back, the title, the faces, share and finish: two more icons there would shrink the title to nothing. Search and filter sit in the row under it, beside the count the page already draws, and that row becomes the search field when search opens.\nSEARCH IS IN MEMORY, over the line's text and its product's name, case and accent folded. The result count is said. Cancel restores the row.\nTHE FILTER ICON COUNTS what the sheet turned on. The chip row names each one with an x, on ONE line: chips that would not fit collapse into a single \"+ N\" chip, which opens the sheet. The shop chip is the chain name alone."
     },
     {
       "id": "sheet",
-      "x": 940,
-      "y": -470,
-      "w": 430,
-      "text": "THE SHEET: SHOW, ORDER, PRICES FROM, LISTS. Checkboxes and radios, never a segmented control (0030 section 6.1 made that call for independent options and it holds here). One primary button says how many lines the choice leaves, so a filter that would leave nothing is visible before it is applied. Reset is in the title row.\nTWO KINDS OF OPTION, and the sheet says which is which under the title: show and lists hide lines; order, grouping and the shop only move and mark them. Only the second kind is remembered between visits, and the shop for two hours only."
+      "x": 920,
+      "y": -430,
+      "w": 410,
+      "text": "THE SHEET: ORDER, GROUP BY, PRICES FROM, LISTS. Radios for each choice that is one of several, checkboxes for the lists, never a segmented control (0030 section 6.1). Grouping is one radio group: nothing, category or list. The primary button says how many lines the choice leaves. Reset is in the title row.\nPRICES FROM is two radios: any of your shops, or one shop. A profile can hold fifty shops, so the one shop is not listed here: Change opens the picker, a sheet of its own, grouped by chain and searched like the supermarkets page."
     },
     {
       "id": "grouping",
-      "x": 960,
-      "y": 2330,
-      "w": 430,
-      "text": "GROUPING IS THE LAST STEP. Filter first, then order, then cut into groups. A line keeps whatever place the order gave it inside its group, so the shop's marks and the usual order survive grouping without a rule of their own.\nHEADINGS ARE REAL HEADINGS with a per group count. A line with no product has no category and goes last, under a heading that says why. The catalog's own Other category is a category and sits above it. When a product carries two categories the line is drawn twice; the count on the tools row still counts lines, not rows."
+      "x": 0,
+      "y": 3480,
+      "w": 410,
+      "text": "GROUPING IS THE LAST STEP. Filter first, then order, then cut into groups. A line keeps whatever place the order gave it inside its group, so the shop's marks and the usual order survive grouping without a rule of their own. Groups take the order of their first line, so the aisles order the categories too.\nBY CATEGORY: real headings with a per group count. A line with no product has no category and goes last, under a heading that says why. The catalog's own Other is a category and sits above it. A product with two categories is drawn twice; the count on the tools row still counts lines.\nBY LIST: the owner reads each list as it was written, a heading per list, each line with that list's own amount and nothing merged. Eggs asked for by two lists is two rows, six and six, not one row of twelve. The number on a row in this mode is that list's share, and moving it is the per list write from 0073."
     },
     {
       "id": "shop",
-      "x": 1400,
-      "y": 2330,
-      "w": 430,
-      "text": "PRICES FROM ONE SHOP. Every row shows that shop's price. A row where another of your shops is cheaper says so after the price, in the attention colour, because it is a decision the shopper faces: a cheaper price, not an error. A row the shop does not list keeps its place in the order but sinks to the end, under a heading, and can still be got: the settle controls never leave a row.\nTHIS NEEDS THE SERVER. The basket read carries one offer per product today, the cheapest across all your shops, so which shops list a product is not on the phone. Its plan is the backend half of this work."
+      "x": 460,
+      "y": 3480,
+      "w": 420,
+      "text": "PRICES FROM ONE SHOP. Every row shows that shop's price. A row where another of your shops is cheaper says so after the price, in the attention colour, because it is a decision the shopper faces: a cheaper price, not an error. A row the shop does not list keeps its place in the order but sinks to the end, under a heading, and can still be got: the settle controls never leave a row. Grouped, it sinks to the end of its group.\nTHIS NEEDS THE SERVER. The basket read carries one offer per product today, the cheapest across all your shops, so which shops list a product is not on the phone. Its plan is the backend half of this work."
     },
     {
       "id": "order",
-      "x": 470,
-      "y": 2330,
-      "w": 430,
-      "text": "THE DEFAULT ORDER IS THE WAY YOU SHOP. The server orders a new basket from the timing of your last trips: when you settle milk, then skimmed milk three seconds later, then juice ten seconds after that, those are aisles. The median of those offsets over up to seven past trips places each product; a product with no history goes after every product with one, A to Z. It is written once, as each line's position, and the sheet's A to Z is the only other order.\nTHE LIST FILTER is the owner's, because it names households. Lines on no list yet are always shown, at the end, under a heading, so a filter for one household never hides what somebody just added in the aisle."
+      "x": 920,
+      "y": 3480,
+      "w": 410,
+      "text": "THE DEFAULT ORDER IS THE WAY YOU SHOP. The server orders a new basket from the timing of your last trips: milk, then skimmed milk three seconds later, then juice ten seconds after that, are aisles. The median of those offsets over up to seven past trips places each product; a product with no history goes after every product with one, A to Z. It is written once, as each line's position. The sheet's A to Z is the only other order.\nWHAT IS REMEMBERED. Order, grouping and the shop are kept in local storage as one record with a date per property. The record is read once, when the list loads: a property whose date has passed is ignored then, and nothing changes under the shopper while the list is open. The shop keeps two hours; the others keep indefinitely. The list filter and the search are never remembered.\nTHE LIST FILTER is the owner's, because it names households. Lines on no list yet are always shown, at the end, under a heading, so a filter for one household never hides what somebody just added in the aisle."
     }
   ]
 }

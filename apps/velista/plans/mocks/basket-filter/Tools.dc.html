@@ -67,7 +67,7 @@
           <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #ffb454; background: linear-gradient(90deg, #ffb454 50%, transparent 50%);"></span></span>
           <div style="flex: 1 1 auto; min-width: 0;">
             <div style="font-size: 16px; line-height: 1.3;">Eggs</div>
-            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Huevos L, 12 &middot; 2.15&nbsp;&euro;</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Huevos L, 12 &middot; 1.99&nbsp;&euro;</div>
             <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">Marc got 2 &middot; from Weekly shop and Groceries</div>
           </div>
           <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">10<span style="font-size: 10px; font-weight: 500; color: #6f7899;">of 12</span></span>
@@ -209,7 +209,7 @@
         </div>
 
         <div style="padding: 14px 16px; font-size: 12px; line-height: 1.5; color: #525a78; border-top: 1px dashed rgba(255,255,255,0.1); margin-top: 120px;">
-          No request leaves the phone: the page already holds every line and every product name. Case and accents are folded, so &ldquo;platano&rdquo; finds Pl&aacute;tano. The match is highlighted on the line; a product caption is matched but not highlighted. When nothing matches, the list area says &ldquo;No line matches &lsquo;xyz&rsquo;&rdquo; in the empty state&rsquo;s own shape, and the composer below still adds a line.
+          No request leaves the phone: the page already holds every line and every product name. Case and accents are folded, so &ldquo;platano&rdquo; finds Pl&aacute;tano. The match is highlighted on the line; a product caption is matched but not highlighted. Cancel restores the row and the count. The search is never remembered.
         </div>
 
       </div>
@@ -222,9 +222,9 @@
     </div>
   </div>
 
-  <!-- ============ FILTERS ON ============ -->
+  <!-- ============ FILTERS ON, CHIPS OVERFLOW ============ -->
   <div style="display: flex; flex-direction: column; gap: 12px;">
-    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">FILTERS ON &middot; the icon counts them, the chips name them, each is one tap to drop</span>
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">FOUR THINGS ON &middot; the icon counts them, the chips stay on one line, the rest collapse into +2</span>
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
       <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
@@ -252,27 +252,23 @@
         </div>
         <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"/><circle cx="14.5" cy="7" r="2.3"/><circle cx="9.5" cy="17" r="2.3"/></svg>
-          <span style="position: absolute; top: 4px; right: 3px; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: #ffb454; color: #0a0c14; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid #0a0c14;">2</span>
+          <span style="position: absolute; top: 4px; right: 3px; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: #ffb454; color: #0a0c14; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid #0a0c14;">4</span>
         </div>
       </div>
 
-      <!-- the chip row: one chip per thing the sheet turned on, and the count of what is left -->
-      <div style="flex: 0 0 auto; padding: 2px 20px 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 12px; border-radius: 999px; border: 1px solid rgba(255,180,84,0.4); background: rgba(255,180,84,0.08); color: #ffd39a; font-size: 13px; font-weight: 600;">Prices from Mercadona <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffd39a" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
-        <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 12px; border-radius: 999px; border: 1px solid rgba(255,180,84,0.4); background: rgba(255,180,84,0.08); color: #ffd39a; font-size: 13px; font-weight: 600;">Still to get <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffd39a" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
-        <span style="margin-left: auto; font-size: 12px; color: #6f7899; font-variant-numeric: tabular-nums;">8 of 12 lines</span>
+      <!-- the chip row: one line, never wraps; what does not fit is one "+ N" chip that opens the sheet -->
+      <div style="flex: 0 0 auto; padding: 2px 20px 10px; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden;">
+        <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 12px; border-radius: 999px; border: 1px solid rgba(255,180,84,0.4); background: rgba(255,180,84,0.08); color: #ffd39a; font-size: 13px; font-weight: 600;">Mercadona <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffd39a" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 12px; border-radius: 999px; border: 1px solid rgba(255,180,84,0.4); background: rgba(255,180,84,0.08); color: #ffd39a; font-size: 13px; font-weight: 600;">Only Groceries <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffd39a" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
+        <span style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); color: #c2c8db; font-size: 13px; font-weight: 600;">+2</span>
+        <span style="margin-left: auto; font-size: 12px; color: #6f7899; font-variant-numeric: tabular-nums;">7 of 12</span>
       </div>
 
       <div style="flex: 1 1 auto; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
 
-        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
-          <div style="flex: 1 1 auto; min-width: 0;">
-            <div style="font-size: 16px; line-height: 1.3;">Milk</div>
-            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Hacendado entera, 1 L &middot; 0.98&nbsp;&euro;</div>
-            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">from Weekly shop &middot; Flat 3B</div>
-          </div>
-          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">3</span>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">Dairy</span>
+          <span style="font-size: 12px; color: #6f7899; font-variant-numeric: tabular-nums;">0 of 1 got</span>
         </div>
 
         <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
@@ -285,24 +281,9 @@
           <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">10<span style="font-size: 10px; font-weight: 500; color: #6f7899;">of 12</span></span>
         </div>
 
-        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
-          <div style="flex: 1 1 auto; min-width: 0;">
-            <div style="font-size: 16px; line-height: 1.3;">Tomatoes</div>
-            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Tomate rama, 1 kg &middot; 1.89&nbsp;&euro;</div>
-            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">from Groceries &middot; Parents&rsquo; house</div>
-          </div>
-          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">6</span>
-        </div>
-
-        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
-          <div style="flex: 1 1 auto; min-width: 0;">
-            <div style="font-size: 16px; line-height: 1.3;">Skimmed milk</div>
-            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Hacendado desnatada, 1 L &middot; 0.95&nbsp;&euro;</div>
-            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">from Weekly shop &middot; Flat 3B</div>
-          </div>
-          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">2</span>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">Meat</span>
+          <span style="font-size: 12px; color: #6f7899; font-variant-numeric: tabular-nums;">0 of 1 got</span>
         </div>
 
         <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
@@ -315,6 +296,25 @@
           <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
         </div>
 
+        <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">Pantry</span>
+          <span style="font-size: 12px; color: #6f7899; font-variant-numeric: tabular-nums;">1 of 1 got</span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; background: #34d399; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3; color: #98a0bb;">Olive oil</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Ana got it &middot; from Groceries</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: #6f7899;">0</span>
+        </div>
+
+        <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">Produce</span>
+          <span style="font-size: 12px; color: #6f7899; font-variant-numeric: tabular-nums;">0 of 2 got</span>
+        </div>
+
         <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
           <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
           <div style="flex: 1 1 auto; min-width: 0;">
@@ -325,19 +325,37 @@
           <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
         </div>
 
-        <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 16px 16px 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-          <span style="font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">Not listed at Mercadona</span>
-          <span style="font-size: 12px; color: #6f7899;">still yours to get</span>
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Tomatoes</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Tomate rama, 1 kg &middot; 1.89&nbsp;&euro;</div>
+            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">from Groceries &middot; Parents&rsquo; house</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">6</span>
+        </div>
+
+        <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">No category</span>
+          <span style="font-size: 12px; color: #6f7899;">lines with no product</span>
         </div>
 
         <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
           <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
           <div style="flex: 1 1 auto; min-width: 0;">
-            <div style="font-size: 16px; line-height: 1.3;">Tropical juice with milk</div>
-            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Don Sim&oacute;n Funciona, 1 L &middot; <span style="color: #98a0bb;">1.45&nbsp;&euro; at Dia</span></div>
-            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">from Weekly shop &middot; Flat 3B</div>
+            <div style="font-size: 16px; line-height: 1.3;">Birthday candles</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Added by Dani &middot; from Groceries</div>
           </div>
-          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">2</span>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Something for the cat</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Added by Marc &middot; <span style="color: #98a0bb;">on no list yet</span></div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
         </div>
 
       </div>
