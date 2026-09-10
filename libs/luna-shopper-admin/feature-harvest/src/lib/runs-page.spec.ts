@@ -387,19 +387,69 @@ describe('the run form, the price scope a walk writes to', () => {
    * (admin plan 0025, section 2).
    */
   it('asks where to look for shops, unless the chain names its own', async () => {
-    const { fixture } = await render(undefined, { [DEZA]: 'lidl-api' });
-    await chain(fixture, MERCADONA);
+    // Mercadona names its own shops since backend plan 0106, so the chain that
+    // still needs a centre here is the one whose site publishes an assortment
+    // and no store list.
+    const { fixture } = await render(undefined, { [DEZA]: 'deza-web' });
+    await chain(fixture, DEZA);
     const page = fixture.componentInstance;
 
     page.mode.set('STORE_DISCOVERY');
     fixture.detectChanges();
     expect(page.needsCentre()).toBe(true);
+    expect(page.offersPostalCodes()).toBe(false);
     expect(text(fixture)).toContain('harvest.runs.start.postalCode');
+
+    await chain(fixture, MERCADONA);
+    fixture.detectChanges();
+    expect(page.needsCentre()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.runs.start.country');
+  });
+
+  /**
+   * The other half of the same fact (backend plan 0106, section 4): a chain
+   * that names its own shops takes no centre and a filter instead, matched
+   * against each shop's own code rather than as a radius.
+   */
+  it('offers the postal code filter only where the chain names its shops', async () => {
+    const { fixture, spawned } = await render(undefined, {
+      [DEZA]: 'deza-web',
+    });
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.mode.set('STORE_DISCOVERY');
+    fixture.detectChanges();
+    expect(page.offersPostalCodes()).toBe(true);
+    expect(text(fixture)).toContain('harvest.runs.start.postalCodes');
+
+    page.postalCodes.set(['15006', '  ', ' 14013 ,15006'].join('\n'));
+    await page.start();
+
+    // Blanks and duplicates are dropped, and a comma separates as a newline
+    // does, because a list of codes is pasted as often as it is typed.
+    expect(spawned[0]).toMatchObject({
+      mode: 'STORE_DISCOVERY',
+      postalCodes: ['15006', '14013'],
+    });
 
     await chain(fixture, DEZA);
     fixture.detectChanges();
-    expect(page.needsCentre()).toBe(false);
-    expect(text(fixture)).not.toContain('harvest.runs.start.postalCode');
+    expect(page.offersPostalCodes()).toBe(false);
+  });
+
+  it('sends no filter at all when none was typed', async () => {
+    // An empty filter is every shop, which is what an absent field already
+    // means, so an empty array in the body would say nothing new.
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.mode.set('STORE_DISCOVERY');
+    fixture.detectChanges();
+    await page.start();
+
+    expect(spawned[0]).not.toHaveProperty('postalCodes');
   });
 
   it('offers the EAN backfill only where there are product pages to read', async () => {

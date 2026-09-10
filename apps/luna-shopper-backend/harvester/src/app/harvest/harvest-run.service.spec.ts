@@ -603,9 +603,10 @@ describe('HarvestRunService.spawn', () => {
   });
 
   it('refuses a store discovery for a chain whose shops it cannot read', async () => {
-    // Mercadona publishes no store list, so a run naming it is still a radius
-    // over OpenStreetMap and still needs a centre.
-    const { service } = build({ source: { adapterKey: 'mercadona-api' } });
+    // A chain that publishes an assortment and no store list is still a radius
+    // over OpenStreetMap and still needs a centre. Mercadona was this case
+    // until plan 0106 read its own store finder.
+    const { service } = build({ source: { adapterKey: 'deza-web' } });
     await expect(
       service.spawn({
         userId: ADMIN,
@@ -613,6 +614,29 @@ describe('HarvestRunService.spawn', () => {
         supermarketId: SUPERMARKET,
       })
     ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('carries the postal code filter into the run a chain’s own list reads', async () => {
+    // Not a centre and not a radius: it matches each shop's own code exactly
+    // (plan 0106, section 4), and blank entries are dropped rather than asked
+    // about.
+    const { service, store } = build({
+      source: { adapterKey: 'mercadona-api' },
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      postalCodes: ['15006', '  ', ' 14013 '],
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supermarketId: SUPERMARKET,
+        payload: expect.objectContaining({ postalCodes: ['15006', '14013'] }),
+      })
+    );
   });
 
   it('refuses a mercadona walk with no scope to write the prices for', async () => {

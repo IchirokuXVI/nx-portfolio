@@ -653,6 +653,10 @@ const spawnRunRequest = object(
     country: string(),
     radiusMetres: integer({ minimum: 1 }),
     brandKeys: array(string()),
+    // Restrict a store discovery to the shops in these postal codes, matched
+    // on the shop's own code and never as a radius (plan 0106, section 4).
+    // Empty and absent are the same thing, which is every shop.
+    postalCodes: array(string()),
     // What observed the products in a FILE_IMPORT's document, which is what its
     // rows and its prices are stamped with (plan 0086, section 6.2). Not what
     // the upload is: a re-imported Mercadona walk stamps OFFICIAL_API.

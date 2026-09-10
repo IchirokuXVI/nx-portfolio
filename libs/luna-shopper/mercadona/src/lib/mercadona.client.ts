@@ -1,10 +1,18 @@
 import type { CategoryPathNode } from './categories';
+import type { Json } from './json';
 import {
   normalizeCategories,
   normalizeCategoryProducts,
   normalizeProduct,
   type NormalizeProductOptions,
 } from './normalize';
+import {
+  MERCADONA_STORES_TOTAL_URL,
+  MERCADONA_STORES_URL,
+  parseStoreDocument,
+  parseStoreTotals,
+  type MercadonaStoreList,
+} from './stores';
 import type {
   MercadonaCategory,
   MercadonaClientOptions,
@@ -12,7 +20,6 @@ import type {
   MercadonaListProduct,
   MercadonaProduct,
 } from './types';
-import type { Json } from './json';
 
 /**
  * Mercadona's storefront API, grouped behind one boundary so that **nothing else
@@ -44,17 +51,94 @@ export class MercadonaHttpError extends Error {
   }
 }
 
-interface ResolveWarehouseOptions {
+/**
+ * What one postal code lookup needs.
+ *
+ * A store discovery asks this 1,213 times, once per distinct postal code the
+ * chain's own shop list names (plan 0106, section 3), so it takes the same
+ * politeness the walk does: the run's shared token bucket through `acquire`,
+ * and backoff on the statuses a retry can fix.
+ */
+export interface ResolveWarehouseOptions {
   baseUrl?: string;
   userAgent: string;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
+  /** Awaited before the request, which is where the run's rate limit lives. */
+  acquire?: () => Promise<void>;
+  retries?: number;
+  backoffBaseMs?: number;
+  sleepImpl?: (ms: number) => Promise<void>;
+}
+
+/** What reading the whole store list needs. One request, plus one for the counts. */
+export interface ListStoresOptions {
+  userAgent: string;
+  /** Overridden from the source row, never from the environment (plan 0083). */
+  storesUrl?: string;
+  totalsUrl?: string;
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+  acquire?: () => Promise<void>;
+  retries?: number;
+  backoffBaseMs?: number;
+  sleepImpl?: (ms: number) => Promise<void>;
 }
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * One request, gated, retried and abortable.
+ *
+ * It exists beside the instance `getJson` because the two calls a store
+ * discovery makes have no warehouse to be scoped to: the shop list is one
+ * static document, and the postal code lookup is the request that finds a
+ * warehouse in the first place. **Null on 404**, which both callers treat as a
+ * value rather than as a failure.
+ *
+ * The response is handed back unread, because the two callers want different
+ * halves of it: the postal code lookup wants one header and never the body.
+ */
+async function request(
+  url: string,
+  init: RequestInit,
+  options: {
+    fetchImpl?: typeof fetch;
+    acquire?: () => Promise<void>;
+    sleepImpl?: (ms: number) => Promise<void>;
+    retries?: number;
+    backoffBaseMs?: number;
+    signal?: AbortSignal;
+  }
+): Promise<Response | null> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const sleep = options.sleepImpl ?? defaultSleep;
+  const retries = options.retries ?? 3;
+  const backoffBaseMs = options.backoffBaseMs ?? 500;
+
+  let attempt = 0;
+  for (;;) {
+    options.signal?.throwIfAborted();
+    await options.acquire?.();
+
+    const response = await fetchImpl(url, { ...init, signal: options.signal });
+    if (response.status === 404) {
+      return null;
+    }
+    if (response.ok) {
+      return response;
+    }
+    if (!RETRYABLE_STATUSES.has(response.status) || attempt >= retries) {
+      throw new MercadonaHttpError(response.status, url);
+    }
+    const backoff = backoffBaseMs * 2 ** attempt;
+    await sleep(backoff + Math.floor(Math.random() * backoff));
+    attempt += 1;
+  }
+}
 
 export class MercadonaClient {
   private readonly baseUrl: string;
@@ -86,25 +170,35 @@ export class MercadonaClient {
    *
    * The key comes back in two shapes, a numeric code (`4661`) and a city slug
    * (`mad3`), which is why `PriceScope.externalKey` is varchar.
+   *
+   * **Null is a value, and it means the chain sells online to nobody there**
+   * (plan 0106, D5). 150 of the 1,137 postal codes a Spanish shop sits on answer
+   * 404 with "This zip code is outside of our working area", and every
+   * Portuguese code answers the same way, because this is the Spanish
+   * storefront. A shop on one of them has no warehouse to be priced by and
+   * takes the `STORE` scope every location with no named scope already takes.
    */
   static async resolveWarehouse(
     postalCode: string,
     options: ResolveWarehouseOptions
-  ): Promise<string> {
+  ): Promise<string | null> {
     const base = (options.baseUrl ?? MERCADONA_BASE_URL).replace(/\/+$/, '');
     const url = `${base}/postal-codes/actions/change-pc/`;
-    const response = await (options.fetchImpl ?? fetch)(url, {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-        'user-agent': options.userAgent,
+    const response = await request(
+      url,
+      {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          'user-agent': options.userAgent,
+        },
+        body: JSON.stringify({ new_postal_code: postalCode }),
       },
-      body: JSON.stringify({ new_postal_code: postalCode }),
-      signal: options.signal,
-    });
-    if (!response.ok) {
-      throw new MercadonaHttpError(response.status, url);
+      options
+    );
+    if (response === null) {
+      return null;
     }
     const warehouse = response.headers.get('x-customer-wh');
     if (!warehouse) {
@@ -116,8 +210,59 @@ export class MercadonaClient {
     return warehouse;
   }
 
+  /**
+   * Every shop the chain publishes, and a count to check it against (plan 0106).
+   *
+   * Static, because the store finder's document is not part of the storefront
+   * API and needs no warehouse: reading the shops is what a run does **before**
+   * it knows any warehouse at all.
+   *
+   * Two requests. The second one asks the companion document what the chain
+   * believes it published, so a run can say it read the whole file rather than
+   * assume it. A companion that is missing or unreadable leaves `declared`
+   * empty, because a check that could not be made is not a check that failed.
+   */
+  static async listStores(
+    options: ListStoresOptions
+  ): Promise<MercadonaStoreList> {
+    const headers = {
+      accept: '*/*',
+      'user-agent': options.userAgent,
+    };
+    const document = await request(
+      options.storesUrl ?? MERCADONA_STORES_URL,
+      { headers },
+      options
+    );
+    if (document === null) {
+      throw new Error(
+        "Mercadona's store list answered 404. The store finder loads one " +
+          'static document and a run cannot name a shop without it.'
+      );
+    }
+    const { publishedOn, stores } = parseStoreDocument(await document.text());
+
+    let declared: Record<string, number> = {};
+    try {
+      const totals = await request(
+        options.totalsUrl ?? MERCADONA_STORES_TOTAL_URL,
+        { headers },
+        options
+      );
+      declared = totals === null ? {} : parseStoreTotals(await totals.text());
+    } catch {
+      // The count is what a run checks itself against, so failing to read it
+      // costs the check and never the 1,675 shops that were read.
+      declared = {};
+    }
+
+    return { publishedOn, stores, declared };
+  }
+
   /** The category tree, two levels (26 roots holding 151 children). */
-  async listCategories(lang: MercadonaLang = 'es'): Promise<MercadonaCategory[]> {
+  async listCategories(
+    lang: MercadonaLang = 'es'
+  ): Promise<MercadonaCategory[]> {
     const payload = await this.getJson(this.url('/categories/', lang));
     return payload === null ? [] : normalizeCategories(payload);
   }
@@ -173,9 +318,9 @@ export class MercadonaClient {
       const english = await this.getProduct(externalId, 'en');
       englishName =
         english && typeof english === 'object' && english !== null
-          ? ((english as Record<string, unknown>)['display_name'] as
+          ? (((english as Record<string, unknown>)['display_name'] as
               | string
-              | undefined) ?? null
+              | undefined) ?? null)
           : null;
     }
     return normalizeProduct(spanish, {

@@ -3,6 +3,7 @@ import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import { LidlClient } from '@portfolio/luna-shopper/lidl';
 import type { SupermarketSource } from '../entities';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
+import { MercadonaStoreDiscoveryRunner } from './mercadona-store-discovery.runner';
 import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
@@ -231,15 +232,18 @@ describe('LidlStoreDiscoveryRunner', () => {
 describe('StoreDiscoveryRunner', () => {
   const osm = { run: jest.fn(async () => undefined) };
   const lidl = { run: jest.fn(async () => undefined) };
+  const mercadona = { run: jest.fn(async () => undefined) };
   const dispatcher = new StoreDiscoveryRunner(
     osm as unknown as OsmStoreDiscoveryRunner,
-    lidl as unknown as LidlStoreDiscoveryRunner
+    lidl as unknown as LidlStoreDiscoveryRunner,
+    mercadona as unknown as MercadonaStoreDiscoveryRunner
   );
   const input = { postalCode: '14013', country: 'es', radiusMetres: 3000 };
 
   beforeEach(() => {
     osm.run.mockClear();
     lidl.run.mockClear();
+    mercadona.run.mockClear();
   });
 
   it('reads a chain that names its own shops from that chain', async () => {
@@ -253,19 +257,42 @@ describe('StoreDiscoveryRunner', () => {
     expect(osm.run).not.toHaveBeenCalled();
   });
 
-  it('takes the OpenStreetMap case for a run with no chain behind it', async () => {
-    // Every run the postal code queue starts looks like this: it is about a
-    // place rather than about a chain, and it finds many chains at once.
-    await dispatcher.run(context(), new RecordingRunReport(), input, null);
-    expect(osm.run).toHaveBeenCalledTimes(1);
-
+  it('reads Mercadona from Mercadona, which used to be the OSM case', async () => {
+    // Plan 0038 asked OpenStreetMap for this chain's shops because OSM's
+    // postcodes were missing two thirds of the time. That was a finding about
+    // OSM; the chain publishes all 1,675 of its own with no gaps (plan 0106).
     await dispatcher.run(
       context(),
       new RecordingRunReport(),
       input,
       source('mercadona-api')
     );
-    expect(osm.run).toHaveBeenCalledTimes(2);
+    expect(mercadona.run).toHaveBeenCalledTimes(1);
+    expect(osm.run).not.toHaveBeenCalled();
+  });
+
+  it('takes the OpenStreetMap case for a run with no chain behind it', async () => {
+    // Every run the postal code queue starts looks like this: it is about a
+    // place rather than about a chain, and it finds many chains at once.
+    await dispatcher.run(context(), new RecordingRunReport(), input, null);
+    expect(osm.run).toHaveBeenCalledTimes(1);
+
+    // An adapter that publishes an assortment and no store list, and one this
+    // build has never heard of, both answer the same way.
+    await dispatcher.run(
+      context(),
+      new RecordingRunReport(),
+      input,
+      source('deza-web')
+    );
+    await dispatcher.run(
+      context(),
+      new RecordingRunReport(),
+      input,
+      source('brand-new-chain')
+    );
+    expect(osm.run).toHaveBeenCalledTimes(3);
     expect(lidl.run).not.toHaveBeenCalled();
+    expect(mercadona.run).not.toHaveBeenCalled();
   });
 });
