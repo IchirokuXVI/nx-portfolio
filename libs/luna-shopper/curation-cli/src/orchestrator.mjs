@@ -15,7 +15,7 @@
  * whole of it runs under `node --test` with no network and no Docker.
  */
 
-import { emptyUsage } from './engine.mjs';
+import { emptyUsage } from '../../model-engines/src/index.mjs';
 import { pickFreeSlot, REHEARSAL_SERVICES, rehearsalUrl } from './slots.mjs';
 
 /** How the second attempt is asked for after a reply that could not be used. */

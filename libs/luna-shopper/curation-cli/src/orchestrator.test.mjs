@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { emptyUsage, stripFence } from './engine.mjs';
+import { emptyUsage, stripFence } from '../../model-engines/src/index.mjs';
 import {
   decideRow,
   parseDecision,

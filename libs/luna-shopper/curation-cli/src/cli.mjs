@@ -47,18 +47,15 @@ import { spawn as spawnProcess } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { IMPLEMENTATION_NAMES, deciderPath, makeDecider } from './decider.mjs';
 import {
-  CLAUDE_TIMEOUT_MS,
-  DEFAULT_EFFORT,
-  DEFAULT_MODEL,
-  EFFORT_LEVELS,
-  confirmApiBilling,
+  DEFAULT_ENGINE,
+  ENGINES,
+  ENGINE_NAMES,
   emptyUsage,
-  makeApiEngine,
-  makeClaudeEngine,
+  engineEntry,
   stripFence,
-} from './engine.mjs';
+} from '../../model-engines/src/index.mjs';
+import { IMPLEMENTATION_NAMES, deciderPath, makeDecider } from './decider.mjs';
 import { runCuration } from './orchestrator.mjs';
 import { REHEARSAL_SERVICES, makeSlots, waitForGateway } from './slots.mjs';
 
@@ -71,27 +68,58 @@ const DEFAULT_RUN_ROOT = '.curation-runs';
 /** The main API a development run reads its queue from. */
 const DEFAULT_MAIN_URL = 'http://localhost:3000';
 
-const USAGE = `Usage: node cli.mjs [options]
+/** Where a help line's description starts. */
+const HELP_COLUMN = 41;
 
-  --implementation <suggestions|groups>  which decider to drive; asked when the
-                                         terminal can be asked and it is absent
-  --engine <claude|api>                  claude (default) bills your Claude
-                                         session; api bills ANTHROPIC_API_KEY
-                                         and asks before it does
-  --model <name>                         default ${DEFAULT_MODEL}
-  --effort <${EFFORT_LEVELS.join('|')}>  how hard the model thinks about one
-                                         row, default ${DEFAULT_EFFORT}
-  --run-dir <dir>                        default ${DEFAULT_RUN_ROOT}/<timestamp>
-  --main-url <u>                         default ${DEFAULT_MAIN_URL}
-  --main-user <name>                     default dev-admin
-  --main-password <p>                    default dev-admin-password, which is
-                                         what every slot seeds
-  --chain <supermarket id>               work one chain only (suggestions)
-  --services <a,b>                       rehearsal services, default
-                                         ${REHEARSAL_SERVICES.join(',')}
-  --apply <decisions.jsonl>              replay a decisions file into the main
-                                         gateway: no slot, no model
+/**
+ * The help text, with the engine half read off the registry.
+ *
+ * `ENGINE_NAMES` drives both this and the argument check below, so an adapter
+ * added to the registry cannot leave either stale. The model and the effort
+ * levels are named per engine because they are per engine: there is no one
+ * default model, and a provider that has no effort levels says so here.
+ */
+export function usageText(engines = ENGINES) {
+  const indent = ' '.repeat(HELP_COLUMN);
+  const line = (flag, text) => `  ${flag}`.padEnd(HELP_COLUMN) + text;
+  const width = Math.max(...engines.map((entry) => entry.name.length));
+  const perEngine = engines
+    .map((entry) => {
+      const effort =
+        entry.effortLevels.length > 0
+          ? `effort ${entry.effortLevels.join('|')} (${entry.defaultEffort})`
+          : 'no effort levels';
+      return `    ${entry.name.padEnd(width)}  model ${entry.defaultModel}, ${effort}`;
+    })
+    .join('\n');
+
+  return `Usage: node cli.mjs [options]
+
+${line('--implementation <suggestions|groups>', 'which decider to drive; asked when the')}
+${indent}terminal can be asked and it is absent
+${line(`--engine <${ENGINE_NAMES.join('|')}>`, `which provider answers, default ${DEFAULT_ENGINE}.`)}
+${indent}claude bills your Claude session; api
+${indent}bills ANTHROPIC_API_KEY and asks first
+${line('--model <name>', "the engine's own default when absent")}
+${line('--effort <level>', 'how hard the model thinks about one row')}
+
+  Each engine names its own defaults, and the level in brackets is the one it
+  takes when --effort is absent:
+
+${perEngine}
+
+${line('--run-dir <dir>', `default ${DEFAULT_RUN_ROOT}/<timestamp>`)}
+${line('--main-url <u>', `default ${DEFAULT_MAIN_URL}`)}
+${line('--main-user <name>', 'default dev-admin')}
+${line('--main-password <p>', 'default dev-admin-password, which is')}
+${indent}what every slot seeds
+${line('--chain <supermarket id>', 'work one chain only (suggestions)')}
+${line('--services <a,b>', 'rehearsal services, default')}
+${indent}${REHEARSAL_SERVICES.join(',')}
+${line('--apply <decisions.jsonl>', 'replay a decisions file into the main')}
+${indent}gateway: no slot, no model
 `;
+}
 
 export function parseArgs(argv) {
   const flags = {};
@@ -301,7 +329,7 @@ export async function main(
 ) {
   const flags = parseArgs(argv);
   if (flags.help) {
-    stdout.write(USAGE);
+    stdout.write(usageText());
     return 0;
   }
 
@@ -313,22 +341,27 @@ export async function main(
     typeof flags['main-user'] === 'string' ? flags['main-user'] : null;
   const mainPassword =
     typeof flags['main-password'] === 'string' ? flags['main-password'] : null;
-  const model = typeof flags.model === 'string' ? flags.model : DEFAULT_MODEL;
+  // A misspelled engine is refused before a slot is taken or a directory made,
+  // and the entry it resolves to is what answers for the model and the effort.
+  // Nothing here asks which engine it got.
+  const engineName =
+    typeof flags.engine === 'string' ? flags.engine : DEFAULT_ENGINE;
+  const entry = engineEntry(engineName);
+
+  const model =
+    typeof flags.model === 'string' ? flags.model : entry.defaultModel;
 
   // Refused here rather than by the CLI three layers down, where it would cost
-  // a slot, a login and a rehearsal catalog before it said so.
+  // a slot, a login and a rehearsal catalog before it said so. The levels are
+  // the resolved entry's own: a provider with none refuses the flag outright.
   const effort =
-    typeof flags.effort === 'string' ? flags.effort : DEFAULT_EFFORT;
-  if (!EFFORT_LEVELS.includes(effort)) {
+    typeof flags.effort === 'string' ? flags.effort : entry.defaultEffort;
+  if (effort !== null && !entry.effortLevels.includes(effort)) {
     throw new Error(
-      `Unknown effort ${effort}. It is one of ${EFFORT_LEVELS.join(', ')}.`
+      entry.effortLevels.length > 0
+        ? `Unknown effort ${effort}. It is one of ${entry.effortLevels.join(', ')}.`
+        : `The ${entry.name} engine takes no --effort.`
     );
-  }
-
-  // A misspelled engine is refused before a slot is taken or a directory made.
-  const engineName = typeof flags.engine === 'string' ? flags.engine : 'claude';
-  if (engineName !== 'claude' && engineName !== 'api') {
-    throw new Error(`Unknown engine ${engineName}. It is claude or api.`);
   }
 
   const implementation = await resolveImplementation({
@@ -369,33 +402,21 @@ export async function main(
   let slot = null;
 
   const usage = emptyUsage();
-  let engine;
-  if (engineName === 'claude') {
-    engine = makeClaudeEngine({
-      spawn,
-      env,
-      model,
-      effort,
-      timeoutMs: CLAUDE_TIMEOUT_MS,
-      stderr,
-      usage,
-      signal: controller.signal,
-    });
-  } else if (engineName === 'api') {
-    const apiKey = await confirmApiBilling({
-      env,
-      isTty,
-      askLine: ask,
-      stdout,
-    });
-    engine = makeApiEngine({
-      apiKey,
-      model,
-      effort,
-      usage,
-      signal: controller.signal,
-    });
-  }
+  // The gate is whatever this entry needs confirmed before it runs, and its
+  // answer is what builds the engine. An entry with no gate is asked nothing.
+  const gated = entry.gate
+    ? await entry.gate({ env, isTty, askLine: ask, stdout })
+    : null;
+  const engine = entry.create({
+    spawn,
+    env,
+    model,
+    effort,
+    usage,
+    stderr,
+    gated,
+    signal: controller.signal,
+  });
 
   const slots = makeSlots({
     run: spawn,
