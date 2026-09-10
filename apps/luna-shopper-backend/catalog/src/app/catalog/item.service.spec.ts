@@ -4,11 +4,14 @@ import {
   type CreateItemInput,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  ConflictException,
   ForbiddenException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import type { Repository } from 'typeorm';
+// `QueryFailedError` is a value here, not just a type: the duplicate barcode
+// cases raise one, because that is what the service recognizes.
+import { QueryFailedError, type Repository } from 'typeorm';
 // `Item` is a value here, not just a type: the audit double keys on the entity
 // class the service hands it.
 import { Item, type ProductGroup, type SupermarketItem } from '../entities';
@@ -413,6 +416,111 @@ describe('ItemService', () => {
         })
       ).rejects.toBeInstanceOf(ValidationException);
       expect(items.save).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The barcode is unique when present, and every write that can meet that
+   * index has to say so in words the operator can act on.
+   *
+   * A duplicate inside one list is caught before the write and is the case
+   * above. This is the other one: the barcode belongs to a product already in
+   * the table, so only Postgres can find out, and the `QueryFailedError` it
+   * raises has to be turned into a 409. `create` and `update` used to let it
+   * through, and an operator was told 500 for a barcode they could see.
+   */
+  describe('a barcode the catalog already holds', () => {
+    /** What the driver raises on `uq_items_ean`, as the service reads it. */
+    function duplicateEan() {
+      const error = new QueryFailedError('insert', [], new Error('duplicate'));
+      (error as unknown as { driverError: { code: string } }).driverError = {
+        code: '23505',
+      };
+      return error;
+    }
+
+    function refusingItems() {
+      return {
+        create: jest.fn((x) => x),
+        save: jest.fn(async () => {
+          throw duplicateEan();
+        }),
+        findOne: jest.fn(async () => ({
+          id: 'i1',
+          name: { en: 'Milk', es: 'Leche' },
+          brand: null,
+          imageUrl: null,
+          sku: null,
+          ean: null,
+          unitSize: 1,
+          category: ItemCategory.DAIRY,
+          defaultUnit: UnitOfMeasure.LITER,
+          productGroupId: null,
+        })),
+      } as unknown as Repository<Item>;
+    }
+
+    it('answers create with a conflict, not an unclassified error', async () => {
+      const { service } = build({ items: refusingItems() });
+
+      await expect(
+        service.create({
+          userId: ADMIN,
+          name: { en: 'Milk', es: 'Leche' },
+          category: ItemCategory.DAIRY,
+          defaultUnit: UnitOfMeasure.LITER,
+          ean: '8480000123456',
+        })
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('answers an edit that types a taken barcode the same way', async () => {
+      const { service } = build({ items: refusingItems() });
+
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          ean: '8480000123456',
+        })
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('answers a batch the same way, and the batch says none landed', async () => {
+      const { service } = build({ items: refusingItems() });
+
+      await expect(
+        service.createMany({
+          userId: ADMIN,
+          items: [
+            {
+              name: { es: 'Leche' },
+              category: ItemCategory.DAIRY,
+              defaultUnit: UnitOfMeasure.LITER,
+              ean: '8480000123456',
+            },
+          ],
+        })
+      ).rejects.toThrow(/none of them were created/);
+    });
+
+    it('leaves an error that is not a duplicate barcode alone', async () => {
+      const items = {
+        create: jest.fn((x) => x),
+        save: jest.fn(async () => {
+          throw new Error('the database went away');
+        }),
+      } as unknown as Repository<Item>;
+      const { service } = build({ items });
+
+      await expect(
+        service.create({
+          userId: ADMIN,
+          name: { en: 'Milk', es: 'Leche' },
+          category: ItemCategory.DAIRY,
+          defaultUnit: UnitOfMeasure.LITER,
+        })
+      ).rejects.toThrow('the database went away');
     });
   });
 });

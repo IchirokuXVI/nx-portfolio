@@ -152,7 +152,16 @@ export class ItemService {
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
     });
-    const saved = await this.audit.write(actor, (tx) => tx.create(Item, draft));
+    // Guarded for the same reason {@link createMany} is: the barcode is unique
+    // when present, so a product the catalog already holds under it refuses the
+    // insert. Unguarded, that reaches the operator as a 500 saying nothing,
+    // which is what the route's own `conflict: true` already promised not to do.
+    let saved: Item;
+    try {
+      saved = await this.audit.write(actor, (tx) => tx.create(Item, draft));
+    } catch (error) {
+      throw asEanConflict(error, EAN_TAKEN_ON_CREATE);
+    }
     if (saved.productGroupId !== null) {
       this.events.itemGroupChanged(saved.id, null, saved.productGroupId);
     }
@@ -224,7 +233,7 @@ export class ItemService {
         return rows;
       });
     } catch (error) {
-      throw asEanConflict(error);
+      throw asEanConflict(error, EAN_TAKEN_IN_BATCH);
     }
 
     for (const row of saved) {
@@ -287,9 +296,16 @@ export class ItemService {
     if (req.productGroupId !== undefined) {
       row.productGroupId = await this.resolveGroup(req.productGroupId);
     }
-    const saved = await this.audit.write(actor, (tx) =>
-      tx.update(Item, before, row)
-    );
+    // An edit reaches the same unique index a create does, because a barcode
+    // typed onto this product can be one another product already carries.
+    let saved: Item;
+    try {
+      saved = await this.audit.write(actor, (tx) =>
+        tx.update(Item, before, row)
+      );
+    } catch (error) {
+      throw asEanConflict(error, EAN_TAKEN_ON_UPDATE);
+    }
     if (saved.productGroupId !== groupBefore) {
       this.events.itemGroupChanged(saved.id, groupBefore, saved.productGroupId);
     }
@@ -1035,23 +1051,46 @@ export class ItemService {
 const PG_UNIQUE_VIOLATION = '23505';
 
 /**
- * The one way a bulk create fails that an operator can act on.
+ * What a duplicate barcode means, in the words of the write that met it.
+ *
+ * Three sentences and not one, because what the operator can do about it
+ * differs: a batch landed nothing at all, a create landed nothing, and an edit
+ * left the product as it was. A single message would have to leave out which.
+ */
+const EAN_TAKEN_IN_BATCH =
+  'One of these products carries an EAN the catalog already holds, so ' +
+  'none of them were created. Bind that row onto the product that has ' +
+  'the barcode instead of creating a second one.';
+
+const EAN_TAKEN_ON_CREATE =
+  'The catalog already holds a product with this EAN, so nothing was ' +
+  'created. Bind onto the product that has the barcode instead of creating ' +
+  'a second one.';
+
+const EAN_TAKEN_ON_UPDATE =
+  'Another product in the catalog already holds this EAN, so nothing was ' +
+  'changed. A barcode names one product, so take it off that product first.';
+
+/**
+ * The one way writing a product fails that an operator can act on.
  *
  * EAN is unique when present, so a product the catalog already holds under the
- * same barcode refuses the insert and takes the whole batch with it. The driver
- * message names a constraint; this names the thing to do about it.
+ * same barcode refuses the write, and in a batch takes every other row with it.
+ * The driver message names a constraint; this names the thing to do about it.
+ *
+ * **Every write that can reach `uq_items_ean` goes through here.** Unguarded,
+ * the `QueryFailedError` reaches `GlobalExceptionFilter` as an unclassified
+ * error and the operator is told 500 "Something went wrong on our side" for a
+ * barcode they can see and fix. `create` and `update` were unguarded until the
+ * curation toolchain met the 500 fifteen times in one run.
  */
-function asEanConflict(error: unknown): unknown {
+function asEanConflict(error: unknown, message: string): unknown {
   if (
     error instanceof QueryFailedError &&
     (error as { driverError?: { code?: string } }).driverError?.code ===
       PG_UNIQUE_VIOLATION
   ) {
-    return new ConflictException(
-      'One of these products carries an EAN the catalog already holds, so ' +
-        'none of them were created. Bind that row onto the product that has ' +
-        'the barcode instead of creating a second one.'
-    );
+    return new ConflictException(message);
   }
   return error;
 }
