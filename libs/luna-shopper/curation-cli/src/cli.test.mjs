@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { ENGINES } from '../../model-engines/src/index.mjs';
 import {
   REPO_ROOT,
   defaultRunDir,
@@ -11,6 +12,7 @@ import {
   parseArgs,
   resolveImplementation,
   spawnCapture,
+  usageText,
 } from './cli.mjs';
 
 function sink() {
@@ -233,6 +235,33 @@ test('--help answers the usage and does nothing else', async () => {
   });
   assert.equal(code, 0);
   assert.match(stdout.text(), /--implementation <suggestions\|groups>/);
+});
+
+test('the help text names every engine the registry holds', () => {
+  const text = usageText();
+  // One table drives the argument check and this text both, so an adapter
+  // added to the registry cannot leave either stale.
+  for (const entry of ENGINES) {
+    assert.match(text, new RegExp(`--engine <[a-z|]*${entry.name}`));
+    assert.match(
+      text,
+      new RegExp(`${entry.name}\\s+model ${entry.defaultModel}`)
+    );
+  }
+});
+
+test('an engine that takes no effort is not offered a level', () => {
+  // Not an entry that exists yet; it is the shape plan 0002 arrives in, and
+  // the help text is the first thing that would misdescribe it.
+  const text = usageText([
+    {
+      name: 'ollama',
+      defaultModel: 'llama3.1',
+      defaultEffort: null,
+      effortLevels: [],
+    },
+  ]);
+  assert.match(text, /ollama\s+model llama3\.1, no effort levels/);
 });
 
 test('the repo root this file computes is the workspace root', () => {

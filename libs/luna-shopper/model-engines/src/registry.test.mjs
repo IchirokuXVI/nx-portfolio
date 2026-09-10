@@ -1,0 +1,134 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { API_CONFIRMATION, confirmApiBilling } from './messages-api.mjs';
+import {
+  DEFAULT_ENGINE,
+  ENGINES,
+  ENGINE_NAMES,
+  engineEntry,
+} from './registry.mjs';
+import { emptyUsage } from './usage.mjs';
+
+/** A writable that keeps what was written. */
+function sink() {
+  const written = [];
+  return { written, write: (text) => written.push(text) };
+}
+
+const ENVELOPE = JSON.stringify({
+  type: 'result',
+  is_error: false,
+  result: '{"decision":"REVIEW"}',
+  usage: { input_tokens: 2, output_tokens: 9 },
+});
+
+test('every name there is resolves to an entry', () => {
+  assert.deepEqual(ENGINE_NAMES, ['claude', 'api']);
+  for (const name of ENGINE_NAMES) {
+    assert.equal(engineEntry(name).name, name);
+  }
+  assert.equal(engineEntry(DEFAULT_ENGINE).name, 'claude');
+});
+
+test('an unknown name is refused by a message that lists the names there are', () => {
+  assert.throws(
+    () => engineEntry('sdk'),
+    /Unknown engine sdk\. It is claude or api\./
+  );
+});
+
+test('every entry carries the whole of what a provider is', () => {
+  for (const entry of ENGINES) {
+    assert.equal(typeof entry.name, 'string');
+    assert.equal(typeof entry.defaultModel, 'string');
+    assert.ok(Array.isArray(entry.effortLevels));
+    assert.equal(typeof entry.create, 'function');
+    // An entry that takes effort has a default that is one of its own levels.
+    if (entry.effortLevels.length > 0) {
+      assert.ok(entry.effortLevels.includes(entry.defaultEffort));
+    } else {
+      assert.equal(entry.defaultEffort, null);
+    }
+  }
+});
+
+test('the defaults an entry names are the ones the engine is built with', () => {
+  const entry = engineEntry('claude');
+  const engine = entry.create({
+    spawn: async () => ({ code: 0, stdout: ENVELOPE, stderr: '' }),
+    env: {},
+    model: entry.defaultModel,
+    effort: entry.defaultEffort,
+    stderr: sink(),
+  });
+
+  assert.equal(engine.name, 'claude');
+  assert.equal(engine.model, 'claude-sonnet-5');
+  assert.equal(engine.effort, 'medium');
+});
+
+test('the claude entry is asked to confirm nothing', () => {
+  assert.equal(engineEntry('claude').gate, null);
+});
+
+test('the api entry names the billing gate, and its answer builds the engine', async () => {
+  const entry = engineEntry('api');
+  assert.equal(entry.gate, confirmApiBilling);
+
+  const key = await entry.gate({
+    env: { ANTHROPIC_API_KEY: 'sk-ant-x' },
+    isTty: true,
+    askLine: async () => API_CONFIRMATION,
+    stdout: sink(),
+  });
+
+  const seen = [];
+  const usage = emptyUsage();
+  const engine = entry.create({
+    fetchImpl: async (url, options) => {
+      seen.push(options.headers);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ content: [{ type: 'text', text: 'ok' }] }),
+      };
+    },
+    model: entry.defaultModel,
+    effort: entry.defaultEffort,
+    usage,
+    gated: key,
+  });
+
+  assert.equal((await engine.ask('x')).text, 'ok');
+  // Whatever the gate answered is what the request is made with, so an entry
+  // with no gate never reaches for a key of its own.
+  assert.equal(seen[0]['x-api-key'], 'sk-ant-x');
+  assert.equal(usage.calls, 1);
+});
+
+test('a run builds its engine from injected everything', async () => {
+  const controller = new AbortController();
+  const seen = [];
+  const usage = emptyUsage();
+  const engine = engineEntry('claude').create({
+    spawn: async (command, args, options) => {
+      seen.push({ command, options });
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    model: 'claude-haiku-4-5',
+    effort: 'low',
+    usage,
+    stderr: sink(),
+    signal: controller.signal,
+  });
+
+  await engine.ask('x');
+
+  assert.equal(engine.model, 'claude-haiku-4-5');
+  assert.equal(engine.effort, 'low');
+  assert.equal(seen[0].command, 'claude');
+  assert.equal(seen[0].options.timeoutMs, 120000);
+  assert.equal(seen[0].options.signal, controller.signal);
+  assert.equal(usage.calls, 1);
+});
