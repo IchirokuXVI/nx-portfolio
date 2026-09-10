@@ -7,9 +7,12 @@ import {
   BULK_ENTRY_DECISIONS_PATH,
   apply,
   buildOperations,
+  candidateIdentities,
+  composeBatch,
   decide,
   end,
   next,
+  sameCandidates,
   start,
 } from './commands.mjs';
 import { makeGateway } from './gateway.mjs';
@@ -140,6 +143,9 @@ test('start verifies both logins, counts the queue and answers the prompt', asyn
   assert.equal(answer.remaining, 2);
   assert.ok(answer.runId);
   assert.match(answer.prompt, /## Category vocabulary/);
+  // How wide a batch this decider will hand out, which is what stops a caller
+  // asking `next --count` of a decider that does not compose one.
+  assert.equal(answer.batches, 20);
 
   const state = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'));
   assert.equal(state.mainUrl, MAIN_URL);
@@ -860,4 +866,344 @@ test('a file of nothing but REVIEWs sends no request at all', async () => {
     session: { fetch: () => assert.fail('a REVIEW must reach no route') },
   });
   assert.equal(answer.operations, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Composition, and the batch `next --count` answers (plan 0002)
+// ---------------------------------------------------------------------------
+
+test('composeBatch admits at most one row per normalized name', () => {
+  const rows = [
+    entry('e1', 'Leche entera 1 L'),
+    entry('e2', 'LECHE  ENTERA 1 l'),
+    entry('e3', 'Pan de molde'),
+    entry('e4', 'Arroz redondo'),
+  ];
+
+  const chosen = composeBatch(rows, 4);
+
+  assert.deepEqual(
+    chosen.map((row) => row.id),
+    ['e1', 'e3', 'e4']
+  );
+});
+
+test('composeBatch stops at the width it was given', () => {
+  const rows = ['a', 'b', 'c', 'd', 'e'].map((id, index) =>
+    entry(id, `Producto ${index}`)
+  );
+  assert.equal(composeBatch(rows, 2).length, 2);
+  assert.equal(composeBatch(rows, 99).length, 5);
+});
+
+test('next --count answers a batch of distinct names and what is left', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      entry('e1', 'Leche entera 1 L'),
+      entry('e2', 'Pan de molde'),
+      entry('e3', 'Arroz redondo 1 kg'),
+      entry('e4', 'Aceite de oliva'),
+    ],
+  });
+  await startIn(dir, w);
+
+  const answer = await next({ runDir: dir, count: 4, gateways: w.gateways });
+
+  assert.equal(answer.remaining, 4);
+  assert.deepEqual(
+    answer.rows.map((row) => row.entry.id),
+    ['e1', 'e2', 'e3', 'e4']
+  );
+  // A row of a batch is the packet a single `next` answers, and carries no
+  // count of its own: what is left is a fact about the run, so it belongs to
+  // the batch rather than to a row the model is about to be shown.
+  assert.deepEqual(Object.keys(answer.rows[0]), [
+    'entry',
+    'candidates',
+    'eanMatch',
+  ]);
+});
+
+test('a row deferred by composition is the first row of the next batch', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      entry('e1', 'Leche entera 1 L'),
+      entry('e2', 'Leche entera 1 L'),
+      entry('e3', 'Pan de molde'),
+    ],
+  });
+  await startIn(dir, w);
+
+  const first = await next({ runDir: dir, count: 3, gateways: w.gateways });
+  assert.deepEqual(
+    first.rows.map((row) => row.entry.id),
+    ['e1', 'e3']
+  );
+
+  for (const entryId of ['e1', 'e3']) {
+    await decide({
+      runDir: dir,
+      entryId,
+      input: { decision: 'REVIEW', confidence: 0.4, issues: [] },
+      gateways: w.gateways,
+      vocabularies: VOCABULARIES,
+      privateLabels: LABELS,
+    });
+  }
+
+  // Deferred, never dropped: it is the first thing the next batch is about.
+  const second = await next({ runDir: dir, count: 3, gateways: w.gateways });
+  assert.deepEqual(
+    second.rows.map((row) => row.entry.id),
+    ['e2']
+  );
+});
+
+test('next --count larger than the queue answers what there is, then nothing', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
+  await startIn(dir, w);
+
+  const answer = await next({ runDir: dir, count: 8, gateways: w.gateways });
+  assert.equal(answer.rows.length, 1);
+
+  await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: CREATE_MILK,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  assert.deepEqual(
+    await next({ runDir: dir, count: 8, gateways: w.gateways }),
+    { rows: [], remaining: 0, done: true }
+  );
+});
+
+test('next without a count answers exactly the row it always answered', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
+  await startIn(dir, w);
+
+  const answer = await next({ runDir: dir, gateways: w.gateways });
+
+  assert.deepEqual(Object.keys(answer), [
+    'entry',
+    'candidates',
+    'eanMatch',
+    'remaining',
+  ]);
+});
+
+// ---------------------------------------------------------------------------
+// Staleness, which is the correctness check the batch rests on (plan 0002)
+// ---------------------------------------------------------------------------
+
+test('candidateIdentities reads the itemId or the ref, as a set', () => {
+  const identities = candidateIdentities({
+    candidates: [
+      { itemId: 'i2', origin: 'catalog' },
+      { ref: 'ref-e1', origin: 'run' },
+      { itemId: 'i2', origin: 'catalog' },
+    ],
+    eanMatch: { itemId: 'i9', origin: 'catalog' },
+  });
+
+  assert.deepEqual(identities, ['i2', 'i9', 'ref-e1']);
+  // The same candidates merged in another order are the same set, so a packet
+  // that differs only in the order of its candidates is not stale.
+  assert.equal(
+    sameCandidates(
+      identities,
+      candidateIdentities({
+        candidates: [
+          { ref: 'ref-e1', origin: 'run' },
+          { itemId: 'i9', origin: 'catalog' },
+        ],
+        eanMatch: { itemId: 'i2', origin: 'catalog' },
+      })
+    ),
+    true
+  );
+  assert.equal(sameCandidates(identities, ['i2', 'i9']), false);
+});
+
+test('a row that gained a candidate from its own batch is stale and writes nothing', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      entry('e1', 'Leche entera 1 L'),
+      entry('e2', 'Leche entera fresca'),
+    ],
+  });
+  await startIn(dir, w);
+
+  const batch = await next({ runDir: dir, count: 2, gateways: w.gateways });
+  assert.deepEqual(
+    batch.rows.map((row) => row.entry.id),
+    ['e1', 'e2']
+  );
+  assert.deepEqual(batch.rows[1].candidates, []);
+
+  // Row one creates the product row two was never shown.
+  await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: CREATE_MILK,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e2',
+    input: CREATE_MILK,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  assert.equal(answer.stale, true);
+  assert.equal(answer.retryable, false);
+  assert.deepEqual(
+    answer.packet.candidates.map((candidate) => candidate.ref),
+    ['ref-e1']
+  );
+  // Nothing was written: the header, and row one, and no row two.
+  assert.equal(readJsonl(join(dir, 'decisions.jsonl')).length, 2);
+  assert.equal(w.rehearsalCatalog.rows.length, 1);
+
+  // Asked again on the refreshed packet it records, rather than going stale a
+  // second time on the same lookup.
+  const again = await decide({
+    runDir: dir,
+    entryId: 'e2',
+    input: { decision: 'LINK', itemRef: 'ref-e1', confidence: 0.97 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+  assert.equal(again.stale, undefined);
+  assert.equal(again.accepted, true);
+  assert.equal(readJsonl(join(dir, 'decisions.jsonl')).length, 3);
+});
+
+test('the same candidates in another order are not stale', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [entry('e1', 'Leche entera 1 L')],
+    catalogItems: [
+      { id: 'i1', name: { es: 'Leche entera' }, defaultUnit: 'LITER' },
+      { id: 'i2', name: { es: 'Leche entera fresca' }, defaultUnit: 'LITER' },
+    ],
+  });
+  await startIn(dir, w);
+
+  const row = await next({ runDir: dir, gateways: w.gateways });
+  assert.deepEqual(
+    row.candidates.map((candidate) => candidate.itemId),
+    ['i1', 'i2']
+  );
+
+  // The same two products, ranked the other way round. The bytes of the packet
+  // differ and the set does not, and the set is what staleness is about.
+  w.mainCatalog.rows.reverse();
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i1', confidence: 0.95 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  assert.equal(answer.stale, undefined);
+  assert.equal(answer.accepted, true);
+});
+
+test('a decide nothing handed out is judged, not called stale', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
+  await startIn(dir, w);
+
+  // No `next`: driven by hand there is no record of what the caller saw, and
+  // therefore nothing that could have changed underneath it.
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: CREATE_MILK,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  assert.equal(answer.stale, undefined);
+  assert.equal(answer.accepted, true);
+});
+
+test('the report names the re-ask rate the run actually saw', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      entry('e1', 'Leche entera 1 L'),
+      entry('e2', 'Leche entera fresca'),
+    ],
+  });
+  await startIn(dir, w);
+  await next({ runDir: dir, count: 2, gateways: w.gateways });
+
+  const decideArgs = {
+    runDir: dir,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  };
+  await decide({ ...decideArgs, entryId: 'e1', input: CREATE_MILK });
+  // Stale, then asked again and recorded.
+  await decide({ ...decideArgs, entryId: 'e2', input: CREATE_MILK });
+  await decide({
+    ...decideArgs,
+    entryId: 'e2',
+    input: { decision: 'LINK', itemRef: 'ref-e1', confidence: 0.97 },
+  });
+
+  const answer = end({ runDir: dir, usage: null });
+
+  assert.deepEqual(answer.reasks, { stale: 1, decided: 2, rate: 0.5 });
+  const report = JSON.parse(readFileSync(answer.report, 'utf8'));
+  assert.deepEqual(report.reasks, { stale: 1, decided: 2, rate: 0.5 });
+});
+
+test('the set a row was handed is forgotten once the row is decided', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
+  await startIn(dir, w);
+  await next({ runDir: dir, count: 4, gateways: w.gateways });
+
+  assert.deepEqual(
+    Object.keys(
+      JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')).handouts
+    ),
+    ['e1']
+  );
+
+  await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: CREATE_MILK,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')).handouts,
+    {}
+  );
 });
