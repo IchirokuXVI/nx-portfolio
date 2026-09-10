@@ -1,5 +1,6 @@
 /**
- * The one backoff loop every adapter runs its attempts through (plan 0001).
+ * The one backoff loop every adapter runs its attempts through (plan 0001),
+ * and the one way a list of prompts is asked (plan 0003).
  *
  * An adapter says what one attempt is and what its failures mean. It does not
  * say how many attempts there are, how long the waits between them last, or
@@ -87,4 +88,59 @@ export async function withRetries(
     }
   }
   throw new Error(`The ${name} engine gave up: ${lastError}.`);
+}
+
+/**
+ * One prompt's entry in a batch: `{ text }` when it answered, `{ error }` when
+ * the engine gave up on it (plan 0003).
+ *
+ * `ask` throws when it gives up, which is the right answer for a caller holding
+ * one question and the wrong one for a caller holding two hundred, because a
+ * throw discards every answer beside the one that failed. On a batch that is
+ * the wrong trade, so the throw is caught here and reported in the slot
+ * belonging to the prompt that failed. The rest of the answers survive.
+ *
+ * A stop is the one thing that is not caught. A stopped run is not a run that
+ * failed two hundred times, so the signal is asked before the error is read and
+ * the reason the caller aborted with travels straight out.
+ */
+export async function askEntry(ask, prompt, options = {}, signal = null) {
+  try {
+    const { text } = await ask(prompt, options);
+    return { text };
+  } catch (error) {
+    if (signal?.aborted) {
+      throw stopReason(signal);
+    }
+    return { error };
+  }
+}
+
+/**
+ * The shared `askMany`: one request at a time, answers in input order.
+ *
+ * Batching turns off where it is not supported, and that is this library's job
+ * rather than each adapter's. Every adapter is given this and reports
+ * `batchSize: 1`; an adapter with a reason to hold more than one request in
+ * flight overrides `askMany` and says how many in `batchSize`. So a fourth
+ * engine that never thought about batching still answers `askMany` correctly,
+ * and no caller has to ask which adapter it is holding.
+ *
+ * The signal is asked before each prompt as well as inside it, so a stop that
+ * arrives between two answers starts nothing further.
+ */
+export async function askManyInOrder(
+  ask,
+  prompts,
+  options = {},
+  signal = null
+) {
+  const answers = [];
+  for (const prompt of prompts) {
+    if (signal?.aborted) {
+      throw stopReason(signal);
+    }
+    answers.push(await askEntry(ask, prompt, options, signal));
+  }
+  return answers;
 }

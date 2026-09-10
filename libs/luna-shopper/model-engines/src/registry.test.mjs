@@ -123,6 +123,76 @@ test('the ollama entry fights none of the four things plan 0001 named', async ()
   ]);
 });
 
+test('every entry builds an engine that answers both methods and says how wide it is', async () => {
+  const built = [
+    engineEntry('claude').create({
+      spawn: async () => ({ code: 0, stdout: ENVELOPE, stderr: '' }),
+      env: {},
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+      stderr: sink(),
+    }),
+    engineEntry('api').create({
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      }),
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+      gated: 'sk-ant-x',
+    }),
+    engineEntry('ollama').create({
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      }),
+      env: {},
+      model: 'gemma4:12b',
+      effort: null,
+      stderr: sink(),
+    }),
+  ];
+
+  for (const engine of built) {
+    assert.equal(typeof engine.ask, 'function');
+    // Batching turns off where it is not supported, and that is the library's
+    // job rather than each adapter's, so there is no entry whose engine cannot
+    // answer a list of prompts.
+    assert.equal(typeof engine.askMany, 'function');
+    assert.ok(Number.isInteger(engine.batchSize) && engine.batchSize > 0);
+  }
+  assert.deepEqual(
+    built.map((engine) => engine.batchSize),
+    [1, 1, 4]
+  );
+});
+
+test('OLLAMA_BATCH reaches the ollama entry, and its notice reaches the injected stderr', async () => {
+  const stderr = sink();
+  const engine = engineEntry('ollama').create({
+    fetchImpl: async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        url.endsWith('/api/show')
+          ? { capabilities: [], model_info: {} }
+          : { message: { content: 'ok' } },
+    }),
+    env: { OLLAMA_BATCH: '12' },
+    model: 'gemma4:12b',
+    effort: null,
+    stderr,
+  });
+
+  assert.equal(engine.batchSize, 12);
+  const answers = await engine.askMany(['one', 'two']);
+  assert.deepEqual(answers, [{ text: 'ok' }, { text: 'ok' }]);
+  assert.equal(stderr.written.length, 1);
+  assert.match(stderr.written[0], /OLLAMA_NUM_PARALLEL/);
+});
+
 test('the api entry names the billing gate, and its answer builds the engine', async () => {
   const entry = engineEntry('api');
   assert.equal(entry.gate, confirmApiBilling);

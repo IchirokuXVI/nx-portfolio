@@ -12,6 +12,7 @@
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from './claude-models.mjs';
 import {
   RETRY_DELAYS,
+  askManyInOrder,
   defaultSleep,
   stopReason,
   withRetries,
@@ -85,78 +86,86 @@ export function makeApiEngine({
   retryDelays = RETRY_DELAYS,
   signal = null,
 }) {
+  async function ask(prompt, { system = null, schema = null } = {}) {
+    const body = JSON.stringify({
+      model,
+      max_tokens: MAX_TOKENS,
+      thinking: { type: 'adaptive' },
+      output_config: {
+        effort,
+        // The same schema the claude engine passes as `--json-schema`, in the
+        // shape the Messages API takes it. Both engines are held to the
+        // decider's shape, so a run cannot depend on which one drove it.
+        ...(schema ? { format: { type: 'json_schema', schema } } : {}),
+      },
+      ...(system
+        ? {
+            system: [
+              {
+                type: 'text',
+                text: system,
+                cache_control: { type: 'ephemeral' },
+              },
+            ],
+          }
+        : {}),
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = await withRetries(
+      async () => {
+        let response;
+        try {
+          response = await fetchImpl(MESSAGES_URL, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': ANTHROPIC_VERSION,
+            },
+            body,
+            signal,
+          });
+        } catch (error) {
+          if (signal?.aborted) {
+            throw stopReason(signal);
+          }
+          return { ok: false, error: `the request failed: ${String(error)}` };
+        }
+        if (response.status === 429 || response.status >= 500) {
+          return { ok: false, error: `HTTP ${response.status}` };
+        }
+        // A 401 or a 400 is the same answer however long the wait, so waiting
+        // thirty seconds would only prove the key is still wrong.
+        if (!response.ok) {
+          return { ok: false, error: `HTTP ${response.status}`, fatal: true };
+        }
+        const payload = await response.json();
+        if (usage) {
+          addUsage(usage, payload?.usage);
+        }
+        const answer = textOf(payload);
+        if (answer === null) {
+          return { ok: false, error: 'the reply carried no text block' };
+        }
+        return { ok: true, value: answer };
+      },
+      { name: 'api', sleep, retryDelays, signal }
+    );
+
+    return { text };
+  }
+
   return {
     name: 'api',
     model,
     effort,
-    async ask(prompt, { system = null, schema = null } = {}) {
-      const body = JSON.stringify({
-        model,
-        max_tokens: MAX_TOKENS,
-        thinking: { type: 'adaptive' },
-        output_config: {
-          effort,
-          // The same schema the claude engine passes as `--json-schema`, in the
-          // shape the Messages API takes it. Both engines are held to the
-          // decider's shape, so a run cannot depend on which one drove it.
-          ...(schema ? { format: { type: 'json_schema', schema } } : {}),
-        },
-        ...(system
-          ? {
-              system: [
-                {
-                  type: 'text',
-                  text: system,
-                  cache_control: { type: 'ephemeral' },
-                },
-              ],
-            }
-          : {}),
-        messages: [{ role: 'user', content: prompt }],
-      });
-
-      const text = await withRetries(
-        async () => {
-          let response;
-          try {
-            response = await fetchImpl(MESSAGES_URL, {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/json',
-                'x-api-key': apiKey,
-                'anthropic-version': ANTHROPIC_VERSION,
-              },
-              body,
-              signal,
-            });
-          } catch (error) {
-            if (signal?.aborted) {
-              throw stopReason(signal);
-            }
-            return { ok: false, error: `the request failed: ${String(error)}` };
-          }
-          if (response.status === 429 || response.status >= 500) {
-            return { ok: false, error: `HTTP ${response.status}` };
-          }
-          // A 401 or a 400 is the same answer however long the wait, so waiting
-          // thirty seconds would only prove the key is still wrong.
-          if (!response.ok) {
-            return { ok: false, error: `HTTP ${response.status}`, fatal: true };
-          }
-          const payload = await response.json();
-          if (usage) {
-            addUsage(usage, payload?.usage);
-          }
-          const answer = textOf(payload);
-          if (answer === null) {
-            return { ok: false, error: 'the reply carried no text block' };
-          }
-          return { ok: true, value: answer };
-        },
-        { name: 'api', sleep, retryDelays, signal }
-      );
-
-      return { text };
-    },
+    // The account behind the key has rate limits this adapter cannot read, and
+    // nothing here was measured against them, so it holds one request in flight
+    // and says so. `askMany` is the shared default, unchanged.
+    batchSize: 1,
+    ask,
+    askMany: (prompts, options = {}) =>
+      askManyInOrder(ask, prompts, options, signal),
   };
 }

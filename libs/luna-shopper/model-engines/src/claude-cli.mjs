@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from './claude-models.mjs';
 import {
   RETRY_DELAYS,
+  askManyInOrder,
   defaultSleep,
   stopReason,
   withRetries,
@@ -197,81 +198,90 @@ export function makeClaudeEngine({
   // never asked anything leaves no directory behind.
   let cwd = scratchDir;
 
+  async function ask(prompt, { system = null, schema = null } = {}) {
+    if (hadKey && !noticed) {
+      noticed = true;
+      stderr.write(
+        'ANTHROPIC_API_KEY is set and is being ignored: this run bills your Claude session. Use --engine api to bill the key.\n'
+      );
+    }
+
+    if (cwd === null) {
+      cwd = makeScratchDir();
+    }
+
+    // `--system-prompt` replaces Claude Code's own system prompt rather than
+    // appending to it, which is what makes the decider's rules the whole of
+    // the model's standing context. `--append-system-prompt` would keep both.
+    const withHint =
+      system && schema ? `${system}\n${TOOL_SHAPE_HINT}` : system;
+    const args = [
+      '-p',
+      '--output-format',
+      'json',
+      '--model',
+      model,
+      ...(effort ? ['--effort', effort] : []),
+      ...(withHint ? ['--system-prompt', withHint] : []),
+      ...(schema ? ['--json-schema', JSON.stringify(schema)] : []),
+      ...MINIMAL_ARGS,
+    ];
+
+    const text = await withRetries(
+      async () => {
+        let answer;
+        try {
+          answer = await spawn('claude', args, {
+            input: prompt,
+            env: childEnv,
+            cwd,
+            timeoutMs,
+            signal,
+          });
+        } catch (error) {
+          if (signal?.aborted) {
+            throw stopReason(signal);
+          }
+          return { ok: false, error: String(error?.message ?? error) };
+        }
+        if (answer.code !== 0) {
+          // Ctrl+C reaches the whole terminal, so the child of the attempt in
+          // flight dies of the same keystroke. That is a stop, not a failure
+          // worth retrying.
+          if (signal?.aborted) {
+            throw stopReason(signal);
+          }
+          return {
+            ok: false,
+            error: `exit ${answer.code}: ${(answer.stderr || '').trim().slice(0, 500)}`,
+          };
+        }
+        const read = readClaudeEnvelope(answer.stdout);
+        if (!read.ok) {
+          return { ok: false, error: read.error };
+        }
+        if (usage) {
+          addUsage(usage, read.usage);
+        }
+        return { ok: true, value: read.text };
+      },
+      { name: 'claude', sleep, retryDelays, signal }
+    );
+
+    return { text };
+  }
+
   return {
     name: 'claude',
     model,
     effort,
-    async ask(prompt, { system = null, schema = null } = {}) {
-      if (hadKey && !noticed) {
-        noticed = true;
-        stderr.write(
-          'ANTHROPIC_API_KEY is set and is being ignored: this run bills your Claude session. Use --engine api to bill the key.\n'
-        );
-      }
-
-      if (cwd === null) {
-        cwd = makeScratchDir();
-      }
-
-      // `--system-prompt` replaces Claude Code's own system prompt rather than
-      // appending to it, which is what makes the decider's rules the whole of
-      // the model's standing context. `--append-system-prompt` would keep both.
-      const withHint =
-        system && schema ? `${system}\n${TOOL_SHAPE_HINT}` : system;
-      const args = [
-        '-p',
-        '--output-format',
-        'json',
-        '--model',
-        model,
-        ...(effort ? ['--effort', effort] : []),
-        ...(withHint ? ['--system-prompt', withHint] : []),
-        ...(schema ? ['--json-schema', JSON.stringify(schema)] : []),
-        ...MINIMAL_ARGS,
-      ];
-
-      const text = await withRetries(
-        async () => {
-          let answer;
-          try {
-            answer = await spawn('claude', args, {
-              input: prompt,
-              env: childEnv,
-              cwd,
-              timeoutMs,
-              signal,
-            });
-          } catch (error) {
-            if (signal?.aborted) {
-              throw stopReason(signal);
-            }
-            return { ok: false, error: String(error?.message ?? error) };
-          }
-          if (answer.code !== 0) {
-            // Ctrl+C reaches the whole terminal, so the child of the attempt in
-            // flight dies of the same keystroke. That is a stop, not a failure
-            // worth retrying.
-            if (signal?.aborted) {
-              throw stopReason(signal);
-            }
-            return {
-              ok: false,
-              error: `exit ${answer.code}: ${(answer.stderr || '').trim().slice(0, 500)}`,
-            };
-          }
-          const read = readClaudeEnvelope(answer.stdout);
-          if (!read.ok) {
-            return { ok: false, error: read.error };
-          }
-          if (usage) {
-            addUsage(usage, read.usage);
-          }
-          return { ok: true, value: read.text };
-        },
-        { name: 'claude', sleep, retryDelays, signal }
-      );
-
-      return { text };
-    },
+    // One call is one `claude -p` process with a session behind it, and this
+    // adapter has no measurement saying that several of them at once answer
+    // sooner. One is the honest answer, and `askMany` below is the shared
+    // default rather than a pool this adapter invented for itself.
+    batchSize: 1,
+    ask,
+    askMany: (prompts, options = {}) =>
+      askManyInOrder(ask, prompts, options, signal),
   };
 }

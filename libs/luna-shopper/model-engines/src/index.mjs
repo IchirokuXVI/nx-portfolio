@@ -5,6 +5,18 @@
  *
  *   engine.ask(prompt, { system, schema }) -> { text }
  *
+ * A caller holding several questions that do not depend on each other asks them
+ * together instead (plan 0003):
+ *
+ *   engine.askMany(prompts, { system, schema }) -> Array<{ text } | { error }>
+ *   engine.batchSize                            // 1 means one at a time
+ *
+ * `askMany` answers in input order, one entry per prompt, and a prompt the
+ * engine gave up on is reported in its own entry while the rest still answer. A
+ * stop is different from a failure and rejects the whole call with the signal's
+ * own reason. `batchSize` is how many requests the engine holds in flight, and
+ * every adapter reports it, so no caller has to ask which one it is holding.
+ *
  * `prompt` is the user half and `system` is the standing half, and the two are
  * never joined by the caller, because an adapter that can cache the standing
  * half separately must be free to do it. `schema` is a JSON schema the reply
@@ -43,12 +55,17 @@ export {
   CHARACTERS_PER_TOKEN,
   KEEP_ALIVE,
   NUM_CTX_CEILING,
+  OLLAMA_DEFAULT_BATCH,
   OLLAMA_DEFAULT_HOST,
   OLLAMA_DEFAULT_MODEL,
+  OLLAMA_MAX_BATCH,
+  OLLAMA_WIDEST_MEASURED_BATCH,
   makeOllamaEngine,
   modelContextLength,
+  ollamaBatchSize,
   ollamaHost,
   truncationFloor,
+  wideBatchNotice,
 } from './ollama.mjs';
 export {
   DEFAULT_ENGINE,
@@ -56,6 +73,12 @@ export {
   ENGINE_NAMES,
   engineEntry,
 } from './registry.mjs';
-export { RETRY_DELAYS, stopReason, withRetries } from './retry.mjs';
+export {
+  RETRY_DELAYS,
+  askEntry,
+  askManyInOrder,
+  stopReason,
+  withRetries,
+} from './retry.mjs';
 export { stripFence } from './text.mjs';
 export { addUsage, emptyUsage } from './usage.mjs';
