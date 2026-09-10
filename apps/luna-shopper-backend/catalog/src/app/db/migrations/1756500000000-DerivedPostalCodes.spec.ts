@@ -1,4 +1,5 @@
 import type { QueryRunner, Repository } from 'typeorm';
+import type { LocationScopeService } from '../../catalog/location-scopes';
 import { ScopeResolverService } from '../../catalog/scope-resolver.service';
 import type {
   PriceScope,
@@ -26,7 +27,6 @@ const CENTROIDS = [
 interface Row {
   id: string;
   supermarketId?: string;
-  priceScopeId?: string;
   country: string | null;
   postalCode: string | null;
   postalCodeSource: string | null;
@@ -257,7 +257,6 @@ describe('a backfilled location and the scope ladder', () => {
       {
         id: 'store-cordoba',
         supermarketId: CHAIN,
-        priceScopeId: STORE_SCOPE,
         country: null,
         postalCode: null,
         postalCodeSource: null,
@@ -279,8 +278,14 @@ describe('a backfilled location and the scope ladder', () => {
     } as unknown as Repository<SupermarketLocation>;
 
     const scopes = {
-      // No NATIONAL scope, so rung two is empty and rung three answers.
-      find: jest.fn(async () => []),
+      // No NATIONAL scope, so rung two is empty and rung three answers. The
+      // second call is rung three loading the chain default by id, which the
+      // view reports the priority of (plan 0105, section 5).
+      find: jest.fn(async (options: { where: { kind?: unknown } }) =>
+        options.where.kind === undefined
+          ? [{ id: DEFAULT_SCOPE, supermarketId: CHAIN, priority: 300 }]
+          : []
+      ),
     } as unknown as Repository<PriceScope>;
 
     const chains = {
@@ -289,7 +294,21 @@ describe('a backfilled location and the scope ladder', () => {
       ]),
     } as unknown as Repository<Supermarket>;
 
-    return new ScopeResolverService(locations, scopes, chains);
+    /**
+     * The store's stack, which is the one STORE scope it has had all along
+     * (plan 0105, section 3). The backfill is about postal codes and this file
+     * is about what the ladder then answers, so the stack is a constant.
+     */
+    const stacks = {
+      stacksFor: jest.fn(
+        async () =>
+          new Map([
+            ['store-cordoba', [{ priceScopeId: STORE_SCOPE, priority: 100 }]],
+          ])
+      ),
+    } as unknown as LocationScopeService;
+
+    return new ScopeResolverService(locations, scopes, chains, stacks);
   }
 
   it('falls to the approximate rung before the backfill and reaches rung one after', async () => {
@@ -319,12 +338,23 @@ describe('a backfilled location and the scope ladder', () => {
   });
 
   it('leaves the price scope exactly where it was', async () => {
-    // Section 4: deriving a postcode changes what the location says about where
-    // it is, not what it prices against.
-    const rows = world();
+    // Section 4: deriving a postcode changes what the location says about
+    // where it is, not what it prices against. Since plan 0105 the scope is
+    // not a column on the shop at all, so what the assertion reads is the
+    // statement: the backfill writes the two postal code columns and names
+    // nothing else.
+    const { runner, calls, rows } = fakeRunner(world());
 
-    await backfillDerivedPostalCodes(fakeRunner(rows).runner);
+    await backfillDerivedPostalCodes(runner);
 
-    expect(rows[0].priceScopeId).toBe(STORE_SCOPE);
+    const updates = calls.filter((sql) =>
+      sql.startsWith('UPDATE "supermarket_locations"')
+    );
+    expect(updates.length).toBeGreaterThan(0);
+    for (const sql of updates) {
+      expect(sql).toMatch(/SET[\s\S]*"postalCode"/);
+      expect(sql).not.toMatch(/"priceScope/);
+    }
+    expect(rows[0].postalCodeSource).toBe('DERIVED');
   });
 });

@@ -261,6 +261,9 @@ const supermarketLocationView = object(
     id: nonEmptyString(),
     supermarketId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
+    // The whole stack, most specific first (plan 0105, section 3), of which
+    // `priceScopeId` above is the first entry.
+    priceScopeIds: array(nonEmptyString()),
     label: nullableLocalized(),
     address: nullableString(),
     city: nullableString(),
@@ -280,6 +283,7 @@ const supermarketLocationView = object(
     'id',
     'supermarketId',
     'priceScopeId',
+    'priceScopeIds',
     'label',
     'address',
     'city',
@@ -301,8 +305,10 @@ const priceScopeView = object(
     kind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
     externalKey: nullableString(),
     label: nullableLocalized(),
+    // How specific the scope is: lower is more specific (plan 0105).
+    priority: integer(),
   },
-  ['id', 'supermarketId', 'kind', 'externalKey', 'label']
+  ['id', 'supermarketId', 'kind', 'externalKey', 'label', 'priority']
 );
 
 const productGroupView = object(
@@ -660,6 +666,9 @@ const listSupermarketsRequest = object(
 
 const locationFields = {
   priceScopeId: string(),
+  // The whole stack (plan 0105, section 3), of which `priceScopeId` is the one
+  // entry shorthand. Naming both is refused rather than merged.
+  priceScopeIds: array(nonEmptyString()),
   label: nullableLocalized(),
   address: nullableString(),
   city: nullableString(),
@@ -1185,6 +1194,8 @@ const createPriceScopeRequest = object(
     kind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
     externalKey: nullableString(),
     label: nullableLocalized(),
+    // Absent takes the default for the kind (plan 0105, section 2.2).
+    priority: integer({ minimum: 0 }),
   },
   ['userId', 'supermarketId', 'kind']
 );
@@ -1196,6 +1207,7 @@ const updatePriceScopeRequest = object(
     kind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
     externalKey: nullableString(),
     label: nullableLocalized(),
+    priority: integer({ minimum: 0 }),
   },
   ['userId', 'priceScopeId']
 );
@@ -1238,8 +1250,22 @@ const resolvedScopeView = object(
     postalCode: nullableString(),
     origin: { type: 'string', enum: [...SCOPE_ORIGINS] },
     approximate: boolean(),
+    // The shop this scope was reached through, its priority, and whether it is
+    // the tier that shop is quoted from (plan 0105, section 5).
+    supermarketLocationId: nullableString(),
+    priority: integer(),
+    quoted: boolean(),
   },
-  ['priceScopeId', 'supermarketId', 'postalCode', 'origin', 'approximate']
+  [
+    'priceScopeId',
+    'supermarketId',
+    'postalCode',
+    'origin',
+    'approximate',
+    'supermarketLocationId',
+    'priority',
+    'quoted',
+  ]
 );
 
 const postalCodeCoverageView = object(

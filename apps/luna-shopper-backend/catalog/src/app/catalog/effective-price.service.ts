@@ -49,23 +49,69 @@ export async function currentPriceRows(
     .getMany();
 }
 
+/** The shops that hold a scope, as a subquery, for the two functions below. */
+const SHOPS_HOLDING = `
+  SELECT mine."supermarketLocationId"
+    FROM "supermarket_location_price_scopes" mine
+   WHERE mine."priceScopeId" = :scopeId`;
+
+/** The scopes those shops also hold. */
+const SCOPES_SHARED_WITH = `
+  SELECT other."priceScopeId"
+    FROM "supermarket_location_price_scopes" other
+   WHERE other."supermarketLocationId" IN (${SHOPS_HOLDING})`;
+
 /**
- * The chain's NATIONAL scope, for a scope that is not it (plan 0080, section
- * 6). Null for a NATIONAL scope itself and for a chain without one.
+ * The scopes this one falls through to: the chain's scopes less specific than
+ * it that a shop holding it also holds (plan 0080, section 6; widened by plan
+ * 0105, section 4).
+ *
+ * **The stack and not merely the chain.** LIDL has 59 REGION scopes, and a shop
+ * in Madrid must not inherit Barcelona's price. What makes a scope reachable
+ * from another is a shop that holds both, which is exactly what the join table
+ * records.
+ *
+ * The chain's NATIONAL is always included, whatever holds it. That is the rule
+ * this function had before there was a stack, and it is what keeps a scope no
+ * shop has been attached to yet inheriting on the day it is created.
+ *
+ * Empty for a scope with nothing less specific than it, which is what the
+ * NATIONAL scope of a chain with no wider tier gets.
  */
-export async function nationalScopeOf(
+export async function lessSpecificScopesOf(
   manager: EntityManager,
   scope: PriceScope
-): Promise<PriceScope | null> {
-  if (scope.kind === PriceScopeKind.NATIONAL) {
-    return null;
+): Promise<PriceScope[]> {
+  return manager
+    .createQueryBuilder(PriceScope, 's')
+    .where('s."supermarketId" = :chain', { chain: scope.supermarketId })
+    .andWhere('s."priority" > :priority', { priority: scope.priority })
+    .andWhere(`(s."kind" = :national OR s."id" IN (${SCOPES_SHARED_WITH}))`, {
+      national: PriceScopeKind.NATIONAL,
+      scopeId: scope.id,
+    })
+    .orderBy('s."priority"', 'ASC')
+    .getMany();
+}
+
+/**
+ * The reverse of {@link lessSpecificScopesOf}: the scopes that fall through to
+ * this one, and whose materialized rows a write here therefore changes.
+ */
+export async function moreSpecificScopesOf(
+  manager: EntityManager,
+  scope: PriceScope
+): Promise<PriceScope[]> {
+  const qb = manager
+    .createQueryBuilder(PriceScope, 's')
+    .where('s."supermarketId" = :chain', { chain: scope.supermarketId })
+    .andWhere('s."priority" < :priority', { priority: scope.priority });
+  // A national price reaches every scope of its chain, held by a shop or not,
+  // because every scope falls through to it (plan 0080, section 6).
+  if (scope.kind !== PriceScopeKind.NATIONAL) {
+    qb.andWhere(`s."id" IN (${SCOPES_SHARED_WITH})`, { scopeId: scope.id });
   }
-  return manager.findOne(PriceScope, {
-    where: {
-      supermarketId: scope.supermarketId,
-      kind: PriceScopeKind.NATIONAL,
-    },
-  });
+  return qb.getMany();
 }
 
 /**
@@ -110,8 +156,14 @@ export async function recomputeEffectivePrices(
       // The scope went away under a cascade; its rows went with it.
       continue;
     }
-    const national = await nationalScopeOf(manager, scope);
-    const scopeIds = national ? [scope.id, national.id] : [scope.id];
+    const inherited = await lessSpecificScopesOf(manager, scope);
+    const scopeIds = [scope.id, ...inherited.map((row) => row.id)];
+    // The ranking the resolution reads, built once per scope rather than once
+    // per product: every scope whose rows were loaded, against its priority.
+    const scopePriorities = new Map<string, number>([
+      [scope.id, scope.priority],
+      ...inherited.map((row): [string, number] => [row.id, row.priority]),
+    ]);
     const itemIds = [...itemSet];
 
     for (let i = 0; i < itemIds.length; i += KEY_CHUNK) {
@@ -136,6 +188,7 @@ export async function recomputeEffectivePrices(
         const resolved = resolveEffectivePrice({
           rows: candidates,
           priceScopeId: scope.id,
+          scopePriorities,
           policies,
           now,
         });
@@ -231,9 +284,10 @@ function toNumber(value: number | string | null | undefined): number | null {
 /**
  * The keys a write at (items, scope) makes stale.
  *
- * The keys themselves, and, for a NATIONAL scope, the same items at every
- * scope of the chain (plan 0080, section 6): a national price reaches every
- * scope of its chain, so writing one recomputes them all.
+ * The keys themselves, and the same items at every scope that falls through to
+ * this one (plan 0080, section 6; plan 0105, section 4): a price written at a
+ * region reaches the shops of that region, and a national price still reaches
+ * every scope of its chain.
  */
 export async function affectedPriceKeys(
   manager: EntityManager,
@@ -247,15 +301,9 @@ export async function affectedPriceKeys(
     return [];
   }
   const scopeIds = [scope.id];
-  if (scope.kind === PriceScopeKind.NATIONAL) {
-    const siblings = await manager.find(PriceScope, {
-      where: { supermarketId: scope.supermarketId },
-      select: { id: true },
-    });
-    for (const sibling of siblings) {
-      if (sibling.id !== scope.id) {
-        scopeIds.push(sibling.id);
-      }
+  for (const dependent of await moreSpecificScopesOf(manager, scope)) {
+    if (dependent.id !== scope.id) {
+      scopeIds.push(dependent.id);
     }
   }
   const keys: PriceKey[] = [];
@@ -268,22 +316,28 @@ export async function affectedPriceKeys(
 }
 
 /**
- * A scope made later inherits on arrival (plan 0080, section 6): every item
- * with a row at the chain's NATIONAL scope is recomputed for the new scope.
+ * A scope inherits on arrival (plan 0080, section 6): every item with a row at
+ * a scope this one falls through to is recomputed for it.
+ *
+ * Called when a scope is created, and again whenever a shop's stack changes,
+ * because attaching a shop to a region is what makes that region reachable
+ * from the shop's own scope (plan 0105, section 3).
  */
-export async function inheritNationalPrices(
+export async function inheritLessSpecificPrices(
   manager: EntityManager,
   scope: PriceScope,
   now: Date = new Date()
 ): Promise<void> {
-  const national = await nationalScopeOf(manager, scope);
-  if (!national) {
+  const inherited = await lessSpecificScopesOf(manager, scope);
+  if (inherited.length === 0) {
     return;
   }
   const priced = await manager
     .createQueryBuilder(ItemPrice, 'p')
     .select('DISTINCT p."itemId"', 'itemId')
-    .where('p."priceScopeId" = :scopeId', { scopeId: national.id })
+    .where('p."priceScopeId" IN (:...scopeIds)', {
+      scopeIds: inherited.map((row) => row.id),
+    })
     .getRawMany<{ itemId: string }>();
   await recomputeEffectivePrices(
     manager,
@@ -350,8 +404,8 @@ export class EffectivePriceService {
     return affectedPriceKeys(manager, itemIds, priceScopeId);
   }
 
-  inheritNational(manager: EntityManager, scope: PriceScope, now?: Date) {
-    return inheritNationalPrices(manager, scope, now);
+  inheritLessSpecific(manager: EntityManager, scope: PriceScope, now?: Date) {
+    return inheritLessSpecificPrices(manager, scope, now);
   }
 
   recomputeAll(manager: EntityManager, now?: Date) {

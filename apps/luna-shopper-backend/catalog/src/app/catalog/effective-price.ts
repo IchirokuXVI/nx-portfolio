@@ -36,8 +36,18 @@ export interface EffectivePriceInput {
    * per (scope, kind); the caller's `DISTINCT ON` is what makes that true.
    */
   rows: readonly PriceRow[];
-  /** The scope being computed. A row at any other scope is the national one. */
+  /** The scope being computed. The most specific of the set, by construction. */
   priceScopeId: string;
+  /**
+   * Each scope id in {@link rows} against its `priority`: lower is more
+   * specific (plan 0105, section 2.1).
+   *
+   * Optional, and absent means the two tier rule this generalized: the scope
+   * being computed beats every other row, which is what "this scope, else the
+   * chain's NATIONAL" was. With one fallback tier the two rules agree exactly,
+   * so a caller with nothing to rank need not build the map.
+   */
+  scopePriorities?: ReadonlyMap<string, number>;
   policies: readonly PolicyRow[];
   now: Date;
 }
@@ -69,8 +79,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * remembered, which is what lets undo, replay and reimport touch only their own
  * rows.
  *
- * 1. Per kind, the narrower scope wins: a regional leaflet at a warehouse scope
- *    beats the national one for that kind, in that warehouse (section 6).
+ * 1. Per kind, the more specific scope wins: a regional leaflet at a warehouse
+ *    scope beats the national one for that kind, in that warehouse (section 6),
+ *    and with three tiers it is the lowest `priority` that has a row of that
+ *    kind (plan 0105, section 4). **Per product, not per scope**: a region that
+ *    prices 400 of a chain's 4,000 products answers for those 400, and the
+ *    other 3,600 fall through to national.
  * 2. Filter to eligible rows: the kind is enabled, `now` is inside the window
  *    where one is set, the age is within `maxAgeDays` where one is set, and an
  *    `ADMIN` row passes its protection test or is past it (section 4.2).
@@ -84,7 +98,11 @@ export function resolveEffectivePrice(
   input: EffectivePriceInput
 ): EffectivePrice {
   const policies = new Map(input.policies.map((p) => [p.sourceKind, p]));
-  const candidates = narrowestPerKind(input.rows, input.priceScopeId);
+  const candidates = narrowestPerKind(
+    input.rows,
+    input.priceScopeId,
+    input.scopePriorities
+  );
   const enabled = candidates.filter(
     (row) => policies.get(row.sourceKind)?.enabled === true
   );
@@ -179,22 +197,62 @@ function isProtected(row: PriceRow, now: number): boolean {
   );
 }
 
-/** Section 6: two rows of one kind, one at each scope, and the narrower wins. */
-function narrowestPerKind(
+/**
+ * Section 6, widened by plan 0105 section 4: several rows of one kind, one per
+ * scope of the shop's stack, and the most specific wins.
+ *
+ * **Within a shop, specific beats cheap.** A national fallback that happens to
+ * undercut the regional price the shop actually charges must not be chosen
+ * here: the shopper would be quoted a number no till will ring up. Cheapest
+ * still decides *between* shops, which is a different question asked later
+ * (section 4, D4).
+ *
+ * Ties are possible, because two scopes may sit at one priority. The scope
+ * being computed wins one, and after that the newer observation does, so the
+ * answer is stable rather than dependent on row order.
+ */
+export function narrowestPerKind(
   rows: readonly PriceRow[],
-  priceScopeId: string
+  priceScopeId: string,
+  scopePriorities?: ReadonlyMap<string, number>
 ): PriceRow[] {
+  const priorityOf = (row: PriceRow): number => {
+    const stated = scopePriorities?.get(row.priceScopeId);
+    if (stated !== undefined) {
+      return stated;
+    }
+    // No map, or a scope the caller did not rank: the two tier rule.
+    return row.priceScopeId === priceScopeId
+      ? Number.NEGATIVE_INFINITY
+      : Number.POSITIVE_INFINITY;
+  };
+
   const byKind = new Map<PriceSourceKind, PriceRow>();
   for (const row of rows) {
     const held = byKind.get(row.sourceKind);
-    if (
-      !held ||
-      (held.priceScopeId !== priceScopeId && row.priceScopeId === priceScopeId)
-    ) {
+    if (!held || beats(row, held)) {
       byKind.set(row.sourceKind, row);
     }
   }
   return [...byKind.values()];
+
+  function beats(row: PriceRow, held: PriceRow): boolean {
+    // Compared and not subtracted: the fallback ranks are infinities, and
+    // `Infinity - Infinity` is NaN, which reads as "not equal" and then loses
+    // every comparison, so two unranked rows would never reach the tie breaks.
+    const mine = priorityOf(row);
+    const theirs = priorityOf(held);
+    if (mine !== theirs) {
+      return mine < theirs;
+    }
+    if (
+      (row.priceScopeId === priceScopeId) !==
+      (held.priceScopeId === priceScopeId)
+    ) {
+      return row.priceScopeId === priceScopeId;
+    }
+    return row.lastObservedAt.getTime() > held.lastObservedAt.getTime();
+  }
 }
 
 /**

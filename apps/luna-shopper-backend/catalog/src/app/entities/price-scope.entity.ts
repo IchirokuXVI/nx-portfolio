@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SCOPE_PRIORITY,
   PriceScopeKind,
   type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
@@ -42,4 +43,27 @@ export class PriceScope extends BaseEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   label!: LocalizedText | null;
+
+  /**
+   * How specific this scope is (plan 0105, section 2.1). Lower is more
+   * specific, and the most specific scope that has a price for a product is the
+   * price that shop charges.
+   *
+   * An integer and not an enum position, so a tier nobody anticipated is a
+   * number rather than a migration: a chain that prices by province fits at 250
+   * with no new {@link kind}, no contract change and no back office release.
+   * {@link DEFAULT_SCOPE_PRIORITY} is what a creator that states none takes.
+   *
+   * **Beside the kind and not instead of it.** The number says how a scope
+   * competes; the kind says how {@link externalKey} is read and how a shop
+   * attaches to it. A warehouse code, a postal code and a store id are not
+   * interchangeable, so a run declaring three kinds at once needs both facts.
+   * The unique index is unchanged: priority is not part of identity.
+   *
+   * Gaps of 100, and an existing row is never renumbered by a migration. A
+   * number that moved on its own would silently re-rank every shop holding the
+   * scope.
+   */
+  @Column({ type: 'integer' })
+  priority!: number;
 }

@@ -12,6 +12,7 @@ import {
   type Item,
 } from '../entities';
 import { fakeAudit } from './catalog-audit.testing';
+import type { LocationScopeService } from './location-scopes';
 import type { PlatformAdminService } from './platform-admin.service';
 import { SupermarketLocationItemService } from './supermarket-location-item.service';
 
@@ -122,12 +123,19 @@ function build(options: BuildOptions = {}) {
   } as unknown as Repository<Item>;
 
   const locations = {
-    findOne: jest.fn(
-      async () =>
-        ({ id: 'loc-1', priceScopeId: 'scope-1' }) as SupermarketLocation
-    ),
+    findOne: jest.fn(async () => ({ id: 'loc-1' }) as SupermarketLocation),
     find: jest.fn(async () => scopeLocations as SupermarketLocation[]),
   } as unknown as Repository<SupermarketLocation>;
+
+  /**
+   * The shop is quoted from `scope-1`, and `scopeLocations` are the shops that
+   * hold it: the two halves the derivation reads, which used to be a column on
+   * the shop and a `find` by that column (plan 0105, section 3).
+   */
+  const stacks = {
+    quotedScopeOf: jest.fn(async () => 'scope-1'),
+    locationsHolding: jest.fn(async () => scopeLocations.map((l) => l.id)),
+  } as unknown as LocationScopeService;
 
   const supermarketItems = {
     find: jest.fn(async () => scopeRows),
@@ -158,7 +166,8 @@ function build(options: BuildOptions = {}) {
     items,
     locations,
     makeAdmin(),
-    audit.service
+    audit.service,
+    stacks
   );
   return { svc, rows, locations, audit, savedShopRows, savedScopeRows };
 }

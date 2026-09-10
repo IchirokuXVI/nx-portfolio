@@ -230,6 +230,8 @@
       "externalKeyHelp": "The source’s own key for the scope, such as a warehouse number. Text and not a number: it arrives as 4661 and as mad3.",
       "label": "Label",
       "labelHelp": "A name for people to read. Harvested scopes have none, and are shown by their kind and source key instead.",
+      "priority": "How specific",
+      "priorityHelp": "Which of a shop's scopes it is quoted from. A shop can sell at several, and the most specific one that has a price for a product is the price that shop charges. It is set from the kind when the scope is made and changed through the API, because moving it re-ranks every shop that holds it.",
       "filter": {
         "supermarketId": "Chain"
       }

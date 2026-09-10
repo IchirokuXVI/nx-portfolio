@@ -63,13 +63,21 @@ export function toSupermarketView(row: Supermarket): SupermarketView {
   };
 }
 
+/**
+ * @param priceScopeIds the shop's stack, most specific first (plan 0105,
+ * section 3). Read separately rather than joined, because every caller but
+ * `get` is mapping a page and a to-many join multiplies the rows a `limit`
+ * counts.
+ */
 export function toSupermarketLocationView(
-  row: SupermarketLocation
+  row: SupermarketLocation,
+  priceScopeIds: readonly string[]
 ): SupermarketLocationView {
   return {
     id: row.id,
     supermarketId: row.supermarketId,
-    priceScopeId: row.priceScopeId,
+    priceScopeId: priceScopeIds[0],
+    priceScopeIds: [...priceScopeIds],
     label: row.label,
     address: row.address,
     city: row.city,
@@ -90,6 +98,7 @@ export function toPriceScopeView(row: PriceScope): PriceScopeView {
     kind: row.kind,
     externalKey: row.externalKey,
     label: row.label,
+    priority: row.priority,
   };
 }
 
