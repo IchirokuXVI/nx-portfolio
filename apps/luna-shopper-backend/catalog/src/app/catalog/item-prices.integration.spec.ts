@@ -204,9 +204,14 @@ describeIntegration('item prices (real Postgres)', () => {
 
   describe('insert on change (section 2.1)', () => {
     it('a repeated value moves lastObservedAt only, a changed value inserts', async () => {
-      const day1 = new Date('2026-09-01T06:00:00.000Z');
-      const day2 = new Date('2026-09-02T06:00:00.000Z');
-      const day3 = new Date('2026-09-03T06:00:00.000Z');
+      // Relative to now, like the freshness tests below, and not calendar dates.
+      // The boundary this asserts is the newest crawl plus the policy's seven
+      // days, and `boundaryOf` keeps only a boundary still in the future, so
+      // fixed dates make the test pass until that day arrives and fail every
+      // run afterwards.
+      const day3 = new Date(Date.now() - DAY_MS);
+      const day2 = new Date(day3.getTime() - DAY_MS);
+      const day1 = new Date(day2.getTime() - DAY_MS);
 
       expect(await crawl(1.19, day1)).toEqual({ inserted: 1, confirmed: 0 });
       expect(await crawl(1.19, day2)).toEqual({ inserted: 0, confirmed: 1 });
