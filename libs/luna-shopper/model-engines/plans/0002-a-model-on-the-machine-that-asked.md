@@ -1,3 +1,5 @@
+> **PR:** [#333](https://github.com/IchirokuXVI/nx-portfolio/pull/333)
+
 # 0002 A model on the machine that asked
 
 The third engine, `--engine ollama`, against a local [Ollama](https://ollama.com)
