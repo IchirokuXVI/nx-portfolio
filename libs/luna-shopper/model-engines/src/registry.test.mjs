@@ -23,7 +23,7 @@ const ENVELOPE = JSON.stringify({
 });
 
 test('every name there is resolves to an entry', () => {
-  assert.deepEqual(ENGINE_NAMES, ['claude', 'api']);
+  assert.deepEqual(ENGINE_NAMES, ['claude', 'api', 'ollama']);
   for (const name of ENGINE_NAMES) {
     assert.equal(engineEntry(name).name, name);
   }
@@ -33,7 +33,7 @@ test('every name there is resolves to an entry', () => {
 test('an unknown name is refused by a message that lists the names there are', () => {
   assert.throws(
     () => engineEntry('sdk'),
-    /Unknown engine sdk\. It is claude or api\./
+    /Unknown engine sdk\. It is claude, api or ollama\./
   );
 });
 
@@ -69,6 +69,58 @@ test('the defaults an entry names are the ones the engine is built with', () => 
 
 test('the claude entry is asked to confirm nothing', () => {
   assert.equal(engineEntry('claude').gate, null);
+});
+
+test('the ollama entry fights none of the four things plan 0001 named', async () => {
+  const entry = engineEntry('ollama');
+  // A default model that is not a Claude model, no effort level it does not
+  // have, and no billing to confirm for a model on the operator's own machine.
+  assert.equal(entry.defaultModel, 'gemma4:12b');
+  assert.deepEqual(entry.effortLevels, []);
+  assert.equal(entry.defaultEffort, null);
+  assert.equal(entry.gate, null);
+
+  const usage = emptyUsage();
+  const seen = [];
+  const engine = entry.create({
+    fetchImpl: async (url, options) => {
+      seen.push(url);
+      if (url.endsWith('/api/show')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ capabilities: ['completion'], model_info: {} }),
+        };
+      }
+      assert.equal(JSON.parse(options.body).model, 'gemma4:12b');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          message: { content: 'ok' },
+          prompt_eval_count: 12,
+          prompt_eval_cached_count: 4,
+          eval_count: 3,
+        }),
+      };
+    },
+    env: { OLLAMA_HOST: 'box:11434' },
+    model: entry.defaultModel,
+    effort: entry.defaultEffort,
+    usage,
+  });
+
+  assert.equal(engine.name, 'ollama');
+  assert.equal(engine.effort, null);
+  assert.equal((await engine.ask('x')).text, 'ok');
+  // The fourth: the usage block is mapped into the five counters this library
+  // owns, and no sixth is invented.
+  assert.equal(usage.inputTokens, 8);
+  assert.equal(usage.cacheReadInputTokens, 4);
+  assert.deepEqual(seen, [
+    'http://box:11434/api/show',
+    'http://box:11434/api/chat',
+  ]);
 });
 
 test('the api entry names the billing gate, and its answer builds the engine', async () => {
