@@ -15,6 +15,7 @@ import {
   EFFORT_LEVELS,
 } from './claude-models.mjs';
 import { confirmApiBilling, makeApiEngine } from './messages-api.mjs';
+import { OLLAMA_DEFAULT_MODEL, makeOllamaEngine } from './ollama.mjs';
 
 /**
  * The providers, in the order a help text lists them.
@@ -82,6 +83,29 @@ export const ENGINES = [
         apiKey: gated,
         model,
         effort,
+        usage,
+        signal,
+      }),
+  },
+  {
+    name: 'ollama',
+    // Not a Claude model, which is the point of stating it per entry. Unlike
+    // the Claude default it names something the operator must have pulled,
+    // which is why a 404 from the server is fatal and names `ollama pull`.
+    defaultModel: OLLAMA_DEFAULT_MODEL,
+    // Effort is a Claude idea, so this entry has none and says so with an
+    // empty list. `cli.mjs` answers `The ollama engine takes no --effort.`
+    // from that emptiness, and the help text prints `no effort levels`.
+    defaultEffort: null,
+    effortLevels: [],
+    // Nothing to confirm: there is no billing for a model running on the
+    // operator's own machine.
+    gate: null,
+    create: ({ fetchImpl, env, model, usage = null, signal = null }) =>
+      makeOllamaEngine({
+        ...(fetchImpl ? { fetchImpl } : {}),
+        env,
+        model,
         usage,
         signal,
       }),

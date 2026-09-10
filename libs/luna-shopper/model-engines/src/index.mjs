@@ -40,6 +40,17 @@ export {
   textOf,
 } from './messages-api.mjs';
 export {
+  CHARACTERS_PER_TOKEN,
+  KEEP_ALIVE,
+  NUM_CTX_CEILING,
+  OLLAMA_DEFAULT_HOST,
+  OLLAMA_DEFAULT_MODEL,
+  makeOllamaEngine,
+  modelContextLength,
+  ollamaHost,
+  truncationFloor,
+} from './ollama.mjs';
+export {
   DEFAULT_ENGINE,
   ENGINES,
   ENGINE_NAMES,
