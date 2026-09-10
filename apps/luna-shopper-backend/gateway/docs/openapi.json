@@ -22450,6 +22450,14 @@
             "format": "uuid",
             "description": "The scope this store prices against (plan 0038, section 5.1). Omit it and the store gets a STORE scope of its own, which is exactly how catalog behaved before scopes existed."
           },
+          "priceScopeIds": {
+            "description": "Every scope the shop sells at, most specific winning (plan 0105, section 3). Order is not significant: the stack is ranked by each scope’s own priority. A shorthand for one of these is `priceScopeId`, and naming both is refused rather than merged.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "label": {
             "nullable": true,
             "type": "object",
@@ -22503,6 +22511,14 @@
             "type": "string",
             "format": "uuid",
             "description": "The scope this store prices against (plan 0038, section 5.1). Omit it and the store gets a STORE scope of its own, which is exactly how catalog behaved before scopes existed."
+          },
+          "priceScopeIds": {
+            "description": "Every scope the shop sells at, most specific winning (plan 0105, section 3). Order is not significant: the stack is ranked by each scope’s own priority. A shorthand for one of these is `priceScopeId`, and naming both is refused rather than merged.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "label": {
             "nullable": true,
@@ -23043,6 +23059,11 @@
                 "$ref": "#/components/schemas/LocalizedTextDto"
               }
             ]
+          },
+          "priority": {
+            "type": "number",
+            "minimum": 0,
+            "description": "How specific the scope is (plan 0105, section 2.1). Lower is more specific, and within one shop the most specific scope that has a price for a product is the price that shop charges. Omit it and the scope takes the default for its kind: 100 STORE, 200 POSTAL_CODE, 300 REGION, 1000 NATIONAL. The gaps are what let a tier nobody anticipated be a number rather than a migration."
           }
         },
         "required": [
@@ -23075,6 +23096,11 @@
                 "$ref": "#/components/schemas/LocalizedTextDto"
               }
             ]
+          },
+          "priority": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Move the scope. Left alone when absent, including when the kind changes beside it: moving a scope re-ranks every shop that holds it, so it is stated rather than inferred."
           }
         }
       },
@@ -26274,6 +26300,9 @@
                 "type": "null"
               }
             ]
+          },
+          "priority": {
+            "type": "integer"
           }
         },
         "required": [
@@ -26281,7 +26310,8 @@
           "supermarketId",
           "kind",
           "externalKey",
-          "label"
+          "label",
+          "priority"
         ],
         "additionalProperties": false
       },
@@ -26482,6 +26512,18 @@
           },
           "approximate": {
             "type": "boolean"
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "quoted": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -26489,7 +26531,10 @@
           "supermarketId",
           "postalCode",
           "origin",
-          "approximate"
+          "approximate",
+          "supermarketLocationId",
+          "priority",
+          "quoted"
         ],
         "additionalProperties": false
       },
@@ -26899,6 +26944,13 @@
             "type": "string",
             "minLength": 1
           },
+          "priceScopeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "label": {
             "anyOf": [
               {
@@ -26972,6 +27024,7 @@
           "id",
           "supermarketId",
           "priceScopeId",
+          "priceScopeIds",
           "label",
           "address",
           "city",

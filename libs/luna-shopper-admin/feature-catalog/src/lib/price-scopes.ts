@@ -13,6 +13,31 @@ import { priceScopeSource } from './catalog-sources';
 export type PriceScope = Wire.CatalogPriceScopeView;
 
 /**
+ * What a priority reads as (plan 0105, section 6).
+ *
+ * **The number is the backend's and the word is this app's**, which is the
+ * split the plan is built on: a chain that prices by province sits at 250 with
+ * no new kind and no release here, and this function is what has to cope with
+ * that rather than refuse it. So the four defaults have words and anything
+ * else says plainly that it has none, with the number, instead of rounding
+ * itself into the nearest band and lying about which shops it covers.
+ */
+export function priorityBand(priority: number): string {
+  switch (priority) {
+    case 100:
+      return 'This shop';
+    case 200:
+      return 'Postal code';
+    case 300:
+      return 'Region';
+    case 1000:
+      return 'Everywhere';
+    default:
+      return `Custom (${priority})`;
+  }
+}
+
+/**
  * Price scopes: the thing a price actually belongs to (plan 0005, section 2).
  *
  * This is the resource that makes the rest of the catalog readable. A price is
@@ -111,10 +136,22 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
       nullable: true,
       maxLength: 200,
     },
+    {
+      kind: 'text',
+      name: 'priority',
+      label: 'catalog.priceScopes.priority',
+      help: 'catalog.priceScopes.priorityHelp',
+      // Shown as a word and never as an input. Moving a scope re-ranks every
+      // shop that holds it (plan 0105, section 2.1), so it is not a control an
+      // operator reaches past on the way to fixing a label; a create takes the
+      // default for its kind, and a deliberate move goes through the API.
+      editable: false,
+      read: (row) => priorityBand(row.priority),
+    },
   ],
 
   list: {
-    columns: ['label', 'kind', 'externalKey', 'supermarketId'],
+    columns: ['label', 'kind', 'priority', 'externalKey', 'supermarketId'],
     // A scope is told from its siblings by what kind it is and which warehouse
     // it stands for. Its chain is the thing the filter above already fixed, so
     // repeating it on every card would spend the width saying one answer twice.

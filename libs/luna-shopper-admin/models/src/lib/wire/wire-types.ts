@@ -251,6 +251,7 @@ export type CreatePriceScopeDto = {
   kind: 'NATIONAL' | 'REGION' | 'POSTAL_CODE' | 'STORE';
   externalKey?: string | null;
   label?: LocalizedTextDto;
+  priority?: number;
 };
 
 /**
@@ -292,6 +293,7 @@ export type CreateSupermarketDto = {
  */
 export type CreateSupermarketLocationDto = {
   priceScopeId?: string;
+  priceScopeIds?: string[];
   label?: LocalizedTextDto;
   address?: string | null;
   city?: string | null;
@@ -904,6 +906,7 @@ export type UpdatePriceScopeDto = {
   kind?: 'NATIONAL' | 'REGION' | 'POSTAL_CODE' | 'STORE';
   externalKey?: string | null;
   label?: LocalizedTextDto;
+  priority?: number;
 };
 
 /**
@@ -959,6 +962,7 @@ export type UpdateSupermarketDto = {
  */
 export type UpdateSupermarketLocationDto = {
   priceScopeId?: string;
+  priceScopeIds?: string[];
   label?: LocalizedTextDto;
   address?: string | null;
   city?: string | null;
@@ -1848,6 +1852,7 @@ export type CatalogPriceScopeView = {
   kind: EnumsPriceScopeKind;
   externalKey: string | null;
   label: CatalogLocalizedText | null;
+  priority: number;
 };
 
 /**
@@ -1912,6 +1917,9 @@ export type CatalogResolvedScopeView = {
   postalCode: string | null;
   origin: 'POSTAL_CODE' | 'NATIONAL' | 'CHAIN_DEFAULT';
   approximate: boolean;
+  supermarketLocationId: string | null;
+  priority: number;
+  quoted: boolean;
 };
 
 /**
@@ -2049,6 +2057,7 @@ export type CatalogSupermarketLocationView = {
   id: string;
   supermarketId: string;
   priceScopeId: string;
+  priceScopeIds: string[];
   label: CatalogLocalizedText | null;
   address: string | null;
   city: string | null;

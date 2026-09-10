@@ -2,7 +2,15 @@ import {
   PostalCodeSource,
   type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  JoinTable,
+  ManyToMany,
+  ManyToOne,
+} from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { PriceScope } from './price-scope.entity';
 import { Supermarket } from './supermarket.entity';
@@ -23,26 +31,38 @@ export class SupermarketLocation extends BaseEntity {
   supermarket!: Supermarket;
 
   /**
-   * The scope whose prices this store sells at (plan 0038, section 5.1). Every
-   * location has one: a chain with no obtainable data gets a STORE scope of its
-   * own, which is what makes hand entered supermarkets need no special case.
+   * The scopes whose prices this store sells at (plan 0038, section 5.1; made
+   * plural by plan 0105, section 3).
    *
-   * Assigning it: where the store's own postal code is known it resolves through
-   * the chain's own resolver; where it is not, the location still gets a STORE
-   * scope of its own and nothing here changes.
+   * **Every location has at least one**, and that is still the floor: a chain
+   * with no obtainable data gets a STORE scope of its own, which is what makes
+   * hand entered supermarkets need no special case. It was a single non-null
+   * column until Mercadona turned out to price by warehouse *and* by tax region
+   * *and*, where somebody prices a shop by hand, by shop. One shop then sits
+   * under three scopes, and each scope's `priority` says which one it is quoted
+   * from.
    *
-   * **Deriving a postal code does not touch this column** (plan 0061, section 4).
+   * Assigning them: where the store's own postal code is known it resolves
+   * through the chain's own resolver; where it is not, the location still gets
+   * a STORE scope of its own and nothing here changes.
+   *
+   * **Deriving a postal code does not touch these** (plan 0061, section 4).
    * {@link postalCodeSource} says where the location *is*; this says what it
    * prices against, and re resolving a scope from a derived code is a larger
    * change belonging to whoever picks up chain specific scope resolution.
+   *
+   * The relation is lazy in the sense that nothing loads it by default: the
+   * services that need the stack ask for it, and the ones that need only the
+   * quoted scope read it through the join table in SQL rather than hydrating
+   * three entities to sort them by an integer.
    */
-  @Index('ix_locations_price_scope')
-  @Column({ type: 'uuid' })
-  priceScopeId!: string;
-
-  @ManyToOne(() => PriceScope, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'priceScopeId' })
-  priceScope!: PriceScope;
+  @ManyToMany(() => PriceScope)
+  @JoinTable({
+    name: 'supermarket_location_price_scopes',
+    joinColumn: { name: 'supermarketLocationId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'priceScopeId', referencedColumnName: 'id' },
+  })
+  priceScopes!: PriceScope[];
 
   @Column({ type: 'jsonb', nullable: true })
   label!: LocalizedText | null;

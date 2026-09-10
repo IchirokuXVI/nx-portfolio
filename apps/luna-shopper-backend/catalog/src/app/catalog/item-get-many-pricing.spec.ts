@@ -187,3 +187,60 @@ describe('ItemService.getMany with scopes (plan 0066)', () => {
     expect(result.items[0].bestOffer?.unitPriceLabel).toBe('EUR/L');
   });
 });
+
+/**
+ * The question this read answers, and the question it does not (plan 0105,
+ * section 4).
+ *
+ * "Which of my shops is cheapest for this?" is answered here, by price, over
+ * the scopes it was handed. "Which price does this shop charge?" is answered
+ * before it, by priority, and never here. This file is the guard the plan
+ * names: it is what fails if somebody applies priority to the wrong question.
+ */
+describe('ItemService.getMany and the scope stack (plan 0105, D4)', () => {
+  it('still takes the cheapest across two shops, whatever their tiers are', async () => {
+    // Two shops of two chains, quoted from a shop tier and a national tier.
+    // Specificity says nothing across a boundary like that, and the cheaper
+    // price is the answer a shopper asked for.
+    const items = { find: jest.fn(async () => [item('i1')]) };
+    const { qb, calls } = makePriceQb([
+      priceRow('i1', 'scope-national-lidl', '0.89', '0.59'),
+    ]);
+    const { service } = build(items, qb);
+
+    const result = await service.getMany({
+      ids: ['i1'],
+      priceScopeIds: ['scope-store-mercadona', 'scope-national-lidl'],
+    });
+
+    expect(result.items[0].bestOffer?.priceScopeId).toBe('scope-national-lidl');
+    // Ordered by price and nothing else: no priority column enters this
+    // query, and adding one would answer the wrong question.
+    expect(calls.order).toEqual([
+      'si."itemId"',
+      'si."price"',
+      'si."unitPrice"',
+    ]);
+    expect(calls.order.join(' ')).not.toContain('priority');
+  });
+
+  it('is handed one scope per shop, so a shop cannot undercut itself', async () => {
+    // The resolver hands over the quoted tier of each shop and never the
+    // wider ones (plan 0105, section 5). This read takes what it is given, so
+    // the two rules together are what stop a national fallback beating the
+    // regional price the shop actually charges.
+    const items = { find: jest.fn(async () => [item('i1')]) };
+    const { qb, calls } = makePriceQb([
+      priceRow('i1', 'scope-region', '1.50', '1.00'),
+    ]);
+    const { service } = build(items, qb);
+
+    const result = await service.getMany({
+      ids: ['i1'],
+      priceScopeIds: ['scope-region'],
+    });
+
+    expect(calls.scopeIds).toEqual(['scope-region']);
+    expect(result.items[0].bestOffer?.price).toBe(1.5);
+  });
+});

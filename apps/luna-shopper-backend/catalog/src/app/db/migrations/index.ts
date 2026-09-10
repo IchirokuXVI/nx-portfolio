@@ -10,6 +10,7 @@ import { LocationItemAvailabilityProvenance1756800000000 } from './1756800000000
 import { ItemPriceDetails1756900000000 } from './1756900000000-ItemPriceDetails';
 import { PriceScopeRegionRename1757000000000 } from './1757000000000-PriceScopeRegionRename';
 import { StricterCatalogSearch1757100000000 } from './1757100000000-StricterCatalogSearch';
+import { PriceScopePriority1757200000000 } from './1757200000000-PriceScopePriority';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -33,4 +34,5 @@ export const CATALOG_MIGRATIONS = [
   ItemPriceDetails1756900000000,
   PriceScopeRegionRename1757000000000,
   StricterCatalogSearch1757100000000,
+  PriceScopePriority1757200000000,
 ];

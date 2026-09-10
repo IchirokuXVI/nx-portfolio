@@ -27,6 +27,7 @@ import {
 } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { toSupermarketItemView } from './catalog.mappers';
+import { LocationScopeService } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 
 interface SupermarketItemCursor {
@@ -59,7 +60,8 @@ export class SupermarketItemService {
     @InjectRepository(SupermarketLocation)
     private readonly locations: Repository<SupermarketLocation>,
     private readonly admin: PlatformAdminService,
-    private readonly audit: CatalogAuditService
+    private readonly audit: CatalogAuditService,
+    private readonly stacks: LocationScopeService
   ) {}
 
   /**
@@ -159,12 +161,18 @@ export class SupermarketItemService {
     if (!location) {
       throw new NotFoundException('Supermarket location not found');
     }
-    return this.page(
-      'priceScopeId',
-      location.priceScopeId,
-      req.cursor,
-      req.limit
+    // The one scope the shop is quoted from (plan 0105, section 4). Its rows
+    // already answer for the whole stack, so the subject of this read, "what
+    // does this shop charge", survived the stack exactly as it survived the
+    // re-keying that made it a scope.
+    const priceScopeId = await this.stacks.quotedScopeOf(
+      this.locations.manager,
+      location.id
     );
+    if (priceScopeId === null) {
+      return { items: [], nextCursor: null };
+    }
+    return this.page('priceScopeId', priceScopeId, req.cursor, req.limit);
   }
 
   async listByScope(

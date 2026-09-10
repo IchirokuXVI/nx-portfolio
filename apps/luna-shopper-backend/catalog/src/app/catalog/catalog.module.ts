@@ -16,6 +16,7 @@ import { EffectivePriceService } from './effective-price.service';
 import { EffectivePriceSweep } from './effective-price.sweep';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
+import { LocationScopeService } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PricePolicyService } from './price-policy.service';
@@ -65,6 +66,7 @@ import { SupermarketService } from './supermarket.service';
     // Which price a shopper sees, materialized inside every price write and
     // kept current by the sweep when only the clock moved (plan 0080).
     EffectivePriceService,
+    LocationScopeService,
     EffectivePriceSweep,
     ItemPriceService,
     PricePolicyService,

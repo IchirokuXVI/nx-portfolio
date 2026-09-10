@@ -14,9 +14,10 @@ import {
   SupermarketLocation,
 } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
+import { EffectivePriceService } from './effective-price.service';
+import { LocationScopeService, setStack } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
-import { EffectivePriceService } from './effective-price.service';
 import { PriceScopeService } from './price-scope.service';
 import { SupermarketLocationService } from './supermarket-location.service';
 
@@ -95,6 +96,8 @@ describeIntegration('locations counted by postal code (real Postgres)', () => {
       admin,
       audit,
       new PostalCodeService(dataSource.getRepository(PostalCodePoint)),
+      new EffectivePriceService(),
+      new LocationScopeService(),
       config
     );
 
@@ -131,14 +134,18 @@ describeIntegration('locations counted by postal code (real Postgres)', () => {
       ['14004', null],
     ];
     for (const [postalCode, country] of rows) {
-      await dataSource.query(
+      // Raw SQL rather than the service, because the point of these rows is
+      // the null country a pre plan 0061 shop has and the service fills in.
+      // The scope is a row in its own table since plan 0105, so it is a
+      // second statement rather than a column.
+      const [{ id }] = await dataSource.query(
         `INSERT INTO "supermarket_locations"
-           ("supermarketId", "priceScopeId", "label", "postalCode", "country",
+           ("supermarketId", "label", "postalCode", "country",
             "postalCodeSource")
-         VALUES ($1, $2, $3, $4, $5, 'SOURCE')`,
+         VALUES ($1, $2, $3, $4, 'SOURCE')
+         RETURNING id`,
         [
           chain.id,
-          scope.id,
           JSON.stringify({
             en: `Shop ${postalCode}`,
             es: `Tienda ${postalCode}`,
@@ -147,6 +154,7 @@ describeIntegration('locations counted by postal code (real Postgres)', () => {
           country,
         ]
       );
+      await setStack(dataSource.manager, id, [scope.id]);
     }
   }
 
@@ -181,8 +189,8 @@ describeIntegration('locations counted by postal code (real Postgres)', () => {
   it('does not count another country as this one', async () => {
     await dataSource.query(
       `INSERT INTO "supermarket_locations"
-         ("supermarketId", "priceScopeId", "label", "postalCode", "country")
-       SELECT "supermarketId", "priceScopeId",
+         ("supermarketId", "label", "postalCode", "country")
+       SELECT "supermarketId",
               '{"en":"Portuguese shop","es":"Tienda portuguesa"}'::jsonb,
               '14013', 'pt'
          FROM "supermarket_locations" LIMIT 1`

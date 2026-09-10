@@ -40,6 +40,27 @@ export enum PriceScopeKind {
 }
 
 /**
+ * How specific a scope of each kind is, when its creator states no priority
+ * (plan 0105, section 2.2).
+ *
+ * Lower is more specific, and the most specific scope that has a price for a
+ * product is the price that shop charges. The gaps of 100 are the point: a tier
+ * nobody anticipated is a number rather than a migration, so a chain that prices
+ * by province sits at 250 with no new kind, no contract change and no back
+ * office release.
+ *
+ * These are defaults and not a derivation. `priority` is stored on the row, and
+ * a row's number is never renumbered afterwards: a number that moved would
+ * silently re-rank every shop that holds the scope.
+ */
+export const DEFAULT_SCOPE_PRIORITY: Record<PriceScopeKind, number> = {
+  [PriceScopeKind.STORE]: 100,
+  [PriceScopeKind.POSTAL_CODE]: 200,
+  [PriceScopeKind.REGION]: 300,
+  [PriceScopeKind.NATIONAL]: 1000,
+};
+
+/**
  * Where a location's postal code came from (plan 0061, section 5).
  *
  * Nullable on the row, alongside a null `postalCode`, so "we have no idea" stays

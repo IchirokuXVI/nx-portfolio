@@ -462,3 +462,141 @@ describe('resolveEffectivePrice (plan 0080, section 4)', () => {
     });
   });
 });
+
+/**
+ * A shop with three tiers, and which one it is quoted from (plan 0105,
+ * section 4).
+ *
+ * The rule under test is one sentence: **within a shop, the most specific
+ * scope that has a row wins, whatever the numbers say.** Cheapest decides
+ * between shops, and the test that this is not confused with it lives in
+ * `item.service.spec.ts`, where the cross-shop comparison is.
+ */
+describe('a shop stack of three tiers (plan 0105, section 4)', () => {
+  const STORE = 'store-cordoba';
+  const REGION = 'region-catalonia';
+
+  /** Lower is more specific. The defaults of section 2.2. */
+  const PRIORITIES = new Map([
+    [STORE, 100],
+    [REGION, 300],
+    [NATIONAL, 1000],
+  ]);
+
+  function resolveStack(rows: PriceRow[], scopeId = STORE) {
+    return resolveEffectivePrice({
+      rows,
+      priceScopeId: scopeId,
+      scopePriorities: PRIORITIES,
+      policies: POLICIES,
+      now: day(9),
+    });
+  }
+
+  it('takes the more specific tier even when a wider one is cheaper', () => {
+    // The whole reason cheapest is not the rule inside a shop: the shopper
+    // would be quoted a number the till in front of them will not ring up.
+    const national = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.0,
+      priceScopeId: NATIONAL,
+      lastObservedAt: day(9),
+    });
+    const region = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.5,
+      priceScopeId: REGION,
+      lastObservedAt: day(9),
+    });
+
+    expect(resolveStack([national, region]).row?.id).toBe(region.id);
+  });
+
+  it('takes the shop tier over both of the others', () => {
+    const national = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.0,
+      priceScopeId: NATIONAL,
+    });
+    const region = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.5,
+      priceScopeId: REGION,
+    });
+    const store = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.9,
+      priceScopeId: STORE,
+    });
+
+    expect(resolveStack([national, region, store]).row?.id).toBe(store.id);
+  });
+
+  it('falls through to the widest tier for a product only priced there', () => {
+    // Section 4: "has a row" is per product. A region pricing 400 of a
+    // chain's 4,000 products answers for those 400, and the other 3,600 fall
+    // through rather than going blank.
+    const national = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.0,
+      priceScopeId: NATIONAL,
+    });
+
+    expect(resolveStack([national]).row?.id).toBe(national.id);
+  });
+
+  it('answers null for a product priced nowhere in the stack', () => {
+    expect(resolveStack([]).row).toBeNull();
+  });
+
+  it('ranks each kind through the stack on its own', () => {
+    // The narrowing is per kind, so a leaflet at the region does not hide an
+    // API row at the shop; the policy then chooses between the two survivors,
+    // and the leaflet outranks the API.
+    const leafletRegion = row({
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      price: 1.4,
+      priceScopeId: REGION,
+      lastObservedAt: day(9),
+    });
+    const apiNational = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.1,
+      priceScopeId: NATIONAL,
+      lastObservedAt: day(9),
+    });
+    const apiStore = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.8,
+      priceScopeId: STORE,
+      lastObservedAt: day(9),
+    });
+
+    const resolved = resolveStack([leafletRegion, apiNational, apiStore]);
+    expect(resolved.row?.id).toBe(leafletRegion.id);
+  });
+
+  it('reads the two tier world exactly as it did before the stack', () => {
+    // No ranking given at all: the scope being computed beats every other
+    // row, which is the rule this generalized (plan 0080, section 6). It is
+    // what keeps every caller that has nothing to rank correct.
+    const national = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.0,
+      priceScopeId: NATIONAL,
+    });
+    const store = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.9,
+      priceScopeId: STORE,
+    });
+
+    const resolved = resolveEffectivePrice({
+      rows: [national, store],
+      priceScopeId: STORE,
+      policies: POLICIES,
+      now: day(9),
+    });
+    expect(resolved.row?.id).toBe(store.id);
+  });
+});

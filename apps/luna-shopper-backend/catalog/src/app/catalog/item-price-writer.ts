@@ -11,7 +11,10 @@ import {
   AUTOMATED_KINDS,
   toNumber,
 } from './effective-price';
-import { currentPriceRows, nationalScopeOf } from './effective-price.service';
+import {
+  currentPriceRows,
+  lessSpecificScopesOf,
+} from './effective-price.service';
 
 export interface ItemPriceWrite {
   scope: PriceScope;
@@ -68,8 +71,11 @@ export async function writeItemPrices(
   }
 
   const itemIds = [...new Set(write.entries.map((entry) => entry.itemId))];
-  const national = await nationalScopeOf(manager, write.scope);
-  const scopeIds = national ? [write.scope.id, national.id] : [write.scope.id];
+  // The scope written to and everything it falls through to: the ADMIN
+  // snapshot below records what every source said at the moment it was taken,
+  // and a source that spoke one tier up is one of them (plan 0105, section 4).
+  const inherited = await lessSpecificScopesOf(manager, write.scope);
+  const scopeIds = [write.scope.id, ...inherited.map((row) => row.id)];
   const current = await currentPriceRows(manager, itemIds, scopeIds);
 
   /** The current row of this kind at this scope, per item. */
