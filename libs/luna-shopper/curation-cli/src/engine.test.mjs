@@ -272,6 +272,8 @@ test('the claude engine strips the key from the child it spawns and says so once
     'json',
     '--model',
     'claude-sonnet-5',
+    '--effort',
+    'medium',
     ...MINIMAL_ARGS,
   ]);
   assert.equal(seen[0].options.input, 'packet');
@@ -290,6 +292,33 @@ test('the claude engine strips the key from the child it spawns and says so once
   assert.equal(usage.calls, 2);
   assert.equal(usage.inputTokens, 4);
   assert.equal(usage.cacheReadInputTokens, 15497 * 2);
+});
+
+test('the claude engine sends the effort it was made with', async () => {
+  const seen = [];
+  const engine = makeClaudeEngine({
+    spawn: async (command, args) => {
+      seen.push(args);
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    effort: 'high',
+    stderr: sink(),
+    scratchDir: '/tmp/scratch',
+  });
+
+  await engine.ask('packet');
+
+  assert.equal(engine.effort, 'high');
+  assert.deepEqual(seen[0].slice(0, 7), [
+    '-p',
+    '--output-format',
+    'json',
+    '--model',
+    'claude-sonnet-5',
+    '--effort',
+    'high',
+  ]);
 });
 
 test('the claude engine says nothing when there was no key to ignore', async () => {

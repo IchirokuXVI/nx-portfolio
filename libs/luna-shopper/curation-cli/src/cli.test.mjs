@@ -199,6 +199,27 @@ test('an unknown engine is refused before anything is started', async () => {
   assert.deepEqual(spawned, []);
 });
 
+test('an unknown effort is refused before anything is started', async () => {
+  const spawned = [];
+  await assert.rejects(
+    () =>
+      main(['--implementation', 'groups', '--effort', 'ultra'], {
+        env: {},
+        stdout: sink(),
+        stderr: sink(),
+        isTty: false,
+        spawn: async (...call) => {
+          spawned.push(call);
+          return { code: 0, stdout: '{}', stderr: '' };
+        },
+        repoRoot: '/repo',
+        platform: 'linux',
+      }),
+    /Unknown effort ultra\. It is one of low, medium, high, xhigh, max\./
+  );
+  assert.deepEqual(spawned, []);
+});
+
 test('--help answers the usage and does nothing else', async () => {
   const stdout = sink();
   const code = await main(['--help'], {
