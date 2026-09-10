@@ -67,7 +67,39 @@ export function makeScratchDir() {
   return mkdtempSync(join(tmpdir(), 'curation-claude-'));
 }
 
-const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * A wait that ends early when the run is stopped.
+ *
+ * The backoff between two failed attempts is up to thirty seconds, and a
+ * Ctrl+C during it would otherwise be answered half a minute later, with the
+ * terminal saying nothing in the meantime. The timer is cleared on the way
+ * out, so a stopped run leaves nothing pending that would hold the process
+ * open after the report is written.
+ */
+const defaultSleep = (ms, signal = null) =>
+  new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    signal?.addEventListener('abort', finish, { once: true });
+  });
+
+/**
+ * The error a stopped run fails with: the reason the caller aborted with.
+ *
+ * Nothing here invents an error of its own, so the orchestrator recognizes a
+ * stop by asking the signal rather than by reading a message.
+ */
+export function stopReason(signal) {
+  return signal?.reason ?? new Error('the run was stopped');
+}
 
 export function emptyUsage() {
   return {
@@ -192,6 +224,7 @@ export function makeClaudeEngine({
   sleep = defaultSleep,
   retryDelays = RETRY_DELAYS,
   scratchDir = null,
+  signal = null,
 }) {
   const { env: childEnv, hadKey } = claudeChildEnv(env);
   let noticed = false;
@@ -231,7 +264,12 @@ export function makeClaudeEngine({
       let lastError = 'the call failed';
       for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
         if (attempt > 0) {
-          await sleep(retryDelays[attempt - 1]);
+          await sleep(retryDelays[attempt - 1], signal);
+        }
+        // A stopped run makes no further attempt. The child of an attempt that
+        // was already running is killed through the same signal, below.
+        if (signal?.aborted) {
+          throw stopReason(signal);
         }
         let answer;
         try {
@@ -240,12 +278,22 @@ export function makeClaudeEngine({
             env: childEnv,
             cwd,
             timeoutMs,
+            signal,
           });
         } catch (error) {
+          if (signal?.aborted) {
+            throw stopReason(signal);
+          }
           lastError = String(error?.message ?? error);
           continue;
         }
         if (answer.code !== 0) {
+          // Ctrl+C reaches the whole terminal, so the child of the attempt in
+          // flight dies of the same keystroke. That is a stop, not a failure
+          // worth retrying.
+          if (signal?.aborted) {
+            throw stopReason(signal);
+          }
           lastError = `exit ${answer.code}: ${(answer.stderr || '').trim().slice(0, 500)}`;
           continue;
         }
@@ -314,6 +362,7 @@ export function makeApiEngine({
   usage = null,
   sleep = defaultSleep,
   retryDelays = RETRY_DELAYS,
+  signal = null,
 }) {
   return {
     name: 'api',
@@ -347,7 +396,10 @@ export function makeApiEngine({
       let lastError = null;
       for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
         if (attempt > 0) {
-          await sleep(retryDelays[attempt - 1]);
+          await sleep(retryDelays[attempt - 1], signal);
+        }
+        if (signal?.aborted) {
+          throw stopReason(signal);
         }
         let response;
         try {
@@ -359,8 +411,12 @@ export function makeApiEngine({
               'anthropic-version': ANTHROPIC_VERSION,
             },
             body,
+            signal,
           });
         } catch (error) {
+          if (signal?.aborted) {
+            throw stopReason(signal);
+          }
           lastError = new Error(`the request failed: ${String(error)}`);
           continue;
         }

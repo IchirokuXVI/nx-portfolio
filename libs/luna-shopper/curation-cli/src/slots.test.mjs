@@ -237,6 +237,28 @@ test('waitForGateway waits for readiness rather than for the socket', async () =
   assert.equal(calls, 3);
 });
 
+test('waitForGateway stops waiting when the run is stopped', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      waitForGateway({
+        url: 'http://localhost:43000',
+        fetchImpl: async () => {
+          calls += 1;
+          controller.abort(new Error('the run was stopped with Ctrl+C'));
+          return { ok: false, status: 503 };
+        },
+        sleep: async () => undefined,
+        now: () => 0,
+        timeoutMs: 120000,
+        signal: controller.signal,
+      }),
+    /stopped with Ctrl\+C/
+  );
+  assert.equal(calls, 1);
+});
+
 test('waitForGateway gives up with the last reason it saw', async () => {
   let clock = 0;
   await assert.rejects(

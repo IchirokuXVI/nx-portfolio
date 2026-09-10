@@ -276,7 +276,21 @@ export function makeSlots({
   };
 }
 
-const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/** A wait of at most `ms`, cut short when the run is stopped. */
+const defaultSleep = (ms, signal = null) =>
+  new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    signal?.addEventListener('abort', finish, { once: true });
+  });
 
 /**
  * Waits for the slot gateway to answer readiness.
@@ -293,10 +307,16 @@ export async function waitForGateway({
   intervalMs = 1000,
   sleep = defaultSleep,
   now = () => Date.now(),
+  signal = null,
 }) {
   const deadline = now() + timeoutMs;
   let lastError = 'it never answered';
   for (;;) {
+    // A run stopped while the services are still starting waits no longer:
+    // the caller takes the slot down from its own teardown.
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error('the run was stopped');
+    }
     try {
       const response = await fetchImpl(`${url}${READY_PATH}`);
       if (response.ok) {
@@ -311,6 +331,6 @@ export async function waitForGateway({
         `The rehearsal gateway at ${url} did not become ready within ${Math.round(timeoutMs / 1000)}s: ${lastError}.`
       );
     }
-    await sleep(intervalMs);
+    await sleep(intervalMs, signal);
   }
 }

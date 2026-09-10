@@ -453,3 +453,138 @@ test('every slot taken stops the run before anything is started', async () => {
   );
   assert.deepEqual(slots.verbs, ['list']);
 });
+
+// ---------------------------------------------------------------------------
+// A stopped run (Ctrl+C)
+// ---------------------------------------------------------------------------
+
+test('a stopped run writes the report over the rows it decided', async () => {
+  const slots = fakeSlots({ taken: [1] });
+  const controller = new AbortController();
+  const decider = fakeDecider({
+    rows: [
+      { ...ROW, remaining: 3 },
+      { ...ROW, remaining: 2 },
+      { ...ROW, remaining: 1 },
+    ],
+  });
+  const stderr = sink();
+
+  // The keystroke lands while the model is answering the first row, which is
+  // where a run spends nearly all of its time.
+  const engine = {
+    ask: async () => {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      return { text: JSON.stringify({ decision: 'LINK' }) };
+    },
+  };
+
+  const outcome = await runCuration({
+    slots,
+    makeDeciderFor: () => decider,
+    engine,
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr,
+    dumpPath: '/runs/x/dump.sql',
+    signal: controller.signal,
+  });
+
+  assert.equal(outcome.stopped, true);
+  assert.equal(outcome.report.report, '/runs/x/report.json');
+  assert.equal(
+    decider.calls.filter((call) => call.command === 'end').length,
+    1
+  );
+  // One row decided, then the walk stopped rather than asking for a second.
+  assert.equal(
+    decider.calls.filter((call) => call.command === 'next').length,
+    1
+  );
+  assert.ok(slots.verbs.includes('down:2'));
+  // A stop is not a failure, so the rehearsal catalog is not dumped.
+  assert.ok(!slots.verbs.some((verb) => verb.startsWith('dump:')));
+  assert.match(stderr.text(), /stopped: the report covers/);
+});
+
+// Ctrl+C reaches every process in the terminal, so the child that was in
+// flight dies of the keystroke and reports it in its own words. Once the run
+// is stopping, that error is the stop.
+test('a step that fails while the run is stopping is the stop, not a failure', async () => {
+  const slots = fakeSlots({ taken: [1] });
+  const controller = new AbortController();
+  const decider = fakeDecider({ rows: [ROW, ROW] });
+  decider.next = async () => {
+    controller.abort(new Error('the run was stopped with Ctrl+C'));
+    throw new Error('next failed: exit 1');
+  };
+
+  const outcome = await runCuration({
+    slots,
+    makeDeciderFor: () => decider,
+    engine: fakeEngine([]),
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+    signal: controller.signal,
+  });
+
+  assert.equal(outcome.stopped, true);
+  assert.equal(outcome.report.report, '/runs/x/report.json');
+  assert.ok(slots.verbs.includes('down:2'));
+});
+
+test('a stop before the run opens takes the slot down and reports nothing', async () => {
+  const slots = fakeSlots({ taken: [1] });
+  const controller = new AbortController();
+  const stderr = sink();
+  const decider = fakeDecider({ rows: [ROW] });
+
+  const outcome = await runCuration({
+    slots,
+    makeDeciderFor: () => decider,
+    engine: fakeEngine([]),
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async ({ signal }) => {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      throw signal.reason;
+    },
+    stripFence,
+    stdout: sink(),
+    stderr,
+    dumpPath: '/runs/x/dump.sql',
+    signal: controller.signal,
+  });
+
+  assert.equal(outcome.stopped, true);
+  assert.equal(outcome.report, null);
+  assert.equal(outcome.runId, null);
+  assert.deepEqual(decider.calls, []);
+  assert.ok(slots.verbs.includes('down:2'));
+  assert.ok(!slots.verbs.some((verb) => verb.startsWith('dump:')));
+  assert.match(stderr.text(), /stopped before the run opened/);
+});
+
+test('the slot is named to the caller before it is brought up', async () => {
+  const seen = [];
+  await runCuration({
+    slots: fakeSlots({ taken: [1, 2] }),
+    makeDeciderFor: () => fakeDecider({ rows: [] }),
+    engine: fakeEngine([]),
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+    onSlot: (slot) => seen.push(slot),
+  });
+  assert.deepEqual(seen, [3]);
+});
