@@ -400,10 +400,12 @@ export function outstandingOf(line: BasketLine): number {
  * page.
  *
  * The two directions say different things because they **are** different things
- * (backend `0056`, section 1): down is units in the trolley, up is a basket deciding
- * to carry more than the households asked for. Neither sentence says "units", and the
- * raise says "buying N" rather than "N left", because raising a finished line is the
- * act most likely to be misread as undoing a purchase.
+ * (velista `0073`, section 2): down is units going into the trolley, up is units
+ * coming back out of it. Neither sentence says "units", and both count what the
+ * gesture moved rather than where it landed, because the number a shopper is deciding
+ * about is how many tins changed hands.
+ *
+ * The raise used to read "buying 20 instead of 5", which is the act `0073` deleted.
  *
  * Null where there is nothing about to happen: no thumb down, or a gesture that came
  * back to where it started.
@@ -425,8 +427,7 @@ export function outstandingCaption(
     ? translator.t('basket.outstanding.bought', undefined, locale, {
         count: current - next,
       })
-    : translator.t('basket.outstanding.buying', undefined, locale, {
-        next,
-        current,
+    : translator.t('basket.line.takenBack', undefined, locale, {
+        count: next - current,
       });
 }

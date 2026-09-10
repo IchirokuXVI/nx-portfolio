@@ -53,6 +53,29 @@
       }
 
       <!--
+        What every list asked for and what every list got (velista 0073, section 3).
+
+        Directly under the product entry and above the settle buttons, which is where
+        the plan puts it: the shopper has already opened this sheet and already picked
+        the product, and the six rows they used to have to find on a second sheet are
+        the next thing under it.
+
+        Only for a reader who passes the all or nothing rule (section 3.3). A guest
+        sees the sheet without it and settles the whole line or part of it through the
+        buttons below, because a guest is never told which household a tin of tomatoes
+        belongs to.
+
+        It owns its own read and draws its own loading and failure states, so the
+        settle buttons below never wait for it (section 3.4).
+      -->
+      @if (canSeeLists()) {
+        <lib-line-lists-summary
+          [finished]="basketFinished()"
+          [lineId]="lineId"
+        />
+      }
+
+      <!--
         **Nothing to settle means no settle target** (plan 0052, section 7.1).
 
         This whole group used to be drawn unconditionally, so a finished line offered
@@ -61,12 +84,12 @@
         none" sent a settle core refuses, because `generated-list-settle.service.ts`
         throws when `outstanding === 0`.
 
-        A control you may not use is not drawn (`0030`). The partial and allocate
-        controls were already conditional on `outstanding() > 1` and would have gone
-        with it anyway; the two that were not are the two that were reported. What
-        stays on a finished line is the product and its change control, because
-        swapping the pick is a correction of the record and is still allowed, and the
-        history control, for a reader entitled to it.
+        A control you may not use is not drawn (`0030`). The partial control was
+        already conditional on `outstanding() > 1` and would have gone with it
+        anyway; the two that were not are the two that were reported. What stays on a
+        finished line is the product and its change control, because swapping the
+        pick is a correction of the record and is still allowed, the list summary,
+        and the history control, for a reader entitled to it.
 
         Since velista 0057 there is a second way to have nothing to settle, and
         `canSettle` is where the two meet: this **line** is done, or the whole
@@ -96,22 +119,6 @@
           }
 
           <!--
-            Only for a reader who holds WRITE on every source list. A control you
-            may not use is not drawn (section 4.1), and the server refuses an
-            allocation from anybody else regardless of what is on screen.
-          -->
-          @if (seesZoneData() && allocationRows().length > 1) {
-            <button
-              (click)="openPane('allocate')"
-              [disabled]="busy()"
-              class="secondary"
-              type="button"
-            >
-              {{ 'basket.allocate.open' | rokuT }}
-            </button>
-          }
-
-          <!--
             Deliberately last and visually apart from the settle targets, which are
             the ones a thumb reaches for: this closes the line without claiming
             anything was bought (section 7).
@@ -123,28 +130,6 @@
             type="button"
           >
             {{ 'basket.settle.none' | rokuT }}
-          </button>
-        </div>
-      }
-
-      <!--
-        The sheet about this line's **lists**, rather than about buying it (velista
-        0055, widened by 0068). Outside the `!finished()` block on purpose: raising a
-        finished line's number is a correction of the record rather than a purchase,
-        and a line already bought still belongs on a household's list.
-
-        Its own group, below the settle targets, because it is not one: the thumb
-        reaching for the big button must not find it.
-      -->
-      @if (canEditUnits()) {
-        <div class="actions lists">
-          <button
-            (click)="openUnits()"
-            [disabled]="busy()"
-            class="secondary"
-            type="button"
-          >
-            {{ 'basket.units.open' | rokuT }}
           </button>
         </div>
       }
@@ -372,87 +357,6 @@
         where somebody looks before pressing it.
       -->
       <p class="hint">{{ 'basket.product.notBought' | rokuT }}</p>
-    }
-
-    <!--
-      The same act done precisely, and the only pane that names a list. Drawn
-      only for a reader who passes the all or nothing rule.
-    -->
-    @case ('allocate') {
-      <p class="pane-title">
-        {{
-          'basket.allocate.title' | rokuT: { name: title(), count: allocated() }
-        }}
-      </p>
-      <p class="hint">{{ 'basket.allocate.hint' | rokuT }}</p>
-
-      <ul class="allocation">
-        @for (row of allocationRows(); track row.listId) {
-          <li class="allocation-row">
-            <span class="allocation-label">
-              <!--
-                Named, so "two for us, one for my parents" can actually be said.
-                A reader who reaches this pane passes the all or nothing rule, so
-                the names are theirs to see by construction.
-              -->
-              @if (row.name) {
-                <span class="allocation-name">{{ row.name }}</span>
-              }
-              <span class="allocation-wanted">
-                {{ 'basket.allocate.wanted' | rokuT: { count: row.wanted } }}
-              </span>
-            </span>
-            <!--
-              The reel again, without its buttons: this was a bare number field,
-              so nothing here grew a control it did not have. Capped at what the
-              list wanted, and written through on `preview` so the running total
-              under the pane moves with the thumb rather than a beat behind it.
-            -->
-            <lib-quantity-reel
-              (committedTo)="setAllocation(row.listId, $event.to)"
-              (preview)="onAllocationPreview(row.listId, $event)"
-              [hideButtons]="true"
-              [label]="
-                row.name ||
-                ('basket.allocate.wanted' | rokuT: { count: row.wanted })
-              "
-              [max]="row.wanted"
-              [min]="0"
-              [value]="allocation().get(row.listId) ?? 0"
-              class="allocation-reel"
-            />
-          </li>
-        }
-      </ul>
-
-      <!--
-        Announced as it changes, so somebody cannot silently allocate more than
-        they bought (section 7).
-      -->
-      <p aria-live="polite" class="allocation-total" role="status">
-        {{ 'basket.allocate.total' | rokuT }}:
-        {{
-          'basket.allocate.totalValue'
-            | rokuT: { allocated: allocated(), total: outstanding() }
-        }}
-      </p>
-      @if (allocated() > outstanding()) {
-        <p class="failed">{{ 'basket.allocate.over' | rokuT }}</p>
-      }
-
-      <div class="actions">
-        <button
-          (click)="settleAllocated()"
-          [disabled]="busy() || allocated() <= 0 || allocated() > outstanding()"
-          class="primary"
-          type="button"
-        >
-          {{ 'basket.allocate.submit' | rokuT }}
-        </button>
-        <button (click)="openPane('settle')" class="quiet" type="button">
-          {{ 'basket.allocate.cancel' | rokuT }}
-        </button>
-      </div>
     }
 
     <!--

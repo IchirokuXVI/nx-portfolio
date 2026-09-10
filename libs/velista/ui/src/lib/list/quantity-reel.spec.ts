@@ -720,6 +720,11 @@ describe('QuantityReel', () => {
    * that would rather press than drag. They step the same run every other gesture
    * steps, and the one thing of their own is that they keep the overlay closed, so a
    * second press has somewhere to land.
+   *
+   * **Off by default since velista `0073` section 5**, so no quantity control in the
+   * product draws them and nothing passes the input today. The path is kept and
+   * tested because the input is: a surface with room for the pair asks for them back
+   * rather than reimplementing the step.
    */
   describe('the minus and plus buttons', () => {
     function button(
@@ -729,8 +734,21 @@ describe('QuantityReel', () => {
       return host.querySelector(`.step.${which}`) as HTMLButtonElement;
     }
 
-    it('draws both by default, and a press steps by one', async () => {
-      const { fixture, host, deltas } = await render(2);
+    /** A caller that asks for them, which is the only way they are drawn. */
+    const withButtons = (
+      value: number,
+      options: { max?: number; readonly?: boolean } = {}
+    ) => render(value, { ...options, hideButtons: false });
+
+    it('draws neither unless the caller asks (velista 0073, test 12)', async () => {
+      const { fixture, host } = await render(2);
+
+      expect(host.querySelector('.step')).toBeNull();
+      expect(fixture.componentInstance.shown()).toBe(2);
+    });
+
+    it('draws both for a caller that asks, and a press steps by one', async () => {
+      const { fixture, host, deltas } = await withButtons(2);
 
       button(host, 'plus').click();
       fixture.detectChanges();
@@ -741,7 +759,7 @@ describe('QuantityReel', () => {
     });
 
     it('keeps the overlay closed, so the button stays under the finger', async () => {
-      const { fixture, host, deltas, runs } = await render(2);
+      const { fixture, host, deltas, runs } = await withButtons(2);
 
       button(host, 'plus').click();
       fixture.detectChanges();
@@ -763,7 +781,7 @@ describe('QuantityReel', () => {
     it('announces no auto close for a run whose overlay never opened', async () => {
       // Nothing disappeared from under anybody's finger, so the row above has no
       // reason to stay deaf for a beat.
-      const { fixture, host } = await render(2);
+      const { fixture, host } = await withButtons(2);
       const closes: number[] = [];
       fixture.componentInstance.autoClosed.subscribe(() => closes.push(1));
 
@@ -776,7 +794,7 @@ describe('QuantityReel', () => {
     it('is covered by the overlay when the pill is pressed mid run', async () => {
       // The press converts the run into an ordinary open one, from wherever the
       // presses had got to, and the commit still measures from where the run began.
-      const { fixture, host, runs } = await render(2);
+      const { fixture, host, runs } = await withButtons(2);
 
       button(host, 'plus').click();
       fixture.detectChanges();
@@ -790,7 +808,7 @@ describe('QuantityReel', () => {
     });
 
     it('does not read a press on a button as the start of a drag', async () => {
-      const { fixture, host } = await render(2);
+      const { fixture, host } = await withButtons(2);
 
       button(host, 'plus').dispatchEvent(pointer('pointerdown', 0));
       host.dispatchEvent(
@@ -804,7 +822,7 @@ describe('QuantityReel', () => {
     it('disables the minus at the floor and the plus at the ceiling', async () => {
       // Disabled rather than clamping silently, the same choice the stepper made:
       // the limit is visible before it is hit.
-      const { fixture, host } = await render(0, { max: 1 });
+      const { fixture, host } = await withButtons(0, { max: 1 });
 
       expect(button(host, 'minus').disabled).toBe(true);
       expect(button(host, 'plus').disabled).toBe(false);
@@ -815,7 +833,9 @@ describe('QuantityReel', () => {
     });
 
     it('is out of reach for a caller who may not change it', async () => {
-      const { fixture, host, deltas } = await render(3, { readonly: true });
+      const { fixture, host, deltas } = await withButtons(3, {
+        readonly: true,
+      });
 
       expect(button(host, 'plus').disabled).toBe(true);
       fixture.componentInstance.onStepButton(1);
@@ -824,13 +844,6 @@ describe('QuantityReel', () => {
       expect(fixture.componentInstance.shown()).toBe(3);
       jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
       expect(deltas).toEqual([]);
-    });
-
-    it('can be hidden by the caller', async () => {
-      const { fixture, host } = await render(2, { hideButtons: true });
-
-      expect(host.querySelector('.step')).toBeNull();
-      expect(fixture.componentInstance.shown()).toBe(2);
     });
   });
 });

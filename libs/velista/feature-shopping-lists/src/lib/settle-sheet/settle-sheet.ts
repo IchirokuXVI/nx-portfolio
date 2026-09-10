@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -35,7 +35,6 @@ import {
   formatMoney,
   generatedListIdOf,
   SheetNavigation,
-  sheetSegments,
 } from '@portfolio/velista/platform';
 import { QuantityReel, SheetShell } from '@portfolio/velista/ui';
 import {
@@ -45,6 +44,7 @@ import {
 } from '../basket-error-copy';
 import { participantName, touchedCaption } from '../basket-labels';
 import { basketPath } from '../basket-paths';
+import { LineListsSummary } from '../line-lists-summary/line-lists-summary';
 
 /**
  * Where a price is from, as one line under the option's name (velista `0062`,
@@ -84,7 +84,7 @@ function placeOf(
  * make the precise ones two taps and a navigation away from the number they were
  * about to type.
  */
-type Pane = 'settle' | 'quantity' | 'product' | 'allocate' | 'history';
+type Pane = 'settle' | 'quantity' | 'product' | 'history';
 
 /** How the settlement history's read has got on. Four states, not two booleans. */
 type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
@@ -98,13 +98,24 @@ type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
  * **Settle closes the whole outstanding amount** and is the common case, so it is
  * the largest control and takes one tap. **Partial submit asks for a number** and
  * is available to everybody, guests included, because it asks nothing about
- * zones. **Allocate** is the same act done precisely and is drawn only for a
- * reader who passes the all or nothing rule, because naming source lists is
- * naming zone data.
+ * zones. Neither mentions a list: a guest is never asked which household a tin of
+ * tomatoes belongs to, and the system allocates oldest origin first.
  *
- * A guest is never asked which household a tin of tomatoes belongs to. They are
- * in a shop with a list. The system allocates oldest origin first and the
- * allocation pane exists for the people who can see enough to correct it.
+ * ## What every list asked for and got, under the product (velista `0073`)
+ *
+ * There were two more controls here and they are both gone. **Allocate** was a pane
+ * saying who got how many of what was just bought; **Change what each list asked
+ * for** opened a second sheet saying who wanted how many. They were the same rows
+ * drawn twice, in two places nobody found.
+ *
+ * What replaced them is `LineListsSummary`, drawn under the product entry for a
+ * reader who passes the all or nothing rule: one row per list, both numbers, both
+ * controls. A guest sees the sheet without it and settles the whole line or part of
+ * it through the buttons exactly as before.
+ *
+ * **The settle buttons never wait for it** (section 3.4). It owns its own read and
+ * draws its own loading and failure states, so a shopper who opened the sheet to
+ * press "Got all" is not held up by a question about lists.
  *
  * ## Not available is here, and it is not a quantity
  *
@@ -146,7 +157,7 @@ type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
  */
 @Component({
   selector: 'lib-settle-sheet',
-  imports: [QuantityReel, RokuTranslatorPipe, SheetShell],
+  imports: [LineListsSummary, QuantityReel, RokuTranslatorPipe, SheetShell],
   templateUrl: './settle-sheet.html',
   styleUrl: './settle-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -163,14 +174,6 @@ export class SettleSheet {
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
-  /**
-   * For the two sheets this one leads on to, and for nothing else.
-   *
-   * A navigation and not a dismissal, because those two sheets are being **opened**:
-   * `SheetNavigation` is what closes one, popping the entry it was opened with, and
-   * the way in is an ordinary push so that back from the units sheet lands here.
-   */
-  private readonly _router = inject(Router);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -590,41 +593,6 @@ export class SettleSheet {
   });
 
   /**
-   * The allocation sheet's rows: one per source list, with what it wanted.
-   *
-   * Empty for a reader who does not pass the rule, which is also the reader for
-   * whom the Allocate control is not drawn at all, so this is belt and braces
-   * rather than the only guard.
-   */
-  protected readonly allocationRows = computed(() => {
-    const origins = this.line()?.origins ?? [];
-    const names = this._store.listNames();
-
-    // **Grouped by list, not one row per origin.** Two lines in the same list
-    // both wanting milk merge into one basket line and contribute an origin
-    // each, so a straight map produces two rows with the same `listId`: two
-    // duplicate `track` keys, and two fields overwriting each other in the
-    // allocation map. The sheet asks which *household* gets how many, and a
-    // household is a list, so the origins on one are summed.
-    const byList = new Map<string, number>();
-    for (const origin of origins) {
-      byList.set(
-        origin.listId,
-        (byList.get(origin.listId) ?? 0) + origin.quantity
-      );
-    }
-
-    return [...byList].map(([listId, wanted]) => ({
-      listId,
-      wanted,
-      // Named where a name is known. A reader who reaches this pane passes the
-      // rule, so `listNames` is populated for them by construction; the fallback
-      // covers a list deleted since the run rather than a redacted one.
-      name: names.get(listId) ?? null,
-    }));
-  });
-
-  /**
    * Whether this reader may read what happened to the line (plan 0049, section 1.1).
    *
    * Two conditions, and they are two because they are two different facts. The reader
@@ -642,61 +610,36 @@ export class SettleSheet {
     () => this._store.seesZoneData() && this._store.me()?.kind !== 'GUEST'
   );
 
-  /** What the person has put against each list, keyed by list id. */
-  protected readonly allocation = signal<ReadonlyMap<string, number>>(
-    new Map()
-  );
-
-  protected readonly allocated = computed(() =>
-    [...this.allocation().values()].reduce((sum, n) => sum + n, 0)
-  );
-
   /** The sheet's accessible title, which is the line's own words. */
   protected readonly title = computed(() => this.line()?.content ?? '');
 
   /**
-   * Whether to offer the units sheet (velista `0055` section 2, widened by `0068`).
+   * Whether to draw the list summary under the product (velista `0073`, section 3.3).
    *
    * The reader must hold an account and pass the all or nothing rule, which is
    * {@link canReadHistory}'s pair of conditions and for the same reason: the read
    * behind it names households, and the server refuses the whole of it to anybody
-   * else rather than redacting it.
+   * else rather than redacting it. A guest sees the sheet without the summary and
+   * settles the whole line or part of it through the buttons as they do today.
    *
-   * **Every line, added or derived, with lists or without.** It used to be hidden for
-   * an `ADDED` line with no origins, because the sheet would have opened on two empty
-   * sections, and a second sheet sent that line to one list. Backend `0092` made
-   * every list a row at zero, so that line is now exactly the one this sheet is most
-   * worth opening for: somebody who added batteries and wants three for the flat and
-   * two for their parents.
+   * **Every line, added or derived, with lists or without.** Backend `0092` made
+   * every list a row at zero, so a line somebody typed in an aisle is the one this
+   * is most worth reading: three for the flat and two for their parents.
    *
-   * A control you may not use is not drawn (`0030`), so this decides whether the way
-   * in exists rather than whether it is disabled.
+   * A finished trip keeps it, unlike the control this replaced. The summary is
+   * something the sheet **says** as well as a pair of controls, and a finished basket
+   * is the receipt for a trip somebody took; the reels go and the numbers stay, which
+   * is the treatment the row one screen up already gives a finished basket.
    */
-  protected readonly canEditUnits = computed(() => {
-    const line = this.line();
-    return (
-      // A finished trip changes nothing about what a household asked for, and the
-      // server refuses the write, so the way in goes with every other control
-      // (velista `0057`, section 6).
-      !this.basketFinished() &&
+  protected readonly canSeeLists = computed(
+    () =>
       this._store.seesZoneData() &&
       this._store.me()?.kind !== 'GUEST' &&
-      line !== null
-    );
-  });
+      this.line() !== null
+  );
 
-  /**
-   * Open the units sheet over this one.
-   *
-   * Relative to the **basket**, which is `_route.parent`, because that is where both
-   * sheets are declared: a sheet has no children, so a sheet reached from a sheet is
-   * a sibling of it. `sheetSegments` stamps the marker rather than this writing it.
-   */
-  protected openUnits(): void {
-    void this._router.navigate(sheetSegments('lines', this._lineId, 'units'), {
-      relativeTo: this._route.parent,
-    });
-  }
+  /** The basket line the summary is about, for its required input. */
+  protected readonly lineId = this._lineId;
 
   /**
    * The whole outstanding amount, in one tap. The common case.
@@ -718,19 +661,6 @@ export class SettleSheet {
    */
   protected async settleNone(): Promise<void> {
     await this._send({ outcome: 'NOT_AVAILABLE' });
-  }
-
-  /** The same act with the allocation supplied instead of derived. */
-  protected async settleAllocated(): Promise<void> {
-    const allocations = [...this.allocation().entries()]
-      .filter(([, quantity]) => quantity > 0)
-      .map(([listId, quantity]) => ({ listId, quantity }));
-
-    await this._send({
-      outcome: 'BOUGHT',
-      quantity: this.allocated(),
-      allocations,
-    });
   }
 
   /**
@@ -816,12 +746,6 @@ export class SettleSheet {
       // never ask what happened to it, and this is one request per origin.
       void this._loadHistory();
     }
-    if (pane === 'allocate') {
-      // Seeded from the default the server would have applied, so the sheet
-      // opens on "what one tap would have done" and the person corrects it
-      // rather than filling it in from nothing (section 4.2).
-      this.allocation.set(this._defaultAllocation());
-    }
     if (pane === 'product') {
       this._openProductPane();
     }
@@ -839,21 +763,6 @@ export class SettleSheet {
   private _openProductPane(): void {
     this._from.set(this.outstanding());
     this._shares.set(new Map());
-  }
-
-  protected setAllocation(listId: string, quantity: number): void {
-    this.allocation.update((held) => {
-      const next = new Map(held);
-      next.set(listId, Math.max(0, quantity));
-      return next;
-    });
-  }
-
-  /** The live half of a list's reel, for the same reasons {@link onSharePreview} has one. */
-  protected onAllocationPreview(listId: string, next: number | null): void {
-    if (next !== null) {
-      this.setAllocation(listId, next);
-    }
   }
 
   /**
@@ -1120,21 +1029,6 @@ export class SettleSheet {
     }
     return map;
   });
-
-  private _defaultAllocation(): ReadonlyMap<string, number> {
-    // Oldest origin first until the outstanding amount is exhausted, which is
-    // exactly what the server does when no allocation is supplied (backend
-    // 0051, section 6.2). Reproducing it here is what makes the sheet a
-    // correction rather than a blank form.
-    let left = this.outstanding();
-    const seeded = new Map<string, number>();
-    for (const row of this.allocationRows()) {
-      const take = Math.min(left, row.wanted);
-      seeded.set(row.listId, take);
-      left -= take;
-    }
-    return seeded;
-  }
 
   private async _send(
     body: Parameters<BasketStore['settle']>[1]

@@ -1,0 +1,247 @@
+<!--
+  One live region around the whole summary (section 7), so a change to either number
+  on either reel is announced once and not twice. Politeness is what coalesces it: a
+  screen reader queues these and drops the ones a later value has already superseded,
+  so a thumb travelling seven units announces where it landed rather than every
+  number on the way.
+-->
+<section aria-live="polite" class="summary" role="status">
+  <h3 class="heading">{{ 'basket.units.lists' | rokuT }}</h3>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="summary-hint">{{ 'basket.units.loading' | rokuT }}</p>
+    }
+
+    <!--
+      Its own failure, in its own block (section 3.4). The settle buttons above are
+      drawn by the sheet and never wait for this read, so a shopper who opened the
+      sheet to press "Got all" is not held up by a question about lists.
+    -->
+    @case ('failed') {
+      <p class="summary-failed">{{ 'basket.units.failed' | rokuT }}</p>
+      <button (click)="retry()" class="summary-retry" type="button">
+        {{ 'basket.units.retry' | rokuT }}
+      </button>
+    }
+
+    @case ('loaded') {
+      @if (empty()) {
+        <!--
+          A reader with no list at all they and the owner can both write. Rare, and
+          drawn as a sentence because empty sections would read as a failure.
+        -->
+        <p class="summary-hint">{{ 'basket.units.empty' | rokuT }}</p>
+      }
+
+      <!--
+        The lists that asked for some of this. Two columns, named once above them
+        rather than on every row: what each list asked for through this basket, and
+        what this basket has bought for it.
+
+        These headings are what replaced `0055` section 5's permanent sentence saying
+        nothing on the screen was marked as bought (section 3.1). It was true of that
+        sheet and is false of this one: the second column is a control that buys.
+      -->
+      @if (asked().length > 0) {
+        <p aria-hidden="true" class="columns">
+          <span class="columns-asked">
+            {{ 'basket.units.askedFor' | rokuT }}
+          </span>
+          <span class="columns-got">{{ 'basket.units.got' | rokuT }}</span>
+        </p>
+
+        <ul class="rows">
+          @for (row of asked(); track row.key) {
+            <ng-container
+              [ngTemplateOutlet]="summaryRow"
+              [ngTemplateOutletContext]="{ $implicit: row }"
+            />
+          }
+        </ul>
+      }
+
+      <!--
+        How much of the line nobody asked for. Nothing creates this any more, because
+        the row's number cannot be raised above what the lists asked for (backend
+        0104, section 2.1), and the lines that already have it are still readable.
+      -->
+      @if (extra() > 0) {
+        <p class="extra">
+          {{
+            'basket.units.extra' | rokuT: { lists: listsWant(), extra: extra() }
+          }}
+        </p>
+      }
+
+      <!--
+        The lists that asked for nothing, closed by default (`0068`, section 4.3).
+
+        A real disclosure with its count in its accessible name, because the common
+        case is a line that is exactly what it looks like, and for a reader in many
+        zones the closed run is every list they can write. It came across from the
+        units sheet whole: raising one of these from zero is the only way an added
+        line reaches a household.
+      -->
+      @if (rest().length > 0) {
+        <button
+          (click)="toggleRest()"
+          [attr.aria-expanded]="restOpen()"
+          class="disclosure"
+          type="button"
+        >
+          {{ 'basket.units.more' | rokuT: { count: rest().length } }}
+        </button>
+
+        @if (restOpen()) {
+          <!--
+            One run of rows and no second heading inside it: they are one answer to
+            the reader, and the difference between a list holding this line and a
+            list holding none is a fact about the write rather than about the screen.
+          -->
+          <ul class="rows rest">
+            @for (row of rest(); track row.key) {
+              <ng-container
+                [ngTemplateOutlet]="summaryRow"
+                [ngTemplateOutletContext]="{ $implicit: row }"
+              />
+            }
+          </ul>
+        }
+      }
+    }
+  }
+</section>
+
+<!--
+  One row, drawn the same whichever collection the list came from.
+
+  A template rather than three copies of fifty lines: the collections differ in what a
+  row starts at, what its caption says and what raising it does, and all of those are
+  already decided in the view model. A reader is not meant to be able to tell the
+  markup apart either.
+-->
+<ng-template #summaryRow let-row>
+  <li class="row">
+    <span class="row-label">
+      <span class="row-name">{{ row.label }}</span>
+
+      <!-- Only where another row carries the same name, which is when it is needed. -->
+      @if (row.zoneName) {
+        <span class="row-zone">{{ row.zoneName }}</span>
+      }
+
+      <!--
+        What the list's own line says: what it asks for on its own before anybody
+        raises it, or what it asks for now when that has drifted from what it asked
+        for here. The basket is a snapshot and this is the one screen where the
+        snapshot and the live list are both in front of somebody.
+      -->
+      @if (row.listCaption; as caption) {
+        <span class="row-wants">{{ caption.key | rokuT: caption.values }}</span>
+      }
+
+      <!-- The household has not agreed to the line yet (backend 0092, section 3). -->
+      @if (row.pending) {
+        <span class="row-wants">{{ 'basket.units.pending' | rokuT }}</span>
+      }
+
+      <!--
+        A match the run made on normalized text alone, marked so the reader confirms
+        it rather than trusting it. The run is deliberately conservative about text
+        matches and a row that offered "milk" as "whole milk" without saying so would
+        be that conservatism read backwards.
+      -->
+      @if (row.matchedOnText) {
+        <span class="row-matched">
+          {{ 'basket.units.byName' | rokuT: { content: row.matchedOnText } }}
+        </span>
+      }
+
+      <!--
+        Why there are no controls, in the row's own words and never by colour or
+        position alone (section 7). The fact stays and the control goes, which is
+        `0030` intact.
+      -->
+      @if (row.reason) {
+        <span class="row-reason">{{ row.reason | rokuT }}</span>
+      }
+
+      <!--
+        What the last write on this row came to: a refusal, or the two things a write
+        that landed has to say in words. On the row rather than on the sheet, because
+        one write per reel means the reel that failed is on the row that can say so.
+      -->
+      @if (row.notices.length > 0) {
+        <span class="row-notices">
+          @for (notice of row.notices; track notice.key) {
+            <span [class.news]="notice.tone === 'news'" class="row-notice">
+              {{ notice.key | rokuT: notice.values }}
+            </span>
+          }
+        </span>
+      }
+    </span>
+
+    <!--
+      What this list asked for. It buys nothing whichever way it goes: the floor is
+      what has already been bought for the list, and the server refuses anything under
+      it with `below_settled` rather than quietly unbuying something.
+    -->
+    @if (row.reason === null && !finished()) {
+      <lib-quantity-reel
+        (committedTo)="commitAsked(row, $event)"
+        [label]="row.askedLabel"
+        [max]="askedMax"
+        [min]="row.got"
+        [readonly]="busy().has(row.key)"
+        [value]="row.shownAsked"
+        class="asked-reel"
+      />
+    } @else {
+      <!--
+        The numbers stay. A row nobody may move still says what this list asked for,
+        which is the information half of the rule the missing reel is the control half
+        of, and a finished trip is a receipt rather than a form.
+      -->
+      <span class="row-number">
+        <span class="visually-hidden">{{ row.askedLabel }}</span>
+        {{ row.asked }}
+      </span>
+    }
+
+    <!--
+      What this basket has bought for this list. **A control, and it buys**: raising it
+      settles that many against this list alone and takes the outstanding number down
+      by the same amount, and lowering it takes that list's newest purchases back.
+
+      Capped at what the list asked for, because a list cannot have got more of a line
+      than it wanted; a shopper who bought more raises the reel beside it first. A list
+      holding no line of this has no second number at all, which is why the plain span
+      covers a row with no zone line as well as a finished trip.
+    -->
+    @if (row.reason === null && row.sourceLineId !== null && !finished()) {
+      <lib-quantity-reel
+        (committedTo)="commitGot(row, $event)"
+        [label]="row.gotLabel"
+        [max]="row.asked"
+        [min]="0"
+        [readonly]="busy().has(row.key)"
+        [value]="row.got"
+        class="got-reel"
+      />
+    } @else if (row.sourceLineId !== null) {
+      <span class="row-number">
+        <span class="visually-hidden">{{ row.gotLabel }}</span>
+        {{ row.got }}
+      </span>
+    } @else {
+      <!--
+        A list that asked for nothing cannot have got any (section 3.2), so the column
+        is empty rather than a zero: a zero here would read as a purchase that has not
+        happened yet, on a list this line has never reached.
+      -->
+      <span aria-hidden="true" class="row-number is-empty">—</span>
+    }
+  </li>
+</ng-template>

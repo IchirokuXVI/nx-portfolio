@@ -990,13 +990,14 @@
       "partly": "{{settled}} de {{total}} conseguidos",
       "wanted": "×{{count}}",
       "free": "Sin producto elegido",
-      "busy": "Guardando"
+      "busy": "Guardando",
+      "takenBack_one": "1 devuelto",
+      "takenBack_other": "{{count}} devueltos"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
       "bought_one": "{{count}} comprado",
-      "bought_other": "{{count}} comprados",
-      "buying": "comprando {{next}} en vez de {{current}}"
+      "bought_other": "{{count}} comprados"
     },
     "touched": {
       "got": "{{name}} lo consiguió",
@@ -1049,27 +1050,13 @@
       "asOf": "Precios de {{when}}",
       "asOfStale": "Precios de {{when}}, y alguno puede estar desactualizado"
     },
-    "allocate": {
-      "open": "Repartir entre listas",
-      "title": "{{name}} · {{count}} conseguidos",
-      "hint": "Qué lista se lleva cuántos. Empieza por la más antigua, que es lo que habría hecho un solo toque.",
-      "wanted": "quería {{count}}",
-      "total": "Repartidos",
-      "totalValue": "{{allocated}} de {{total}}",
-      "over": "Eso es más de lo que has conseguido",
-      "submit": "Registrarlo",
-      "cancel": "Cancelar"
-    },
     "units": {
-      "open": "Cambiar lo que ha pedido cada lista",
-      "title": "{{name}}",
-      "notBuying": "Cambiar esto cambia lo que quiere cada lista. Aquí no se marca nada como comprado.",
-      "buying_one": "Se compra {{count}}",
-      "buying_other": "Se compran {{count}}",
       "extra": "{{lists}} para estas listas y {{extra}} de más",
       "lists": "Listas que han pedido esto",
       "askedFor": "Pedido",
-      "bought": "Comprado",
+      "got": "Conseguido",
+      "askedLabel": "{{name}}, pedido",
+      "gotLabel": "{{name}}, conseguido",
       "more_one": "1 lista más",
       "more_other": "{{count}} listas más",
       "listAsks": "en su lista pide {{count}}",
@@ -1087,8 +1074,7 @@
       "loading": "Leyendo las listas",
       "failed": "No se han podido leer las listas",
       "retry": "Reintentar",
-      "empty": "No hay ninguna lista en la que puedas poner esto",
-      "close": "Listo"
+      "empty": "No hay ninguna lista en la que puedas poner esto"
     },
     "send": {
       "pending": "Esperando a que esa lista lo acepte"

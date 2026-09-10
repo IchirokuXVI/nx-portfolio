@@ -10,6 +10,8 @@ import {
   type BasketOriginCandidate,
   type BasketOriginQuantityRequest,
   type BasketOriginQuantityResult,
+  type BasketOriginSettledRequest,
+  type BasketOriginSettledResult,
   type BasketOutstandingRequest,
   type BasketParticipant,
   type BasketPriceScope,
@@ -1060,6 +1062,120 @@ export class BasketMemory implements BasketServiceI {
       // the row rather than leave it drawn at its old number.
       origin: wanted === 0 ? null : this._detail(next),
       listQuantity,
+    };
+  }
+
+  /**
+   * Set how many of a line one list has got (velista `0073`, backend `0104`).
+   *
+   * **It buys**, which is the whole of what separates it from the write above:
+   * `settled` moves, an outcome is written and the outstanding number on every
+   * screen follows. The fake carries the rule in full rather than a sketch of it,
+   * because the settle sheet's summary is read against it and a fake that only
+   * moved one number would let a screen ship that adds up wrongly.
+   *
+   * ## The close that overshoots
+   *
+   * A `NOT_AVAILABLE` close settles the outstanding amount and buys nothing, so it
+   * has no units divided among the lists. Raising any list's number therefore takes
+   * the **whole** close back before it settles anything, and what is outstanding
+   * afterwards can be more than the reel was dragged to. The close's size is not a
+   * field: it is what is settled beyond what the origins between them account for.
+   */
+  async setOriginSettled(
+    _generatedListId: string,
+    lineId: string,
+    body: BasketOriginSettledRequest
+  ): Promise<BasketOriginSettledResult> {
+    this._requireZoneReader();
+    this._requireLive();
+    const line = this._require(lineId);
+
+    const origin = (line.origins ?? []).find(
+      (row) => row.lineId === body.lineId
+    );
+    if (origin === undefined) {
+      throw new GatewayError({
+        code: 'not_found',
+        status: 404,
+        correlationId: 'memory',
+        detail: 'That list is not on this line',
+      });
+    }
+
+    const facts = this._facts(origin.id);
+    if (body.from !== facts.settledHere) {
+      throw new GatewayError({
+        code: 'stale_quantity',
+        status: 409,
+        correlationId: 'memory',
+        detail: `${facts.settledHere} have been bought for this list now`,
+      });
+    }
+
+    // At most what the list asked for. A shopper who bought more raises that first,
+    // which is the other reel on the same row.
+    const wanted = Math.min(
+      Math.max(0, Math.round(body.settled)),
+      origin.quantity
+    );
+    if (wanted === facts.settledHere) {
+      // A reel let go where it started costs nothing and is not a failure.
+      return this._originSettledResult(line, origin);
+    }
+
+    const delta = wanted - facts.settledHere;
+    // Everything settled that no list accounts for, which is what a close left
+    // behind. Any raise takes all of it back, and a lower leaves it alone.
+    const unattributed = Math.max(
+      0,
+      line.settled -
+        (line.origins ?? []).reduce(
+          (sum, row) => sum + this._facts(row.id).settledHere,
+          0
+        )
+    );
+    const taken = delta > 0 ? unattributed : 0;
+
+    this._originFacts.set(origin.id, {
+      ...facts,
+      settledHere: wanted,
+      // The zone line follows what was bought against it, down on a purchase and
+      // back up on a take back, which is what the row's caption reads.
+      listQuantity: Math.max(0, facts.listQuantity - delta),
+    });
+
+    const moved: BasketLine = {
+      ...line,
+      settled: Math.max(0, line.settled + delta - taken),
+      touchedBy: this.me.id,
+      touchedAt: new Date(),
+      // A raise is a purchase whatever it took back on the way; a lower that leaves
+      // nothing settled leaves the line untouched by any outcome.
+      lastOutcome:
+        delta > 0
+          ? 'BOUGHT'
+          : line.settled + delta > 0
+            ? line.lastOutcome
+            : null,
+    };
+    this._lines = this._lines.map((row) => (row.id === lineId ? moved : row));
+
+    return this._originSettledResult(moved, origin);
+  }
+
+  /** The shape the `got` write answers: the line, the row, and an empty report. */
+  private _originSettledResult(
+    line: BasketLine,
+    origin: BasketLineOrigin
+  ): BasketOriginSettledResult {
+    return {
+      line: this._project(line),
+      origin: this._detail(origin),
+      skippedCount: 0,
+      // Required rather than absent, because the route is refused outright to
+      // anybody who may not read it.
+      skipped: [],
     };
   }
 

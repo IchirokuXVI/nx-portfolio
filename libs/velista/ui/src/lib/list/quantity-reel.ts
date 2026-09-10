@@ -143,13 +143,16 @@ export class QuantityReel {
   /**
    * Whether to draw the control without its minus and plus buttons.
    *
-   * The buttons flank the pill and step by one, which is the short way to ±1 for a
-   * pointer that would rather press than drag. They are drawn by default; a caller
-   * whose layout has no room for them, or whose surface already narrates the step
-   * some other way, turns them off here. The drag, the tap and the keyboard are
-   * untouched either way.
+   * **True by default since velista `0073` section 5**, so no quantity control in the
+   * product draws a plus or a minus. They flanked the pill and stepped by one, which
+   * doubled the width of a control whose whole target is the number, and the reel
+   * already answers a tap, a drag and the arrow keys. Nothing passes this today; it
+   * stays an input so a surface with room for the pair can ask for them back rather
+   * than reimplementing the step.
+   *
+   * The drag, the tap and the keyboard path are untouched either way.
    */
-  readonly hideButtons = input(false);
+  readonly hideButtons = input(true);
 
   /**
    * The lowest number the reel will go to.

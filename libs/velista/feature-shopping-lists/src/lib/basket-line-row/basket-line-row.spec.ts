@@ -5,7 +5,6 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  LINE_QUANTITY_MAX,
   QUANTITY_REEL_IDLE_MS,
   type BasketLine,
   type BasketParticipant,
@@ -408,15 +407,16 @@ describe('BasketLineRow: the number as a control', () => {
     );
   });
 
-  it('caps the raise on the resulting quantity, not on the outstanding one', async () => {
-    // Backend `0056`, section 5: a partly settled line cannot be raised past the
-    // limit an unsettled one has, so what is already bought comes off the top.
-    const fixture = await render(line({ quantity: 5, settled: 2 }));
+  it('runs from zero to what the lists asked for', async () => {
+    // Velista `0073`, section 2 and test 1. The reel used to stop at
+    // `LINE_QUANTITY_MAX` minus what was settled, so up meant "buy more than
+    // anybody asked for". It now caps at the line's own quantity, and a line of six
+    // settled to zero offers a reel from zero to six.
+    const fixture = await render(line({ quantity: 6, settled: 6 }));
 
-    expect(reel(fixture).getAttribute('aria-valuemax')).toBe(
-      String(LINE_QUANTITY_MAX - 2)
-    );
+    expect(reel(fixture).getAttribute('aria-valuemax')).toBe('6');
     expect(reel(fixture).getAttribute('aria-valuemin')).toBe('0');
+    expect(reel(fixture).getAttribute('aria-valuenow')).toBe('0');
   });
 
   it('says how many are being bought while the thumb is down', async () => {
@@ -428,14 +428,15 @@ describe('BasketLineRow: the number as a control', () => {
     expect(text(fixture, '.preview')).toContain('basket.outstanding.bought');
   });
 
-  it('says what it will buy instead, on the way up', async () => {
-    // A different sentence, because it is a different act: nothing has been bought,
-    // and this basket has decided to carry more than the households asked for.
-    const fixture = await render(line({ quantity: 5 }));
+  it('says how many are being taken back, on the way up', async () => {
+    // Velista `0073`, section 2 and test 2. A different sentence, because it is a
+    // different act: down puts tins in the trolley and up takes them out again.
+    // "buying 20 instead of 5" went with the act it described.
+    const fixture = await render(line({ quantity: 5, settled: 3 }));
 
     key(fixture, 'ArrowUp');
 
-    expect(text(fixture, '.preview')).toContain('basket.outstanding.buying');
+    expect(text(fixture, '.preview')).toContain('basket.line.takenBack');
   });
 
   it('says nothing when the gesture comes back to where it started', async () => {
@@ -464,21 +465,30 @@ describe('BasketLineRow: the number as a control', () => {
     expect(moves).toEqual([{ from: 5, to: 3 }]);
   });
 
-  it('raises a finished line without ever saying anything is left', async () => {
-    // Section 5, and the most likely misreading of this screen. Raising a done line
-    // adds demand and reverts no settlement, so the caption says what will be
-    // bought rather than what remains.
+  it('takes a purchase back off a finished line', async () => {
+    // What `0054` section 5 said this gesture was, and what `0073` says it is. A
+    // done line raised by one is one tin coming back out of the trolley, which is
+    // exactly what somebody putting it back on the shelf reaches for.
     const fixture = await render(bought());
     const moves: { from: number; to: number }[] = [];
     fixture.componentInstance.outstanding.subscribe((move) => moves.push(move));
 
     key(fixture, 'ArrowUp');
 
-    expect(text(fixture, '.preview')).toContain('basket.outstanding.buying');
+    expect(text(fixture, '.preview')).toContain('basket.line.takenBack');
 
     letGo(fixture);
 
     expect(moves).toEqual([{ from: 0, to: 1 }]);
+  });
+
+  it('draws itself partly settled when a purchase comes back', async () => {
+    // Section 2 and test 3, and the sentence the whole plan is for. A line of six
+    // dragged to zero and brought back to four is two bought and four still to get.
+    const fixture = await render(line({ quantity: 6, settled: 2 }));
+
+    expect(reel(fixture).getAttribute('aria-valuenow')).toBe('4');
+    expect(text(fixture, '.progress')).toContain('basket.line.partly');
   });
 
   it('is readable rather than disabled while the write is out', async () => {

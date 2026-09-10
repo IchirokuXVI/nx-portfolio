@@ -990,13 +990,14 @@
       "partly": "{{settled}} of {{total}} got",
       "wanted": "×{{count}}",
       "free": "No product chosen",
-      "busy": "Saving"
+      "busy": "Saving",
+      "takenBack_one": "1 taken back",
+      "takenBack_other": "{{count}} taken back"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
       "bought_one": "{{count}} bought",
-      "bought_other": "{{count}} bought",
-      "buying": "buying {{next}} instead of {{current}}"
+      "bought_other": "{{count}} bought"
     },
     "touched": {
       "got": "{{name}} got it",
@@ -1049,27 +1050,13 @@
       "asOf": "Prices from {{when}}",
       "asOfStale": "Prices from {{when}}, and some may be out of date"
     },
-    "allocate": {
-      "open": "Split between lists",
-      "title": "{{name}} · got {{count}}",
-      "hint": "Which list gets how many. Starts from oldest first, which is what one tap would have done.",
-      "wanted": "wanted {{count}}",
-      "total": "Allocated",
-      "totalValue": "{{allocated}} of {{total}}",
-      "over": "That is more than you got",
-      "submit": "Record it",
-      "cancel": "Cancel"
-    },
     "units": {
-      "open": "Change what each list asked for",
-      "title": "{{name}}",
-      "notBuying": "Changing these changes what each list wants. Nothing here is marked as bought.",
-      "buying_one": "Buying {{count}}",
-      "buying_other": "Buying {{count}}",
       "extra": "{{lists}} for these lists, plus {{extra}} extra",
       "lists": "Lists that asked for this",
       "askedFor": "Asked for",
-      "bought": "Bought",
+      "got": "Got",
+      "askedLabel": "{{name}}, asked for",
+      "gotLabel": "{{name}}, got",
       "more_one": "1 more list",
       "more_other": "{{count}} more lists",
       "listAsks": "asks for {{count}} on its list",
@@ -1087,8 +1074,7 @@
       "loading": "Reading the lists",
       "failed": "The lists could not be read",
       "retry": "Try again",
-      "empty": "There is no list you can put this on",
-      "close": "Done"
+      "empty": "There is no list you can put this on"
     },
     "send": {
       "pending": "Waiting for that list to approve it"

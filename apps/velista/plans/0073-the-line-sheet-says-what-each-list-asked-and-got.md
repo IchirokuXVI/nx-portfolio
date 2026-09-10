@@ -1,3 +1,5 @@
+> **PR:** [#328](https://github.com/IchirokuXVI/nx-portfolio/pull/328)
+
 # 0073: the line sheet says what each list asked for and got
 
 > Server half: `apps/luna-shopper-backend/plans/0104`, which owns the arithmetic and the two
