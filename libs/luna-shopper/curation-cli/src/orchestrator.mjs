@@ -66,6 +66,14 @@ export function parseDecision(text, { stripFence }) {
   }
 }
 
+/** Why the decider could not use a reply, as one line for the retry. */
+function issuesText(issues) {
+  return (issues ?? [])
+    .map((issue) => issue?.detail ?? issue?.code ?? '')
+    .filter(Boolean)
+    .join('; ');
+}
+
 /**
  * One row: ask, record, and one retry when the reply cannot be used.
  *
@@ -74,6 +82,17 @@ export function parseDecision(text, { stripFence }) {
  * `retryable: true` with nothing written, the model is asked again with the
  * reason, and the second answer goes in with `--final`, which records a REVIEW
  * rather than asking a third time.
+ *
+ * **A stale packet re-enters the loop and spends nothing** (plan 0002). The
+ * decider re-runs its two lookups before it records, and a candidate set that
+ * changed since the row was handed out means the model was asked the wrong
+ * question, not that it answered badly. So the row is asked again on the
+ * refreshed packet with the retry budget untouched, and a row that goes stale
+ * and then breaks the schema still gets both of the attempts `--final` counts.
+ *
+ * `reply` is the answer a batch already carries for this row, so a batched walk
+ * spends its first attempt in `askMany` rather than here. Absent, the row is
+ * asked here, which is what a walk of one row at a time does.
  */
 export async function decideRow({
   row,
@@ -82,46 +101,76 @@ export async function decideRow({
   engine,
   decider,
   stripFence,
+  reply = null,
 }) {
   const { id } = rowIdentity(row);
-  const packet = toPacket(row);
-  const body = JSON.stringify(packet, null, 2);
+  let body = JSON.stringify(toPacket(row), null, 2);
 
   // The rules go in the system half and the packet in the user half, and the
   // rules are never repeated in the user half. Both engines send the system
   // half on every call, so the one thing that changes between calls is the
   // packet, and the unchanging remainder is what the server side cache serves.
-  const first = await engine.ask(body, { system: prompt, schema });
-  const decision = parseDecision(first.text, { stripFence });
+  const ask = async (text) =>
+    String((await engine.ask(text, { system: prompt, schema })).text ?? '');
 
-  let answer;
-  let reason;
-  if (decision) {
-    answer = await decider.decide(id, decision, { final: false });
-    if (!answer.retryable) {
-      return answer;
+  // A prompt the engine gave up on comes back as its own entry rather than as
+  // a throw, so that one failure does not discard the answers beside it. Here
+  // it is a reply that cannot be used, which is what the retry is for.
+  let gaveUp = reply?.error
+    ? String(reply.error?.message ?? reply.error)
+    : null;
+  let text = gaveUp ? '' : reply ? String(reply.text ?? '') : await ask(body);
+
+  let retried = false;
+  for (;;) {
+    const decision = gaveUp ? null : parseDecision(text, { stripFence });
+    let reason = gaveUp ?? 'the reply is not one JSON object';
+
+    // A last attempt is recorded whatever it says: `--final` turns an unusable
+    // reply into a REVIEW carrying the reason, so the walk moves on rather
+    // than stopping.
+    if (decision || retried) {
+      const answer = await decider.decide(
+        id,
+        decision ?? { modelReply: (gaveUp ?? text).slice(0, 2000) },
+        { final: retried }
+      );
+      if (answer?.stale) {
+        body = JSON.stringify(toPacket(answer.packet), null, 2);
+        gaveUp = null;
+        text = await ask(body);
+        continue;
+      }
+      if (retried || !answer.retryable) {
+        return answer;
+      }
+      reason = issuesText(answer.issues);
     }
-    reason = (answer.issues ?? [])
-      .map((issue) => issue?.detail ?? issue?.code ?? '')
-      .filter(Boolean)
-      .join('; ');
-  } else {
-    reason = 'the reply is not one JSON object';
+
+    gaveUp = null;
+    text = await ask(
+      `${body}\n\n${RETRY_INSTRUCTION.replace('{error}', reason || 'it broke the schema')}`
+    );
+    retried = true;
   }
+}
 
-  const retryBody = `${body}\n\n${RETRY_INSTRUCTION.replace('{error}', reason || 'it broke the schema')}`;
-  const second = await engine.ask(retryBody, { system: prompt, schema });
-  const retried = parseDecision(second.text, { stripFence });
-
-  // A second unusable reply is still a decided row: `--final` records it as a
-  // REVIEW carrying the reason, so the walk moves on rather than stopping.
-  return decider.decide(
-    id,
-    retried ?? { modelReply: String(second.text ?? '').slice(0, 2000) },
-    {
-      final: true,
-    }
-  );
+/**
+ * The rows to work next, and how many of the run are left at that moment.
+ *
+ * A width of one asks for exactly what it has always asked for, with no count
+ * on the command line, so an engine that holds one request in flight walks the
+ * queue it has always walked and the decider answers one row.
+ */
+export async function fetchBatch(decider, width) {
+  if (width <= 1) {
+    const row = await decider.next();
+    return row?.done
+      ? { rows: [], remaining: 0 }
+      : { rows: [row], remaining: row?.remaining ?? 0 };
+  }
+  const answer = await decider.next(width);
+  return { rows: answer?.rows ?? [], remaining: answer?.remaining ?? 0 };
 }
 
 /**
@@ -143,6 +192,20 @@ export async function decideRow({
  * reaches the whole terminal, so whichever child was in flight dies of the same
  * keystroke and reports it in its own words; a step that failed while the run
  * was stopping is the stop, and the walk breaks rather than throwing.
+ *
+ * **The walk asks several rows at a time** (plan 0002), as many as the engine
+ * holds in flight and the decider composes. A batch is one `askMany` and then
+ * one `decide` per row in input order, and the order is what makes it
+ * equivalent to walking one row at a time: at the moment row k is recorded, the
+ * rehearsal catalog holds the creations of the rows before it in its own batch,
+ * so the decider's lookups answer exactly what they would have answered
+ * sequentially. A row whose candidates changed since it was handed out is asked
+ * again on the refreshed packet, inside `decideRow`.
+ *
+ * A stop part way through a batch is a stop like any other: `askMany` rejects
+ * with the signal's own reason, the rows already recorded stay recorded, and
+ * nothing still in flight is applied. A batch is not a transaction and was
+ * never going to be one, which is what makes a stopped run resumable.
  */
 export async function runCuration({
   slots,
@@ -198,31 +261,70 @@ export async function runCuration({
     const total = opened.remaining ?? 0;
     stderr.write(`run ${opened.runId}: ${total} rows\n`);
 
-    for (;;) {
+    // How many rows one round of the walk asks about: what the engine holds in
+    // flight, and never more than the decider will hand out at once. There is
+    // no flag for either half. An engine that answers one request at a time
+    // says so, and a decider that composes no batches answers nothing here and
+    // is walked exactly as it has always been walked.
+    const width = Math.max(
+      1,
+      Math.min(
+        Math.trunc(Number(engine.batchSize ?? 1)) || 1,
+        Math.trunc(Number(opened.batches ?? 1)) || 1
+      )
+    );
+
+    walk: for (;;) {
       if (signal?.aborted) {
         stopped = true;
         break;
       }
       try {
-        const row = await decider.next();
-        if (row?.done) {
+        const batch = await fetchBatch(decider, width);
+        if (batch.rows.length === 0) {
           break;
         }
-        const { name } = rowIdentity(row);
-        const position = Math.max(1, total - (row.remaining ?? 0) + 1);
-        stderr.write(`${position}/${total} - ${name}\n`);
 
-        const answer = await decideRow({
-          row,
-          prompt: opened.prompt,
-          // A decider that answers no schema is driven exactly as before, which
-          // is what keeps the two implementations independent of each other.
-          schema: opened.schema ?? null,
-          engine,
-          decider,
-          stripFence,
-        });
-        stdout.write(`${JSON.stringify(answer)}\n`);
+        // One call for the whole batch, and the whole of the saving. A batch is
+        // composed so that no two of its rows can be about the same product, so
+        // asking them together shows each of them what asking them one after
+        // another would have shown it.
+        const replies =
+          width > 1
+            ? await engine.askMany(
+                batch.rows.map((row) => JSON.stringify(toPacket(row), null, 2)),
+                { system: opened.prompt, schema: opened.schema ?? null }
+              )
+            : null;
+
+        // In input order, and only in input order. At the moment row k is
+        // recorded the rehearsal catalog holds the creations of rows 1 to k-1
+        // of this batch, which is the state the sequential walk would have
+        // shown it. Applied in any other order that equivalence is gone.
+        for (let index = 0; index < batch.rows.length; index++) {
+          if (signal?.aborted) {
+            stopped = true;
+            break walk;
+          }
+          const row = batch.rows[index];
+          const { name } = rowIdentity(row);
+          const position = Math.max(1, total - batch.remaining + 1 + index);
+          stderr.write(`${position}/${total} - ${name}\n`);
+
+          const answer = await decideRow({
+            row,
+            prompt: opened.prompt,
+            // A decider that answers no schema is driven exactly as before,
+            // which is what keeps the two implementations independent of each
+            // other.
+            schema: opened.schema ?? null,
+            engine,
+            decider,
+            stripFence,
+            reply: replies?.[index] ?? null,
+          });
+          stdout.write(`${JSON.stringify(answer)}\n`);
+        }
       } catch (error) {
         if (!signal?.aborted) {
           throw error;
@@ -240,6 +342,13 @@ export async function runCuration({
     // this way: `end` reads the decisions file, so it reports over however many
     // rows the walk reached.
     const report = await decider.end(usage);
+    // What the run saw, beside what the plan predicted. A chain that clusters
+    // differently from the one that was measured says so here.
+    if (report?.reasks) {
+      stderr.write(
+        `re-asked ${report.reasks.stale} of ${report.reasks.decided} decided rows\n`
+      );
+    }
     stderr.write(`report: ${report.report}\n`);
     return { slot, runId: opened.runId, report, usage, stopped };
   } catch (error) {

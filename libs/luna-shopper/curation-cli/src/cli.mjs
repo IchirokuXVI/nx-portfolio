@@ -4,8 +4,9 @@
  *
  * This is the one entry point of the curation toolchain that is meant to be
  * invoked by hand. It picks the implementation, takes a fresh rehearsal slot,
- * drives the decider's next/model/decide loop with one model call per row, and
- * tears the slot down whatever happened.
+ * drives the decider's next/model/decide loop as many rows at a time as the
+ * engine and the decider between them allow, and tears the slot down whatever
+ * happened.
  *
  * The rehearsal slot is ephemeral: this checkout is not configured for it, and
  * whatever slot you are serving here keeps running throughout. See `slots.mjs`.

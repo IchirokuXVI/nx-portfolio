@@ -39,6 +39,17 @@ test('a missing required flag says which one', async () => {
   await assert.rejects(() => run(['next']), /--run-dir is required/);
 });
 
+test('next refuses a count that is not a whole number of rows', async () => {
+  // `--count` with nothing after it parses as `true`, and `Number(true)` is 1,
+  // so a typed flag would quietly become a batch of one row.
+  for (const flags of [['--count'], ['--count', '0'], ['--count', 'four']]) {
+    await assert.rejects(
+      () => run(['next', '--run-dir', '/tmp/r', ...flags]),
+      /--count takes a whole number of rows/
+    );
+  }
+});
+
 test('decide refuses stdin that is not JSON', async () => {
   await assert.rejects(
     () =>

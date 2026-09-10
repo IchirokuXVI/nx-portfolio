@@ -27,15 +27,22 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply> [options]
           Verifies both admin logins, counts the queue, and answers
           { runId, remaining, prompt }.
 
-  next    --run-dir <dir> [--main-password <p>]
+  next    --run-dir <dir> [--count <n>] [--main-password <p>]
           Answers one row: { entry, candidates, eanMatch, remaining },
           or { done: true }.
+          With --count, answers { rows, remaining } instead: up to n rows
+          whose normalized names are pairwise distinct, so a caller can ask
+          a model about all of them at once.
 
   decide  --run-dir <dir> --entry <id> [--final] [--main-password <p>]
           The model's JSON on stdin. Answers
           { accepted, retryable, decision, issues, remaining }.
           Without --final a reply that breaks the schema answers
           retryable: true and writes nothing, so the caller can ask again.
+          A row whose candidates changed since next handed it out answers
+          { stale: true, packet } and writes nothing, whatever --final says:
+          the model was asked the wrong question, so ask it the one in
+          packet and decide again.
 
   end     --run-dir <dir> [--usage <json>]
           Writes the report and answers its path.
@@ -74,6 +81,21 @@ function required(flags, name) {
   return value;
 }
 
+/**
+ * A flag that has to be a whole number of rows.
+ *
+ * `--count` with no value parses as `true`, and `Number(true)` is 1, so a typed
+ * flag would silently become a batch of one. It is refused instead.
+ */
+function positive(flags, name) {
+  const value = flags[name];
+  const parsed = typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`--${name} takes a whole number of rows, 1 or more`);
+  }
+  return parsed;
+}
+
 function readStdin(fd = 0) {
   return readFileSync(fd, 'utf8');
 }
@@ -104,6 +126,7 @@ export async function run(argv, { stdin = readStdin } = {}) {
   if (command === 'next') {
     return next({
       runDir: required(flags, 'run-dir'),
+      count: flags.count === undefined ? null : positive(flags, 'count'),
       mainPassword:
         typeof flags['main-password'] === 'string'
           ? flags['main-password']

@@ -4,8 +4,10 @@
  * A killed run resumes for free because everything a subcommand needs is on
  * disk between invocations. There are two files and nothing else:
  *
- * - `state.json`: the run's identity, the two urls, the chain walk cursor and
- *   the ids already decided.
+ * - `state.json`: the run's identity, the two urls, the chain walk cursor, the
+ *   ids already decided, the candidate set each row of the current batch was
+ *   handed, and how many rows have had to be asked again because that set
+ *   changed underneath them.
  * - `decisions.jsonl`: a header line, then one line per decided row.
  *
  * The decided ids live in `state.json` *and* are recoverable from the JSONL, on
@@ -107,6 +109,11 @@ export function createRun(
     chainIndex: 0,
     decidedIds: [],
     createdRefs: {},
+    // What `next` last handed out, per row, as candidate identities, and how
+    // many rows `decide` has refused to record because that set had changed
+    // (plan 0002). A row leaves `handouts` the moment it is decided.
+    handouts: {},
+    reasks: 0,
   };
   writeState(dir, state);
   return state;

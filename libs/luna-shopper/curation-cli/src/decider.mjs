@@ -103,16 +103,33 @@ export function makeDecider({
       ]);
     },
 
-    /** One row, or `{ done: true }`. */
-    next() {
-      return call(['next', '--run-dir', runDir, ...password]);
+    /**
+     * One row, or `{ done: true }`.
+     *
+     * With a count it is `{ rows, remaining }` instead, up to that many rows
+     * the decider composed so that no two of them can be about the same
+     * product (plan 0002). The count is `engine.batchSize` and nothing else,
+     * so an engine that holds one request in flight passes none and the
+     * subcommand is the one it has always been.
+     */
+    next(count = null) {
+      return call([
+        'next',
+        '--run-dir',
+        runDir,
+        ...(count ? ['--count', String(count)] : []),
+        ...password,
+      ]);
     },
 
     /**
      * The decision, validated and recorded by the decider.
      *
      * Without `final` a reply that breaks the schema answers `retryable: true`
-     * and writes nothing, which is what buys the one retry.
+     * and writes nothing, which is what buys the one retry. A row whose
+     * candidates changed since `next` handed it out answers `stale: true` with
+     * the refreshed packet, writes nothing, and spends no retry: the model was
+     * asked the wrong question rather than answering badly.
      */
     decide(entryId, decision, { final = false } = {}) {
       return call(
