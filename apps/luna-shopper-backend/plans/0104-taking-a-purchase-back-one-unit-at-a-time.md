@@ -1,3 +1,5 @@
+> **PR:** [#325](https://github.com/IchirokuXVI/nx-portfolio/pull/325)
+
 # 0104: taking a purchase back one unit at a time
 
 > Client half: `apps/velista/plans/0073`, which draws every rule this plan owns.
