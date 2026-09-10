@@ -35,8 +35,15 @@ export interface FakeLineSettlements {
       where: {
         generatedListLineId?: string;
         lineId?: string;
+        outcome?: SettlementOutcome;
         revertedAt?: unknown;
       };
+      /**
+       * Newest first when it says so, which is the order a revert walks in
+       * (plan 0104, section 3.1), and oldest first by default, which is what
+       * re-homing reads.
+       */
+      order?: { settledAt?: 'ASC' | 'DESC'; id?: 'ASC' | 'DESC' };
     }): Promise<Partial<LineSettlement>[]>;
   };
 }
@@ -110,30 +117,33 @@ export function fakeLineSettlements(
           newestFirst(where.lineId).find((row) => standing(row, where)) ?? null
         );
       },
-      async find({ where }) {
-        return (
-          rows
-            .map((row, index) => ({ row, index }))
-            .filter(
-              (entry) =>
-                (where.lineId === undefined ||
-                  entry.row.lineId === where.lineId) &&
-                (where.generatedListLineId === undefined ||
-                  entry.row.generatedListLineId ===
-                    where.generatedListLineId) &&
-                standing(entry.row, where)
-            )
-            // Oldest first, with the insertion order breaking a tie, which is
-            // what both callers ask for and what the real index answers. It
-            // matters to re-homing (plan 0093, section 3), where the order of two
-            // purchases decides which list gets which units.
-            .sort((a, b) => {
-              const at = a.row.settledAt?.getTime() ?? 0;
-              const bt = b.row.settledAt?.getTime() ?? 0;
-              return at - bt || a.index - b.index;
-            })
-            .map((entry) => entry.row)
-        );
+      async find({ where, order }) {
+        // Oldest first, with the insertion order breaking a tie, which is what
+        // the real index answers. It matters to re-homing (plan 0093,
+        // section 3), where the order of two purchases decides which list gets
+        // which units, and it is reversed for a revert, which takes the newest
+        // purchase back first (plan 0104, section 3.1).
+        const descending = order?.settledAt === 'DESC';
+        return rows
+          .map((row, index) => ({ row, index }))
+          .filter(
+            (entry) =>
+              (where.lineId === undefined ||
+                entry.row.lineId === where.lineId) &&
+              (where.generatedListLineId === undefined ||
+                entry.row.generatedListLineId === where.generatedListLineId) &&
+              (where.outcome === undefined ||
+                entry.row.outcome === where.outcome) &&
+              standing(entry.row, where)
+          )
+          .sort((a, b) => {
+            const at = a.row.settledAt?.getTime() ?? 0;
+            const bt = b.row.settledAt?.getTime() ?? 0;
+            return descending
+              ? bt - at || b.index - a.index
+              : at - bt || a.index - b.index;
+          })
+          .map((entry) => entry.row);
       },
     },
   };

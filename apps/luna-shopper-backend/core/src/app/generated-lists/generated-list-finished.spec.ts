@@ -18,6 +18,7 @@ import type { ListAccessService } from '../lists/list-access.service';
 import type { ProfileService } from '../profiles/profile.service';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
@@ -231,13 +232,12 @@ function build(status: GeneratedListStatus): Harness {
     publisher
   );
   const outstanding = new GeneratedListOutstandingService(
-    dataSource,
     lists as never,
     lines as never,
     sharing,
     generated,
     settle,
-    publisher
+    reopen
   );
   const basketWrites = new GeneratedListBasketService(
     lists as never,
@@ -273,6 +273,18 @@ function build(status: GeneratedListStatus): Harness {
     claims.service,
     waiting,
     publisher
+  );
+  const settledWrites = new GeneratedListOriginSettledService(
+    lists as never,
+    lines as never,
+    origins as never,
+    zoneLines as never,
+    noRows as never,
+    sharing,
+    generated,
+    originWrites,
+    settle,
+    reopen
   );
 
   const writes: Harness['writes'] = {
@@ -360,6 +372,17 @@ function build(status: GeneratedListStatus): Harness {
         quantity: 1,
         from: 2,
       }),
+    // Plan 0104 section 4's other reel on the same row: what one list **got**,
+    // which writes settlements and so is refused for the reason the settle is.
+    'change what a household got': () =>
+      settledWrites.setOriginSettled({
+        generatedListId: BASKET,
+        lineId: LINE,
+        participantId: ACTOR,
+        sourceLineId: ZONE_LINE,
+        settled: 2,
+        from: 0,
+      }),
   };
 
   return { writes, events, claims };
@@ -370,9 +393,10 @@ const WRITES = Object.keys(build(GeneratedListStatus.COMPLETED).writes);
 describe('a finished basket refuses every write (section 3)', () => {
   it('covers every row of the table, and the two rows it omits', () => {
     // Nine rows in section 3.1, plus reorder (which saves every line of the
-    // basket) and the origin quantity edit (which saves the basket line as well
-    // as the zone line). Section 3.2's one rule covers both.
-    expect(WRITES).toHaveLength(11);
+    // basket), the origin quantity edit (which saves the basket line as well as
+    // the zone line) and plan 0104's origin settled write. Section 3.2's one
+    // rule covers all three.
+    expect(WRITES).toHaveLength(12);
   });
 
   describe.each(WRITES)('%s', (name) => {

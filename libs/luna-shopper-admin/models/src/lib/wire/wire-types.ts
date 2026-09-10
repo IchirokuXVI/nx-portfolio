@@ -635,6 +635,15 @@ export type SetGeneratedListOriginQuantityDto = {
 };
 
 /**
+ * `SetGeneratedListOriginSettledDto` in the gateway's OpenAPI document.
+ */
+export type SetGeneratedListOriginSettledDto = {
+  lineId: string;
+  settled: number;
+  from: number;
+};
+
+/**
  * `SetListAccessDto` in the gateway's OpenAPI document.
  */
 export type SetListAccessDto = {
@@ -3302,6 +3311,16 @@ export type MsgGeneratedListSetOriginQuantityResponse = {
   line: GeneratedListSharingBasketLineView;
   origin: GeneratedListSharingLineOriginDetail | null;
   listQuantity: number;
+};
+
+/**
+ * `msg.generatedList.setOriginSettled.response` in the gateway's OpenAPI document.
+ */
+export type MsgGeneratedListSetOriginSettledResponse = {
+  line: GeneratedListSharingBasketLineView;
+  origin: GeneratedListSharingLineOriginDetail | null;
+  skippedCount: number;
+  skipped: GeneratedListSharingSettleSkip[];
 };
 
 /**
