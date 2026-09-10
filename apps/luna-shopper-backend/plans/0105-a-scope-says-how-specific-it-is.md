@@ -1,3 +1,5 @@
+> **PR:** [#337](https://github.com/IchirokuXVI/nx-portfolio/pull/337)
+
 # 0105 A scope says how specific it is
 
 A price scope is the set of shops a chain charges the same in. Today a shop points at exactly one of
