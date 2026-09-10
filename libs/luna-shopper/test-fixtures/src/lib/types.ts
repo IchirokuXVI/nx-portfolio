@@ -197,11 +197,25 @@ export interface SeedPriceScope {
   kind: PriceScopeKind;
   externalKey: string | null;
   label: LocalizedText | null;
+  /**
+   * How specific the scope is: lower is more specific (backend plan 0105).
+   *
+   * Stated rather than left to the entity's own default, because the seeder
+   * inserts through the query builder and a column the fixture does not name
+   * is a null in a NOT NULL column.
+   */
+  priority: number;
 }
 
 export interface SeedSupermarketLocation {
   id: string;
   supermarketId: string;
+  /**
+   * The scope this shop sells at. Since backend plan 0105 it is a row in
+   * `supermarket_location_price_scopes` rather than a column on the shop, and
+   * the catalog seeder writes that row; the fixture still states one scope,
+   * because the demo world has one shop with one price.
+   */
   priceScopeId: string;
   label: LocalizedText | null;
   address: string | null;

@@ -15,6 +15,7 @@ import {
   SupermarketItem,
   SupermarketLocation,
   SupermarketLocationItem,
+  SupermarketLocationPriceScope,
 } from '../../entities';
 
 /**
@@ -108,7 +109,13 @@ export const CATALOG_INSERT_ORDER: {
   {
     name: 'SupermarketLocation',
     entity: SupermarketLocation,
-    rows: catalog.locations,
+    // The scope moved off the shop and into its own table (plan 0105), so the
+    // column the fixture states is stripped here and written as a row by
+    // `seedLocationScopes` below.
+    rows: catalog.locations.map(({ priceScopeId, ...row }) => {
+      void priceScopeId;
+      return row;
+    }),
   },
   // Groups before items, because an item may point at one (plan 0048).
   {
@@ -147,7 +154,26 @@ export async function seedCatalog(dataSource: DataSource): Promise<void> {
         await m.getRepository(step.entity).insert(step.rows as ObjectLiteral[]);
       }
     }
+    await seedLocationScopes(m);
   });
+}
+
+/**
+ * Which scope each seeded shop sells at (plan 0105, section 3).
+ *
+ * Outside {@link CATALOG_INSERT_ORDER} because that list deletes by `id`, and
+ * this table has no `id`: the pair is its primary key. It needs no delete of
+ * its own either, since the shops were deleted above and the row goes with
+ * them on the cascade.
+ */
+async function seedLocationScopes(m: EntityManager): Promise<void> {
+  const rows = catalog.locations.map((row) => ({
+    supermarketLocationId: row.id,
+    priceScopeId: row.priceScopeId,
+  }));
+  if (rows.length) {
+    await m.getRepository(SupermarketLocationPriceScope).insert(rows);
+  }
 }
 
 /** CLI entry: seed, then close the connection (the CLI wrapper handles errors). */
