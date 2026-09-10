@@ -50,7 +50,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { IMPLEMENTATION_NAMES, deciderPath, makeDecider } from './decider.mjs';
 import {
   CLAUDE_TIMEOUT_MS,
+  DEFAULT_EFFORT,
   DEFAULT_MODEL,
+  EFFORT_LEVELS,
   confirmApiBilling,
   emptyUsage,
   makeApiEngine,
@@ -77,6 +79,8 @@ const USAGE = `Usage: node cli.mjs [options]
                                          session; api bills ANTHROPIC_API_KEY
                                          and asks before it does
   --model <name>                         default ${DEFAULT_MODEL}
+  --effort <${EFFORT_LEVELS.join('|')}>  how hard the model thinks about one
+                                         row, default ${DEFAULT_EFFORT}
   --run-dir <dir>                        default ${DEFAULT_RUN_ROOT}/<timestamp>
   --main-url <u>                         default ${DEFAULT_MAIN_URL}
   --main-user <name>                     default dev-admin
@@ -311,6 +315,16 @@ export async function main(
     typeof flags['main-password'] === 'string' ? flags['main-password'] : null;
   const model = typeof flags.model === 'string' ? flags.model : DEFAULT_MODEL;
 
+  // Refused here rather than by the CLI three layers down, where it would cost
+  // a slot, a login and a rehearsal catalog before it said so.
+  const effort =
+    typeof flags.effort === 'string' ? flags.effort : DEFAULT_EFFORT;
+  if (!EFFORT_LEVELS.includes(effort)) {
+    throw new Error(
+      `Unknown effort ${effort}. It is one of ${EFFORT_LEVELS.join(', ')}.`
+    );
+  }
+
   // A misspelled engine is refused before a slot is taken or a directory made.
   const engineName = typeof flags.engine === 'string' ? flags.engine : 'claude';
   if (engineName !== 'claude' && engineName !== 'api') {
@@ -361,6 +375,7 @@ export async function main(
       spawn,
       env,
       model,
+      effort,
       timeoutMs: CLAUDE_TIMEOUT_MS,
       stderr,
       usage,
@@ -376,6 +391,7 @@ export async function main(
     engine = makeApiEngine({
       apiKey,
       model,
+      effort,
       usage,
       signal: controller.signal,
     });
