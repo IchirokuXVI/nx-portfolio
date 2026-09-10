@@ -286,7 +286,8 @@ was asked of a knob this provider does not have.
 reading is the caller that would want them, but `ask(prompt, { system, schema })`
 has no slot for an image and adding one is a change to the contract, which is the
 one thing this plan exists to avoid making. An engine that takes images is a
-plan 0003, and it is a plan about the contract before it is a plan about Ollama.
+a plan of its own, and it is a plan about the contract before it is a plan about
+Ollama.
 
 **It is not tool use, and it is not streaming.** The contract answers `{ text }`.
 
