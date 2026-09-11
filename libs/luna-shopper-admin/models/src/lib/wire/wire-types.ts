@@ -761,6 +761,7 @@ export type SpawnHarvestRunDto = {
   country?: string;
   radiusMetres?: number;
   brandKeys?: string[];
+  postalCodes?: string[];
   detailBackfill?: boolean;
 };
 
@@ -2717,7 +2718,7 @@ export const HarvestAdapterCapabilityTable = {
   'mercadona-api': {
     writesPrices: true,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    listsItsOwnStores: true,
     hasProductPages: false,
   },
   'deza-web': {

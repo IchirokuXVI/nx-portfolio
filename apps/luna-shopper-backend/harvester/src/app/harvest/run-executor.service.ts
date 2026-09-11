@@ -227,6 +227,12 @@ export class RunExecutor implements OnApplicationShutdown {
               postalCode: String(run.input['postalCode'] ?? ''),
               country: String(run.input['country'] ?? 'es'),
               radiusMetres: Number(run.input['radiusMetres'] ?? 3000),
+              // The shops a chain's own list is filtered to (plan 0106,
+              // section 4). Absent and empty are the same thing, which is every
+              // shop, and the OpenStreetMap case ignores it.
+              postalCodes: Array.isArray(run.input['postalCodes'])
+                ? (run.input['postalCodes'] as unknown[]).map(String)
+                : undefined,
               supermarketId: run.supermarketId ?? undefined,
               // The chain's own identity, read here rather than by the runner
               // (plan 0103, section 6.4).

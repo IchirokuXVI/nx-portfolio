@@ -64,7 +64,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`).',
+      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`).',
   })
   @IsOptional()
   @IsUUID()
@@ -82,7 +82,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     maxLength: 16,
     description:
-      'Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8).',
+      'Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8). A chain that names its own shops needs neither, and filters with `postalCodes` instead.',
   })
   @IsOptional()
   @IsString()
@@ -116,6 +116,17 @@ export class SpawnHarvestRunDto {
   @IsArray()
   @IsString({ each: true })
   brandKeys?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Restrict a STORE_DISCOVERY of a chain that publishes its own shop list to the shops in these postal codes. It matches each shop’s own code exactly and is never a radius: the chain states the code, so an exact match is a well posed question where a bounding box is not. An empty list is every shop the chain publishes; the document is one request either way, and what the filter saves is the warehouse lookup per code.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(16, { each: true })
+  postalCodes?: string[];
 
   @ApiPropertyOptional({
     default: false,

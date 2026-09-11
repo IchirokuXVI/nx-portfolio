@@ -19,6 +19,7 @@ import { HarvestController } from './harvest.controller';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
+import { MercadonaStoreDiscoveryRunner } from './mercadona-store-discovery.runner';
 import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
@@ -74,6 +75,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
     // else is a radius over OpenStreetMap.
     OsmStoreDiscoveryRunner,
     LidlStoreDiscoveryRunner,
+    MercadonaStoreDiscoveryRunner,
     StoreDiscoveryRunner,
     // The second half of every run, whatever the first half was (plan 0086, D5).
     //

@@ -212,10 +212,14 @@ export interface AdapterCapabilities {
  * refuses a bad request.
  */
 export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
+  // The store finder publishes all 1,675 shops in one static document, with a
+  // postal code and coordinates on every one of them (plan 0106). Plan 0038
+  // said this chain named none and had to be found through OpenStreetMap; that
+  // was a finding about OpenStreetMap's data and was never true of Mercadona's.
   'mercadona-api': {
     writesPrices: true,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    listsItsOwnStores: true,
     hasProductPages: false,
   },
   // The site prints no price at all, so a scope would be a required field that
@@ -645,6 +649,22 @@ export interface SpawnHarvestRunRequest extends AdminCredential {
   radiusMetres?: number;
   /** Restrict a store discovery run's report to these `brand:wikidata` keys. */
   brandKeys?: string[];
+  /**
+   * Restrict a store discovery run to the shops in these postal codes, for a
+   * chain that publishes its own shop list (plan 0106, section 4).
+   *
+   * The match is on the shop's **own** postal code, exactly. A radius here
+   * would rebuild the ambiguity plan 0038 section 2.8 found in OpenStreetMap,
+   * where the twelve Mercadonas inside 14013's bounding box sit in four other
+   * codes; the chain states each shop's code itself, so an exact match is a
+   * well posed question.
+   *
+   * **An empty array and an absent field are the same thing**, which is every
+   * shop. What the filter saves is not the one request for the document, which
+   * is read whole either way: it is the second request kind, because a run
+   * filtered to four codes resolves four warehouses instead of 1,213.
+   */
+  postalCodes?: string[];
   /**
    * What observed the products in a FILE_IMPORT's document, which is what its
    * rows and its prices are stamped with (plan 0086, section 6.2).

@@ -431,6 +431,13 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
           // over-fetch cheap and a large one tedious.
           radiusMetres: req.radiusMetres ?? 3000,
           brandKeys: req.brandKeys ?? [],
+          // The shops a chain's own list is filtered to (plan 0106, section 4).
+          // Not a centre and not a radius: it matches each shop's own code
+          // exactly, and an empty list is every shop. The OpenStreetMap case
+          // has a centre already and ignores it.
+          postalCodes: (req.postalCodes ?? [])
+            .map((code) => code.trim())
+            .filter((code) => code !== ''),
         },
       };
     }

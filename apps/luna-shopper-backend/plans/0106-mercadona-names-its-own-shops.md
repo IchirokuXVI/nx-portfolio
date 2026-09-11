@@ -1,3 +1,5 @@
+> **PR:** [#340](https://github.com/IchirokuXVI/nx-portfolio/pull/340)
+
 # 0106 Mercadona names its own shops
 
 `store-discovery.runner.ts:19` says this:

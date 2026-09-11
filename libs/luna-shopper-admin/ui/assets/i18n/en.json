@@ -573,6 +573,8 @@
         "supermarketId": "Chain",
         "postalCode": "Postal code",
         "country": "Country",
+        "postalCodes": "Only these postal codes",
+        "postalCodesHelp": "Optional, and only for a chain that names its own shops. One code per line, matched against each shop’s own postal code exactly. Leave it empty for every shop the chain publishes: the shop list is one request either way, and what this saves is the question the run asks about each code.",
         "submit": "Start the run",
         "starting": "Starting…",
         "attribution": "A run's writes are recorded against the harvester service, not against you. Starting one is what is being recorded here.",

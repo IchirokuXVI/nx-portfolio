@@ -222,6 +222,23 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
             <input [(ngModel)]="country" name="country" type="text" />
           </label>
         }
+
+        <!-- The other half of the same fact: a chain that names its own shops
+             needs no centre, and narrowing such a run is a filter on the code
+             each shop states rather than a radius (backend plan 0106). -->
+        @if (offersPostalCodes()) {
+          <label>
+            <span>{{ 'harvest.runs.start.postalCodes' | rokuT }}</span>
+            <textarea
+              [(ngModel)]="postalCodes"
+              name="postalCodes"
+              rows="3"
+            ></textarea>
+            <p class="attribution">
+              {{ 'harvest.runs.start.postalCodesHelp' | rokuT }}
+            </p>
+          </label>
+        }
       </div>
 
       <p class="attribution">{{ 'harvest.runs.start.attribution' | rokuT }}</p>
@@ -440,6 +457,14 @@ export class RunsPage {
   readonly supermarketId = signal('');
   readonly priceScopeId = signal('');
   readonly postalCode = signal('');
+  /**
+   * The codes a chain's own shop list is narrowed to, one per line.
+   *
+   * Free text rather than a picker, because the codes an operator wants are
+   * the ones they already have in front of them, and the run reports the ones
+   * that matched no shop rather than refusing them.
+   */
+  readonly postalCodes = signal('');
   readonly country = signal('');
   /** The chosen chain's adapter, once a source read has answered. `''` until. */
   readonly adapterKey = signal('');
@@ -520,6 +545,18 @@ export class RunsPage {
       !this.capabilities().listsItsOwnStores
   );
 
+  /**
+   * Whether this store discovery can be narrowed to a few postal codes.
+   *
+   * The mirror image of {@link needsCentre}, and the same fact read the other
+   * way: a chain that names its own shops has no centre to be given and a
+   * filter to be offered instead. A radius run is already narrow.
+   */
+  readonly offersPostalCodes = computed(
+    () =>
+      this.mode() === 'STORE_DISCOVERY' && this.capabilities().listsItsOwnStores
+  );
+
   /** Whether this chain has product pages an EAN backfill could read. */
   readonly offersBackfill = computed(
     () =>
@@ -574,6 +611,10 @@ export class RunsPage {
     this.supermarketId.set(supermarketId);
     this.priceScopeId.set('');
     this.adapterKey.set('');
+    // Codes of the previous chain's shops are not codes of this one's, and the
+    // field is hidden while the adapter is unknown, so a value left here would
+    // be sent by a form that never showed it.
+    this.postalCodes.set('');
     // A backfill of the previous chain's pages is not a backfill of this one,
     // and the switch is hidden while the adapter is unknown, so a value left
     // set here would be sent by a form that never showed it.
@@ -775,6 +816,23 @@ export class RunsPage {
   }
 
   /**
+   * The typed codes, one per line, blanks and duplicates dropped.
+   *
+   * Commas and semicolons split too, because a list of postal codes is pasted
+   * as often as it is typed and neither separator can appear inside a code.
+   */
+  private chosenCodes(): string[] {
+    return [
+      ...new Set(
+        this.postalCodes()
+          .split(/[\n,;]/)
+          .map((code) => code.trim())
+          .filter((code) => code !== '')
+      ),
+    ];
+  }
+
+  /**
    * The spawn body, with blank fields left out entirely.
    *
    * An empty string is not a postal code and not a uuid, and the harvester's
@@ -785,6 +843,13 @@ export class RunsPage {
     const input: Wire.SpawnHarvestRunDto = { mode: this.mode() };
     if (this.offersBackfill() && this.detailBackfill()) {
       input.detailBackfill = true;
+    }
+    // An empty filter is every shop, which is what an absent field already
+    // means, so nothing is sent for one: the backend would read the two the
+    // same way and an empty array in the body reads as a filter that failed.
+    const postalCodes = this.offersPostalCodes() ? this.chosenCodes() : [];
+    if (postalCodes.length > 0) {
+      input.postalCodes = postalCodes;
     }
     const optional = {
       supermarketId: this.supermarketId().trim(),
