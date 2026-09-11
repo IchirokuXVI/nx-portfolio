@@ -21,7 +21,16 @@ import {
   type BasketViewProperty,
   type BasketViewState,
 } from '@portfolio/velista/models';
+import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
 import { BasketStore } from './basket-store';
+import {
+  dropExpired,
+  forget,
+  NO_BASKET_VIEW_MEMORY,
+  parseBasketViewMemory,
+  remember,
+  type BasketViewMemory,
+} from './basket-view-memory';
 
 /** One row of the filter sheet's LISTS section, and of nothing else. */
 export interface BasketSourceList {
@@ -62,6 +71,7 @@ export interface BasketSourceList {
 export class BasketViewStore {
   private readonly _basket = inject(BasketStore);
   private readonly _locale = inject(RokuLocaleStore).locale;
+  private readonly _browser = inject(BrowserFacade);
 
   private readonly _query = signal('');
 
@@ -258,14 +268,28 @@ export class BasketViewStore {
 
   setOrder(order: BasketOrder): void {
     this._state.update((state) => ({ ...state, order }));
+    this._store((memory, now) => remember(memory, 'order', order, now));
   }
 
   setGrouping(grouping: BasketGrouping): void {
     this._state.update((state) => ({ ...state, grouping }));
+    this._store((memory, now) => remember(memory, 'grouping', grouping, now));
   }
 
+  /**
+   * Show one shop's prices, or the cheapest anywhere (`0078`).
+   *
+   * Choosing the cheapest anywhere **forgets** the shop rather than remembering a
+   * null, and the two are the same thing to the next basket: a property the record
+   * does not hold leaves the state's own default in place, and that default is null.
+   */
   setShop(shop: string | null): void {
     this._state.update((state) => ({ ...state, shop }));
+    this._store((memory, now) =>
+      shop === null
+        ? forget(memory, 'shop')
+        : remember(memory, 'shop', shop, now)
+    );
   }
 
   /**
@@ -298,9 +322,29 @@ export class BasketViewStore {
     this._state.update((state) => ({ ...state, lists }));
   }
 
-  /** Put one property back to its default, which is what a chip's x does. */
+  /**
+   * Put one property back to its default, which is what a chip's x does.
+   *
+   * **The default is then remembered, as a choice.** Somebody who takes a remembered
+   * "By category" off the page has decided they want it off, and a record that
+   * simply forgot it would hand the grouping straight back on the next basket. The
+   * exception is the shop, for the reason written on {@link setShop}: its default is
+   * the absence of a value, so choosing it forgets instead.
+   */
   resetProperty(property: BasketViewProperty): void {
     this._state.update((state) => resetBasketViewProperty(state, property));
+
+    if (property === 'lists') {
+      // Never stored, so there is nothing to put back. `0075` section 6.
+      return;
+    }
+
+    const value = DEFAULT_BASKET_VIEW_STATE[property];
+    this._store((memory, now) =>
+      value === null
+        ? forget(memory, property)
+        : remember(memory, property, value, now)
+    );
   }
 
   /**
@@ -313,6 +357,53 @@ export class BasketViewStore {
    */
   reset(): void {
     this._state.set(DEFAULT_BASKET_VIEW_STATE);
+    // A record holding nothing, rather than three properties each holding their
+    // default. Reset is the one gesture that says "forget all of this", and writing
+    // the defaults back would be indistinguishable from three separate choices.
+    this._write(NO_BASKET_VIEW_MEMORY);
+  }
+
+  /**
+   * Apply what this device remembers, once, because a basket has just loaded
+   * (`0076`, section 3).
+   *
+   * Called by the page after `BasketStore.open` resolves, which is the moment the
+   * scopes and the source lists this has to check against exist. **Nothing is
+   * watched afterwards**, and that is the whole design: a value whose date passes
+   * while the basket is open stays applied, because the date is compared once rather
+   * than counted down, and `watchStorage` is not used either, since a second tab
+   * changing the grouping must not move rows under a thumb in this one.
+   *
+   * Applied **over the current state** rather than over the defaults, so the list
+   * filter and the search survive it. Both are reachable before this runs: a sheet
+   * is a child route, so a link straight to `sheet/filter` draws the controls while
+   * the basket behind them is still loading.
+   */
+  restore(): void {
+    const stored = this._read();
+    if (stored === null) {
+      return;
+    }
+
+    const now = Date.now();
+    const kept = dropExpired(stored, now);
+    if (kept !== stored) {
+      // An expired property is gone for good, and the record says so from now on.
+      this._write(kept);
+    }
+
+    const order = kept.order?.value;
+    const grouping = kept.grouping?.value;
+    const shop = kept.shop?.value;
+
+    this._state.update((state) => ({
+      ...state,
+      ...(order === undefined ? {} : { order }),
+      ...(grouping === undefined || !this._offersGrouping(grouping)
+        ? {}
+        : { grouping }),
+      ...(shop === undefined || !this._pricesAt(shop) ? {} : { shop }),
+    }));
   }
 
   /**
@@ -331,5 +422,62 @@ export class BasketViewStore {
     // loads: leaving has to put this back to the defaults regardless, or a basket
     // opened with nothing stored would start on the last one's order.
     this._state.set(DEFAULT_BASKET_VIEW_STATE);
+  }
+
+  // --- What this device remembers (velista `0076`) ---------------------------
+
+  /**
+   * Whether this reader is offered the remembered grouping at all.
+   *
+   * `sourceLists` is the sheet's own test for its "List" option, and asking the same
+   * question here is what keeps the two from disagreeing: a reader with no lists to
+   * group by would otherwise get a grouping their sheet shows no radio for, and the
+   * sheet would draw "Nothing" over a basket grouped by list.
+   *
+   * The value **stays in storage**, silently. The owner's phone is usually the
+   * owner's, and the next basket is very possibly one whose lists they can see.
+   */
+  private _offersGrouping(grouping: BasketGrouping): boolean {
+    return grouping !== 'list' || this.sourceLists().length > 0;
+  }
+
+  /**
+   * Whether this basket has any price from the remembered shop.
+   *
+   * A record written on a basket priced at other shops, or a shopping profile that
+   * has changed since, names a scope this basket knows nothing about, and a view
+   * filtered to it would mark nothing. Dropped silently and, like the grouping, kept
+   * in storage: the next basket is very possibly priced there again.
+   */
+  private _pricesAt(shop: string): boolean {
+    return this._basket.basket()?.scopes.has(shop) === true;
+  }
+
+  /** The stored record, or null for anything this build cannot read (rule D4). */
+  private _read(): BasketViewMemory | null {
+    return parseBasketViewMemory(
+      this._browser.readStorage(StorageKeys.basketView)
+    );
+  }
+
+  private _write(memory: BasketViewMemory): void {
+    this._browser.writeStorage(StorageKeys.basketView, JSON.stringify(memory));
+  }
+
+  /**
+   * Change one property of the stored record, reading it first.
+   *
+   * Read, change, write, rather than holding the record in a field: the other
+   * properties have to come back **with their own dates**, so that setting the
+   * grouping does not extend the shop's two hours, and reading them from storage is
+   * the one version of that which cannot drift. It is not a watch — nothing here
+   * moves a row — and a storage that throws answers null through
+   * {@link BrowserFacade}, which leaves the setter working and the device merely
+   * forgetful.
+   */
+  private _store(
+    change: (memory: BasketViewMemory, now: number) => BasketViewMemory
+  ): void {
+    this._write(change(this._read() ?? NO_BASKET_VIEW_MEMORY, Date.now()));
   }
 }

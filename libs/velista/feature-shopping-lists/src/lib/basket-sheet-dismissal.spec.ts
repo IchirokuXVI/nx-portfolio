@@ -14,6 +14,7 @@ import {
   SessionStore,
 } from '@portfolio/velista/data-access';
 import {
+  provideFakeBrowserFacade,
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
@@ -157,6 +158,9 @@ async function render(
       // the store above, and the filter sheet reads five of them, so a double here
       // would be a second implementation of the thing under test's whole input.
       BasketViewStore,
+      // And a fresh `Map` for what it remembers (`0076`), so no test in this file
+      // inherits an order or a grouping another one chose.
+      provideFakeBrowserFacade(new Map()),
       // The settle sheet reads a line's settlement history through this. These tests
       // are about the URL a sheet leaves on and never open that pane, so an empty page
       // is enough: what matters is that the injection resolves.

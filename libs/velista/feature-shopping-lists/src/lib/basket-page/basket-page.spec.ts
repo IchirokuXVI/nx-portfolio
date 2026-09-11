@@ -25,7 +25,11 @@ import type {
   CatalogSuggestion,
   ErrorCode,
 } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  provideFakeBrowserFacade,
+  provideVelistaTesting,
+  StorageKeys,
+} from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { BasketLineRow } from '../basket-line-row/basket-line-row';
 import { BasketPage } from './basket-page';
@@ -136,6 +140,14 @@ interface Options {
   readonly listNames?: ReadonlyMap<string, string>;
   /** What the progress sentence counts. Defaults to a basket nobody has started. */
   readonly progress?: { done: number; unavailable: number; total: number };
+  /**
+   * What this device already remembers about how to draw a basket (`0076`).
+   *
+   * Empty by default, which is a device that has never been here. Seeding it is how
+   * a test says the shopper made a choice on their last trip, since the page reads
+   * the record itself once the basket has loaded.
+   */
+  readonly storage?: Map<string, string>;
   /**
    * Whether the translator echoes the values a key was given as well as the key.
    *
@@ -376,6 +388,11 @@ async function render(options: Options = {}): Promise<{
       // needs nothing this harness does not already stand in for, since everything
       // it reads comes off `BasketStore` and the locale store above.
       BasketViewStore,
+      // ...except this device's storage, which `0076` gave it. A fresh `Map` per
+      // test and not the real facade: jsdom hands every test in this file the same
+      // `localStorage`, so a test that chose an order would hand it to the next
+      // page to open, through the restore the page now runs on load.
+      provideFakeBrowserFacade(options.storage ?? new Map()),
     ],
   }).compileComponents();
 
@@ -1669,6 +1686,35 @@ describe('searching the basket', () => {
 
       expect(view.order()).toBe('shop');
       expect(view.lists()).toBeNull();
+    });
+
+    /**
+     * The page is what pairs the restore with the load (`0076`, section 3), and it
+     * does it **after** `open` resolves rather than beside it: the scopes and the
+     * source lists a remembered value is checked against arrive with the basket.
+     */
+    it('opens on what this device remembered last time', async () => {
+      const { fixture } = await render({
+        lines: sourced,
+        sources: SOURCES,
+        listNames: LIST_NAMES,
+        storage: new Map([
+          [
+            StorageKeys.basketView,
+            JSON.stringify({
+              version: 1,
+              order: { value: 'alpha', until: null },
+            }),
+          ],
+        ]),
+      });
+
+      expect(TestBed.inject(BasketViewStore).order()).toBe('alpha');
+      // And the chip row says so, because a list drawn in an order nobody can see a
+      // reason for looks broken to the next person handed the phone.
+      expect(chips(fixture)[0]?.textContent).toContain(
+        'basket.view.order.alpha'
+      );
     });
   });
 });

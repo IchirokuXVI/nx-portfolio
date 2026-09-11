@@ -9,6 +9,7 @@ import {
 import { BasketStore, BasketViewStore } from '@portfolio/velista/data-access';
 import type { BasketLine } from '@portfolio/velista/models';
 import {
+  provideFakeBrowserFacade,
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
@@ -95,6 +96,9 @@ function render(options: {
       provideVelistaTesting({ basePath: '' }),
       { provide: BasketStore, useValue: store },
       BasketViewStore,
+      // A fresh `Map` per test for what the sheet remembers (`0076`), rather than
+      // the one `localStorage` jsdom shares with every other test in this file.
+      provideFakeBrowserFacade(new Map()),
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: { navigate: jest.fn() } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
