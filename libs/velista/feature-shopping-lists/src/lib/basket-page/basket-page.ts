@@ -407,7 +407,17 @@ export class BasketPage {
   );
 
   constructor() {
-    void this._store.open(this._id);
+    /**
+     * The basket, and then what this device remembers about how to draw it
+     * (`0076`, section 3).
+     *
+     * After the load and not beside it, because the two things the remembered
+     * record is checked against — the basket's price scopes and the lists it drew
+     * from — arrive with the basket. Once, here, rather than watched: a value whose
+     * date passes while the shopper is standing in an aisle must not move the rows
+     * in front of them.
+     */
+    void this._store.open(this._id).then(() => this._view.restore());
 
     /**
      * The socket is closed from **here**, and it has to be.

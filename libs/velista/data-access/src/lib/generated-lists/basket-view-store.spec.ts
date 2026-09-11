@@ -4,9 +4,19 @@ import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular'
 import type {
   BasketLine,
   BasketParticipant,
+  BasketPriceScope,
   BasketProduct,
 } from '@portfolio/velista/models';
+import {
+  provideFakeBrowserFacade,
+  StorageKeys,
+  type BrowserFacade,
+} from '@portfolio/velista/platform';
 import { BasketStore } from './basket-store';
+import {
+  parseBasketViewMemory,
+  type BasketViewMemory,
+} from './basket-view-memory';
 import { BasketViewStore } from './basket-view-store';
 
 /**
@@ -70,11 +80,18 @@ interface Harness {
     readonly { zoneId: string; listId: string }[]
   >;
   readonly listNames: WritableSignal<ReadonlyMap<string, string>>;
+  /** The scopes this basket is priced at, which a remembered shop is checked against. */
+  readonly scopes: WritableSignal<ReadonlyMap<string, BasketPriceScope>>;
+  /** This device's storage, so a spec can seed a record and read what was written. */
+  readonly storage: Map<string, string>;
 }
 
 function harness(
   lines: readonly BasketLine[],
-  products: ReadonlyMap<string, BasketProduct> = new Map()
+  products: ReadonlyMap<string, BasketProduct> = new Map(),
+  storage: Map<string, string> = new Map(),
+  /** What a storage that will not answer looks like from above the facade (`0076`). */
+  browser: Partial<BrowserFacade> = {}
 ): Harness {
   TestBed.resetTestingModule();
 
@@ -83,10 +100,12 @@ function harness(
   const locale = signal('en');
   const sources = signal<readonly { zoneId: string; listId: string }[]>([]);
   const listNames = signal<ReadonlyMap<string, string>>(new Map());
+  const scopes = signal<ReadonlyMap<string, BasketPriceScope>>(new Map());
 
   TestBed.configureTestingModule({
     providers: [
       { provide: RokuLocaleStore, useValue: { locale } },
+      provideFakeBrowserFacade(storage, browser),
       {
         provide: BasketStore,
         useValue: {
@@ -96,7 +115,7 @@ function harness(
           me: signal<BasketParticipant | null>(ME),
           // The run's own sources travel on the basket rather than on its lines, so
           // the double answers the whole read the way the store reaches for it.
-          basket: computed(() => ({ sources: sources() })),
+          basket: computed(() => ({ sources: sources(), scopes: scopes() })),
           listNames,
         },
       },
@@ -111,6 +130,8 @@ function harness(
     locale,
     sources,
     listNames,
+    scopes,
+    storage,
   };
 }
 
@@ -483,5 +504,347 @@ describe('BasketViewStore, the view state', () => {
     view.leave();
 
     expect(view.state()).toEqual(DEFAULTS);
+  });
+});
+
+/**
+ * What the sheet remembers between visits (velista `0076`).
+ *
+ * Three sentences carry all of it. **Only what moves lines is kept**, so the order,
+ * the grouping and the shop come back and the search and the list filter never do.
+ * **A date is compared once**, when the basket loads, so a value that expires while
+ * somebody is standing in an aisle does not move the rows in front of them. And **a
+ * value this basket cannot honour is dropped but not deleted**, because the next
+ * basket is very possibly one that can.
+ */
+describe('BasketViewStore, what the sheet remembers', () => {
+  const basket: readonly BasketLine[] = [
+    onLists('l-1', 'Milk', ['l-groceries']),
+    onLists('l-2', 'Bread', ['l-weekly']),
+  ];
+
+  const HOUR = 60 * 60 * 1000;
+  /** A fixed moment, so no test here starts passing or failing with the calendar. */
+  const NOW = Date.UTC(2026, 0, 15, 10, 0, 0);
+  const KEY = StorageKeys.basketView;
+
+  const DEFAULTS = {
+    order: 'shop',
+    grouping: 'none',
+    shop: null,
+    lists: null,
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
+  });
+
+  afterEach(() => jest.useRealTimers());
+
+  const at = (offsetMs: number) => new Date(NOW + offsetMs).toISOString();
+
+  const seed = (memory: BasketViewMemory) =>
+    new Map([[KEY, JSON.stringify(memory)]]);
+
+  const written = (storage: Map<string, string>) =>
+    parseBasketViewMemory(storage.get(KEY) ?? null);
+
+  /** A basket priced at one shop, which is what a remembered shop is checked against. */
+  function priced(harnessed: Harness): Harness {
+    harnessed.scopes.set(
+      new Map([
+        [
+          'scope-mercadona',
+          {
+            priceScopeId: 'scope-mercadona',
+            supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+            locations: [],
+          },
+        ],
+      ])
+    );
+    return harnessed;
+  }
+
+  it('applies a remembered order, grouping and shop when the basket loads', () => {
+    const harnessed = priced(
+      withLists(
+        harness(
+          basket,
+          new Map(),
+          seed({
+            version: 1,
+            order: { value: 'alpha', until: null },
+            grouping: { value: 'category', until: null },
+            shop: { value: 'scope-mercadona', until: at(HOUR) },
+          })
+        )
+      )
+    );
+
+    harnessed.view.restore();
+
+    expect(harnessed.view.state()).toEqual({
+      order: 'alpha',
+      grouping: 'category',
+      shop: 'scope-mercadona',
+      lists: null,
+    });
+  });
+
+  it('starts on the defaults when this device remembers nothing', () => {
+    const harnessed = priced(withLists(harness(basket)));
+
+    harnessed.view.restore();
+
+    expect(harnessed.view.state()).toEqual(DEFAULTS);
+    expect(harnessed.storage.size).toBe(0);
+  });
+
+  it('ignores a property whose date has passed, and takes it out of the record', () => {
+    const harnessed = priced(
+      withLists(
+        harness(
+          basket,
+          new Map(),
+          seed({
+            version: 1,
+            order: { value: 'alpha', until: null },
+            shop: { value: 'scope-mercadona', until: at(-1) },
+          })
+        )
+      )
+    );
+
+    harnessed.view.restore();
+
+    expect(harnessed.view.order()).toBe('alpha');
+    expect(harnessed.view.shop()).toBeNull();
+    expect(written(harnessed.storage)).toEqual({
+      version: 1,
+      order: { value: 'alpha', until: null },
+    });
+  });
+
+  /**
+   * The expiry is a date, not a timer. A shop remembered at 10:00 and read at 11:50
+   * is applied, and noon arriving while the basket is open changes nothing: the next
+   * basket to open is what ignores it.
+   */
+  it('keeps a property whose date is still ahead, and does not drop it later', () => {
+    const harnessed = priced(
+      withLists(
+        harness(
+          basket,
+          new Map(),
+          seed({
+            version: 1,
+            shop: { value: 'scope-mercadona', until: at(HOUR) },
+          })
+        )
+      )
+    );
+
+    harnessed.view.restore();
+    expect(harnessed.view.shop()).toBe('scope-mercadona');
+
+    jest.setSystemTime(NOW + 3 * HOUR);
+
+    expect(harnessed.view.shop()).toBe('scope-mercadona');
+    expect(written(harnessed.storage)?.shop?.until).toBe(at(HOUR));
+  });
+
+  it('dates the shop two hours out, and setting the grouping leaves that date alone', () => {
+    const harnessed = priced(withLists(harness(basket)));
+
+    harnessed.view.setShop('scope-mercadona');
+    expect(written(harnessed.storage)?.shop).toEqual({
+      value: 'scope-mercadona',
+      until: at(2 * HOUR),
+    });
+
+    jest.setSystemTime(NOW + HOUR);
+    harnessed.view.setGrouping('category');
+
+    const record = written(harnessed.storage);
+    expect(record?.shop).toEqual({
+      value: 'scope-mercadona',
+      until: at(2 * HOUR),
+    });
+    expect(record?.grouping).toEqual({ value: 'category', until: null });
+  });
+
+  it('ignores a remembered shop this basket has no price from, and keeps it stored', () => {
+    const stored: BasketViewMemory = {
+      version: 1,
+      shop: { value: 'scope-lidl', until: at(HOUR) },
+    };
+    const harnessed = priced(
+      withLists(harness(basket, new Map(), seed(stored)))
+    );
+
+    harnessed.view.restore();
+
+    expect(harnessed.view.shop()).toBeNull();
+    expect(written(harnessed.storage)).toEqual(stored);
+  });
+
+  it('ignores a remembered list grouping for a reader with no lists, and keeps it stored', () => {
+    const stored: BasketViewMemory = {
+      version: 1,
+      grouping: { value: 'list', until: null },
+    };
+    // No `withLists`: this reader's sheet offers no "List" radio at all, and a
+    // basket grouped by a choice the sheet cannot show is one nobody can undo.
+    const harnessed = priced(harness(basket, new Map(), seed(stored)));
+
+    harnessed.view.restore();
+
+    expect(harnessed.view.grouping()).toBe('none');
+    expect(written(harnessed.storage)).toEqual(stored);
+  });
+
+  it('never writes the list filter or the search', () => {
+    const harnessed = withLists(harness(basket));
+
+    harnessed.view.search('milk');
+    harnessed.view.toggleList('l-weekly');
+    harnessed.view.setOrder('alpha');
+
+    expect(written(harnessed.storage)).toEqual({
+      version: 1,
+      order: { value: 'alpha', until: null },
+    });
+  });
+
+  it('leaves the search and the list filter alone when it restores', () => {
+    const harnessed = priced(
+      withLists(
+        harness(
+          basket,
+          new Map(),
+          seed({ version: 1, order: { value: 'alpha', until: null } })
+        )
+      )
+    );
+
+    harnessed.view.search('milk');
+    harnessed.view.toggleList('l-weekly');
+
+    harnessed.view.restore();
+
+    expect(harnessed.view.order()).toBe('alpha');
+    expect(harnessed.view.query()).toBe('milk');
+    expect(harnessed.view.lists()).toEqual(
+      new Set(['l-groceries', 'l-parents'])
+    );
+  });
+
+  it.each([
+    [
+      'a version this build does not write',
+      { version: 2, order: { value: 'alpha', until: null } },
+    ],
+    [
+      'a value outside its own union',
+      { version: 1, order: { value: 'newest', until: null } },
+    ],
+    ['a record that is not JSON at all', 'basket-view'],
+  ])('applies nothing at all for %s', (_case, raw) => {
+    const harnessed = priced(
+      withLists(
+        harness(
+          basket,
+          new Map(),
+          new Map([[KEY, typeof raw === 'string' ? raw : JSON.stringify(raw)]])
+        )
+      )
+    );
+
+    harnessed.view.restore();
+
+    expect(harnessed.view.state()).toEqual(DEFAULTS);
+  });
+
+  /**
+   * The facade answers null for a storage that throws, which is private mode and
+   * site data blocked. Nothing here is load bearing enough to fail a tap over, so
+   * the device merely forgets.
+   */
+  it('forgets, and goes on working, when storage will not answer', () => {
+    const harnessed = withLists(
+      harness(basket, new Map(), new Map(), {
+        readStorage: () => null,
+        writeStorage: () => undefined,
+      })
+    );
+
+    harnessed.view.restore();
+    harnessed.view.setOrder('alpha');
+    harnessed.view.setGrouping('category');
+
+    expect(harnessed.view.order()).toBe('alpha');
+    expect(harnessed.view.grouping()).toBe('category');
+    expect(harnessed.storage.size).toBe(0);
+  });
+
+  it('writes a record holding nothing when the sheet is reset', () => {
+    const harnessed = priced(withLists(harness(basket)));
+    harnessed.view.setOrder('alpha');
+    harnessed.view.setShop('scope-mercadona');
+
+    harnessed.view.reset();
+
+    expect(written(harnessed.storage)).toEqual({ version: 1 });
+  });
+
+  /**
+   * Taking a remembered grouping off the page is a choice, and the record says so.
+   * A chip's x that merely forgot would hand the grouping straight back on the next
+   * basket, which is the same control failing to do what it says.
+   */
+  it('remembers a property put back to its default by hand', () => {
+    const harnessed = priced(
+      withLists(
+        harness(
+          basket,
+          new Map(),
+          seed({ version: 1, grouping: { value: 'category', until: null } })
+        )
+      )
+    );
+    harnessed.view.restore();
+
+    harnessed.view.resetProperty('grouping');
+
+    expect(written(harnessed.storage)).toEqual({
+      version: 1,
+      grouping: { value: 'none', until: null },
+    });
+  });
+
+  /**
+   * The shop is the exception, because its default is the **absence** of a value and
+   * `Remembered` has no room for one. Forgetting it and remembering its default are
+   * the same thing to the next basket, which starts with no shop either way.
+   */
+  it('forgets the shop when the cheapest anywhere is chosen again', () => {
+    const harnessed = priced(withLists(harness(basket)));
+    harnessed.view.setShop('scope-mercadona');
+
+    harnessed.view.resetProperty('shop');
+
+    expect(written(harnessed.storage)).toEqual({ version: 1 });
+  });
+
+  it('writes nothing for the list filter, which has nothing to put back', () => {
+    const harnessed = withLists(harness(basket));
+    harnessed.view.toggleList('l-weekly');
+
+    harnessed.view.resetProperty('lists');
+
+    expect(harnessed.storage.size).toBe(0);
+    expect(harnessed.view.lists()).toBeNull();
   });
 });
