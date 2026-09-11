@@ -155,6 +155,17 @@ $app-content-max: 480px;
   --app-control-height: var(--app-touch-target);
   --app-line-row-height: 56px;
   --app-chip-radius: var(--app-radius-full);
+  // A chip is deliberately shorter than a touch target: a row of 44px pills under
+  // the basket's tools row would be a band rather than a summary. A chip that is a
+  // control grows its **target** to `--app-touch-target` with a pseudo element and
+  // leaves the pill this tall, so the two have to be arithmetic on each other and
+  // both are tokens (velista `0075`, section 5).
+  --app-chip-height: 30px;
+  // A count over a glyph's corner, and the ring that punches it out of whatever is
+  // behind. Small enough to read as a badge rather than as a second control, and
+  // large enough for two digits.
+  --app-badge-size: 17px;
+  --app-badge-ring: 2px;
   --app-card-radius: var(--app-radius-lg);
   --app-field-radius: var(--app-radius-md);
   // Rule T3: iOS Safari zooms the viewport when a focused input is under 16px,

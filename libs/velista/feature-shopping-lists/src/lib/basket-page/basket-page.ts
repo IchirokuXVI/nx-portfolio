@@ -38,13 +38,16 @@ import {
 } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
+  ChipRow,
   CloseIcon,
+  FilterIcon,
   FlagIcon,
   LineComposer,
   OfflineIcon,
   PersonIcon,
   SearchIcon,
   ShareIcon,
+  type ChipRowItem,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
 import { outstandingCaption, participantInitials } from '../basket-labels';
@@ -108,7 +111,9 @@ import { BASKET_PATHS } from '../basket-paths';
   imports: [
     BasketLineRow,
     ChevronLeftIcon,
+    ChipRow,
     CloseIcon,
+    FilterIcon,
     FlagIcon,
     LineComposer,
     OfflineIcon,
@@ -619,6 +624,12 @@ export class BasketPage {
   /** What is in the search field, for the count and for the no match sentence. */
   protected readonly searchQuery = this._view.query;
 
+  /**
+   * Whether anything is being searched for, which decides **which** empty state is
+   * drawn: the search's, quoting what was typed, or the filter's (`0075`).
+   */
+  protected readonly searching = this._view.searching;
+
   /** The query folded once, handed to every row to draw its `<mark>` from. */
   protected readonly highlight = this._view.folded;
 
@@ -700,6 +711,95 @@ export class BasketPage {
     this._view.search('');
     this._searchOpen.set(false);
     this._focusWanted.set('button');
+  }
+
+  // --- The filter sheet and its chips (plan 0075) ----------------------------
+
+  /**
+   * The lines, cut into the sections the page draws (section 3).
+   *
+   * One section with no heading for an ungrouped, unfiltered basket, which is the
+   * ordinary case, so the template's loop over sections is the same list it always
+   * drew with one more level around it.
+   */
+  protected readonly sections = this._view.sections;
+
+  /** How many lines are on the screen, for the chip row's count. */
+  protected readonly visibleCount = this._view.visibleCount;
+
+  /** How many of the four properties are on, for the filter button's badge. */
+  protected readonly activeCount = this._view.activeCount;
+
+  /**
+   * The chips, with their words resolved.
+   *
+   * Resolved here rather than in `ChipRow`, because each label's arguments come from
+   * this screen's state and `ChipRow` knows nothing about baskets; and resolved
+   * through the translator service rather than the pipe because this is a list the
+   * component computes. The spec asserts the **key and its arguments** through
+   * `basketViewChips`, which is pure, so nothing here tests the translator.
+   */
+  protected readonly chipItems = computed<readonly ChipRowItem[]>(() => {
+    const locale = this._locale();
+    return this._view.chips().map((chip) => {
+      const label = this._translator.t(
+        chip.key,
+        undefined,
+        locale,
+        chip.args ?? undefined
+      );
+      return {
+        id: chip.property,
+        label,
+        // "Remove: A to Z". The chip's own words go inside the name, so a screen
+        // reader hears what pressing the x gets rid of rather than "button, x".
+        removeLabel: this._translator.t(
+          'basket.view.chip.remove',
+          undefined,
+          locale,
+          { name: label }
+        ),
+      };
+    });
+  });
+
+  /**
+   * The count at the chip row's trailing edge, or null.
+   *
+   * **Drawn only while fewer lines are shown than the basket holds.** A row saying
+   * "12 of 12" next to a chip that reorders is noise: the chips say what is on, and
+   * this says what it cost.
+   */
+  protected readonly chipCount = computed(() => {
+    const shown = this.visibleCount();
+    const total = this.lines().length;
+    if (shown >= total) {
+      return null;
+    }
+    return this._translator.t('basket.view.count', undefined, this._locale(), {
+      shown,
+      total,
+    });
+  });
+
+  /**
+   * A chip's x: put that one property back to its default.
+   *
+   * Looked up rather than cast. The id is a property name this page put on the chip,
+   * so a cast would be correct today and silent the day a chip carries something
+   * else.
+   */
+  protected removeChip(id: string): void {
+    const chip = this._view.chips().find((item) => item.property === id);
+    if (chip !== undefined) {
+      this._view.resetProperty(chip.property);
+    }
+  }
+
+  protected openFilter(): void {
+    void this._router.navigate(sheetSegments('filter'), {
+      relativeTo: this._route,
+    });
   }
 
   // --- The composer (plan 0053) ---------------------------------------------

@@ -10,6 +10,7 @@ export * from './lib/assistant';
 export * from './lib/attribution';
 export * from './lib/basket-search';
 export * from './lib/basket-view';
+export * from './lib/compose-basket-view';
 export * from './lib/domain';
 export * from './lib/enums';
 export * from './lib/generated-list-view';
