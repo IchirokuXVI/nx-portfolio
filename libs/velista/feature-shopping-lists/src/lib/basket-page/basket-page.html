@@ -475,7 +475,7 @@
                       <span aria-hidden="true">
                         {{
                           heading.kind === 'key'
-                            ? (heading.key | rokuT)
+                            ? (heading.key | rokuT: heading.args)
                             : heading.text
                         }}
                       </span>
@@ -506,12 +506,14 @@
                         [highlight]="highlight()"
                         [line]="row.line"
                         [listNames]="listNames()"
+                        [mark]="row.mark"
                         [meId]="meId()"
                         [notice]="noticeFor(row.line)"
                         [origin]="row.origin"
                         [ownName]="ownName()"
                         [people]="participantsById()"
                         [products]="products()"
+                        [shop]="pricedShop()"
                       />
                     </li>
                   }

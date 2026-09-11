@@ -55,6 +55,8 @@ export * from './lib/presence/list-viewers';
 export * from './lib/presence/presence-row';
 export * from './lib/recording/recording-elapsed';
 export * from './lib/recording/recording-row';
+export * from './lib/shops/franchise-buttons';
+export * from './lib/shops/shop-list';
 export * from './lib/translations';
 export * from './lib/zone/confirm-sheet';
 export * from './lib/zone/group-header';

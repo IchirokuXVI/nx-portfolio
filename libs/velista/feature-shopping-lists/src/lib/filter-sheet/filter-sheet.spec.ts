@@ -7,7 +7,7 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import { BasketStore, BasketViewStore } from '@portfolio/velista/data-access';
-import type { BasketLine } from '@portfolio/velista/models';
+import type { BasketLine, BasketPriceScope } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -63,9 +63,34 @@ const GUEST_LINES = [
   line('l-3', 'Batteries', null),
 ];
 
+/**
+ * One price scope, with as many shops as the case needs (velista `0078`).
+ *
+ * Locations are what tells an owner's basket from a guest's here, which is the same
+ * test the sheet itself asks: the server sends a guest the chain and no addresses.
+ */
+function scope(
+  priceScopeId: string,
+  chain: string,
+  shops: readonly string[] = []
+): BasketPriceScope {
+  return {
+    priceScopeId,
+    supermarketName: { en: chain, es: chain },
+    locations: shops.map((address, index) => ({
+      id: `${priceScopeId}-${index}`,
+      label: null,
+      address,
+      city: 'Córdoba',
+      postalCode: '14001',
+    })),
+  };
+}
+
 function render(options: {
   readonly lines: readonly BasketLine[];
   readonly sources?: readonly { zoneId: string; listId: string }[];
+  readonly scopes?: readonly BasketPriceScope[];
 }) {
   TestBed.resetTestingModule();
 
@@ -75,12 +100,15 @@ function render(options: {
   };
 
   const sources = signal(options.sources ?? []);
+  const scopes = signal(
+    new Map((options.scopes ?? []).map((held) => [held.priceScopeId, held]))
+  );
   const store = {
     lines: signal(options.lines),
     products: signal(new Map()),
     lastAdded: signal(null),
     me: signal(null),
-    basket: computed(() => ({ sources: sources() })),
+    basket: computed(() => ({ sources: sources(), scopes: scopes() })),
     listNames: signal(
       new Map([
         ['l-groceries', 'Groceries'],
@@ -313,10 +341,131 @@ describe('FilterSheet', () => {
     expect(sheets.leaveTo).not.toHaveBeenCalled();
   });
 
-  /** PRICES FROM is `0078`'s, and a control that cannot act is not drawn. */
-  it('draws no prices section', () => {
-    const { fixture } = render({ lines: OWNER_LINES });
+  /**
+   * PRICES FROM, and the three things it draws (velista `0078`, section 3).
+   *
+   * A basket with no scopes, a basket with scopes and nothing chosen, and a basket
+   * with a shop chosen. The first is the state staging and production are in, the
+   * second is the one every basket opens in, and the third is the point of the plan.
+   */
+  describe('the prices section', () => {
+    it('is absent for a basket with no price scopes', () => {
+      const { fixture } = render({ lines: OWNER_LINES });
 
-    expect(legends(fixture)).not.toContain('basket.view.prices.legend');
+      expect(legends(fixture)).not.toContain('basket.view.shop.legend');
+    });
+
+    it('draws "One shop" disabled with Choose before anything is picked', () => {
+      const { fixture } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      expect(legends(fixture)).toContain('basket.view.shop.legend');
+
+      const shopRadio = fixture.debugElement
+        .queryAll(By.css('input[name="basket-shop"]'))
+        .map((node) => node.nativeElement as HTMLInputElement);
+      expect(shopRadio).toHaveLength(2);
+      // The first radio is "any of your shops" and is what a basket opens on.
+      expect(shopRadio[0].checked).toBe(true);
+      // Disabled and not hidden, so the group reads as two choices with one not
+      // yet available (section 7).
+      expect(shopRadio[1].disabled).toBe(true);
+
+      expect(text(fixture, '.shops .is-muted')).toBe('basket.view.shop.none');
+      expect(text(fixture, '.shops .pick')).toBe('basket.view.shop.choose');
+    });
+
+    it('draws the chain, the shop and Change once one is picked', () => {
+      const { fixture, view } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      view.setShop('s-merca');
+      fixture.detectChanges();
+
+      expect(text(fixture, '.shops .choice-body .choice-title')).toBe(
+        'Mercadona'
+      );
+      expect(text(fixture, '.shops .choice-body .choice-hint')).toBe(
+        'Ronda de los Tejares 32'
+      );
+      expect(text(fixture, '.shops .pick')).toBe('basket.view.shop.change');
+
+      const shopRadio = fixture.debugElement
+        .queryAll(By.css('input[name="basket-shop"]'))
+        .map((node) => node.nativeElement as HTMLInputElement);
+      expect(shopRadio[1].disabled).toBe(false);
+      expect(shopRadio[1].checked).toBe(true);
+    });
+
+    /**
+     * The radio switches the two views without opening the picker.
+     *
+     * Somebody comparing "what does this shop charge" with "what is the cheapest"
+     * should not have to choose the shop again on the way back.
+     */
+    it('switches between the two without leaving the sheet', () => {
+      const { fixture, view, sheets } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      view.setShop('s-merca');
+      fixture.detectChanges();
+
+      fixture.debugElement
+        .queryAll(By.css('input[name="basket-shop"]'))[0]
+        .triggerEventHandler('change', { target: {} });
+      expect(view.shop()).toBeNull();
+
+      fixture.detectChanges();
+      fixture.debugElement
+        .queryAll(By.css('input[name="basket-shop"]'))[1]
+        .triggerEventHandler('change', { target: {} });
+      expect(view.shop()).toBe('s-merca');
+
+      expect(sheets.leaveTo).not.toHaveBeenCalled();
+    });
+
+    /** A guest is told these are "the shops" and never "your shops". */
+    it('says whose shops these are from the locations the server sent', () => {
+      const { fixture } = render({
+        lines: GUEST_LINES,
+        scopes: [scope('s-merca', 'Mercadona')],
+      });
+
+      expect(text(fixture, '.shops .choice-title')).toBe(
+        'basket.view.shop.anyGuest'
+      );
+    });
+
+    /** Change leaves for the picker with `leaveTo`, so nothing is stacked. */
+    it('leaves for the shop picker rather than pushing it', () => {
+      const { fixture, sheets } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      fixture.debugElement.query(By.css('.shops .pick')).nativeElement.click();
+
+      expect(sheets.dismiss).not.toHaveBeenCalled();
+      expect(sheets.leaveTo).toHaveBeenCalledWith(
+        `/en/shopping-lists/${BASKET_ID}/sheet/filter/shop`
+      );
+    });
   });
 });
+
+/** The first match's trimmed text, which is what most of these assert on. */
+function text(
+  fixture: ReturnType<typeof render>['fixture'],
+  selector: string
+): string {
+  const node = fixture.debugElement.query(By.css(selector));
+  return (
+    (node?.nativeElement as HTMLElement | undefined)?.textContent?.trim() ?? ''
+  );
+}

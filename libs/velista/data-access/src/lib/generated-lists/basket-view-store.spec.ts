@@ -851,3 +851,128 @@ describe('BasketViewStore, what the sheet remembers', () => {
     expect(harnessed.view.lists()).toBeNull();
   });
 });
+
+/**
+ * The chosen shop, named (velista `0078`, sections 3 and 5).
+ *
+ * Resolved here rather than in the sheet, because the chip row on the page behind it
+ * says the same word: two places resolving a `LocalizedName` is two places to forget
+ * the reader's language changed.
+ */
+describe('BasketViewStore: the chosen shop', () => {
+  const basket: readonly BasketLine[] = [
+    onLists('l-1', 'Milk', ['l-groceries']),
+    onLists('l-2', 'Bread', ['l-weekly']),
+  ];
+
+  /** Mercadona with two shops, and Dia with none: an owner's basket and a guest's. */
+  function shops(harnessed: Harness): Harness {
+    harnessed.scopes.set(
+      new Map([
+        [
+          'scope-mercadona',
+          {
+            priceScopeId: 'scope-mercadona',
+            supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+            locations: [
+              {
+                id: 'loc-tejares',
+                label: null,
+                address: 'Ronda de los Tejares 32',
+                city: 'Córdoba',
+                postalCode: '14008',
+              },
+              {
+                id: 'loc-barcelona',
+                label: null,
+                address: 'Avenida de Barcelona 4',
+                city: 'Córdoba',
+                postalCode: '14001',
+              },
+            ],
+          },
+        ],
+        [
+          'scope-dia',
+          {
+            priceScopeId: 'scope-dia',
+            supermarketName: { en: 'Dia', es: 'Dia' },
+            locations: [],
+          },
+        ],
+      ])
+    );
+    return harnessed;
+  }
+
+  it('offers every scope the basket was priced at', () => {
+    const harnessed = shops(harness(basket));
+
+    expect(
+      harnessed.view.priceScopes().map((held) => held.priceScopeId)
+    ).toEqual(['scope-mercadona', 'scope-dia']);
+  });
+
+  it('names the chain and the scope’s first shop', () => {
+    const harnessed = shops(harness(basket));
+
+    harnessed.view.setShop('scope-mercadona');
+
+    // The first of two, which is `0062` section 5.1's rule for a place with
+    // several locations: any of them is where the price comes from, and a list of
+    // addresses answers a question the sheet cannot answer anyway.
+    expect(harnessed.view.chosenShop()).toEqual({
+      priceScopeId: 'scope-mercadona',
+      chain: 'Mercadona',
+      shop: 'Ronda de los Tejares 32',
+    });
+  });
+
+  it('names no shop for a scope the reader was sent none of', () => {
+    const harnessed = shops(harness(basket));
+
+    harnessed.view.setShop('scope-dia');
+
+    expect(harnessed.view.chosenShop()?.shop).toBeNull();
+  });
+
+  it('names nothing for a shop this basket was not priced at', () => {
+    const harnessed = shops(harness(basket));
+
+    harnessed.view.setShop('scope-gone');
+
+    expect(harnessed.view.chosenShop()).toBeNull();
+  });
+
+  /**
+   * The chip is the **chain** and never the shop: the chip row is one line on a 390
+   * wide phone, and "Mercadona" is what distinguishes this view from the default
+   * while a street name distinguishes one Mercadona from another.
+   */
+  it('chips the chain’s name alone', () => {
+    const harnessed = shops(harness(basket));
+
+    harnessed.view.setShop('scope-mercadona');
+
+    expect(harnessed.view.chips()).toEqual([
+      {
+        property: 'shop',
+        key: 'basket.view.chip.shop',
+        args: { name: 'Mercadona' },
+      },
+    ]);
+  });
+
+  /**
+   * Section 5.1, and what staging and production are actually in: a shop nobody has
+   * priced marks nothing, so the rows quote the cheapest exactly as they did.
+   */
+  it('quotes no shop until one of them prices something on the basket', () => {
+    const harnessed = shops(harness(basket));
+
+    harnessed.view.setShop('scope-mercadona');
+
+    // Nothing in this basket's products carries an offer at all.
+    expect(harnessed.view.pricedShop()).toBeNull();
+  });
+});

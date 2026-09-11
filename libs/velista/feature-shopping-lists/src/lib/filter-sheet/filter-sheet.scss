@@ -89,6 +89,38 @@
   accent-color: var(--app-action-bg);
 }
 
+// The shop row's label, which is everything in it except the Change button
+// (velista `0078`): the button sits outside so its tap is not the radio's.
+.choice-pick {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+  cursor: pointer;
+}
+
+// Change and Choose: a text button in the quiet action role, the same treatment
+// Reset takes in the title row above.
+.pick {
+  @include shared.tap-target;
+
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+// "One shop", before a shop has been chosen. Muted, beside a disabled radio, so
+// the row says what it is without pretending to be an option yet.
+.is-muted {
+  color: var(--app-text-muted);
+}
+
 .choice-body {
   display: flex;
   flex: 1;

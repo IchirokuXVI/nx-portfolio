@@ -161,3 +161,54 @@ describe('toBasketView: prices and places (velista 0062)', () => {
     expect(view?.products.get('i-milk')?.offer).toBeNull();
   });
 });
+
+/**
+ * Every scope's offer, per product (velista `0078`, section 2; backend `0109`).
+ *
+ * `bestOffer` is unchanged and still the cheapest. What is new is the list beside
+ * it, which is what lets a row say what **this** shop charges rather than what the
+ * cheapest of five does.
+ */
+describe('toBasketView: every scope’s offer (velista 0078)', () => {
+  const DIA = { ...OFFER, priceScopeId: 'scope-b', price: 0.79 };
+
+  it('reads every offer into a list, in the order the read sent them', () => {
+    const view = basket({
+      products: [{ ...PRODUCT, bestOffer: DIA, offers: [DIA, OFFER] }],
+    });
+
+    expect(
+      view?.products
+        .get('i-milk')
+        ?.offers.map((offer) => [offer.priceScopeId, offer.price])
+    ).toEqual([
+      ['scope-b', 0.79],
+      ['scope-a', 0.95],
+    ]);
+  });
+
+  it('reads a missing `offers` key as an empty list', () => {
+    // Every caller but the basket read asks for `best`, and so does an older
+    // gateway. Empty draws as a basket nobody has priced rather than as a basket
+    // nothing is listed in, which is the only safe direction.
+    const view = basket({ products: [{ ...PRODUCT, bestOffer: OFFER }] });
+
+    expect(view?.products.get('i-milk')?.offers).toEqual([]);
+  });
+
+  it('drops an offer that names no scope', () => {
+    // The rule `bestOffer` already follows: a price that cannot say where it came
+    // from cannot be attributed to a shop, and every use of this list is an
+    // attribution.
+    const view = basket({
+      products: [
+        {
+          ...PRODUCT,
+          offers: [DIA, { ...OFFER, priceScopeId: undefined }],
+        },
+      ],
+    });
+
+    expect(view?.products.get('i-milk')?.offers).toHaveLength(1);
+  });
+});

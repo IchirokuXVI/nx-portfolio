@@ -718,19 +718,24 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the five sheets over the basket, and no units sheet', () => {
-      // Velista `0073`, test 11, and `0075`, test 10. There were six, then four:
-      // `lines/:lineId/list` went with the send sheet it drew (`0068`), which folded
-      // every list into the units sheet; `lines/:lineId/units` went with the units
-      // sheet itself, whose rows are now drawn on the settle sheet under the product.
-      // Nothing in the app declares a sheet over a sheet any more. `sheet/filter` is
-      // the fifth, and the first that is about the screen rather than the basket.
+    it('offers the six sheets over the basket, and no units sheet', () => {
+      // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
+      // six, then four: `lines/:lineId/list` went with the send sheet it drew
+      // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
+      // went with the units sheet itself, whose rows are now drawn on the settle
+      // sheet under the product. Nothing in the app declares a sheet over a sheet
+      // any more, and `sheet/filter/shop` is no exception: it is a **sibling** of
+      // `sheet/filter`, which it replaces with `leaveTo` rather than covering.
+      //
+      // The longer path is declared first, which is this table's rule wherever two
+      // paths share a prefix.
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
           'sheet/lines/:lineId/settle',
           'sheet/people',
           'sheet/share',
           'sheet/finish',
+          'sheet/filter/shop',
           'sheet/filter',
         ]
       );
@@ -754,7 +759,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(5);
+      expect(sheets).toHaveLength(6);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -885,9 +890,9 @@ describe('the sheets and their exit animation', () => {
     //
     // It was twenty nine until velista `0068` deleted the send sheet, and twenty eight
     // until `0073` deleted the units sheet: its rows are drawn on the settle sheet
-    // under the product now. `0075` added the basket's filter sheet, which takes it
-    // back to twenty eight.
-    expect(sheets).toHaveLength(28);
+    // under the product now. `0075` added the basket's filter sheet, which took it
+    // back to twenty eight, and `0078` added the shop picker beside it.
+    expect(sheets).toHaveLength(29);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

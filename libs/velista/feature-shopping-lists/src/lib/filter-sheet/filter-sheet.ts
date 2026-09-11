@@ -1,10 +1,19 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketViewStore } from '@portfolio/velista/data-access';
+import {
+  BasketViewStore,
+  type BasketChosenShop,
+} from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   type BasketGrouping,
@@ -15,7 +24,7 @@ import {
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
-import { basketPath } from '../basket-paths';
+import { basketPath, shopPickerPath } from '../basket-paths';
 
 /**
  * How the basket is ordered, grouped and narrowed (velista `0075`, section 4).
@@ -43,14 +52,19 @@ import { basketPath } from '../basket-paths';
  * decides, which is the rule `0044` section 4.1 set for the row's "from" caption and
  * the reason a redaction cannot be got wrong in one place and right in another.
  *
- * ## What is not here
+ * ## PRICES FROM, and the sheet this one leaves for
  *
- * **PRICES FROM is `0078`'s** and absent until then: it needs one offer per scope,
- * which the basket read does not yet carry (backend `0109`). The GROUP BY radios
- * exist and set the state, and `0077` is what makes category and list cut the lines
- * up; until it lands, choosing one changes the chip row and nothing else. That is
- * deliberate rather than half done: the state has to travel before anything can act
- * on it, and `0076` stores it.
+ * The section is drawn from the data too (velista `0078`, section 3): a basket with
+ * no price scopes has no section, which covers a run scoped by hand, a profile since
+ * deleted and a gateway that failed to price the read. Its second radio is disabled
+ * until a shop is known, rather than hidden, so the group reads as two choices with
+ * one not yet available.
+ *
+ * Choosing **which** shop is a sheet of its own, because a profile can hold fifty of
+ * them. Change goes there with `leaveTo` and the picker comes back the same way, so
+ * this sheet is never pushed under that one and the back gesture from the picker
+ * lands here exactly once (`0031`). That is also why nothing here is a draft: a
+ * component holding one would not survive the trip.
  */
 @Component({
   selector: 'lib-filter-sheet',
@@ -73,6 +87,52 @@ export class FilterSheet {
   protected readonly grouping = this._view.grouping;
   protected readonly sourceLists = this._view.sourceLists;
   protected readonly keptLists = this._view.keptLists;
+  private readonly _chosenShop = this._view.chosenShop;
+
+  /**
+   * The shop the second radio offers, which outlives choosing the first one.
+   *
+   * `setShop(null)` **forgets** the shop rather than remembering a null, which is
+   * `0076`'s rule and the right one for the next basket. It is the wrong one for the
+   * next tap: somebody comparing this shop's prices with the cheapest would have to
+   * choose the shop again every time they came back, from a row that had gone back
+   * to reading "One shop". So the row this sheet draws is held here while the sheet
+   * is open, and the state stays exactly as `0076` wants it.
+   *
+   * It does not survive the sheet, and it should not: what a device remembers about
+   * a shop is `0076`'s answer, and this is a control, not a memory.
+   */
+  private readonly _lastShop = signal<BasketChosenShop | null>(null);
+
+  /** What the second radio says, whether or not it is the chosen one right now. */
+  protected readonly shopRow = computed(
+    () => this._chosenShop() ?? this._lastShop()
+  );
+
+  /** Whether prices come from that shop, which is which radio is checked. */
+  protected readonly oneShop = computed(() => this._chosenShop() !== null);
+
+  /**
+   * Whether this basket was priced anywhere, which decides the whole section
+   * (velista `0078`, section 3).
+   *
+   * The data decides, as it does for the LISTS section above: a basket with no
+   * scopes has no shops to choose between, so there is no radio group rather than a
+   * radio group offering one choice.
+   */
+  protected readonly hasShops = () => this._view.priceScopes().length > 0;
+
+  /**
+   * Whether the shopper is told these are **their** shops.
+   *
+   * A reader the server sent no locations to is a guest, and a guest's basket is
+   * priced at somebody else's shops (`0066`, section 5). The question is asked of
+   * the data rather than of the participant kind, which is the same test the shop
+   * picker uses to decide it draws chain buttons and no addresses, so the two cannot
+   * disagree about whose shops these are.
+   */
+  protected readonly ownShops = () =>
+    this._view.priceScopes().some((scope) => scope.locations.length > 0);
 
   /**
    * How many lines the page is showing, for the footer button.
@@ -112,6 +172,39 @@ export class FilterSheet {
   protected toggleList(listId: string, event: Event): void {
     this._view.toggleList(listId);
     (event.target as HTMLInputElement).checked = this.keptLists().has(listId);
+  }
+
+  /**
+   * The cheapest of the shopper's shops, which is what every basket opens on.
+   *
+   * The shop is held on the way out (see {@link _lastShop}) so that the radio beside
+   * this one keeps offering it: switching between the two views is the gesture this
+   * section exists for, and it must not cost a trip to the picker each time.
+   */
+  protected setAnyShop(): void {
+    this._lastShop.set(this._chosenShop());
+    this._view.setShop(null);
+  }
+
+  /** Prices from the shop the row names, without opening the picker. */
+  protected setOneShop(): void {
+    const shop = this.shopRow();
+    if (shop !== null) {
+      this._view.setShop(shop.priceScopeId);
+    }
+  }
+
+  /**
+   * Leave for the shop picker, which is Change and Choose both.
+   *
+   * `leaveTo` and not a push: this sheet is replaced rather than covered, so the
+   * picker's own way back reaches it once rather than falling through two sheets
+   * (`0031`). Nothing is lost by it, because every control here has already applied.
+   */
+  protected openPicker(): void {
+    void this._sheet.leaveTo(
+      shopPickerPath(this._locale(), this._basePath, this._generatedListId())
+    );
   }
 
   protected reset(): void {

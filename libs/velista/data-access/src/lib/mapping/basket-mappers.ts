@@ -471,6 +471,14 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         size: typeof raw['unitSize'] === 'number' ? raw['unitSize'] : null,
         unit: nullableStr(raw['defaultUnit']),
         offer: toProductOffer(raw['bestOffer']),
+        // Every scope's offer (velista `0078`, section 2). Absent for every caller
+        // but the basket read, which is the only one that asks backend `0109` for
+        // `offers: 'all'`, and absent from an older gateway; both map to an empty
+        // list, which draws as a basket nobody has priced rather than as a basket
+        // nothing is listed in. An entry with no scope id is dropped by
+        // `toProductOffer`, since a price nothing can be attributed to is a price no
+        // shop charges.
+        offers: mapArray(raw['offers'], toProductOffer),
         // One wire value into a one element list (velista `0077`, section 2). The
         // field is required on `ItemView` and has been since the catalog existed, so
         // the fallback covers a thirteenth category rather than an older backend,

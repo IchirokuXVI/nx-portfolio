@@ -2,11 +2,13 @@ import { matchesBasketLine } from './basket-search';
 import type {
   BasketLine,
   BasketLineOrigin,
+  BasketPriceScope,
   BasketProduct,
   BasketProgress,
 } from './basket-view';
-import { basketLinesProgress } from './basket-view';
+import { basketLinesProgress, offerAt } from './basket-view';
 import type { ProductCategory } from './enums';
+import { inLocale } from './shopping-profile';
 
 /**
  * How the basket's lines are ordered (velista `0075`, section 2).
@@ -78,7 +80,66 @@ export interface BasketViewContext {
    * nobody can read.
    */
   readonly listNames: ReadonlyMap<string, string>;
+  /**
+   * The scopes the basket was priced at, by scope id (velista `0078`, section 5).
+   *
+   * Read for one thing only, the **chain's name**, which every mark this pipeline
+   * writes has to say: "1.99 € at Dia" is a sentence and "1.99 € at
+   * 7f3c…" is not. Empty for a basket the gateway could not name the scopes of,
+   * which draws no marks at all rather than marks naming nobody.
+   */
+  readonly scopes: ReadonlyMap<string, BasketPriceScope>;
 }
+
+/**
+ * What one row says about the chosen shop's price, beside the price itself
+ * (velista `0078`, section 5).
+ *
+ * Null on most rows, which is the ordinary case: the shop lists the product and
+ * nowhere else is cheaper, so the caption is a name and a number exactly as `0062`
+ * drew it.
+ *
+ * The type `0075` declined to invent. It is a union rather than a record of
+ * nullable halves because the two marks are two different sentences and a row draws
+ * one of them: an "unlisted" that also carried a "cheaper elsewhere" would be a
+ * state nothing can render.
+ *
+ * The strings are **resolved**, not keys with data hanging off them: the chain's
+ * name is server data in the reader's language, and `inLocale` needs a locale the
+ * page has no business re-deriving per row. What is left to the page is the
+ * sentence around them, which is a translation key.
+ */
+export type BasketRowMark =
+  /**
+   * The chosen shop lists it, and another of the basket's shops is cheaper.
+   *
+   * A decision the shopper faces rather than a fault, which is why it is drawn in
+   * the attention role (`0002`, section 4.4) and never in a danger one.
+   */
+  | {
+      readonly kind: 'cheaper';
+      readonly price: number;
+      readonly currency: string | null;
+      /** The chain quoting it. The shop is not named: `0062`, section 5.1. */
+      readonly chain: string;
+    }
+  /**
+   * The chosen shop does not list it, and this line has sunk.
+   *
+   * {@link elsewhere} is the cheapest price anybody else on this basket quotes,
+   * which is often the thing that decides whether to walk across the road, and null
+   * when nobody quotes one. The line is still a line to buy either way.
+   */
+  | {
+      readonly kind: 'unlisted';
+      /** The chosen shop's chain, so the sentence names where it is missing from. */
+      readonly chain: string;
+      readonly elsewhere: {
+        readonly price: number;
+        readonly currency: string | null;
+        readonly chain: string;
+      } | null;
+    };
 
 /** One drawn row. A line, and under `grouping: 'list'` the origin it is drawn for. */
 export interface BasketViewRow {
@@ -100,6 +161,15 @@ export interface BasketViewRow {
    * under every other grouping, where a row is the line itself.
    */
   readonly origin: BasketLineOrigin | null;
+  /**
+   * What this row says about the chosen shop, or null (velista `0078`, section 5).
+   *
+   * Decided here rather than by the row, because the **sink** is decided here and
+   * the two are one answer: a line the shop does not list is marked and moved, and
+   * a component working the first half out for itself is a second place for them to
+   * disagree. Null on every row while no shop is chosen.
+   */
+  readonly mark: BasketRowMark | null;
 }
 
 /**
@@ -114,8 +184,18 @@ export interface BasketViewRow {
  * it wrong for one whose list is called "Dairy".
  */
 export type BasketViewHeading =
-  /** Words this app wrote, resolved by the page: the categories and both sinks. */
-  | { readonly kind: 'key'; readonly key: string }
+  /**
+   * Words this app wrote, resolved by the page: the categories and every sink.
+   *
+   * {@link args} is what the sentence interpolates, and it exists for `0078`'s
+   * sink alone: "Not listed at Mercadona" names a chain, which is data, inside a
+   * sentence this app owns. Absent on every other heading, which takes none.
+   */
+  | {
+      readonly kind: 'key';
+      readonly key: string;
+      readonly args?: Readonly<Record<string, string>>;
+    }
   /** Words somebody else wrote, drawn as they are: a list's own name. */
   | { readonly kind: 'text'; readonly text: string };
 
@@ -161,6 +241,9 @@ const NO_LIST_SECTION_KEY = 'no-list';
 /** The sink holding every line with no product to take a category from (`0077`). */
 const NO_CATEGORY_SECTION_KEY = 'no-category';
 
+/** The sink holding the lines the chosen shop does not list (`0078`, section 5). */
+const NOT_LISTED_SECTION_KEY = 'not-listed';
+
 /**
  * Turn a basket's lines into the sections a page draws (velista `0075`,
  * section 3).
@@ -178,19 +261,211 @@ const NO_CATEGORY_SECTION_KEY = 'no-category';
  * Reversing the last two would let a group impose an order the shopper did not
  * choose.
  *
- * ## What is not here yet
+ * ## The sink is part of the order, and that is why it is second
  *
- * `0078`'s sink for a shop that does not list a line, which is why
- * {@link BasketViewState.shop} is carried here and never read.
+ * A line the chosen shop does not list goes last (velista `0078`, section 5), and
+ * it goes last **before** anything is cut up, which is one partition rather than one
+ * per section. Grouping then keeps it: the sunk lines are already at the end of the
+ * array, so each category and each list ends with its own, in the order they were
+ * in. Sinking after grouping would need the rule written once per grouping, and the
+ * three copies would eventually disagree.
  */
 export function composeBasketView(
   lines: readonly BasketLine[],
   state: BasketViewState,
   context: BasketViewContext
 ): readonly BasketViewSection[] {
+  // Over the whole basket rather than over what survived the filter: a search that
+  // hides eight rows must not change what the ninth says about the shop, and the
+  // "has this shop priced anything" test below is a fact about the basket.
+  const prices = priceView(lines, state, context);
   const kept = filterLines(lines, state, context);
   const ordered = orderLines(kept, state, context);
-  return groupLines(ordered, state, context);
+  const sunk = sinkUnlisted(ordered, prices);
+  return groupLines(sunk, state, context, prices);
+}
+
+/**
+ * What the chosen shop makes of this basket: a mark per line, and which lines sank.
+ *
+ * Null wherever no marking may be drawn, and there are three such cases rather than
+ * one. No shop is chosen, which is the default and the ordinary state of the screen.
+ * A shop this basket was not priced at, which is a remembered choice against a
+ * basket that has changed (`0076`) and cannot say anything about it. And **a scope
+ * that lists nothing on this basket**, which is velista `0078` section 5.1 and is
+ * the one that matters in the world as it is today: staging and production carry no
+ * prices at all, a profile's shops exist whether or not the harvester has reached
+ * them, and a shop nobody has priced is not a shop that stocks nothing. Marking
+ * every line "not listed at Mercadona" there would be the app inventing a fact.
+ */
+interface PriceView {
+  /** The chosen shop's chain, in the reader's language, for every sentence here. */
+  readonly chain: string;
+  /** One mark per line that has one. A line absent from it draws nothing. */
+  readonly marks: ReadonlyMap<string, BasketRowMark>;
+  /** The lines this shop does not list, which sink and are marked. */
+  readonly unlisted: ReadonlySet<string>;
+}
+
+function priceView(
+  lines: readonly BasketLine[],
+  state: BasketViewState,
+  context: BasketViewContext
+): PriceView | null {
+  const shop = basketPricedScope(lines, state, context);
+  if (shop === null) {
+    return null;
+  }
+
+  const scope = context.scopes.get(shop);
+  if (scope === undefined) {
+    return null;
+  }
+
+  const chain = inLocale(scope.supermarketName, context.locale);
+  const picked = lines.map((line) => pickOf(line, context));
+  const marks = new Map<string, BasketRowMark>();
+  const unlisted = new Set<string>();
+
+  for (const [index, line] of lines.entries()) {
+    const product = picked[index];
+    if (product === undefined) {
+      // No pick, or a pick the catalog can no longer resolve. There is nothing to
+      // be unlisted, so the row says nothing and never sinks.
+      continue;
+    }
+
+    const here = offerAt(product, shop);
+    const best = cheapestElsewhere(product, shop, context);
+
+    if (here === null) {
+      unlisted.add(line.id);
+      marks.set(line.id, { kind: 'unlisted', chain, elsewhere: best });
+      continue;
+    }
+
+    // A scope can carry a product with no number on it, which is listed and
+    // unpriced. Nothing can be called cheaper than a price that does not exist.
+    if (here.price !== null && best !== null && best.price < here.price) {
+      marks.set(line.id, {
+        kind: 'cheaper',
+        price: best.price,
+        currency: best.currency,
+        chain: best.chain,
+      });
+    }
+  }
+
+  return { chain, marks, unlisted };
+}
+
+/**
+ * The scope every row on this screen quotes, or null for the cheapest anywhere
+ * (velista `0078`, sections 5 and 5.1).
+ *
+ * Exported because the **row** needs the same answer the pipeline needs: it draws
+ * `offerAt(pick, this)` where it used to draw the cheapest, and a row that read
+ * `BasketViewState.shop` directly would quote nothing at all on a basket where this
+ * says null. One question, so the price a row shows and the marks the pipeline
+ * writes cannot come from different shops.
+ *
+ * Three ways to answer null, and the third is the one that matters today. No shop is
+ * chosen. A shop this basket was not priced at, which a remembered choice can be
+ * (`0076`). Or **a shop that lists nothing on this basket**: staging and production
+ * carry no prices, a profile's shops exist whether or not the harvester has reached
+ * them, and a shop nobody has priced is not a shop that stocks nothing. One priced
+ * product is enough to say the harvester has been to this chain, which is what makes
+ * its silence about the rest worth drawing.
+ */
+export function basketPricedScope(
+  lines: readonly BasketLine[],
+  state: BasketViewState,
+  context: Pick<BasketViewContext, 'products' | 'scopes'>
+): string | null {
+  const shop = state.shop;
+  if (shop === null || !context.scopes.has(shop)) {
+    return null;
+  }
+
+  const priced = lines.some(
+    (line) => offerAt(pickOf(line, context), shop) !== null
+  );
+  return priced ? shop : null;
+}
+
+/** The product a line means, or undefined for a line that means none. */
+function pickOf(
+  line: BasketLine,
+  context: Pick<BasketViewContext, 'products'>
+): BasketProduct | undefined {
+  const pickId = line.pickId;
+  return pickId === null ? undefined : context.products.get(pickId);
+}
+
+/**
+ * The cheapest price any **other** scope on this basket quotes, and who quotes it.
+ *
+ * A minimum rather than the first entry, although backend `0109` sorts them cheapest
+ * first: an ordering promised by a response is not one this file can be held to, and
+ * the scan is over a handful of offers.
+ *
+ * A scope {@link BasketViewContext.scopes} cannot name is skipped rather than drawn
+ * with its id. "1.99 € at 7f3c…" is not a sentence, and the offer it came
+ * from is still counted by nothing else on the screen.
+ */
+function cheapestElsewhere(
+  product: BasketProduct,
+  shop: string,
+  context: BasketViewContext
+): { price: number; currency: string | null; chain: string } | null {
+  let best: { price: number; currency: string | null; chain: string } | null =
+    null;
+
+  for (const offer of product.offers) {
+    if (offer.priceScopeId === shop || offer.price === null) {
+      continue;
+    }
+    const scope = context.scopes.get(offer.priceScopeId);
+    if (scope === undefined) {
+      continue;
+    }
+    if (best === null || offer.price < best.price) {
+      best = {
+        price: offer.price,
+        currency: offer.currency,
+        chain: inLocale(scope.supermarketName, context.locale),
+      };
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Put the lines the chosen shop does not list at the end, keeping their order.
+ *
+ * A stable partition and not a sort, so two sunk lines come out in the order the
+ * step before put them in, and so does everything above them. By identity when
+ * nothing sank, which is every basket until somebody picks a shop.
+ */
+function sinkUnlisted(
+  lines: readonly BasketLine[],
+  prices: PriceView | null
+): readonly BasketLine[] {
+  if (prices === null || prices.unlisted.size === 0) {
+    return lines;
+  }
+
+  const held: BasketLine[] = [];
+  const sunk: BasketLine[] = [];
+  for (const line of lines) {
+    if (prices.unlisted.has(line.id)) {
+      sunk.push(line);
+    } else {
+      held.push(line);
+    }
+  }
+  return [...held, ...sunk];
 }
 
 /** Step one: the search, and then the lists. */
@@ -269,15 +544,16 @@ function orderLines(
 function groupLines(
   lines: readonly BasketLine[],
   state: BasketViewState,
-  context: BasketViewContext
+  context: BasketViewContext,
+  prices: PriceView | null
 ): readonly BasketViewSection[] {
   if (state.grouping === 'category') {
-    return byCategory(lines, context);
+    return byCategory(lines, context, prices);
   }
   if (state.grouping === 'list') {
-    return byList(lines, context);
+    return byList(lines, context, prices);
   }
-  return ungrouped(lines, state);
+  return ungrouped(lines, state, prices);
 }
 
 /**
@@ -291,19 +567,29 @@ function groupLines(
  * It exists only while the list filter is on. With no filter the basket is drawn in
  * the order the shopper walks and nothing else, and pulling the aisle's own lines
  * to the bottom under a heading would be a reordering nobody asked for.
+ *
+ * ## Two sinks, and the shop's is last and wins
+ *
+ * `0078`'s sink is unconditional, unlike the one above it: it is drawn whenever a
+ * shop is chosen and something sank, because a shopper who asked for one shop's
+ * prices asked exactly this question. A line that is both unlisted **and** on no
+ * list goes to the shop's sink, which is the more useful of the two sentences to
+ * somebody standing in the shop, and puts the line in one place rather than
+ * splitting the unlisted lines across two headings.
  */
 function ungrouped(
   lines: readonly BasketLine[],
-  state: BasketViewState
+  state: BasketViewState,
+  prices: PriceView | null
 ): readonly BasketViewSection[] {
-  if (state.lists === null) {
-    return [section(ALL_SECTION_KEY, null, null, rowsOf(lines), false)];
-  }
-
   const onAList: BasketLine[] = [];
   const onNoList: BasketLine[] = [];
+  const notListed: BasketLine[] = [];
+
   for (const line of lines) {
-    if (isOnNoList(line)) {
+    if (prices !== null && prices.unlisted.has(line.id)) {
+      notListed.push(line);
+    } else if (state.lists !== null && isOnNoList(line)) {
       onNoList.push(line);
     } else {
       onAList.push(line);
@@ -311,10 +597,15 @@ function ungrouped(
   }
 
   const sections = [
-    section(ALL_SECTION_KEY, null, null, rowsOf(onAList), false),
+    section(ALL_SECTION_KEY, null, null, rowsOf(onAList, prices), false),
   ];
   if (onNoList.length > 0) {
-    sections.push(noListSection(rowsOf(onNoList), false));
+    sections.push(noListSection(rowsOf(onNoList, prices), false));
+  }
+  if (notListed.length > 0 && prices !== null) {
+    sections.push(
+      notListedSection(prices.chain, rowsOf(notListed, prices), false)
+    );
   }
   return sections;
 }
@@ -347,7 +638,8 @@ function ungrouped(
  */
 function byCategory(
   lines: readonly BasketLine[],
-  context: BasketViewContext
+  context: BasketViewContext,
+  prices: PriceView | null
 ): readonly BasketViewSection[] {
   // Insertion ordered, which is what makes a section's place its first line's
   // place. A `Map` guarantees that; an object keyed on the same strings would not.
@@ -379,7 +671,7 @@ function byCategory(
         `category:${category}`,
         { kind: 'key', key: `basket.category.${category}` },
         null,
-        rowsOf(held),
+        rowsOf(held, prices),
         true
       )
     );
@@ -391,7 +683,7 @@ function byCategory(
         NO_CATEGORY_SECTION_KEY,
         { kind: 'key', key: 'basket.group.noCategory' },
         'basket.group.noCategoryHint',
-        rowsOf(noCategory),
+        rowsOf(noCategory, prices),
         true
       )
     );
@@ -427,7 +719,8 @@ function byCategory(
  */
 function byList(
   lines: readonly BasketLine[],
-  context: BasketViewContext
+  context: BasketViewContext,
+  prices: PriceView | null
 ): readonly BasketViewSection[] {
   const lists = new Map<string, BasketViewRow[]>();
   const unplaceable: BasketLine[] = [];
@@ -453,6 +746,7 @@ function byList(
         key: origin.id,
         line,
         origin,
+        mark: prices?.marks.get(line.id) ?? null,
       };
       const held = lists.get(origin.listId);
       if (held === undefined) {
@@ -470,7 +764,7 @@ function byList(
   const sections: BasketViewSection[] = [];
   if (unplaceable.length > 0) {
     sections.push(
-      section(ALL_SECTION_KEY, null, null, rowsOf(unplaceable), true)
+      section(ALL_SECTION_KEY, null, null, rowsOf(unplaceable, prices), true)
     );
   }
 
@@ -489,7 +783,7 @@ function byList(
   }
 
   if (onNoList.length > 0) {
-    sections.push(noListSection(rowsOf(onNoList), true));
+    sections.push(noListSection(rowsOf(onNoList, prices), true));
   }
 
   return sections;
@@ -522,9 +816,39 @@ function noListSection(
   );
 }
 
+/**
+ * The sink for the lines the chosen shop does not list (`0078`, section 5).
+ *
+ * The chain is in the heading rather than only on each row, because the section is
+ * the answer to "what does this shop not have" and a heading reading "Not listed"
+ * would leave a reader who scrolled to it asking where. It is data inside a sentence
+ * this app owns, which is what {@link BasketViewHeading}'s `args` is for.
+ */
+function notListedSection(
+  chain: string,
+  rows: readonly BasketViewRow[],
+  counted: boolean
+): BasketViewSection {
+  return section(
+    NOT_LISTED_SECTION_KEY,
+    { kind: 'key', key: 'basket.group.notListed', args: { chain } },
+    'basket.group.notListedHint',
+    rows,
+    counted
+  );
+}
+
 /** A run of lines as rows about themselves, which is every grouping but by list. */
-function rowsOf(lines: readonly BasketLine[]): readonly BasketViewRow[] {
-  return lines.map((line) => ({ key: line.id, line, origin: null }));
+function rowsOf(
+  lines: readonly BasketLine[],
+  prices: PriceView | null
+): readonly BasketViewRow[] {
+  return lines.map((line) => ({
+    key: line.id,
+    line,
+    origin: null,
+    mark: prices?.marks.get(line.id) ?? null,
+  }));
 }
 
 /**

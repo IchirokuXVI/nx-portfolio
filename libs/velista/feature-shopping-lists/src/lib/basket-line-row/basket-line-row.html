@@ -100,7 +100,31 @@
       "best price" badge here; that comparison is the pick sheet's.
     -->
     @if (productName(); as product) {
-      <span class="product">{{ product }}</span>
+      <!--
+        The name, the price, and what this shop makes of it (velista 0078,
+        section 5). Three pieces on one caption line rather than three lines: a row
+        with a mark and a row without must be the same height, or the list jumps as
+        somebody switches shops.
+
+        The mark is **words** and the colour is never the only carrier. "Cheaper
+        elsewhere" is a decision the shopper faces rather than a fault, so it takes
+        the attention role (`0002`, section 4.4); "not listed" is a fact about the
+        shop, so it is only a shade brighter than the caption it sits in.
+      -->
+      <span class="product">
+        <span>{{ product }}</span>
+        @if (productPrice(); as price) {
+          <span> · {{ price }}</span>
+        }
+        @if (markCaption(); as mark) {
+          <span
+            [class.is-cheaper]="this.mark()?.kind === 'cheaper'"
+            [class.is-unlisted]="this.mark()?.kind === 'unlisted'"
+          >
+            · {{ mark }}</span
+          >
+        }
+      </span>
     } @else if (line().optionIds.length > 0) {
       <span class="product is-missing">{{
         'basket.product.none' | rokuT

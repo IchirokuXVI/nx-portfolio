@@ -22,6 +22,20 @@ export interface ShopRow {
   readonly failed: boolean;
 }
 
+/**
+ * What a row's control does (velista `0078`, section 4).
+ *
+ * `exclude` is the screen this list was written for: a checkbox per shop, checked
+ * meaning included, and the three exclusion states beside it. `pick` is the basket's
+ * shop picker, where the same rows answer a different question, "which one am I in",
+ * and the control is therefore a radio in one group.
+ *
+ * One component with a mode rather than two lists, because the row itself is the
+ * same row: the chain leads, the shop's own name follows, the address is under both.
+ * Two copies would drift the moment one of them learned something about a shop.
+ */
+export type ShopListMode = 'exclude' | 'pick';
+
 /** Shops that share a postal code, under the name the profile gave that code. */
 export interface ShopGroup {
   readonly key: string;
@@ -53,6 +67,19 @@ export interface ShopGroup {
  * A row whose brand is refused is disabled rather than hidden, and says so in words. The
  * finer axis never re-admits what the coarser one refused, so a tick here would be a
  * control that appears to work and changes nothing on any screen that reads prices.
+ *
+ * ## Two modes, and why it lives in `ui`
+ *
+ * Velista `0078` asks the same rows a second question, "which shop am I standing in",
+ * and the basket's shop picker is where it asks it. So the row's control is the mode's
+ * (see {@link ShopListMode}) and the component moved out of `feature-account`, which
+ * `feature-shopping-lists` cannot import: a feature library is lazy loaded, and naming
+ * one from another would pull its pages into the wrong bundle.
+ *
+ * The three exclusion states are drawn under `exclude` only. They are facts about a
+ * **profile's** preferences, and the picker is not a screen about preferences: a row
+ * dimmed there would say the shop is refused when what is being asked is where the
+ * reader is.
  */
 @Component({
   selector: 'lib-shop-list',
@@ -73,5 +100,44 @@ export class ShopList {
    */
   readonly grouped = input(true);
 
-  readonly toggle = output<string>();
+  /** Which question the rows ask. See {@link ShopListMode}. */
+  readonly mode = input<ShopListMode>('exclude');
+
+  /** The picked shop under `pick`, so the group has one checked radio. */
+  readonly pickedId = input<string | null>(null);
+
+  /**
+   * A row's checkbox was tapped under `exclude`.
+   *
+   * Named `toggled` and not `toggle`, which is a DOM event a `<details>` fires:
+   * `@angular-eslint/no-output-native` refuses an output that shadows one, and it
+   * is right to, because a host listener for the native event would be caught by
+   * this one instead.
+   */
+  readonly toggled = output<string>();
+
+  /**
+   * A row's radio was chosen under `pick`.
+   *
+   * A second output rather than one that means two things, because the two acts are
+   * not the same act: `toggled` says "include this or do not" and this says "prices
+   * from here". A caller listening for the wrong one would compile.
+   */
+  readonly pick = output<string>();
+
+  /** Whether this row's control is on, which is a different question per mode. */
+  protected isChecked(shop: ShopRow): boolean {
+    return this.mode() === 'pick'
+      ? shop.id === this.pickedId()
+      : !shop.excluded && !shop.excludedChain;
+  }
+
+  /** Report the tap as whichever act this mode's control performs. */
+  protected choose(shopId: string): void {
+    if (this.mode() === 'pick') {
+      this.pick.emit(shopId);
+      return;
+    }
+    this.toggled.emit(shopId);
+  }
 }

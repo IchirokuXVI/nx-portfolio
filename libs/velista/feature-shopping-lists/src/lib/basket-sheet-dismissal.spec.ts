@@ -25,6 +25,7 @@ import { FinishSheet } from './finish-sheet/finish-sheet';
 import { PeopleSheet } from './people-sheet/people-sheet';
 import { SettleSheet } from './settle-sheet/settle-sheet';
 import { ShareSheet } from './share-sheet/share-sheet';
+import { ShopPickerSheet } from './shop-picker-sheet/shop-picker-sheet';
 
 const BASKET_ID = 'b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33';
 const LINE_ID = 'c0ffee00-1111-4222-8333-444455556666';
@@ -56,6 +57,28 @@ const SHEETS: readonly {
   { name: 'ShareSheet', component: ShareSheet, path: 'share', params: {} },
   { name: 'FinishSheet', component: FinishSheet, path: 'finish', params: {} },
   { name: 'FilterSheet', component: FilterSheet, path: 'filter', params: {} },
+];
+
+/**
+ * The sheets opened **from** another sheet, with the one they close onto.
+ *
+ * One row since velista `0078`. It is a separate table because the URL it closes on
+ * is a different URL: the picker is reached from the filter sheet and goes back to
+ * it, and dismissing it onto the basket would take somebody two screens back from
+ * one gesture.
+ */
+const FROM_FILTER: readonly {
+  readonly name: string;
+  readonly component: Type<unknown>;
+  readonly path: string;
+  readonly params: Readonly<Record<string, string>>;
+}[] = [
+  {
+    name: 'ShopPickerSheet',
+    component: ShopPickerSheet,
+    path: 'filter/shop',
+    params: {},
+  },
 ];
 
 /**
@@ -277,16 +300,56 @@ describe('the sheets over the basket', () => {
   });
 
   /**
-   * **There is no sheet over a sheet in the basket any more** (velista `0073`).
+   * The sheets reached **from** another sheet, which close onto that one.
    *
-   * This file used to carry a second table for the sheets reached *from* the settle
-   * sheet, asserting that each closed onto the settle sheet's whole URL rather than
-   * onto the basket two screens down. There were two; `0068` folded the send sheet
-   * into the units sheet, and `0073` folded the units sheet into the settle sheet
-   * itself, so the table has no rows and `describe.each` cannot take an empty one.
+   * This table emptied twice and is back. `0068` folded the send sheet into the units
+   * sheet and `0073` folded the units sheet into the settle sheet, so for two plans
+   * nothing in the basket was opened from a sheet. Velista `0078`'s shop picker is,
+   * and the rule it broke the first time around is the rule here: a sheet opened from
+   * another one closes onto **that** one's whole URL, because closing it onto the
+   * basket would take somebody two screens back from one gesture.
    *
-   * The rule it asserted is not retired, only unreachable: a sheet declared beside
-   * this one and opened from it brings back the table and these three assertions with
-   * it.
+   * The picker is a **sibling** route of the filter sheet rather than its child, and
+   * the two replace each other with `leaveTo`, so neither is ever drawn over the
+   * other. What that changes is the panel; what it does not change is where closing
+   * goes, which is what these assert.
    */
+  describe.each(FROM_FILTER)(
+    '$name, declared at $path',
+    ({ component, params }) => {
+      it('closes onto the sheet it was opened from, whole', async () => {
+        const { fixture, sheets } = await render(component, params, '/velista');
+
+        await close(fixture);
+
+        expect(sheets.dismiss).toHaveBeenCalledWith(
+          `/velista/en/shopping-lists/${BASKET_ID}/sheet/filter`
+        );
+      });
+
+      it('names that sheet in the standalone build too', async () => {
+        const { fixture, sheets } = await render(component, params, '');
+
+        await close(fixture);
+
+        expect(sheets.dismiss).toHaveBeenCalledWith(
+          `/en/shopping-lists/${BASKET_ID}/sheet/filter`
+        );
+      });
+
+      it('dismisses rather than navigating, so back cannot reopen it', async () => {
+        const { fixture, sheets, router } = await render(
+          component,
+          params,
+          '/velista'
+        );
+
+        await close(fixture);
+
+        expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+        expect(router.navigate).not.toHaveBeenCalled();
+        expect(router.navigateByUrl).not.toHaveBeenCalled();
+      });
+    }
+  );
 });

@@ -1,0 +1,131 @@
+@use '../basket-shared' as shared;
+
+// The chevron and the title on one line, which is the supermarkets page's own head
+// with the page's back control folded into it: this sheet is reached from another
+// sheet, so the way back is a control here rather than a bar above it.
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-block-end: var(--app-space-4);
+}
+
+.back {
+  @include shared.tap-target;
+
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+// The search field, written the way the supermarkets page writes it: a visible
+// label above a bordered row holding the glyph and the input. Sass cannot cross a
+// library boundary, so the shapes are repeated rather than imported, and every
+// value in them is a token precisely so the copies cannot disagree.
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block-end: var(--app-space-4);
+}
+
+.field-label {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+
+  &:has(.search-input:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.search-glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.search-input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: var(--app-control-height);
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  // Rule T3: anything under 16px makes iOS Safari zoom the viewport on focus.
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  // The ring is drawn by the wrapper, which is the thing that looks like the field.
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.result-count {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.empty {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.chain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-4);
+}
+
+.chain-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+// The list under the buttons breathes, which it does not need to on the
+// supermarkets page: there it is the whole body of a scrolling screen.
+lib-shop-list {
+  margin-block-start: var(--app-space-4);
+}

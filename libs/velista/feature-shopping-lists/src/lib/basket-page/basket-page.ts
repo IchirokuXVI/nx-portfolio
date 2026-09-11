@@ -594,7 +594,14 @@ export class BasketPage {
 
     const name =
       heading.kind === 'key'
-        ? this._translator.t(heading.key, undefined, this._locale())
+        ? this._translator.t(
+            heading.key,
+            undefined,
+            this._locale(),
+            // What the sentence interpolates, which is `0078`'s sink alone: "Not
+            // listed at Mercadona" names a chain inside words this app owns.
+            heading.args
+          )
         : heading.text;
     const count = this.sectionCount(section);
     return count === '' ? name : `${name}, ${count}`;
@@ -871,6 +878,15 @@ export class BasketPage {
 
   /** How many lines are on the screen, for the chip row's count. */
   protected readonly visibleCount = this._view.visibleCount;
+
+  /**
+   * The scope every row quotes, or null for the cheapest anywhere (`0078`).
+   *
+   * Asked once for the whole basket and handed to each row, which is what this page
+   * already does with `canReopen` and its own name: a component built once per line
+   * has no business asking the same question a dozen times.
+   */
+  protected readonly pricedShop = this._view.pricedShop;
 
   /** How many of the four properties are on, for the filter button's badge. */
   protected readonly activeCount = this._view.activeCount;

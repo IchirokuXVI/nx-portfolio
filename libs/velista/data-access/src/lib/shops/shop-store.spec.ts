@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import type { Page, Shop } from '@portfolio/velista/models';
+import { OTHER_CHAINS, type Page, type Shop } from '@portfolio/velista/models';
 import { ShoppingProfileStore } from '../profiles/shopping-profile-store';
 import { ShopMemory } from './shop-memory';
 import {
@@ -7,7 +7,7 @@ import {
   type ShopQuery,
   type ShopServiceI,
 } from './shop-service';
-import { OTHER_CHAINS, ShopStore } from './shop-store';
+import { ShopStore } from './shop-store';
 
 /**
  * The store behind the supermarkets screen (plan 0059).
