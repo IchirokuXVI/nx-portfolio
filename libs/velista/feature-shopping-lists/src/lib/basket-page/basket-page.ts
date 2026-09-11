@@ -29,6 +29,9 @@ import {
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   type BasketLine,
+  type BasketLineOrigin,
+  type BasketViewRow,
+  type BasketViewSection,
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import {
@@ -523,6 +526,147 @@ export class BasketPage {
 
     // The same sentence the caption showed under the thumb, so a reader who could
     // not see it still learns which of the two happened (section 7).
+    this._say(
+      outstandingCaption(
+        change.from,
+        change.to,
+        this._translator,
+        this._locale()
+      ) ?? ''
+    );
+
+    if (result.skippedCount > 0) {
+      this.openLine(line);
+    }
+  }
+
+  /**
+   * A section's count as the heading draws it, or empty where it has none.
+   *
+   * "1 of 3 got", in the same words and from the same function as the sentence in
+   * the tools row above it, plus "· 1 not available" where a shop had none of
+   * something. The unavailable half is a separate key for the reason the page's own
+   * sentence keeps it separate: it is a different claim from a purchase, and a
+   * heading that folded the two would report a shop that had none as shopping done.
+   *
+   * Empty for the unheaded section of an ungrouped view, whose count would only
+   * repeat the sentence above it. `composeBasketView` decides that, not this.
+   */
+  protected sectionCount(section: BasketViewSection): string {
+    const progress = section.progress;
+    if (progress === null) {
+      return '';
+    }
+
+    const locale = this._locale();
+    const got = this._translator.t('basket.group.progress', undefined, locale, {
+      done: progress.done,
+      total: progress.total,
+    });
+
+    if (progress.unavailable === 0) {
+      return got;
+    }
+    return `${got} · ${this._translator.t(
+      'basket.group.unavailable',
+      undefined,
+      locale,
+      { count: progress.unavailable }
+    )}`;
+  }
+
+  /**
+   * The whole heading as one accessible name, "Dairy, 1 of 3 got" (section 6).
+   *
+   * One string rather than a heading whose count is a separate node, because a
+   * reader moving by heading hears the `h2` and nothing else in it: a count drawn
+   * beside the name would be visible to everybody and announced to nobody.
+   *
+   * A list's own name goes in as it is. It is the only half of this sentence this
+   * app did not write, which is the distinction {@link BasketViewHeading} exists to
+   * keep, and a name run through the translator would be looked up as a key.
+   */
+  protected headingLabel(section: BasketViewSection): string {
+    const heading = section.heading;
+    if (heading === null) {
+      return '';
+    }
+
+    const name =
+      heading.kind === 'key'
+        ? this._translator.t(heading.key, undefined, this._locale())
+        : heading.text;
+    const count = this.sectionCount(section);
+    return count === '' ? name : `${name}, ${count}`;
+  }
+
+  /**
+   * A row's reel was let go: the whole line, or one household's share of it.
+   *
+   * Two writes behind one gesture, and **the row does not choose between them**: it
+   * reports where the number went and this decides, because the row it belongs to is
+   * what carries the origin and the page is what holds the store. A row under a list
+   * heading commits that list's own purchase through velista `0073`'s per list write;
+   * every other row commits the line's, exactly as it always has.
+   */
+  protected async setRowOutstanding(
+    row: BasketViewRow,
+    change: { from: number; to: number }
+  ): Promise<void> {
+    const origin = row.origin;
+    if (origin === null) {
+      await this.setOutstanding(row.line, change);
+      return;
+    }
+    await this.setOriginOutstanding(row.line, origin, change);
+  }
+
+  /**
+   * One household's share of a line moved (velista `0077`, section 4.1).
+   *
+   * The reel counts what is **still to get** and the write takes what has been
+   * **got**, so the two numbers are subtracted from what the list asked for on the
+   * way past. `from` is that list's settled count as this screen last read it, which
+   * is the same stale check every other write on this page sends: the server refuses
+   * a move whose origin no longer matches rather than applying it as the opposite
+   * act (backend `0056`, section 3.2).
+   *
+   * The answer carries the **whole line**, and the store applies it, so the row
+   * redraws from what the server now says rather than from the number that was sent.
+   * That matters here for `0073`'s own reason: taking back a `NOT_AVAILABLE` close
+   * has no units to divide, so the whole close comes back and the number lands above
+   * where the control was dragged.
+   *
+   * Guarded on a settled count this build can read. `amountUnknown` has already made
+   * the reel a readout where it cannot, so this is unreachable rather than merely
+   * unlikely, and it refuses rather than sending a `from` it made up.
+   */
+  private async setOriginOutstanding(
+    line: BasketLine,
+    origin: BasketLineOrigin,
+    change: { from: number; to: number }
+  ): Promise<void> {
+    const settled = origin.settled;
+    if (settled === undefined) {
+      return;
+    }
+
+    // One sentence at a time across the whole basket, exactly as `setOutstanding`
+    // clears it: a stale refusal under a row somebody has since moved again is a lie
+    // about the present.
+    this._notice.set(null);
+
+    const result = await this._store.setOriginSettled(line.id, {
+      lineId: origin.lineId,
+      settled: Math.max(0, origin.quantity - change.to),
+      from: settled,
+    });
+
+    if (result === null) {
+      this._reportOutstanding(line);
+      return;
+    }
+
     this._say(
       outstandingCaption(
         change.from,

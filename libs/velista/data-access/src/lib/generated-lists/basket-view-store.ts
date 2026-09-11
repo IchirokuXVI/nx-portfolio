@@ -181,6 +181,7 @@ export class BasketViewStore {
       query: this._query(),
       products: this._basket.products(),
       locale: this._locale(),
+      listNames: this._basket.listNames(),
     })
   );
 

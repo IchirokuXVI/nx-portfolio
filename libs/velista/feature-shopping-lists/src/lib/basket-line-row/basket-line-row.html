@@ -166,7 +166,7 @@
     on the reel is not a tap on the line, and the row underneath must not hear it.
   -->
   <span class="numbers">
-    @if (finished()) {
+    @if (finished() || amountUnknown()) {
       <!--
         The trip is over, so the number is a number again (velista 0057, section 6).
 
@@ -175,6 +175,12 @@
         refuses on every line of the basket at once, and `0030` does not draw one of
         those. The count keeps the reel's own accessible name, because the question
         it answers has not changed, only whether it can be answered again.
+
+        The second way in is velista `0077`: a row under a list heading whose origin
+        carries no settled count. The same rule reaches it from the other side —
+        there is no starting point to drag from, so what is drawn is what that list
+        asked for, and the accessible name says so rather than promising an
+        outstanding amount. See `amountUnknown`.
       -->
       <span [attr.aria-label]="reelLabel()" class="settled-count" role="img">
         {{ stillToGet() }}
@@ -205,6 +211,15 @@
     -->
     @if (caption(); as said) {
       <span aria-hidden="true" class="preview">{{ said }}</span>
+    } @else if (origin() !== null) {
+      <!--
+        Which household's share this row's number is (velista `0077`, section 4.1).
+
+        Drawn on every row under a list heading and not only on a partly settled one,
+        because the number above it is one list's and the glyph beside it is the
+        whole line's, and this sentence is the only thing on the row that says so.
+      -->
+      <span aria-hidden="true" class="progress">{{ progressCaption() }}</span>
     } @else if (state() === 'partly') {
       <!--
         Both numbers, so somebody can see what is left without arithmetic. A

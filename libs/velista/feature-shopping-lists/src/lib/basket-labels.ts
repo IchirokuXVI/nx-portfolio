@@ -3,6 +3,7 @@ import {
   basketLineState,
   outstanding,
   type BasketLine,
+  type BasketLineOrigin,
   type BasketParticipant,
 } from '@portfolio/velista/models';
 
@@ -331,6 +332,40 @@ export function quantityCaption(
         count: line.quantity,
       })
     : '';
+}
+
+/**
+ * What one list asked for and got, for a row drawn under that list's heading
+ * (velista `0077`, section 4.1).
+ *
+ * Two sentences and the origin decides which. A list that has got some of its share
+ * says so, "2 of 6 got"; one that has got none, **or one whose count this build
+ * cannot read**, says what it asked for instead and says it against the line's own
+ * total, "this list asked for 6 of the 12". The second half of that sentence is the
+ * point of it: the number beside the row is the list's and the glyph is the line's,
+ * and without it a shopper has no way to tell which of the two they are reading.
+ *
+ * `settled` is absent against a backend before luna `0109`, which is why the fall
+ * through is to the sentence that needs only what a list asked for. Never zero: "0 of
+ * 6 got" is a claim about the trip, and this build would be making it up.
+ */
+export function listShareCaption(
+  line: BasketLine,
+  origin: BasketLineOrigin,
+  translator: RokuTranslatorService,
+  locale: string
+): string {
+  const settled = origin.settled;
+  if (settled !== undefined && settled > 0) {
+    return translator.t('basket.line.listPartly', undefined, locale, {
+      settled,
+      asked: origin.quantity,
+    });
+  }
+  return translator.t('basket.line.listShare', undefined, locale, {
+    asked: origin.quantity,
+    total: line.quantity,
+  });
 }
 
 /**

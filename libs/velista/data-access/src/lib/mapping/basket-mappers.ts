@@ -5,6 +5,8 @@ import {
   LINE_APPROVAL_STATUSES,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
+  PRODUCT_CATEGORIES,
+  PRODUCT_CATEGORY_FALLBACK,
   type BasketLine,
   type BasketLineOrigin,
   type BasketLineOriginDetail,
@@ -154,9 +156,22 @@ function toBasketLineOrigin(raw: unknown): BasketLineOrigin | null {
   const listId = str(raw['listId']);
   const lineId = str(raw['lineId']);
 
-  return id === null || zoneId === null || listId === null || lineId === null
-    ? null
-    : { id, zoneId, listId, lineId, quantity: numOr(raw['quantity'], 0) };
+  if (id === null || zoneId === null || listId === null || lineId === null) {
+    return null;
+  }
+
+  return {
+    id,
+    zoneId,
+    listId,
+    lineId,
+    quantity: numOr(raw['quantity'], 0),
+    // An `in` check, for the reason `origins` itself gets one: a backend before
+    // luna `0109` carries no per origin settled count at all, and reading that
+    // absence as zero would tell a shopper that a household has got none of its six
+    // rather than that this build cannot say (velista `0077`, section 4.1).
+    ...('settled' in raw ? { settled: numOr(raw['settled'], 0) } : {}),
+  };
 }
 
 /** From `GeneratedListBasketLineView`. */
@@ -455,6 +470,14 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         size: typeof raw['unitSize'] === 'number' ? raw['unitSize'] : null,
         unit: nullableStr(raw['defaultUnit']),
         offer: toProductOffer(raw['bestOffer']),
+        // One wire value into a one element list (velista `0077`, section 2). The
+        // field is required on `ItemView` and has been since the catalog existed, so
+        // the fallback covers a thirteenth category rather than an older backend,
+        // and it folds onto `OTHER` rather than dropping the product: a line whose
+        // aisle this build cannot name is still a line to buy.
+        categories: [
+          oneOf(raw['category'], PRODUCT_CATEGORIES, PRODUCT_CATEGORY_FALLBACK),
+        ],
       };
 }
 

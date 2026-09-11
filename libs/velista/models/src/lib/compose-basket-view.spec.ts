@@ -13,6 +13,7 @@ import {
   type BasketViewContext,
   type BasketViewState,
 } from './compose-basket-view';
+import type { ProductCategory } from './enums';
 
 function line(
   id: string,
@@ -35,22 +36,39 @@ function line(
   } as BasketLine;
 }
 
-function origin(listId: string): BasketLineOrigin {
-  return { id: `o-${listId}`, zoneId: 'z1', listId, lineId: 'l1', quantity: 1 };
+function origin(
+  listId: string,
+  over: Partial<BasketLineOrigin> = {}
+): BasketLineOrigin {
+  return {
+    id: `o-${listId}`,
+    zoneId: 'z1',
+    listId,
+    lineId: `zone-line-${listId}`,
+    quantity: 1,
+    ...over,
+  };
 }
 
 function product(
   id: string,
   name: string,
-  brand: string | null
+  brand: string | null,
+  categories: readonly ProductCategory[] = ['OTHER']
 ): BasketProduct {
-  return { id, name: { en: name, es: name }, brand } as BasketProduct;
+  return {
+    id,
+    name: { en: name, es: name },
+    brand,
+    categories,
+  } as BasketProduct;
 }
 
 const CONTEXT: BasketViewContext = {
   query: '',
   products: new Map(),
   locale: 'en',
+  listNames: new Map(),
 };
 
 function state(over: Partial<BasketViewState> = {}): BasketViewState {
@@ -186,7 +204,10 @@ describe('composeBasketView', () => {
 
       expect(sections).toHaveLength(2);
       expect(sections[0].rows.map((row) => row.line.id)).toContain('guest');
-      expect(sections[1].heading).toBe('basket.group.noList');
+      expect(sections[1].heading).toEqual({
+        kind: 'key',
+        key: 'basket.group.noList',
+      });
       expect(sections[1].hint).toBe('basket.group.noListHint');
       expect(sections[1].rows.map((row) => row.line.id)).toEqual(['none']);
     });
@@ -229,11 +250,319 @@ describe('composeBasketView', () => {
     });
   });
 
-  it('draws no origin on any row, which is 0077’s', () => {
+  /**
+   * The ungrouped view is about lines and not about origins, and its one section
+   * is the whole screen, so a count on it would only repeat the sentence in the
+   * tools row above it.
+   */
+  it('draws no origin and no count on an ungrouped view', () => {
     const sections = composeBasketView([line('a', 'Milk')], state(), CONTEXT);
 
     expect(sections[0].rows[0].origin).toBeNull();
     expect(sections[0].progress).toBeNull();
+  });
+});
+
+/**
+ * The aisle view (velista `0077`, section 3).
+ *
+ * Three claims carry it, and each one is a thing a tidier implementation quietly
+ * breaks: a section's place comes from its first line and from nothing else, a
+ * product in two aisles puts its line in both without being counted twice, and the
+ * lines with no product go last under a heading that says why.
+ */
+describe('composeBasketView, grouped by category', () => {
+  const CATALOG = new Map([
+    ['p-milk', product('p-milk', 'Milk', null, ['DAIRY'])],
+    ['p-bread', product('p-bread', 'Bread', null, ['BAKERY'])],
+    ['p-cheese', product('p-cheese', 'Cheese', null, ['DAIRY'])],
+    ['p-odd', product('p-odd', 'Batteries', null, ['OTHER'])],
+  ]);
+
+  function grouped(
+    lines: readonly BasketLine[],
+    over: Partial<BasketViewState> = {}
+  ) {
+    return composeBasketView(lines, state({ grouping: 'category', ...over }), {
+      ...CONTEXT,
+      products: CATALOG,
+    });
+  }
+
+  it('puts every line under its product’s category', () => {
+    const sections = grouped([
+      line('a', 'Milk', { pickId: 'p-milk' }),
+      line('b', 'Bread', { pickId: 'p-bread' }),
+      line('c', 'Cheese', { pickId: 'p-cheese' }),
+    ]);
+
+    expect(
+      sections.map((part) => [
+        part.heading,
+        part.rows.map((row) => row.line.id),
+      ])
+    ).toEqual([
+      [{ kind: 'key', key: 'basket.category.DAIRY' }, ['a', 'c']],
+      [{ kind: 'key', key: 'basket.category.BAKERY' }, ['b']],
+    ]);
+  });
+
+  /**
+   * The rule the plan's section 3 fixes. Under "The way you shop" it is what makes
+   * the aisles order the categories, which is the entire point of that order; a
+   * pipeline that sorted the sections by name, or by the enum, would throw it away.
+   */
+  it('gives a section the place of its first line, OTHER included', () => {
+    const sections = grouped([
+      line('a', 'Batteries', { pickId: 'p-odd' }),
+      line('b', 'Bread', { pickId: 'p-bread' }),
+      line('c', 'Milk', { pickId: 'p-milk' }),
+    ]);
+
+    expect(sections.map((part) => part.key)).toEqual([
+      'category:OTHER',
+      'category:BAKERY',
+      'category:DAIRY',
+    ]);
+  });
+
+  it('draws a line in every category it has, and counts it once', () => {
+    const twoAisles = new Map([
+      ['p-both', product('p-both', 'Yoghurt', null, ['DAIRY', 'SNACKS'])],
+    ]);
+
+    const sections = composeBasketView(
+      [line('a', 'Yoghurt', { pickId: 'p-both' })],
+      state({ grouping: 'category' }),
+      { ...CONTEXT, products: twoAisles }
+    );
+
+    expect(sections.map((part) => part.key)).toEqual([
+      'category:DAIRY',
+      'category:SNACKS',
+    ]);
+    expect(basketViewLines(sections)).toHaveLength(1);
+  });
+
+  /**
+   * Two ways to have no category and they are one section: a line nobody picked a
+   * product for, and a line whose pick the products map cannot resolve because the
+   * basket has outlived the catalog it was built from.
+   */
+  it('puts every line with no resolved pick last, under a heading that says why', () => {
+    const sections = grouped([
+      line('free', 'Something for dinner'),
+      line('milk', 'Milk', { pickId: 'p-milk' }),
+      line('gone', 'Old thing', { pickId: 'p-deleted' }),
+    ]);
+
+    const last = sections[sections.length - 1];
+    expect(last.key).toBe('no-category');
+    expect(last.heading).toEqual({
+      kind: 'key',
+      key: 'basket.group.noCategory',
+    });
+    expect(last.hint).toBe('basket.group.noCategoryHint');
+    expect(last.rows.map((row) => row.line.id)).toEqual(['free', 'gone']);
+  });
+
+  it('counts each section over its own lines, with a close that bought nothing apart', () => {
+    const sections = grouped([
+      line('a', 'Milk', {
+        pickId: 'p-milk',
+        quantity: 1,
+        settled: 1,
+        lastOutcome: 'BOUGHT',
+      }),
+      line('b', 'Cheese', {
+        pickId: 'p-cheese',
+        quantity: 1,
+        settled: 1,
+        lastOutcome: 'NOT_AVAILABLE',
+      }),
+      line('c', 'Cream', { pickId: 'p-milk' }),
+      line('d', 'Bread', { pickId: 'p-bread' }),
+    ]);
+
+    expect(sections[0].progress).toEqual({ done: 1, unavailable: 1, total: 3 });
+    expect(sections[1].progress).toEqual({ done: 0, unavailable: 0, total: 1 });
+  });
+
+  /**
+   * Filter, then order, then group. The grouping gets no ordering of its own, so a
+   * line keeps whatever place the order gave it inside its category.
+   */
+  it('keeps the order the shop sink gave a line inside its category', () => {
+    const sections = grouped(
+      [
+        line('z', 'Zucchini', { pickId: 'p-milk' }),
+        line('a', 'Apples', { pickId: 'p-milk' }),
+        line('m', 'Milk', { pickId: 'p-milk' }),
+      ],
+      { order: 'alpha' }
+    );
+
+    expect(sections[0].rows.map((row) => row.line.content)).toEqual([
+      'Apples',
+      'Milk',
+      'Zucchini',
+    ]);
+  });
+
+  it('narrows to the search before it groups', () => {
+    const sections = composeBasketView(
+      [
+        line('a', 'Milk', { pickId: 'p-milk' }),
+        line('b', 'Bread', { pickId: 'p-bread' }),
+      ],
+      state({ grouping: 'category' }),
+      { ...CONTEXT, products: CATALOG, query: 'bread' }
+    );
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].key).toBe('category:BAKERY');
+  });
+});
+
+/**
+ * The household view (velista `0077`, section 4).
+ *
+ * The claim that matters most here is that a line is drawn **once per origin** with
+ * that origin on the row: everything the row does differently under this grouping
+ * reads the origin, so a row handed none would quietly draw the basket's summed
+ * numbers under one household's heading.
+ */
+describe('composeBasketView, grouped by list', () => {
+  const NAMES = new Map([
+    ['l1', 'Weekly shop'],
+    ['l2', 'Flat 3B'],
+  ]);
+
+  function grouped(
+    lines: readonly BasketLine[],
+    over: Partial<BasketViewState> = {}
+  ) {
+    return composeBasketView(lines, state({ grouping: 'list', ...over }), {
+      ...CONTEXT,
+      listNames: NAMES,
+    });
+  }
+
+  it('heads a section with the list’s own name, which is data and not a key', () => {
+    const sections = grouped([line('a', 'Milk', { origins: [origin('l1')] })]);
+
+    expect(sections[0].heading).toEqual({ kind: 'text', text: 'Weekly shop' });
+    expect(sections[0].key).toBe('list:l1');
+  });
+
+  it('draws a line once per origin, each row carrying its own', () => {
+    const sections = grouped([
+      line('both', 'Eggs', {
+        origins: [origin('l1', { quantity: 6 }), origin('l2', { quantity: 6 })],
+      }),
+    ]);
+
+    expect(sections.map((part) => part.key)).toEqual(['list:l1', 'list:l2']);
+    expect(sections[0].rows[0].origin?.listId).toBe('l1');
+    expect(sections[1].rows[0].origin?.listId).toBe('l2');
+    // One thing to buy, drawn in two places. The sheet's button says one.
+    expect(basketViewLines(sections)).toHaveLength(1);
+  });
+
+  it('gives a section the place of its first line, like every other grouping', () => {
+    const sections = grouped([
+      line('a', 'Milk', { origins: [origin('l2')] }),
+      line('b', 'Bread', { origins: [origin('l1')] }),
+    ]);
+
+    expect(sections.map((part) => part.key)).toEqual(['list:l2', 'list:l1']);
+  });
+
+  it('sinks the line on no list yet, under 0075’s own words', () => {
+    const sections = grouped([
+      line('a', 'Milk', { origins: [origin('l1')] }),
+      line('b', 'Batteries', { origins: [] }),
+    ]);
+
+    const last = sections[sections.length - 1];
+    expect(last.key).toBe('no-list');
+    expect(last.heading).toEqual({ kind: 'key', key: 'basket.group.noList' });
+    expect(last.hint).toBe('basket.group.noListHint');
+    expect(last.rows.map((row) => row.line.id)).toEqual(['b']);
+    expect(last.rows[0].origin).toBeNull();
+  });
+
+  /**
+   * Redaction is not a fact about the line. A guest is never told that something is
+   * on no list, because they are never told about lists at all, so a line with no
+   * `origins` key stays unheaded rather than joining the sink.
+   */
+  it('leaves a redacted line unheaded rather than sinking it', () => {
+    const sections = grouped([
+      line('guest', 'Candles'),
+      line('a', 'Milk', { origins: [origin('l1')] }),
+    ]);
+
+    expect(sections[0].heading).toBeNull();
+    expect(sections[0].rows.map((row) => row.line.id)).toEqual(['guest']);
+    expect(sections[1].key).toBe('list:l1');
+  });
+
+  it('does not head a section for a list it has no name for', () => {
+    const sections = grouped([
+      line('a', 'Milk', { origins: [origin('l1'), origin('unknown')] }),
+    ]);
+
+    expect(sections.map((part) => part.key)).toEqual(['list:l1']);
+  });
+
+  it('gives each list its own count', () => {
+    const sections = grouped([
+      line('a', 'Milk', {
+        quantity: 1,
+        settled: 1,
+        lastOutcome: 'BOUGHT',
+        origins: [origin('l1')],
+      }),
+      line('b', 'Bread', { origins: [origin('l1')] }),
+      line('c', 'Cheese', { origins: [origin('l2')] }),
+    ]);
+
+    expect(sections[0].progress).toEqual({ done: 1, unavailable: 0, total: 2 });
+    expect(sections[1].progress).toEqual({ done: 0, unavailable: 0, total: 1 });
+  });
+
+  /**
+   * A row's key has to survive a line reaching one household through two zone lines,
+   * which `@for` tracks on. The line's id is the same for both.
+   */
+  it('gives two rows of one line under one heading distinct keys', () => {
+    const sections = grouped([
+      line('a', 'Milk', {
+        origins: [
+          origin('l1', { id: 'o-first', lineId: 'zl-1' }),
+          origin('l1', { id: 'o-second', lineId: 'zl-2' }),
+        ],
+      }),
+    ]);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].rows.map((row) => row.key)).toEqual([
+      'o-first',
+      'o-second',
+    ]);
+  });
+
+  it('keeps the list filter, which runs before the grouping', () => {
+    const sections = grouped(
+      [
+        line('a', 'Milk', { origins: [origin('l1')] }),
+        line('b', 'Cheese', { origins: [origin('l2')] }),
+      ],
+      { lists: new Set(['l1']) }
+    );
+
+    expect(sections.map((part) => part.key)).toEqual(['list:l1']);
   });
 });
 
@@ -246,14 +575,14 @@ describe('basketViewLines', () => {
         heading: null,
         hint: null,
         progress: null,
-        rows: [{ line: one, origin: null }],
+        rows: [{ key: 'a', line: one, origin: null }],
       },
       {
         key: 'y',
         heading: null,
         hint: null,
         progress: null,
-        rows: [{ line: one, origin: null }],
+        rows: [{ key: 'a', line: one, origin: null }],
       },
     ];
 

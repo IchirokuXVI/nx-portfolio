@@ -169,6 +169,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     size: 1,
     unit: 'LITER',
     offer: offer(0.95, 0.95, 'EUR/L'),
+    categories: ['DAIRY'],
   },
   {
     id: 'item-milk-pascual',
@@ -177,6 +178,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     size: 1,
     unit: 'LITER',
     offer: offer(0.89, 0.89, 'EUR/L'),
+    categories: ['DAIRY'],
   },
   {
     id: 'item-milk-central',
@@ -188,6 +190,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     size: 1,
     unit: 'LITER',
     offer: null,
+    categories: ['DAIRY'],
   },
   {
     id: 'item-eggs',
@@ -196,6 +199,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     size: 12,
     unit: 'UNIT',
     offer: offer(2.85, 0.24, 'EUR/ud'),
+    categories: ['DAIRY'],
   },
 ];
 
@@ -1710,9 +1714,25 @@ export class BasketMemory implements BasketServiceI {
    * Deleting the key rather than nulling it, because that is what the server
    * does and the difference is what the screen branches on.
    */
+  /**
+   * One line as this reader gets it: origins carrying their own settled count, or
+   * no origins at all.
+   *
+   * `settled` per origin is what backend `0109` section 4 adds to the read, and this
+   * fake models it the way that plan describes: the number is read off the
+   * settlement facts rather than stored twice, so the read and `setOriginSettled`
+   * cannot disagree about what a household has got. It rides on `origins`, so
+   * stripping those takes it with them and the redaction stays one statement.
+   */
   private _project(line: BasketLine): BasketLine {
     if (this.seesZoneData) {
-      return line;
+      return {
+        ...line,
+        origins: (line.origins ?? []).map((origin) => ({
+          ...origin,
+          settled: this._facts(origin.id).settledHere,
+        })),
+      };
     }
     // `targetListId` goes with `origins`, for the same reason: which household
     // list a line was sent to is a household this reader may not be told about. It

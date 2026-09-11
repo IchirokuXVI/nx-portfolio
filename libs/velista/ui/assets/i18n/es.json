@@ -992,12 +992,15 @@
       "free": "Sin producto elegido",
       "busy": "Guardando",
       "takenBack_one": "1 devuelto",
-      "takenBack_other": "{{count}} devueltos"
+      "takenBack_other": "{{count}} devueltos",
+      "listShare": "esta lista pidió {{asked}} de {{total}}",
+      "listPartly": "{{settled}} de {{asked}} conseguidos"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
       "bought_one": "{{count}} comprado",
-      "bought_other": "{{count}} comprados"
+      "bought_other": "{{count}} comprados",
+      "listLabel": "{{list}}, {{name}}, por conseguir"
     },
     "touched": {
       "got": "{{name}} lo consiguió",
@@ -1063,7 +1066,12 @@
     },
     "group": {
       "noList": "Todavía en ninguna lista",
-      "noListHint": "añadido en la tienda"
+      "noListHint": "añadido en la tienda",
+      "noCategory": "Sin categoría",
+      "noCategoryHint": "líneas sin producto",
+      "progress": "{{done}} de {{total}} conseguidos",
+      "unavailable_one": "{{count}} no disponible",
+      "unavailable_other": "{{count}} no disponibles"
     },
     "settle": {
       "title": "{{name}}",
@@ -1249,6 +1257,20 @@
       "isNone": "{{name}} no estaba disponible",
       "isWanted": "{{name}} está aún por conseguir",
       "isPartly": "{{name}} está conseguido en parte"
+    },
+    "category": {
+      "PRODUCE": "Frutas y verduras",
+      "DAIRY": "Lácteos",
+      "BAKERY": "Panadería",
+      "MEAT": "Carne",
+      "SEAFOOD": "Pescado",
+      "FROZEN": "Congelados",
+      "BEVERAGES": "Bebidas",
+      "SNACKS": "Aperitivos",
+      "PANTRY": "Despensa",
+      "HOUSEHOLD": "Hogar",
+      "PERSONAL_CARE": "Cuidado personal",
+      "OTHER": "Otros"
     }
   },
   "getList": {

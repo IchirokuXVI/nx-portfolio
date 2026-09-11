@@ -2,6 +2,7 @@ import {
   toBasketLine,
   toBasketLineOrigins,
   toBasketOriginQuantityResult,
+  toBasketView,
 } from './basket-mappers';
 
 /**
@@ -234,5 +235,89 @@ describe('toBasketOriginQuantityResult', () => {
     expect(
       toBasketOriginQuantityResult({ origin: null, listQuantity: 0 })
     ).toBeNull();
+  });
+});
+
+/**
+ * The two fields velista `0077` reads that the client used to drop (section 2) or
+ * that the wire does not carry yet (section 4.1).
+ *
+ * The category is required on `ItemView` and has been since the catalog existed, so
+ * the grouping needed no server half at all: it was arriving on every basket and
+ * being thrown away. `settled` per origin is backend `0109`'s, and the distinction
+ * worth a test is that its absence is **kept**, not folded onto zero: "this
+ * household has got none of its six" is a claim about the trip, and a build reading
+ * an older backend would be making it up.
+ */
+describe('toBasketView: the product’s aisle, and what each list got', () => {
+  const VIEW = {
+    id: 'gl-1',
+    me: { id: 'p-1', kind: 'OWNER' },
+    lines: [],
+    participants: [],
+    products: [],
+  };
+
+  function productsOf(products: readonly unknown[]) {
+    return toBasketView({ ...VIEW, products })?.products;
+  }
+
+  it('reads the wire category into a one element list', () => {
+    const read = productsOf([{ id: 'i-1', category: 'DAIRY' }]);
+
+    expect(read?.get('i-1')?.categories).toEqual(['DAIRY']);
+  });
+
+  /**
+   * A thirteenth category is a product this app cannot name, and the honest place
+   * for one is the heading that says exactly that. Dropping it would take a line off
+   * a screen somebody is shopping from.
+   */
+  it('reads a category it has never heard of as OTHER, and keeps the product', () => {
+    const read = productsOf([
+      { id: 'i-1', category: 'BABY_FOOD' },
+      { id: 'i-2' },
+    ]);
+
+    expect(read?.get('i-1')?.categories).toEqual(['OTHER']);
+    expect(read?.get('i-2')?.categories).toEqual(['OTHER']);
+  });
+
+  it('reads what each list has got, and keeps its absence apart from zero', () => {
+    const withOrigins = (origins: readonly unknown[]) =>
+      toBasketView({
+        ...VIEW,
+        lines: [
+          {
+            id: 'line-1',
+            content: 'Eggs',
+            quantity: 12,
+            settledQuantity: 0,
+            itemId: null,
+            options: [],
+            position: 0,
+            createdByParticipantId: null,
+            lastEditedByParticipantId: null,
+            lastEditedAt: null,
+            lastOutcome: null,
+            origins,
+          },
+        ],
+      })?.lines[0].origins?.[0];
+
+    const origin = {
+      id: 'o-1',
+      zoneId: 'z-1',
+      listId: 'l-1',
+      lineId: 'zl-1',
+      quantity: 6,
+    };
+
+    expect(withOrigins([{ ...origin, settled: 2 }])?.settled).toBe(2);
+    expect(withOrigins([{ ...origin, settled: 0 }])?.settled).toBe(0);
+    // A backend before luna `0109`. Absent, and not zero: the row draws a readout
+    // rather than a reel it has no starting point for.
+    expect(withOrigins([origin])?.settled).toBeUndefined();
+    expect(withOrigins([origin])?.quantity).toBe(6);
   });
 });

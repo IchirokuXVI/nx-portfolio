@@ -87,6 +87,8 @@ interface FakeStore {
   readonly unsettled: WritableSignal<number>;
   /** Every status write the page made, on the **owner's** surface (plan 0057). */
   readonly setStatus: jest.Mock;
+  /** Every per list purchase the page made, which is `0077`'s row under a heading. */
+  readonly setOriginSettled: jest.Mock;
   /** Every refetch, so a spec can see the screen being brought up to date. */
   readonly refresh: jest.Mock;
   /** Every product the basket named, which is the other half of what a search reads. */
@@ -252,6 +254,17 @@ async function render(options: Options = {}): Promise<{
     finished: signal(options.finished ?? false),
     unsettled: signal(options.unsettled ?? options.lines?.length ?? 0),
     setStatus: jest.fn().mockResolvedValue(options.statusWriteLands ?? true),
+    // The whole line comes back, exactly as the real write answers it: the row has
+    // to redraw from the server's answer and never from the number it sent.
+    setOriginSettled: jest.fn(
+      (lineId: string): Promise<BasketOriginSettledResult | null> =>
+        Promise.resolve({
+          line: line(lineId),
+          origin: null,
+          skippedCount: 0,
+          skipped: [],
+        })
+    ),
     refresh: jest.fn().mockResolvedValue(undefined),
     products: signal<ReadonlyMap<string, BasketProduct>>(
       options.products ?? new Map()
@@ -335,6 +348,7 @@ async function render(options: Options = {}): Promise<{
           settle: () => Promise.resolve(null),
           reopen: () => Promise.resolve(null),
           setOutstanding: store.setOutstanding,
+          setOriginSettled: store.setOriginSettled,
           addLine: (body: BasketAddLineRequest) => {
             store.added.push(body);
             const answer =
@@ -1715,6 +1729,235 @@ describe('searching the basket', () => {
       expect(chips(fixture)[0]?.textContent).toContain(
         'basket.view.order.alpha'
       );
+    });
+  });
+
+  /**
+   * Grouping (velista `0077`).
+   *
+   * What is asserted here is the half the pipeline cannot: a heading is a real `h2`
+   * whose accessible name carries the count, and a row under a list heading commits
+   * through the **per list** write rather than the line's. `compose-basket-view.spec`
+   * carries the cutting up.
+   */
+  describe('grouping the rows', () => {
+    const SOURCES = [
+      { zoneId: 'z1', listId: 'l-weekly' },
+      { zoneId: 'z1', listId: 'l-groceries' },
+    ];
+
+    const LIST_NAMES = new Map([
+      ['l-weekly', 'Weekly shop'],
+      ['l-groceries', 'Groceries'],
+    ]);
+
+    const milk = (over: Partial<BasketProduct> = {}): BasketProduct => ({
+      id: 'i-milk',
+      name: { en: 'Milk', es: 'Leche' },
+      brand: null,
+      size: null,
+      unit: null,
+      offer: null,
+      categories: ['DAIRY'],
+      ...over,
+    });
+
+    const grouped: readonly BasketLine[] = [
+      line('Milk', {
+        id: 'l-1',
+        quantity: 3,
+        settled: 3,
+        lastOutcome: 'BOUGHT',
+        pickId: 'i-milk',
+        origins: [
+          {
+            id: 'o-1',
+            zoneId: 'z1',
+            listId: 'l-weekly',
+            lineId: 'zl-1',
+            quantity: 2,
+            settled: 2,
+          },
+          {
+            id: 'o-2',
+            zoneId: 'z1',
+            listId: 'l-groceries',
+            lineId: 'zl-2',
+            quantity: 1,
+            settled: 1,
+          },
+        ],
+      }),
+      line('Cheese', {
+        id: 'l-2',
+        pickId: 'i-milk',
+        origins: [
+          {
+            id: 'o-3',
+            zoneId: 'z1',
+            listId: 'l-weekly',
+            lineId: 'zl-3',
+            quantity: 4,
+            settled: 0,
+          },
+        ],
+      }),
+      line('Something for dinner', { id: 'l-3', origins: [] }),
+    ];
+
+    async function renderGrouped(grouping: 'category' | 'list') {
+      const rendered = await render({
+        lines: grouped,
+        sources: SOURCES,
+        listNames: LIST_NAMES,
+        products: new Map([['i-milk', milk()]]),
+      });
+      TestBed.inject(BasketViewStore).setGrouping(grouping);
+      rendered.fixture.detectChanges();
+      return rendered;
+    }
+
+    /** One row by the words on it, because a line is drawn once per list here. */
+    const rowFor = (
+      fixture: ComponentFixture<BasketPage>,
+      content: string
+    ): BasketLineRow | null =>
+      fixture.debugElement
+        .queryAll(By.directive(BasketLineRow))
+        .map((found) => found.componentInstance as BasketLineRow)
+        .find((row) => row.line().content === content) ?? null;
+
+    /** Let the page await the write, then draw what came back. */
+    async function settleWrites(
+      fixture: ComponentFixture<BasketPage>
+    ): Promise<void> {
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    const headings = (fixture: ComponentFixture<BasketPage>) =>
+      Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+          '.group-title'
+        )
+      );
+
+    it('heads each aisle with an h2 carrying the name and the count together', async () => {
+      const { fixture } = await renderGrouped('category');
+
+      const [dairy] = headings(fixture);
+      expect(dairy.tagName).toBe('H2');
+      // One accessible name, because a reader moving by heading hears the `h2` and
+      // nothing else inside it (section 6). The visible spans are `aria-hidden`.
+      expect(dairy.getAttribute('aria-label')).toBe(
+        'basket.category.DAIRY, basket.group.progress'
+      );
+    });
+
+    it('heads the sink with the words that say why it exists', async () => {
+      const { fixture } = await renderGrouped('category');
+
+      const last = headings(fixture)[headings(fixture).length - 1];
+      expect(last.getAttribute('aria-label')).toContain(
+        'basket.group.noCategory'
+      );
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.group-hint')
+          ?.textContent
+      ).toContain('basket.group.noCategoryHint');
+    });
+
+    /**
+     * A list's name is the one half of a heading this app did not write, so it is
+     * drawn as it is. Running it through the translator would look it up as a key
+     * and a household called "Weekly shop" would be headed "Weekly shop" only by
+     * luck.
+     */
+    it('heads a list section with the household’s own name, untranslated', async () => {
+      const { fixture } = await renderGrouped('list');
+
+      expect(headings(fixture).map((node) => node.textContent?.trim())).toEqual(
+        [
+          expect.stringContaining('Weekly shop'),
+          expect.stringContaining('Groceries'),
+          expect.stringContaining('basket.group.noList'),
+        ]
+      );
+    });
+
+    it('says a close that bought nothing apart from a purchase, on the heading', async () => {
+      const closed = [
+        line('Bread', {
+          id: 'l-1',
+          quantity: 1,
+          settled: 1,
+          lastOutcome: 'NOT_AVAILABLE',
+          pickId: 'i-milk',
+        }),
+      ];
+      const { fixture } = await render({
+        lines: closed,
+        products: new Map([['i-milk', milk()]]),
+      });
+      TestBed.inject(BasketViewStore).setGrouping('category');
+      fixture.detectChanges();
+
+      // Two keys, as the page's own sentence keeps them apart: a shop that had none
+      // is not shopping done.
+      expect(headings(fixture)[0].getAttribute('aria-label')).toBe(
+        'basket.category.DAIRY, basket.group.progress · basket.group.unavailable'
+      );
+    });
+
+    it('draws no heading at all on an ungrouped basket', async () => {
+      const { fixture } = await render({ lines: grouped });
+
+      expect(headings(fixture)).toHaveLength(0);
+    });
+
+    /**
+     * The write this plan's section 4.1 turns on. A reel under a list heading counts
+     * what is still to get for **that list**, and the write takes what has been got,
+     * so the two numbers are subtracted from what the list asked for on the way past.
+     * `from` is that list's settled count as the screen last read it, never the
+     * line's.
+     */
+    it('commits a row under a list heading through the per list write', async () => {
+      const { fixture, store } = await renderGrouped('list');
+
+      // Four asked for and none got, so the reel runs from four and lands on one.
+      rowFor(fixture, 'Cheese')?.outstanding.emit({ from: 4, to: 1 });
+      await settleWrites(fixture);
+
+      expect(store.setOriginSettled).toHaveBeenCalledWith('l-2', {
+        lineId: 'zl-3',
+        settled: 3,
+        from: 0,
+      });
+      expect(store.setOutstanding).not.toHaveBeenCalled();
+    });
+
+    it('commits an ungrouped row through the line’s own write, as it always has', async () => {
+      const { fixture, store } = await render({ lines: grouped });
+
+      rowFor(fixture, 'Cheese')?.outstanding.emit({ from: 1, to: 0 });
+      await settleWrites(fixture);
+
+      expect(store.setOutstanding).toHaveBeenCalledWith('l-2', 0, 1);
+      expect(store.setOriginSettled).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The "List" radio is the filter sheet's, and it is offered on the same test the
+     * store uses to drop a remembered one: a reader with no source lists has nothing
+     * to group by, and a sheet that offered it would draw "Nothing" over a basket
+     * grouped by list.
+     */
+    it('offers no list grouping to a reader with no source lists', async () => {
+      await render({ lines: grouped });
+
+      expect(TestBed.inject(BasketViewStore).sourceLists()).toEqual([]);
     });
   });
 });

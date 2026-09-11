@@ -421,7 +421,10 @@ describe('BasketViewStore, the view state', () => {
         'Milk',
         'Bread',
       ]);
-      expect(sections[1].heading).toBe('basket.group.noList');
+      expect(sections[1].heading).toEqual({
+        kind: 'key',
+        key: 'basket.group.noList',
+      });
       expect(contents(sections[1].rows.map((row) => row.line))).toEqual([
         'Batteries',
       ]);

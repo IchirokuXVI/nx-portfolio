@@ -455,8 +455,36 @@
             @if (section.rows.length > 0) {
               <section class="group">
                 @if (section.heading; as heading) {
+                  <!--
+                    The name and the count in **one** accessible name, "Dairy, 1 of
+                    3 got" (velista `0077`, section 6), so a reader moving by
+                    heading hears how much of this aisle is left rather than only
+                    what it is called. The two spans are the visual split of the
+                    same sentence, so they are `aria-hidden` and the `h2` carries
+                    the whole of it.
+
+                    A heading is either words this app wrote or a household's own
+                    name for its list, and the two are not interchangeable: see
+                    `BasketViewHeading`.
+                  -->
                   <div class="group-head">
-                    <h2 class="group-title">{{ heading | rokuT }}</h2>
+                    <h2
+                      [attr.aria-label]="headingLabel(section)"
+                      class="group-title"
+                    >
+                      <span aria-hidden="true">
+                        {{
+                          heading.kind === 'key'
+                            ? (heading.key | rokuT)
+                            : heading.text
+                        }}
+                      </span>
+                      @if (sectionCount(section); as count) {
+                        <span aria-hidden="true" class="group-count">{{
+                          count
+                        }}</span>
+                      }
+                    </h2>
                     @if (section.hint; as hint) {
                       <span class="group-hint">{{ hint | rokuT }}</span>
                     }
@@ -464,11 +492,11 @@
                 }
 
                 <ul class="lines">
-                  @for (row of section.rows; track row.line.id) {
+                  @for (row of section.rows; track row.key) {
                     <li>
                       <lib-basket-line-row
                         (open)="openLine(row.line)"
-                        (outstanding)="setOutstanding(row.line, $event)"
+                        (outstanding)="setRowOutstanding(row, $event)"
                         (reopen)="reopenLine(row.line)"
                         (settle)="settleLine(row.line)"
                         [awaitingApproval]="pendingTargets().has(row.line.id)"
@@ -480,6 +508,7 @@
                         [listNames]="listNames()"
                         [meId]="meId()"
                         [notice]="noticeFor(row.line)"
+                        [origin]="row.origin"
                         [ownName]="ownName()"
                         [people]="participantsById()"
                         [products]="products()"
