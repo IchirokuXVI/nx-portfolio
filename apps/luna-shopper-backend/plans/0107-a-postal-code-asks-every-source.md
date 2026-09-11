@@ -118,7 +118,7 @@ function over the reported place, so it is testable with no database:
 (`0106` section 1), so every one of its 1,675 shops failed the check and waited for a person to press
 import on a row nothing was wrong with. The address is what identifies a shop of a chain, it travels
 on `street` and `city`, and velista already draws it under the chain's name for any shop whose label
-is null.
+is null. Dropped in [#349](https://github.com/IchirokuXVI/nx-portfolio/pull/349).
 
 **A place that fails the check is not an error and is not rejected.** It becomes an ordinary `NEW`
 row in the queue with the failed fields named on it, which is the existing screen doing the existing
