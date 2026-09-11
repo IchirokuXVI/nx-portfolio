@@ -43,6 +43,7 @@ import {
 } from './harvest-export';
 import { toSourceCatalogEntryView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { acceptedName } from './source-entry-name';
 import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
@@ -229,15 +230,19 @@ export class SourceEntryService {
       }
     }
 
-    const spanish = req.name?.es?.trim() || entry.name;
-    if (!spanish) {
-      throw new ValidationException(
-        'A product needs a name in at least one language.',
-        { details: { name: 'give at least one of es or en' } }
-      );
+    const source = await this.sources.findBySupermarket(entry.supermarketId);
+    const name = acceptedName(req.name, entry.name, source?.adapterKey);
+
+    // The source's own translation, so it fills a language the operator left
+    // blank and never replaces one they typed (plan 0111, section 6). An
+    // operator who typed an English name has said what the product is called in
+    // English, and the chain does not get to overrule them.
+    if (!name.en) {
+      const english = await this.fetchEnglishName(entry);
+      if (english) {
+        name.en = english;
+      }
     }
-    const english =
-      req.name?.en?.trim() || (await this.fetchEnglishName(entry));
 
     const item: ItemView = await this.catalog.createItem({
       // Plan 0079 reverses plan 0038 section 11: a product the source does not
@@ -245,8 +250,9 @@ export class SourceEntryService {
       // copy is indistinguishable from a translation in the row, so nothing
       // could list the products still waiting for one; an absent key is a
       // visible gap the admin lists, and a reader sees the Spanish name through
-      // the fallback, which is what the copy gave them anyway.
-      name: english ? { es: spanish, en: english } : { es: spanish },
+      // the fallback, which is what the copy gave them anyway. Plan 0111 says
+      // the same in the other direction: an English only accept writes no `es`.
+      name,
       brand: req.brand === undefined ? entry.brand : req.brand,
       ean,
       unitSize:
@@ -514,7 +520,8 @@ export class SourceEntryService {
       return product?.name.en ?? null;
     } catch (error) {
       // One optional request must not stop a product being created. The item is
-      // saved with its Spanish name and the admin can translate it later.
+      // saved with the languages it already has and the admin can add the
+      // other one later.
       this.logger.warn(
         `Could not fetch the English name for ${entry.externalId}: ${String(error)}`
       );

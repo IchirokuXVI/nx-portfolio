@@ -25,7 +25,11 @@ describe('DiscoveredPlaceService import, the chain it resolves', () => {
     return {
       id: 'place-1',
       runId: 'run-1',
-      provider: 'OSM',
+      // LIDL's own store list rather than OpenStreetMap, because creating a
+      // chain now needs a provider that says what language it names things in
+      // (plan 0111, section 8). Everything else about this fixture is a LIDL
+      // shop already. The OSM case has its own test below.
+      provider: 'LIDL',
       externalRef: 'node/1',
       brandKey: null,
       brandName: 'LIDL',
@@ -136,6 +140,78 @@ describe('DiscoveredPlaceService import, the chain it resolves', () => {
       ([input]) => input.supermarketId
     );
     expect(new Set(chains).size).toBe(1);
+  });
+
+  it('writes the chain name once, under the language the source prints in', async () => {
+    // Plan 0111, section 8. It used to be written into both keys, and a copy is
+    // indistinguishable from a translation in the row: nothing could list the
+    // chains still waiting for one, and `missingLocales` reported a coverage
+    // that was a duplicate. A reader of either language still sees the proper
+    // noun, through the fallback, which is what the copy was giving them.
+    const harness = build();
+    harness.add(place({ id: 'p1' }));
+
+    await harness.service.import({ userId: ADMIN, placeId: 'p1' });
+
+    expect(harness.catalog.createSupermarket).toHaveBeenCalledWith(
+      expect.objectContaining({ name: { es: 'LIDL' } })
+    );
+  });
+
+  it('labels the shop once, under the language the source prints in', async () => {
+    // The third copy of the same string into both keys, and the one plan 0111
+    // section 8's own example is about: "Mercadona Alicante" is a shop, not a
+    // chain.
+    const harness = build();
+    harness.add(place({ id: 'p1', name: 'LIDL Córdoba' }));
+
+    await harness.service.import({ userId: ADMIN, placeId: 'p1' });
+
+    expect(harness.catalog.createLocation).toHaveBeenCalledWith(
+      expect.objectContaining({ label: { es: 'LIDL Córdoba' } })
+    );
+  });
+
+  it('leaves the shop unlabelled when the provider states no language', async () => {
+    // A label is nullable and is a convenience over the address, so unlike a
+    // chain name it costs nothing to leave absent. The import still lands.
+    const harness = build({ known: [chain('chain-lidl', 'LIDL')] });
+    harness.add(place({ id: 'p1', provider: 'OSM', name: 'LIDL Córdoba' }));
+
+    await harness.service.import({ userId: ADMIN, placeId: 'p1' });
+
+    expect(harness.catalog.createLocation).toHaveBeenCalledWith(
+      expect.objectContaining({ label: null })
+    );
+  });
+
+  it('refuses to name a chain from a provider that states no language', async () => {
+    // OpenStreetMap's `name` tag is written by mappers in the local language of
+    // wherever the shop is, so `osm-places` answers a null `printedLocale` and
+    // there is no key to file the string under. Guessing one is what plan 0111
+    // removes, so this joins the refusal an unnamed place already gets: the
+    // operator creates the chain and passes its id.
+    const harness = build();
+    harness.add(place({ id: 'p1', provider: 'OSM' }));
+
+    await expect(
+      harness.service.import({ userId: ADMIN, placeId: 'p1' })
+    ).rejects.toThrow(/do not say what language/);
+    expect(harness.catalog.createSupermarket).not.toHaveBeenCalled();
+  });
+
+  it('attaches an OSM place to a chain catalog already holds', async () => {
+    // The refusal is about *naming a new* chain, not about OpenStreetMap. A
+    // place whose brand catalog already knows never needs a name written.
+    const harness = build({ known: [chain('chain-lidl', 'LIDL')] });
+    harness.add(place({ id: 'p1', provider: 'OSM' }));
+
+    await harness.service.import({ userId: ADMIN, placeId: 'p1' });
+
+    expect(harness.catalog.createSupermarket).not.toHaveBeenCalled();
+    expect(harness.catalog.createLocation).toHaveBeenCalledWith(
+      expect.objectContaining({ supermarketId: 'chain-lidl' })
+    );
   });
 
   it('creates one chain when four imports overlap', async () => {

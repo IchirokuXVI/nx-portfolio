@@ -11,16 +11,19 @@ import {
 import {
   clampPageSize,
   ConflictException,
-  decodeCursor,
+  DEFAULT_LOCALE,
   encodeCursor,
+  getRequestContext,
   NotFoundException,
   ValidationException,
+  type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, Repository } from 'typeorm';
 import { ProductGroup } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
+  decodeCursorForLocale,
   displayName,
   displayNameSql,
   toProductGroupView,
@@ -39,6 +42,8 @@ import {
 const PG_UNIQUE_VIOLATION = '23505';
 
 interface ProductGroupCursor {
+  /** The language the `value` was cut under (plan 0111, section 5). */
+  locale: SupportedLocale;
   /** An offset for a ranked page, a sort value for an ordinary one. */
   value: string;
   id: string;
@@ -155,17 +160,23 @@ export class ProductGroupService {
    */
   async list(req: ListProductGroupsRequest): Promise<ProductGroupPage> {
     const limit = clampPageSize(req.limit);
-    const cursor = decodeCursor(req.cursor) as ProductGroupCursor | undefined;
+    // The caller's language, off the request context the gateway propagated
+    // (plan 0111, section 3).
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    const cursor = decodeCursorForLocale<ProductGroupCursor>(
+      req.cursor,
+      locale
+    );
     const term = parseSearchTerm(req.query);
 
     if (!term) {
       const qb = this.groups
         .createQueryBuilder('g')
-        .orderBy(displayNameSql('g'), 'ASC')
+        .orderBy(displayNameSql('g', locale), 'ASC')
         .addOrderBy('g.id', 'ASC')
         .take(limit + 1);
       if (cursor) {
-        qb.andWhere(`(${displayNameSql('g')}, g.id) > (:cv, :cid)`, {
+        qb.andWhere(`(${displayNameSql('g', locale)}, g.id) > (:cv, :cid)`, {
           cv: cursor.value,
           cid: cursor.id,
         });
@@ -178,7 +189,11 @@ export class ProductGroupService {
         items: page.map(toProductGroupView),
         nextCursor:
           hasMore && last
-            ? encodeCursor({ value: displayName(last.name), id: last.id })
+            ? encodeCursor({
+                locale,
+                value: displayName(last.name, locale),
+                id: last.id,
+              })
             : null,
       };
     }
@@ -211,7 +226,7 @@ export class ProductGroupService {
     return {
       items: page.map(toProductGroupView),
       nextCursor: hasMore
-        ? encodeCursor({ value: String(offset + limit), id: '' })
+        ? encodeCursor({ locale, value: String(offset + limit), id: '' })
         : null,
     };
   }

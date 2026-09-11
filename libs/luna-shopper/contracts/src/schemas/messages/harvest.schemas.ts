@@ -1032,7 +1032,7 @@ const discoveryRequestIdRequest = object(
  * (plan 0103, section 4.1).
  *
  * `const` and not `properties`, because the table itself is the contract. The
- * spawn enforces these four booleans and the back office draws its form from
+ * spawn enforces these facts and the back office draws its form from
  * them, so the document has to carry the answers and not only the question. The
  * value is {@link ADAPTER_CAPABILITIES} itself, so the schema cannot state a
  * capability the backend does not enforce.
@@ -1041,7 +1041,7 @@ const adapterCapabilityTable: JsonSchema = {
   $id: HARVEST_SCHEMA_IDS.adapterCapabilityTable,
   type: 'object',
   description:
-    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.',
+    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. A reader that does not know an adapter must answer no to every boolean and null to the language rather than throw.',
   const: ADAPTER_CAPABILITIES,
 };
 

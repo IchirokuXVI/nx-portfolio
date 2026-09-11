@@ -19,6 +19,7 @@ import type { CatalogClient } from './catalog-client.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import type { SourceEntryPriceWriter } from './source-entry-write';
+import type { SupermarketSourceService } from './supermarket-source.service';
 
 /**
  * A whole decisions file, applied in one call (plan 0100).
@@ -128,6 +129,8 @@ function build(
     /** Fail the cleanup delete, so the product is reported as an orphan. */
     failDelete?: boolean;
     createItems?: jest.Mock;
+    /** The chain's adapter, which decides what language its printed name is in. */
+    adapterKey?: string | null;
   } = {}
 ) {
   const rows = options.rows ?? [entry()];
@@ -191,7 +194,26 @@ function build(
     }),
   } as unknown as PlatformAdminService;
 
-  const service = new SourceEntryBatchService(entries, catalog, prices, admin);
+  // Every row in these files belongs to Mercadona, which prints Spanish, so a
+  // row accepted with no name of its own files the printed string under `es`.
+  // `in` rather than `??`, so a test can say `adapterKey: null` and mean it:
+  // null is the chain whose printed language nothing knows, and `??` would read
+  // it as "not provided" and hand back Mercadona.
+  const adapterKey =
+    'adapterKey' in options ? options.adapterKey : 'mercadona-api';
+  const sources = {
+    findBySupermarket: jest.fn(async () =>
+      adapterKey === null ? null : { adapterKey }
+    ),
+  } as unknown as SupermarketSourceService;
+
+  const service = new SourceEntryBatchService(
+    entries,
+    catalog,
+    prices,
+    admin,
+    sources
+  );
   return { service, saved, createItems, deleteItem, write, manager, admin };
 }
 
@@ -309,6 +331,100 @@ describe('SourceEntryBatchService', () => {
     expect(saved[0].name).toBe('Leche semidesnatada Hacendado');
     expect(saved[0].brand).toBe('Hacendado');
     expect(saved[0].sizeFormat).toBe('1 L');
+  });
+
+  /**
+   * The name a created product gets, over the same four cases the one at a time
+   * route is tested on (plan 0111, section 6 and section 12).
+   *
+   * The two routes are tested separately and deliberately: they drifted once
+   * already, the batch copy silently required Spanish the way the other one did,
+   * and the only difference between them that is meant to exist is the English
+   * fetch, which this route does not pay for.
+   */
+  describe('the name a created product gets', () => {
+    /** The single `createItem` input this file produced. */
+    async function nameFrom(
+      item: Record<string, unknown>,
+      options: Parameters<typeof build>[0] = {}
+    ) {
+      const { service, createItems } = build(options);
+      const result = await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item,
+            expect: expectFresh,
+          },
+        ])
+      );
+      return { result, createItems };
+    }
+
+    it('takes Spanish alone when that is what the file gave', async () => {
+      const { createItems } = await nameFrom({ name: { es: 'Leche entera' } });
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ name: { es: 'Leche entera' } }),
+      ]);
+    });
+
+    it('takes English alone, and writes no Spanish key', async () => {
+      // The regression: the old rule read `item.name.es` and fell back to the
+      // row's printed string, so an English only decision stored the chain's
+      // Spanish name beside it. This route never fetches English, so what the
+      // file said is the whole answer.
+      const { createItems } = await nameFrom({ name: { en: 'Whole milk' } });
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ name: { en: 'Whole milk' } }),
+      ]);
+      const [[[input]]] = createItems.mock.calls;
+      expect(input.name).not.toHaveProperty('es');
+    });
+
+    it('takes both when the file gave both', async () => {
+      const { createItems } = await nameFrom({
+        name: { es: 'Leche entera', en: 'Whole milk' },
+      });
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: { es: 'Leche entera', en: 'Whole milk' },
+        }),
+      ]);
+    });
+
+    it('falls back to the printed name, under the language the chain prints in', async () => {
+      const { createItems } = await nameFrom({});
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: { es: 'Leche semidesnatada Hacendado' },
+        }),
+      ]);
+    });
+
+    it('refuses the file when nothing names the product', async () => {
+      // A refusal here lands nothing at all, which is this route's whole point:
+      // the throw happens before `createItems`, so no product exists to orphan.
+      const { result, createItems } = await nameFrom(
+        {},
+        { rows: [entry({ name: '' })] }
+      );
+
+      expect(result.applied).toBe(false);
+      expect(createItems).not.toHaveBeenCalled();
+    });
+
+    it('refuses the file when the chain names no language it prints in', async () => {
+      const { result, createItems } = await nameFrom({}, { adapterKey: null });
+
+      expect(result.applied).toBe(false);
+      expect(createItems).not.toHaveBeenCalled();
+    });
   });
 
   it('refuses the whole file for one stale expect, and writes nothing anywhere', async () => {

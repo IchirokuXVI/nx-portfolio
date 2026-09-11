@@ -2713,7 +2713,7 @@ export type GeneratedListGeneratedListView = {
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. A reader that does not know an adapter must answer no to every boolean and null to the language rather than throw.
  */
 export const HarvestAdapterCapabilityTable = {
   'mercadona-api': {
@@ -2721,43 +2721,49 @@ export const HarvestAdapterCapabilityTable = {
     scopesItsOwn: false,
     listsItsOwnStores: true,
     hasProductPages: false,
+    printedLocale: 'es',
   },
   'deza-web': {
     writesPrices: false,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: 'es',
   },
   'carrefour-web': {
     writesPrices: true,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: true,
+    printedLocale: 'es',
   },
   'lidl-api': {
     writesPrices: true,
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: true,
+    printedLocale: 'es',
   },
   'osm-places': {
     writesPrices: false,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: null,
   },
   manual: {
     writesPrices: false,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: null,
   },
 } as const;
 
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. A reader that does not know an adapter must answer no to every boolean and null to the language rather than throw.
  */
 export type HarvestAdapterCapabilityTable =
   typeof HarvestAdapterCapabilityTable;

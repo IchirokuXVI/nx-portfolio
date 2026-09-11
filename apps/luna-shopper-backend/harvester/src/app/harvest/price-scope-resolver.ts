@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import { CatalogClient } from './catalog-client.service';
+import { printedNameOrNull } from './source-entry-name';
 
 /**
  * A group of shops a source prices together, as the source names it (plan 0103,
@@ -43,9 +44,15 @@ export interface ScopeDeclaration {
 export class PriceScopeResolver {
   constructor(private readonly catalog: CatalogClient) {}
 
-  /** A resolver scoped to one chain, for the length of one run. */
-  forRun(supermarketId: string): RunScopeResolver {
-    return new RunScopeResolver(this.catalog, supermarketId);
+  /**
+   * A resolver scoped to one chain, for the length of one run.
+   *
+   * `adapterKey` is here for one reason: a scope the run has to create is named
+   * with the source's own string, and that string belongs to the language the
+   * source prints in (plan 0111, section 8).
+   */
+  forRun(supermarketId: string, adapterKey: string | null): RunScopeResolver {
+    return new RunScopeResolver(this.catalog, supermarketId, adapterKey);
   }
 }
 
@@ -60,7 +67,8 @@ export class RunScopeResolver {
 
   constructor(
     private readonly catalog: CatalogClient,
-    private readonly supermarketId: string
+    private readonly supermarketId: string,
+    private readonly adapterKey: string | null
   ) {}
 
   /**
@@ -83,11 +91,20 @@ export class RunScopeResolver {
       return existing;
     }
 
+    // The source's own name for the group, written once under the language
+    // that source prints in (plan 0111, section 8). It used to be written into
+    // both keys, which made a copy indistinguishable from a translation and
+    // reported a coverage that was a duplicate.
+    //
+    // A source that prints no language this build can name leaves the scope
+    // unnamed rather than filing its string under a guessed key. The scope
+    // still exists and still prices its shops: the name is what an operator
+    // reads, and `null` is already what a declaration with no name produces.
     const scope = await this.catalog.createPriceScope(
       this.supermarketId,
       declaration.kind,
       declaration.key,
-      declaration.name ? { es: declaration.name, en: declaration.name } : null
+      printedNameOrNull(declaration.name, this.adapterKey)
     );
     held.set(declaration.key, scope.id);
     this.resolved.set(declaration.key, scope.id);

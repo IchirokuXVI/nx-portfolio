@@ -206,7 +206,10 @@ export class RunExecutor implements OnApplicationShutdown {
               {
                 ingest: this.ingest,
                 scopes: run.supermarketId
-                  ? this.scopes.forRun(run.supermarketId)
+                  ? this.scopes.forRun(
+                      run.supermarketId,
+                      source?.adapterKey ?? null
+                    )
                   : null,
                 places: this.places,
                 shops: this.shops,
@@ -287,6 +290,9 @@ export class RunExecutor implements OnApplicationShutdown {
             // What observed the price, not what uploaded it: a re-imported
             // Mercadona walk stamps OFFICIAL_API (plan 0086, section 6.2).
             sourceKind: run.input['sourceKind'] as PriceSourceKind,
+            // The chain's own adapter, for the language a scope this file
+            // declares is named in (plan 0111, section 8).
+            adapterKey: source?.adapterKey ?? null,
           });
           break;
       }

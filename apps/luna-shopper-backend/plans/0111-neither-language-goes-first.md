@@ -1,4 +1,6 @@
-# 0109 Neither language goes first
+> **PR:** [#347](https://github.com/IchirokuXVI/nx-portfolio/pull/347)
+
+# 0111 Neither language goes first
 
 Plan `0079` decided that a name carries the languages it has, that a language a name does not
 have is absent from the object rather than null, and that a reader sees the language they read
@@ -235,7 +237,7 @@ choose one: the back office sends no `Accept-Language` at all today, so it will 
 English until `apps/luna-shopper-admin/plans/0026` adds the header and the picker. The two are
 independent and can be built in either order, and neither is broken by the other:
 
-- 0109 alone changes nothing observable in the back office, because the locale it now honours
+- 0111 alone changes nothing observable in the back office, because the locale it now honours
   resolves to English for a request with no header.
 - 0026 alone fixes the names on screen and the server messages, and leaves the listing order
   English first until this plan lands.

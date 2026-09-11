@@ -403,6 +403,105 @@ describe('SourceEntryService', () => {
       );
     });
 
+    it('creates the item with the English name alone when that is all the operator gave', async () => {
+      // **The regression plan 0111 exists for.** The old rule read `req.name.es`
+      // and nothing else, so an operator who filled English and left Spanish
+      // blank got the chain's printed Spanish string stored beside their typed
+      // English: they wrote one name and the catalog held two, one of which
+      // nobody had checked. No `es` key is the whole assertion.
+      const { service, createItem } = build({ english: null });
+
+      await service.createItem({
+        userId: ADMIN,
+        entryId: 'e-1',
+        name: { en: 'Semi skimmed milk' },
+      });
+
+      expect(createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ name: { en: 'Semi skimmed milk' } })
+      );
+      const [[input]] = createItem.mock.calls;
+      expect(input.name).not.toHaveProperty('es');
+    });
+
+    it('never lets the fetched English name overrule one the operator typed', async () => {
+      // The fetch fills a language left blank and replaces none. An operator who
+      // typed an English name has said what the product is called in English.
+      const { service, createItem, fetchEnglish } = build({
+        english: 'Semi skimmed milk',
+      });
+
+      await service.createItem({
+        userId: ADMIN,
+        entryId: 'e-1',
+        name: { es: 'Leche entera', en: 'Whole milk' },
+      });
+
+      expect(fetchEnglish).not.toHaveBeenCalled();
+      expect(createItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: { es: 'Leche entera', en: 'Whole milk' },
+        })
+      );
+    });
+
+    it('refuses when neither the request nor the row names the product', async () => {
+      // The message used to offer a choice the code did not honour: it said any
+      // one language would do while checking `es` alone. It is true now.
+      const { service, createItem } = build({ row: entry({ name: '' }) });
+
+      await expect(
+        service.createItem({ userId: ADMIN, entryId: 'e-1' })
+      ).rejects.toThrow('A product needs a name in at least one language.');
+      expect(createItem).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the chain does not say what language it prints in', async () => {
+      // A printed string of unknown language is not a name in any particular
+      // one, and guessing is what this plan removes (section 7). The operator
+      // names the product instead.
+      const { service, createItem } = build({ source: null });
+
+      await expect(
+        service.createItem({ userId: ADMIN, entryId: 'e-1' })
+      ).rejects.toThrow('A product needs a name in at least one language.');
+      expect(createItem).not.toHaveBeenCalled();
+    });
+
+    it('takes a name the operator typed even when the chain prints no language', async () => {
+      // The refusal above is about having nothing to file, not about the chain.
+      const { service, createItem } = build({ source: null });
+
+      await service.createItem({
+        userId: ADMIN,
+        entryId: 'e-1',
+        name: { es: 'Leche entera' },
+      });
+
+      expect(createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ name: { es: 'Leche entera' } })
+      );
+    });
+
+    it('ignores a name key the operator left blank', async () => {
+      // `{ en: '  ' }` would satisfy every "at least one language" check and put
+      // an empty string on every screen, so a blank key is dropped and the row's
+      // printed name answers instead.
+      const { service, createItem } = build({ english: null });
+
+      await service.createItem({
+        userId: ADMIN,
+        entryId: 'e-1',
+        name: { en: '   ' },
+      });
+
+      expect(createItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: { es: 'Leche semidesnatada Hacendado' },
+        })
+      );
+    });
+
     it('refuses an EAN the catalog already holds, naming the item', async () => {
       const { service } = build({ row: entry({ ean: '8480000123456' }) });
       const catalog = (

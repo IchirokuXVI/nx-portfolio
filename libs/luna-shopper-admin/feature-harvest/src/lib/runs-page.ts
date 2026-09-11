@@ -68,7 +68,11 @@ const MODES: readonly HarvestRunMode[] = [
 /** How far the scope read walks looking for the chain's `NATIONAL` one. */
 const SCOPE_PAGE = 100;
 
-/** The four facts the gateway publishes about a source. */
+/**
+ * The facts this form uses, out of the table the gateway publishes. The table
+ * also carries the language a source prints in, which the form does not draw
+ * (backend plan 0111, section 7).
+ */
 interface AdapterCapabilities {
   readonly writesPrices: boolean;
   readonly scopesItsOwn: boolean;

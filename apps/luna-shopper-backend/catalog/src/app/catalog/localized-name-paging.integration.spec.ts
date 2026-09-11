@@ -5,6 +5,10 @@ import {
   type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  runWithRequestContext,
+  type SupportedLocale,
+} from '@portfolio/luna-shopper/platform';
+import {
   describeIntegration,
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
@@ -210,5 +214,116 @@ describeIntegration('localized name paging (real Postgres)', () => {
 
     expect(seen).toHaveLength(created.length);
     expect([...seen].sort()).toEqual([...created].sort());
+  });
+
+  /**
+   * The caller's language decides the order (plan 0111, sections 4 and 5).
+   *
+   * These four names sort differently in the two languages on purpose, and two
+   * of them carry one language only, so the fallback takes part in the order
+   * rather than sitting at the end of it. Spanish reads Ajo, Berenjena, Yogurt,
+   * Zanahoria, which is declaration order; English reads Apricot, Berenjena,
+   * Yogurt, Zucchini, which is 3, 1, 2, 0. A listing that still ordered English
+   * first would answer the second sequence for both.
+   */
+  const BY_LANGUAGE: readonly LocalizedText[] = [
+    { en: 'Zucchini', es: 'Ajo' },
+    { es: 'Berenjena' },
+    { en: 'Yogurt' },
+    { en: 'Apricot', es: 'Zanahoria' },
+  ];
+
+  /** Runs a read as a caller who reads `locale`, the way the gateway does. */
+  function asReaderOf<T>(
+    locale: SupportedLocale,
+    read: () => Promise<T>
+  ): Promise<T> {
+    return runWithRequestContext(
+      { correlationId: `test-${locale}`, locale },
+      read
+    );
+  }
+
+  describe('the order a listing is paged in', () => {
+    let mine: string[];
+
+    beforeAll(async () => {
+      mine = [];
+      for (const name of BY_LANGUAGE) {
+        const item = await items.create({
+          userId: OWNER,
+          name,
+          category: ItemCategory.OTHER,
+          defaultUnit: UnitOfMeasure.UNIT,
+        });
+        mine.push(item.id);
+      }
+    });
+
+    /**
+     * The ids this describe created, in the order the listing served them.
+     *
+     * Filtered rather than asserted whole, because the products the tests above
+     * created are in the same table. Filtering keeps relative order, which is
+     * the claim, and leaves the test indifferent to what else the schema holds.
+     */
+    async function order(locale: SupportedLocale): Promise<string[]> {
+      const seen = await asReaderOf(locale, () =>
+        collect((cursor) =>
+          items.search({ userId: OWNER, order: 'name', limit: 2, cursor })
+        )
+      );
+      // Nothing may repeat, whatever the language: the keyset predicate, the
+      // ORDER BY and the cursor value are built from one order and a
+      // disagreement between them shows up here first.
+      expect(new Set(seen).size).toBe(seen.length);
+      return seen.filter((id) => mine.includes(id));
+    }
+
+    it('pages by Spanish for a reader of Spanish', async () => {
+      expect(await order('es')).toEqual(mine);
+    });
+
+    it('pages by English for a reader of English', async () => {
+      expect(await order('en')).toEqual([mine[3], mine[1], mine[2], mine[0]]);
+    });
+
+    it('serves every row under either language, including the single language ones', async () => {
+      // The fallback half: a row with no Spanish is still on a Spanish page and
+      // a row with no English is still on an English page. Before plan 0079
+      // seeking on one key alone dropped them entirely, and the widened order
+      // has to keep that fixed in both directions rather than one.
+      for (const locale of ['es', 'en'] as const) {
+        expect([...(await order(locale))].sort()).toEqual([...mine].sort());
+      }
+    });
+
+    it('answers the first page when a cursor cut under another language comes back', async () => {
+      // Plan 0111, section 5. Without this the seek compares a Spanish
+      // predicate against an English key: rows repeat or vanish and nothing on
+      // screen says so. Restarting is the visible, harmless answer, and the
+      // back office drops the cursor on a switch anyway, so this is the net
+      // under that rather than the mechanism.
+      const english = await asReaderOf('en', () =>
+        items.search({ userId: OWNER, order: 'name', limit: 2 })
+      );
+      expect(english.nextCursor).not.toBeNull();
+
+      const resent = await asReaderOf('es', () =>
+        items.search({
+          userId: OWNER,
+          order: 'name',
+          limit: 2,
+          cursor: english.nextCursor as string,
+        })
+      );
+      const spanishFirstPage = await asReaderOf('es', () =>
+        items.search({ userId: OWNER, order: 'name', limit: 2 })
+      );
+
+      expect(resent.items.map((row) => row.id)).toEqual(
+        spanishFirstPage.items.map((row) => row.id)
+      );
+    });
   });
 });

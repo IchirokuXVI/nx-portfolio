@@ -32,10 +32,34 @@ import {
 } from './place-import-check';
 import { PlatformAdminService } from './platform-admin.service';
 import type { ObservedPlace } from './run-report';
+import { printedName, printedNameOrNull } from './source-entry-name';
 
 interface PlaceCursor {
   value: string;
   id: string;
+}
+
+/**
+ * The adapter that reported a place, by the provider stamped on it.
+ *
+ * A store discovery writes its own provider string and the adapter it ran is
+ * not on the row, so the two are matched here. It is needed only for the
+ * language question (plan 0111, section 8), and only before a chain exists: a
+ * chain that catalog already holds has a source row, and a chain being created
+ * from a place has nothing but the place.
+ *
+ * A provider nothing here names answers null, which `adapterCapabilities` then
+ * reads as "I know nothing" and the chain create turns into a refusal rather
+ * than a guessed language.
+ */
+const PROVIDER_ADAPTERS: Readonly<Record<string, string>> = {
+  OSM: 'osm-places',
+  LIDL: 'lidl-api',
+  MERCADONA: 'mercadona-api',
+};
+
+function adapterKeyFor(provider: string): string | null {
+  return PROVIDER_ADAPTERS[provider] ?? null;
 }
 
 /** What a run hands {@link DiscoveredPlaceService.observe}. */
@@ -468,7 +492,19 @@ export class DiscoveredPlaceService {
     const location = await this.catalog.createLocation({
       supermarketId,
       priceScopeId: options.priceScopeId,
-      label: place.name ? { en: place.name, es: place.name } : null,
+      // The shop's own name, written once under the language its provider
+      // prints in (plan 0111, section 8). "Mercadona Alicante" is not English
+      // and not Spanish, and a reader of either sees it through the fallback,
+      // which is what the copy was giving them anyway. The difference is that
+      // the row now says truthfully which language it holds.
+      //
+      // The plan names the chain name and the scope name. This is the third of
+      // the same copy, in the same file, and it is the one its example is
+      // about. A label is already nullable, so a provider that states no
+      // language leaves the shop unlabelled rather than refusing the import:
+      // the label is a convenience over the address, and unlike a chain name
+      // nothing downstream needs it to exist.
+      label: printedNameOrNull(place.name, adapterKeyFor(place.provider)),
       address: place.street,
       city: place.city,
       // The run's own country, which used to be discarded and hardcoded null
@@ -571,9 +607,30 @@ export class DiscoveredPlaceService {
           'Pass an explicit supermarketId to attach it to one.'
       );
     }
+    // The chain's name is written once, under the language the source that
+    // reported it prints in (plan 0111, section 8). It used to be written into
+    // both keys, and a copy is indistinguishable from a translation in the row:
+    // nothing could list the chains still waiting for one, and the back office
+    // badge reported a coverage that was a duplicate.
+    //
+    // A provider that prints no language this build can name has nothing to
+    // file the string under, and guessing is the thing this plan removes. That
+    // is OpenStreetMap, whose `name` tag is written by mappers in the local
+    // language of wherever the shop is. It joins the refusal above rather than
+    // inventing a key: the operator names the chain by passing its id, which is
+    // the same escape hatch an unnamed place already uses.
+    const printed = printedName(name, adapterKeyFor(place.provider));
+    if (Object.keys(printed).length === 0) {
+      throw new ConflictException(
+        `Places from ${place.provider} do not say what language they name ` +
+          'things in, so this chain cannot be created with a name in one. ' +
+          'Create the chain and pass an explicit supermarketId to attach ' +
+          'this place to it.'
+      );
+    }
     try {
       return await this.catalog.createSupermarket({
-        name: { en: name, es: name },
+        name: printed,
         externalBrandKey: place.brandKey,
       });
     } catch (error) {
