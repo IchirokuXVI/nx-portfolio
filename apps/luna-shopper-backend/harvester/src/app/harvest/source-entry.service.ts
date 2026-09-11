@@ -390,21 +390,16 @@ export class SourceEntryService {
       return [];
     }
     const held: HarvestExportScope[] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await this.catalog.listPriceScopes(supermarketId, cursor);
-      for (const scope of page.items) {
-        if (named.has(scope.id)) {
-          held.push({
-            id: scope.id,
-            externalKey: scope.externalKey,
-            kind: scope.kind,
-            name: scope.label?.es ?? scope.label?.en ?? null,
-          });
-        }
+    for (const scope of await this.catalog.listAllPriceScopes(supermarketId)) {
+      if (named.has(scope.id)) {
+        held.push({
+          id: scope.id,
+          externalKey: scope.externalKey,
+          kind: scope.kind,
+          name: scope.label?.es ?? scope.label?.en ?? null,
+        });
       }
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor);
+    }
     return held;
   }
 
