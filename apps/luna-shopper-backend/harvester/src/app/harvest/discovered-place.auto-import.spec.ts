@@ -191,18 +191,41 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
     const harness = build();
 
     const result = await harness.service.observe(
-      [observed({ name: null, brandName: null })],
+      [observed({ country: null, brandName: null })],
       options()
     );
 
     expect(harness.catalog.createLocation).not.toHaveBeenCalled();
     expect(result.imported).toBe(0);
     expect(result.blocked).toEqual([
-      { externalRef: 'lidl/1234', missing: ['name', 'chain'] },
+      { externalRef: 'lidl/1234', missing: ['country', 'chain'] },
     ]);
     // An ordinary NEW row in the review queue, which is the existing screen
     // doing the existing job. Nothing is rejected (D4).
     expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
+  });
+
+  it('imports a shop the chain published no name for', async () => {
+    // Mercadona's store finder publishes none at all, so a required name sent
+    // every one of its 1,675 shops to the review queue. The location is created
+    // with no label, and velista draws the address under the chain's name,
+    // which is what it already does for every shop with no name of its own.
+    const harness = build();
+
+    const result = await harness.service.observe(
+      [observed({ name: null })],
+      options()
+    );
+
+    expect(result.imported).toBe(1);
+    expect(result.blocked).toEqual([]);
+    expect(harness.catalog.createLocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: null,
+        address: 'Avenida del Aeropuerto',
+        city: 'Córdoba',
+      })
+    );
   });
 
   it('refuses a place whose postal code was derived rather than stated', async () => {

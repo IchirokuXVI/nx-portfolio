@@ -34,7 +34,7 @@ import {
   schemaId,
   string,
 } from '../builders';
-import { adminCredentialProperties } from '../common.schemas';
+import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
 import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
 
 /**
@@ -1227,6 +1227,13 @@ export const harvestMessageContracts: Record<
   [SUPERMARKET_SOURCE_PATTERNS.setEnabled]: {
     request: HARVEST_SCHEMA_IDS.setSourceEnabledRequest,
     response: HARVEST_SCHEMA_IDS.supermarketSourceView,
+  },
+  // The row that is gone, by its own id, which is what every delete here
+  // answers. There is no view to send back: the caller asked for the row not to
+  // exist any more.
+  [SUPERMARKET_SOURCE_PATTERNS.delete]: {
+    request: HARVEST_SCHEMA_IDS.sourceIdRequest,
+    response: COMMON_IDS.idResult,
   },
   [POSTAL_CODE_DISCOVERY_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listDiscoveryRequestsRequest,

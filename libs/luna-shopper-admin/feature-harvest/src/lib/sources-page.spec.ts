@@ -449,3 +449,139 @@ describe('the chain sources screen, and its controls', () => {
     );
   });
 });
+
+/**
+ * The two things a row could not do: change every one of its settings, and stop
+ * existing.
+ *
+ * The screen could already change the adapter, the workers and the rate. What
+ * it could not touch was `config`, where an adapter's own settings live, and
+ * there was no way at all to take a row back: the row is keyed on the chain, so
+ * a source described against the wrong chain cannot be moved and the upsert
+ * would only write a second row beside it.
+ */
+describe('the chain sources screen, editing and deleting a row', () => {
+  const row = (fixture: ComponentFixture<SourcesPage>) =>
+    fixture.componentInstance
+      .sources()
+      .filter((source) => source.supermarketId === MERCADONA)[0];
+
+  it('opens the settings of the row being edited, as readable JSON', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+
+    page.edit(row(fixture));
+    fixture.detectChanges();
+
+    expect(page.configText()).toBe(
+      JSON.stringify(row(fixture).config, null, 2)
+    );
+    expect(
+      fixture.nativeElement.querySelector('textarea[name="config"]')
+    ).not.toBeNull();
+  });
+
+  it('saves the settings that were typed', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+
+    page.edit(row(fixture));
+    page.configText.set('{ "warehouse": "4661" }');
+    await page.save(row(fixture));
+    await drain();
+    fixture.detectChanges();
+
+    expect(row(fixture).config).toEqual({ warehouse: '4661' });
+    expect(page.editing()).toBeNull();
+  });
+
+  it('refuses settings that are not a JSON object and saves nothing', async () => {
+    // The column is read when a run starts, so a broken value would be found by
+    // a crawl rather than by the person who typed it.
+    const fixture = await render();
+    const page = fixture.componentInstance;
+    const before = row(fixture).config;
+
+    page.edit(row(fixture));
+    page.configText.set('{ warehouse: 4661');
+    await page.save(row(fixture));
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.formErrorKey()).toBe('harvest.sources.config.invalid');
+    expect(row(fixture).config).toEqual(before);
+    // Still open, because the operator has something to fix in it.
+    expect(page.editing()).toBe(MERCADONA);
+    expect(text(fixture)).toContain('That is not a JSON object');
+  });
+
+  it('reads an empty box as no settings at all', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+
+    page.edit(row(fixture));
+    page.configText.set('   ');
+    await page.save(row(fixture));
+    await drain();
+    fixture.detectChanges();
+
+    expect(row(fixture).config).toEqual({});
+    expect(page.formErrorKey()).toBeNull();
+  });
+
+  it('asks before it deletes, and names the chain in the question', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+
+    page.askDelete(row(fixture));
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('lib-confirm-dialog')
+    ).not.toBeNull();
+    expect(text(fixture)).toContain("Delete this chain's source?");
+    expect(text(fixture)).toContain('will have no source row');
+    // The name itself is an interpolation, and the translator this file builds
+    // answers keys rather than filling arguments, so what is asserted here is
+    // that the row being asked about is the one that was clicked.
+    expect(page.pendingDelete()?.supermarketId).toBe(MERCADONA);
+  });
+
+  it('takes the row away once the question is answered', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+    const target = row(fixture);
+
+    page.askDelete(target);
+    await page.confirmDelete(target);
+    await drain();
+    fixture.detectChanges();
+
+    expect(
+      page.sources().some((source) => source.supermarketId === MERCADONA)
+    ).toBe(false);
+    expect(page.pendingDelete()).toBeNull();
+  });
+
+  it('keeps the row and the question when the delete is refused', async () => {
+    // The backend refuses while a run of that chain is in flight. A dialog that
+    // closed on a refusal would read as a delete that worked.
+    const fixture = await render();
+    const page = fixture.componentInstance;
+    const target = row(fixture);
+    jest
+      .spyOn(TestBed.inject(HARVEST_SERVICE), 'deleteSource')
+      .mockRejectedValue({ status: 409, error: { code: 'conflict' } });
+
+    page.askDelete(target);
+    await page.confirmDelete(target);
+    await drain();
+    fixture.detectChanges();
+
+    expect(
+      page.sources().some((source) => source.supermarketId === MERCADONA)
+    ).toBe(true);
+    expect(page.pendingDelete()).not.toBeNull();
+    expect(page.errorKey()).toBe('resource.error.conflict');
+  });
+});

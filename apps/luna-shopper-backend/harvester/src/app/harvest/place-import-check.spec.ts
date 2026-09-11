@@ -14,7 +14,6 @@ import {
 function place(over: Partial<PlaceImportSubject> = {}): PlaceImportSubject {
   return {
     externalRef: 'lidl/1234',
-    name: 'Lidl Córdoba Poniente',
     latitude: 37.8882,
     longitude: -4.8035,
     postalCode: '14013',
@@ -27,14 +26,17 @@ function place(over: Partial<PlaceImportSubject> = {}): PlaceImportSubject {
 }
 
 describe('placeImportBlockers (plan 0107, section 3.2)', () => {
-  it('lets a complete place through', () => {
+  it('lets a complete place through, name or no name', () => {
+    // The fixture carries no name, because the check no longer reads one.
+    // Mercadona's store finder publishes none at all, so requiring one sent
+    // every one of its 1,675 shops to a queue for a person to press import on a
+    // row nothing was wrong with. The address is what identifies a shop of a
+    // chain, and it travels on `street` and `city`.
     expect(placeImportBlockers(place())).toEqual([]);
   });
 
   it.each([
     ['externalRef', { externalRef: '   ' }, 'externalRef'],
-    ['no name', { name: null }, 'name'],
-    ['a blank name', { name: '  ' }, 'name'],
     ['no latitude', { latitude: null }, 'latitude'],
     ['no longitude', { longitude: null }, 'longitude'],
     ['no postal code', { postalCode: null }, 'postalCode'],
@@ -78,9 +80,9 @@ describe('placeImportBlockers (plan 0107, section 3.2)', () => {
     // answers the whole row rather than uncovering the next blocker.
     expect(
       placeImportBlockers(
-        place({ name: null, postalCode: null, brandKey: null, brandName: null })
+        place({ postalCode: null, brandKey: null, brandName: null })
       )
-    ).toEqual(['name', 'postalCode', 'chain']);
+    ).toEqual(['postalCode', 'chain']);
   });
 
   it('refuses a place whose coordinates are not numbers', () => {

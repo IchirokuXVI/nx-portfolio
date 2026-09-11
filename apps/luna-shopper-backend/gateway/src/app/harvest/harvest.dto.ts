@@ -435,7 +435,7 @@ export class UpsertSupermarketSourceDto {
 
   @ApiPropertyOptional({
     description:
-      'Let the shops this chain names enter the catalog without a person looking first. Off by default, and a separate decision from `enabled`: reading the shops of a chain and trusting them are decided at two different times. A shop that is missing a name, a position, its own postal code, a country or a chain still goes to the review queue.',
+      'Let the shops this chain names enter the catalog without a person looking first. Off by default, and a separate decision from `enabled`: reading the shops of a chain and trusting them are decided at two different times. A shop that is missing a position, its own postal code, a country or a chain still goes to the review queue. A name is not required: many chains publish none, and the address is what identifies a shop.',
   })
   @IsOptional()
   @IsBoolean()

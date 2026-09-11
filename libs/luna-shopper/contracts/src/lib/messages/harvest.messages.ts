@@ -154,6 +154,18 @@ export const SUPERMARKET_SOURCE_PATTERNS = {
   get: 'supermarketSource.get',
   list: 'supermarketSource.list',
   setEnabled: 'supermarketSource.setEnabled',
+  /**
+   * Take a chain's source row away again.
+   *
+   * The row is keyed on the chain, so a row created against the wrong chain
+   * cannot be moved to the right one: `upsert` would write a second row rather
+   * than move the first. Deleting it is the only way back, and without this the
+   * mistake was permanent.
+   *
+   * **It refuses while a run of that chain is in flight**, because the run
+   * reads its worker count and its rate from the row it is holding.
+   */
+  delete: 'supermarketSource.delete',
 } as const;
 
 /**
