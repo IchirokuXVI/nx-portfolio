@@ -20,7 +20,7 @@ Built after `luna-shopper/tools` plan 0001 (the folder this lives in) and
 `apps/luna-shopper-backend/harvester/tools/leaflet/` holds 2,933 lines that
 work. Procedure (a) of its `README.md` has nine steps, and steps 5, 6 and 7 are
 already `build-document.mjs`, `drift-check.mjs` and `validate.mjs`. Steps 8 and 9
-are an upload and a baseline, and both stay a person's job (section 8).
+are an upload and a baseline, and both stay a person's job (section 10).
 
 So this plan writes an orchestrator, not a reader. What it adds is steps 1 and 3:
 render the PDF to page images, and ask a model for each page. Steps 2 and 4 it
@@ -55,7 +55,7 @@ no reference to it.
 ```
 --pdf <path>            the leaflet. A PDF, or an image, or a directory of page images.
 --chain <slug>          which chain's prompt and layout to use. Required.
---engine <name>         ollama (default), claude, api. From the registry.
+--engine <name>         ollama (default), claude, api, manual. Section 6 is manual.
 --model <name>          overrides the engine's default model.
 --pages 1-12,31         read only these. Default: every page.
 --out <dir>             where the working material goes. Default: tmp/leaflet/<slug>-<date>.
@@ -63,7 +63,7 @@ no reference to it.
 --dry-run               census and layout check only. Read no page.
 ```
 
-Seven steps, in order, and each one can refuse:
+Eight steps, in order, and each one can refuse:
 
 1. **Census.** Page count, page size, and which pages carry a text layer. Printed
    before anything is asked of a model, because the two chains read so far were
@@ -79,19 +79,23 @@ Seven steps, in order, and each one can refuse:
    it goes. A page that answers nothing parseable is retried once and then
    recorded as an empty array with a named warning, never as a crash: forty
    pages must not be lost to page thirty seven.
-5. **Leaflet metadata.** Write `<out>/import/leaflet.json`: the PDF path, the
+5. **Sanity pass.** Check the readings against what the printed page can support,
+   and name every row that fails. Section 8 is the list of checks. This runs for
+   every engine, because every model has a systematic defect and only the defect
+   differs.
+6. **Leaflet metadata.** Write `<out>/import/leaflet.json`: the PDF path, the
    page count, the fixed section pages, the printed validity window, the engine
    and model that read it, and the date. The validity window is asked of the
    model once, against the cover, and **every field it fills is printed for the
    operator to confirm**, because a wrong date silently mis-scopes every price.
-6. **Build, drift check, validate.** The three existing scripts, in that order,
+7. **Build, drift check, validate.** The three existing scripts, in that order,
    as child processes. A drift refusal stops the run and prints every statistic
    that left its band. `--update-baseline` is never passed automatically.
-7. **Report.** Pages read, offers found, how many have a price, how many have a
-   unit price only, how many have neither, every warning, the drift result and
-   the output path.
+8. **Report.** Pages read, offers found, how many have a price, how many have a
+   unit price only, how many have neither, every sanity failure, every warning,
+   the drift result and the output path.
 
-**The command never uploads.** Step 7 prints the document's path and the
+**The command never uploads.** Step 8 prints the document's path and the
 `harvest/imports/upload` call to make with it. A leaflet reading is accepted by a
 person looking at it, and a tool that posted its own output would remove the only
 review the pipeline has.
@@ -118,7 +122,7 @@ Two details the renderer must get right, and both come from a real leaflet:
   `chains/<slug>/headings.mjs` beside the other per chain defaults, with a
   `--dpi` override for a leaflet that differs.
 - **Never split a tall page.** Aspect ratio costs nothing, and a cut through a
-  tile loses the tile. Section 6 measures what happens when you do it anyway.
+  tile loses the tile. Section 7 measures what happens when you do it anyway.
 
 **A leaflet that arrives as images skips this entirely.** `--pdf <directory>`
 reads `page_NN.png` from it, and LIDL's flyer endpoint already serves every page
@@ -137,10 +141,85 @@ person has to agree with. A `--new-chain` flag that generated them would produce
 a plausible `prompt.txt` nobody checked, and the first sign of trouble would be a
 baseline built from a wrong reading.
 
-`AGENT-PROMPT.md` stays, and shrinks. Prompt A becomes one line, the command at
-the top of this plan. Prompt B stays as it is.
+`AGENT-PROMPT.md` stays, and shrinks. Prompt A is deleted outright: it is a hand
+maintained copy of a procedure, and `--engine manual` now generates the same
+thing from the chain's own files, for this leaflet, with real paths in it
+(section 6). What replaces it is the command. Prompt B stays as it is, because
+writing a new chain's folder is still the job it describes.
 
-## 6. What a local model actually does, measured
+## 6. `--engine manual`, which hands the reading to any model at all
+
+```sh
+# 1. Render, and write the prompt to paste.
+npx nx run luna-shopper/leaflet-cli:read -- --pdf tmp/dia_leaflet.pdf --chain dia --engine manual
+
+# 2. Paste <out>/PROMPT.md into Claude Code, or any model you like. It writes
+#    <out>/import/page_NN.json.
+
+# 3. Pick the run back up.
+npx nx run luna-shopper/leaflet-cli:read -- --out <out> --resume --engine manual
+```
+
+The model this repo measured as most accurate is Sonnet 5, and the awkward way to
+reach it is `--engine claude`, which has to put the Read tool back into a call
+that was cut to 2,546 tokens on purpose (`shared/model-engines` plan 0004,
+section 4). Manual mode reaches it by not being clever: a Claude Code session
+already reads a PNG with its Read tool, and it already has the tokens paid for.
+
+So manual mode is not a lesser fallback. It is how a person gets the best reading
+available without the CLI holding a credential, and it is the mode to use when a
+run matters.
+
+**What it is, exactly: an engine that is a person.** It is spelled as an
+`--engine` value because it answers the same question every other engine answers,
+which is who reads the page. It is **not** a `shared/model-engines` registry
+entry, because everything in that registry builds an object with an `ask` method
+and this one has no `ask` to build. It never calls a model, it pauses, and it
+holds a terminal and a person, all three of which that library's contract
+forbids. The CLI branches on it before it ever asks the registry for an engine.
+
+### The two halves
+
+**The hand off.** The run stops after rendering and writes `<out>/PROMPT.md`. That
+file is self contained and is the whole of what a person pastes:
+
+- `chains/<slug>/prompt.txt` verbatim, since it is the chain's own contract with
+  a model and nothing here may paraphrase it.
+- The **absolute** path of every page image, numbered, so a tool with file access
+  needs no further instruction. A chat window with no file access gets the same
+  list and the person attaches the files, which is why the paths are absolute and
+  listed rather than globbed.
+- Where to write each answer: `<out>/import/page_NN.json`, one JSON array per
+  page, an empty array for a page with no priced product.
+- The census and the layout check from steps 1 and 3, so the reader is told what
+  kind of document this is before reading it.
+- The three fields that matter most, which the chain prompt already names:
+  `loyalty`, `promotion.type` with `promotion.single_unit_price`, and `basis`.
+
+**The pick up.** `--resume` already keeps a page reading that exists, so the
+second command needs no new machinery. What it adds is refusing to build on a
+reading it cannot trust:
+
+- A `page_NN.json` that is not a JSON array is named, by page, and the run stops.
+  A model that answered with prose inside a code fence is the common case, and a
+  run that quietly treated it as an empty page would report a leaflet with
+  missing products and no reason why.
+- A page with no file at all is named, and the run stops unless `--pages` said
+  that page was not wanted. Thirty nine pages out of forty is a partial reading,
+  and the operator decides whether it is worth building.
+- Everything that arrives goes through the same step 5 sanity pass as a model
+  run. A person pasting into an unmeasured model is exactly who needs it.
+
+### Two rules
+
+- **Manual mode never edits a reading.** It refuses one, names the page, and
+  stops. A tool that repaired a model's JSON would be deciding what the page said.
+- **`PROMPT.md` is generated, never committed and never hand written.** It is the
+  chain's prompt plus this run's paths. A second copy of a chain's rules that
+  drifts from `chains/<slug>/prompt.txt` is the failure this whole folder is
+  arranged to prevent.
+
+## 7. What a local model actually does, measured
 
 The comparison the workspace already had was three models on three pages of the
 El Jamon leaflet, 19 offers, scored against a reading the user spot checked.
@@ -213,34 +292,69 @@ costs four calls, a merge nobody can fully trust, and the promotion types.
 minutes and costs nothing. Quartering is 28.3 seconds per page. For scale, the
 same 12 image pages cost $0.05 on Gemini 3.5 Flash-Lite and $0.28 on Sonnet 5.
 
-## 7. The default engine, and the sentence that has to be printed
+## 8. The sanity pass, which names the rows to look at
 
-`--engine ollama` is the default, because a leaflet reading is cheap to redo, the
-drift check and the baseline already exist to catch a bad one, and a free first
-pass over a 40 page leaflet is worth having. It is the right default for reading
-a leaflet you are about to look at.
+A warning that says a reading may be wrong is worth much less than one that says
+**which rows**. Step 5 checks every reading against what a printed page can
+support, whatever produced it, and names each row that fails. It never edits a
+row and it never drops one.
 
-It is **not** good enough to accept unseen, and the tool has to say so rather
-than imply it by succeeding. So a run on a local engine ends with the count it
-earned:
+The checks are arithmetic and structural, so they hold for any chain and any
+model:
+
+| Check                                                                               | Why                                                                     |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| A `price_drop` carries no `required_quantity` and no `single_unit_price`            | The page prints neither. gemma4 filled both on **9 of 9**               |
+| On a `second_unit_discount`, `price` equals `total_price` minus `single_unit_price` | Catches every Gemini error the earlier comparison found                 |
+| `was_price` is greater than `price`                                                 | An ANTES price below the new price is a swap or a misread digit         |
+| A row has a `price`, or a `unit_price`, or a reason for neither                     | A row with no number is a tile the model saw and could not read         |
+| `unit_price_per` is present whenever `unit_price` is                                | A unit price with no basis cannot be compared, which is its whole point |
+| No two rows on one page share a name and a price                                    | The duplicate a merge or a re-read leaves behind                        |
+
+**A failure is a warning and not a refusal.** A leaflet is allowed to print
+something strange, and the pages are the authority, not this table. What the run
+owes the operator is the page number, the product and the rule that broke, so the
+check is a list of places to look rather than a verdict. The drift check in step
+7 is the one that refuses.
+
+## 9. The default is ollama, and the run says what that costs
+
+`--engine ollama` stays the default, because a leaflet reading is cheap to redo,
+the drift check and the baseline already exist to catch a bad one, and a free
+first pass over a 40 page leaflet is worth having.
+
+**It is not good enough to accept unseen, and the tool has to say so rather than
+imply it by exiting zero.** A local engine prints its measured accuracy
+**before** the run as well as after, because the warning is worth nothing to
+somebody who has already waited eleven minutes and started reading the output:
 
 ```
-Read by ollama gemma4:12b. Measured on El Jamon: every tile found, 63% of
-headline prices correct, and an invented single unit price on every price drop.
-Check the prices against the pages before uploading this document.
+Engine: ollama gemma4:12b. This model was measured on the El Jamon leaflet and
+it makes several errors per page. It found every tile and invented nothing, and
+it got 63% of headline prices, 55% of ANTES prices and 31% of unit prices right,
+against 95%, 100% and 100% for Sonnet 5. On every price drop tile it invented a
+single unit price the page does not print.
+
+Check this reading against the pages before you upload it. For a reading you do
+not intend to check, use --engine manual (section 6) and paste the prompt into a
+stronger model.
 ```
 
-Two things follow from the same measurement:
+The same sentence, shortened to its first line, ends the run and is written into
+`leaflet.json` beside the engine name, so the warning survives into the document
+and a person reading the file next week sees what read it.
 
-- **`--engine claude` is what an unchecked run uses.** Sonnet 5 is the only
-  model in the table with no reading error, and the leaflet notes record the
-  same on a separate 37 tile sample.
+Three things follow from the same measurement:
+
+- **Manual mode is the accurate path, not `--engine claude`.** Section 6.
+- **The sanity pass is what makes the default usable.** Section 8 catches the one
+  defect this model has 9 times out of 9, by name and page.
 - **The drift check is the gate, not the operator's patience.** It already
   refuses a reading whose statistics left the chain's band, and a local model's
-  wrong digits move exactly those statistics. Running it is step 6 and it is not
+  wrong digits move exactly those statistics. Running it is step 7 and it is not
   optional.
 
-## 8. What this plan does not do
+## 10. What this plan does not do
 
 - **No upload.** Section 3 says why.
 - **No `--update-baseline`.** A baseline is accepted by a person, by hand, after
@@ -252,8 +366,13 @@ Two things follow from the same measurement:
   than one tool that does both.
 - **No OCR and no text layer path.** Both were measured and both are far worse
   than the weakest model in the table.
+- **Manual mode pastes nothing back on stdin.** The reader writes
+  `page_NN.json` and the run is picked up with `--resume`. A prompt that asked an
+  operator to paste 40 JSON answers into a terminal, one at a time, is a worse
+  tool than the `AGENT-PROMPT.md` it replaces.
+- **The sanity pass never repairs a row.** Section 8.
 
-## 9. What is tested
+## 11. What is tested
 
 `node --test`, no network, no model, as the curation libraries do.
 
@@ -264,24 +383,38 @@ Two things follow from the same measurement:
 - The page loop, against a fake engine: order, the single retry, an unparseable
   answer becoming an empty array and a warning, and `--resume` skipping a page
   whose file exists.
+- **Each sanity check, against a reading built to break exactly that one.** The
+  price drop case uses a real gemma4 row, so the check is proved against the
+  defect it was written for rather than against an invented one.
+- **Manual mode**: `PROMPT.md` carries `chains/<slug>/prompt.txt` byte for byte
+  and one absolute path per rendered page. No model is called, and the run stops
+  after writing it. On the pick up, a `page_NN.json` holding prose is named by
+  page and stops the run, a missing page is named unless `--pages` excluded it,
+  and a valid set proceeds into the same sanity pass.
 - The three child processes are called with the arguments the README documents,
   and a drift refusal stops the run before `validate.mjs`.
 - `leaflet.json` is built from the model's answer plus the census, and a null
-  validity bound survives into the file as null.
-- The local engine notice is printed for `ollama` and not for `claude`.
+  validity bound survives into the file as null. It carries the engine warning
+  when the engine had one.
+- The local engine notice is printed **before and after** the run for `ollama`,
+  and not at all for `claude` or `manual`.
 
 Beyond the suites, one end to end rehearsal against the committed El Jamon
-baseline, whose expected result is section 6's table. A change that moves those
+baseline, whose expected result is section 7's table. A change that moves those
 numbers is either a better prompt or a broken tool, and the scorer says which.
 
-## 10. Order of work
+## 12. Order of work
 
 1. Move `apps/luna-shopper-backend/harvester/tools/leaflet/` into the two
    projects. No logic changes, tests unchanged.
 2. The census, the renderer and its probe.
 3. The page loop over `engine.ask` with images.
-4. `leaflet.json`, then the three child processes and the report.
-5. The layout check, which is last because it is the only step that needs the
+4. The sanity pass, which is worth having before anything trusts a reading.
+5. `leaflet.json`, then the three child processes and the report.
+6. **Manual mode.** It is late because it is the cheapest step by far: the
+   rendering, the resume and the sanity pass are all already built by here, and
+   what is left is writing one file and refusing a bad one.
+7. The layout check, which is last because it is the only step that needs the
    model and the chain description to agree.
-6. Shrink `AGENT-PROMPT.md` prompt A to the one command, and update the README's
-   procedure (a).
+8. Delete `AGENT-PROMPT.md` prompt A, which manual mode now generates, and update
+   the README's procedure (a).

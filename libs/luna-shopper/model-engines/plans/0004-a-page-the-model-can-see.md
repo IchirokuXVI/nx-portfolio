@@ -113,12 +113,26 @@ Three rules that keep this honest:
 - **The cost is measured and written down in the leaflet plan, not estimated
   here.** Re-enabling one tool has a token price, an extra agentic turn is
   possible, and both are properties of the running CLI rather than of this
-  contract. `luna-shopper/leaflet-cli` plan 0001 section 6 is where that
+  contract. `luna-shopper/leaflet-cli` plan 0001 section 7 is where that
   measurement is recorded, because it is the plan with a real page to measure.
 
 **The alternative refused**: base64 inside the prompt text. The CLI has no image
 content type on stdin, so a base64 blob is read as text, billed as text and
 understood as nothing.
+
+**And the alternative that is not refused, and may make this adapter wait.**
+`leaflet-cli` plan 0001 section 6 adds a `manual` mode, which renders the pages
+and writes one prompt for a person to paste into a real Claude Code session. That
+session reads a PNG with its Read tool, at no extra cost, with none of the
+argument juggling above. It reaches the same model more cheaply than this adapter
+does.
+
+So the claude half of this plan is the **last** thing built, and it is fair to
+stop before it. The Ollama half is what the default engine needs, the Messages
+API half is four lines, and the claude half exists for a caller that wants a
+picture read inside a script without a person. A leaflet is not that caller. If
+nothing else asks for it by the time the other two are done, leave it, and let
+this section stand as the record of why it costs what it costs.
 
 ## 5. What was measured
 
