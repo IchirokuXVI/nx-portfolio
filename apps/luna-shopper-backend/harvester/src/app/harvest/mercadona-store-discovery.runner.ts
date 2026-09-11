@@ -120,6 +120,10 @@ export class MercadonaStoreDiscoveryRunner implements StoreDiscoveryRunner {
         website: null,
         openingHours: store.openingHours,
         tags: tagsOf(store, warehouses.get(store.postalCode) ?? null),
+        // The warehouse that prices this shop, which the block above declared
+        // as a scope. A code that answered 404 names none, and a trusted import
+        // then gives the shop a STORE scope of its own (plan 0107, 3.3).
+        scopeKey: warehouses.get(store.postalCode) ?? null,
       });
     }
 

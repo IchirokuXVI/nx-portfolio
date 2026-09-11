@@ -7,6 +7,7 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
@@ -89,6 +90,7 @@ async function render() {
   await TestBed.configureTestingModule({
     imports: [SourcesPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       provideRouter([]),
       provideLocationMocks(),
@@ -154,6 +156,48 @@ describe('the chain sources screen, in English', () => {
     // Mercadona is seeded on and DEZA off, so both labels are on the screen.
     expect(text(fixture)).toContain('Enabled');
     expect(text(fixture)).toContain('Disabled');
+  });
+
+  /**
+   * The second switch, and the one that writes to the catalog (backend plan
+   * 0107, section 3.1).
+   *
+   * It carries a sentence rather than a bare label because it is the only
+   * control in the harvester that lets a third party's data into the catalog
+   * with nobody looking first, and "Trusted" on its own says none of that.
+   */
+  it('says whether a chain is trusted, and what trusting it means', async () => {
+    const fixture = await render();
+
+    // Every seeded chain is untrusted, which is what a row says until somebody
+    // decides otherwise.
+    expect(text(fixture)).toContain('Not trusted');
+    expect(text(fixture)).toContain('go straight into the catalog');
+    expect(text(fixture)).toContain('still waits in the places queue');
+  });
+
+  it('turns the trust switch on without touching the fetching settings', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+    const before = page
+      .sources()
+      .filter((source) => source.supermarketId === MERCADONA)[0];
+
+    await page.toggleTrust(before);
+    fixture.detectChanges();
+
+    const after = page
+      .sources()
+      .filter((source) => source.supermarketId === MERCADONA)[0];
+    expect(after.autoImportPlaces).toBe(true);
+    // The row's own values went back, not the edit form's: the form may be
+    // closed, or open on another chain.
+    expect(after.adapterKey).toBe(before.adapterKey);
+    expect(after.workers).toBe(before.workers);
+    expect(after.maxRequestsPerSecond).toBe(before.maxRequestsPerSecond);
+    expect(after.config).toEqual(before.config);
+    // And fetching is a different decision, so it did not move either.
+    expect(after.enabled).toBe(before.enabled);
   });
 
   /**

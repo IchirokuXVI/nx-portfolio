@@ -1,3 +1,5 @@
+> **PR:** [#346](https://github.com/IchirokuXVI/nx-portfolio/pull/346)
+
 # 0076: what the sheet remembers
 
 > Third of the five basket finding plans (`0074` to `0078`). `0075` built the view state.

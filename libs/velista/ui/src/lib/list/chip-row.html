@@ -1,0 +1,68 @@
+<!--
+  A list of buttons, because that is what it is: every chip removes something and
+  the `+N` opens a sheet. The list semantics are what let a screen reader say how
+  many there are before reading them.
+-->
+<ul class="row">
+  @for (chip of visible(); track chip.id) {
+    <li class="item">
+      <button
+        (click)="remove.emit(chip.id)"
+        [attr.aria-label]="chip.removeLabel"
+        class="chip"
+        type="button"
+      >
+        <span class="chip-label">{{ chip.label }}</span>
+        <!--
+          The glyph is drawn here rather than taken from the icon library because the
+          x inside a chip is 14px artwork at a stroke weight of its own, and the
+          shared close icon is sized for a 44px control.
+        -->
+        <span aria-hidden="true" class="chip-x">&times;</span>
+      </button>
+    </li>
+  }
+
+  @if (hidden() > 0) {
+    <li class="item">
+      <button
+        (click)="more.emit()"
+        [attr.aria-label]="
+          'basket.view.chip.moreLabel' | rokuT: { count: hidden() }
+        "
+        class="chip chip-more"
+        type="button"
+      >
+        {{ 'basket.view.chip.more' | rokuT: { count: hidden() } }}
+      </button>
+    </li>
+  }
+</ul>
+
+@if (count(); as shown) {
+  <span class="count">{{ shown }}</span>
+}
+
+<!--
+  The measuring row (see the class comment). Every chip at its natural width,
+  hidden from sight and from the accessibility tree, and spans rather than buttons
+  so that there is nothing in here to focus.
+-->
+<div aria-hidden="true" class="ruler">
+  @for (chip of chips(); track chip.id) {
+    <span #ruler class="chip">
+      <span class="chip-label">{{ chip.label }}</span>
+      <span class="chip-x">&times;</span>
+    </span>
+  }
+  <!--
+    Measured at the widest number it could carry, which is every chip: a `+N` that
+    grows from one digit to two must not be the reason a chip stops fitting. Absent
+    with no chips, because there is then nothing to measure and nothing to overflow.
+  -->
+  @if (chips().length > 0) {
+    <span #plusRuler class="chip chip-more">
+      {{ 'basket.view.chip.more' | rokuT: { count: chips().length } }}
+    </span>
+  }
+</div>

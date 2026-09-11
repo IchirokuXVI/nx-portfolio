@@ -8,6 +8,7 @@ import {
   signal,
   untracked,
   viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -18,6 +19,7 @@ import {
 import {
   BASKET_REOPEN_AVAILABLE,
   BasketStore,
+  BasketViewStore,
   GeneratedListStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
@@ -36,11 +38,16 @@ import {
 } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
+  ChipRow,
+  CloseIcon,
+  FilterIcon,
   FlagIcon,
   LineComposer,
   OfflineIcon,
   PersonIcon,
+  SearchIcon,
   ShareIcon,
+  type ChipRowItem,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
 import { outstandingCaption, participantInitials } from '../basket-labels';
@@ -104,12 +111,16 @@ import { BASKET_PATHS } from '../basket-paths';
   imports: [
     BasketLineRow,
     ChevronLeftIcon,
+    ChipRow,
+    CloseIcon,
+    FilterIcon,
     FlagIcon,
     LineComposer,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
     RouterOutlet,
+    SearchIcon,
     ShareIcon,
   ],
   templateUrl: './basket-page.html',
@@ -118,6 +129,13 @@ import { BASKET_PATHS } from '../basket-paths';
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
+  /**
+   * What this screen is showing of the basket, as opposed to what is in it.
+   *
+   * Route provided beside {@link BasketStore}, so the sheets `0075` and `0078` add
+   * reach the same instance the page reads. See the class comment there.
+   */
+  private readonly _view = inject(BasketViewStore);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
@@ -235,9 +253,7 @@ export class BasketPage {
    */
   protected readonly ownName = computed(() => this._session.username());
 
-  protected readonly products = computed(
-    () => this._store.basket()?.products ?? new Map()
-  );
+  protected readonly products = this._store.products;
 
   /**
    * What to call this basket.
@@ -391,7 +407,17 @@ export class BasketPage {
   );
 
   constructor() {
-    void this._store.open(this._id);
+    /**
+     * The basket, and then what this device remembers about how to draw it
+     * (`0076`, section 3).
+     *
+     * After the load and not beside it, because the two things the remembered
+     * record is checked against — the basket's price scopes and the lists it drew
+     * from — arrive with the basket. Once, here, rather than watched: a value whose
+     * date passes while the shopper is standing in an aisle must not move the rows
+     * in front of them.
+     */
+    void this._store.open(this._id).then(() => this._view.restore());
 
     /**
      * The socket is closed from **here**, and it has to be.
@@ -404,7 +430,14 @@ export class BasketPage {
      * is destroyed on leaving for certain, which makes it the only honest place to say
      * the shopper has gone.
      */
-    inject(DestroyRef).onDestroy(() => this._store.leave());
+    inject(DestroyRef).onDestroy(() => {
+      this._store.leave();
+      // The view store is provided on the same route and has the same problem, so
+      // it is let go in the same place. Without this a basket opened later starts
+      // on whatever the last one was searched for, and the search is the one thing
+      // on this screen that is never remembered (section 4.7).
+      this._view.leave();
+    });
   }
 
   protected isBusy(line: BasketLine): boolean {
@@ -581,6 +614,202 @@ export class BasketPage {
 
   protected retry(): void {
     void this._store.refresh();
+  }
+
+  // --- The tools row and the search (plan 0074) -----------------------------
+
+  /**
+   * The lines actually drawn, which is the whole basket until somebody searches.
+   *
+   * Read from {@link BasketViewStore} and never filtered here, because `0075` to
+   * `0078` grow the same signal into an order, a filter and a grouping, and a page
+   * that did its own narrowing would be a second answer to the same question.
+   *
+   * {@link progress} is deliberately **not** derived from this. "4 of 12 got" is
+   * about the trip and stays about the trip: a search hides rows and changes nothing
+   * about how much shopping is left.
+   */
+  protected readonly visibleLines = this._view.visibleLines;
+
+  /** What is in the search field, for the count and for the no match sentence. */
+  protected readonly searchQuery = this._view.query;
+
+  /**
+   * Whether anything is being searched for, which decides **which** empty state is
+   * drawn: the search's, quoting what was typed, or the filter's (`0075`).
+   */
+  protected readonly searching = this._view.searching;
+
+  /** The query folded once, handed to every row to draw its `<mark>` from. */
+  protected readonly highlight = this._view.folded;
+
+  /**
+   * Whether the field has replaced the row, which is not the same as searching.
+   *
+   * A field that is open and empty draws the whole basket, and the count under it
+   * says so. The two questions are separate because opening is a gesture and
+   * searching is a string: the field stays open through a query somebody deletes a
+   * character at a time, and Cancel is what closes it.
+   */
+  private readonly _searchOpen = signal(false);
+
+  protected readonly searchOpen = this._searchOpen.asReadonly();
+
+  /**
+   * Which control the keyboard should be on once the row has been redrawn.
+   *
+   * A signal and not a call, because neither control exists at the moment the
+   * gesture happens: opening the search destroys the button that was pressed, and
+   * cancelling destroys the field. The effect below waits for whichever one arrives.
+   */
+  private readonly _focusWanted = signal<'field' | 'button' | null>(null);
+
+  private readonly _searchField =
+    viewChild<ElementRef<HTMLInputElement>>('searchField');
+
+  private readonly _searchButton =
+    viewChild<ElementRef<HTMLButtonElement>>('searchButton');
+
+  /**
+   * Put the focus where the gesture said, as soon as there is something to put it
+   * on (section 6).
+   *
+   * Focus never lands on the page body, which is what a naive open and close does:
+   * the field takes it when it appears, and Cancel or Escape gives it back to the
+   * search button, so a keyboard reader is never dropped at the top of the document
+   * in the middle of a basket.
+   */
+  private readonly _focusEffect = effect(() => {
+    const wanted = this._focusWanted();
+    const field = this._searchField();
+    const button = this._searchButton();
+
+    const target =
+      wanted === 'field' ? field : wanted === 'button' ? button : null;
+    if (target === undefined || target === null) {
+      return;
+    }
+
+    untracked(() => this._focusWanted.set(null));
+    target.nativeElement.focus();
+  });
+
+  /** Replace the row with the field, and put the caret in it. */
+  protected openSearch(): void {
+    this._searchOpen.set(true);
+    this._focusWanted.set('field');
+  }
+
+  protected onSearch(event: Event): void {
+    this._view.search((event.target as HTMLInputElement).value);
+  }
+
+  /** Empty the field without closing it, which is the control inside it. */
+  protected clearSearch(): void {
+    this._view.search('');
+    this._focusWanted.set('field');
+  }
+
+  /**
+   * Cancel, the scrim of this particular control: Escape does exactly the same.
+   *
+   * It **clears the query as well as closing the field**, so the row that comes
+   * back is over the whole basket. A search left running behind a closed field is a
+   * screen missing rows for a reason nothing on it says.
+   */
+  protected closeSearch(): void {
+    this._view.search('');
+    this._searchOpen.set(false);
+    this._focusWanted.set('button');
+  }
+
+  // --- The filter sheet and its chips (plan 0075) ----------------------------
+
+  /**
+   * The lines, cut into the sections the page draws (section 3).
+   *
+   * One section with no heading for an ungrouped, unfiltered basket, which is the
+   * ordinary case, so the template's loop over sections is the same list it always
+   * drew with one more level around it.
+   */
+  protected readonly sections = this._view.sections;
+
+  /** How many lines are on the screen, for the chip row's count. */
+  protected readonly visibleCount = this._view.visibleCount;
+
+  /** How many of the four properties are on, for the filter button's badge. */
+  protected readonly activeCount = this._view.activeCount;
+
+  /**
+   * The chips, with their words resolved.
+   *
+   * Resolved here rather than in `ChipRow`, because each label's arguments come from
+   * this screen's state and `ChipRow` knows nothing about baskets; and resolved
+   * through the translator service rather than the pipe because this is a list the
+   * component computes. The spec asserts the **key and its arguments** through
+   * `basketViewChips`, which is pure, so nothing here tests the translator.
+   */
+  protected readonly chipItems = computed<readonly ChipRowItem[]>(() => {
+    const locale = this._locale();
+    return this._view.chips().map((chip) => {
+      const label = this._translator.t(
+        chip.key,
+        undefined,
+        locale,
+        chip.args ?? undefined
+      );
+      return {
+        id: chip.property,
+        label,
+        // "Remove: A to Z". The chip's own words go inside the name, so a screen
+        // reader hears what pressing the x gets rid of rather than "button, x".
+        removeLabel: this._translator.t(
+          'basket.view.chip.remove',
+          undefined,
+          locale,
+          { name: label }
+        ),
+      };
+    });
+  });
+
+  /**
+   * The count at the chip row's trailing edge, or null.
+   *
+   * **Drawn only while fewer lines are shown than the basket holds.** A row saying
+   * "12 of 12" next to a chip that reorders is noise: the chips say what is on, and
+   * this says what it cost.
+   */
+  protected readonly chipCount = computed(() => {
+    const shown = this.visibleCount();
+    const total = this.lines().length;
+    if (shown >= total) {
+      return null;
+    }
+    return this._translator.t('basket.view.count', undefined, this._locale(), {
+      shown,
+      total,
+    });
+  });
+
+  /**
+   * A chip's x: put that one property back to its default.
+   *
+   * Looked up rather than cast. The id is a property name this page put on the chip,
+   * so a cast would be correct today and silent the day a chip carries something
+   * else.
+   */
+  protected removeChip(id: string): void {
+    const chip = this._view.chips().find((item) => item.property === id);
+    if (chip !== undefined) {
+      this._view.resetProperty(chip.property);
+    }
+  }
+
+  protected openFilter(): void {
+    void this._router.navigate(sheetSegments('filter'), {
+      relativeTo: this._route,
+    });
   }
 
   // --- The composer (plan 0053) ---------------------------------------------

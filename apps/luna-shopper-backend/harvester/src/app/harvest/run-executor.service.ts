@@ -198,6 +198,10 @@ export class RunExecutor implements OnApplicationShutdown {
                 defaultPriceScopeId: run.priceScopeId,
                 sourceKind: sourceKindOf(source?.adapterKey),
                 postalCodeDeriveMaxMetres: settings.postalCodeDeriveMaxMetres,
+                // The chain's own trust switch (plan 0107, section 3.1). A run
+                // with no source names no chain, and a radius search is never
+                // trusted: `false` here is the whole of D3.
+                autoImportPlaces: source?.autoImportPlaces ?? false,
               },
               {
                 ingest: this.ingest,
@@ -452,6 +456,10 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     }),
     placesCreated: written.placesCreated,
     placesRefreshed: written.placesRefreshed,
+    placesImported: written.placesImported,
+    // Named rather than counted, for the same reason `shopsUnmapped` is: the
+    // operator has to know which shop is waiting and which field it lacks.
+    placesNotImported: written.placesNotImported,
     scopesDeclared: written.scopesDeclared,
     scopesCreated: written.scopesCreated,
     shopsWritten: written.shopsWritten,

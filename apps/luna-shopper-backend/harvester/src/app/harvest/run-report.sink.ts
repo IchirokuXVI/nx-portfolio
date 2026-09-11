@@ -6,7 +6,10 @@ import {
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
-import type { DiscoveredPlaceService } from './discovered-place.service';
+import type {
+  BlockedPlace,
+  DiscoveredPlaceService,
+} from './discovered-place.service';
 import type { RunScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import type {
@@ -57,6 +60,15 @@ export interface RunReportSinkInput {
   sourceKind: PriceSourceKind;
   /** How far a place with no postal code may reach for the nearest one. */
   postalCodeDeriveMaxMetres: number;
+  /**
+   * Whether this run's chain is trusted to write its own shops into the catalog
+   * (plan 0107, section 3.1).
+   *
+   * It is the chain's `autoImportPlaces` column, read by the executor. Always
+   * false for a run with no chain, which is every radius search: OpenStreetMap
+   * has no row to carry the flag, and its data is why the review queue exists.
+   */
+  autoImportPlaces: boolean;
 }
 
 /** What the run wrote, for the counters and the run's report. */
@@ -82,6 +94,16 @@ export interface RunReportResult {
   pricesConfirmed: number;
   placesCreated: number;
   placesRefreshed: number;
+  /** Catalog locations this run wrote itself, which only a trusted chain earns. */
+  placesImported: number;
+  /**
+   * Trusted places the completeness check sent to the review queue instead,
+   * with the fields each was missing (plan 0107, section 3.2).
+   *
+   * Named rather than counted, like {@link shopsUnmapped}: an operator reading
+   * the queue wants to know which shop they are looking at and why it is there.
+   */
+  placesNotImported: BlockedPlace[];
   scopesDeclared: number;
   scopesCreated: number;
   /** Shops the source named that no catalog location is bound to yet. */
@@ -127,6 +149,8 @@ export class RunReportSink implements RunReport {
     pricesConfirmed: 0,
     placesCreated: 0,
     placesRefreshed: 0,
+    placesImported: 0,
+    placesNotImported: [],
     scopesDeclared: 0,
     scopesCreated: 0,
     shopsUnmapped: [],
@@ -280,9 +304,16 @@ export class RunReportSink implements RunReport {
     const written = await this.deps.places.observe(chunk, {
       runId: this.context.runId,
       deriveMaxMetres: this.input.postalCodeDeriveMaxMetres,
+      autoImport: this.input.autoImportPlaces,
+      // Read through the resolver at import time, so a scope declared just
+      // before this chunk is already resolvable by it. A key nothing declared
+      // answers null and the shop takes a STORE scope of its own.
+      scopeIdFor: (key) => this.deps.scopes?.idFor(key) ?? null,
     });
     this.result.placesCreated += written.created;
     this.result.placesRefreshed += written.refreshed;
+    this.result.placesImported += written.imported;
+    this.result.placesNotImported.push(...written.blocked);
     await this.context.report({
       processed: chunk.length,
       created: written.created,

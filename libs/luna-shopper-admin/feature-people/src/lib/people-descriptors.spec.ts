@@ -274,8 +274,23 @@ describe('the users descriptor', () => {
   it('keys a row by its user id and not by its username', () => {
     const [rosa, , rosaAgain] = USER_SEED;
 
-    expect(USERS.title(rosa)).toBe(USERS.title(rosaAgain));
+    expect(USERS.title(rosa, CONTENT_LOCALES)).toBe(
+      USERS.title(rosaAgain, CONTENT_LOCALES)
+    );
     expect(idOf(USERS, rosa)).not.toBe(idOf(USERS, rosaAgain));
+  });
+
+  /**
+   * Eleven of the sixteen descriptors return a plain field and ignore the
+   * reading order (admin plan 0026, section 5). A username is not localized
+   * text and never becomes any, so the widened signature has to cost these
+   * nothing: the same name under either choice.
+   */
+  it('calls an account by its username whatever language the operator reads', () => {
+    const [rosa] = USER_SEED;
+
+    expect(USERS.title(rosa, ['en', 'es'])).toBe('rosa');
+    expect(USERS.title(rosa, ['es', 'en'])).toBe('rosa');
   });
 
   it('renders two accounts with the same username as two rows', () => {
@@ -442,8 +457,8 @@ describe('the list and shopping list descriptors', () => {
   it('calls an unnamed shopping list by its id', () => {
     const [named, unnamed] = BASKET_SEED;
 
-    expect(BASKETS.title(named)).toBe('Saturday');
-    expect(BASKETS.title(unnamed)).toBe(unnamed.id);
+    expect(BASKETS.title(named, CONTENT_LOCALES)).toBe('Saturday');
+    expect(BASKETS.title(unnamed, CONTENT_LOCALES)).toBe(unnamed.id);
   });
 });
 

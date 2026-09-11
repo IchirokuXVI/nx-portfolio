@@ -1,0 +1,111 @@
+// One line and never two (velista `0075`, section 5). The row clips rather than
+// wrapping, and what does not fit has already been replaced by the `+N` chip, so the
+// clip is a safety net and not the mechanism.
+//
+// Every gap here is `--app-space-3`, which is 8px, and `CHIP_GAP` in `chip-row.ts`
+// is the same number: the fit has to be arithmetic, and a `var()` is a string until
+// something lays it out. The two are checked against each other by nothing, so they
+// are named together in both files.
+:host {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  min-inline-size: 0;
+}
+
+// The amber accent, which in this app is the quiet action role and not the status
+// attention one: `--app-status-attention-fg` is violet despite its name, and
+// reaching for it here would paint the row violet with nothing failing.
+.chip {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  gap: var(--app-space-2);
+  align-items: center;
+  block-size: var(--app-chip-height);
+  padding: 0 var(--app-space-3);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The pill stays `--app-chip-height`, which is shorter than a touch target: a row of
+// 44px pills between the tools row and the first line would be a band, and this row
+// is a summary first and a control second. So the **target** is grown instead of the
+// pill, vertically only, where there is nothing to collide with: the chips sit in one
+// line and the gap between them stays a gap.
+.chip::after {
+  position: absolute;
+  inset-block: calc((var(--app-touch-target) - var(--app-chip-height)) / -2);
+  inset-inline: 0;
+  content: '';
+}
+
+.chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-x {
+  font-size: var(--app-text-sm);
+  line-height: 1;
+}
+
+// `+N` is not one of the things that is on: it is the way to the rest of them. So it
+// takes the ordinary border and the secondary ink rather than the accent, which is
+// reserved for a chip that names a property.
+.chip-more {
+  border-color: var(--app-border-strong);
+  background: none;
+  color: var(--app-text-secondary);
+}
+
+.count {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+// The measuring row. `visibility: hidden` rather than `display: none`, because an
+// element that is not displayed has no width to measure; and taken out of the flow,
+// so it occupies nothing. Out of the tab order too, which is what `visibility`
+// buys over `opacity: 0`.
+.ruler {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: flex;
+  gap: var(--app-space-3);
+  visibility: hidden;
+  pointer-events: none;
+}

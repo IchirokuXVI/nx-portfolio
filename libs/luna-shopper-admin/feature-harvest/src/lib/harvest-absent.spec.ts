@@ -3,6 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DEPLOYMENT_SERVICE,
   type DeploymentServiceI,
   DeploymentStore,
@@ -83,6 +84,7 @@ async function render<T>(
   await TestBed.configureTestingModule({
     imports: [component as never, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       provideRouter([]),
       provideLocationMocks(),

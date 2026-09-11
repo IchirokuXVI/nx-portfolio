@@ -8,22 +8,46 @@ import {
 import { ForbiddenException } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import type { DiscoveredPlace, PostalCodeDiscoveryRequest } from '../entities';
+import type {
+  DiscoveredPlace,
+  PostalCodeDiscoveryRequest,
+  SupermarketSource,
+} from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import {
   ActiveRunExistsError,
   type HarvestRunStore,
 } from './harvest-run.store';
 import type { PlatformAdminService } from './platform-admin.service';
-import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
+import {
+  PostalCodeDiscoveryService,
+  type PlaceSourceRef,
+} from './postal-code-discovery.service';
 import {
   backoffSeconds,
   type PostalCodeDiscoveryStore,
 } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import type { RunExecutor } from './run-executor.service';
+import type { SupermarketSourceService } from './supermarket-source.service';
 
 const ADMIN = 'owner-1';
+
+/** The source every code is asked of, and the only one that is not a row. */
+const OSM: PlaceSourceRef = {
+  sourceId: null,
+  supermarketId: null,
+  label: 'OpenStreetMap',
+  autoImportPlaces: false,
+};
+
+/** A chain that names its own shops, for the runs that are not OpenStreetMap's. */
+const LIDL: PlaceSourceRef = {
+  sourceId: 'src-lidl',
+  supermarketId: 'chain-lidl',
+  label: 'lidl-api',
+  autoImportPlaces: false,
+};
 
 function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
   return {
@@ -80,6 +104,43 @@ function places(rows: unknown[][] = [[], []]): Repository<DiscoveredPlace> {
   } as unknown as Repository<DiscoveredPlace>;
 }
 
+/** One `supermarket_sources` row, as the place source set reads it. */
+function source(overrides: Partial<SupermarketSource> = {}): SupermarketSource {
+  return {
+    id: 'src-lidl',
+    supermarketId: 'chain-lidl',
+    adapterKey: 'lidl-api',
+    enabled: true,
+    autoImportPlaces: false,
+    config: {},
+    workers: 4,
+    maxRequestsPerSecond: 4,
+    lastRunAt: null,
+    lastSuccessAt: null,
+    consecutiveFailures: 0,
+    createdAt: new Date('2026-09-01T09:00:00.000Z'),
+    updatedAt: new Date('2026-09-01T09:00:00.000Z'),
+    ...overrides,
+  } as SupermarketSource;
+}
+
+function sourceService(
+  rows: SupermarketSource[] = []
+): SupermarketSourceService {
+  return {
+    listEnabled: jest.fn(async () => rows),
+  } as unknown as SupermarketSourceService;
+}
+
+/** Which source last answered a code, and when. Keyed like the real query. */
+function runStore(
+  answered: Map<string | null, Date> = new Map()
+): HarvestRunStore {
+  return {
+    lastAnsweredBySource: jest.fn(async () => answered),
+  } as unknown as HarvestRunStore;
+}
+
 function row(
   overrides: Partial<PostalCodeDiscoveryRequest> = {}
 ): PostalCodeDiscoveryRequest {
@@ -92,6 +153,7 @@ function row(
     lastAttemptedAt: new Date('2026-09-01T09:00:00.000Z'),
     discoveredAt: null,
     nextAttemptAt: null,
+    requeuedAt: null,
     attempts: 1,
     runId: null,
     error: null,
@@ -121,6 +183,8 @@ describe('PostalCodeDiscoveryService (plan 0063)', () => {
       places(),
       catalog,
       admin(),
+      sourceService(),
+      runStore(),
       configOf(config)
     );
     return { service, enqueue, countLocationsByPostalCode };
@@ -192,6 +256,8 @@ describe('PostalCodeDiscoveryService (plan 0063)', () => {
       places(),
       catalog,
       admin(),
+      sourceService(),
+      runStore(),
       configOf(settings())
     );
 
@@ -234,6 +300,179 @@ describe('PostalCodeDiscoveryService (plan 0063)', () => {
   });
 });
 
+// --- Which sources a code is asked of (plan 0107, section 2) ---------------
+
+describe('PostalCodeDiscoveryService place sources (plan 0107)', () => {
+  function build(options: {
+    rows?: SupermarketSource[];
+    answered?: Map<string | null, Date>;
+    config?: Partial<HarvesterConfig>;
+  }) {
+    return new PostalCodeDiscoveryService(
+      {} as unknown as PostalCodeDiscoveryStore,
+      places(),
+      {} as unknown as CatalogClient,
+      admin(),
+      sourceService(options.rows ?? []),
+      runStore(options.answered ?? new Map()),
+      configOf(settings(options.config))
+    );
+  }
+
+  const labels = (refs: PlaceSourceRef[]): string[] =>
+    refs.map((ref) => ref.label);
+
+  it('always includes OpenStreetMap, which is not a chain row', async () => {
+    const service = build({ rows: [] });
+
+    expect(labels(await service.placeSourcesFor('es'))).toEqual([
+      'OpenStreetMap',
+    ]);
+  });
+
+  it('adds every enabled chain that publishes its own shop list', async () => {
+    const service = build({
+      rows: [
+        source({ id: 'src-lidl', adapterKey: 'lidl-api' }),
+        source({
+          id: 'src-mercadona',
+          supermarketId: 'chain-mercadona',
+          adapterKey: 'mercadona-api',
+        }),
+      ],
+    });
+
+    expect(labels(await service.placeSourcesFor('es'))).toEqual([
+      'OpenStreetMap',
+      'lidl-api',
+      'mercadona-api',
+    ]);
+  });
+
+  it('leaves out a chain that publishes no shop list at all', async () => {
+    // `deza-web` and `carrefour-web` publish an assortment and no store list,
+    // so asking them where the shops are would be asking the wrong question.
+    const service = build({
+      rows: [
+        source({ id: 'src-deza', adapterKey: 'deza-web' }),
+        source({ id: 'src-lidl', adapterKey: 'lidl-api' }),
+      ],
+    });
+
+    expect(labels(await service.placeSourcesFor('es'))).toEqual([
+      'OpenStreetMap',
+      'lidl-api',
+    ]);
+  });
+
+  it('carries the chain, its row and its trust switch', async () => {
+    const service = build({
+      rows: [source({ autoImportPlaces: true })],
+    });
+    const [osm, lidl] = await service.placeSourcesFor('es');
+
+    // OpenStreetMap can never be trusted: it has no row to carry the flag, and
+    // its data is why the review queue exists (D3).
+    expect(osm).toEqual({
+      sourceId: null,
+      supermarketId: null,
+      label: 'OpenStreetMap',
+      autoImportPlaces: false,
+    });
+    expect(lidl).toEqual({
+      sourceId: 'src-lidl',
+      supermarketId: 'chain-lidl',
+      label: 'lidl-api',
+      autoImportPlaces: true,
+    });
+  });
+
+  it('asks every source that has never answered the code', async () => {
+    const service = build({ rows: [source()] });
+
+    expect(labels(await service.dueSourcesFor('es', '14013', null))).toEqual([
+      'OpenStreetMap',
+      'lidl-api',
+    ]);
+  });
+
+  it('asks only the source that has not answered recently (D5)', async () => {
+    // The rule this plan is about: a code answered by OpenStreetMap last week
+    // and never by LIDL starts the LIDL run alone. Asking the question per code
+    // would have let the first source to answer silence the other two.
+    const lastWeek = new Date(Date.now() - 7 * 86_400_000);
+    const service = build({
+      rows: [source()],
+      answered: new Map([[null, lastWeek]]),
+    });
+
+    expect(labels(await service.dueSourcesFor('es', '14013', null))).toEqual([
+      'lidl-api',
+    ]);
+  });
+
+  it('asks nobody when every source answered inside the cooldown', async () => {
+    const yesterday = new Date(Date.now() - 86_400_000);
+    const service = build({
+      rows: [source()],
+      answered: new Map([
+        [null, yesterday],
+        ['src-lidl', yesterday],
+      ]),
+    });
+
+    expect(await service.dueSourcesFor('es', '14013', null)).toEqual([]);
+  });
+
+  it('asks again once the cooldown has passed', async () => {
+    const longAgo = new Date(Date.now() - 40 * 86_400_000);
+    const service = build({
+      rows: [source()],
+      answered: new Map([
+        [null, longAgo],
+        ['src-lidl', longAgo],
+      ]),
+    });
+
+    expect(labels(await service.dueSourcesFor('es', '14013', null))).toEqual([
+      'OpenStreetMap',
+      'lidl-api',
+    ]);
+  });
+
+  it('asks everybody again when an operator requeued the code', async () => {
+    // Plan 0097 section 6.2 promises that requeueing ignores the cooldown. A
+    // per source cooldown alone would turn that button into a row that goes
+    // straight back to DONE without anybody being asked anything.
+    const yesterday = new Date(Date.now() - 86_400_000);
+    const service = build({
+      rows: [source()],
+      answered: new Map([
+        [null, yesterday],
+        ['src-lidl', yesterday],
+      ]),
+    });
+
+    expect(
+      labels(await service.dueSourcesFor('es', '14013', new Date()))
+    ).toEqual(['OpenStreetMap', 'lidl-api']);
+  });
+
+  it('does not re-ask a source that already answered since the requeue', async () => {
+    // Which is what makes a partially failed pass retry the failed source
+    // alone: the ones that answered are on the far side of the stamp.
+    const requeuedAt = new Date(Date.now() - 3600_000);
+    const service = build({
+      rows: [source()],
+      answered: new Map([[null, new Date()]]),
+    });
+
+    expect(
+      labels(await service.dueSourcesFor('es', '14013', requeuedAt))
+    ).toEqual(['lidl-api']);
+  });
+});
+
 // --- The drain half --------------------------------------------------------
 
 describe('PostalCodeDiscoveryWorker (plan 0063)', () => {
@@ -242,8 +481,12 @@ describe('PostalCodeDiscoveryWorker (plan 0063)', () => {
       config?: Partial<HarvesterConfig>;
       pending?: PostalCodeDiscoveryRequest[];
       status?: HarvestRunStatus;
+      statuses?: HarvestRunStatus[];
       createImpl?: HarvestRunStore['create'];
       runError?: string | null;
+      /** The sources every claimed code is due for. OpenStreetMap alone by default. */
+      due?: PlaceSourceRef[];
+      dueError?: string;
     } = {}
   ) {
     const pending = [...(options.pending ?? [])];
@@ -274,19 +517,31 @@ describe('PostalCodeDiscoveryWorker (plan 0063)', () => {
     /** How many runs were in flight at once. One, or the plan is broken. */
     let inFlight = 0;
     let concurrentPeak = 0;
+    const statuses = [...(options.statuses ?? [])];
     const runToCompletion = jest.fn(async () => {
       inFlight += 1;
       concurrentPeak = Math.max(concurrentPeak, inFlight);
       await Promise.resolve();
       inFlight -= 1;
-      return options.status ?? HarvestRunStatus.COMPLETED;
+      return statuses.shift() ?? options.status ?? HarvestRunStatus.COMPLETED;
     });
     const executor = { runToCompletion } as unknown as RunExecutor;
+
+    const dueSourcesFor = jest.fn(async () => {
+      if (options.dueError) {
+        throw new Error(options.dueError);
+      }
+      return options.due ?? [OSM];
+    });
+    const discovery = {
+      dueSourcesFor,
+    } as unknown as PostalCodeDiscoveryService;
 
     const worker = new PostalCodeDiscoveryWorker(
       queue,
       runs,
       executor,
+      discovery,
       configOf(settings(options.config))
     );
     return {
@@ -297,6 +552,7 @@ describe('PostalCodeDiscoveryWorker (plan 0063)', () => {
       release,
       create: options.createImpl ?? create,
       runToCompletion,
+      dueSourcesFor,
       peak: () => concurrentPeak,
     };
   }
@@ -345,6 +601,155 @@ describe('PostalCodeDiscoveryWorker (plan 0063)', () => {
     );
   });
 
+  // --- One code, one run per source (plan 0107, section 2) -----------------
+
+  it('starts one run per source the code is due for', async () => {
+    const { worker, create, runToCompletion, markDone, peak } = build({
+      pending: [row()],
+      due: [OSM, LIDL],
+    });
+
+    await worker.drain();
+
+    expect(runToCompletion).toHaveBeenCalledTimes(2);
+    // Still one at a time: the active run index allows one store discovery, and
+    // `OsmPlacesClient` rate limits per instance.
+    expect(peak()).toBe(1);
+    expect(create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ supermarketId: null, sourceId: null })
+    );
+    expect(create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        supermarketId: 'chain-lidl',
+        sourceId: 'src-lidl',
+      })
+    );
+    // The row is done when every run it started has finished, and it points at
+    // the last one.
+    expect(markDone).toHaveBeenCalledWith('q-1', 'run-2');
+  });
+
+  it('filters a chain wide source to the code, and never OpenStreetMap', async () => {
+    // What stops a 1,675 shop document being read again for every code in the
+    // queue (plan 0106, section 4). OpenStreetMap's query is already centred on
+    // the code, so a filter there would be a second answer to one question.
+    const { worker, create } = build({ pending: [row()], due: [OSM, LIDL] });
+
+    await worker.drain();
+
+    expect(create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        payload: expect.not.objectContaining({
+          postalCodes: expect.anything(),
+        }),
+      })
+    );
+    expect(create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        payload: expect.objectContaining({ postalCodes: ['14013'] }),
+      })
+    );
+  });
+
+  it('starts nothing and marks the code done when no source is due', async () => {
+    const { worker, runToCompletion, markDone } = build({
+      pending: [row()],
+      due: [],
+    });
+
+    await worker.drain();
+
+    expect(runToCompletion).not.toHaveBeenCalled();
+    // Null rather than a run id: the row keeps whatever run it already names
+    // instead of pointing at one this pass did not start.
+    expect(markDone).toHaveBeenCalledWith('q-1', null);
+  });
+
+  it('keeps the code retryable for the source that failed, and names it', async () => {
+    // The other source answered, so the next pass finds it inside its cooldown
+    // and asks the failed one alone (section 2.2).
+    const { worker, markDone, markAttemptFailed } = build({
+      pending: [row()],
+      due: [OSM, LIDL],
+      statuses: [HarvestRunStatus.COMPLETED, HarvestRunStatus.FAILED],
+      runError: 'The chain answered 503',
+    });
+
+    await worker.drain();
+
+    expect(markDone).not.toHaveBeenCalled();
+    expect(markAttemptFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ postalCode: '14013' }),
+      'lidl-api: The chain answered 503',
+      3,
+      // The run that did answer, so the row points at work that happened.
+      'run-1'
+    );
+  });
+
+  it('puts the whole row back when another run holds the lock mid pass', async () => {
+    let calls = 0;
+    const { worker, release, markAttemptFailed, runToCompletion } = build({
+      pending: [row(), row({ id: 'q-2', postalCode: '14010' })],
+      due: [OSM, LIDL],
+      createImpl: (async () => {
+        calls += 1;
+        if (calls === 1) {
+          return { id: 'run-1' };
+        }
+        throw new ActiveRunExistsError('someone-elses-run');
+      }) as unknown as HarvestRunStore['create'],
+    });
+
+    await worker.drain();
+
+    // One run happened and the second source never started. The row goes back
+    // whole: the source that answered is recorded on its own run, so the next
+    // pass asks only for what is still missing.
+    expect(runToCompletion).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(markAttemptFailed).not.toHaveBeenCalled();
+  });
+
+  it('gives the row back when shutdown interrupts a pass', async () => {
+    // Marking it DONE here would say every source answered and hide the rest
+    // behind the thirty day cooldown. The sources that did answer are recorded
+    // on their own runs, so the row costs nothing to hand back.
+    const harness = build({ pending: [row()], due: [OSM, LIDL] });
+    harness.runToCompletion.mockImplementationOnce(async () => {
+      harness.worker.onApplicationShutdown();
+      return HarvestRunStatus.COMPLETED;
+    });
+
+    await harness.worker.drain();
+
+    expect(harness.runToCompletion).toHaveBeenCalledTimes(1);
+    expect(harness.markDone).not.toHaveBeenCalled();
+    expect(harness.markAttemptFailed).not.toHaveBeenCalled();
+    expect(harness.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('spends the attempt when the source set cannot be read', async () => {
+    const { worker, markAttemptFailed, runToCompletion } = build({
+      pending: [row()],
+      dueError: 'the database is down',
+    });
+
+    await worker.drain();
+
+    expect(runToCompletion).not.toHaveBeenCalled();
+    expect(markAttemptFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ postalCode: '14013' }),
+      expect.stringContaining('the database is down'),
+      3,
+      null
+    );
+  });
+
   it('does not drain while HARVEST_ENABLED is false', async () => {
     const { worker, claimNext, runToCompletion } = build({
       pending: [row()],
@@ -369,11 +774,13 @@ describe('PostalCodeDiscoveryWorker (plan 0063)', () => {
     await worker.drain();
 
     expect(markDone).not.toHaveBeenCalled();
+    // The source is named on the reason, so a row that failed for one of three
+    // sources says which (section 2.2).
     expect(markAttemptFailed).toHaveBeenCalledWith(
       expect.objectContaining({ postalCode: '14013' }),
-      'Nominatim found no point for postal code 99999',
+      'OpenStreetMap: Nominatim found no point for postal code 99999',
       3,
-      'run-1'
+      null
     );
   });
 

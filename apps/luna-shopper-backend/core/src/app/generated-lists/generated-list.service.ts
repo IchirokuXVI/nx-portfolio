@@ -35,6 +35,7 @@ import {
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProfileService } from '../profiles/profile.service';
+import { GeneratedListOrderService } from './generated-list-order.service';
 import {
   NO_GENERATED_LINE_COUNTS,
   toBasketLineView,
@@ -130,7 +131,11 @@ export class GeneratedListService {
     private readonly settlements: Repository<LineSettlement>,
     private readonly profiles: ProfileService,
     private readonly claims: LineClaimService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // The order a shopper walks (plan 0110), asked once per run and never
+    // afterwards. A service of its own because it is a read of the owner's past
+    // trips rather than anything about the lists this run drew from.
+    private readonly order: GeneratedListOrderService
   ) {}
 
   // --- The run ---------------------------------------------------------------
@@ -195,7 +200,11 @@ export class GeneratedListService {
       })),
     };
 
-    const saved = await this.write(req, snapshot, composed);
+    // The order the owner walks (plan 0110), decided here and written once. The
+    // positions below are the index in **this** array, not the order the source
+    // lists happened to be read in.
+    const walked = await this.order.order(req.userId, composed);
+    const saved = await this.write(req, snapshot, walked);
     const view = await this.viewFor(saved);
     this.events.emitToUsers(
       RealtimeEvent.GeneratedListCreated,

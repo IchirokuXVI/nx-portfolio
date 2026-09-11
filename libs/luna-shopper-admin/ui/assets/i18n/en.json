@@ -66,6 +66,11 @@
     "waiting": "{{count}} waiting for a decision",
     "signOut": "Sign out",
     "screens": "Screens in this section",
+    "contentLanguage": "Read the catalog in",
+    "language": {
+      "en": "English",
+      "es": "Spanish"
+    },
     "sections": {
       "overview": "Overview",
       "catalog": "Catalog",
@@ -907,6 +912,11 @@
       "exists": "That chain already has a source row. Change it in the list instead.",
       "enabled": "Enabled",
       "disabled": "Disabled",
+      "trusted": "Trusted",
+      "untrusted": "Not trusted",
+      "trust": {
+        "hint": "Trusted means the shops this chain names go straight into the catalog, with nobody looking first. A shop that is missing a name, a position, its own postal code, a country or a chain still waits in the places queue. This is the only switch here that writes to the catalog without a review."
+      },
       "field": {
         "chain": "Chain",
         "adapter": "Adapter",

@@ -228,24 +228,169 @@
         </div>
       } @else {
         <!--
-          "got" means bought. A line closed because the shop had none is counted
-          separately rather than folded in, because folding it in would claim a
-          purchase that never happened.
+          **The tools row** (plan 0074, section 3): the count at the leading edge
+          and the controls at the trailing one. `0075` puts the filter button
+          beside the search.
+
+          Not in the header, which already holds back, the title, the faces, share
+          and finish. A sixth and seventh control there shrink the title to nothing
+          on a 390 wide phone, and the title is the one thing on that bar a person
+          reads. This row was empty at the trailing edge, and the count it holds is
+          about the lines, which is what the controls are about too.
+
+          Drawn for every reader, guests included. Nothing in it names a household.
         -->
-        <p class="progress">
-          {{
-            'basket.progress'
-              | rokuT: { done: progress().done, total: progress().total }
-          }}
-          @if (progress().unavailable > 0) {
-            <span class="progress-unavailable">
+        @if (searchOpen()) {
+          <!--
+            The field takes the whole row, count and control together, which is
+            what makes it usable one handed on a phone. Cancel is beside it rather
+            than inside it: it is not a clear, it puts the row back.
+          -->
+          <div class="search">
+            <label class="field-label" for="basket-search">
+              {{ 'basket.search.label' | rokuT }}
+            </label>
+
+            <div class="search-row">
+              <span class="search-field">
+                <lib-search-icon class="search-glyph" />
+                <input
+                  (input)="onSearch($event)"
+                  (keydown.escape)="closeSearch()"
+                  [placeholder]="'basket.search.placeholder' | rokuT"
+                  [value]="searchQuery()"
+                  #searchField
+                  autocapitalize="none"
+                  autocomplete="off"
+                  class="search-input"
+                  enterkeyhint="search"
+                  id="basket-search"
+                  type="search"
+                />
+
+                <!--
+                  Only where there is something to clear. A control that does
+                  nothing is the invitation `0038` section 2.1 refuses to draw, and
+                  an empty field already says it is empty.
+                -->
+                @if (searchQuery() !== '') {
+                  <button
+                    (click)="clearSearch()"
+                    [attr.aria-label]="'basket.search.clear' | rokuT"
+                    class="search-clear"
+                    type="button"
+                  >
+                    <lib-close-icon class="search-clear-glyph" />
+                  </button>
+                }
+              </span>
+
+              <button
+                (click)="closeSearch()"
+                class="search-cancel"
+                type="button"
+              >
+                {{ 'basket.search.cancel' | rokuT }}
+              </button>
+            </div>
+          </div>
+
+          <!--
+            How many are left, and it is the reason the search is trustworthy: a
+            search that silently empties the screen is indistinguishable from one
+            that broke (`0059` section 7). One polite region, and the only thing
+            announced on a keystroke.
+          -->
+          <p aria-live="polite" class="search-count" role="status">
+            {{
+              'basket.search.count'
+                | rokuT: { shown: visibleLines().length, total: lines().length }
+            }}
+          </p>
+        } @else {
+          <div class="tools">
+            <!--
+              "got" means bought. A line closed because the shop had none is
+              counted separately rather than folded in, because folding it in would
+              claim a purchase that never happened.
+
+              It counts the **whole** basket and never what a search left standing:
+              this is about how much shopping is left, and hiding rows does not buy
+              anything.
+            -->
+            <p class="progress">
               {{
-                'basket.progressUnavailable'
-                  | rokuT: { count: progress().unavailable }
+                'basket.progress'
+                  | rokuT: { done: progress().done, total: progress().total }
               }}
-            </span>
-          }
-        </p>
+              @if (progress().unavailable > 0) {
+                <span class="progress-unavailable">
+                  {{
+                    'basket.progressUnavailable'
+                      | rokuT: { count: progress().unavailable }
+                  }}
+                </span>
+              }
+            </p>
+
+            <button
+              (click)="openSearch()"
+              [attr.aria-label]="'basket.search.open' | rokuT"
+              #searchButton
+              class="tool"
+              type="button"
+            >
+              <lib-search-icon class="tool-glyph" />
+            </button>
+
+            <!--
+              Filtering and ordering (plan 0075, section 5). The badge is how many
+              properties are not at their default, and the **name carries it too**:
+              "Filter and order, 2 on". A count that only exists as a dot over a
+              glyph is a count a screen reader never hears, and the chips under this
+              row are the other half of saying the same thing.
+            -->
+            <button
+              (click)="openFilter()"
+              [attr.aria-label]="
+                activeCount() === 0
+                  ? ('basket.view.open' | rokuT)
+                  : ('basket.view.openCount' | rokuT: { count: activeCount() })
+              "
+              [class.is-on]="activeCount() > 0"
+              class="tool"
+              type="button"
+            >
+              <lib-filter-icon class="tool-glyph" />
+              @if (activeCount() > 0) {
+                <span aria-hidden="true" class="tool-badge">
+                  {{ activeCount() }}
+                </span>
+              }
+            </button>
+          </div>
+        }
+
+        <!--
+          What the sheet turned on, named on the page (section 5). Absent entirely
+          when nothing is on, so the lines move up: a row that is always there but
+          usually empty is a band of wasted height on a 390 wide phone.
+
+          The chips name the order and the grouping as well as the filters, even
+          though neither hides a line. This row is how the state of the screen is
+          understood without opening the sheet, and a basket that is suddenly
+          alphabetical with nothing saying so looks broken to the next person handed
+          the phone.
+        -->
+        @if (chipItems().length > 0) {
+          <lib-chip-row
+            (more)="openFilter()"
+            (remove)="removeChip($event)"
+            [chips]="chipItems()"
+            [count]="chipCount()"
+            class="chips"
+          />
+        }
 
         <!--
           Every line is settled, so the screen asks (plan 0057, section 4). The last
@@ -266,29 +411,86 @@
           </div>
         }
 
-        <ul class="lines">
-          @for (line of lines(); track line.id) {
-            <li>
-              <lib-basket-line-row
-                (open)="openLine(line)"
-                (outstanding)="setOutstanding(line, $event)"
-                (reopen)="reopenLine(line)"
-                (settle)="settleLine(line)"
-                [awaitingApproval]="pendingTargets().has(line.id)"
-                [busy]="isBusy(line)"
-                [canReopen]="canReopen"
-                [finished]="finished()"
-                [line]="line"
-                [listNames]="listNames()"
-                [meId]="meId()"
-                [notice]="noticeFor(line)"
-                [ownName]="ownName()"
-                [people]="participantsById()"
-                [products]="products()"
-              />
-            </li>
+        <!--
+          Nothing matched (section 4.6). The basket's own empty state with
+          different words, and **the composer stays**: the thing somebody searched
+          for and did not find is very often the next line. Submitting it clears
+          the query, so the new row is seen landing rather than hidden by the
+          search that failed to find it.
+        -->
+        <!--
+          Nothing to draw, and the two reasons say different things (plan 0074
+          section 4.6, plan 0075 section 6). A search that found nothing quotes what
+          was typed, because the words are the thing to change. A filter that shows
+          nothing cannot quote anything, and the chips above already name what is on,
+          so it says so and points at them.
+
+          The composer stays in both cases: the thing somebody looked for and did not
+          find is very often the next line.
+        -->
+        @if (visibleCount() === 0) {
+          <div class="empty">
+            @if (searching()) {
+              <p class="empty-title">
+                {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
+              </p>
+              <p class="empty-body">{{ 'basket.search.noneHint' | rokuT }}</p>
+            } @else {
+              <p class="empty-title">{{ 'basket.view.none' | rokuT }}</p>
+              <p class="empty-body">{{ 'basket.view.noneHint' | rokuT }}</p>
+            }
+          </div>
+        } @else {
+          <!--
+            One section per run of rows (plan 0075, section 3). An ungrouped,
+            unfiltered basket is one section with no heading, which is the ordinary
+            case and draws exactly the list this was before.
+
+            A section heading is a real `h2`, the page's `h1` being the basket's
+            name, so the groups are navigable and not only visible (`0059` section
+            7). The hint beside it says why the section exists rather than repeating
+            its name.
+          -->
+          @for (section of sections(); track section.key) {
+            @if (section.rows.length > 0) {
+              <section class="group">
+                @if (section.heading; as heading) {
+                  <div class="group-head">
+                    <h2 class="group-title">{{ heading | rokuT }}</h2>
+                    @if (section.hint; as hint) {
+                      <span class="group-hint">{{ hint | rokuT }}</span>
+                    }
+                  </div>
+                }
+
+                <ul class="lines">
+                  @for (row of section.rows; track row.line.id) {
+                    <li>
+                      <lib-basket-line-row
+                        (open)="openLine(row.line)"
+                        (outstanding)="setOutstanding(row.line, $event)"
+                        (reopen)="reopenLine(row.line)"
+                        (settle)="settleLine(row.line)"
+                        [awaitingApproval]="pendingTargets().has(row.line.id)"
+                        [busy]="isBusy(row.line)"
+                        [canReopen]="canReopen"
+                        [finished]="finished()"
+                        [highlight]="highlight()"
+                        [line]="row.line"
+                        [listNames]="listNames()"
+                        [meId]="meId()"
+                        [notice]="noticeFor(row.line)"
+                        [ownName]="ownName()"
+                        [people]="participantsById()"
+                        [products]="products()"
+                      />
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
           }
-        </ul>
+        }
       }
     }
   }

@@ -1,0 +1,138 @@
+@use '../basket-shared' as shared;
+
+// The title and Reset on one line, baseline aligned so the small control sits on the
+// title's own line rather than floating beside its box.
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  margin-block-end: var(--app-space-4);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+// A text button in the amber quiet action role, which in this app is the accent:
+// `--app-status-attention-fg` is violet despite its name.
+.reset {
+  @include shared.tap-target;
+
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.group {
+  margin: 0 0 var(--app-space-4);
+  padding: 0;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+}
+
+// The legend is the group's name and is read before its first option, so it is a
+// real `legend` rather than a styled div. Pulled out of the box it labels, as the
+// mock draws it: an uppercase label above the card.
+.legend {
+  padding: 0 0 var(--app-space-2);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+// The whole label is the target, so the tap area is the option and not the dot.
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-2) var(--app-space-3);
+  cursor: pointer;
+
+  & + & {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+
+  // The ring goes on the label, because the control inside it is the real one:
+  // `:focus-within` puts the outline around what a keyboard reader is on.
+  &:focus-within {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The chosen option is tinted **and** carries a checked control, so nothing here is
+// signalled by colour alone.
+.picked {
+  background: var(--app-status-attention-bg);
+}
+
+// The native radio and checkbox, kept: they are what make this a group to a screen
+// reader and to the arrow keys. `accent-color` tints them without replacing them
+// with a span that would have neither behaviour.
+.control {
+  flex: none;
+  margin: 0;
+  accent-color: var(--app-action-bg);
+}
+
+.choice-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+}
+
+.choice-title {
+  flex: 1;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.choice-hint {
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+// The note at a choice's trailing edge, which says what the option does rather than
+// what it is: "each list's own amounts".
+.choice-note {
+  flex: none;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+}
+
+// How many of the basket's lines reach this list. Tabular, so a column of them does
+// not shift as the trip empties them.
+.choice-count {
+  flex: none;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.footer {
+  display: flex;
+}
+
+.confirm {
+  @include shared.primary-button;
+
+  flex: 1;
+}

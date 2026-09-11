@@ -40,6 +40,29 @@ export class SupermarketSource extends BaseEntity {
   @Column({ type: 'boolean', default: false })
   enabled!: boolean;
 
+  /**
+   * The shops this chain names may enter the catalog with no person in the way
+   * (plan 0107, section 3.1).
+   *
+   * Off by default, one per chain, written from the back office beside
+   * {@link enabled}. It is a column for the reason plan 0083 gives for that
+   * one: a second chain would otherwise need a second environment variable
+   * threaded through `app-config.ts`, the config map, `_env.tpl` and both
+   * `luna-slot` scripts before it could be trusted. **Do not add a per chain
+   * environment variable.**
+   *
+   * It is a separate decision from {@link enabled}, and separate for the same
+   * reason `HARVEST_ENABLED` is separate from the Helm switch: reading a
+   * chain's shops and letting them into the catalog unreviewed are two things
+   * an operator decides at two different times.
+   *
+   * **OpenStreetMap can never carry it.** It has no row to put it on, and that
+   * is the correct answer rather than an omission: two thirds of its shops
+   * carry no postcode, which is why the review queue exists at all.
+   */
+  @Column({ type: 'boolean', default: false })
+  autoImportPlaces!: boolean;
+
   /** Adapter specific settings, e.g. Mercadona's postal code. */
   @Column({ type: 'jsonb', default: () => `'{}'::jsonb` })
   config!: Record<string, unknown>;

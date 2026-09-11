@@ -152,7 +152,8 @@ function build(options: {
     {} as never,
     {} as unknown as ProfileService,
     claims.service,
-    publisher
+    publisher,
+    {} as never
   );
 
   const logger = { log: jest.fn(), error: jest.fn() };

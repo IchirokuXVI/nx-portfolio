@@ -1,3 +1,5 @@
+> **PR:** [#344](https://github.com/IchirokuXVI/nx-portfolio/pull/344)
+
 # 0110: the order a shopper walks
 
 > Client half: `apps/velista/plans/0075`, whose "The way you shop" radio is this order and

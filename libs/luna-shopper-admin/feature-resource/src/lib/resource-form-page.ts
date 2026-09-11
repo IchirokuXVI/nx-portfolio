@@ -10,9 +10,11 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { ResourceFormStore } from '@portfolio/luna-shopper-admin/data-access';
 import {
-  CONTENT_LOCALES,
+  ContentLocaleStore,
+  ResourceFormStore,
+} from '@portfolio/luna-shopper-admin/data-access';
+import {
   isEditable,
   toCell,
   type FieldMessage,
@@ -130,6 +132,7 @@ export class ResourceFormPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _router = inject(Router);
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _content = inject(ContentLocaleStore);
 
   readonly references = inject(ResourceReferences);
 
@@ -172,7 +175,9 @@ export class ResourceFormPage {
   /** What this row is called, once it has been read. */
   readonly subtitle = computed(() => {
     const row = this.store.row();
-    return row === null ? null : this.descriptor.title(row);
+    return row === null
+      ? null
+      : this.descriptor.title(row, this._content.order());
   });
 
   readonly messages = computed<
@@ -198,7 +203,7 @@ export class ResourceFormPage {
 
       const options = {
         locale: this._translator.locale(),
-        contentLocales: CONTENT_LOCALES,
+        contentLocales: this._content.order(),
       };
       const cells: Record<string, ResourceCell> = {};
       for (const field of this.descriptor.fields) {

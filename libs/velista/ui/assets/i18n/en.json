@@ -1014,6 +1014,57 @@
       "two": "from {{first}} and {{second}}",
       "more": "from {{first}} and {{count}} more"
     },
+    "search": {
+      "open": "Search this list",
+      "label": "Search this list",
+      "placeholder": "Line or product",
+      "clear": "Clear",
+      "cancel": "Cancel",
+      "count": "{{shown}} of {{total}} lines",
+      "none": "No line matches “{{query}}”",
+      "noneHint": "Add it below and it goes on this list."
+    },
+    "view": {
+      "open": "Filter and order",
+      "openCount": "Filter and order, {{count}} on",
+      "title": "Filter and order",
+      "reset": "Reset",
+      "none": "No line matches the filter",
+      "noneHint": "Remove a chip above to see more.",
+      "show_one": "Show 1 line",
+      "show_other": "Show {{count}} lines",
+      "count": "{{shown}} of {{total}}",
+      "order": {
+        "legend": "Order",
+        "shop": "The way you shop",
+        "shopHint": "Calculated from your last trips",
+        "alpha": "A to Z"
+      },
+      "group": {
+        "legend": "Group by",
+        "none": "Nothing",
+        "category": "Category",
+        "list": "List",
+        "listHint": "each list’s own amounts"
+      },
+      "lists": {
+        "legend": "Lists",
+        "only": "Only {{name}}",
+        "some": "{{kept}} of {{total}} lists"
+      },
+      "chip": {
+        "remove": "Remove: {{name}}",
+        "byCategory": "By category",
+        "byList": "By list",
+        "shop": "{{name}}",
+        "more": "+{{count}}",
+        "moreLabel": "{{count}} more, open filter and order"
+      }
+    },
+    "group": {
+      "noList": "On no list yet",
+      "noListHint": "added in the shop"
+    },
     "settle": {
       "title": "{{name}}",
       "all_one": "Got it",

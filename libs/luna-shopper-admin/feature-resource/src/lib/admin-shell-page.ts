@@ -8,10 +8,12 @@ import {
 } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import {
+  ContentLocaleStore,
   DeploymentStore,
   SessionStore,
   SIGN_IN_PATH,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { CONTENT_LOCALES } from '@portfolio/luna-shopper-admin/models';
 import {
   AppShell,
   Viewport,
@@ -43,8 +45,11 @@ import {
   imports: [AppShell],
   template: `
     <lib-app-shell
+      (chooseContentLocale)="chooseContentLocale($event)"
       (signOut)="signOut()"
       [compact]="compact()"
+      [contentLocale]="contentLocale()"
+      [contentLocales]="contentLocales"
       [current]="current()"
       [deployment]="deployment()"
       [operator]="operator()"
@@ -65,6 +70,7 @@ export class AdminShellPage {
   private readonly _sections = inject(ADMIN_SECTIONS);
   private readonly _sessions = inject(SessionStore);
   private readonly _deployments = inject(DeploymentStore);
+  private readonly _content = inject(ContentLocaleStore);
   private readonly _viewport = inject(Viewport);
   private readonly _router = inject(Router);
 
@@ -199,6 +205,22 @@ export class AdminShellPage {
       ''
     );
   });
+
+  /**
+   * The language the catalog is read in, and the languages it is written in
+   * (admin plan 0026, section 7).
+   *
+   * The options are the content locales and never `APP_AVAILABLE_LOCALES`,
+   * which is the interface's list and is one entry long. The chrome draws the
+   * control and decides nothing, exactly as it draws the navigation and works
+   * out none of it.
+   */
+  readonly contentLocale = this._content.locale;
+  readonly contentLocales = CONTENT_LOCALES;
+
+  chooseContentLocale(locale: string): void {
+    this._content.choose(locale);
+  }
 
   signOut(): void {
     this._sessions.signOut();

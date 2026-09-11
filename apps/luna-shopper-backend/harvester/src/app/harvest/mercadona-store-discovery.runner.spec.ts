@@ -187,6 +187,9 @@ describe('MercadonaStoreDiscoveryRunner', () => {
         parking: 'yes',
         'mercadona:readyToEat': 'no',
       },
+      // The warehouse again, as the scope key a trusted import reads to put the
+      // shop in the group the chain prices it with (plan 0107, section 3.3).
+      scopeKey: '4661',
     });
     // Whether the row is new is `discovered-place.service`'s. A run reports
     // what the source said and never a status.

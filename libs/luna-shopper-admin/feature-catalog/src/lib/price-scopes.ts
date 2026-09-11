@@ -77,8 +77,8 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
    * fallback rather than the id, which would name it after something nobody has
    * ever seen.
    */
-  title: (row) => {
-    const label = localizedTextValue(row.label, CONTENT_LOCALES);
+  title: (row, locales) => {
+    const label = localizedTextValue(row.label, locales);
     if (label !== '') {
       return label;
     }

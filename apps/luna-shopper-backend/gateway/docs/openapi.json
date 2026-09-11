@@ -23514,6 +23514,10 @@
             "type": "boolean",
             "description": "A source is created disabled. Turning fetching on for a third party is a decision made explicitly, never a side effect of describing the chain."
           },
+          "autoImportPlaces": {
+            "type": "boolean",
+            "description": "Let the shops this chain names enter the catalog without a person looking first. Off by default, and a separate decision from `enabled`: reading the shops of a chain and trusting them are decided at two different times. A shop that is missing a name, a position, its own postal code, a country or a chain still goes to the review queue."
+          },
           "config": {
             "type": "object",
             "additionalProperties": true,
@@ -29769,6 +29773,9 @@
           "enabled": {
             "type": "boolean"
           },
+          "autoImportPlaces": {
+            "type": "boolean"
+          },
           "config": {
             "type": "object",
             "additionalProperties": true
@@ -29803,6 +29810,7 @@
           "supermarketId",
           "adapterKey",
           "enabled",
+          "autoImportPlaces",
           "config",
           "workers",
           "maxRequestsPerSecond",
