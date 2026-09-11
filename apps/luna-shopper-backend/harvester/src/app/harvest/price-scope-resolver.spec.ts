@@ -22,12 +22,13 @@ function build(
   const created: Array<{ externalKey: string | null; kind: PriceScopeKind }> =
     [];
   let pages = held;
-  const listPriceScopes = jest.fn(async () => ({
-    items: pages,
-    nextCursor: null,
-  }));
+  // The paging itself is `CatalogClient.listAllPriceScopes`, which two callers
+  // share (plan 0108): this and the spawn that checks the scopes a walk was
+  // given. What is asserted here is that the resolver asks for the chain's
+  // scopes once, however many keys a run declares.
+  const listAllPriceScopes = jest.fn(async () => pages);
   const catalog = {
-    listPriceScopes,
+    listAllPriceScopes,
     createPriceScope: jest.fn(
       async (
         supermarketId: string,
@@ -53,7 +54,7 @@ function build(
     resolver: new PriceScopeResolver(catalog).forRun(CHAIN, adapterKey),
     catalog,
     created,
-    listPriceScopes,
+    listAllPriceScopes,
   };
 }
 
@@ -129,7 +130,7 @@ describe('RunScopeResolver', () => {
   });
 
   it('pages the chain once however many keys a run declares', async () => {
-    const { resolver, listPriceScopes } = build();
+    const { resolver, listAllPriceScopes } = build();
 
     await resolver.declare(region('1'));
     await resolver.declare(region('2'));
@@ -137,7 +138,7 @@ describe('RunScopeResolver', () => {
 
     // A walk declares a region once per product priced for it, which for 59
     // regions across 4,000 products is a great many calls. The read is once.
-    expect(listPriceScopes).toHaveBeenCalledTimes(1);
+    expect(listAllPriceScopes).toHaveBeenCalledTimes(1);
     expect(resolver.createdCount).toBe(2);
     expect(resolver.keys).toEqual(['1', '2']);
   });

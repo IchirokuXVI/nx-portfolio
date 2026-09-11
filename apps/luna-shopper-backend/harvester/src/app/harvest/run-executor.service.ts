@@ -13,7 +13,7 @@ import { SourceCatalogEntry, type SupermarketSource } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import { CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
-import type { BackfillEntry } from './catalog-runner';
+import type { BackfillEntry, RunPriceScope } from './catalog-runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { FileImportRunner } from './file-import.runner';
 import { HarvestRunStore } from './harvest-run.store';
@@ -113,6 +113,56 @@ export class RunExecutor implements OnApplicationShutdown {
       sizeFormat: row.sizeFormat,
       categoryPath: row.categoryPath ?? [],
     }));
+  }
+
+  /**
+   * The scopes a walk covers, with the key each one is walked by (plan 0108,
+   * section 2).
+   *
+   * **The warehouse is the scope's own `externalKey` and is read from the row**,
+   * not from the run's payload. The payload holds what the operator chose, which
+   * is a list of ids, and resolving them here is the same act as
+   * {@link chainOf}: a runner fetches and reports, so anything it needs and
+   * cannot fetch is read for it.
+   *
+   * A scope the spawn accepted and catalog no longer holds is dropped rather
+   * than fatal, because the run still has warehouses to walk. A run left with
+   * none throws, since a walk of nothing would finish as a success that fetched
+   * no prices.
+   */
+  private async walkedScopes(
+    supermarketId: string | null,
+    requested: unknown
+  ): Promise<RunPriceScope[] | undefined> {
+    const ids = Array.isArray(requested) ? requested.map(String) : [];
+    if (!supermarketId || ids.length === 0) {
+      return undefined;
+    }
+    const held = new Map(
+      (await this.catalog.listAllPriceScopes(supermarketId)).map((scope) => [
+        scope.id,
+        scope,
+      ])
+    );
+    const scopes: RunPriceScope[] = [];
+    for (const id of ids) {
+      const externalKey = held.get(id)?.externalKey;
+      if (externalKey) {
+        scopes.push({ id, externalKey });
+        continue;
+      }
+      this.logger.warn(
+        `The price scope ${id} is gone or has lost its key since this run was ` +
+          'started, so its warehouse is not walked.'
+      );
+    }
+    if (scopes.length === 0) {
+      throw new Error(
+        'Every price scope this run was started with has gone or lost its key, ' +
+          'so there is no warehouse left to walk.'
+      );
+    }
+    return scopes;
   }
 
   /** True while this process is actually running that run. */
@@ -260,6 +310,14 @@ export class RunExecutor implements OnApplicationShutdown {
             {
               supermarketId: run.supermarketId as string,
               priceScopeId: run.priceScopeId ?? undefined,
+              // The warehouses this walk covers, read here rather than by the
+              // runner (plan 0108, section 2; plan 0103, section 6.4). The
+              // spawn already refused a scope with no key and one outside the
+              // adapter's band, so what is left is a lookup.
+              priceScopes: await this.walkedScopes(
+                run.supermarketId,
+                run.input['priceScopeIds']
+              ),
               detailBackfill,
               // The rows a backfill reads pages for, loaded here rather than by
               // the runner (plan 0103, section 6.2).

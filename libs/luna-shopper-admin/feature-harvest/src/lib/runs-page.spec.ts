@@ -32,12 +32,49 @@ import { RunsPage } from './runs-page';
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
 const DEZA = '33333333-3333-4333-8333-333333333333';
 const NATIONAL = 'scope-national';
+const CORDOBA = 'scope-4661';
+const CORUNA = 'scope-4804';
+
+/**
+ * What the chain's scopes look like, which is what both scope controls read.
+ *
+ * `priority` is what the adapter's band is read against and `externalKey` is
+ * the warehouse a walk fetches (backend plan 0108), so those are the two fields
+ * every case here varies. The numbers are `DEFAULT_SCOPE_PRIORITY`'s.
+ */
+const SCOPES = [
+  {
+    id: NATIONAL,
+    kind: 'NATIONAL',
+    externalKey: null,
+    label: null,
+    priority: 1000,
+  },
+  {
+    id: CORDOBA,
+    kind: 'REGION',
+    externalKey: '4661',
+    label: null,
+    priority: 300,
+  },
+  {
+    id: CORUNA,
+    kind: 'REGION',
+    externalKey: '4804',
+    label: { en: 'A Coruna' },
+    priority: 300,
+  },
+];
 
 /** What the chain picker finds, whatever is typed into it. */
 const CHAINS = [
   { id: MERCADONA, title: 'Mercadona' },
   { id: DEZA, title: 'Deza' },
 ];
+
+/** A checkbox change, as the template hands one to `toggleScope`. */
+const ticked = (checked: boolean) =>
+  ({ target: { checked } }) as unknown as Event;
 
 /** Long enough for the picker's own 250 ms to settle. */
 const SEARCH_SETTLE_MS = 320;
@@ -108,15 +145,12 @@ async function render(
       provideLocationMocks(),
       { provide: HARVEST_SERVICE, useValue: service },
       {
-        // The chain's scopes, for the preselection. One national scope, which
-        // is what a chain that prices nationwide looks like.
+        // The chain's scopes: the national one the single picker preselects,
+        // and two warehouses a Mercadona walk chooses between.
         provide: RESOURCE_GATEWAYS,
         useValue: {
           for: () => ({
-            list: async () => ({
-              items: [{ id: NATIONAL, kind: 'NATIONAL' }],
-              nextCursor: null,
-            }),
+            list: async () => ({ items: SCOPES, nextCursor: null }),
           }),
         },
       },
@@ -228,32 +262,101 @@ describe('the run form, the modes it offers', () => {
 
 describe('the run form, the price scope a walk writes to', () => {
   /**
-   * The spawn refuses a Mercadona walk without a scope (backend plan 0086,
-   * section 9), so the field is on screen and the button is not offered until it
-   * is answered.
+   * A Mercadona walk covers the warehouses it is given, and a warehouse is a
+   * scope's own key (backend plan 0108). So the chain that used to ask for one
+   * scope asks for a list, and the single picker is drawn for the adapter that
+   * still takes one.
    */
-  it('asks for a scope for a chain fetched through an API that prices', async () => {
+  it('asks for warehouses, not for one scope, for a chain that prices by warehouse', async () => {
     const { fixture } = await render();
     await chain(fixture, MERCADONA);
     const page = fixture.componentInstance;
 
     expect(page.adapterKey()).toBe('mercadona-api');
-    expect(page.needsScope()).toBe(true);
-    expect(text(fixture)).toContain('harvest.runs.start.priceScope');
+    expect(page.needsScope()).toBe(false);
+    expect(page.needsScopeList()).toBe(true);
+    expect(text(fixture)).toContain('harvest.runs.start.priceScopes');
   });
 
-  /** Most walks price nationally, so the operator confirms rather than searches. */
-  it('preselects the chain national scope', async () => {
+  it('offers every scope and refuses the ones this walk may not write', async () => {
     const { fixture } = await render();
     await chain(fixture, MERCADONA);
+
+    // Shown and disabled rather than hidden, so an operator looking for the
+    // chain's national scope can see that it exists and that a crawl of one
+    // warehouse may not claim it.
+    expect(fixture.componentInstance.scopeChoices()).toEqual([
+      expect.objectContaining({ id: NATIONAL, walkable: false }),
+      expect.objectContaining({ id: CORDOBA, walkable: true, title: '4661' }),
+      expect.objectContaining({
+        id: CORUNA,
+        walkable: true,
+        // The key first: a harvested scope usually has no label, and the key is
+        // the number the chain publishes.
+        title: '4804 — A Coruna',
+      }),
+    ]);
+  });
+
+  it('will not start a walk that covers no warehouse', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    expect(page.priceScopeIds()).toEqual([]);
+    expect(page.ready()).toBe(false);
+    await page.start();
+    await drain();
+
+    expect(spawned).toEqual([]);
+  });
+
+  it('sends every warehouse ticked, in the order they were ticked', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORUNA, ticked(true));
+    page.toggleScope(CORDOBA, ticked(true));
+    fixture.detectChanges();
+
+    expect(page.ready()).toBe(true);
+    await page.start();
+    await drain();
+
+    expect(spawned[0]).toEqual({
+      mode: 'CATALOG_DISCOVERY',
+      supermarketId: MERCADONA,
+      priceScopeIds: [CORUNA, CORDOBA],
+    });
+  });
+
+  it('takes a warehouse back out again', async () => {
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORDOBA, ticked(true));
+    page.toggleScope(CORDOBA, ticked(false));
+
+    expect(page.priceScopeIds()).toEqual([]);
+    expect(page.ready()).toBe(false);
+  });
+
+  /** Most walks that take one scope price nationally, so it is preselected. */
+  it('preselects the chain national scope for a walk that takes one', async () => {
+    const { fixture } = await render(undefined, { [DEZA]: 'carrefour-web' });
+    await chain(fixture, DEZA);
 
     expect(fixture.componentInstance.priceScopeId()).toBe(NATIONAL);
     expect(fixture.componentInstance.ready()).toBe(true);
   });
 
   it('will not start the walk with the scope emptied', async () => {
-    const { fixture, spawned } = await render();
-    await chain(fixture, MERCADONA);
+    const { fixture, spawned } = await render(undefined, {
+      [DEZA]: 'carrefour-web',
+    });
+    await chain(fixture, DEZA);
     const page = fixture.componentInstance;
 
     page.priceScopeId.set('');
@@ -267,15 +370,17 @@ describe('the run form, the price scope a walk writes to', () => {
   });
 
   it('sends the scope with the walk', async () => {
-    const { fixture, spawned } = await render();
-    await chain(fixture, MERCADONA);
+    const { fixture, spawned } = await render(undefined, {
+      [DEZA]: 'carrefour-web',
+    });
+    await chain(fixture, DEZA);
 
     await fixture.componentInstance.start();
     await drain();
 
     expect(spawned[0]).toEqual({
       mode: 'CATALOG_DISCOVERY',
-      supermarketId: MERCADONA,
+      supermarketId: DEZA,
       priceScopeId: NATIONAL,
     });
   });
@@ -359,11 +464,15 @@ describe('the run form, the price scope a walk writes to', () => {
 
     expect(page.needsScope()).toBe(false);
     expect(page.offersBackfill()).toBe(false);
+    expect(page.needsScopeList()).toBe(false);
     expect(page.capabilities()).toEqual({
       writesPrices: false,
       scopesItsOwn: false,
       listsItsOwnStores: false,
       hasProductPages: false,
+      // Null and not a band: an adapter this build has never heard of is given
+      // no scopes to write, like every other answer here.
+      walkablePriorities: null,
     });
   });
 
@@ -510,8 +619,8 @@ describe('the run form, the price scope a walk writes to', () => {
 
     expect(page.supermarketId()).toBe(MERCADONA);
     expect(page.adapterKey()).toBe('mercadona-api');
-    expect(page.needsScope()).toBe(true);
-    expect(text(fixture)).toContain('harvest.runs.start.priceScope');
+    expect(page.needsScopeList()).toBe(true);
+    expect(text(fixture)).toContain('harvest.runs.start.priceScopes');
   });
 });
 

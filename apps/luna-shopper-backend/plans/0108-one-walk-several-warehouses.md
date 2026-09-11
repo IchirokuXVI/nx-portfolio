@@ -1,3 +1,5 @@
+> **PR:** [#352](https://github.com/IchirokuXVI/nx-portfolio/pull/352)
+
 # 0108 One walk, several warehouses
 
 A Mercadona catalog discovery walks one warehouse. The warehouse it walks and the scope it writes for

@@ -14,10 +14,46 @@ export interface BackfillEntry {
   categoryPath: string[];
 }
 
+/**
+ * One group of shops a walk covers, with the key the source knows it by (plan
+ * 0108, section 1).
+ *
+ * **The key is the warehouse.** A Mercadona walk fetches the warehouse named
+ * here and stamps its prices with the same string, so the two cannot disagree.
+ * They used to be separate inputs, `source.config.warehouse` and a scope chosen
+ * at the spawn, and nothing compared them: a run configured for `4661` and
+ * started with the scope keyed `4804` walked Córdoba and wrote those prices onto
+ * A Coruña's scope with no error anywhere.
+ *
+ * It carries the id as well because the id is what an operator chose and what
+ * the run's payload records, and a message that names the scope reads better
+ * with it. Nothing in a runner resolves it: a runner reports the key, and the
+ * orchestrator turns keys into rows (plan 0103, section 3).
+ */
+export interface RunPriceScope {
+  id: string;
+  /** `PriceScope.externalKey`, which for this chain is the warehouse code. */
+  externalKey: string;
+}
+
 /** What a `CATALOG_DISCOVERY` is asked to walk. */
 export interface CatalogDiscoveryInput {
   supermarketId: string;
   priceScopeId?: string;
+  /**
+   * The scopes this walk covers, one warehouse each (plan 0108, section 2).
+   *
+   * A list and not one id, because the cost of a walk is dominated by the
+   * product detail phase and that phase is shared across warehouses: the detail
+   * call answers `ean` and `brand`, and neither depends on the warehouse, so six
+   * warehouses cost about 5,300 requests together against 26,298 apart.
+   *
+   * **Resolved by the executor, not by the runner** (plan 0103, section 6.4).
+   * The spawn checks the ids against the adapter's band and records them on the
+   * run; the executor reads the rows and hands over the keys, because a runner
+   * fetches and reports and holds no `CatalogClient` to look one up with.
+   */
+  priceScopes?: readonly RunPriceScope[];
   /**
    * Read product pages for the EAN instead of crawling the assortment (plan
    * 0090, section 12.1). Allowed only for an adapter that has a product page,
