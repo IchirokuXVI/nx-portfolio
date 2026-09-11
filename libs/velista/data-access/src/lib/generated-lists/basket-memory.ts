@@ -514,6 +514,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-1',
           quantity: 2,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
         {
           id: 'o-2',
@@ -521,6 +524,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-groceries',
           lineId: 'zl-2',
           quantity: 1,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -546,6 +552,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-3',
           quantity: 12,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -572,6 +581,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-4',
           quantity: 1,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -1013,6 +1025,9 @@ export class BasketMemory implements BasketServiceI {
       listId: body.listId,
       lineId: zoneLineId,
       quantity: wanted,
+      // Whatever this list had already bought, which a raise never changes: the
+      // read recomputes it from the facts, and this is the shape's own default.
+      settled: this._facts(originId).settledHere,
     };
 
     const kept =
@@ -1718,7 +1733,7 @@ export class BasketMemory implements BasketServiceI {
    * One line as this reader gets it: origins carrying their own settled count, or
    * no origins at all.
    *
-   * `settled` per origin is what backend `0109` section 4 adds to the read, and this
+   * `settled` per origin is what backend `0109` section 4 added to the read, and this
    * fake models it the way that plan describes: the number is read off the
    * settlement facts rather than stored twice, so the read and `setOriginSettled`
    * cannot disagree about what a household has got. It rides on `origins`, so

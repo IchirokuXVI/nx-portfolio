@@ -120,21 +120,19 @@ export interface BasketLineOrigin {
   /** What this origin contributed to the line's summed quantity. */
   quantity: number;
   /**
-   * How many of {@link quantity} were bought for this list, and **absent from
-   * every backend before luna `0109`** (velista `0077`, section 4.1).
+   * How many of {@link quantity} were bought for this list (luna `0109`, section 4;
+   * velista `0077`, section 4.1).
    *
-   * Optional rather than defaulted to zero, and the difference is a number a
-   * shopper reads. Zero would say this household has got none of its six, which is
-   * a claim about the trip; absent says this build cannot tell, which is the truth
-   * against a read that does not carry the field. The row draws the second as a
-   * readout rather than as a reel, per `0030`: a control whose starting point is
-   * unknown is not drawn.
+   * `BOUGHT` rows only, with anything reverted excluded, which is the same floor
+   * `0104` checks before it lets a take back through. It is what the reel under a
+   * list heading is bound to and what that row sends as its `from`, so the two
+   * cannot drift: the screen reads and writes one number.
    *
-   * It rides on the line's `origins`, so it is missing for exactly the readers
-   * `origins` is missing for, and that absence is the redaction rule rather than
-   * this one.
+   * It rides on the line's `origins`, so it is absent for exactly the readers
+   * `origins` is absent for, and that absence is the redaction rule rather than a
+   * second one here.
    */
-  settled?: number;
+  settled: number;
 }
 
 /**

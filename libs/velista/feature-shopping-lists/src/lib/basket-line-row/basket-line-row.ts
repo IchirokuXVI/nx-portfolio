@@ -336,59 +336,22 @@ export class BasketLineRow {
   protected readonly state = computed(() => basketLineState(this.line()));
 
   /**
-   * What this list asked for and got, or null on a row that is about the whole
-   * line.
-   *
-   * `settled` is null rather than zero where the origin does not carry one, which is
-   * every backend before luna `0109`. The three numbers below all branch on it, and
-   * they branch the same way: a count this build cannot read removes a control
-   * rather than inventing a starting point for it.
-   */
-  protected readonly share = computed(() => {
-    const origin = this.origin();
-    if (origin === null) {
-      return null;
-    }
-    return { asked: origin.quantity, settled: origin.settled ?? null };
-  });
-
-  /**
-   * Whether the number is a readout rather than a reel, because nothing can be
-   * dragged from an unknown starting point.
-   *
-   * `0030`'s rule, applied to missing data rather than to a missing permission: a
-   * control whose commit would send a number this build made up is not drawn. It
-   * resolves itself the moment the backend carries a per origin settled count, and
-   * until then the row under a list heading says what that list asked for and takes
-   * no gesture.
-   */
-  protected readonly amountUnknown = computed(() => {
-    const share = this.share();
-    return share !== null && share.settled === null;
-  });
-
-  /**
    * How many are still to get, which is what the reel is bound to.
    *
    * **The origin's, on a row drawn under one** (velista `0077`, section 4.1): a
    * household that asked for six and got two has four still to get, whatever the
-   * other households on the same line have done. Where the origin carries no settled
-   * count the number is what that list asked for, and {@link amountUnknown} has
-   * already turned the reel into a readout, so it is a fact on the screen rather
-   * than a place to drag from.
+   * other households on the same line have done. The line's own outstanding amount
+   * everywhere else, which is what this row has always drawn.
    *
    * Not called `outstanding`: the output that reports a move of it has that name,
    * and it belongs to the thing a caller listens for rather than to a number they
    * could read off the line themselves.
    */
   protected readonly stillToGet = computed(() => {
-    const share = this.share();
-    if (share === null) {
-      return outstanding(this.line());
-    }
-    return share.settled === null
-      ? share.asked
-      : Math.max(0, share.asked - share.settled);
+    const origin = this.origin();
+    return origin === null
+      ? outstanding(this.line())
+      : Math.max(0, origin.quantity - origin.settled);
   });
 
   /**
@@ -419,7 +382,7 @@ export class BasketLineRow {
    * zero to six.
    */
   protected readonly ceiling = computed(
-    () => this.share()?.asked ?? this.line().quantity
+    () => this.origin()?.quantity ?? this.line().quantity
   );
 
   /**
@@ -430,32 +393,17 @@ export class BasketLineRow {
    * thing that tells two identically named reels apart for somebody who hears the
    * row rather than seeing which heading it sits under.
    *
-   * Where the origin carries no settled count the number is not an outstanding
-   * amount at all but what that list asked for, so the name says that instead: a
-   * reel announced as "still to get" over a number that is nothing of the kind is
-   * worse than one with no list in its name.
+   * A list with no name falls back to the reel's ordinary name rather than drawing a
+   * leading comma, which is the rule `originsCaption` and the filter sheet's rows
+   * already follow for the same data. The pipeline heads no section for such a list,
+   * so this is a guard and not a case anybody meets.
    */
   protected readonly reelLabel = computed(() => {
     const name = this.line().content;
     const origin = this.origin();
-    if (origin === null) {
-      return this._translator.t(
-        'basket.outstanding.label',
-        undefined,
-        this._locale(),
-        { name }
-      );
-    }
+    const list =
+      origin === null ? '' : (this.listNames().get(origin.listId) ?? '');
 
-    const list = this.listNames().get(origin.listId) ?? '';
-    if (this.amountUnknown()) {
-      return this._translator.t(
-        'basket.units.askedLabel',
-        undefined,
-        this._locale(),
-        { name: list === '' ? name : `${list}, ${name}` }
-      );
-    }
     return this._translator.t(
       list === '' ? 'basket.outstanding.label' : 'basket.outstanding.listLabel',
       undefined,

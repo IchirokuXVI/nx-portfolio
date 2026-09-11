@@ -24,11 +24,10 @@ import { BasketLineRow } from './basket-line-row';
  *
  * **The reel is bounded by what this list asked for**, not by the basket's summed
  * quantity, or a shopper could record six purchases against a list that wanted two.
- * **The caption says which of the two numbers is which**, because the glyph beside it
- * reads the line. **The "from" caption goes**, because the heading above it already
- * says the list. And **a settled count this build cannot read removes the reel**
- * rather than defaulting to zero, which is the state of every backend before luna
- * `0109`.
+ * **It is bound to that list's own outstanding amount**, so two households on one
+ * line move independently. **The caption says which of the two numbers is which**,
+ * because the glyph beside it reads the line. And **the "from" caption goes**,
+ * because the heading above it already says the list.
  */
 
 function line(overrides: Partial<BasketLine> = {}): BasketLine {
@@ -158,20 +157,30 @@ describe('BasketLineRow: the row under a list heading', () => {
   });
 
   /**
-   * A backend before luna `0109`. There is no starting point to drag from, so the
-   * reel is not drawn at all: `0030`'s rule, reaching a missing number rather than a
-   * missing permission. What is drawn is what the list asked for, and the sentence
-   * under it says so, so nothing on the row claims a purchase that may have happened.
+   * A household that has bought none of its share is still a household with a reel:
+   * the whole six are still to get for it, and the sentence under the number is what
+   * stops the row reading as an untouched line.
    */
-  it('draws a readout rather than a reel where the settled count is absent', async () => {
-    const unknown = origin();
-    delete (unknown as { settled?: number }).settled;
+  it('draws a live reel for a list that has got none of its share', async () => {
+    const fixture = await render(line(), origin({ quantity: 6, settled: 0 }));
 
-    const fixture = await render(line(), unknown);
+    expect(reel(fixture)?.max()).toBe(6);
+    expect(reel(fixture)?.value()).toBe(6);
+    expect(text(fixture, '.settled-count')).toBeNull();
+  });
 
-    expect(reel(fixture)).toBeNull();
-    expect(text(fixture, '.settled-count')).toBe('6');
-    expect(text(fixture, '.progress')).toBe('basket.line.listShare');
+  /**
+   * Two households on one line move independently, which is the point of drawing the
+   * line twice. Nothing about the other list's six reaches this row's number.
+   */
+  it('leaves the other household’s share out of this row’s number', async () => {
+    const fixture = await render(
+      line({ quantity: 12, settled: 6 }),
+      origin({ quantity: 6, settled: 1 })
+    );
+
+    expect(reel(fixture)?.max()).toBe(6);
+    expect(reel(fixture)?.value()).toBe(5);
   });
 
   /**

@@ -339,15 +339,14 @@ export function quantityCaption(
  * (velista `0077`, section 4.1).
  *
  * Two sentences and the origin decides which. A list that has got some of its share
- * says so, "2 of 6 got"; one that has got none, **or one whose count this build
- * cannot read**, says what it asked for instead and says it against the line's own
- * total, "this list asked for 6 of the 12". The second half of that sentence is the
- * point of it: the number beside the row is the list's and the glyph is the line's,
- * and without it a shopper has no way to tell which of the two they are reading.
+ * says so, "2 of 6 got"; one that has got none says what it asked for instead, and
+ * says it against the line's own total, "this list asked for 6 of the 12".
  *
- * `settled` is absent against a backend before luna `0109`, which is why the fall
- * through is to the sentence that needs only what a list asked for. Never zero: "0 of
- * 6 got" is a claim about the trip, and this build would be making it up.
+ * The second half of that sentence is the point of it. The number beside the row is
+ * this household's and the glyph is the whole line's, and without a sentence naming
+ * both a shopper has no way to tell which of the two they are reading. A list that
+ * has got none is exactly where that confusion would land, because the row then
+ * looks like an untouched line.
  */
 export function listShareCaption(
   line: BasketLine,
@@ -355,17 +354,15 @@ export function listShareCaption(
   translator: RokuTranslatorService,
   locale: string
 ): string {
-  const settled = origin.settled;
-  if (settled !== undefined && settled > 0) {
-    return translator.t('basket.line.listPartly', undefined, locale, {
-      settled,
-      asked: origin.quantity,
-    });
-  }
-  return translator.t('basket.line.listShare', undefined, locale, {
-    asked: origin.quantity,
-    total: line.quantity,
-  });
+  return origin.settled > 0
+    ? translator.t('basket.line.listPartly', undefined, locale, {
+        settled: origin.settled,
+        asked: origin.quantity,
+      })
+    : translator.t('basket.line.listShare', undefined, locale, {
+        asked: origin.quantity,
+        total: line.quantity,
+      });
 }
 
 /**

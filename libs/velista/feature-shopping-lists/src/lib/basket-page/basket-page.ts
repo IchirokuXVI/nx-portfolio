@@ -636,21 +636,12 @@ export class BasketPage {
    * That matters here for `0073`'s own reason: taking back a `NOT_AVAILABLE` close
    * has no units to divide, so the whole close comes back and the number lands above
    * where the control was dragged.
-   *
-   * Guarded on a settled count this build can read. `amountUnknown` has already made
-   * the reel a readout where it cannot, so this is unreachable rather than merely
-   * unlikely, and it refuses rather than sending a `from` it made up.
    */
   private async setOriginOutstanding(
     line: BasketLine,
     origin: BasketLineOrigin,
     change: { from: number; to: number }
   ): Promise<void> {
-    const settled = origin.settled;
-    if (settled === undefined) {
-      return;
-    }
-
     // One sentence at a time across the whole basket, exactly as `setOutstanding`
     // clears it: a stale refusal under a row somebody has since moved again is a lie
     // about the present.
@@ -659,7 +650,7 @@ export class BasketPage {
     const result = await this._store.setOriginSettled(line.id, {
       lineId: origin.lineId,
       settled: Math.max(0, origin.quantity - change.to),
-      from: settled,
+      from: origin.settled,
     });
 
     if (result === null) {

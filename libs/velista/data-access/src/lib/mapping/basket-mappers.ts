@@ -166,11 +166,12 @@ function toBasketLineOrigin(raw: unknown): BasketLineOrigin | null {
     listId,
     lineId,
     quantity: numOr(raw['quantity'], 0),
-    // An `in` check, for the reason `origins` itself gets one: a backend before
-    // luna `0109` carries no per origin settled count at all, and reading that
-    // absence as zero would tell a shopper that a household has got none of its six
-    // rather than that this build cannot say (velista `0077`, section 4.1).
-    ...('settled' in raw ? { settled: numOr(raw['settled'], 0) } : {}),
+    // Required on the wire since luna `0109`, and defaulted exactly as `quantity`
+    // above it is. Zero on an unreadable value is the safe direction rather than an
+    // honest one: the row would draw a full reel, and the write it sends carries
+    // that zero as its `from`, which the server refuses as stale instead of
+    // applying as the opposite act (backend `0056`, section 3.2).
+    settled: numOr(raw['settled'], 0),
   };
 }
 

@@ -244,10 +244,9 @@ describe('toBasketOriginQuantityResult', () => {
  *
  * The category is required on `ItemView` and has been since the catalog existed, so
  * the grouping needed no server half at all: it was arriving on every basket and
- * being thrown away. `settled` per origin is backend `0109`'s, and the distinction
- * worth a test is that its absence is **kept**, not folded onto zero: "this
- * household has got none of its six" is a claim about the trip, and a build reading
- * an older backend would be making it up.
+ * being thrown away. `settled` per origin is backend `0109`'s, required on the wire
+ * beside `quantity` and read the same way, because the reel under a list heading is
+ * bound to the difference between the two and sends the second as its `from`.
  */
 describe('toBasketView: the product’s aisle, and what each list got', () => {
   const VIEW = {
@@ -283,7 +282,7 @@ describe('toBasketView: the product’s aisle, and what each list got', () => {
     expect(read?.get('i-2')?.categories).toEqual(['OTHER']);
   });
 
-  it('reads what each list has got, and keeps its absence apart from zero', () => {
+  it('reads what each list has got, beside what it asked for', () => {
     const withOrigins = (origins: readonly unknown[]) =>
       toBasketView({
         ...VIEW,
@@ -315,9 +314,11 @@ describe('toBasketView: the product’s aisle, and what each list got', () => {
 
     expect(withOrigins([{ ...origin, settled: 2 }])?.settled).toBe(2);
     expect(withOrigins([{ ...origin, settled: 0 }])?.settled).toBe(0);
-    // A backend before luna `0109`. Absent, and not zero: the row draws a readout
-    // rather than a reel it has no starting point for.
-    expect(withOrigins([origin])?.settled).toBeUndefined();
-    expect(withOrigins([origin])?.quantity).toBe(6);
+    expect(withOrigins([{ ...origin, settled: 2 }])?.quantity).toBe(6);
+    // Zero on a value this build cannot read, exactly as `quantity` above it
+    // defaults. The safe direction rather than an honest one: the row draws a full
+    // reel, and the `from` it then sends is refused as stale rather than applied as
+    // the opposite act.
+    expect(withOrigins([origin])?.settled).toBe(0);
   });
 });
