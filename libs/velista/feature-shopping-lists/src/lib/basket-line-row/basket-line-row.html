@@ -73,7 +73,25 @@
     class="body"
     type="button"
   >
-    <span class="content">{{ line().content }}</span>
+    <!--
+      The words, with the first match of a search painted (velista 0074, section
+      4.5). The `<mark>` is presentational: the row's accessible name is composed
+      from `line().content` and is unchanged, so a screen reader hears the line
+      rather than the fragment.
+
+      The three pieces are written with no space between them, because there is
+      none in the string: Angular collapses the whitespace around an interpolation
+      into a real space, so a line break here would put one inside the word.
+    -->
+    <span class="content">
+      @if (highlighted(); as parts) {
+        <span>{{ parts.before }}</span
+        ><mark class="match">{{ parts.match }}</mark
+        ><span>{{ parts.after }}</span>
+      } @else {
+        {{ line().content }}
+      }
+    </span>
 
     <!--
       The picked product, named, and priced after the separator when the run's

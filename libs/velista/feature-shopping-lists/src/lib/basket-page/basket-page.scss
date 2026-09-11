@@ -224,10 +224,188 @@ lib-line-composer {
   font-size: var(--app-text-2xs);
 }
 
+// The tools row (plan 0074, section 3): the count at the leading edge and the
+// controls at the trailing one. The row already existed as a bare sentence; what
+// is new is that it is a row, with somewhere for `0075` to put the filter button.
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding-inline-end: var(--app-space-2);
+}
+
+// 44 square like every other control on this screen (section 11), and quiet: the
+// acts on this page are on the rows, and a tool that competed with them would be
+// the loudest thing above a basket somebody is working through.
+.tool {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.tool-glyph {
+  font-size: var(--app-icon-md);
+}
+
 .progress {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// The field that replaces the row. Written the way the supermarkets page writes
+// its own, down to the ring being drawn by the wrapper rather than by the input,
+// because a reader who has met one search in this app must not have to learn a
+// second one.
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding-inline: var(--app-space-4) var(--app-space-2);
+}
+
+.field-label {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  flex: 1;
+  min-inline-size: 0;
+  padding-inline: var(--app-space-4) var(--app-space-2);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+
+  &:has(.search-input:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.search-glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.search-input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: var(--app-control-height);
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  // Rule T3: anything under 16px makes iOS Safari zoom the viewport on focus.
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  // The ring is drawn by the wrapper, which is the thing that looks like the field.
+  &:focus-visible {
+    outline: none;
+  }
+
+  // The browser's own clear control, which two of them would be. Ours is drawn
+  // only when there is something to clear and takes the app's own treatment.
+  &::-webkit-search-cancel-button {
+    display: none;
+  }
+}
+
+// Inside the field and smaller than 44, which is the one place on this screen
+// that is allowed to be: it sits inside a target that is already tall enough, and
+// making it square would push the text it clears off a 390 wide phone.
+.search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--app-space-7);
+  block-size: var(--app-space-7);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--app-text-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.search-clear-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+// Text and not a glyph, because it undoes a mode rather than performing an act,
+// and an X beside the X inside the field would be two controls that look alike
+// and do different things.
+.search-cancel {
+  @include shared.tap-target;
+
+  flex: none;
+  padding-inline: var(--app-space-2);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// Quieter than the progress sentence it stands in for: it is about the field
+// above it and not about the shopping.
+.search-count {
   margin: 0;
   padding-inline: var(--app-space-4);
-  font-size: var(--app-text-sm);
+  font-size: var(--app-text-xs);
   color: var(--app-text-muted);
 }
 

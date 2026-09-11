@@ -16,6 +16,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   basketLineState,
+  basketMatchRange,
   inLocale,
   outstanding,
   QUANTITY_REEL_CLICK_SHIELD_MS,
@@ -247,6 +248,45 @@ export class BasketLineRow {
    * view carries it the row reads the line and this input goes.
    */
   readonly awaitingApproval = input(false);
+
+  /**
+   * What the basket is being searched for, already folded (velista `0074`,
+   * section 4.5).
+   *
+   * Folded by the page and not here, because the answer is the same for every row
+   * and this component is constructed once per line, which is the reasoning
+   * {@link ownName} and {@link canReopen} already follow.
+   *
+   * Empty whenever nothing is being searched for, which is the ordinary state of
+   * this screen: an empty highlight draws no mark and the row is exactly the row it
+   * was.
+   */
+  readonly highlight = input('');
+
+  /**
+   * The line's own words, split around the first match, or null for no match.
+   *
+   * The **content only**. The product caption below it is matched too, so a line is
+   * found by its pick's name or brand, but it is 12px muted text and a mark on it
+   * competes with the name it sits beside. So a line found that way is drawn
+   * unhighlighted, which is why this is null rather than a range into some other
+   * string.
+   *
+   * Nothing else about the row changes, so a highlighted row and an ordinary one
+   * are the same height.
+   */
+  protected readonly highlighted = computed(() => {
+    const content = this.line().content;
+    const range = basketMatchRange(content, this.highlight());
+    if (range === null) {
+      return null;
+    }
+    return {
+      before: content.slice(0, range.start),
+      match: content.slice(range.start, range.end),
+      after: content.slice(range.end),
+    };
+  });
 
   readonly open = output<void>();
 

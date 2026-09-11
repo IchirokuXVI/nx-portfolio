@@ -758,11 +758,16 @@ describe('AppShellRoutes', () => {
       }
     });
 
-    it('provides the store and the socket on the page, not on the app', () => {
-      // Both scoped here, which is what makes the connection's lifetime the
+    it('provides the stores and the socket on the page, not on the app', () => {
+      // All three scoped here, which is what makes the connection's lifetime the
       // screen's: two baskets are never open at once, and presence answers "who is
       // here" rather than "who has ever opened this" precisely because leaving the
       // route destroys the socket (plan 0048, section 4).
+      //
+      // `BasketViewStore` is here rather than on the component because the sheets
+      // that set its controls are **child routes** of this page (velista `0074`,
+      // section 4.3), and a store the component provided is not one a sibling route
+      // can be sure to reach.
       //
       // Asserted by name rather than by counting, because a count says nothing about
       // *which* provider went missing, and the socket is the one whose absence would
@@ -771,7 +776,11 @@ describe('AppShellRoutes', () => {
         (provider) => (provider as { name?: string }).name
       );
 
-      expect(provided).toEqual(['BasketSocket', 'BasketStore']);
+      expect(provided).toEqual([
+        'BasketSocket',
+        'BasketStore',
+        'BasketViewStore',
+      ]);
     });
 
     it('keeps the page, the join screen and every sheet lazy', () => {

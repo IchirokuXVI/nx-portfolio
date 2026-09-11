@@ -18,6 +18,7 @@ import {
   type BasketOriginSettledResult,
   type BasketParticipant,
   type BasketPresenceEntry,
+  type BasketProduct,
   type BasketSettleRequest,
   type BasketSettleResult,
   type BasketShareLink,
@@ -290,6 +291,17 @@ export class BasketStore {
   /** The lines, in the order the basket holds them. */
   readonly lines = computed<readonly BasketLine[]>(
     () => this._basket()?.lines ?? []
+  );
+
+  /**
+   * Every product the basket named, by id: the pick of a line and its options.
+   *
+   * Here rather than composed again by each reader, which is what the page and
+   * `BasketViewStore` were both doing: two identities for one map means a row is
+   * redrawn whenever either of them is recomputed for an unrelated reason.
+   */
+  readonly products = computed<ReadonlyMap<string, BasketProduct>>(
+    () => this._basket()?.products ?? new Map()
   );
 
   /**
