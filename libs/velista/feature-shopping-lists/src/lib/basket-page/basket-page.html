@@ -342,7 +342,54 @@
             >
               <lib-search-icon class="tool-glyph" />
             </button>
+
+            <!--
+              Filtering and ordering (plan 0075, section 5). The badge is how many
+              properties are not at their default, and the **name carries it too**:
+              "Filter and order, 2 on". A count that only exists as a dot over a
+              glyph is a count a screen reader never hears, and the chips under this
+              row are the other half of saying the same thing.
+            -->
+            <button
+              (click)="openFilter()"
+              [attr.aria-label]="
+                activeCount() === 0
+                  ? ('basket.view.open' | rokuT)
+                  : ('basket.view.openCount' | rokuT: { count: activeCount() })
+              "
+              [class.is-on]="activeCount() > 0"
+              class="tool"
+              type="button"
+            >
+              <lib-filter-icon class="tool-glyph" />
+              @if (activeCount() > 0) {
+                <span aria-hidden="true" class="tool-badge">
+                  {{ activeCount() }}
+                </span>
+              }
+            </button>
           </div>
+        }
+
+        <!--
+          What the sheet turned on, named on the page (section 5). Absent entirely
+          when nothing is on, so the lines move up: a row that is always there but
+          usually empty is a band of wasted height on a 390 wide phone.
+
+          The chips name the order and the grouping as well as the filters, even
+          though neither hides a line. This row is how the state of the screen is
+          understood without opening the sheet, and a basket that is suddenly
+          alphabetical with nothing saying so looks broken to the next person handed
+          the phone.
+        -->
+        @if (chipItems().length > 0) {
+          <lib-chip-row
+            (more)="openFilter()"
+            (remove)="removeChip($event)"
+            [chips]="chipItems()"
+            [count]="chipCount()"
+            class="chips"
+          />
         }
 
         <!--
@@ -371,38 +418,78 @@
           the query, so the new row is seen landing rather than hidden by the
           search that failed to find it.
         -->
-        @if (visibleLines().length === 0) {
+        <!--
+          Nothing to draw, and the two reasons say different things (plan 0074
+          section 4.6, plan 0075 section 6). A search that found nothing quotes what
+          was typed, because the words are the thing to change. A filter that shows
+          nothing cannot quote anything, and the chips above already name what is on,
+          so it says so and points at them.
+
+          The composer stays in both cases: the thing somebody looked for and did not
+          find is very often the next line.
+        -->
+        @if (visibleCount() === 0) {
           <div class="empty">
-            <p class="empty-title">
-              {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
-            </p>
-            <p class="empty-body">{{ 'basket.search.noneHint' | rokuT }}</p>
+            @if (searching()) {
+              <p class="empty-title">
+                {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
+              </p>
+              <p class="empty-body">{{ 'basket.search.noneHint' | rokuT }}</p>
+            } @else {
+              <p class="empty-title">{{ 'basket.view.none' | rokuT }}</p>
+              <p class="empty-body">{{ 'basket.view.noneHint' | rokuT }}</p>
+            }
           </div>
         } @else {
-          <ul class="lines">
-            @for (line of visibleLines(); track line.id) {
-              <li>
-                <lib-basket-line-row
-                  (open)="openLine(line)"
-                  (outstanding)="setOutstanding(line, $event)"
-                  (reopen)="reopenLine(line)"
-                  (settle)="settleLine(line)"
-                  [awaitingApproval]="pendingTargets().has(line.id)"
-                  [busy]="isBusy(line)"
-                  [canReopen]="canReopen"
-                  [finished]="finished()"
-                  [highlight]="highlight()"
-                  [line]="line"
-                  [listNames]="listNames()"
-                  [meId]="meId()"
-                  [notice]="noticeFor(line)"
-                  [ownName]="ownName()"
-                  [people]="participantsById()"
-                  [products]="products()"
-                />
-              </li>
+          <!--
+            One section per run of rows (plan 0075, section 3). An ungrouped,
+            unfiltered basket is one section with no heading, which is the ordinary
+            case and draws exactly the list this was before.
+
+            A section heading is a real `h2`, the page's `h1` being the basket's
+            name, so the groups are navigable and not only visible (`0059` section
+            7). The hint beside it says why the section exists rather than repeating
+            its name.
+          -->
+          @for (section of sections(); track section.key) {
+            @if (section.rows.length > 0) {
+              <section class="group">
+                @if (section.heading; as heading) {
+                  <div class="group-head">
+                    <h2 class="group-title">{{ heading | rokuT }}</h2>
+                    @if (section.hint; as hint) {
+                      <span class="group-hint">{{ hint | rokuT }}</span>
+                    }
+                  </div>
+                }
+
+                <ul class="lines">
+                  @for (row of section.rows; track row.line.id) {
+                    <li>
+                      <lib-basket-line-row
+                        (open)="openLine(row.line)"
+                        (outstanding)="setOutstanding(row.line, $event)"
+                        (reopen)="reopenLine(row.line)"
+                        (settle)="settleLine(row.line)"
+                        [awaitingApproval]="pendingTargets().has(row.line.id)"
+                        [busy]="isBusy(row.line)"
+                        [canReopen]="canReopen"
+                        [finished]="finished()"
+                        [highlight]="highlight()"
+                        [line]="row.line"
+                        [listNames]="listNames()"
+                        [meId]="meId()"
+                        [notice]="noticeFor(row.line)"
+                        [ownName]="ownName()"
+                        [people]="participantsById()"
+                        [products]="products()"
+                      />
+                    </li>
+                  }
+                </ul>
+              </section>
             }
-          </ul>
+          }
         }
       }
     }

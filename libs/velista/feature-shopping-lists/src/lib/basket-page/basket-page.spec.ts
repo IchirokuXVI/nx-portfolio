@@ -127,6 +127,13 @@ interface Options {
   readonly statusWriteLands?: boolean;
   /** The products the lines pick, so a search can match a name or a brand (`0074`). */
   readonly products?: ReadonlyMap<string, BasketProduct>;
+  /**
+   * The lists the run drew from (`0075`). Absent is a guest, who has none, so the
+   * filter sheet draws no lists section and the chip row can hold no list chip.
+   */
+  readonly sources?: readonly { zoneId: string; listId: string }[];
+  /** Those lists by name, for the list chip and the sheet's checkboxes. */
+  readonly listNames?: ReadonlyMap<string, string>;
   /** What the progress sentence counts. Defaults to a basket nobody has started. */
   readonly progress?: { done: number; unavailable: number; total: number };
   /**
@@ -279,6 +286,10 @@ async function render(options: Options = {}): Promise<{
             generatedAt: null,
             products: new Map(),
             scopes: new Map(),
+            // What the run drew from, which is what the filter sheet offers and what
+            // the list filter and its chip are about (`0075`). Absent by default, so
+            // every test in this file that predates it still renders a guest's sheet.
+            sources: options.sources,
           }),
           state: signal('ready'),
           lines: store.lines,
@@ -287,7 +298,7 @@ async function render(options: Options = {}): Promise<{
           progress: store.progress,
           busyLines: signal(new Set<string>()),
           participantsById: signal(new Map<string, BasketParticipant>()),
-          listNames: signal(new Map<string, string>()),
+          listNames: signal(options.listNames ?? new Map<string, string>()),
           seesZoneData: signal(true),
           me: signal(me),
           live: store.live,
@@ -1403,6 +1414,261 @@ describe('searching the basket', () => {
       // Nothing about the search survives leaving: it is the one thing on this
       // screen that is never remembered (section 4.7).
       expect(view.query()).toBe('');
+    });
+  });
+
+  /**
+   * The filter button, its chips and the sections (velista `0075`).
+   *
+   * What these cover is the half of the plan that lives on the page: the badge, the
+   * chip row, and the sink section a list filter produces. The pipeline itself is
+   * tested in `compose-basket-view.spec.ts`, and the fit of the chips in
+   * `chip-row.spec.ts`, because jsdom lays nothing out.
+   */
+  describe('filtering and ordering', () => {
+    /** Two lists, one line each, and a line nobody has accepted yet. */
+    const sourced: readonly BasketLine[] = [
+      line('Milk', {
+        id: 'l-1',
+        origins: [
+          {
+            id: 'o-1',
+            zoneId: 'z1',
+            listId: 'l-groceries',
+            lineId: 'zl-1',
+            quantity: 1,
+          },
+        ],
+      }),
+      line('Bread', {
+        id: 'l-2',
+        origins: [
+          {
+            id: 'o-2',
+            zoneId: 'z1',
+            listId: 'l-weekly',
+            lineId: 'zl-2',
+            quantity: 1,
+          },
+        ],
+      }),
+      line('Batteries', { id: 'l-3', origins: [] }),
+    ];
+
+    const SOURCES = [
+      { zoneId: 'z1', listId: 'l-groceries' },
+      { zoneId: 'z1', listId: 'l-weekly' },
+    ];
+
+    const LIST_NAMES = new Map([
+      ['l-groceries', 'Groceries'],
+      ['l-weekly', 'Weekly shop'],
+    ]);
+
+    async function renderSourced(echoValues = false) {
+      return render({
+        lines: sourced,
+        sources: SOURCES,
+        listNames: LIST_NAMES,
+        echoValues,
+      });
+    }
+
+    function filterButton(
+      fixture: ComponentFixture<BasketPage>
+    ): HTMLElement | null {
+      return (
+        Array.from(
+          (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+            '.tools .tool'
+          )
+        )[1] ?? null
+      );
+    }
+
+    function chips(fixture: ComponentFixture<BasketPage>): HTMLElement[] {
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+          'lib-chip-row .row .chip'
+        )
+      );
+    }
+
+    function headings(fixture: ComponentFixture<BasketPage>): string[] {
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+          '.group-title'
+        )
+      ).map((node) => node.textContent?.trim() ?? '');
+    }
+
+    it('draws the filter control beside the search, for every reader', async () => {
+      const { fixture } = await render({ lines: threeLines });
+
+      expect(filterButton(fixture)).not.toBeNull();
+      expect(query(fixture, 'lib-filter-icon')).not.toBeNull();
+    });
+
+    it('opens the sheet at the basket’s own sheet URL', async () => {
+      const { fixture, store } = await render({ lines: threeLines });
+
+      filterButton(fixture)?.click();
+
+      expect(store.navigate).toHaveBeenCalledWith(
+        ['sheet', 'filter'],
+        expect.anything()
+      );
+    });
+
+    /**
+     * The count is in the **name** and not only in the badge: a number that exists
+     * as a dot over a glyph is a number a screen reader never hears.
+     */
+    it('names the control plainly at rest and with the count once something is on', async () => {
+      const { fixture } = await renderSourced(true);
+      expect(filterButton(fixture)?.getAttribute('aria-label')).toBe(
+        'basket.view.open'
+      );
+      expect(query(fixture, '.tool-badge')).toBeNull();
+
+      TestBed.inject(BasketViewStore).setOrder('alpha');
+      fixture.detectChanges();
+
+      expect(filterButton(fixture)?.getAttribute('aria-label')).toBe(
+        'basket.view.openCount:{"count":1}'
+      );
+      expect(query(fixture, '.tool-badge')?.textContent?.trim()).toBe('1');
+    });
+
+    it('draws no chip row at all while nothing is on', async () => {
+      const { fixture } = await renderSourced();
+
+      expect(query(fixture, 'lib-chip-row')).toBeNull();
+    });
+
+    it('draws one chip per property that is not at its default', async () => {
+      const { fixture } = await renderSourced();
+      const view = TestBed.inject(BasketViewStore);
+
+      view.setOrder('alpha');
+      view.setGrouping('category');
+      fixture.detectChanges();
+
+      expect(chips(fixture).map((chip) => chip.textContent?.trim())).toEqual([
+        'basket.view.order.alpha×',
+        'basket.view.chip.byCategory×',
+      ]);
+    });
+
+    it('names a chip’s x by what it removes', async () => {
+      const { fixture } = await renderSourced(true);
+      TestBed.inject(BasketViewStore).setOrder('alpha');
+      fixture.detectChanges();
+
+      expect(chips(fixture)[0].getAttribute('aria-label')).toBe(
+        'basket.view.chip.remove:{"name":"basket.view.order.alpha"}'
+      );
+    });
+
+    it('puts one property back when its chip is pressed', async () => {
+      const { fixture } = await renderSourced();
+      const view = TestBed.inject(BasketViewStore);
+      view.setOrder('alpha');
+      view.setGrouping('category');
+      fixture.detectChanges();
+
+      chips(fixture)[0].click();
+      fixture.detectChanges();
+
+      expect(view.order()).toBe('shop');
+      // The other chip stays: a chip removes its own property and nothing else.
+      expect(view.grouping()).toBe('category');
+      expect(chips(fixture)).toHaveLength(1);
+    });
+
+    it('names the one kept list on its chip', async () => {
+      const { fixture } = await renderSourced(true);
+
+      TestBed.inject(BasketViewStore).toggleList('l-weekly');
+      fixture.detectChanges();
+
+      expect(chips(fixture)[0].textContent).toContain(
+        'basket.view.lists.only:{"name":"Groceries"}'
+      );
+    });
+
+    /**
+     * The count beside the chips, and the rule that it is drawn only while fewer
+     * lines are shown than the basket holds: "12 of 12" is noise.
+     */
+    it('says how many lines are shown, only while some are hidden', async () => {
+      const { fixture } = await renderSourced(true);
+      const view = TestBed.inject(BasketViewStore);
+
+      view.setOrder('alpha');
+      fixture.detectChanges();
+      expect(query(fixture, 'lib-chip-row .count')).toBeNull();
+
+      view.toggleList('l-weekly');
+      fixture.detectChanges();
+      // Milk, and Batteries, which is on no list and always shown.
+      expect(query(fixture, 'lib-chip-row .count')?.textContent).toContain(
+        'basket.view.count:{"shown":2,"total":3}'
+      );
+    });
+
+    it('sinks the line on no list under its own heading', async () => {
+      const { fixture } = await renderSourced();
+
+      expect(headings(fixture)).toEqual([]);
+
+      TestBed.inject(BasketViewStore).toggleList('l-weekly');
+      fixture.detectChanges();
+
+      expect(headings(fixture)).toEqual(['basket.group.noList']);
+      expect(text(fixture)).toContain('basket.group.noListHint');
+      expect(rows(fixture)).toHaveLength(2);
+    });
+
+    /** "4 of 12 got" is about the trip. Hiding rows buys nothing. */
+    it('keeps the progress sentence counting the whole basket', async () => {
+      const { fixture } = await renderSourced(true);
+      TestBed.inject(BasketViewStore).toggleList('l-weekly');
+      fixture.detectChanges();
+
+      expect(text(fixture)).toContain('"total":3');
+    });
+
+    /**
+     * The two empty states say different things, and the filter's cannot quote a
+     * query: there is none.
+     */
+    it('says the filter matched nothing, rather than quoting an empty search', async () => {
+      const { fixture } = await render({
+        lines: [sourced[1]],
+        sources: SOURCES,
+        listNames: LIST_NAMES,
+      });
+
+      TestBed.inject(BasketViewStore).toggleList('l-weekly');
+      fixture.detectChanges();
+
+      expect(text(fixture)).toContain('basket.view.none');
+      expect(text(fixture)).not.toContain('basket.search.none');
+      // The thing somebody was looking for is very often the next line.
+      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+    });
+
+    it('gives the whole view state back on leaving', async () => {
+      const { fixture } = await renderSourced();
+      const view = TestBed.inject(BasketViewStore);
+      view.setOrder('alpha');
+      view.toggleList('l-weekly');
+
+      fixture.destroy();
+
+      expect(view.order()).toBe('shop');
+      expect(view.lists()).toBeNull();
     });
   });
 });

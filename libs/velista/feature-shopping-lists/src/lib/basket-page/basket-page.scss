@@ -240,6 +240,8 @@ lib-line-composer {
 .tool {
   @include shared.tap-target;
 
+  // For the badge, which sits over the glyph's trailing corner.
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -263,6 +265,45 @@ lib-line-composer {
 
 .tool-glyph {
   font-size: var(--app-icon-md);
+}
+
+// A tool with something on takes the accent, which is the amber quiet action role
+// and not `--app-status-attention-fg`: that one is violet despite its name.
+//
+// The glyph is tinted **and** carries the badge, and the accessible name carries the
+// number as well, so nothing about "two things are on" rests on the colour alone.
+.tool.is-on {
+  color: var(--app-action-quiet-fg);
+}
+
+// The count, over the glyph's trailing corner. `aria-hidden`, because the button's
+// own name already says it: a badge a screen reader read as well would say the
+// number twice.
+.tool-badge {
+  position: absolute;
+  inset-block-start: var(--app-space-2);
+  inset-inline-end: var(--app-space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--app-badge-size);
+  block-size: var(--app-badge-size);
+  padding: 0 var(--app-space-2);
+  // The ring is the page's own ground, so the badge is punched out of the glyph
+  // behind it rather than sitting on top of it.
+  border: var(--app-badge-ring) solid var(--app-surface-ground);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-fg);
+  color: var(--app-surface-ground);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+// The chip row, between the tools row and the first line. Absent when nothing is on,
+// so this rule only ever applies to a row that has something in it.
+.chips {
+  margin-block-start: calc(-1 * var(--app-space-2));
 }
 
 .progress {
@@ -532,6 +573,40 @@ lib-line-composer {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+// --- The sections (plan 0075) -----------------------------------------------
+//
+// An ungrouped basket is one section with no heading, so these rules apply to the
+// sinks this plan draws and to `0077`'s groups. The section itself carries nothing:
+// the rows inside it already have their own separators, and a box around a group
+// would put two borders where the heading is enough.
+
+// The heading and its hint on one line, the heading leading and the hint trailing,
+// as the mock draws it. A real `h2`, so the groups are navigable.
+.group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4) var(--app-space-4) var(--app-space-2);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.group-title {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+// Why the section exists, not a second name for it: "added in the shop".
+.group-hint {
+  flex: none;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
 }
 
 // --- The states -------------------------------------------------------------

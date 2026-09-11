@@ -791,6 +791,20 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.FinishSheet
                   ),
               }),
+              // Ordering, grouping and narrowing the lines (velista `0075`). A sheet
+              // rather than a menu on the page, because it holds four groups of
+              // controls and one of them is a list of households.
+              //
+              // It is the first sheet over this page that is about the **screen**
+              // rather than about the basket, which is why it reads `BasketViewStore`
+              // and never `BasketStore`: it sets what is drawn and writes nothing.
+              sheet({
+                path: 'filter',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.FilterSheet
+                  ),
+              }),
             ],
           },
           {

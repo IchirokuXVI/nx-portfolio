@@ -8,6 +8,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BasketStore,
+  BasketViewStore,
   GeneratedListStore,
   LINE_SERVICE,
   SessionStore,
@@ -18,6 +19,7 @@ import {
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
+import { FilterSheet } from './filter-sheet/filter-sheet';
 import { FinishSheet } from './finish-sheet/finish-sheet';
 import { PeopleSheet } from './people-sheet/people-sheet';
 import { SettleSheet } from './settle-sheet/settle-sheet';
@@ -52,6 +54,7 @@ const SHEETS: readonly {
   { name: 'PeopleSheet', component: PeopleSheet, path: 'people', params: {} },
   { name: 'ShareSheet', component: ShareSheet, path: 'share', params: {} },
   { name: 'FinishSheet', component: FinishSheet, path: 'finish', params: {} },
+  { name: 'FilterSheet', component: FilterSheet, path: 'filter', params: {} },
 ];
 
 /**
@@ -73,6 +76,12 @@ function storeDouble() {
     shareLink: signal(null),
     busyLines: signal(new Set<string>()),
     lines: signal([]),
+    // What `BasketViewStore` composes the page's sections from, and what its effect
+    // watches to clear the search when the reader's own line lands. Empty, because
+    // these tests are about the URL a sheet leaves on, and that URL is the same
+    // whether the basket has thirty lines or none.
+    products: signal(new Map()),
+    lastAdded: signal(null),
     seesZoneData: signal(false),
     listNames: signal(new Map<string, string>()),
     participants: signal([]),
@@ -144,6 +153,10 @@ async function render(
     providers: [
       provideVelistaTesting({ basePath }),
       { provide: BasketStore, useValue: storeDouble() },
+      // The real view store rather than a double. It holds nothing but signals over
+      // the store above, and the filter sheet reads five of them, so a double here
+      // would be a second implementation of the thing under test's whole input.
+      BasketViewStore,
       // The settle sheet reads a line's settlement history through this. These tests
       // are about the URL a sheet leaves on and never open that pane, so an empty page
       // is enough: what matters is that the injection resolves.

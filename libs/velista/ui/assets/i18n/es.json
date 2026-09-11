@@ -1024,6 +1024,47 @@
       "none": "Ninguna línea coincide con «{{query}}»",
       "noneHint": "Añádela abajo y se pone en esta lista."
     },
+    "view": {
+      "open": "Filtrar y ordenar",
+      "openCount": "Filtrar y ordenar, {{count}} activos",
+      "title": "Filtrar y ordenar",
+      "reset": "Quitar todo",
+      "none": "Ninguna línea coincide con el filtro",
+      "noneHint": "Quita una etiqueta de arriba para ver más.",
+      "show_one": "Ver 1 línea",
+      "show_other": "Ver {{count}} líneas",
+      "count": "{{shown}} de {{total}}",
+      "order": {
+        "legend": "Orden",
+        "shop": "Como compras tú",
+        "shopHint": "Calculado con tus últimas compras",
+        "alpha": "De la A a la Z"
+      },
+      "group": {
+        "legend": "Agrupar por",
+        "none": "Nada",
+        "category": "Categoría",
+        "list": "Lista",
+        "listHint": "las cantidades de cada lista"
+      },
+      "lists": {
+        "legend": "Listas",
+        "only": "Solo {{name}}",
+        "some": "{{kept}} de {{total}} listas"
+      },
+      "chip": {
+        "remove": "Quitar: {{name}}",
+        "byCategory": "Por categoría",
+        "byList": "Por lista",
+        "shop": "{{name}}",
+        "more": "+{{count}}",
+        "moreLabel": "{{count}} más, abrir filtrar y ordenar"
+      }
+    },
+    "group": {
+      "noList": "Todavía en ninguna lista",
+      "noListHint": "añadido en la tienda"
+    },
     "settle": {
       "title": "{{name}}",
       "all_one": "Conseguido",
