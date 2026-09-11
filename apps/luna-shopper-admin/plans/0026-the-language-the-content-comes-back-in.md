@@ -1,3 +1,5 @@
+> **PR:** [#343](https://github.com/IchirokuXVI/nx-portfolio/pull/343)
+
 # 0026 The language the content comes back in
 
 The back office reads English and only English. Not because anybody chose that, but because
