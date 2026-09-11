@@ -589,6 +589,22 @@ export interface ItemView {
    * no price to show.
    */
   bestOffer?: ItemOfferView | null;
+  /**
+   * What **every** scope charges for this product, cheapest first (plan 0109,
+   * section 2).
+   *
+   * Present only when the request asked for `all`, and absent on every other
+   * read, which is what lets the one view every catalog read answers with carry
+   * both answers rather than forking a second one. {@link bestOffer} is this
+   * array's first entry whenever there is one, because the two are filled from
+   * the same rows and so cannot disagree.
+   *
+   * **A scope absent from it does not list the product.** A row saying the
+   * product is unavailable is excluded exactly as it is from `bestOffer`, so
+   * there is no third state between "cheapest here" and "not sold here" for a
+   * client to draw.
+   */
+  offers?: ItemOfferView[];
 }
 
 /**
@@ -1131,6 +1147,18 @@ export interface GetItemsRequest {
    * rather than this one's exception.
    */
   priceScopeIds?: string[];
+  /**
+   * How much of the pricing to attach (plan 0109, section 2).
+   *
+   * `best` is the default and is what every caller received before that plan:
+   * one offer per item, the cheapest across the scopes, on `bestOffer`. `all`
+   * adds {@link ItemView.offers}, every scope's offer for the item, and leaves
+   * `bestOffer` exactly as it was.
+   *
+   * Read only when {@link priceScopeIds} names a scope, on the reasoning that
+   * field already states: a lookup that prices nothing has no offers to list.
+   */
+  offers?: 'best' | 'all';
 }
 
 /**

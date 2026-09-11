@@ -65,9 +65,10 @@ const lineOriginView = object(
     listId: nonEmptyString(),
     lineId: nonEmptyString(),
     quantity: integer({ minimum: 0 }),
+    settled: integer({ minimum: 0 }),
     lineVersion: integer({ minimum: 1 }),
   },
-  ['id', 'zoneId', 'listId', 'lineId', 'quantity', 'lineVersion']
+  ['id', 'zoneId', 'listId', 'lineId', 'quantity', 'settled', 'lineVersion']
 );
 
 const lineView = object(

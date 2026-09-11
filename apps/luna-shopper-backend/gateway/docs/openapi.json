@@ -26098,6 +26098,12 @@
                 "type": "null"
               }
             ]
+          },
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemOfferView"
+            }
           }
         },
         "required": [
@@ -28272,6 +28278,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "settled": {
+            "type": "integer",
+            "minimum": 0
+          },
           "lineVersion": {
             "type": "integer",
             "minimum": 1
@@ -28283,6 +28293,7 @@
           "listId",
           "lineId",
           "quantity",
+          "settled",
           "lineVersion"
         ],
         "additionalProperties": false

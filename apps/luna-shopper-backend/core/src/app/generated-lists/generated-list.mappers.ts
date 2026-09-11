@@ -43,8 +43,19 @@ function readSnapshot(
   return { ...snapshot, pricingProfileId: snapshot.pricingProfileId ?? null };
 }
 
+/**
+ * One provenance row as the wire describes it.
+ *
+ * `settled` is passed in rather than read off the row, because it is not on the
+ * row: it is a sum over this basket's live purchases against the origin's zone
+ * line (plan 0109, section 4). It is an argument rather than an optional field
+ * so that every composer of this view has to have asked for it, which is the
+ * one thing that stops a read quietly reporting that a household has received
+ * none of what it asked for.
+ */
 export function toOriginView(
-  row: GeneratedListLineOrigin
+  row: GeneratedListLineOrigin,
+  settled: number
 ): GeneratedListLineOriginView {
   return {
     id: row.id,
@@ -52,8 +63,29 @@ export function toOriginView(
     listId: row.listId,
     lineId: row.lineId,
     quantity: row.quantity,
+    settled,
     lineVersion: row.lineVersion,
   };
+}
+
+/**
+ * What this basket has bought for each of a line's origins, keyed on the **zone
+ * line** a settlement landed on, which is what `generated_list_line_origins`
+ * is unique on beside the basket line.
+ */
+export type SettledPerOrigin = ReadonlyMap<string, number>;
+
+/** Nothing settled, shared rather than allocated per line. */
+const EMPTY_SETTLED: SettledPerOrigin = new Map<string, number>();
+
+/** The one place the two mappers turn that map into a row's own number. */
+function originViews(
+  origins: GeneratedListLineOrigin[],
+  settled: SettledPerOrigin
+): GeneratedListLineOriginView[] {
+  return origins.map((origin) =>
+    toOriginView(origin, settled.get(origin.lineId) ?? 0)
+  );
 }
 
 export function toGeneratedLineView(
@@ -61,6 +93,8 @@ export function toGeneratedLineView(
   children: {
     origins: GeneratedListLineOrigin[];
     options: GeneratedListLineOption[];
+    /** Keyed on the origin's zone line (plan 0109, section 4). */
+    settledPerOrigin: SettledPerOrigin;
   }
 ): GeneratedListLineView {
   return {
@@ -73,7 +107,7 @@ export function toGeneratedLineView(
     origin: row.origin,
     targetListId: row.targetListId,
     position: row.position,
-    origins: children.origins.map(toOriginView),
+    origins: originViews(children.origins, children.settledPerOrigin),
   };
 }
 
@@ -108,6 +142,13 @@ export function toBasketLineView(
      * of them.
      */
     waitingSettled?: number;
+    /**
+     * Keyed on the origin's zone line (plan 0109, section 4). Defaulted to an
+     * empty map for the same reason `waitingSettled` is defaulted to zero: a
+     * line nobody has settled off a list has nothing in it, which is nearly
+     * every line.
+     */
+    settledPerOrigin?: SettledPerOrigin;
   },
   seesZoneData: boolean
 ): GeneratedListBasketLineView {
@@ -141,7 +182,13 @@ export function toBasketLineView(
 
   return {
     ...line,
-    origins: children.origins.map(toOriginView),
+    // Under the redaction, deliberately: `settled` rides on `origins`, so it is
+    // absent for exactly the readers `origins` is absent for (plan 0109,
+    // section 4). It names a zone line, which is the rule's own subject.
+    origins: originViews(
+      children.origins,
+      children.settledPerOrigin ?? EMPTY_SETTLED
+    ),
     targetListId: row.targetListId,
     origin: row.origin,
   };

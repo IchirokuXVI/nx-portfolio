@@ -368,6 +368,10 @@ const itemView = object(
     bestOffer: {
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
     },
+    // Also deliberately NOT required (plan 0109, section 2): only a lookup that
+    // asked for `all` fills it, and absent means "this read did not list the
+    // scopes", which is a different sentence from an empty array.
+    offers: array(ref(CATALOG_SCHEMA_IDS.itemOfferView)),
   },
   [
     'id',
@@ -918,6 +922,9 @@ const getItemsRequest = object(
     // "do not price", unlike search, because a lookup by id answers the same
     // items either way.
     priceScopeIds: array(nonEmptyString()),
+    // Plan 0109: `all` adds every scope's offer beside the cheapest one. Absent
+    // is `best`, which is what every caller before that plan sent.
+    offers: string({ enum: ['best', 'all'] }),
   },
   ['ids']
 );

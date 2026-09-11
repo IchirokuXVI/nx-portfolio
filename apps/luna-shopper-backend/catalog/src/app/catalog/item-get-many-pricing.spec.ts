@@ -85,9 +85,18 @@ const priceRow = (
 
 /** A query builder double that records the scope filter and the order. */
 function makePriceQb(rows: SupermarketItem[]) {
-  const calls: { scopeIds?: string[]; order: string[] } = { order: [] };
+  const calls: { scopeIds?: string[]; order: string[]; distinct: boolean } = {
+    order: [],
+    distinct: false,
+  };
   const qb: Record<string, jest.Mock> = {};
-  qb['distinctOn'] = jest.fn(() => qb);
+  qb['distinctOn'] = jest.fn(() => {
+    // Recorded rather than ignored: the collapse is the whole difference
+    // between the two queries, and plan 0109 exists because of what it throws
+    // away.
+    calls.distinct = true;
+    return qb;
+  });
   qb['where'] = jest.fn(() => qb);
   qb['andWhere'] = jest.fn((_sql: string, params?: { scopeIds?: string[] }) => {
     if (params?.scopeIds) {
@@ -185,6 +194,123 @@ describe('ItemService.getMany with scopes (plan 0066)', () => {
 
     expect(result.items[0].bestOffer?.unitPrice).toBe(1.52);
     expect(result.items[0].bestOffer?.unitPriceLabel).toBe('EUR/L');
+  });
+});
+
+/**
+ * Every scope's offer, on request (plan 0109, section 2).
+ *
+ * The cheapest offer answers "what will this cost" and cannot answer "what does
+ * this shop charge": `DISTINCT ON` keeps one row per item, so a chain that
+ * stocks a product but is dearer than its neighbour leaves no trace of stocking
+ * it at all. `offers: 'all'` is the same query without the collapse, and the
+ * four cases here are section 2's four sentences.
+ */
+describe("ItemService.getMany with offers: 'all' (plan 0109)", () => {
+  it('answers every available row per item, cheapest first, best equal to the first', async () => {
+    const items = { find: jest.fn(async () => [item('i1')]) };
+    // As the query orders them: by item, then by price. The service reads the
+    // first entry as the cheapest rather than sorting again.
+    const { qb, calls } = makePriceQb([
+      priceRow('i1', 'scope-a', '0.95', '0.63'),
+      priceRow('i1', 'scope-b', '1.15', '0.76'),
+    ]);
+    const { service } = build(items, qb);
+
+    const result = await service.getMany({
+      ids: ['i1'],
+      priceScopeIds: ['scope-a', 'scope-b'],
+      offers: 'all',
+    });
+
+    expect(result.items[0].offers?.map((row) => row.priceScopeId)).toEqual([
+      'scope-a',
+      'scope-b',
+    ]);
+    // Filled from the same array, so the two cannot disagree.
+    expect(result.items[0].bestOffer).toEqual(result.items[0].offers?.[0]);
+    expect(calls.scopeIds).toEqual(['scope-a', 'scope-b']);
+    // No collapse, and the same ranking key `getMany` already used: the till
+    // price, with the unit price only breaking a tie.
+    expect(calls.distinct).toBe(false);
+    expect(calls.order).toEqual([
+      'si."itemId"',
+      'si."price"',
+      'si."unitPrice"',
+    ]);
+  });
+
+  it('answers exactly what it answers today when the flag is absent', async () => {
+    const items = { find: jest.fn(async () => [item('i1')]) };
+    const { qb, calls } = makePriceQb([
+      priceRow('i1', 'scope-a', '0.95', '0.63'),
+    ]);
+    const { service } = build(items, qb);
+
+    const result = await service.getMany({
+      ids: ['i1'],
+      priceScopeIds: ['scope-a', 'scope-b'],
+    });
+
+    // The regression guard for every caller that is not the basket read: no
+    // `offers` key at all, and the collapsed query.
+    expect('offers' in result.items[0]).toBe(false);
+    expect(result.items[0].bestOffer?.priceScopeId).toBe('scope-a');
+    expect(calls.distinct).toBe(true);
+  });
+
+  it('answers an empty list and no best offer for an item nothing quotes', async () => {
+    const items = { find: jest.fn(async () => [item('i1'), item('i2')]) };
+    const { qb } = makePriceQb([priceRow('i2', 'scope-a', '2.19', '1.46')]);
+    const { service } = build(items, qb);
+
+    const result = await service.getMany({
+      ids: ['i1', 'i2'],
+      priceScopeIds: ['scope-a'],
+      offers: 'all',
+    });
+
+    const byId = new Map(result.items.map((view) => [view.id, view]));
+    expect(byId.get('i1')?.offers).toEqual([]);
+    // Null rather than absent, as it is without the flag: this read priced, and
+    // this item has no price here.
+    expect(byId.get('i1')?.bestOffer).toBeNull();
+    expect(byId.get('i2')?.offers).toHaveLength(1);
+  });
+
+  it('leaves a row the shop says it does not stock out of the list', async () => {
+    // The `available` filter is the query's, and it is the same filter the
+    // cheapest answer applies. "No row" is therefore the client's one way of
+    // reading "not sold here", and there is no third state to draw.
+    const items = { find: jest.fn(async () => [item('i1')]) };
+    const { qb } = makePriceQb([priceRow('i1', 'scope-b', '1.15', '0.76')]);
+    const { service, prices } = build(items, qb);
+
+    const result = await service.getMany({
+      ids: ['i1'],
+      priceScopeIds: ['scope-a', 'scope-b'],
+      offers: 'all',
+    });
+
+    expect(result.items[0].offers?.map((row) => row.priceScopeId)).toEqual([
+      'scope-b',
+    ]);
+    expect(qb['andWhere']).toHaveBeenCalledWith('si."available"');
+    expect(prices.createQueryBuilder).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs no query at all when the caller named no scopes', async () => {
+    const items = { find: jest.fn(async () => [item('i1')]) };
+    const { qb } = makePriceQb([]);
+    const { service, prices } = build(items, qb);
+
+    const result = await service.getMany({ ids: ['i1'], offers: 'all' });
+
+    // A lookup that prices nothing has no offers to list, so the flag changes
+    // nothing: the same unpriced view every caller without scopes receives.
+    expect('offers' in result.items[0]).toBe(false);
+    expect('bestOffer' in result.items[0]).toBe(false);
+    expect(prices.createQueryBuilder).not.toHaveBeenCalled();
   });
 });
 
