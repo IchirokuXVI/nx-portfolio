@@ -1,3 +1,5 @@
+> **PR:** [#342](https://github.com/IchirokuXVI/nx-portfolio/pull/342)
+
 # 0107 A postal code asks every source, and a trusted one answers into the catalog
 
 A postal code enters the queue because a profile write announced it or because an operator typed it
