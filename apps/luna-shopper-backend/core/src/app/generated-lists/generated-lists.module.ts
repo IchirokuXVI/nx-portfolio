@@ -17,6 +17,7 @@ import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
@@ -77,6 +78,9 @@ import { WaitingSettlementService } from './waiting-settlement.service';
   controllers: [GeneratedListController, GeneratedListSharingController],
   providers: [
     GeneratedListService,
+    // The order a shopper walks (plan 0110). The run asks it once, between
+    // composing a basket and writing it, and nothing asks it again.
+    GeneratedListOrderService,
     GeneratedListLineService,
     GeneratedListSharingService,
     GeneratedListSettleService,

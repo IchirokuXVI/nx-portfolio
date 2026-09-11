@@ -265,6 +265,100 @@ export interface WritableListRow {
   zoneId: string;
 }
 
+/**
+ * The order the owner walked their last trips in (plan 0110, section 2). `$1` is
+ * the owner, `$2` the statuses a finished trip may be in, `$3` how many trips.
+ *
+ * It answers one row per line that was settled on one of those trips, carrying
+ * how many seconds into the trip the shopper stood at that shelf. A basket
+ * composed afterwards is ordered by the median of those offsets, so somebody who
+ * settles milk and then skimmed milk three seconds later gets them side by side
+ * however the source lists were written.
+ *
+ * ## Facts rather than keys
+ *
+ * Section 2 describes the answer as `(key, offsetSeconds)` pairs, and this query
+ * stops one step short of the key on purpose: one of the two keys is
+ * `normalizeContent`, a fold that lives in TypeScript and that the add, the run
+ * and this read all have to agree on. Reimplementing it in SQL would be a second
+ * definition of "the same thing" free to drift from the first, so the query
+ * answers the content and the product ids and {@link GeneratedListOrderService}
+ * forms both keys from them.
+ *
+ * ## The three predicates that carry rules
+ *
+ * - **`revertedAt IS NULL`** (plan 0104). A purchase somebody took back is not a
+ *   shelf they stood at, and the partial index this rides on exists for it.
+ * - **Both outcomes count.** A line closed as `NOT_AVAILABLE` was still a visit
+ *   to the shelf, so the join filters on no outcome at all.
+ * - **`EXISTS` a live settlement.** A basket nobody settled anything in is not a
+ *   trip and must not use up one of the seven, or a shopper who composed three
+ *   baskets and shopped none of them would read as having no history.
+ *
+ * A line settled twice, in two shops, counts from the first: `min(settledAt)`
+ * per line, and the trip's own start is the earliest of those.
+ */
+export const ORDER_HISTORY_SQL = `
+  WITH "trips" AS (
+    SELECT gl.id
+    FROM "generated_lists" gl
+    WHERE gl."ownerUserId" = $1
+      AND gl.status::text = ANY($2::text[])
+      AND EXISTS (
+        SELECT 1
+        FROM "generated_list_lines" gll
+        JOIN "line_settlements" ls ON ls."generatedListLineId" = gll.id
+        WHERE gll."generatedListId" = gl.id
+          AND ls."revertedAt" IS NULL
+      )
+    ORDER BY gl."generatedAt" DESC, gl.id DESC
+    LIMIT $3
+  ),
+  "visits" AS (
+    SELECT
+      gll."generatedListId" AS "tripId",
+      gll.content AS "content",
+      gll."itemId" AS "pickItemId",
+      array_remove(array_agg(DISTINCT ls."itemId"), NULL) AS "settledItemIds",
+      min(ls."settledAt") AS "settledAt"
+    FROM "generated_list_lines" gll
+    JOIN "line_settlements" ls ON ls."generatedListLineId" = gll.id
+    WHERE gll."generatedListId" IN (SELECT id FROM "trips")
+      AND ls."revertedAt" IS NULL
+    GROUP BY gll."generatedListId", gll.id, gll.content, gll."itemId"
+  ),
+  "starts" AS (
+    SELECT "tripId", min("settledAt") AS "startedAt"
+    FROM "visits"
+    GROUP BY "tripId"
+  )
+  SELECT
+    v."tripId" AS "tripId",
+    v."content" AS "content",
+    v."pickItemId" AS "pickItemId",
+    v."settledItemIds" AS "settledItemIds",
+    extract(epoch FROM (v."settledAt" - s."startedAt"))::double precision
+      AS "offsetSeconds"
+  FROM "visits" v
+  JOIN "starts" s ON s."tripId" = v."tripId"
+`;
+
+/**
+ * One row of {@link ORDER_HISTORY_SQL}: one shelf, on one past trip.
+ *
+ * `pickItemId` is what the basket line was pointing at and `settledItemIds` is
+ * what the shopper said they actually got, which differ exactly when the pick
+ * was swapped in the aisle. Both are matching keys, because the composed line's
+ * option set is what the run composed from and either product identifies it.
+ */
+export interface OrderHistoryRow {
+  tripId: string;
+  content: string;
+  pickItemId: string | null;
+  settledItemIds: string[];
+  offsetSeconds: number;
+}
+
 /** One row of {@link CANDIDATE_LINES_SQL}. */
 export interface CandidateLineRow {
   id: string;
