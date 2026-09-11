@@ -18,12 +18,13 @@ Built after `luna-shopper/tools` plan 0001 (the folder this lives in) and
 ## 1. Most of this already exists, and none of it is rewritten
 
 `apps/luna-shopper-backend/harvester/tools/leaflet/` holds 2,933 lines that
-work. The reading procedure in its `README.md` has six steps, and steps 4, 5 and
-6 are `build-document.mjs`, `drift-check.mjs` and `validate.mjs`.
+work. Procedure (a) of its `README.md` has nine steps, and steps 5, 6 and 7 are
+already `build-document.mjs`, `drift-check.mjs` and `validate.mjs`. Steps 8 and 9
+are an upload and a baseline, and both stay a person's job (section 8).
 
 So this plan writes an orchestrator, not a reader. What it adds is steps 1 and 3:
-render the PDF to page images, and ask a model for each page. Everything below
-those two is called, unchanged, as it stands.
+render the PDF to page images, and ask a model for each page. Steps 2 and 4 it
+automates, and steps 5 to 7 it calls, unchanged, as they stand.
 
 **The three price rules do not move and are not duplicated.**
 `to-harvest-document.mjs` owns them and keeps owning them. A CLI that decided a
