@@ -40,6 +40,7 @@ export function toSupermarketSourceView(
     supermarketId: row.supermarketId,
     adapterKey: row.adapterKey as AdapterKey,
     enabled: row.enabled,
+    autoImportPlaces: row.autoImportPlaces,
     config: row.config,
     workers: row.workers,
     maxRequestsPerSecond: Number(row.maxRequestsPerSecond),

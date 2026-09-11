@@ -1013,6 +1013,7 @@ export type UpsertSupermarketSourceDto = {
     | 'osm-places'
     | 'manual';
   enabled?: boolean;
+  autoImportPlaces?: boolean;
   config?: {
     [key: string]: unknown;
   };
@@ -3078,6 +3079,7 @@ export type HarvestSupermarketSourceView = {
   supermarketId: string;
   adapterKey: EnumsAdapterKey;
   enabled: boolean;
+  autoImportPlaces: boolean;
   config: {
     [key: string]: unknown;
   };

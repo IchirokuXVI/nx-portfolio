@@ -108,6 +108,8 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
         defaultPriceScopeId: null,
         sourceKind: PriceSourceKind.OFFICIAL_API,
         postalCodeDeriveMaxMetres: 5000,
+        // A walk reports no place, so the trust switch decides nothing here.
+        autoImportPlaces: false,
       },
       {
         ingest,

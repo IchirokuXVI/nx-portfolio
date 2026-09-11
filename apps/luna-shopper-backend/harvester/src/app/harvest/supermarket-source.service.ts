@@ -62,6 +62,10 @@ export class SupermarketSourceService {
         supermarketId: req.supermarketId,
         adapterKey: req.adapterKey,
         enabled: false,
+        // Untrusted, like `enabled` and for the same reason (plan 0107, D2):
+        // describing a chain says nothing about whether its shops may reach the
+        // catalog unreviewed.
+        autoImportPlaces: false,
         config: {},
         workers: defaults.defaultWorkers,
         maxRequestsPerSecond: defaults.defaultMaxRequestsPerSecond,
@@ -70,6 +74,9 @@ export class SupermarketSourceService {
     row.adapterKey = req.adapterKey;
     if (req.enabled !== undefined) {
       row.enabled = req.enabled;
+    }
+    if (req.autoImportPlaces !== undefined) {
+      row.autoImportPlaces = req.autoImportPlaces;
     }
     if (req.config !== undefined) {
       row.config = req.config;
@@ -145,6 +152,21 @@ export class SupermarketSourceService {
     supermarketId: string
   ): Promise<SupermarketSource | null> {
     return this.sources.findOne({ where: { supermarketId } });
+  }
+
+  /**
+   * Every chain a run may fetch right now, oldest row first.
+   *
+   * No admin gate and no paging: the caller is the postal code worker deciding
+   * which sources to ask about one code, not a screen. A chain whose row says
+   * false is absent from the answer, which is plan 0083's rule unchanged and is
+   * why this plan adds no second switch beside it.
+   */
+  async listEnabled(): Promise<SupermarketSource[]> {
+    return this.sources.find({
+      where: { enabled: true },
+      order: { createdAt: 'ASC' },
+    });
   }
 
   async recordRunStarted(source: SupermarketSource): Promise<void> {

@@ -26,12 +26,52 @@ import { Repository } from 'typeorm';
 import { DiscoveredPlace } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { toDiscoveredPlaceView } from './harvest.mappers';
+import {
+  placeImportBlockers,
+  type PlaceImportBlocker,
+} from './place-import-check';
 import { PlatformAdminService } from './platform-admin.service';
 import type { ObservedPlace } from './run-report';
 
 interface PlaceCursor {
   value: string;
   id: string;
+}
+
+/** What a run hands {@link DiscoveredPlaceService.observe}. */
+export interface ObserveOptions {
+  runId: string;
+  /** How far a place with no postal code may reach for the nearest one. */
+  deriveMaxMetres: number;
+  /**
+   * Whether this run's source is trusted to write its shops into the catalog
+   * (plan 0107, section 3.1). False for every radius search: OpenStreetMap has
+   * no row to carry the flag.
+   */
+  autoImport: boolean;
+  /** The run's scope resolver, for the group of shops a place is priced with. */
+  scopeIdFor?: (key: string) => string | null;
+}
+
+/** One trusted place the completeness check sent to the queue instead. */
+export interface BlockedPlace {
+  externalRef: string;
+  missing: PlaceImportBlocker[];
+}
+
+export interface ObserveResult {
+  created: number;
+  refreshed: number;
+  /** Locations this run wrote into the catalog with nobody in the way. */
+  imported: number;
+  /**
+   * Trusted places the check refused, with the fields they were missing.
+   *
+   * Named rather than counted, and on the run's report rather than on the row:
+   * an operator draining the queue wants to know which shop they are looking at
+   * and why it is there.
+   */
+  blocked: BlockedPlace[];
 }
 
 /** The chains catalog knows, read once and asked twice. */
@@ -94,7 +134,8 @@ export class DiscoveredPlaceService {
   ) {}
 
   /**
-   * What a run does with the shops it found (plan 0103, section 6.4).
+   * What a run does with the shops it found (plan 0103, section 6.4; plan 0107,
+   * section 3).
    *
    * Both store discovery runners held a `Repository<DiscoveredPlace>` and wrote
    * this themselves, twice, with the postal code derivation in one of them only.
@@ -111,16 +152,25 @@ export class DiscoveredPlaceService {
    * beyond that bound keeps both columns null. A wrong postcode puts the shop in
    * somebody else's list, which is worse than no postcode at all.
    *
+   * **A trusted source's shops are imported here, by the run** (plan 0107,
+   * section 3.3). `autoImport` is the chain's own `autoImportPlaces` column and
+   * is false for every radius search, which has no row to carry it. What it
+   * does is exactly what an admin pressing import does, for a place that passes
+   * {@link placeImportBlockers}; a place that fails it is left `NEW` with its
+   * missing fields named on the run's report.
+   *
    * No admin gate, unlike every other method here: the caller is a run, not a
    * person, and the run was already gated at the spawn.
    */
   async observe(
     places: readonly ObservedPlace[],
-    options: { runId: string; deriveMaxMetres: number }
-  ): Promise<{ created: number; refreshed: number }> {
+    options: ObserveOptions
+  ): Promise<ObserveResult> {
     const seenAt = new Date();
     let created = 0;
     let refreshed = 0;
+    let imported = 0;
+    const blocked: BlockedPlace[] = [];
 
     for (const place of places) {
       const located = await this.locate(place, options.deriveMaxMetres);
@@ -145,25 +195,75 @@ export class DiscoveredPlaceService {
       const existing = await this.places.findOne({
         where: { provider: place.provider, externalRef: place.externalRef },
       });
+      let row: DiscoveredPlace;
       if (existing) {
         Object.assign(existing, fields);
-        await this.places.save(existing);
+        row = await this.places.save(existing);
         refreshed += 1;
+      } else {
+        row = await this.places.save(
+          this.places.create({
+            provider: place.provider,
+            externalRef: place.externalRef,
+            status: DiscoveredPlaceStatus.NEW,
+            firstSeenAt: seenAt,
+            ...fields,
+          })
+        );
+        created += 1;
+      }
+
+      if (!options.autoImport) {
         continue;
       }
-      await this.places.save(
-        this.places.create({
-          provider: place.provider,
-          externalRef: place.externalRef,
-          status: DiscoveredPlaceStatus.NEW,
-          firstSeenAt: seenAt,
-          ...fields,
-        })
-      );
-      created += 1;
+      // **A decision already taken is never reopened**, which is the same rule
+      // the upsert above follows for `status`: a place an operator imported or
+      // rejected keeps that answer however many runs meet it again (D6).
+      if (row.status !== DiscoveredPlaceStatus.NEW) {
+        continue;
+      }
+      const missing = placeImportBlockers(row);
+      if (missing.length > 0) {
+        blocked.push({ externalRef: row.externalRef, missing });
+        continue;
+      }
+      if (await this.autoImport(row, place.scopeKey ?? null, options)) {
+        imported += 1;
+      }
     }
 
-    return { created, refreshed };
+    return { created, refreshed, imported, blocked };
+  }
+
+  /**
+   * Promote one trusted place, and never fail the run over it.
+   *
+   * A shop catalog refused is one shop. The run found the rest and the row is
+   * still in the queue for a person, so the failure is logged and counted as
+   * blocked rather than thrown: losing a store discovery over one address would
+   * throw away every other shop it read.
+   */
+  private async autoImport(
+    row: DiscoveredPlace,
+    scopeKey: string | null,
+    options: ObserveOptions
+  ): Promise<boolean> {
+    try {
+      // The scope the source declared for this shop, resolved through the run's
+      // own resolver. Undefined when the source declared none, and catalog then
+      // gives the location the `STORE` scope it gives any location that names
+      // none (plan 0107, section 3.3).
+      const priceScopeId =
+        (scopeKey ? options.scopeIdFor?.(scopeKey) : null) ?? undefined;
+      await this.promote(row, { priceScopeId });
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Could not import ${row.provider}/${row.externalRef} automatically, ` +
+          `so it stays in the queue: ${String(error)}`
+      );
+      return false;
+    }
   }
 
   /**
@@ -338,12 +438,36 @@ export class DiscoveredPlaceService {
       );
     }
 
+    return toDiscoveredPlaceView(
+      await this.promote(place, {
+        supermarketId: req.supermarketId,
+        priceScopeId: req.priceScopeId,
+      })
+    );
+  }
+
+  /**
+   * Create the location and mark the place ours.
+   *
+   * The whole of what an import does, in one place, because a run does it too
+   * now (plan 0107, section 3.3). The admin gate and the "already imported"
+   * refusal stay with the callers: a run skips such a row rather than reporting
+   * a conflict about it.
+   *
+   * The actor on the write is the harvester's provisioned `HARVESTER_ACTOR_ID`,
+   * which `CatalogClient` stamps on every call, so the catalog audit says a run
+   * did this and not a person.
+   */
+  private async promote(
+    place: DiscoveredPlace,
+    options: { supermarketId?: string; priceScopeId?: string }
+  ): Promise<DiscoveredPlace> {
     const supermarketId =
-      req.supermarketId ?? (await this.resolveSupermarket(place)).id;
+      options.supermarketId ?? (await this.resolveSupermarket(place)).id;
 
     const location = await this.catalog.createLocation({
       supermarketId,
-      priceScopeId: req.priceScopeId,
+      priceScopeId: options.priceScopeId,
       label: place.name ? { en: place.name, es: place.name } : null,
       address: place.street,
       city: place.city,
@@ -366,7 +490,7 @@ export class DiscoveredPlaceService {
     // Written back so a re-run recognizes the place as already ours rather than
     // offering it again.
     place.supermarketLocationId = location.id;
-    return toDiscoveredPlaceView(await this.places.save(place));
+    return this.places.save(place);
   }
 
   async reject(req: DiscoveredPlaceIdRequest): Promise<DiscoveredPlaceView> {
