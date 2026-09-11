@@ -1014,6 +1014,16 @@
       "two": "de {{first}} y {{second}}",
       "more": "de {{first}} y {{count}} más"
     },
+    "search": {
+      "open": "Buscar en esta lista",
+      "label": "Buscar en esta lista",
+      "placeholder": "Línea o producto",
+      "clear": "Borrar",
+      "cancel": "Cancelar",
+      "count": "{{shown}} de {{total}} líneas",
+      "none": "Ninguna línea coincide con «{{query}}»",
+      "noneHint": "Añádela abajo y se pone en esta lista."
+    },
     "settle": {
       "title": "{{name}}",
       "all_one": "Conseguido",

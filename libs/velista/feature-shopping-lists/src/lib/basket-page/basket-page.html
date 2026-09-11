@@ -228,24 +228,122 @@
         </div>
       } @else {
         <!--
-          "got" means bought. A line closed because the shop had none is counted
-          separately rather than folded in, because folding it in would claim a
-          purchase that never happened.
+          **The tools row** (plan 0074, section 3): the count at the leading edge
+          and the controls at the trailing one. `0075` puts the filter button
+          beside the search.
+
+          Not in the header, which already holds back, the title, the faces, share
+          and finish. A sixth and seventh control there shrink the title to nothing
+          on a 390 wide phone, and the title is the one thing on that bar a person
+          reads. This row was empty at the trailing edge, and the count it holds is
+          about the lines, which is what the controls are about too.
+
+          Drawn for every reader, guests included. Nothing in it names a household.
         -->
-        <p class="progress">
-          {{
-            'basket.progress'
-              | rokuT: { done: progress().done, total: progress().total }
-          }}
-          @if (progress().unavailable > 0) {
-            <span class="progress-unavailable">
+        @if (searchOpen()) {
+          <!--
+            The field takes the whole row, count and control together, which is
+            what makes it usable one handed on a phone. Cancel is beside it rather
+            than inside it: it is not a clear, it puts the row back.
+          -->
+          <div class="search">
+            <label class="field-label" for="basket-search">
+              {{ 'basket.search.label' | rokuT }}
+            </label>
+
+            <div class="search-row">
+              <span class="search-field">
+                <lib-search-icon class="search-glyph" />
+                <input
+                  (input)="onSearch($event)"
+                  (keydown.escape)="closeSearch()"
+                  [placeholder]="'basket.search.placeholder' | rokuT"
+                  [value]="searchQuery()"
+                  #searchField
+                  autocapitalize="none"
+                  autocomplete="off"
+                  class="search-input"
+                  enterkeyhint="search"
+                  id="basket-search"
+                  type="search"
+                />
+
+                <!--
+                  Only where there is something to clear. A control that does
+                  nothing is the invitation `0038` section 2.1 refuses to draw, and
+                  an empty field already says it is empty.
+                -->
+                @if (searchQuery() !== '') {
+                  <button
+                    (click)="clearSearch()"
+                    [attr.aria-label]="'basket.search.clear' | rokuT"
+                    class="search-clear"
+                    type="button"
+                  >
+                    <lib-close-icon class="search-clear-glyph" />
+                  </button>
+                }
+              </span>
+
+              <button
+                (click)="closeSearch()"
+                class="search-cancel"
+                type="button"
+              >
+                {{ 'basket.search.cancel' | rokuT }}
+              </button>
+            </div>
+          </div>
+
+          <!--
+            How many are left, and it is the reason the search is trustworthy: a
+            search that silently empties the screen is indistinguishable from one
+            that broke (`0059` section 7). One polite region, and the only thing
+            announced on a keystroke.
+          -->
+          <p aria-live="polite" class="search-count" role="status">
+            {{
+              'basket.search.count'
+                | rokuT: { shown: visibleLines().length, total: lines().length }
+            }}
+          </p>
+        } @else {
+          <div class="tools">
+            <!--
+              "got" means bought. A line closed because the shop had none is
+              counted separately rather than folded in, because folding it in would
+              claim a purchase that never happened.
+
+              It counts the **whole** basket and never what a search left standing:
+              this is about how much shopping is left, and hiding rows does not buy
+              anything.
+            -->
+            <p class="progress">
               {{
-                'basket.progressUnavailable'
-                  | rokuT: { count: progress().unavailable }
+                'basket.progress'
+                  | rokuT: { done: progress().done, total: progress().total }
               }}
-            </span>
-          }
-        </p>
+              @if (progress().unavailable > 0) {
+                <span class="progress-unavailable">
+                  {{
+                    'basket.progressUnavailable'
+                      | rokuT: { count: progress().unavailable }
+                  }}
+                </span>
+              }
+            </p>
+
+            <button
+              (click)="openSearch()"
+              [attr.aria-label]="'basket.search.open' | rokuT"
+              #searchButton
+              class="tool"
+              type="button"
+            >
+              <lib-search-icon class="tool-glyph" />
+            </button>
+          </div>
+        }
 
         <!--
           Every line is settled, so the screen asks (plan 0057, section 4). The last
@@ -266,29 +364,46 @@
           </div>
         }
 
-        <ul class="lines">
-          @for (line of lines(); track line.id) {
-            <li>
-              <lib-basket-line-row
-                (open)="openLine(line)"
-                (outstanding)="setOutstanding(line, $event)"
-                (reopen)="reopenLine(line)"
-                (settle)="settleLine(line)"
-                [awaitingApproval]="pendingTargets().has(line.id)"
-                [busy]="isBusy(line)"
-                [canReopen]="canReopen"
-                [finished]="finished()"
-                [line]="line"
-                [listNames]="listNames()"
-                [meId]="meId()"
-                [notice]="noticeFor(line)"
-                [ownName]="ownName()"
-                [people]="participantsById()"
-                [products]="products()"
-              />
-            </li>
-          }
-        </ul>
+        <!--
+          Nothing matched (section 4.6). The basket's own empty state with
+          different words, and **the composer stays**: the thing somebody searched
+          for and did not find is very often the next line. Submitting it clears
+          the query, so the new row is seen landing rather than hidden by the
+          search that failed to find it.
+        -->
+        @if (visibleLines().length === 0) {
+          <div class="empty">
+            <p class="empty-title">
+              {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
+            </p>
+            <p class="empty-body">{{ 'basket.search.noneHint' | rokuT }}</p>
+          </div>
+        } @else {
+          <ul class="lines">
+            @for (line of visibleLines(); track line.id) {
+              <li>
+                <lib-basket-line-row
+                  (open)="openLine(line)"
+                  (outstanding)="setOutstanding(line, $event)"
+                  (reopen)="reopenLine(line)"
+                  (settle)="settleLine(line)"
+                  [awaitingApproval]="pendingTargets().has(line.id)"
+                  [busy]="isBusy(line)"
+                  [canReopen]="canReopen"
+                  [finished]="finished()"
+                  [highlight]="highlight()"
+                  [line]="line"
+                  [listNames]="listNames()"
+                  [meId]="meId()"
+                  [notice]="noticeFor(line)"
+                  [ownName]="ownName()"
+                  [people]="participantsById()"
+                  [products]="products()"
+                />
+              </li>
+            }
+          </ul>
+        }
       }
     }
   }

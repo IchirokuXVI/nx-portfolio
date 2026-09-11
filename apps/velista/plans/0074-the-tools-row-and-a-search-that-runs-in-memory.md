@@ -1,3 +1,5 @@
+> **PR:** [#341](https://github.com/IchirokuXVI/nx-portfolio/pull/341)
+
 # 0074: the tools row, and a search that runs in memory
 
 > The first of five plans that give the basket page a way to find a line. This one adds the

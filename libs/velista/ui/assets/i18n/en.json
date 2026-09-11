@@ -1014,6 +1014,16 @@
       "two": "from {{first}} and {{second}}",
       "more": "from {{first}} and {{count}} more"
     },
+    "search": {
+      "open": "Search this list",
+      "label": "Search this list",
+      "placeholder": "Line or product",
+      "clear": "Clear",
+      "cancel": "Cancel",
+      "count": "{{shown}} of {{total}} lines",
+      "none": "No line matches “{{query}}”",
+      "noneHint": "Add it below and it goes on this list."
+    },
     "settle": {
       "title": "{{name}}",
       "all_one": "Got it",

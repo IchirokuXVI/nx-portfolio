@@ -8,6 +8,7 @@ import {
   signal,
   untracked,
   viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -18,6 +19,7 @@ import {
 import {
   BASKET_REOPEN_AVAILABLE,
   BasketStore,
+  BasketViewStore,
   GeneratedListStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
@@ -36,10 +38,12 @@ import {
 } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
+  CloseIcon,
   FlagIcon,
   LineComposer,
   OfflineIcon,
   PersonIcon,
+  SearchIcon,
   ShareIcon,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
@@ -104,12 +108,14 @@ import { BASKET_PATHS } from '../basket-paths';
   imports: [
     BasketLineRow,
     ChevronLeftIcon,
+    CloseIcon,
     FlagIcon,
     LineComposer,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
     RouterOutlet,
+    SearchIcon,
     ShareIcon,
   ],
   templateUrl: './basket-page.html',
@@ -118,6 +124,13 @@ import { BASKET_PATHS } from '../basket-paths';
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
+  /**
+   * What this screen is showing of the basket, as opposed to what is in it.
+   *
+   * Route provided beside {@link BasketStore}, so the sheets `0075` and `0078` add
+   * reach the same instance the page reads. See the class comment there.
+   */
+  private readonly _view = inject(BasketViewStore);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
@@ -235,9 +248,7 @@ export class BasketPage {
    */
   protected readonly ownName = computed(() => this._session.username());
 
-  protected readonly products = computed(
-    () => this._store.basket()?.products ?? new Map()
-  );
+  protected readonly products = this._store.products;
 
   /**
    * What to call this basket.
@@ -404,7 +415,14 @@ export class BasketPage {
      * is destroyed on leaving for certain, which makes it the only honest place to say
      * the shopper has gone.
      */
-    inject(DestroyRef).onDestroy(() => this._store.leave());
+    inject(DestroyRef).onDestroy(() => {
+      this._store.leave();
+      // The view store is provided on the same route and has the same problem, so
+      // it is let go in the same place. Without this a basket opened later starts
+      // on whatever the last one was searched for, and the search is the one thing
+      // on this screen that is never remembered (section 4.7).
+      this._view.leave();
+    });
   }
 
   protected isBusy(line: BasketLine): boolean {
@@ -581,6 +599,107 @@ export class BasketPage {
 
   protected retry(): void {
     void this._store.refresh();
+  }
+
+  // --- The tools row and the search (plan 0074) -----------------------------
+
+  /**
+   * The lines actually drawn, which is the whole basket until somebody searches.
+   *
+   * Read from {@link BasketViewStore} and never filtered here, because `0075` to
+   * `0078` grow the same signal into an order, a filter and a grouping, and a page
+   * that did its own narrowing would be a second answer to the same question.
+   *
+   * {@link progress} is deliberately **not** derived from this. "4 of 12 got" is
+   * about the trip and stays about the trip: a search hides rows and changes nothing
+   * about how much shopping is left.
+   */
+  protected readonly visibleLines = this._view.visibleLines;
+
+  /** What is in the search field, for the count and for the no match sentence. */
+  protected readonly searchQuery = this._view.query;
+
+  /** The query folded once, handed to every row to draw its `<mark>` from. */
+  protected readonly highlight = this._view.folded;
+
+  /**
+   * Whether the field has replaced the row, which is not the same as searching.
+   *
+   * A field that is open and empty draws the whole basket, and the count under it
+   * says so. The two questions are separate because opening is a gesture and
+   * searching is a string: the field stays open through a query somebody deletes a
+   * character at a time, and Cancel is what closes it.
+   */
+  private readonly _searchOpen = signal(false);
+
+  protected readonly searchOpen = this._searchOpen.asReadonly();
+
+  /**
+   * Which control the keyboard should be on once the row has been redrawn.
+   *
+   * A signal and not a call, because neither control exists at the moment the
+   * gesture happens: opening the search destroys the button that was pressed, and
+   * cancelling destroys the field. The effect below waits for whichever one arrives.
+   */
+  private readonly _focusWanted = signal<'field' | 'button' | null>(null);
+
+  private readonly _searchField =
+    viewChild<ElementRef<HTMLInputElement>>('searchField');
+
+  private readonly _searchButton =
+    viewChild<ElementRef<HTMLButtonElement>>('searchButton');
+
+  /**
+   * Put the focus where the gesture said, as soon as there is something to put it
+   * on (section 6).
+   *
+   * Focus never lands on the page body, which is what a naive open and close does:
+   * the field takes it when it appears, and Cancel or Escape gives it back to the
+   * search button, so a keyboard reader is never dropped at the top of the document
+   * in the middle of a basket.
+   */
+  private readonly _focusEffect = effect(() => {
+    const wanted = this._focusWanted();
+    const field = this._searchField();
+    const button = this._searchButton();
+
+    const target =
+      wanted === 'field' ? field : wanted === 'button' ? button : null;
+    if (target === undefined || target === null) {
+      return;
+    }
+
+    untracked(() => this._focusWanted.set(null));
+    target.nativeElement.focus();
+  });
+
+  /** Replace the row with the field, and put the caret in it. */
+  protected openSearch(): void {
+    this._searchOpen.set(true);
+    this._focusWanted.set('field');
+  }
+
+  protected onSearch(event: Event): void {
+    this._view.search((event.target as HTMLInputElement).value);
+  }
+
+  /** Empty the field without closing it, which is the control inside it. */
+  protected clearSearch(): void {
+    this._view.search('');
+    this._focusWanted.set('field');
+  }
+
+  /**
+   * Cancel, the scrim of this particular control: Escape does exactly the same.
+   *
+   * It **clears the query as well as closing the field**, so the row that comes
+   * back is over the whole basket. A search left running behind a closed field is a
+   * screen missing rows for a reason nothing on it says.
+   */
+  protected closeSearch(): void {
+    this._view.search('');
+    this._searchOpen.set(false);
+    this._focusWanted.set('button');
   }
 
   // --- The composer (plan 0053) ---------------------------------------------
