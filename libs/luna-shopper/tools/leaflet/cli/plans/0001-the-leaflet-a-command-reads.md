@@ -61,7 +61,15 @@ no reference to it.
 --out <dir>             where the working material goes. Default: tmp/leaflet/<slug>-<date>.
 --resume                keep page readings that already exist in --out.
 --dry-run               census and layout check only. Read no page.
+--page-timeout <s>      give up on one page after this long. Default 120.
 ```
+
+**`--page-timeout` is not a tuning knob, it is the only thing that ends a looping
+local model** (section 7). Its default is deliberately shorter than the slowest
+good page is fast: a page that has not answered in two minutes on this hardware
+is not going to, and a 40 page leaflet must not be able to consume a night. A
+page that hits it is recorded as an empty reading with a named warning, exactly
+like an unparseable one, and the run carries on to page 38.
 
 Eight steps, in order, and each one can refuse:
 
@@ -261,16 +269,70 @@ invention from every model, and find it by scoring before trusting a run.**
 
 | Setting       | Default   | What the default costs                                                 |
 | ------------- | --------- | ---------------------------------------------------------------------- |
-| `think`       | **on**    | 31.8 s against 6.3 s for the same page and the same two offers         |
+| `think`       | **on**    | **the dense pages never finish at all**, see below                     |
 | `num_predict` | unlimited | one page ran **18 minutes** at 96% GPU before it was killed by hand    |
 | `temperature` | 0.8       | the same page answers differently twice, so no baseline means anything |
 
 The runaway is the one to fear. Ollama shifts the context window instead of
 stopping, so a model that falls into a repetition loop generates until something
 else ends it, the request never returns, and nothing in the envelope says
-anything is wrong. With a cap that same page answered in 21.6 seconds. These
-three belong in the Ollama adapter, and `shared/model-engines` plan 0004 puts
-them there.
+anything is wrong. These three belong in the Ollama adapter, and
+`shared/model-engines` plan 0004 puts them there.
+
+### `think: false` is not a speed setting, it is what makes the task finish
+
+The first measurement read as a 5x speed difference on the cover page, 31.8 s
+against 6.3 s. That was the cheap page. Repeating the run with thinking on over
+all three pages says something much worse:
+
+| Page               | Offers | Thinking off | Thinking on        |
+| ------------------ | ------ | ------------ | ------------------ |
+| 1, the cover       | 2      | 6.3 s        | 23.6 s             |
+| 5, beers           | 8      | 21.6 s       | **never finished** |
+| 31, the 2 X 1 page | 9      | 23.4 s       | **never finished** |
+
+Both dense pages ran past a three minute timeout. Page 5 was then streamed for a
+**full five minutes**: 16,172 tokens produced, of which **zero** were the answer.
+All of it was thinking, and from about 100 seconds it was a verbatim loop:
+
+```
+Wait, 0.76 / 0.33 = 2.30.   Why is it 2.26?
+Maybe it's 0.74 + 0.02?     Wait, 0.74 / 0.33 = 2.24.
+Wait, I'm misreading the numbers.
+San Miguel: "Llevando 1 unidad 0,74€", "el litro le sale a 2,24€".
+```
+
+Those lines repeat to the cutoff. **The trigger is identified and it is the
+model checking the page's arithmetic.** The tile prints a litre price of 2,26 for
+a can that divides to 2,30, so the model cannot reconcile the two and will not
+move on. Rule 2 of `chains/el-jamon/prompt.txt` already says to record the
+printed figure and never convert it. Thinking makes the model do the division
+anyway, and a leaflet that rounds its own comparison figure then traps it.
+
+Two rules follow:
+
+- **A longer timeout buys nothing.** Three minutes and five minutes produce the
+  same zero rows. A timeout bounds the damage, it does not collect an answer, so
+  the CLI still needs one and must never be mistaken for a fix.
+- **Thinking is off for leaflet reading, and the reason is written down here** so
+  that nobody turns it back on expecting a better reading. What it buys on the
+  one page that finishes is real but small: page 1 with thinking on wrote
+  `promotion: { type }` alone and invented no `single_unit_price`, which is the
+  defect section 8 checks for. It is not worth the two pages in three that never
+  answer.
+
+### More context is not the lever
+
+The run above was made at **32,768** tokens of context, double the first one.
+Page 1's answer came back **identical on every field**, the wrong `was_price` of
+21.06 included.
+
+That is the whole answer on context size, and it is arithmetic rather than
+opinion: one page read is about **1,577 input tokens**, being roughly 1,300 for
+the prompt and 256 for the image. Nothing was ever close to the 16,384 it started
+with, so nothing was ever truncated, so there is nothing for a bigger window to
+fix. 65,536 would change nothing either, for the same reason. Spend the VRAM on
+running two requests at once instead.
 
 ### Quartering the page does not work
 

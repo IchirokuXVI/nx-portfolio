@@ -54,15 +54,28 @@ change, and each one was measured on a real leaflet page rather than reasoned
 about. Section 5 has the numbers.
 
 - **`think: false`.** Thinking is **on by default** for a model that reports the
-  `thinking` capability, and `gemma4:12b` does. It costs about five times the
-  wall clock for no better reading.
+  `thinking` capability, and `gemma4:12b` does. With it on, the two dense pages
+  of a three page sample **never answered at all**: one was streamed for five
+  minutes and produced 16,172 tokens of thinking and zero rows, looping verbatim
+  from about 100 seconds. The leaflet plan's section 7 has the loop and its
+  trigger.
 - **`num_predict`.** Ollama **shifts the context window rather than stopping**,
   so a model that falls into a repetition loop generates until something else
   kills it. One page ran eighteen minutes before it was killed by hand, against
   twenty two seconds with a cap. There is no default that saves you: the cap is
   the only thing that ends a bad generation.
+- **A wall clock timeout, which the cap does not replace.** A cap ends a
+  generation by token count, and a caller still needs to stop waiting. Both are
+  needed, and neither collects an answer: three minutes and five minutes on the
+  same looping page produced the same nothing.
 - **`temperature: 0`.** A reading is a transcription, and the same page must
   answer the same way twice or no baseline means anything.
+
+**What none of these is: a bigger context.** Measured at 16,384 and again at
+32,768 on the same page, the answer came back identical field for field. One
+image ask here is about 1,577 input tokens, so nothing was ever truncated and a
+wider window has nothing to fix. Do not read a stuck local model as a context
+problem.
 
 The first two are new to this library and belong in the adapter rather than in
 the leaflet caller, because neither is about leaflets. A curation decider that
@@ -145,8 +158,10 @@ One page of a Spanish supermarket leaflet (El Jamon, page 1, rendered at 200 dpi
 | default (thinking on, no cap) | 31.8 s     | 1,577         | 2            |
 | `think: false`, cap 4,096     | 6.3 s      | 374           | 2            |
 
-The same two offers, the same two prices, five times faster. On a forty page
-leaflet that difference is twenty minutes against four.
+The same two offers, the same two prices, five times faster. **Read that as the
+mildest form of the problem rather than its size.** Page 1 carries two offers and
+is the one page that finishes with thinking on at all. On the two pages of the
+sample that carry eight and nine offers, thinking on never produced an answer.
 
 **The context shift is the dangerous one**, because it has no error. Page 5 of
 the same leaflet, with the same settings but no `num_predict`, ran for eighteen
