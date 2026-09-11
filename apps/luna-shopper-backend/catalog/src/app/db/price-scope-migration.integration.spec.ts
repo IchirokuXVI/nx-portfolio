@@ -122,11 +122,15 @@ describeIntegration('price scope migration (real Postgres)', () => {
     // 3. Forward.
     await dataSource.runMigrations();
 
-    // Every location now points at a STORE scope of its own, keyed on its id.
+    // Every location now sells at a STORE scope of its own, keyed on its id.
+    // Read through the join table rather than the column, which plan 0105
+    // replaced: the shape changed and the property did not.
     const locations = await dataSource.query(
-      `SELECT l."id", l."priceScopeId", s."kind", s."externalKey"
+      `SELECT l."id", ls."priceScopeId", s."kind", s."externalKey"
        FROM "supermarket_locations" l
-       JOIN "price_scopes" s ON s."id" = l."priceScopeId"
+       JOIN "supermarket_location_price_scopes" ls
+         ON ls."supermarketLocationId" = l."id"
+       JOIN "price_scopes" s ON s."id" = ls."priceScopeId"
        ORDER BY l."city", l."id"`
     );
     expect(locations).toHaveLength(2);
@@ -139,7 +143,9 @@ describeIntegration('price scope migration (real Postgres)', () => {
     const prices = await dataSource.query(
       `SELECT l."id" AS "locationId", si."price", si."available", si."priceSourceKind"
        FROM "supermarket_items" si
-       JOIN "supermarket_locations" l ON l."priceScopeId" = si."priceScopeId"
+       JOIN "supermarket_location_price_scopes" ls
+         ON ls."priceScopeId" = si."priceScopeId"
+       JOIN "supermarket_locations" l ON l."id" = ls."supermarketLocationId"
        WHERE si."itemId" = $1`,
       [itemId]
     );
@@ -196,9 +202,9 @@ describeIntegration('price scope migration (real Postgres)', () => {
     expect(rows.map((r: { price: string }) => Number(r.price))).toEqual([
       8.75, 8.95,
     ]);
-    expect(rows.map((r: { positionInStore: string }) => r.positionInStore)).toEqual(
-      ['Aisle 3', 'Aisle 1']
-    );
+    expect(
+      rows.map((r: { positionInStore: string }) => r.positionInStore)
+    ).toEqual(['Aisle 3', 'Aisle 1']);
 
     await dataSource.runMigrations();
   }, 120_000);

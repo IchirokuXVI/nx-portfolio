@@ -3,6 +3,7 @@ import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import { LidlClient } from '@portfolio/luna-shopper/lidl';
 import type { SupermarketSource } from '../entities';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
+import { MercadonaStoreDiscoveryRunner } from './mercadona-store-discovery.runner';
 import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
@@ -27,6 +28,7 @@ function store(options: {
   ref: string;
   region: number | null;
   regionName?: string;
+  zip?: string;
 }): Record<string, unknown> {
   return {
     objectNumber: options.ref,
@@ -35,7 +37,7 @@ function store(options: {
       streetName: 'Avda. Madrid,',
       streetNumber: '34',
       city: 'Fraga',
-      zip: '22520',
+      zip: options.zip ?? '22520',
       state: 'Aragón',
       latitude: 41.5223,
       longitude: 0.33812,
@@ -160,6 +162,122 @@ describe('LidlStoreDiscoveryRunner', () => {
     expect(report.places[0]).not.toHaveProperty('status');
   });
 
+  it('names the region as the scope the shop is priced in', async () => {
+    // What a trusted import reads to put the shop in the group the chain
+    // prices it with (plan 0107, section 3.3). A shop with no region names
+    // none and takes a STORE scope of its own.
+    const runner = new TestRunner([
+      store({ ref: 'ES1', region: 21 }),
+      store({ ref: 'ES2', region: null }),
+    ]);
+
+    await runner.run(
+      context(),
+      report,
+      {
+        postalCode: '',
+        country: 'es',
+        radiusMetres: 0,
+        supermarketId: CHAIN,
+        chain: CHAIN_IDENTITY,
+      },
+      source()
+    );
+
+    expect(report.places.map((place) => place.scopeKey)).toEqual(['21', null]);
+  });
+
+  // --- The postal code filter (plan 0107, section 1) -----------------------
+
+  it('reports only the shops in the codes it was asked for', async () => {
+    // Three requests read the whole country whatever is asked of it. What the
+    // filter saves is a chain wide store list being written again for every
+    // code in the queue.
+    const runner = new TestRunner([
+      store({ ref: 'ES1', region: 21, zip: '22520' }),
+      store({ ref: 'ES2', region: 26, zip: '14013' }),
+      store({ ref: 'ES3', region: 21, zip: '28001' }),
+    ]);
+
+    await runner.run(
+      context(),
+      report,
+      {
+        postalCode: '14013',
+        country: 'es',
+        radiusMetres: 0,
+        postalCodes: ['14013'],
+        supermarketId: CHAIN,
+        chain: CHAIN_IDENTITY,
+      },
+      source()
+    );
+
+    expect(report.places.map((place) => place.externalRef)).toEqual(['ES2']);
+    // Only the regions of the shops it reported, so a filtered run does not
+    // create scopes for shops it said nothing about.
+    expect(report.scopes.map((scope) => scope.key)).toEqual(['26']);
+  });
+
+  it('reports every shop when the run names no code', async () => {
+    // An empty array and an absent field are the same thing, which is every
+    // shop the chain publishes.
+    const stores = [
+      store({ ref: 'ES1', region: 21, zip: '22520' }),
+      store({ ref: 'ES2', region: 26, zip: '14013' }),
+    ];
+
+    for (const postalCodes of [undefined, []]) {
+      report = new RecordingRunReport();
+      await new TestRunner(stores).run(
+        context(),
+        report,
+        {
+          postalCode: '',
+          country: 'es',
+          radiusMetres: 0,
+          postalCodes,
+          supermarketId: CHAIN,
+          chain: CHAIN_IDENTITY,
+        },
+        source()
+      );
+      expect(report.places).toHaveLength(2);
+    }
+  });
+
+  it('names a code no shop sits on rather than refusing the run', async () => {
+    // A filter that matched nothing is a run that reports nothing, and the
+    // operator needs to know which code was the wrong one.
+    const run = context();
+    const runner = new TestRunner([
+      store({ ref: 'ES1', region: 21, zip: '22520' }),
+    ]);
+
+    await runner.run(
+      run,
+      report,
+      {
+        postalCode: '99999',
+        country: 'es',
+        radiusMetres: 0,
+        postalCodes: ['99999'],
+        supermarketId: CHAIN,
+        chain: CHAIN_IDENTITY,
+      },
+      source()
+    );
+
+    expect(report.places).toHaveLength(0);
+    expect(run.setReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stores: 0,
+        storesInDocument: 1,
+        postalCodesWithNoShop: ['99999'],
+      })
+    );
+  });
+
   it('declares one scope per region, and none twice', async () => {
     const runner = new TestRunner([
       store({ ref: 'ES1', region: 21 }),
@@ -231,15 +349,18 @@ describe('LidlStoreDiscoveryRunner', () => {
 describe('StoreDiscoveryRunner', () => {
   const osm = { run: jest.fn(async () => undefined) };
   const lidl = { run: jest.fn(async () => undefined) };
+  const mercadona = { run: jest.fn(async () => undefined) };
   const dispatcher = new StoreDiscoveryRunner(
     osm as unknown as OsmStoreDiscoveryRunner,
-    lidl as unknown as LidlStoreDiscoveryRunner
+    lidl as unknown as LidlStoreDiscoveryRunner,
+    mercadona as unknown as MercadonaStoreDiscoveryRunner
   );
   const input = { postalCode: '14013', country: 'es', radiusMetres: 3000 };
 
   beforeEach(() => {
     osm.run.mockClear();
     lidl.run.mockClear();
+    mercadona.run.mockClear();
   });
 
   it('reads a chain that names its own shops from that chain', async () => {
@@ -253,19 +374,42 @@ describe('StoreDiscoveryRunner', () => {
     expect(osm.run).not.toHaveBeenCalled();
   });
 
-  it('takes the OpenStreetMap case for a run with no chain behind it', async () => {
-    // Every run the postal code queue starts looks like this: it is about a
-    // place rather than about a chain, and it finds many chains at once.
-    await dispatcher.run(context(), new RecordingRunReport(), input, null);
-    expect(osm.run).toHaveBeenCalledTimes(1);
-
+  it('reads Mercadona from Mercadona, which used to be the OSM case', async () => {
+    // Plan 0038 asked OpenStreetMap for this chain's shops because OSM's
+    // postcodes were missing two thirds of the time. That was a finding about
+    // OSM; the chain publishes all 1,675 of its own with no gaps (plan 0106).
     await dispatcher.run(
       context(),
       new RecordingRunReport(),
       input,
       source('mercadona-api')
     );
-    expect(osm.run).toHaveBeenCalledTimes(2);
+    expect(mercadona.run).toHaveBeenCalledTimes(1);
+    expect(osm.run).not.toHaveBeenCalled();
+  });
+
+  it('takes the OpenStreetMap case for a run with no chain behind it', async () => {
+    // Every run the postal code queue starts looks like this: it is about a
+    // place rather than about a chain, and it finds many chains at once.
+    await dispatcher.run(context(), new RecordingRunReport(), input, null);
+    expect(osm.run).toHaveBeenCalledTimes(1);
+
+    // An adapter that publishes an assortment and no store list, and one this
+    // build has never heard of, both answer the same way.
+    await dispatcher.run(
+      context(),
+      new RecordingRunReport(),
+      input,
+      source('deza-web')
+    );
+    await dispatcher.run(
+      context(),
+      new RecordingRunReport(),
+      input,
+      source('brand-new-chain')
+    );
+    expect(osm.run).toHaveBeenCalledTimes(3);
     expect(lidl.run).not.toHaveBeenCalled();
+    expect(mercadona.run).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,7 @@ import {
 } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogDashboardService } from './dashboard.service';
+import { setStack } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 
 /**
@@ -281,15 +282,16 @@ describeIntegration('catalog’s dashboard block (real Postgres)', () => {
       supermarkets.create({ name: { en: 'Other', es: 'Otra' } })
     );
     for (const externalRef of ['node/1', 'node/2', 'node/3']) {
-      await locations.save(
+      const shop = await locations.save(
         locations.create({
           supermarketId: chain.id,
-          priceScopeId: scope.id,
           label: null,
           externalRef,
           externalProvider: 'OSM',
         })
       );
+      // The scope moved off the shop and into its own table (plan 0105).
+      await setStack(dataSource.manager, shop.id, [scope.id]);
     }
     await newItem();
     await groups.save(

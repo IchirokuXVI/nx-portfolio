@@ -91,6 +91,36 @@ export function chainState(summary: ShopChainSummary): ChainState {
 }
 
 /**
+ * The key of the OTHER button, which is not a chain id and cannot collide with one:
+ * every chain id is a UUID.
+ *
+ * OTHER is a client side bucket (backend plan 0068, section 4) and the server has
+ * never heard the word. It is the chains with no `externalBrandKey`, which is what
+ * survives the import of a shop that had no brand at all, and plan 0059 section 3.2
+ * measured it as the **largest** button on the screen for many people: 35 of the 75
+ * places in one city radius were independents.
+ */
+export const OTHER_CHAINS = 'other';
+
+/**
+ * One franchise button, ready to draw (plan 0059, section 3.2).
+ *
+ * Here rather than beside the store that first built one, because velista `0078`
+ * draws the same buttons over a **basket's** price scopes: the shop picker's chains
+ * come from the basket read and never from `ShopStore`. A view model two features
+ * assemble belongs with the other view models, which is what this library is.
+ */
+export interface FranchiseButton {
+  /** A chain id, or {@link OTHER_CHAINS}. */
+  readonly key: string;
+  /** Null for OTHER, which is a bucket rather than a brand and is named by the screen. */
+  readonly name: LocalizedName | null;
+  readonly locations: number;
+  readonly excluded: number;
+  readonly state: ChainState;
+}
+
+/**
  * What the profile is being told about one shop (backend plan 0064, section 5).
  *
  * `excluded: false` deletes the row rather than storing it, because absence already

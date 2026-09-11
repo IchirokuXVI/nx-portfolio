@@ -69,6 +69,36 @@ export function settleSheetPath(
   ).join('/')}`;
 }
 
+/**
+ * The filter sheet's own URL, which the shop picker returns to (velista `0078`).
+ *
+ * The picker is pushed over this sheet and pops back onto it, so one back gesture
+ * from the picker lands on the filter sheet exactly once (`0031`); this URL is the
+ * picker's fallback for a cold load on its own address. Both name the other in full,
+ * for the reason every dismissal in this app names its page in full.
+ */
+export function filterSheetPath(
+  locale: string,
+  basePath: string,
+  generatedListId: string
+): string {
+  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
+    'filter'
+  ).join('/')}`;
+}
+
+/** The shop picker's URL, a sheet of its own under the filter sheet's address. */
+export function shopPickerPath(
+  locale: string,
+  basePath: string,
+  generatedListId: string
+): string {
+  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
+    'filter',
+    'shop'
+  ).join('/')}`;
+}
+
 /** The path to the join screen for one link secret. */
 export function joinPath(
   locale: string,

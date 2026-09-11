@@ -992,12 +992,15 @@
       "free": "No product chosen",
       "busy": "Saving",
       "takenBack_one": "1 taken back",
-      "takenBack_other": "{{count}} taken back"
+      "takenBack_other": "{{count}} taken back",
+      "listShare": "this list asked for {{asked}} of the {{total}}",
+      "listPartly": "{{settled}} of {{asked}} got"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
       "bought_one": "{{count}} bought",
-      "bought_other": "{{count}} bought"
+      "bought_other": "{{count}} bought",
+      "listLabel": "{{list}}, {{name}}, still to get"
     },
     "touched": {
       "got": "{{name}} got it",
@@ -1013,6 +1016,84 @@
       "one": "from {{first}}",
       "two": "from {{first}} and {{second}}",
       "more": "from {{first}} and {{count}} more"
+    },
+    "search": {
+      "open": "Search this list",
+      "label": "Search this list",
+      "placeholder": "Line or product",
+      "clear": "Clear",
+      "cancel": "Cancel",
+      "count": "{{shown}} of {{total}} lines",
+      "none": "No line matches “{{query}}”",
+      "noneHint": "Add it below and it goes on this list."
+    },
+    "view": {
+      "open": "Filter and order",
+      "openCount": "Filter and order, {{count}} on",
+      "title": "Filter and order",
+      "reset": "Reset",
+      "none": "No line matches the filter",
+      "noneHint": "Remove a chip above to see more.",
+      "show_one": "Show 1 line",
+      "show_other": "Show {{count}} lines",
+      "count": "{{shown}} of {{total}}",
+      "order": {
+        "legend": "Order",
+        "shop": "The way you shop",
+        "shopHint": "Calculated from your last trips",
+        "alpha": "A to Z"
+      },
+      "group": {
+        "legend": "Group by",
+        "none": "Nothing",
+        "category": "Category",
+        "list": "List",
+        "listHint": "each list’s own amounts"
+      },
+      "shop": {
+        "legend": "Prices from",
+        "any": "Any of your shops",
+        "anyGuest": "Any of the shops",
+        "anyHint": "the cheapest",
+        "none": "One shop",
+        "choose": "Choose",
+        "chooseLabel": "Choose the shop prices are from",
+        "change": "Change",
+        "changeLabel": "Change the shop prices are from",
+        "title": "Prices from",
+        "back": "Back to filter and order",
+        "search": "Shop, chain or street",
+        "count_one": "{{count}} shop",
+        "count_other": "{{count}} shops"
+      },
+      "lists": {
+        "legend": "Lists",
+        "only": "Only {{name}}",
+        "some": "{{kept}} of {{total}} lists"
+      },
+      "chip": {
+        "remove": "Remove: {{name}}",
+        "byCategory": "By category",
+        "byList": "By list",
+        "shop": "{{name}}",
+        "more": "+{{count}}",
+        "moreLabel": "{{count}} more, open filter and order"
+      }
+    },
+    "price": {
+      "cheaperAt": "{{price}} at {{chain}}",
+      "notListedAt": "not listed at {{chain}}"
+    },
+    "group": {
+      "noList": "On no list yet",
+      "noListHint": "added in the shop",
+      "notListed": "Not listed at {{chain}}",
+      "notListedHint": "still yours to get",
+      "noCategory": "No category",
+      "noCategoryHint": "lines with no product",
+      "progress": "{{done}} of {{total}} got",
+      "unavailable_one": "{{count}} not available",
+      "unavailable_other": "{{count}} not available"
     },
     "settle": {
       "title": "{{name}}",
@@ -1198,6 +1279,20 @@
       "isNone": "{{name}} was not available",
       "isWanted": "{{name}} is still to get",
       "isPartly": "{{name}} is partly got"
+    },
+    "category": {
+      "PRODUCE": "Produce",
+      "DAIRY": "Dairy",
+      "BAKERY": "Bakery",
+      "MEAT": "Meat",
+      "SEAFOOD": "Seafood",
+      "FROZEN": "Frozen",
+      "BEVERAGES": "Beverages",
+      "SNACKS": "Snacks",
+      "PANTRY": "Pantry",
+      "HOUSEHOLD": "Household",
+      "PERSONAL_CARE": "Personal care",
+      "OTHER": "Other"
     }
   },
   "getList": {

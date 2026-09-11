@@ -22,6 +22,7 @@ import {
   SupermarketLocationItem,
 } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
+import { LocationScopeService, setStack } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 import { SupermarketLocationItemService } from './supermarket-location-item.service';
 
@@ -83,7 +84,8 @@ describeIntegration('per shop availability (real Postgres)', () => {
       dataSource.getRepository(Item),
       dataSource.getRepository(SupermarketLocation),
       admin,
-      new CatalogAuditService(dataSource)
+      new CatalogAuditService(dataSource),
+      new LocationScopeService()
     );
   }, 120_000);
 
@@ -115,16 +117,16 @@ describeIntegration('per shop availability (real Postgres)', () => {
       )
     ).id;
     const locations = dataSource.getRepository(SupermarketLocation);
-    shopA = (
-      await locations.save(
-        locations.create({ supermarketId: chain.id, priceScopeId: scopeId })
-      )
-    ).id;
-    shopB = (
-      await locations.save(
-        locations.create({ supermarketId: chain.id, priceScopeId: scopeId })
-      )
-    ).id;
+    /** A shop, selling at one scope. The stack is its own table (plan 0105). */
+    const shop = async (): Promise<string> => {
+      const row = await locations.save(
+        locations.create({ supermarketId: chain.id })
+      );
+      await setStack(dataSource.manager, row.id, [scopeId]);
+      return row.id;
+    };
+    shopA = await shop();
+    shopB = await shop();
 
     const items = dataSource.getRepository(Item);
     const created = await items.save(

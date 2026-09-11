@@ -9,6 +9,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { In, Repository } from 'typeorm';
 import { PriceScope, Supermarket, SupermarketLocation } from '../entities';
+import { LocationScopeService } from './location-scopes';
 
 /**
  * How long one resolution stands (plan 0049, section 1.1).
@@ -40,7 +41,11 @@ interface CacheEntry {
  *
  * ## The ladder, per chain
  *
- * 1. The chain's scopes that serve one of the caller's postal codes.
+ * 1. The chain's scopes that serve one of the caller's postal codes. Since
+ *    plan 0105 a shop holds a stack of them rather than one, and the whole
+ *    stack comes back so a reader can see it; the entry a scoped read quotes
+ *    from is the most specific of each shop's stack, and it is the one flagged
+ *    `quoted`.
  * 2. Otherwise its `NATIONAL` scope, if it has one: a chain that prices
  *    nationally has no location to be asked about.
  * 3. Otherwise its owner set default scope, and the result is **flagged
@@ -79,6 +84,15 @@ interface CacheEntry {
  * postal code the caller asked about comes back in `coverage` saying whether
  * anybody we know serves it. A code no chain serves is not an error (section 5):
  * coverage is a property of our data, and the client explains it in words.
+ *
+ * ## Why `priceScopeIds` is not every scope in `scopes`
+ *
+ * It is the quoted ones (plan 0105, section 4). A shop's less specific tiers
+ * are in `scopes`, because the stack is worth seeing, and out of the list
+ * handed to a scoped read, because that read takes the cheapest of what it is
+ * given: a shop's own national fallback undercutting the regional price the
+ * shop actually charges would win, and the shopper would be quoted a number no
+ * till will ring up. Cheapest decides between shops, never inside one.
  */
 @Injectable()
 export class ScopeResolverService {
@@ -90,7 +104,8 @@ export class ScopeResolverService {
     @InjectRepository(PriceScope)
     private readonly scopes: Repository<PriceScope>,
     @InjectRepository(Supermarket)
-    private readonly supermarkets: Repository<Supermarket>
+    private readonly supermarkets: Repository<Supermarket>,
+    private readonly stacks: LocationScopeService
   ) {}
 
   async resolve(req: ResolvePriceScopesRequest): Promise<ResolvedScopesView> {
@@ -136,7 +151,6 @@ export class ScopeResolverService {
             select: {
               id: true,
               supermarketId: true,
-              priceScopeId: true,
               postalCode: true,
             },
           });
@@ -168,19 +182,40 @@ export class ScopeResolverService {
         : dedupe(serving.map((row) => row.supermarketId))
     ).filter((id) => !excluded.has(id));
 
+    // One read for every shop's stack, rather than one per shop: a caller with
+    // four postal codes in a city reaches dozens of shops.
+    const stacks = await this.stacks.stacksFor(
+      this.locations.manager,
+      serving.map((row) => row.id)
+    );
+
     const scopes: ResolvedScopeView[] = [];
     const fallbackChains: string[] = [];
 
     for (const supermarketId of candidates) {
       const own = serving.filter((row) => row.supermarketId === supermarketId);
-      if (own.length > 0) {
-        for (const row of own) {
-          scopes.push({
-            priceScopeId: row.priceScopeId,
-            supermarketId,
-            postalCode: row.postalCode,
-            origin: 'POSTAL_CODE',
-            approximate: false,
+      // A chain whose shops are here but hold no scope at all falls to the
+      // rungs below, rather than contributing an empty answer. Nothing writes
+      // that state, and reading it as "served, with no prices" would hide it.
+      const stacked = own.filter(
+        (row) => (stacks.get(row.id)?.length ?? 0) > 0
+      );
+      if (stacked.length > 0) {
+        for (const row of stacked) {
+          const stack = stacks.get(row.id) ?? [];
+          stack.forEach((tier, index) => {
+            scopes.push({
+              priceScopeId: tier.priceScopeId,
+              supermarketId,
+              postalCode: row.postalCode,
+              origin: 'POSTAL_CODE',
+              approximate: false,
+              supermarketLocationId: row.id,
+              priority: tier.priority,
+              // Most specific first, so the head of the stack is the tier this
+              // shop is quoted from.
+              quoted: index === 0,
+            });
           });
         }
         continue;
@@ -195,16 +230,20 @@ export class ScopeResolverService {
     const unique = new Map<string, ResolvedScopeView>();
     for (const scope of scopes) {
       const existing = unique.get(scope.priceScopeId);
-      // An exact reason beats an approximate one for the same scope: the id is
-      // the same either way, and the explanation is what the client renders.
-      if (!existing || (existing.approximate && !scope.approximate)) {
+      if (!existing || preferred(scope, existing)) {
         unique.set(scope.priceScopeId, scope);
       }
     }
     const resolved = [...unique.values()];
 
     return {
-      priceScopeIds: resolved.map((scope) => scope.priceScopeId),
+      // The quoted entries only (plan 0105, section 4). One shop's regional
+      // tier can be another shop's quoted one, and it belongs here on the
+      // second shop's account: the merge above is what makes that a single
+      // entry flagged `quoted` rather than two rows disagreeing.
+      priceScopeIds: resolved
+        .filter((scope) => scope.quoted)
+        .map((scope) => scope.priceScopeId),
       scopes: resolved,
       coverage,
       approximate: resolved.some((scope) => scope.approximate),
@@ -232,10 +271,26 @@ export class ScopeResolverService {
     const nationalByChain = new Map(
       national.map((scope) => [scope.supermarketId, scope])
     );
+    // The owner set fallbacks, loaded as rows rather than ids because the view
+    // now carries each scope's priority.
+    const fallbackIds = chains
+      .map((chain) => chain.defaultPriceScopeId)
+      .filter((id): id is string => id !== null);
+    const fallbackScopes =
+      fallbackIds.length === 0
+        ? []
+        : await this.scopes.find({ where: { id: In(fallbackIds) } });
+    const fallbackById = new Map(
+      fallbackScopes.map((scope) => [scope.id, scope])
+    );
     const defaultByChain = new Map(
       chains
         .filter((chain) => chain.defaultPriceScopeId !== null)
-        .map((chain) => [chain.id, chain.defaultPriceScopeId as string])
+        .map((chain) => [
+          chain.id,
+          fallbackById.get(chain.defaultPriceScopeId as string),
+        ])
+        .filter((pair): pair is [string, PriceScope] => pair[1] !== undefined)
     );
 
     const rungs: ResolvedScopeView[] = [];
@@ -248,19 +303,27 @@ export class ScopeResolverService {
           postalCode: null,
           origin: 'NATIONAL',
           approximate: false,
+          // A fallback for a missing shop, not a tier of a stack (plan 0105,
+          // section 5), so there is no shop to name and nothing above it here.
+          supermarketLocationId: null,
+          priority: nationalScope.priority,
+          quoted: true,
         });
         continue;
       }
       const fallback = defaultByChain.get(supermarketId);
       if (fallback) {
         rungs.push({
-          priceScopeId: fallback,
+          priceScopeId: fallback.id,
           supermarketId,
           postalCode: null,
           origin: 'CHAIN_DEFAULT',
           // The one place this is true, and the reason the field exists: the
           // price is real, and it is a price for somewhere else.
           approximate: true,
+          supermarketLocationId: null,
+          priority: fallback.priority,
+          quoted: true,
         });
       }
       // A chain off the end of the ladder contributes nothing, which is the
@@ -280,6 +343,26 @@ export class ScopeResolverService {
     }
     this.cache.set(key, { value, expiresAt: Date.now() + SCOPE_CACHE_TTL_MS });
   }
+}
+
+/**
+ * Which of two entries for the same scope id the answer keeps.
+ *
+ * **Quoted first.** One shop's regional tier can be the tier another shop is
+ * quoted from, and the entry has to say so, or that second shop would be
+ * dropped from `priceScopeIds` and quoted nothing at all.
+ *
+ * Then an exact reason over an approximate one: the id is the same either way,
+ * and the explanation is what the client renders.
+ */
+function preferred(
+  candidate: ResolvedScopeView,
+  held: ResolvedScopeView
+): boolean {
+  if (candidate.quoted !== held.quoted) {
+    return candidate.quoted;
+  }
+  return held.approximate && !candidate.approximate;
 }
 
 /** Order independent, so two callers asking the same thing share one entry. */

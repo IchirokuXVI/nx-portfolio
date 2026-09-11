@@ -11,14 +11,17 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
-  decodeCursor,
+  DEFAULT_LOCALE,
   encodeCursor,
+  getRequestContext,
   NotFoundException,
+  type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type SelectQueryBuilder } from 'typeorm';
 import { Supermarket } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
+  decodeCursorForLocale,
   displayName,
   displayNameSql,
   toSupermarketView,
@@ -28,6 +31,8 @@ import { PriceScopeService } from './price-scope.service';
 
 interface SupermarketCursor {
   order: SupermarketOrder;
+  /** The language the `value` was cut under (plan 0111, section 5). */
+  locale: SupportedLocale;
   value: string;
   id: string;
 }
@@ -117,11 +122,15 @@ export class SupermarketService {
   async list(req: ListSupermarketsRequest): Promise<SupermarketPage> {
     const order = this.resolveOrder(req.order);
     const limit = clampPageSize(req.limit);
-    const cursor = decodeCursor(req.cursor) as SupermarketCursor | undefined;
+    // The caller's language, off the request context the gateway propagated
+    // (plan 0111, section 3). It is not a field on the request: the context is
+    // the one answer to this question and a second one could disagree with it.
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    const cursor = decodeCursorForLocale<SupermarketCursor>(req.cursor, locale);
 
     const qb = this.supermarkets.createQueryBuilder('s').take(limit + 1);
     this.applySearch(qb, req.query);
-    this.applyOrder(qb, order, cursor);
+    this.applyOrder(qb, order, locale, cursor);
 
     const rows = await qb.getMany();
     const hasMore = rows.length > limit;
@@ -131,7 +140,8 @@ export class SupermarketService {
       hasMore && last
         ? encodeCursor({
             order,
-            value: this.cursorValue(order, last),
+            locale,
+            value: this.cursorValue(order, locale, last),
             id: last.id,
           })
         : null;
@@ -191,6 +201,7 @@ export class SupermarketService {
   private applyOrder(
     qb: SelectQueryBuilder<Supermarket>,
     order: SupermarketOrder,
+    locale: SupportedLocale,
     cursor?: SupermarketCursor
   ): void {
     if (order === 'created') {
@@ -210,10 +221,10 @@ export class SupermarketService {
         });
       }
     } else {
-      // Order by the shown name (English, else Spanish); id breaks ties.
-      qb.orderBy(displayNameSql('s'), 'ASC').addOrderBy('s.id', 'ASC');
+      // Order by the shown name, in the caller's language; id breaks ties.
+      qb.orderBy(displayNameSql('s', locale), 'ASC').addOrderBy('s.id', 'ASC');
       if (cursor) {
-        qb.andWhere(`(${displayNameSql('s')}, s.id) > (:cv, :cid)`, {
+        qb.andWhere(`(${displayNameSql('s', locale)}, s.id) > (:cv, :cid)`, {
           cv: cursor.value,
           cid: cursor.id,
         });
@@ -221,13 +232,17 @@ export class SupermarketService {
     }
   }
 
-  private cursorValue(order: SupermarketOrder, row: Supermarket): string {
+  private cursorValue(
+    order: SupermarketOrder,
+    locale: SupportedLocale,
+    row: Supermarket
+  ): string {
     if (order === 'created') {
       return row.createdAt.toISOString();
     }
     if (order === 'updated') {
       return row.updatedAt.toISOString();
     }
-    return displayName(row.name);
+    return displayName(row.name, locale);
   }
 }

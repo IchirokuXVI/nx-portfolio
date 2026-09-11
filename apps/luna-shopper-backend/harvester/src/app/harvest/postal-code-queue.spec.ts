@@ -15,9 +15,11 @@ import type { HarvesterConfig } from '../config/app-config';
 import type { DiscoveredPlace, PostalCodeDiscoveryRequest } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
+import type { HarvestRunStore } from './harvest-run.store';
 import type { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import type { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
+import type { SupermarketSourceService } from './supermarket-source.service';
 
 const ADMIN = 'owner-1';
 
@@ -151,6 +153,14 @@ describe('The postal code queue as a screen (plan 0097)', () => {
       placeRepo.repository,
       options.catalog ?? catalogHolding(true),
       admin(),
+      // This file is about the screen, which asks neither question. The set of
+      // place sources and the per source cooldown have their own spec.
+      {
+        listEnabled: jest.fn(async () => []),
+      } as unknown as SupermarketSourceService,
+      {
+        lastAnsweredBySource: jest.fn(async () => new Map()),
+      } as unknown as HarvestRunStore,
       configOf(settings(options.config))
     );
     return { service, qb, query: placeRepo.query };

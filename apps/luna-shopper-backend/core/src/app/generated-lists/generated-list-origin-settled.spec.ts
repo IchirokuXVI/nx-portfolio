@@ -284,7 +284,10 @@ function build(
     sourceSnapshot: { profileId: null, pricingProfileId: null, sources: [] },
   };
   const lists = { findOne: async () => list } as never;
-  const lines = { findOne: async () => basketLine } as never;
+  // A copy per read, as TypeORM answers one: the service's own read of the line
+  // must not see a settle or a revert that wrote through a different entity, or
+  // the spec passes on an answer the real repository never gives.
+  const lines = { findOne: async () => ({ ...basketLine }) } as never;
   const originRows = {
     find: async () => [...origins].sort((a, b) => a.order - b.order),
     findOne: async ({ where }: { where: { lineId?: string; id?: string } }) =>

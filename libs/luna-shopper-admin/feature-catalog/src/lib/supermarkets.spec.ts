@@ -4,6 +4,7 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DeploymentStore,
   ServerReachability,
   SessionStorage,
@@ -43,6 +44,7 @@ async function boot(url: string): Promise<ComponentFixture<TestHost>> {
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       provideRouter(
         adminRoutes([{ key: 'catalog', label: '', resources: [SUPERMARKETS] }])
@@ -136,9 +138,20 @@ describe('the supermarkets descriptor', () => {
   });
 
   it('calls a chain by its localized name', () => {
-    expect(SUPERMARKETS.title(SUPERMARKET_SEED[0] as Supermarket)).toBe(
-      'Mercadona'
-    );
+    expect(
+      SUPERMARKETS.title(SUPERMARKET_SEED[0] as Supermarket, ['en', 'es'])
+    ).toBe('Mercadona');
+  });
+
+  /** The reading order reaches the title (admin plan 0026, section 5). */
+  it('calls a chain by the name in the language the operator reads', () => {
+    const chain = {
+      ...(SUPERMARKET_SEED[0] as Supermarket),
+      name: { en: 'The Corner Shop', es: 'La Tienda' },
+    };
+
+    expect(SUPERMARKETS.title(chain, ['en', 'es'])).toBe('The Corner Shop');
+    expect(SUPERMARKETS.title(chain, ['es', 'en'])).toBe('La Tienda');
   });
 
   it('offers only the orders the backend accepts', () => {

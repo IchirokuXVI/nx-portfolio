@@ -419,3 +419,41 @@ export type UnitOfMeasure = (typeof UNITS_OF_MEASURE)[number];
  * volume here would be inventing the very fact the row exists to state.
  */
 export const UNIT_OF_MEASURE_FALLBACK: UnitOfMeasure = 'UNIT';
+
+/**
+ * What aisle a product belongs to (`ItemCategory` on the wire, velista `0077`).
+ *
+ * The twelve the catalog knows, and the order here is the wire's own rather than a
+ * shopping order: nothing reads this list to lay a screen out. Sections take the
+ * order of their first line (`0077`, section 3), so the aisles a basket is grouped
+ * into are ordered by the shopper's own walk and not by a constant.
+ *
+ * The category has ridden on every basket product since the catalog existed and the
+ * client dropped it, which is why grouping by it needs no server half at all.
+ */
+export const PRODUCT_CATEGORIES = [
+  'PRODUCE',
+  'DAIRY',
+  'BAKERY',
+  'MEAT',
+  'SEAFOOD',
+  'FROZEN',
+  'BEVERAGES',
+  'SNACKS',
+  'PANTRY',
+  'HOUSEHOLD',
+  'PERSONAL_CARE',
+  'OTHER',
+] as const;
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+
+/**
+ * What a category this build has never heard of reads as.
+ *
+ * `OTHER` is a real member rather than a bin for unreadable values, and folding the
+ * unknown onto it is still right: a thirteenth category added to the catalog is a
+ * product this app cannot name, and the honest place for a product it cannot name is
+ * the heading that says exactly that. The alternative, dropping the product out of
+ * every section, would take a line off a screen somebody is shopping from.
+ */
+export const PRODUCT_CATEGORY_FALLBACK: ProductCategory = 'OTHER';

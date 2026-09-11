@@ -250,6 +250,17 @@ export class CreateSupermarketLocationDto {
   @IsUUID()
   priceScopeId?: string;
 
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    description:
+      'Every scope the shop sells at, most specific winning (plan 0105, section 3). Order is not significant: the stack is ranked by each scope’s own priority. A shorthand for one of these is `priceScopeId`, and naming both is refused rather than merged.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  priceScopeIds?: string[];
+
   @ApiPropertyOptional({ type: LocalizedTextDto, nullable: true })
   @IsOptional()
   @ValidateNested()
@@ -493,6 +504,17 @@ export class CreatePriceScopeDto {
   @ValidateNested()
   @Type(() => LocalizedTextDto)
   label?: LocalizedTextDto | null;
+
+  @ApiPropertyOptional({
+    type: Number,
+    minimum: 0,
+    description:
+      'How specific the scope is (plan 0105, section 2.1). Lower is more specific, and within one shop the most specific scope that has a price for a product is the price that shop charges. Omit it and the scope takes the default for its kind: 100 STORE, 200 POSTAL_CODE, 300 REGION, 1000 NATIONAL. The gaps are what let a tier nobody anticipated be a number rather than a migration.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  priority?: number;
 }
 
 export class UpdatePriceScopeDto {
@@ -512,6 +534,17 @@ export class UpdatePriceScopeDto {
   @ValidateNested()
   @Type(() => LocalizedTextDto)
   label?: LocalizedTextDto | null;
+
+  @ApiPropertyOptional({
+    type: Number,
+    minimum: 0,
+    description:
+      'Move the scope. Left alone when absent, including when the kind changes beside it: moving a scope re-ranks every shop that holds it, so it is stated rather than inferred.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  priority?: number;
 }
 
 // --- Item prices: every price a source gave (plan 0080) ---------------------

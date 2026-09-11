@@ -1,14 +1,17 @@
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
 // `SupermarketLocation` is a value here: the audit double keys on the class.
 import {
+  PriceScope,
   SupermarketLocation,
   type PostalCodePoint,
   type Supermarket,
 } from '../entities';
 import { fakeAudit } from './catalog-audit.testing';
+import type { EffectivePriceService } from './effective-price.service';
+import type { LocationScopeService } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
@@ -89,6 +92,55 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
     requireScopeOf: jest.fn(async () => ({ id: SCOPE })),
   } as unknown as PriceScopeService;
 
+  /**
+   * The stack, as a plain array per shop (plan 0105, section 3). `setStack`
+   * records what it was told, and `stacksFor` reads it back, so a create
+   * asserting `priceScopeId` is asserting the head of the stack the service
+   * actually wrote rather than a value the double invented.
+   */
+  const written = new Map<string, string[]>();
+  const stacks = {
+    setStack: jest.fn(
+      async (
+        _manager: unknown,
+        supermarketLocationId: string,
+        priceScopeIds: readonly string[]
+      ) => {
+        const before = written.get(supermarketLocationId) ?? [];
+        written.set(supermarketLocationId, [...priceScopeIds]);
+        return {
+          added: priceScopeIds.filter((id) => !before.includes(id)),
+          removed: before.filter((id) => !priceScopeIds.includes(id)),
+        };
+      }
+    ),
+    stacksFor: jest.fn(async (_manager: unknown, ids: readonly string[]) => {
+      const answer = new Map<
+        string,
+        { priceScopeId: string; priority: number }[]
+      >();
+      for (const id of ids) {
+        const stack = written.get(id);
+        if (stack) {
+          answer.set(
+            id,
+            stack.map((priceScopeId, index) => ({
+              priceScopeId,
+              priority: (index + 1) * 100,
+            }))
+          );
+        }
+      }
+      return answer;
+    }),
+  } as unknown as LocationScopeService;
+
+  // A create that attaches a scope lets that scope inherit (plan 0105,
+  // section 3). Nothing here asserts prices, so the double only has to exist.
+  const effective = {
+    inheritLessSpecific: jest.fn(async () => undefined),
+  } as unknown as EffectivePriceService;
+
   const config = {
     getOrThrow: () => ({
       // The owner writes as a configured SERVICE here (plan 0072). This file is
@@ -107,6 +159,17 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
       SupermarketLocation,
       { name: 'supermarket_locations', repository: locations },
     ],
+    // Writing a shop's stack reads the scopes back, so that each one can
+    // inherit what it now falls through to (plan 0105, section 3).
+    [
+      PriceScope,
+      {
+        name: 'price_scopes',
+        repository: {
+          find: jest.fn(async () => [{ id: SCOPE }]),
+        } as unknown as Repository<PriceScope>,
+      },
+    ],
   ]);
   const service = new SupermarketLocationService(
     locations,
@@ -115,9 +178,11 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
     new PlatformAdminService(new JwtService(), config),
     audit.service,
     new PostalCodeService(pointsRepository),
+    effective,
+    stacks,
     config
   );
-  return { service, locations, stored, audit };
+  return { service, locations, stored, audit, stacks, effective };
 }
 
 /** Everything a create needs beyond the field under test. */
@@ -378,6 +443,10 @@ describe('SupermarketLocationService.list postal code filter', () => {
       // A read: nothing here opens a transaction.
       fakeAudit([]).service,
       {} as PostalCodeService,
+      {} as EffectivePriceService,
+      {
+        stacksFor: jest.fn(async () => new Map()),
+      } as unknown as LocationScopeService,
       { getOrThrow: () => ({}) } as unknown as ConfigService
     );
     return { service, qb };

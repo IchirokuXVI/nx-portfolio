@@ -12,6 +12,7 @@ import {
   type SupermarketLocation,
 } from '../entities';
 import { fakeAudit } from './catalog-audit.testing';
+import type { LocationScopeService } from './location-scopes';
 import type { PlatformAdminService } from './platform-admin.service';
 import { SupermarketItemService } from './supermarket-item.service';
 
@@ -59,10 +60,11 @@ function storedRow(overrides: Partial<SupermarketItem> = {}): SupermarketItem {
 describe('SupermarketItemService', () => {
   const item = { id: 'item-1' } as Item;
   const scope = { id: 'scope-1' } as PriceScope;
-  const location = {
-    id: 'loc-1',
-    priceScopeId: 'scope-1',
-  } as SupermarketLocation;
+  const location = { id: 'loc-1' } as SupermarketLocation;
+  /** The shop sells at `scope-1`, and that is the scope it is quoted from. */
+  const stacks = {
+    quotedScopeOf: jest.fn(async () => 'scope-1'),
+  } as unknown as LocationScopeService;
 
   function build(overrides: Partial<Repository<SupermarketItem>> = {}) {
     const admin = makeAdmin();
@@ -98,7 +100,8 @@ describe('SupermarketItemService', () => {
       scopes,
       locations,
       admin,
-      audit.service
+      audit.service,
+      stacks
     );
     return {
       svc,
@@ -283,7 +286,8 @@ describe('SupermarketItemService.adminList', () => {
       admin,
       // A read: it opens no transaction, so an unbound double is the honest
       // double. A write reaching it here would throw rather than pass quietly.
-      fakeAudit([]).service
+      fakeAudit([]).service,
+      {} as LocationScopeService
     );
     return { svc, qb, items, admin };
   }

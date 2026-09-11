@@ -4,6 +4,7 @@ import type {
   BasketOriginUnavailableReason,
   LineApprovalStatus,
   ParticipantKind,
+  ProductCategory,
   SettlementOutcome,
 } from './enums';
 import { isLiveGeneratedList } from './enums';
@@ -118,6 +119,20 @@ export interface BasketLineOrigin {
   lineId: string;
   /** What this origin contributed to the line's summed quantity. */
   quantity: number;
+  /**
+   * How many of {@link quantity} were bought for this list (luna `0109`, section 4;
+   * velista `0077`, section 4.1).
+   *
+   * `BOUGHT` rows only, with anything reverted excluded, which is the same floor
+   * `0104` checks before it lets a take back through. It is what the reel under a
+   * list heading is bound to and what that row sends as its `from`, so the two
+   * cannot drift: the screen reads and writes one number.
+   *
+   * It rides on the line's `origins`, so it is absent for exactly the readers
+   * `origins` is absent for, and that absence is the redaction rule rather than a
+   * second one here.
+   */
+  settled: number;
 }
 
 /**
@@ -152,6 +167,35 @@ export interface BasketProduct {
   unit: string | null;
   /** The cheapest price at the run's scopes, or null where there is none. */
   readonly offer: ProductOffer | null;
+  /**
+   * One offer per scope that lists this product, cheapest first (velista `0078`,
+   * section 2; backend `0109`).
+   *
+   * What {@link offer} cannot answer. That one is a `DISTINCT ON (itemId)`, so it
+   * says which scope is cheapest and never which scopes carry the product at all,
+   * and a view of one shop's prices needs the second question answered: standing in
+   * a Mercadona, what this chain charges and whether it stocks the line are two
+   * different things and the cheapest price anywhere says neither.
+   *
+   * **Empty means unlisted everywhere**, and it means that for exactly the reason a
+   * row with `available = false` never reaches here: the server excludes it, so
+   * absent is the only way a product can fail to be listed and there is no third
+   * state to draw. Empty is also what an older backend answers, which draws as a
+   * basket nobody has priced and is the same screen staging and production already
+   * show.
+   */
+  readonly offers: readonly ProductOffer[];
+  /**
+   * What aisles this product belongs to, for the category grouping (velista
+   * `0077`, section 2).
+   *
+   * A **list** where the wire carries one value, and that costs nothing today: the
+   * brief says a product will one day carry several, a pipeline written over a list
+   * is the same pipeline either way, and the day the wire grows a second value
+   * nothing above the mapper changes. Never empty: an unreadable value maps to
+   * `OTHER` rather than dropping the product out of every section.
+   */
+  readonly categories: readonly ProductCategory[];
 }
 
 /**
@@ -561,6 +605,70 @@ export function basketLineState(line: BasketLine): BasketLineState {
 /** How many are still to get. Never negative, however the numbers arrived. */
 export function outstanding(line: BasketLine): number {
   return Math.max(0, line.quantity - line.settled);
+}
+
+/**
+ * What one scope charges for a product, or null when that scope does not list it
+ * (velista `0078`, section 2).
+ *
+ * The one place the lookup lives, so the row that draws a price and the pipeline
+ * that decides a line has sunk cannot answer the question differently. A product
+ * this basket has no entry for at all answers null too, which is the same null: to
+ * the reader, a pick the catalog cannot resolve and a pick this chain does not
+ * stock are both "no price from here".
+ *
+ * Null rather than the cheapest offer as a fallback. Quoting Dia's price under a
+ * heading that says Mercadona is the defect this whole plan exists to remove.
+ */
+export function offerAt(
+  product: BasketProduct | undefined,
+  priceScopeId: string
+): ProductOffer | null {
+  if (product === undefined) {
+    return null;
+  }
+  return (
+    product.offers.find((offer) => offer.priceScopeId === priceScopeId) ?? null
+  );
+}
+
+/** How a run of lines is progressing: got, had none, and how many there are. */
+export interface BasketProgress {
+  readonly done: number;
+  readonly unavailable: number;
+  readonly total: number;
+}
+
+/**
+ * What a run of lines comes to, counted in **lines and not units**.
+ *
+ * "Four things done out of twelve" is what somebody in a shop is tracking, and a
+ * basket of one line asking for twelve tins would otherwise read as almost
+ * finished. That is `0047`'s rule for a zone list and this is the same count.
+ *
+ * **`done` is not `finished`.** A `NOT_AVAILABLE` settle closes a line's outstanding
+ * amount without buying anything, so counting every finished line as one somebody
+ * got would report a shop that had none as a purchase, which is the claim the row's
+ * own caption is careful not to make.
+ *
+ * Here rather than in the store because velista `0077` gives every section of a
+ * grouped basket its own count, and a heading that said "1 of 3 got" by one rule
+ * while the sentence above it said "4 of 12 got" by another would be two answers to
+ * one question. The store's `progress` is this function over the whole basket.
+ */
+export function basketLinesProgress(
+  lines: readonly BasketLine[]
+): BasketProgress {
+  const finished = lines.filter((line) => outstanding(line) === 0);
+  const unavailable = finished.filter(
+    (line) => line.lastOutcome === 'NOT_AVAILABLE'
+  ).length;
+
+  return {
+    done: finished.length - unavailable,
+    unavailable,
+    total: lines.length,
+  };
 }
 
 /**

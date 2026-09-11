@@ -131,8 +131,16 @@ function unionOf(
 /** The basket every read here is about. */
 const BASKET_ID = 'basket-saturday';
 
-/** The one scope the mock prices against: Mercadona's Córdoba warehouse. */
+/**
+ * The two scopes the mock prices against, which are two chains.
+ *
+ * Two rather than one since velista `0078`: a screen that shows one shop's prices
+ * and says where a product is cheaper cannot be looked at against a basket priced at
+ * a single shop. Mercadona carries two locations and Dia one, which is also what
+ * makes the shop picker worth opening in this mode.
+ */
 const SCOPE_MERCADONA = 'scope-mercadona-cordoba';
+const SCOPE_DIA = 'scope-dia-cordoba';
 
 /**
  * A price on a product, for the pick sheet to have something to compare.
@@ -146,7 +154,8 @@ const SCOPE_MERCADONA = 'scope-mercadona-cordoba';
 const offer = (
   price: number,
   unitPrice: number | null,
-  unitPriceLabel: string | null
+  unitPriceLabel: string | null,
+  priceScopeId: string = SCOPE_MERCADONA
 ): ProductOffer => ({
   price,
   currency: 'EUR',
@@ -155,8 +164,24 @@ const offer = (
   observedAt: new Date('2026-09-01T06:00:00.000Z'),
   sourceKind: 'OFFICIAL_WEB',
   stale: false,
-  priceScopeId: SCOPE_MERCADONA,
+  priceScopeId,
 });
+
+/**
+ * Every scope's offer, cheapest first, and the cheapest of them again.
+ *
+ * The pair backend `0109` answers with, built here out of one list so the two cannot
+ * disagree: `offer` is the first entry by construction rather than a second literal
+ * somebody has to keep in step with the first.
+ */
+const priced = (
+  ...offers: readonly ProductOffer[]
+): Pick<BasketProduct, 'offer' | 'offers'> => {
+  const sorted = [...offers].sort(
+    (left, right) => (left.price ?? Infinity) - (right.price ?? Infinity)
+  );
+  return { offer: sorted[0] ?? null, offers: sorted };
+};
 
 const PRODUCTS: readonly BasketProduct[] = [
   {
@@ -168,7 +193,12 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Hacendado',
     size: 1,
     unit: 'LITER',
-    offer: offer(0.95, 0.95, 'EUR/L'),
+    // Dearer at Dia, so the Mercadona view draws no mark and the Dia view does.
+    ...priced(
+      offer(0.95, 0.95, 'EUR/L'),
+      offer(1.05, 1.05, 'EUR/L', SCOPE_DIA)
+    ),
+    categories: ['DAIRY'],
   },
   {
     id: 'item-milk-pascual',
@@ -176,7 +206,12 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Pascual',
     size: 1,
     unit: 'LITER',
-    offer: offer(0.89, 0.89, 'EUR/L'),
+    // Cheaper at Dia, which is the "cheaper elsewhere" mark on the Mercadona view.
+    ...priced(
+      offer(0.89, 0.89, 'EUR/L'),
+      offer(0.79, 0.79, 'EUR/L', SCOPE_DIA)
+    ),
+    categories: ['DAIRY'],
   },
   {
     id: 'item-milk-central',
@@ -187,7 +222,9 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Central Lechera Asturiana',
     size: 1,
     unit: 'LITER',
-    offer: null,
+    // Priced nowhere, which is `0062` section 5.3's unpriced option among priced ones.
+    ...priced(),
+    categories: ['DAIRY'],
   },
   {
     id: 'item-eggs',
@@ -195,7 +232,9 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Hacendado',
     size: 12,
     unit: 'UNIT',
-    offer: offer(2.85, 0.24, 'EUR/ud'),
+    // Mercadona alone, so the Dia view sinks this line and says where it is sold.
+    ...priced(offer(2.85, 0.24, 'EUR/ud')),
+    categories: ['DAIRY'],
   },
 ];
 
@@ -211,6 +250,26 @@ const SCOPES: readonly BasketPriceScope[] = [
         address: 'Ronda de los Tejares 32',
         city: 'Córdoba',
         postalCode: '14008',
+      },
+      {
+        id: 'loc-barcelona',
+        label: null,
+        address: 'Avenida de Barcelona 4',
+        city: 'Córdoba',
+        postalCode: '14001',
+      },
+    ],
+  },
+  {
+    priceScopeId: SCOPE_DIA,
+    supermarketName: { en: 'Dia', es: 'Dia' },
+    locations: [
+      {
+        id: 'loc-dia-victoria',
+        label: null,
+        address: 'Paseo de la Victoria 21',
+        city: 'Córdoba',
+        postalCode: '14004',
       },
     ],
   },
@@ -510,6 +569,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-1',
           quantity: 2,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
         {
           id: 'o-2',
@@ -517,6 +579,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-groceries',
           lineId: 'zl-2',
           quantity: 1,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -542,6 +607,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-3',
           quantity: 12,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -568,6 +636,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-4',
           quantity: 1,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -1009,6 +1080,9 @@ export class BasketMemory implements BasketServiceI {
       listId: body.listId,
       lineId: zoneLineId,
       quantity: wanted,
+      // Whatever this list had already bought, which a raise never changes: the
+      // read recomputes it from the facts, and this is the shape's own default.
+      settled: this._facts(originId).settledHere,
     };
 
     const kept =
@@ -1710,9 +1784,25 @@ export class BasketMemory implements BasketServiceI {
    * Deleting the key rather than nulling it, because that is what the server
    * does and the difference is what the screen branches on.
    */
+  /**
+   * One line as this reader gets it: origins carrying their own settled count, or
+   * no origins at all.
+   *
+   * `settled` per origin is what backend `0109` section 4 added to the read, and this
+   * fake models it the way that plan describes: the number is read off the
+   * settlement facts rather than stored twice, so the read and `setOriginSettled`
+   * cannot disagree about what a household has got. It rides on `origins`, so
+   * stripping those takes it with them and the redaction stays one statement.
+   */
   private _project(line: BasketLine): BasketLine {
     if (this.seesZoneData) {
-      return line;
+      return {
+        ...line,
+        origins: (line.origins ?? []).map((origin) => ({
+          ...origin,
+          settled: this._facts(origin.id).settledHere,
+        })),
+      };
     }
     // `targetListId` goes with `origins`, for the same reason: which household
     // list a line was sent to is a household this reader may not be told about. It

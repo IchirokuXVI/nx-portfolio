@@ -367,8 +367,21 @@ export interface SupermarketView {
 export interface SupermarketLocationView {
   id: string;
   supermarketId: string;
-  /** The scope whose prices this store sells at (plan 0038, section 5.1). */
+  /**
+   * The most specific scope this store sells at: the first entry of
+   * {@link priceScopeIds}.
+   *
+   * Kept singular beside the stack because it is what a scoped read is handed
+   * (plan 0105, section 4): that scope's materialized rows already answer for
+   * the whole stack, so quoting from it is quoting what this till charges.
+   */
   priceScopeId: string;
+  /**
+   * Every scope this store sells at, most specific first (plan 0105, section
+   * 3). One entry until a chain declares more than one tier, which is the state
+   * every shop is in before plan 0108.
+   */
+  priceScopeIds: string[];
   label: LocalizedText | null;
   address: string | null;
   city: string | null;
@@ -484,6 +497,17 @@ export interface PriceScopeView {
    */
   externalKey: string | null;
   label: LocalizedText | null;
+  /**
+   * How specific this scope is (plan 0105, section 2.1). Lower is more specific,
+   * and within one shop the most specific scope that has a price for a product
+   * is the price that shop charges.
+   *
+   * An integer rather than a position in {@link PriceScopeKind}, so a tier
+   * nobody anticipated is a number rather than a migration. The defaults are
+   * {@link DEFAULT_SCOPE_PRIORITY}; a client shows a label for the band and
+   * never the number.
+   */
+  priority: number;
 }
 
 /**
@@ -565,6 +589,22 @@ export interface ItemView {
    * no price to show.
    */
   bestOffer?: ItemOfferView | null;
+  /**
+   * What **every** scope charges for this product, cheapest first (plan 0109,
+   * section 2).
+   *
+   * Present only when the request asked for `all`, and absent on every other
+   * read, which is what lets the one view every catalog read answers with carry
+   * both answers rather than forking a second one. {@link bestOffer} is this
+   * array's first entry whenever there is one, because the two are filled from
+   * the same rows and so cannot disagree.
+   *
+   * **A scope absent from it does not list the product.** A row saying the
+   * product is unavailable is excluded exactly as it is from `bestOffer`, so
+   * there is no third state between "cheapest here" and "not sold here" for a
+   * client to draw.
+   */
+  offers?: ItemOfferView[];
 }
 
 /**
@@ -824,8 +864,17 @@ export interface CreateSupermarketLocationRequest extends AdminCredential {
    * Optional: a location with no scope named is given its chain's STORE scope for
    * this location, created on the spot, so hand entered supermarkets keep working
    * exactly as they did before scopes existed.
+   *
+   * A shorthand for a {@link priceScopeIds} of one. Naming both is a conflict
+   * rather than a merge, because a caller that stated the stack twice does not
+   * agree with itself.
    */
   priceScopeId?: string;
+  /**
+   * Every scope the shop sells at (plan 0105, section 3). Order is not
+   * significant: the stack is ranked by each scope's own `priority`.
+   */
+  priceScopeIds?: string[];
   label?: LocalizedText | null;
   address?: string | null;
   city?: string | null;
@@ -858,7 +907,10 @@ export interface CreateSupermarketLocationRequest extends AdminCredential {
 
 export interface UpdateSupermarketLocationRequest extends AdminCredential {
   supermarketLocationId: string;
+  /** A shorthand for a {@link priceScopeIds} of one. Naming both is a conflict. */
   priceScopeId?: string;
+  /** The shop's whole stack, replacing what it held (plan 0105, section 3). */
+  priceScopeIds?: string[];
   label?: LocalizedText | null;
   address?: string | null;
   city?: string | null;
@@ -1095,6 +1147,18 @@ export interface GetItemsRequest {
    * rather than this one's exception.
    */
   priceScopeIds?: string[];
+  /**
+   * How much of the pricing to attach (plan 0109, section 2).
+   *
+   * `best` is the default and is what every caller received before that plan:
+   * one offer per item, the cheapest across the scopes, on `bestOffer`. `all`
+   * adds {@link ItemView.offers}, every scope's offer for the item, and leaves
+   * `bestOffer` exactly as it was.
+   *
+   * Read only when {@link priceScopeIds} names a scope, on the reasoning that
+   * field already states: a lookup that prices nothing has no offers to list.
+   */
+  offers?: 'best' | 'all';
 }
 
 /**
@@ -1455,6 +1519,11 @@ export interface CreatePriceScopeRequest extends AdminCredential {
   kind: PriceScopeKind;
   externalKey?: string | null;
   label?: LocalizedText | null;
+  /**
+   * How specific the scope is. Absent takes {@link DEFAULT_SCOPE_PRIORITY} for
+   * the kind, which is what lets every existing caller stay as it is.
+   */
+  priority?: number;
 }
 
 export interface UpdatePriceScopeRequest extends AdminCredential {
@@ -1462,6 +1531,12 @@ export interface UpdatePriceScopeRequest extends AdminCredential {
   kind?: PriceScopeKind;
   externalKey?: string | null;
   label?: LocalizedText | null;
+  /**
+   * Moving a scope re-ranks every shop that holds it, so this is a deliberate
+   * act and never a side effect of changing the kind: a kind changed with no
+   * priority beside it leaves the number where it was (plan 0105, section 2.1).
+   */
+  priority?: number;
 }
 
 export interface PriceScopeIdRequest extends AdminCredential {
@@ -1532,6 +1607,29 @@ export interface ResolvedScopeView {
   origin: ScopeOrigin;
   /** True exactly when `origin` is `CHAIN_DEFAULT`: prices are for elsewhere. */
   approximate: boolean;
+  /**
+   * The shop this scope was reached through, or null off rung one (plan 0105,
+   * section 5). Rungs two and three are about a chain with no shop here, so
+   * there is no shop to name.
+   */
+  supermarketLocationId: string | null;
+  /**
+   * The scope's own `priority`, so a reader can see the shop's stack ranked
+   * without a second read.
+   */
+  priority: number;
+  /**
+   * Whether this is the scope a scoped read should quote for its shop: the most
+   * specific of that shop's stack (plan 0105, section 4).
+   *
+   * False for the less specific scopes of the same shop, which are in `scopes`
+   * so the stack is visible and are **not** in {@link
+   * ResolvedScopesView.priceScopeIds}. Leaving them in would put a shop's own
+   * national fallback into the cheapest-of comparison, and a national price
+   * that undercuts the regional one the shop actually charges would be quoted
+   * from a till that will not ring it up.
+   */
+  quoted: boolean;
 }
 
 /**
@@ -1548,8 +1646,18 @@ export interface PostalCodeCoverageView {
 
 /** What a place resolves to today. */
 export interface ResolvedScopesView {
-  /** The union, ready to hand to a scoped read. Order is not significant. */
+  /**
+   * Ready to hand to a scoped read. Order is not significant.
+   *
+   * The union over shops of the one scope each shop is quoted from, plus
+   * whatever rungs two and three added, which is exactly the entries of
+   * {@link scopes} whose `quoted` is true (plan 0105, section 4). A shop's less
+   * specific scopes are deliberately absent: that shop's quoted scope already
+   * answers for its whole stack, and including them would compare a shop
+   * against itself.
+   */
   priceScopeIds: string[];
+  /** Every scope reached, including the less specific tiers of a shop's stack. */
   scopes: ResolvedScopeView[];
   /** One entry per postal code asked about, in the order they were given. */
   coverage: PostalCodeCoverageView[];

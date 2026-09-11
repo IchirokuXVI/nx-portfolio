@@ -717,6 +717,9 @@ export class HarvestMemory implements HarvestServiceI {
       if (input.enabled !== undefined) {
         existing.enabled = input.enabled;
       }
+      if (input.autoImportPlaces !== undefined) {
+        existing.autoImportPlaces = input.autoImportPlaces;
+      }
       return { ...existing };
     }
 
@@ -725,6 +728,9 @@ export class HarvestMemory implements HarvestServiceI {
       supermarketId,
       adapterKey: input.adapterKey,
       enabled: input.enabled ?? false,
+      // Untrusted, like `enabled`: describing a chain says nothing about
+      // whether its shops may reach the catalog unreviewed.
+      autoImportPlaces: input.autoImportPlaces ?? false,
       config: input.config ?? {},
       workers: input.workers ?? 1,
       maxRequestsPerSecond: input.maxRequestsPerSecond ?? 1,
@@ -749,6 +755,18 @@ export class HarvestMemory implements HarvestServiceI {
 
     source.enabled = enabled;
     return { ...source };
+  }
+
+  async deleteSource(supermarketId: string): Promise<{ id: string }> {
+    const at = this._sources.findIndex(
+      (candidate) => candidate.supermarketId === supermarketId
+    );
+    if (at === -1) {
+      throw notFound();
+    }
+
+    const [removed] = this._sources.splice(at, 1);
+    return { id: removed.id };
   }
 
   /**

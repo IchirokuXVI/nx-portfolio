@@ -34,7 +34,7 @@ import {
   schemaId,
   string,
 } from '../builders';
-import { adminCredentialProperties } from '../common.schemas';
+import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
 import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
 
 /**
@@ -156,6 +156,7 @@ const supermarketSourceView = object(
     supermarketId: nonEmptyString(),
     adapterKey: ref(HARVEST_SCHEMA_IDS.adapterKey),
     enabled: boolean(),
+    autoImportPlaces: boolean(),
     config: freeObject(),
     workers: integer({ minimum: 1 }),
     maxRequestsPerSecond: { type: 'number', exclusiveMinimum: 0 },
@@ -168,6 +169,7 @@ const supermarketSourceView = object(
     'supermarketId',
     'adapterKey',
     'enabled',
+    'autoImportPlaces',
     'config',
     'workers',
     'maxRequestsPerSecond',
@@ -649,10 +651,18 @@ const spawnRunRequest = object(
     mode: ref(HARVEST_SCHEMA_IDS.harvestRunMode),
     supermarketId: string(),
     priceScopeId: string(),
+    // The scopes a Mercadona walk covers, one warehouse each (plan 0108,
+    // section 2). The warehouse is the scope's own `externalKey`, so the run
+    // cannot walk one warehouse and label its prices with another.
+    priceScopeIds: array(string()),
     postalCode: string(),
     country: string(),
     radiusMetres: integer({ minimum: 1 }),
     brandKeys: array(string()),
+    // Restrict a store discovery to the shops in these postal codes, matched
+    // on the shop's own code and never as a radius (plan 0106, section 4).
+    // Empty and absent are the same thing, which is every shop.
+    postalCodes: array(string()),
     // What observed the products in a FILE_IMPORT's document, which is what its
     // rows and its prices are stamped with (plan 0086, section 6.2). Not what
     // the upload is: a re-imported Mercadona walk stamps OFFICIAL_API.
@@ -1026,7 +1036,7 @@ const discoveryRequestIdRequest = object(
  * (plan 0103, section 4.1).
  *
  * `const` and not `properties`, because the table itself is the contract. The
- * spawn enforces these four booleans and the back office draws its form from
+ * spawn enforces these facts and the back office draws its form from
  * them, so the document has to carry the answers and not only the question. The
  * value is {@link ADAPTER_CAPABILITIES} itself, so the schema cannot state a
  * capability the backend does not enforce.
@@ -1035,7 +1045,7 @@ const adapterCapabilityTable: JsonSchema = {
   $id: HARVEST_SCHEMA_IDS.adapterCapabilityTable,
   type: 'object',
   description:
-    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.',
+    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes REGION rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.',
   const: ADAPTER_CAPABILITIES,
 };
 
@@ -1221,6 +1231,13 @@ export const harvestMessageContracts: Record<
   [SUPERMARKET_SOURCE_PATTERNS.setEnabled]: {
     request: HARVEST_SCHEMA_IDS.setSourceEnabledRequest,
     response: HARVEST_SCHEMA_IDS.supermarketSourceView,
+  },
+  // The row that is gone, by its own id, which is what every delete here
+  // answers. There is no view to send back: the caller asked for the row not to
+  // exist any more.
+  [SUPERMARKET_SOURCE_PATTERNS.delete]: {
+    request: HARVEST_SCHEMA_IDS.sourceIdRequest,
+    response: COMMON_IDS.idResult,
   },
   [POSTAL_CODE_DISCOVERY_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listDiscoveryRequestsRequest,

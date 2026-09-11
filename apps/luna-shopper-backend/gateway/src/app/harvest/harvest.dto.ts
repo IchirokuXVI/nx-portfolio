@@ -64,7 +64,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`).',
+      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`).',
   })
   @IsOptional()
   @IsUUID()
@@ -73,16 +73,27 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices. A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself.',
+      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead.',
   })
   @IsOptional()
   @IsUUID()
   priceScopeId?: string;
 
   @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    description:
+      'The scopes a `mercadona-api` CATALOG_DISCOVERY covers, one warehouse each, and required and non-empty for one. Each scope’s own `externalKey` is the warehouse the walk fetches, so a run cannot walk one warehouse and label its prices with another. A list and not one id because the detail phase, which is where the eighteen minutes go, is shared across warehouses: six of them cost about 5,300 requests together against 26,298 apart. A scope with no key is refused, and so is one whose priority is outside the band the adapter’s walk may write.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  priceScopeIds?: string[];
+
+  @ApiPropertyOptional({
     maxLength: 16,
     description:
-      'Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8).',
+      'Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8). A chain that names its own shops needs neither, and filters with `postalCodes` instead.',
   })
   @IsOptional()
   @IsString()
@@ -116,6 +127,17 @@ export class SpawnHarvestRunDto {
   @IsArray()
   @IsString({ each: true })
   brandKeys?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Restrict a STORE_DISCOVERY of a chain that publishes its own shop list to the shops in these postal codes. It matches each shop’s own code exactly and is never a radius: the chain states the code, so an exact match is a well posed question where a bounding box is not. An empty list is every shop the chain publishes; the document is one request either way, and what the filter saves is the warehouse lookup per code.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(16, { each: true })
+  postalCodes?: string[];
 
   @ApiPropertyOptional({
     default: false,
@@ -423,10 +445,18 @@ export class UpsertSupermarketSourceDto {
   enabled?: boolean;
 
   @ApiPropertyOptional({
+    description:
+      'Let the shops this chain names enter the catalog without a person looking first. Off by default, and a separate decision from `enabled`: reading the shops of a chain and trusting them are decided at two different times. A shop that is missing a position, its own postal code, a country or a chain still goes to the review queue. A name is not required: many chains publish none, and the address is what identifies a shop.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  autoImportPlaces?: boolean;
+
+  @ApiPropertyOptional({
     type: 'object',
     additionalProperties: true,
     description:
-      'Adapter specific settings. For `mercadona-api` this is where the resolved `warehouse` lives, e.g. `{ "warehouse": "4661" }`.',
+      'Adapter specific settings, such as `carrefour-web`’s `detailBudget`. It no longer holds a warehouse: a Mercadona walk reads each warehouse from the price scope it writes for, so the two cannot disagree (plan 0108).',
   })
   @IsOptional()
   @IsObject()

@@ -7,7 +7,7 @@ import {
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
-import { LessThan, QueryFailedError, Repository } from 'typeorm';
+import { In, LessThan, QueryFailedError, Repository } from 'typeorm';
 import { HarvestRun } from '../entities';
 
 const PG_UNIQUE_VIOLATION = '23505';
@@ -204,12 +204,72 @@ export class HarvestRunStore {
     return qb.getOne();
   }
 
+  /**
+   * Whether this chain has a run in flight, whatever mode it is.
+   *
+   * {@link findActive} answers the same question when it is given a chain, but
+   * it demands a mode it then ignores, and a caller with no mode to give had to
+   * invent one. This one asks what it means.
+   */
+  async findActiveBySupermarket(
+    supermarketId: string
+  ): Promise<HarvestRun | null> {
+    return this.runs.findOne({
+      where: {
+        supermarketId,
+        status: In([HarvestRunStatus.PENDING, HarvestRunStatus.RUNNING]),
+      },
+    });
+  }
+
   async load(runId: string): Promise<HarvestRun> {
     const row = await this.runs.findOne({ where: { id: runId } });
     if (!row) {
       throw new NotFoundException('Harvest run not found');
     }
     return row;
+  }
+
+  /**
+   * When each source last answered one postal code, by the source's own id
+   * (plan 0107, section 2.1).
+   *
+   * **This is where "is that code due" is answered from**, and it is the runs
+   * rather than a second table because a run already records which code it was
+   * about and which source it read. A code the queue holds is asked of three
+   * sources, and asking the question per code would let the first one to answer
+   * silence the other two.
+   *
+   * A run with no source is OpenStreetMap, and it keys under `null` here for
+   * the same reason: it is about a place rather than about a chain, and it has
+   * no `supermarket_sources` row to be named by.
+   *
+   * Only `COMPLETED` counts. A run that failed has not answered anything, and
+   * the queue row's own backoff is what decides when to try it again.
+   */
+  async lastAnsweredBySource(
+    country: string,
+    postalCode: string
+  ): Promise<Map<string | null, Date>> {
+    const rows: Array<{ sourceId: string | null; answeredAt: Date | null }> =
+      await this.runs.query(
+        `SELECT r."sourceId"        AS "sourceId",
+                MAX(r."finishedAt") AS "answeredAt"
+           FROM "harvest_runs" AS r
+          WHERE r."mode" = 'STORE_DISCOVERY'
+            AND r."status" = 'COMPLETED'
+            AND lower(r."input"->>'country') = $1
+            AND r."input"->>'postalCode' = $2
+          GROUP BY r."sourceId"`,
+        [country, postalCode]
+      );
+    const answered = new Map<string | null, Date>();
+    for (const row of rows) {
+      if (row.answeredAt) {
+        answered.set(row.sourceId, new Date(row.answeredAt));
+      }
+    }
+    return answered;
   }
 
   async markRunning(

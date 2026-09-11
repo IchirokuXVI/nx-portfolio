@@ -1,16 +1,22 @@
-import type {
-  ItemOfferView,
-  ItemPriceView,
-  ItemView,
-  LocalizedText,
-  PricePolicyView,
-  PriceScopeView,
-  ProductGroupView,
-  SupermarketItemView,
-  SupermarketLocationItemView,
-  SupermarketLocationView,
-  SupermarketView,
+import {
+  CONTENT_LOCALES,
+  type ContentLocale,
+  type ItemOfferView,
+  type ItemPriceView,
+  type ItemView,
+  type LocalizedText,
+  type PricePolicyView,
+  type PriceScopeView,
+  type ProductGroupView,
+  type SupermarketItemView,
+  type SupermarketLocationItemView,
+  type SupermarketLocationView,
+  type SupermarketView,
 } from '@portfolio/luna-shopper/contracts';
+import {
+  decodeCursor,
+  type SupportedLocale,
+} from '@portfolio/luna-shopper/platform';
 import type {
   Item,
   ItemPrice,
@@ -24,8 +30,28 @@ import type {
 } from '../entities';
 
 /**
- * The sort key for a localized name, in SQL: English, else Spanish, never null
- * (plan 0079, section 3).
+ * The content locales, the caller's first (plan 0111, section 4).
+ *
+ * No language goes first on its own account. A reader of Spanish falls through
+ * Spanish and then English, a reader of English the other way about, and both
+ * still see a row that carries only the other language rather than a blank.
+ *
+ * A supported request locale the catalog writes no content in contributes
+ * nothing and leaves the rest in their declared order, so adding a request
+ * language before the content that goes with it is not a special case here.
+ */
+export function readingOrder(
+  locale: SupportedLocale
+): readonly ContentLocale[] {
+  return [
+    ...CONTENT_LOCALES.filter((l) => l === locale),
+    ...CONTENT_LOCALES.filter((l) => l !== locale),
+  ];
+}
+
+/**
+ * The sort key for a localized name, in SQL: the caller's language, then the
+ * others, never null (plan 0079, section 3; the caller's order is plan 0111).
  *
  * The three admin listings that page by name use it in the `ORDER BY`, in the
  * keyset seek and, through {@link displayName}, in the cursor value, and the
@@ -34,13 +60,67 @@ import type {
  * Spanish only product appear on no page at all, with nothing to say so. Not
  * indexed, and not worth indexing: these are admin listings of a few thousand
  * rows.
+ *
+ * Now that the order depends on the caller, the locale it was built under is a
+ * fourth thing that has to agree, which is why the cursor carries it (section
+ * 5) and a page cut under another language starts over instead of seeking.
+ *
+ * The interpolation is safe and must stay auditable: `locale` is the narrowed
+ * `SupportedLocale` union, and `toSupportedLocale` is the only way into that
+ * type. A locale that reached this function unnarrowed is SQL injection, so
+ * pass what the request context holds and never a request string.
  */
-export const displayNameSql = (alias: string): string =>
-  `coalesce(${alias}.name ->> 'en', ${alias}.name ->> 'es', '')`;
+export const displayNameSql = (
+  alias: string,
+  locale: SupportedLocale
+): string =>
+  `coalesce(${readingOrder(locale)
+    .map((l) => `${alias}.name ->> '${l}'`)
+    .join(', ')}, '')`;
 
 /** The TypeScript half of {@link displayNameSql}: the same rule, for the cursor. */
-export function displayName(name: LocalizedText): string {
-  return name.en ?? name.es ?? '';
+export function displayName(
+  name: LocalizedText,
+  locale: SupportedLocale
+): string {
+  for (const l of readingOrder(locale)) {
+    const value = name[l];
+    if (value != null) {
+      return value;
+    }
+  }
+  return '';
+}
+
+/**
+ * Decodes a listing cursor and discards one that was cut under a different
+ * language (plan 0111, section 5).
+ *
+ * A name ordered page seeks with `(displayNameSql(locale), id) > (value, id)`,
+ * so the value in the token means something only under the locale that produced
+ * it. An operator who switches language halfway down a list would otherwise
+ * page with one language's predicate against the other language's key and get
+ * rows repeated or silently skipped, with nothing on screen to say so.
+ *
+ * Discarding is the whole mechanism, because {@link decodeCursor} already
+ * treats a cursor it cannot use as "start from the beginning" rather than an
+ * error. A restarted page is a visible, harmless outcome; a mismatched seek is
+ * an invisible, wrong one.
+ *
+ * Every order is checked and not just `name`, even though `created` and
+ * `updated` sort by a timestamp no language touches. One token cannot be
+ * half valid, the caller cannot tell which orders are locale sensitive, and the
+ * cost of being uniform is one restarted page on a listing the operator was
+ * about to refetch anyway.
+ */
+export function decodeCursorForLocale<T extends { locale: SupportedLocale }>(
+  cursor: string | null | undefined,
+  locale: SupportedLocale
+): T | undefined {
+  // Cast for the same reason every call site used to: an interface carries no
+  // index signature, so it does not satisfy `decodeCursor`'s constraint.
+  const decoded = decodeCursor(cursor) as T | undefined;
+  return decoded?.locale === locale ? decoded : undefined;
 }
 
 /**
@@ -63,13 +143,21 @@ export function toSupermarketView(row: Supermarket): SupermarketView {
   };
 }
 
+/**
+ * @param priceScopeIds the shop's stack, most specific first (plan 0105,
+ * section 3). Read separately rather than joined, because every caller but
+ * `get` is mapping a page and a to-many join multiplies the rows a `limit`
+ * counts.
+ */
 export function toSupermarketLocationView(
-  row: SupermarketLocation
+  row: SupermarketLocation,
+  priceScopeIds: readonly string[]
 ): SupermarketLocationView {
   return {
     id: row.id,
     supermarketId: row.supermarketId,
-    priceScopeId: row.priceScopeId,
+    priceScopeId: priceScopeIds[0],
+    priceScopeIds: [...priceScopeIds],
     label: row.label,
     address: row.address,
     city: row.city,
@@ -90,6 +178,7 @@ export function toPriceScopeView(row: PriceScope): PriceScopeView {
     kind: row.kind,
     externalKey: row.externalKey,
     label: row.label,
+    priority: row.priority,
   };
 }
 

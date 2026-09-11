@@ -1,0 +1,253 @@
+<lib-sheet-shell
+  (dismiss)="close()"
+  [hasFooter]="true"
+  labelledBy="filter-title"
+>
+  <!--
+    Reset sits beside the title rather than in the footer. It is not the counterweight
+    to a commit, because there is nothing to commit: every control here has already
+    applied. It is before the first group in the tab order, which is where a keyboard
+    reader expects a control that undoes the whole panel.
+  -->
+  <div class="head">
+    <h2 class="title" id="filter-title">{{ 'basket.view.title' | rokuT }}</h2>
+    <button (click)="reset()" class="reset" type="button">
+      {{ 'basket.view.reset' | rokuT }}
+    </button>
+  </div>
+
+  <!--
+    Real radios in a real fieldset, so a screen reader hears "Order" before "The way
+    you shop", and never a segmented control: `0030` section 6.1 made that call for
+    independent options and `0024` for a choice that is not a decision, and both
+    groups here are the second kind. The label is the tap target in both.
+  -->
+  <fieldset class="group">
+    <legend class="legend">{{ 'basket.view.order.legend' | rokuT }}</legend>
+
+    <label [class.picked]="order() === 'shop'" class="choice">
+      <input
+        (change)="setOrder('shop')"
+        [checked]="order() === 'shop'"
+        class="control"
+        name="basket-order"
+        type="radio"
+        value="shop"
+      />
+      <span class="choice-body">
+        <span class="choice-title">
+          {{ 'basket.view.order.shop' | rokuT }}
+        </span>
+        <!--
+          The one hint in this sheet, and it earns its line: "the way you shop" is a
+          claim about the shopper that nobody would guess the server computed from
+          their own past trips (backend 0110).
+        -->
+        <span class="choice-hint">
+          {{ 'basket.view.order.shopHint' | rokuT }}
+        </span>
+      </span>
+    </label>
+
+    <label [class.picked]="order() === 'alpha'" class="choice">
+      <input
+        (change)="setOrder('alpha')"
+        [checked]="order() === 'alpha'"
+        class="control"
+        name="basket-order"
+        type="radio"
+        value="alpha"
+      />
+      <span class="choice-title">{{ 'basket.view.order.alpha' | rokuT }}</span>
+    </label>
+  </fieldset>
+
+  <fieldset class="group">
+    <legend class="legend">{{ 'basket.view.group.legend' | rokuT }}</legend>
+
+    <label [class.picked]="grouping() === 'none'" class="choice">
+      <input
+        (change)="setGrouping('none')"
+        [checked]="grouping() === 'none'"
+        class="control"
+        name="basket-grouping"
+        type="radio"
+        value="none"
+      />
+      <span class="choice-title">{{ 'basket.view.group.none' | rokuT }}</span>
+    </label>
+
+    <label [class.picked]="grouping() === 'category'" class="choice">
+      <input
+        (change)="setGrouping('category')"
+        [checked]="grouping() === 'category'"
+        class="control"
+        name="basket-grouping"
+        type="radio"
+        value="category"
+      />
+      <span class="choice-title">
+        {{ 'basket.view.group.category' | rokuT }}
+      </span>
+    </label>
+
+    <!--
+      Drawn only for a reader who has lists, and drawn from the data rather than from
+      a flag: `sourceLists` is empty for a guest, which is the same emptiness that
+      keeps the LISTS section below out of their sheet. One question, so the two
+      cannot disagree (section 4).
+    -->
+    @if (hasLists()) {
+      <label [class.picked]="grouping() === 'list'" class="choice">
+        <input
+          (change)="setGrouping('list')"
+          [checked]="grouping() === 'list'"
+          class="control"
+          name="basket-grouping"
+          type="radio"
+          value="list"
+        />
+        <span class="choice-title">{{ 'basket.view.group.list' | rokuT }}</span>
+        <span class="choice-note">
+          {{ 'basket.view.group.listHint' | rokuT }}
+        </span>
+      </label>
+    }
+  </fieldset>
+
+  <!--
+    Which shop's prices the rows show (velista `0078`, section 3).
+
+    Absent for a basket with no price scopes, drawn from the data exactly as the
+    LISTS section below is: a run scoped by hand, a profile since deleted or a
+    gateway that could not price the read has nothing to choose between, and a
+    control that cannot do anything is an invitation `0038` section 2.1 will not
+    draw.
+  -->
+  @if (hasShops()) {
+    <fieldset class="group shops">
+      <legend class="legend">{{ 'basket.view.shop.legend' | rokuT }}</legend>
+
+      <label [class.picked]="!oneShop()" class="choice">
+        <input
+          (change)="setAnyShop()"
+          [checked]="!oneShop()"
+          class="control"
+          name="basket-shop"
+          type="radio"
+        />
+        <span class="choice-title">
+          @if (ownShops()) {
+            {{ 'basket.view.shop.any' | rokuT }}
+          } @else {
+            {{ 'basket.view.shop.anyGuest' | rokuT }}
+          }
+        </span>
+        <span class="choice-note">{{
+          'basket.view.shop.anyHint' | rokuT
+        }}</span>
+      </label>
+
+      <!--
+        The second radio is the shop. Before one has been chosen it is **live, and
+        it opens the picker**: a radio that did nothing when tapped read as broken,
+        and the tap on it was already the answer to "which shop". It stays
+        unchecked until the picker answers, so the group never claims a shop it
+        does not have.
+
+        The button beside it is a text button and its accessible name says which
+        section it belongs to, because "Change" alone is four other things on this
+        screen.
+      -->
+      <div [class.picked]="oneShop()" class="choice">
+        <!--
+          A `div` holding a label and a button, where every other row here is one
+          label: a label wrapping a button would make the button's tap toggle the
+          radio too, which is the one thing Change must not do.
+        -->
+        <label class="choice-pick">
+          <input
+            (change)="setOneShop($event)"
+            [checked]="oneShop()"
+            class="control"
+            name="basket-shop"
+            type="radio"
+          />
+
+          @if (shopRow(); as shop) {
+            <span class="choice-body">
+              <span class="choice-title">{{ shop.chain }}</span>
+              @if (shop.shop !== null) {
+                <span class="choice-hint">{{ shop.shop }}</span>
+              }
+            </span>
+          } @else {
+            <span class="choice-title is-muted">
+              {{ 'basket.view.shop.none' | rokuT }}
+            </span>
+          }
+        </label>
+
+        @if (shopRow() === null) {
+          <button
+            (click)="openPicker()"
+            [attr.aria-label]="'basket.view.shop.chooseLabel' | rokuT"
+            class="pick"
+            type="button"
+          >
+            {{ 'basket.view.shop.choose' | rokuT }}
+          </button>
+        } @else {
+          <button
+            (click)="openPicker()"
+            [attr.aria-label]="'basket.view.shop.changeLabel' | rokuT"
+            class="pick"
+            type="button"
+          >
+            {{ 'basket.view.shop.change' | rokuT }}
+          </button>
+        }
+      </div>
+    </fieldset>
+  }
+
+  <!--
+    The lists this basket drew from (section 6). Checkboxes, because the options are
+    independent, and the trailing number is how many of the basket's lines reach each
+    one, which is what makes a list worth keeping or dropping.
+
+    The group name the mock prints under each list is **not drawn**: the basket read
+    carries `listNames` and no zone names, and the only shape that has one is the per
+    line origin detail, which costs a request per line. The row's own "from" caption
+    names the list alone for the same reason, so the sheet and the rows agree.
+  -->
+  @if (hasLists()) {
+    <fieldset class="group">
+      <legend class="legend">{{ 'basket.view.lists.legend' | rokuT }}</legend>
+
+      @for (source of sourceLists(); track source.id) {
+        <label [class.picked]="keptLists().has(source.id)" class="choice">
+          <input
+            (change)="toggleList(source.id, $event)"
+            [checked]="keptLists().has(source.id)"
+            class="control"
+            type="checkbox"
+          />
+          <span class="choice-title">{{ source.name }}</span>
+          <span class="choice-count">{{ source.lines }}</span>
+        </label>
+      }
+    </fieldset>
+  }
+
+  <!--
+    One button, and it is a way out rather than a commit: what was tapped has already
+    applied. It says the number so that leaving the sheet is not a guess about what is
+    behind it.
+  -->
+  <div class="footer" sheetFooter>
+    <button (click)="close()" class="confirm" type="button">
+      {{ 'basket.view.show' | rokuT: { count: visibleCount() } }}
+    </button>
+  </div>
+</lib-sheet-shell>

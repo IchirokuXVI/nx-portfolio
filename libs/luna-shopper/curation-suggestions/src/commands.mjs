@@ -50,6 +50,17 @@ export const MAX_OPERATIONS = 1000;
 /** How many rows one queue page holds. The plan asks for 10 to 20. */
 const QUEUE_PAGE = 20;
 
+/**
+ * How wide a batch may be, whatever `--count` asks for (plan 0002).
+ *
+ * A batch is composed out of the queue page the walk is standing on and never
+ * across it, because `decide` finds its entry on that same page: a row taken
+ * from the page after it would be handed out and then be undecidable. The page
+ * is twenty rows and a batch is four, so the cap shortens a batch only where a
+ * page is nearly worked through, which costs one narrow batch per twenty rows.
+ */
+const MAX_BATCH = QUEUE_PAGE;
+
 /** The default session factory. Every test passes its own. */
 function defaultMakeSession(options) {
   return createAdminSession(options);
@@ -158,6 +169,12 @@ export async function start({
   return {
     runId,
     remaining: total,
+    // How many rows `next --count` will hand out at once. The caller asks for
+    // no more than this, and a decider that answers nothing here is walked one
+    // row at a time, which is what keeps the two implementations independent:
+    // `curation-groups` has the same shape and probably the same opportunity,
+    // and nobody has measured how often two of its rows collide.
+    batches: MAX_BATCH,
     prompt: buildSystemPrompt({
       categories: vocabularies.categories,
       units: vocabularies.units,
@@ -251,20 +268,107 @@ export async function collectCandidates({
 }
 
 // ---------------------------------------------------------------------------
+// Composition, and the candidate set a row was handed (plan 0002)
+// ---------------------------------------------------------------------------
+
+/**
+ * The rows of one batch: up to `width`, pairwise distinct normalized names.
+ *
+ * The blind spot of a batch is only the rows earlier in that same batch, so the
+ * whole of composition is a set of names. Nothing cleverer, on purpose. The
+ * measurement over the real Mercadona assortment says the identical name case
+ * is three quarters of the collisions, and a token overlap rule would be
+ * guessing at a search whose own notes record that the Spanish stemmer
+ * conflates `salado` into `sal`. Overlap composes a batch acceptably and is not
+ * fit to be a correctness check; the `decide` time lookup is that check.
+ *
+ * A row that collides is left where it is rather than dropped. It is the first
+ * undecided row on the page next time, which makes it the first row of a later
+ * batch, which is where the sequential walk would have shown it the earlier
+ * creation anyway.
+ */
+export function composeBatch(rows, width) {
+  const names = new Set();
+  const chosen = [];
+  for (const row of rows) {
+    if (chosen.length >= width) {
+      break;
+    }
+    const key = normalizeName(row?.name);
+    if (names.has(key)) {
+      continue;
+    }
+    names.add(key);
+    chosen.push(row);
+  }
+  return chosen;
+}
+
+/**
+ * What a packet's candidates are, as identities rather than as bytes.
+ *
+ * A candidate is named by its `itemId` when the main catalog holds it and by
+ * its `ref` when this run created it, and those two are the only things a
+ * decision can name, so they are the only things a change in the set can
+ * matter through. Sorted and deduplicated, so a packet that differs only in the
+ * order its candidates were merged in is the same set and not a stale one.
+ *
+ * The EAN match is folded in because it comes from a lookup of its own: a
+ * barcode's owner is a candidate the model was shown whether or not the text
+ * search also surfaced it.
+ */
+export function candidateIdentities({ candidates, eanMatch } = {}) {
+  const ids = new Set();
+  for (const candidate of [
+    ...(candidates ?? []),
+    ...(eanMatch ? [eanMatch] : []),
+  ]) {
+    const id = candidate?.itemId ?? candidate?.ref ?? null;
+    if (id) {
+      ids.add(id);
+    }
+  }
+  return [...ids].sort();
+}
+
+/** Two candidate sets, compared as sets. */
+export function sameCandidates(before, after) {
+  if (!Array.isArray(before) || !Array.isArray(after)) {
+    return false;
+  }
+  return (
+    before.length === after.length &&
+    before.every((id, index) => id === after[index])
+  );
+}
+
+// ---------------------------------------------------------------------------
 // next
 // ---------------------------------------------------------------------------
 
 /**
- * Walks the queue to the first row this run has not decided, and answers it.
+ * Walks the queue to the rows this run has not decided, and answers them.
  *
  * The page is re-read on every call rather than cached across invocations. That
  * costs one request per row, which is nothing beside a model call, and it buys
  * two things: the row is as fresh as the answer about to be recorded against
  * it, and a `next` repeated after a crash answers the same row rather than
  * skipping one.
+ *
+ * **`count` changes the shape of the answer and nothing else.** Absent, this is
+ * the one row it has always been. Given, the answer is `{ rows, remaining }`
+ * with up to `count` rows composed by `composeBatch`, which is what lets the
+ * caller ask a model about several of them at once (plan 0002).
+ *
+ * Either way the candidate set each row was handed is recorded in the run
+ * directory, because `decide` has to know what the model was shown before it
+ * records what the model answered. Only the current batch is kept: a row is
+ * dropped from the record when it is decided, so the file stays the size of one
+ * batch rather than the size of the run.
  */
 export async function next({
   runDir,
+  count = null,
   mainPassword,
   makeSession = defaultMakeSession,
   gateways = null,
@@ -273,10 +377,11 @@ export async function next({
   const { main, rehearsal } =
     gateways ?? openGateways({ state, makeSession, mainPassword });
   const decided = new Set(state.decidedIds ?? []);
+  const width =
+    count === null ? 1 : Math.max(1, Math.min(Math.trunc(count), MAX_BATCH));
 
   let chainIndex = state.chainIndex ?? 0;
   const chains = state.chains.map((chain) => ({ ...chain }));
-  let moved = false;
 
   while (chainIndex < chains.length) {
     const chain = chains[chainIndex];
@@ -285,32 +390,35 @@ export async function next({
       limit: QUEUE_PAGE,
     });
     const items = page?.items ?? [];
-    const row = items.find((item) => !decided.has(item.id));
+    const undecided = items.filter((item) => !decided.has(item.id));
 
-    if (row) {
-      if (moved) {
-        writeState(runDir, { ...state, chains, chainIndex });
+    if (undecided.length > 0) {
+      const handouts = {};
+      const rows = [];
+      // Sequentially, because every one of these is a read against a gateway on
+      // the same machine and the batch exists to save model time, not this.
+      for (const row of composeBatch(undecided, width)) {
+        const { candidates, eanMatch } = await collectCandidates({
+          entry: row,
+          main,
+          rehearsal,
+          createdRefs: state.createdRefs,
+        });
+        const packet = buildEntryPacket({
+          entry: row,
+          supermarket: supermarketOf(state, row),
+          candidates,
+          eanMatch,
+        });
+        handouts[row.id] = candidateIdentities(packet);
+        rows.push(packet);
       }
-      const supermarket = supermarketOf(state, row);
-      const { candidates, eanMatch } = await collectCandidates({
-        entry: row,
-        main,
-        rehearsal,
-        createdRefs: state.createdRefs,
-      });
-      const packet = buildEntryPacket({
-        entry: row,
-        supermarket,
-        candidates,
-        eanMatch,
-      });
-      return {
-        ...packet,
-        remaining: Math.max(0, (state.total ?? 0) - decided.size),
-      };
+
+      writeState(runDir, { ...state, chains, chainIndex, handouts });
+      const remaining = Math.max(0, (state.total ?? 0) - decided.size);
+      return count === null ? { ...rows[0], remaining } : { rows, remaining };
     }
 
-    moved = true;
     if (page?.nextCursor) {
       chain.cursor = page.nextCursor;
     } else {
@@ -319,8 +427,10 @@ export async function next({
     }
   }
 
-  writeState(runDir, { ...state, chains, chainIndex });
-  return { done: true, remaining: 0 };
+  writeState(runDir, { ...state, chains, chainIndex, handouts: {} });
+  return count === null
+    ? { done: true, remaining: 0 }
+    : { rows: [], remaining: 0, done: true };
 }
 
 /**
@@ -374,6 +484,14 @@ function supermarketOf(state, entry) {
  *
  * REVIEW writes nothing anywhere. Only a CREATE that survived every validator
  * reaches the rehearsal catalog, and nothing ever reaches the main one.
+ *
+ * **The question is checked before the answer is judged** (plan 0002). The two
+ * lookups are re-run here, where the creations of the rows decided before this
+ * one already exist, and compared against the set `next` handed out. A set that
+ * changed means the model was asked the wrong question, so nothing is written
+ * and the answer is `{ stale: true, packet }` carrying the question it should
+ * have been asked. That is a lookup and not a prediction, which is why it runs
+ * here rather than while the batch was being composed.
  */
 export async function decide({
   runDir,
@@ -393,8 +511,52 @@ export async function decide({
   const { main, rehearsal } =
     gateways ?? openGateways({ state, makeSession, mainPassword });
   const decided = new Set(state.decidedIds ?? []);
+  const remainingNow = () => Math.max(0, (state.total ?? 0) - decided.size);
   const remainingAfter = () =>
     Math.max(0, (state.total ?? 0) - decided.size - 1);
+
+  // The set `next` handed this row out with, when a `next` handed it out at
+  // all. Driven by hand there is none, and then there is nothing to compare
+  // against and nothing that could have gone stale: the caller saw whatever it
+  // saw. Only a row this run handed out can be checked.
+  const handout = (state.handouts ?? {})[entryId] ?? null;
+
+  let entry = handout ? await findEntry({ main, state, entryId }) : null;
+  let collected = null;
+  if (entry) {
+    collected = await collectCandidates({
+      entry,
+      main,
+      rehearsal,
+      createdRefs: state.createdRefs,
+    });
+    const now = candidateIdentities(collected);
+    if (!sameCandidates(handout, now)) {
+      const packet = buildEntryPacket({
+        entry,
+        supermarket: supermarketOf(state, entry),
+        candidates: collected.candidates,
+        eanMatch: collected.eanMatch,
+      });
+      // The refreshed set becomes the handout, so the answer to the refreshed
+      // question is judged against the question that was asked. Without that
+      // the re-ask would go stale again on the same lookup, forever.
+      writeState(runDir, {
+        ...state,
+        handouts: { ...(state.handouts ?? {}), [entryId]: now },
+        reasks: (state.reasks ?? 0) + 1,
+      });
+      return {
+        accepted: false,
+        retryable: false,
+        stale: true,
+        decision: null,
+        issues: [],
+        packet: { ...packet, remaining: remainingNow() },
+        remaining: remainingNow(),
+      };
+    }
+  }
 
   const shape = checkDecisionShape(input);
   if (!shape.ok && !final) {
@@ -403,11 +565,11 @@ export async function decide({
       retryable: true,
       decision: null,
       issues: [issue('MODEL_OUTPUT_INVALID', shape.error)],
-      remaining: Math.max(0, (state.total ?? 0) - decided.size),
+      remaining: remainingNow(),
     };
   }
 
-  const entry = await findEntry({ main, state, entryId });
+  entry = entry ?? (await findEntry({ main, state, entryId }));
   if (!entry) {
     throw new Error(
       `Entry ${entryId} is not on the queue page the walk is standing on. It was decided or rejected elsewhere.`
@@ -451,12 +613,17 @@ export async function decide({
     );
   }
 
-  const { candidates, itemsById, runItems } = await collectCandidates({
-    entry,
-    main,
-    rehearsal,
-    createdRefs: state.createdRefs,
-  });
+  // Collected once. The staleness check above already ran the two lookups when
+  // this row was handed out by a `next`, and re-running them here would be the
+  // same two answers at twice the cost.
+  const { candidates, itemsById, runItems } =
+    collected ??
+    (await collectCandidates({
+      entry,
+      main,
+      rehearsal,
+      createdRefs: state.createdRefs,
+    }));
 
   let linkTarget = null;
   let linkRef = null;
@@ -619,7 +786,12 @@ function record({
     candidateCount,
     decidedAt: new Date().toISOString(),
   };
-  appendDecision(runDir, state, row);
+  // A decided row is never asked again, so the set it was handed is no longer
+  // anything to compare against. Dropping it here keeps the record the size of
+  // one batch instead of the size of the run.
+  const handouts = { ...(state.handouts ?? {}) };
+  delete handouts[entry.id];
+  appendDecision(runDir, { ...state, handouts }, row);
   return {
     accepted: decision !== 'REVIEW',
     retryable: false,
@@ -633,7 +805,14 @@ function record({
 // end
 // ---------------------------------------------------------------------------
 
-/** Counts per decision, every REVIEW with its issues, and the caller's usage. */
+/**
+ * Counts per decision, every REVIEW with its issues, and the caller's usage.
+ *
+ * The re-ask rate is reported beside them (plan 0002), because the 2.6% the
+ * plan predicts is a prediction from one chain's dump and the run is the thing
+ * that knows. A chain that clusters differently says so here rather than in a
+ * table somebody would have to believe.
+ */
 export function end({ runDir, usage = null }) {
   const { state, header, records } = loadRun(runDir);
 
@@ -641,6 +820,13 @@ export function end({ runDir, usage = null }) {
   for (const row of records) {
     counts[row.decision] = (counts[row.decision] ?? 0) + 1;
   }
+
+  const stale = state.reasks ?? 0;
+  const reasks = {
+    stale,
+    decided: records.length,
+    rate: records.length > 0 ? stale / records.length : 0,
+  };
 
   const path = writeReport(runDir, {
     runId: state.runId,
@@ -652,6 +838,7 @@ export function end({ runDir, usage = null }) {
     total: state.total ?? records.length,
     decided: records.length,
     counts,
+    reasks,
     usage,
     reviews: records
       .filter((row) => row.decision === 'REVIEW')
@@ -664,7 +851,7 @@ export function end({ runDir, usage = null }) {
       })),
   });
 
-  return { report: path, counts, decided: records.length };
+  return { report: path, counts, decided: records.length, reasks };
 }
 
 // ---------------------------------------------------------------------------

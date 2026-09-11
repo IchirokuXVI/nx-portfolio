@@ -15,16 +15,20 @@ import { PriceScopeResolver } from './price-scope-resolver';
 
 const CHAIN = '11111111-1111-4111-8111-111111111111';
 
-function build(held: PriceScopeView[] = []) {
+function build(
+  held: PriceScopeView[] = [],
+  adapterKey: string | null = 'lidl-api'
+) {
   const created: Array<{ externalKey: string | null; kind: PriceScopeKind }> =
     [];
   let pages = held;
-  const listPriceScopes = jest.fn(async () => ({
-    items: pages,
-    nextCursor: null,
-  }));
+  // The paging itself is `CatalogClient.listAllPriceScopes`, which two callers
+  // share (plan 0108): this and the spawn that checks the scopes a walk was
+  // given. What is asserted here is that the resolver asks for the chain's
+  // scopes once, however many keys a run declares.
+  const listAllPriceScopes = jest.fn(async () => pages);
   const catalog = {
-    listPriceScopes,
+    listAllPriceScopes,
     createPriceScope: jest.fn(
       async (
         supermarketId: string,
@@ -47,10 +51,10 @@ function build(held: PriceScopeView[] = []) {
   } as unknown as CatalogClient;
 
   return {
-    resolver: new PriceScopeResolver(catalog).forRun(CHAIN),
+    resolver: new PriceScopeResolver(catalog).forRun(CHAIN, adapterKey),
     catalog,
     created,
-    listPriceScopes,
+    listAllPriceScopes,
   };
 }
 
@@ -68,13 +72,42 @@ describe('RunScopeResolver', () => {
     expect(created).toEqual([
       { externalKey: '21', kind: PriceScopeKind.REGION },
     ]);
-    // The source's own name, in both languages, because there is only one and
-    // inventing a translation for it would be worse than repeating it.
+    // The source's own name, written once under the language LIDL prints in
+    // (plan 0111, section 8). It used to be written into both keys, and a copy
+    // is indistinguishable from a translation in the row.
     expect(catalog.createPriceScope).toHaveBeenCalledWith(
       CHAIN,
       PriceScopeKind.REGION,
       '21',
-      { es: 'Huesca', en: 'Huesca' }
+      { es: 'Huesca' }
+    );
+  });
+
+  it('leaves a scope unnamed when the source prints no language we know', async () => {
+    // An adapter with no `printedLocale` has nothing to file the string under,
+    // and guessing a key is the thing plan 0111 removes. The scope is still
+    // created and still prices its shops: only the name an operator reads is
+    // absent, which is already what a declaration with no name produces.
+    const { resolver, catalog } = build([], 'osm-places');
+
+    expect(await resolver.declare(region('21', 'Huesca'))).toBe('scope-21');
+    expect(catalog.createPriceScope).toHaveBeenCalledWith(
+      CHAIN,
+      PriceScopeKind.REGION,
+      '21',
+      null
+    );
+  });
+
+  it('leaves a scope unnamed when the declaration names nothing', async () => {
+    const { resolver, catalog } = build();
+
+    expect(await resolver.declare(region('21', null))).toBe('scope-21');
+    expect(catalog.createPriceScope).toHaveBeenCalledWith(
+      CHAIN,
+      PriceScopeKind.REGION,
+      '21',
+      null
     );
   });
 
@@ -97,7 +130,7 @@ describe('RunScopeResolver', () => {
   });
 
   it('pages the chain once however many keys a run declares', async () => {
-    const { resolver, listPriceScopes } = build();
+    const { resolver, listAllPriceScopes } = build();
 
     await resolver.declare(region('1'));
     await resolver.declare(region('2'));
@@ -105,7 +138,7 @@ describe('RunScopeResolver', () => {
 
     // A walk declares a region once per product priced for it, which for 59
     // regions across 4,000 products is a great many calls. The read is once.
-    expect(listPriceScopes).toHaveBeenCalledTimes(1);
+    expect(listAllPriceScopes).toHaveBeenCalledTimes(1);
     expect(resolver.createdCount).toBe(2);
     expect(resolver.keys).toEqual(['1', '2']);
   });

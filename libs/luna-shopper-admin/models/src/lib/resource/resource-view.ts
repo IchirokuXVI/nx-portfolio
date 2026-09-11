@@ -69,7 +69,15 @@ export interface ResourceRowView<T extends ResourceRow = ResourceRow> {
 export interface RenderOptions {
   /** The interface locale, which decides number and date shapes. */
   readonly locale: string;
-  /** The content locales to prefer, in order, for localized text. */
+  /**
+   * The content locales to prefer, in order, for localized text.
+   *
+   * The operator's reading order since admin plan 0026, which is
+   * `ContentLocaleStore.order()` and no longer the `CONTENT_LOCALES` constant.
+   * It is an order and not a filter: every content locale is in it, so a value
+   * with no text in the chosen language falls through to the one it has and
+   * `missing` still reports the gap.
+   */
   readonly contentLocales: readonly string[];
 }
 
@@ -220,7 +228,7 @@ export function toRowView<T extends ResourceRow>(
 
   return {
     id: idOf(descriptor, row),
-    title: descriptor.title(row),
+    title: descriptor.title(row, options.contentLocales),
     cells,
     row,
   };

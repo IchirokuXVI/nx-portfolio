@@ -6,8 +6,8 @@ import {
   signal,
 } from '@angular/core';
 import {
+  basketLinesProgress,
   basketTakesLines,
-  outstanding,
   type BasketAddLineRequest,
   type BasketLine,
   type BasketLineOrigins,
@@ -18,6 +18,7 @@ import {
   type BasketOriginSettledResult,
   type BasketParticipant,
   type BasketPresenceEntry,
+  type BasketProduct,
   type BasketSettleRequest,
   type BasketSettleResult,
   type BasketShareLink,
@@ -293,6 +294,17 @@ export class BasketStore {
   );
 
   /**
+   * Every product the basket named, by id: the pick of a line and its options.
+   *
+   * Here rather than composed again by each reader, which is what the page and
+   * `BasketViewStore` were both doing: two identities for one map means a row is
+   * redrawn whenever either of them is recomputed for an unrelated reason.
+   */
+  readonly products = computed<ReadonlyMap<string, BasketProduct>>(
+    () => this._basket()?.products ?? new Map()
+  );
+
+  /**
    * Whether this basket still takes lines, which is what draws the composer.
    *
    * False before anything has loaded, which is the safe direction and the same one
@@ -427,27 +439,7 @@ export class BasketStore {
    * done out of twelve" is what somebody in a shop is tracking, and a basket of
    * one line asking for twelve tins would otherwise read as almost finished.
    */
-  readonly progress = computed(() => {
-    const lines = this.lines();
-    const finished = lines.filter((line) => outstanding(line) === 0);
-
-    // **`got` is not `finished`.** A `NOT_AVAILABLE` settle closes a line's
-    // outstanding amount without buying anything, so counting every finished
-    // line as one somebody got would report a shop that had none as a purchase
-    // — the same claim the row's caption is careful not to make.
-    //
-    // A summary view could not tell these apart, because the distinction is per
-    // line. This one can, so it does.
-    const unavailable = finished.filter(
-      (line) => line.lastOutcome === 'NOT_AVAILABLE'
-    ).length;
-
-    return {
-      done: finished.length - unavailable,
-      unavailable,
-      total: lines.length,
-    };
-  });
+  readonly progress = computed(() => basketLinesProgress(this.lines()));
 
   /**
    * Load a basket, deciding first whether this browser may even ask.
@@ -717,6 +709,29 @@ export class BasketStore {
     // last (velista `0069`, section 4).
     this._lastAdded.set(line);
     this._lastSplit.set(null);
+
+    // A line arrives bare, and the products it names do not come with it: the add
+    // answers the line alone and the broadcast carries the same shape, while
+    // `products` is composed once per basket read at the gateway. So a line added
+    // with a product drew "not linked to a product" until the next reload, because
+    // the row could not resolve a pick the map had never been told about. The
+    // basket is re-read, quietly, so the row names its product a moment later.
+    if (this._namesUnknownProducts(line)) {
+      void this.refresh();
+    }
+  }
+
+  /** Whether the line picks or offers a product this basket's map does not hold. */
+  private _namesUnknownProducts(line: BasketLine): boolean {
+    const products = this._basket()?.products;
+    if (products === undefined) {
+      return false;
+    }
+    const named = [...line.optionIds];
+    if (line.pickId !== null) {
+      named.push(line.pickId);
+    }
+    return named.some((id) => !products.has(id));
   }
 
   /**

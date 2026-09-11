@@ -20696,6 +20696,89 @@
         "tags": [
           "admin-harvest"
         ]
+      },
+      "delete": {
+        "operationId": "AdminHarvestSourcesController_remove_v1",
+        "parameters": [
+          {
+            "name": "supermarketId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `supermarketSource.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
       }
     },
     "/v1/admin/harvest/sources/{supermarketId}/enabled": {
@@ -22450,6 +22533,14 @@
             "format": "uuid",
             "description": "The scope this store prices against (plan 0038, section 5.1). Omit it and the store gets a STORE scope of its own, which is exactly how catalog behaved before scopes existed."
           },
+          "priceScopeIds": {
+            "description": "Every scope the shop sells at, most specific winning (plan 0105, section 3). Order is not significant: the stack is ranked by each scope’s own priority. A shorthand for one of these is `priceScopeId`, and naming both is refused rather than merged.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "label": {
             "nullable": true,
             "type": "object",
@@ -22503,6 +22594,14 @@
             "type": "string",
             "format": "uuid",
             "description": "The scope this store prices against (plan 0038, section 5.1). Omit it and the store gets a STORE scope of its own, which is exactly how catalog behaved before scopes existed."
+          },
+          "priceScopeIds": {
+            "description": "Every scope the shop sells at, most specific winning (plan 0105, section 3). Order is not significant: the stack is ranked by each scope’s own priority. A shorthand for one of these is `priceScopeId`, and naming both is refused rather than merged.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "label": {
             "nullable": true,
@@ -23043,6 +23142,11 @@
                 "$ref": "#/components/schemas/LocalizedTextDto"
               }
             ]
+          },
+          "priority": {
+            "type": "number",
+            "minimum": 0,
+            "description": "How specific the scope is (plan 0105, section 2.1). Lower is more specific, and within one shop the most specific scope that has a price for a product is the price that shop charges. Omit it and the scope takes the default for its kind: 100 STORE, 200 POSTAL_CODE, 300 REGION, 1000 NATIONAL. The gaps are what let a tier nobody anticipated be a number rather than a migration."
           }
         },
         "required": [
@@ -23075,6 +23179,11 @@
                 "$ref": "#/components/schemas/LocalizedTextDto"
               }
             ]
+          },
+          "priority": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Move the scope. Left alone when absent, including when the kind changes beside it: moving a scope re-ranks every shop that holds it, so it is stated rather than inferred."
           }
         }
       },
@@ -23158,17 +23267,25 @@
           "supermarketId": {
             "type": "string",
             "format": "uuid",
-            "description": "Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`)."
+            "description": "Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`)."
           },
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices. A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself."
+            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead."
+          },
+          "priceScopeIds": {
+            "description": "The scopes a `mercadona-api` CATALOG_DISCOVERY covers, one warehouse each, and required and non-empty for one. Each scope’s own `externalKey` is the warehouse the walk fetches, so a run cannot walk one warehouse and label its prices with another. A list and not one id because the detail phase, which is where the eighteen minutes go, is shared across warehouses: six of them cost about 5,300 requests together against 26,298 apart. A scope with no key is refused, and so is one whose priority is outside the band the adapter’s walk may write.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "postalCode": {
             "type": "string",
             "maxLength": 16,
-            "description": "Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8)."
+            "description": "Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8). A chain that names its own shops needs neither, and filters with `postalCodes` instead."
           },
           "country": {
             "type": "string",
@@ -23184,6 +23301,13 @@
           },
           "brandKeys": {
             "description": "Restrict the report to these `brand:wikidata` keys.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "postalCodes": {
+            "description": "Restrict a STORE_DISCOVERY of a chain that publishes its own shop list to the shops in these postal codes. It matches each shop’s own code exactly and is never a radius: the chain states the code, so an exact match is a well posed question where a bounding box is not. An empty list is every shop the chain publishes; the document is one request either way, and what the filter saves is the warehouse lookup per code.",
             "type": "array",
             "items": {
               "type": "string"
@@ -23481,10 +23605,14 @@
             "type": "boolean",
             "description": "A source is created disabled. Turning fetching on for a third party is a decision made explicitly, never a side effect of describing the chain."
           },
+          "autoImportPlaces": {
+            "type": "boolean",
+            "description": "Let the shops this chain names enter the catalog without a person looking first. Off by default, and a separate decision from `enabled`: reading the shops of a chain and trusting them are decided at two different times. A shop that is missing a position, its own postal code, a country or a chain still goes to the review queue. A name is not required: many chains publish none, and the address is what identifies a shop."
+          },
           "config": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Adapter specific settings. For `mercadona-api` this is where the resolved `warehouse` lives, e.g. `{ \"warehouse\": \"4661\" }`."
+            "description": "Adapter specific settings, such as `carrefour-web`’s `detailBudget`. It no longer holds a warehouse: a Mercadona walk reads each warehouse from the price scope it writes for, so the two cannot disagree (plan 0108)."
           },
           "workers": {
             "type": "number",
@@ -26061,6 +26189,12 @@
                 "type": "null"
               }
             ]
+          },
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemOfferView"
+            }
           }
         },
         "required": [
@@ -26274,6 +26408,9 @@
                 "type": "null"
               }
             ]
+          },
+          "priority": {
+            "type": "integer"
           }
         },
         "required": [
@@ -26281,7 +26418,8 @@
           "supermarketId",
           "kind",
           "externalKey",
-          "label"
+          "label",
+          "priority"
         ],
         "additionalProperties": false
       },
@@ -26482,6 +26620,18 @@
           },
           "approximate": {
             "type": "boolean"
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "quoted": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -26489,7 +26639,10 @@
           "supermarketId",
           "postalCode",
           "origin",
-          "approximate"
+          "approximate",
+          "supermarketLocationId",
+          "priority",
+          "quoted"
         ],
         "additionalProperties": false
       },
@@ -26899,6 +27052,13 @@
             "type": "string",
             "minLength": 1
           },
+          "priceScopeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "label": {
             "anyOf": [
               {
@@ -26972,6 +27132,7 @@
           "id",
           "supermarketId",
           "priceScopeId",
+          "priceScopeIds",
           "label",
           "address",
           "city",
@@ -28208,6 +28369,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "settled": {
+            "type": "integer",
+            "minimum": 0
+          },
           "lineVersion": {
             "type": "integer",
             "minimum": 1
@@ -28219,6 +28384,7 @@
           "listId",
           "lineId",
           "quantity",
+          "settled",
           "lineVersion"
         ],
         "additionalProperties": false
@@ -28505,43 +28671,58 @@
       },
       "harvest.AdapterCapabilityTable": {
         "type": "object",
-        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. A reader that does not know an adapter must answer no to all four rather than throw.",
+        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes REGION rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.",
         "const": {
           "mercadona-api": {
             "writesPrices": true,
-            "scopesItsOwn": false,
-            "listsItsOwnStores": false,
-            "hasProductPages": false
+            "scopesItsOwn": true,
+            "listsItsOwnStores": true,
+            "hasProductPages": false,
+            "printedLocale": "es",
+            "walkablePriorities": {
+              "min": 300,
+              "max": 300
+            }
           },
           "deza-web": {
             "writesPrices": false,
             "scopesItsOwn": false,
             "listsItsOwnStores": false,
-            "hasProductPages": false
+            "hasProductPages": false,
+            "printedLocale": "es",
+            "walkablePriorities": null
           },
           "carrefour-web": {
             "writesPrices": true,
             "scopesItsOwn": false,
             "listsItsOwnStores": false,
-            "hasProductPages": true
+            "hasProductPages": true,
+            "printedLocale": "es",
+            "walkablePriorities": null
           },
           "lidl-api": {
             "writesPrices": true,
             "scopesItsOwn": true,
             "listsItsOwnStores": true,
-            "hasProductPages": true
+            "hasProductPages": true,
+            "printedLocale": "es",
+            "walkablePriorities": null
           },
           "osm-places": {
             "writesPrices": false,
             "scopesItsOwn": false,
             "listsItsOwnStores": false,
-            "hasProductPages": false
+            "hasProductPages": false,
+            "printedLocale": null,
+            "walkablePriorities": null
           },
           "manual": {
             "writesPrices": false,
             "scopesItsOwn": false,
             "listsItsOwnStores": false,
-            "hasProductPages": false
+            "hasProductPages": false,
+            "printedLocale": null,
+            "walkablePriorities": null
           }
         }
       },
@@ -29703,6 +29884,9 @@
           "enabled": {
             "type": "boolean"
           },
+          "autoImportPlaces": {
+            "type": "boolean"
+          },
           "config": {
             "type": "object",
             "additionalProperties": true
@@ -29737,6 +29921,7 @@
           "supermarketId",
           "adapterKey",
           "enabled",
+          "autoImportPlaces",
           "config",
           "workers",
           "maxRequestsPerSecond",

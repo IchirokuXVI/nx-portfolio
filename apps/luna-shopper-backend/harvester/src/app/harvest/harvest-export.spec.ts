@@ -314,10 +314,7 @@ describe('importing a run this backend exported', () => {
     const catalog = {
       searchItems: jest.fn(async () => ({ items, nextCursor: null })),
       addPrices: jest.fn(async () => ({ inserted: 1, confirmed: 0 })),
-      listPriceScopes: jest.fn(async () => ({
-        items: held,
-        nextCursor: null,
-      })),
+      listAllPriceScopes: jest.fn(async () => held),
       createPriceScope: jest.fn(
         async (_chain: string, kind: string, externalKey: string | null) => {
           createdScopes.push({ externalKey, kind });

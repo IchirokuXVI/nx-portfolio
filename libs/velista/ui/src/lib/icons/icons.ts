@@ -106,6 +106,27 @@ export class SearchIcon {
   );
 }
 
+/**
+ * Filtering and ordering, on the basket's tools row (velista `0075`).
+ *
+ * Two rules with a knob on each rather than the usual funnel, because the control
+ * it opens does two things: a funnel says only that rows are being removed, and
+ * half of this sheet reorders and groups without removing anything.
+ */
+@Component({
+  selector: 'lib-filter-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class FilterIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./filter-icon.svg?raw')
+  );
+}
+
 @Component({
   selector: 'lib-copy-icon',
   template: TEMPLATE,

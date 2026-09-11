@@ -36,6 +36,22 @@ export const StorageKeys = {
    */
   installed: `installed:${APP_KEY}`,
   /**
+   * How the shopper likes the basket drawn: its order, its grouping and the shop
+   * its prices come from (plan 0076).
+   *
+   * **One record for the device, not one per basket.** The preference is the
+   * shopper's rather than this trip's, and somebody with two baskets in a week does
+   * not want to set it twice. What the record may hold is deliberately short: the
+   * search and the list filter **hide** lines, and a basket that opens with half of
+   * its lines missing because of a choice made last week is a basket somebody thinks
+   * is broken.
+   *
+   * Each property carries its own expiry date, because they are not all worth the
+   * same lifetime: "prices from Mercadona" is true for the trip and not for the
+   * month. See `BASKET_VIEW_LIFETIME_MS` in `data-access` for the numbers.
+   */
+  basketView: `basket-view:${APP_KEY}`,
+  /**
    * That this document already spent its one reload on a build the server refuses
    * (plan 0072 D4).
    *

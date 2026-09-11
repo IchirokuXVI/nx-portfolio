@@ -39,7 +39,7 @@ export const PRODUCT_GROUPS = defineResource<ProductGroup>({
     many: 'catalog.productGroups.many',
   },
 
-  title: (row) => localizedTextValue(row.name, CONTENT_LOCALES),
+  title: (row, locales) => localizedTextValue(row.name, locales),
 
   fields: [
     {

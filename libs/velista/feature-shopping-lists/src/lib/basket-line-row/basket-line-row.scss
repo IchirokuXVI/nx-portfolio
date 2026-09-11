@@ -139,10 +139,27 @@
   overflow-wrap: anywhere;
 }
 
+// The name, the price and the mark, as **inline** spans rather than flex items.
+// The separator travels inside each piece, so the caption reads "name · 2.49 € ·
+// 1.99 € at Dia" however many of the three are present, and a flex item would have
+// its leading space collapsed away at the start of a line.
 .product {
   font-size: var(--app-text-xs);
   color: var(--app-text-secondary);
   overflow-wrap: anywhere;
+}
+
+// Another of the shopper's own shops charges less. The attention role, which in
+// this app is violet: it is a decision to make and never an error (`0002`,
+// section 4.4). The words say it too, so the colour carries nothing alone.
+.is-cheaper {
+  color: var(--app-status-attention-fg);
+}
+
+// This shop does not stock it. A fact about the shop rather than about the line,
+// which is still a line to buy, so it is a shade of the caption and not a state.
+.is-unlisted {
+  color: var(--app-text-muted);
 }
 
 // A pick catalog no longer names. The line is still a line to buy, so this is
@@ -221,4 +238,19 @@
 
 .visually-hidden {
   @include shared.visually-hidden;
+}
+
+// The searched fragment, painted where it was found (velista 0074, section 4.5).
+//
+// The quiet action tint, which is this app's amber: `--app-action-quiet-bg` is the
+// same amber at the fill opacity every status tint uses, so nothing here mixes a
+// colour (rule T1). Both halves are set, because a browser's own `<mark>` is
+// yellow with black text and would be unreadable on Night.
+//
+// No padding and no weight, so the mark takes no room: a highlighted row and an
+// ordinary one are the same height and the same line length.
+.match {
+  border-radius: var(--app-radius-sm);
+  background: var(--app-action-quiet-bg);
+  color: inherit;
 }

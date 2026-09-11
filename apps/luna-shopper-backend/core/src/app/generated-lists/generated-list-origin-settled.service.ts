@@ -280,18 +280,27 @@ export class GeneratedListOriginSettledService {
     line: SetGeneratedListOriginSettledResult['line'];
     origin: GeneratedListLineOriginDetail | null;
   }> {
-    const [fresh, source, view] = await Promise.all([
+    // The line is read again as well, and it has to be. The entity `resolve`
+    // loaded is the line **before** the settle or the revert, and neither writes
+    // through it: the settle loads and saves a line of its own and the revert
+    // works on the row it locks. Projecting the stale entity answered the
+    // `settledQuantity` the line had before the write, so the sheet's "got all"
+    // button kept its old count and a line taken to zero this way never drew as
+    // done until a reload.
+    const [fresh, source, moved] = await Promise.all([
       this.origins.findOne({ where: { id: origin.id } }),
       this.zoneLines.findOne({ where: { id: origin.lineId } }),
-      // A reader of this route passes section 5.2 by construction, so the line
-      // is projected whole.
-      this.generated.basketLineViewFor(line, true),
+      this.lines.findOne({ where: { id: line.id } }),
     ]);
+    const current = moved ?? line;
+    // A reader of this route passes section 5.2 by construction, so the line is
+    // projected whole.
+    const view = await this.generated.basketLineViewFor(current, true);
     return {
       line: view,
       origin:
         fresh && source
-          ? await this.originsService.detailOf(list, line, fresh, source)
+          ? await this.originsService.detailOf(list, current, fresh, source)
           : null,
     };
   }

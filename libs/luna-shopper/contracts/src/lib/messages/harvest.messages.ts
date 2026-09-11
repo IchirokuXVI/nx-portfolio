@@ -1,9 +1,11 @@
 import type { HarvestDocument } from '../../schemas/harvest-document';
-import type {
-  ItemCategory,
-  PostalCodeSource,
-  PriceSourceKind,
-  UnitOfMeasure,
+import {
+  DEFAULT_SCOPE_PRIORITY,
+  PriceScopeKind,
+  type ItemCategory,
+  type PostalCodeSource,
+  type PriceSourceKind,
+  type UnitOfMeasure,
 } from '../enums/catalog.enums';
 import type {
   DiscoveredPlaceStatus,
@@ -18,7 +20,11 @@ import type {
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
-import type { BulkOperationError, ItemView } from './catalog.messages';
+import type {
+  BulkOperationError,
+  ContentLocale,
+  ItemView,
+} from './catalog.messages';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
@@ -150,6 +156,18 @@ export const SUPERMARKET_SOURCE_PATTERNS = {
   get: 'supermarketSource.get',
   list: 'supermarketSource.list',
   setEnabled: 'supermarketSource.setEnabled',
+  /**
+   * Take a chain's source row away again.
+   *
+   * The row is keyed on the chain, so a row created against the wrong chain
+   * cannot be moved to the right one: `upsert` would write a second row rather
+   * than move the first. Deleting it is the only way back, and without this the
+   * mistake was permanent.
+   *
+   * **It refuses while a run of that chain is in flight**, because the run
+   * reads its worker count and its rate from the row it is holding.
+   */
+  delete: 'supermarketSource.delete',
 } as const;
 
 /**
@@ -185,7 +203,7 @@ export type AdapterKey = (typeof ADAPTER_KEYS)[number];
  *
  * Each field is a fact about the storefront rather than a switch somebody sets.
  * The spawn turns them into the fields a run requires, and the back office turns
- * the same four booleans into the fields a form offers, so the two cannot
+ * the same facts into the fields a form offers, so the two cannot
  * disagree about what a chain needs. Three arrays in `harvest-run.service.ts`
  * and one constant in `runs-page.ts` said this before, and they already
  * disagreed: the backend required a price scope for `carrefour-web` and the form
@@ -201,10 +219,38 @@ export interface AdapterCapabilities {
   listsItsOwnStores: boolean;
   /** The source has a product page, so an EAN backfill has something to read. */
   hasProductPages: boolean;
+  /**
+   * The language this source's own text is written in, or null when nothing is
+   * known (plan 0111, section 7).
+   *
+   * A printed name belongs to the language the chain prints in, so accepting a
+   * queued row files it under that key rather than under a constant. A null
+   * means the string belongs to no language this build can name, and the accept
+   * then requires the operator to say which rather than guessing.
+   */
+  printedLocale: ContentLocale | null;
+  /**
+   * The scope priorities this adapter's walk may write, and null for an adapter
+   * whose walk is given no scopes to write (plan 0108, section 4).
+   *
+   * Mercadona prices by warehouse, so a walk writes `REGION` scopes and nothing
+   * coarser or finer. A `NATIONAL` row for this chain is an operator's summary
+   * and not something a crawl of one warehouse may claim, and a `STORE` row is a
+   * hand entered price a crawl must never overwrite. The spawn refuses a scope
+   * outside the band, naming the scope and its priority.
+   *
+   * **A band and not one number**, because a chain that genuinely prices at two
+   * tiers states so here rather than in a runner conditional (D5). The bounds
+   * are inclusive and are read against {@link PriceScopeView.priority}, which is
+   * the stored integer and never the kind: a chain that prices by province sits
+   * at 250 with no new kind, and a band is what lets an adapter say whether that
+   * is its business.
+   */
+  walkablePriorities: { min: number; max: number } | null;
 }
 
 /**
- * The four facts, per adapter.
+ * The facts, per adapter.
  *
  * **A reader that does not know an adapter must answer no to everything.** A
  * back office one release behind a backend that added an adapter then draws a
@@ -212,11 +258,27 @@ export interface AdapterCapabilities {
  * refuses a bad request.
  */
 export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
+  // The store finder publishes all 1,675 shops in one static document, with a
+  // postal code and coordinates on every one of them (plan 0106). Plan 0038
+  // said this chain named none and had to be found through OpenStreetMap; that
+  // was a finding about OpenStreetMap's data and was never true of Mercadona's.
   'mercadona-api': {
     writesPrices: true,
-    scopesItsOwn: false,
-    listsItsOwnStores: false,
+    // A walk is given the warehouses it walks, and the warehouse is the scope's
+    // own `externalKey` (plan 0108, section 1). It named no scope of its own
+    // while the warehouse lived on `source.config`, which is how a run keyed
+    // `4661` in config wrote Córdoba's prices onto A Coruña's scope.
+    scopesItsOwn: true,
+    listsItsOwnStores: true,
     hasProductPages: false,
+    printedLocale: 'es',
+    // The REGION band alone: a warehouse is what this chain prices by, and a
+    // crawl of one warehouse may claim neither the chain's NATIONAL summary nor
+    // a STORE row somebody typed.
+    walkablePriorities: {
+      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+    },
   },
   // The site prints no price at all, so a scope would be a required field that
   // does nothing (plan 0085).
@@ -225,12 +287,19 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: 'es',
+    // A walk that writes no price writes no scope, so there is no band to state.
+    walkablePriorities: null,
   },
   'carrefour-web': {
     writesPrices: true,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: true,
+    printedLocale: 'es',
+    // One default scope, chosen at the spawn, and no list. Nothing is selected,
+    // so there is nothing for a band to refuse.
+    walkablePriorities: null,
   },
   // The one source that states the region of every price it publishes and names
   // its own 730 shops (plan 0089).
@@ -239,28 +308,46 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: true,
+    printedLocale: 'es',
+    // It reads every region the week's offers name and creates what is missing,
+    // so a run selects no scope and the band has nothing to say about it.
+    walkablePriorities: null,
   },
+  // OpenStreetMap carries a place's name and never a language for it, and a
+  // shop name is a proper noun in any case, so there is nothing to claim here.
   'osm-places': {
     writesPrices: false,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: null,
+    walkablePriorities: null,
   },
+  // Nothing is printed: whatever a manual row holds, an operator typed, and the
+  // operator says which language they typed it in.
   manual: {
     writesPrices: false,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: null,
+    walkablePriorities: null,
   },
 };
 
 /**
- * The capabilities of an adapter this build knows, and all four false otherwise.
+ * The capabilities of an adapter this build knows, and "I know nothing"
+ * otherwise: every boolean false, and no printed language.
  *
  * The lookup is a function rather than an index so the "answers no to
  * everything" rule is written once. A caller reading the record directly gets
  * `undefined` for an adapter added after it shipped, and every call site would
  * have to remember to handle it.
+ *
+ * A null `printedLocale` is that rule for the language too, and it is the safe
+ * direction for the same reason: an unknown adapter's printed string gets filed
+ * under no language rather than guessed into one, so the accept asks the
+ * operator instead of writing a name in a language nobody checked.
  */
 export function adapterCapabilities(
   adapterKey: string | null | undefined
@@ -271,6 +358,8 @@ export function adapterCapabilities(
       scopesItsOwn: false,
       listsItsOwnStores: false,
       hasProductPages: false,
+      printedLocale: null,
+      walkablePriorities: null,
     }
   );
 }
@@ -289,6 +378,20 @@ export interface SupermarketSourceView {
   supermarketId: string;
   adapterKey: AdapterKey;
   enabled: boolean;
+  /**
+   * The shops this chain names may enter the catalog without a person looking
+   * first (plan 0107, section 3.1).
+   *
+   * Off by default, and a separate decision from {@link enabled} for the reason
+   * `HARVEST_ENABLED` is separate from the Helm switch: reading a chain's shops
+   * and letting them into the catalog unreviewed are two things an operator
+   * decides at two different times.
+   *
+   * **A place still has to pass the completeness check**, and one that fails it
+   * becomes an ordinary `NEW` row in the review queue. The flag is a fast lane
+   * and not a replacement for the queue.
+   */
+  autoImportPlaces: boolean;
   config: Record<string, unknown>;
   workers: number;
   maxRequestsPerSecond: number;
@@ -635,16 +738,50 @@ export interface SpawnHarvestRunRequest extends AdminCredential {
    * The scope the prices are written for.
    *
    * Required for a FILE_IMPORT, and for a CATALOG_DISCOVERY of a chain whose
-   * adapter yields prices (`mercadona-api`). A `deza-web` discovery accepts one
-   * and ignores it, because the site prints no price and a required field that
-   * does nothing is a lie in a form.
+   * adapter yields prices and names none of its own (`carrefour-web`). A
+   * `deza-web` discovery accepts one and ignores it, because the site prints no
+   * price and a required field that does nothing is a lie in a form.
    */
   priceScopeId?: string;
+  /**
+   * The scopes a walk covers, one warehouse each (plan 0108, section 2).
+   *
+   * Required and non-empty for a `mercadona-api` catalog discovery, and read by
+   * nothing else. Each scope's own `externalKey` **is** the warehouse the walk
+   * fetches, so the two cannot disagree: the pair used to be `config.warehouse`
+   * and a scope chosen at the spawn, and a run configured for one and started
+   * with the other wrote a whole crawl of prices under the wrong label with no
+   * error anywhere.
+   *
+   * A list and not one id, because the cost of a walk is dominated by the
+   * product detail phase and that phase is shared across warehouses: six
+   * warehouses are about 5,300 requests together against 26,298 apart. Which
+   * scopes a run may take is {@link AdapterCapabilities.walkablePriorities}, and
+   * a scope with no `externalKey` is refused because there is no warehouse to
+   * walk for it.
+   */
+  priceScopeIds?: string[];
   postalCode?: string;
   country?: string;
   radiusMetres?: number;
   /** Restrict a store discovery run's report to these `brand:wikidata` keys. */
   brandKeys?: string[];
+  /**
+   * Restrict a store discovery run to the shops in these postal codes, for a
+   * chain that publishes its own shop list (plan 0106, section 4).
+   *
+   * The match is on the shop's **own** postal code, exactly. A radius here
+   * would rebuild the ambiguity plan 0038 section 2.8 found in OpenStreetMap,
+   * where the twelve Mercadonas inside 14013's bounding box sit in four other
+   * codes; the chain states each shop's code itself, so an exact match is a
+   * well posed question.
+   *
+   * **An empty array and an absent field are the same thing**, which is every
+   * shop. What the filter saves is not the one request for the document, which
+   * is read whole either way: it is the second request kind, because a run
+   * filtered to four codes resolves four warehouses instead of 1,213.
+   */
+  postalCodes?: string[];
   /**
    * What observed the products in a FILE_IMPORT's document, which is what its
    * rows and its prices are stamped with (plan 0086, section 6.2).
@@ -1036,6 +1173,8 @@ export interface UpsertSupermarketSourceRequest extends AdminCredential {
   supermarketId: string;
   adapterKey: AdapterKey;
   enabled?: boolean;
+  /** Trust this chain's own shop list, per plan 0107, section 3.1. */
+  autoImportPlaces?: boolean;
   config?: Record<string, unknown>;
   workers?: number;
   maxRequestsPerSecond?: number;

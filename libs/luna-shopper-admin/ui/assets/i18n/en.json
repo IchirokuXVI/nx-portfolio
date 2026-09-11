@@ -66,6 +66,11 @@
     "waiting": "{{count}} waiting for a decision",
     "signOut": "Sign out",
     "screens": "Screens in this section",
+    "contentLanguage": "Read the catalog in",
+    "language": {
+      "en": "English",
+      "es": "Spanish"
+    },
     "sections": {
       "overview": "Overview",
       "catalog": "Catalog",
@@ -230,6 +235,8 @@
       "externalKeyHelp": "The source’s own key for the scope, such as a warehouse number. Text and not a number: it arrives as 4661 and as mad3.",
       "label": "Label",
       "labelHelp": "A name for people to read. Harvested scopes have none, and are shown by their kind and source key instead.",
+      "priority": "How specific",
+      "priorityHelp": "Which of a shop's scopes it is quoted from. A shop can sell at several, and the most specific one that has a price for a product is the price that shop charges. It is set from the kind when the scope is made and changed through the API, because moving it re-ranks every shop that holds it.",
       "filter": {
         "supermarketId": "Chain"
       }
@@ -571,12 +578,17 @@
         "supermarketId": "Chain",
         "postalCode": "Postal code",
         "country": "Country",
+        "postalCodes": "Only these postal codes",
+        "postalCodesHelp": "Optional, and only for a chain that names its own shops. One code per line, matched against each shop’s own postal code exactly. Leave it empty for every shop the chain publishes: the shop list is one request either way, and what this saves is the question the run asks about each code.",
         "submit": "Start the run",
         "starting": "Starting…",
         "attribution": "A run's writes are recorded against the harvester service, not against you. Starting one is what is being recorded here.",
         "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
         "failed": "The run did not start, and the server did not say why.",
         "refused": "The run did not start. The server said:",
+        "priceScopes": "Warehouses to walk",
+        "priceScopesHelp": "A walk covers the warehouses you tick, and a warehouse is the price scope's own key, so the prices it writes cannot be labelled with a warehouse it did not read. Tick several: the expensive half of a walk is the product detail pass, which does not depend on the warehouse and is done once for all of them. A scope this chain's walk may not write is shown and refused rather than hidden.",
+        "priceScopesEmpty": "This chain has no price scopes to walk. Run a store discovery first: that is what creates one scope per warehouse.",
         "priceScope": "Price scope to write to",
         "priceScopeHelp": "A walk writes the prices it reads, so it has to be told which scope they belong to. Only asked for a chain whose source states a price and does not name the scope of each one itself; a site that prints none needs no scope.",
         "detailBackfill": "Read product pages for the missing EANs",
@@ -903,9 +915,25 @@
       "exists": "That chain already has a source row. Change it in the list instead.",
       "enabled": "Enabled",
       "disabled": "Disabled",
+      "trusted": "Trusted",
+      "untrusted": "Not trusted",
+      "trust": {
+        "hint": "Trusted means the shops this chain names go straight into the catalog, with nobody looking first. A shop that is missing a position, its own postal code, a country or a chain still waits in the places queue. A name is not required, because many chains publish none. This is the only switch here that writes to the catalog without a review."
+      },
+      "remove": {
+        "action": "Delete this source",
+        "heading": "Delete this chain's source?",
+        "body": "{{chain}} will have no source row, so no run can be started for it and its adapter, workers, rate and switches are forgotten. The runs it has already done are kept. Describe the chain again to fetch it once more.",
+        "confirm": "Delete the source"
+      },
+      "config": {
+        "hint": "Adapter specific settings, as JSON. An empty box means no settings at all. The harvester reads this when a run starts, so a value that is wrong is found by the run rather than here.",
+        "invalid": "That is not a JSON object, so nothing was saved. Fix it, or empty the box."
+      },
       "field": {
         "chain": "Chain",
         "adapter": "Adapter",
+        "config": "Adapter settings",
         "workers": "Workers",
         "rate": "Requests per second",
         "lastRunAt": "Last run",

@@ -26,6 +26,7 @@ import {
 } from '../entities';
 import { AuditedWrite, CatalogAuditService } from './catalog-audit.service';
 import { toSupermarketLocationItemView } from './catalog.mappers';
+import { LocationScopeService } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 
 interface LocationItemCursor {
@@ -65,7 +66,8 @@ export class SupermarketLocationItemService {
     @InjectRepository(SupermarketLocation)
     private readonly locations: Repository<SupermarketLocation>,
     private readonly admin: PlatformAdminService,
-    private readonly audit: CatalogAuditService
+    private readonly audit: CatalogAuditService,
+    private readonly stacks: LocationScopeService
   ) {}
 
   /**
@@ -224,11 +226,17 @@ export class SupermarketLocationItemService {
       for (const { before, row } of changed) {
         await tx.recordUpdate(SupermarketLocationItem, before, row);
       }
-      await this.deriveScopeFlags(
-        tx,
-        location.priceScopeId,
-        touched.map((row) => row.itemId)
+      const priceScopeId = await this.stacks.quotedScopeOf(
+        tx.manager,
+        location.id
       );
+      if (priceScopeId !== null) {
+        await this.deriveScopeFlags(
+          tx,
+          priceScopeId,
+          touched.map((row) => row.itemId)
+        );
+      }
     });
 
     return { written: touched.length, skipped, conflicts };
@@ -309,11 +317,10 @@ export class SupermarketLocationItemService {
     itemIds: string[]
   ): Promise<void> {
     const manager: EntityManager = tx.manager;
-    const locations = await manager.find(SupermarketLocation, {
-      where: { priceScopeId },
-      select: { id: true },
-    });
-    const locationIds = locations.map((l) => l.id);
+    const locationIds = await this.stacks.locationsHolding(
+      manager,
+      priceScopeId
+    );
     if (locationIds.length === 0) {
       return;
     }

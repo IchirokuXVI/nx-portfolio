@@ -16,12 +16,16 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   basketLineState,
+  basketMatchRange,
   inLocale,
+  offerAt,
   outstanding,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   type BasketLine,
+  type BasketLineOrigin,
   type BasketParticipant,
   type BasketProduct,
+  type BasketRowMark,
 } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
 import {
@@ -33,6 +37,7 @@ import {
 } from '@portfolio/velista/ui';
 import {
   addedCaption,
+  listShareCaption,
   originsCaption,
   outstandingCaption,
   quantityCaption,
@@ -167,6 +172,46 @@ export class BasketLineRow {
   /** List names for the "from" caption. Empty for a reader who has no origins. */
   readonly listNames = input<ReadonlyMap<string, string>>(new Map());
 
+  /**
+   * The one list this row is about, or null for a row about the whole line
+   * (velista `0077`, section 4.1).
+   *
+   * Set only under the list grouping, where a line two households asked for is drawn
+   * twice, once under each heading. It changes **what the numbers on this row mean**
+   * and nothing about what the row says: the ceiling, the value and the progress
+   * caption all become this list's, and the status glyph stays the line's.
+   *
+   * That split is deliberate and it is section 4.1's whole point. A tick beside "6
+   * of 6 got" under one household while the other household's six are still to get
+   * would be a contradiction on one row, so the glyph reads the line, the number
+   * reads the origin, and the caption between them says which is which.
+   */
+  readonly origin = input<BasketLineOrigin | null>(null);
+
+  /**
+   * The price scope this row quotes, or null for the cheapest anywhere
+   * (velista `0078`, section 5).
+   *
+   * An input rather than a store read, exactly as {@link canReopen} and
+   * {@link ownName} are: one basket has a dozen of these components and the answer
+   * is the same for every one of them.
+   *
+   * It changes **which** number the caption carries and nothing else about the row:
+   * a row priced at Mercadona and a row priced at the cheapest of five shops are the
+   * same shape, which is `0062` section 2's rule and holds here too.
+   */
+  readonly shop = input<string | null>(null);
+
+  /**
+   * What this row says about that shop, beside the number, or null.
+   *
+   * Composed by the pipeline rather than here, because the **sink** is decided
+   * there: the line that says "not listed at Mercadona" is the line that moved to
+   * the end of the list, and a component working the first half out for itself would
+   * be a second place for the two to disagree.
+   */
+  readonly mark = input<BasketRowMark | null>(null);
+
   /** The reader's own participant id, so their own edits can be named. */
   readonly meId = input<string | null>(null);
 
@@ -248,6 +293,45 @@ export class BasketLineRow {
    */
   readonly awaitingApproval = input(false);
 
+  /**
+   * What the basket is being searched for, already folded (velista `0074`,
+   * section 4.5).
+   *
+   * Folded by the page and not here, because the answer is the same for every row
+   * and this component is constructed once per line, which is the reasoning
+   * {@link ownName} and {@link canReopen} already follow.
+   *
+   * Empty whenever nothing is being searched for, which is the ordinary state of
+   * this screen: an empty highlight draws no mark and the row is exactly the row it
+   * was.
+   */
+  readonly highlight = input('');
+
+  /**
+   * The line's own words, split around the first match, or null for no match.
+   *
+   * The **content only**. The product caption below it is matched too, so a line is
+   * found by its pick's name or brand, but it is 12px muted text and a mark on it
+   * competes with the name it sits beside. So a line found that way is drawn
+   * unhighlighted, which is why this is null rather than a range into some other
+   * string.
+   *
+   * Nothing else about the row changes, so a highlighted row and an ordinary one
+   * are the same height.
+   */
+  protected readonly highlighted = computed(() => {
+    const content = this.line().content;
+    const range = basketMatchRange(content, this.highlight());
+    if (range === null) {
+      return null;
+    }
+    return {
+      before: content.slice(0, range.start),
+      match: content.slice(range.start, range.end),
+      after: content.slice(range.end),
+    };
+  });
+
   readonly open = output<void>();
 
   /**
@@ -280,11 +364,21 @@ export class BasketLineRow {
   /**
    * How many are still to get, which is what the reel is bound to.
    *
+   * **The origin's, on a row drawn under one** (velista `0077`, section 4.1): a
+   * household that asked for six and got two has four still to get, whatever the
+   * other households on the same line have done. The line's own outstanding amount
+   * everywhere else, which is what this row has always drawn.
+   *
    * Not called `outstanding`: the output that reports a move of it has that name,
    * and it belongs to the thing a caller listens for rather than to a number they
    * could read off the line themselves.
    */
-  protected readonly stillToGet = computed(() => outstanding(this.line()));
+  protected readonly stillToGet = computed(() => {
+    const origin = this.origin();
+    return origin === null
+      ? outstanding(this.line())
+      : Math.max(0, origin.quantity - origin.settled);
+  });
 
   /**
    * What the reel shows while a write is out.
@@ -313,14 +407,36 @@ export class BasketLineRow {
    * and up takes purchases back. A line of six dragged to zero offers a reel from
    * zero to six.
    */
-  protected readonly ceiling = computed(() => this.line().quantity);
-
-  /** What the reel is counting: how many are still to get, not how many to buy. */
-  protected readonly reelLabel = computed(() =>
-    this._translator.t('basket.outstanding.label', undefined, this._locale(), {
-      name: this.line().content,
-    })
+  protected readonly ceiling = computed(
+    () => this.origin()?.quantity ?? this.line().quantity
   );
+
+  /**
+   * What the reel is counting: how many are still to get, not how many to buy.
+   *
+   * **Under a list heading it names the list first**, "Flat, Eggs, still to get",
+   * which is the shape `0073` gave the settle sheet's per list reels and is the only
+   * thing that tells two identically named reels apart for somebody who hears the
+   * row rather than seeing which heading it sits under.
+   *
+   * A list with no name falls back to the reel's ordinary name rather than drawing a
+   * leading comma, which is the rule `originsCaption` and the filter sheet's rows
+   * already follow for the same data. The pipeline heads no section for such a list,
+   * so this is a guard and not a case anybody meets.
+   */
+  protected readonly reelLabel = computed(() => {
+    const name = this.line().content;
+    const origin = this.origin();
+    const list =
+      origin === null ? '' : (this.listNames().get(origin.listId) ?? '');
+
+    return this._translator.t(
+      list === '' ? 'basket.outstanding.label' : 'basket.outstanding.listLabel',
+      undefined,
+      this._locale(),
+      { list, name }
+    );
+  });
 
   /** Where the thumb is, while it is down. Null the moment the overlay closes. */
   private readonly _preview = signal<number | null>(null);
@@ -482,27 +598,102 @@ export class BasketLineRow {
    * cheapest option there would put a number on a product nobody has chosen.
    */
   protected readonly productName = computed<string | null>(() => {
-    const pickId = this.line().pickId;
-    if (pickId === null) {
-      return null;
-    }
-    const product = this.products().get(pickId);
+    const product = this._product();
     // A pick catalog no longer has: the basket outlives the catalog it was built
     // from, and a line with an unnameable product is still a line to buy.
-    if (!product) {
+    return product === null ? null : inLocale(product.name, this._locale());
+  });
+
+  /** The pick, or null for a free text line and for a pick catalog cannot resolve. */
+  private readonly _product = computed<BasketProduct | null>(() => {
+    const pickId = this.line().pickId;
+    return pickId === null ? null : (this.products().get(pickId) ?? null);
+  });
+
+  /**
+   * The price after the product's name, or null where there is none.
+   *
+   * **The chosen shop's**, when one is in use (velista `0078`, section 5), and the
+   * cheapest at the run's scopes otherwise, which is what `0062` drew and what the
+   * default still draws. A scope that carries the product with no number on it draws
+   * nothing, which is the same blank a product nobody has priced leaves: the row has
+   * no way to say "listed, price unknown" in the space it has, and the pick sheet is
+   * where that distinction is worth drawing (`0062`, section 5.3).
+   */
+  protected readonly productPrice = computed<string | null>(() => {
+    const product = this._product();
+    if (product === null) {
       return null;
     }
+
+    const shop = this.shop();
+    const offer = shop === null ? product.offer : offerAt(product, shop);
+    if (offer === null || offer.price === null) {
+      return null;
+    }
+    return formatMoney(offer.price, offer.currency, this._locale());
+  });
+
+  /**
+   * The mark's own sentence, composed, or null when the row carries none.
+   *
+   * One string and not two spans, because the unlisted mark is genuinely two
+   * clauses about one thing — "not listed at Mercadona · 2.85 € at Dia" — and
+   * drawing them as separate pieces would let a line break fall between a price and
+   * the shop it belongs to. The separator is the one this row already joins its
+   * captions with.
+   */
+  protected readonly markCaption = computed<string | null>(() => {
+    const mark = this.mark();
+    if (mark === null) {
+      return null;
+    }
+
     const locale = this._locale();
-    const name = inLocale(product.name, locale);
-    const offer = product.offer;
-    return offer !== null && offer.price !== null
-      ? `${name} · ${formatMoney(offer.price, offer.currency, locale)}`
-      : name;
+    if (mark.kind === 'cheaper') {
+      return this._translator.t('basket.price.cheaperAt', undefined, locale, {
+        price: formatMoney(mark.price, mark.currency, locale),
+        chain: mark.chain,
+      });
+    }
+
+    const missing = this._translator.t(
+      'basket.price.notListedAt',
+      undefined,
+      locale,
+      { chain: mark.chain }
+    );
+    const elsewhere = mark.elsewhere;
+    if (elsewhere === null) {
+      return missing;
+    }
+
+    const at = this._translator.t('basket.price.cheaperAt', undefined, locale, {
+      price: formatMoney(elsewhere.price, elsewhere.currency, locale),
+      chain: elsewhere.chain,
+    });
+    return `${missing} · ${at}`;
   });
 
   protected readonly quantity = computed(() =>
     quantityCaption(this.line(), this._translator, this._locale())
   );
+
+  /**
+   * The sentence under the number: the line's, or this list's share of it.
+   *
+   * One slot and not two, because they answer the same question about the same
+   * number and a row that drew both would say it twice. The line's version is drawn
+   * only for a partly settled line, which is what {@link quantity} has always done;
+   * the list's is drawn on every row under a list heading, because the number beside
+   * it is a household's share and nothing else on the row says so.
+   */
+  protected readonly progressCaption = computed(() => {
+    const origin = this.origin();
+    return origin === null
+      ? this.quantity()
+      : listShareCaption(this.line(), origin, this._translator, this._locale());
+  });
 
   protected readonly touched = computed(() =>
     touchedCaption(
@@ -533,14 +724,22 @@ export class BasketLineRow {
     )
   );
 
-  /** Null for a reader who may not see origins. See the class comment. */
+  /**
+   * Null for a reader who may not see origins, and null under a list heading.
+   *
+   * The second is velista `0077`, section 4.1: "from Weekly shop" is not drawn on a
+   * row that sits under Weekly shop's own heading, because the heading already says
+   * it. Drawing both would put the same three words on every row of the section.
+   */
   protected readonly from = computed(() =>
-    originsCaption(
-      this.line(),
-      this.listNames(),
-      this._translator,
-      this._locale()
-    )
+    this.origin() !== null
+      ? null
+      : originsCaption(
+          this.line(),
+          this.listNames(),
+          this._translator,
+          this._locale()
+        )
   );
 
   /**
@@ -553,8 +752,13 @@ export class BasketLineRow {
   protected readonly label = computed(() => {
     const parts = [
       this.line().content,
-      this.quantity(),
+      this.progressCaption(),
+      // The product, its price and what the row says about the shop, each a
+      // sentence of its own: a mark is words beside a number and a reader who
+      // hears the row hears it (velista `0078`, section 7).
       this.productName() ?? '',
+      this.productPrice() ?? '',
+      this.markCaption() ?? '',
       this.touched() ?? '',
       this.added() ?? '',
       this.from() ?? '',

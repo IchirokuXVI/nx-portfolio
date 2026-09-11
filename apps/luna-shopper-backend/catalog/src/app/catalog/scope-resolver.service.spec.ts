@@ -1,6 +1,10 @@
-import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
-import type { Repository } from 'typeorm';
+import {
+  DEFAULT_SCOPE_PRIORITY,
+  PriceScopeKind,
+} from '@portfolio/luna-shopper/contracts';
+import type { EntityManager, Repository } from 'typeorm';
 import type { PriceScope, Supermarket, SupermarketLocation } from '../entities';
+import type { LocationScopeService, ScopeInStack } from './location-scopes';
 import { ScopeResolverService } from './scope-resolver.service';
 
 const CALLER = 'user-1';
@@ -10,8 +14,20 @@ const MERCADONA = 'chain-mercadona';
 const LIDL = 'chain-lidl';
 const DIA = 'chain-dia';
 
+/**
+ * A shop in the world, and the scopes it sells at.
+ *
+ * `priceScopeId` is the one entry shorthand every test written before plan
+ * 0105 used, and it still means what it meant: a stack of one. A test about
+ * the stack states `priceScopeIds` instead.
+ */
+interface WorldLocation extends Partial<SupermarketLocation> {
+  priceScopeId?: string;
+  priceScopeIds?: string[];
+}
+
 interface World {
-  locations: Partial<SupermarketLocation>[];
+  locations: WorldLocation[];
   scopes: Partial<PriceScope>[];
   chains: Partial<Supermarket>[];
 }
@@ -21,7 +37,8 @@ interface World {
  * value object rather than a list, so each double reads the ids back out of it:
  * matching what the service asked for is the whole job of these fakes.
  */
-function build(world: World) {
+function build(input: World) {
+  const world = withIds(input);
   const idsOf = (value: unknown): string[] => {
     const operator = value as { _value?: unknown };
     const raw = operator?._value ?? value;
@@ -39,7 +56,15 @@ function build(world: World) {
 
   const scopes = {
     find: jest.fn(
-      async (options: { where: { supermarketId: unknown; kind: unknown } }) => {
+      async (options: {
+        where: { supermarketId?: unknown; kind?: unknown; id?: unknown };
+      }) => {
+        // Rung three looks scopes up by id, to report their priority; rung two
+        // looks the chain's NATIONAL up by chain and kind.
+        if (options.where.id !== undefined) {
+          const wanted = new Set(idsOf(options.where.id));
+          return world.scopes.filter((row) => wanted.has(row.id as string));
+        }
         const wanted = new Set(idsOf(options.where.supermarketId));
         return world.scopes.filter(
           (row) =>
@@ -57,7 +82,67 @@ function build(world: World) {
     }),
   } as unknown as Repository<Supermarket>;
 
-  return new ScopeResolverService(locations, scopes, chains);
+  /**
+   * The stacks, ranked the way the real one ranks them: ascending priority,
+   * then the scope id, so a test asserting an order is asserting the rule and
+   * not the order it happened to list the scopes in.
+   *
+   * A scope the world does not describe takes the default for the kind the
+   * stack position implies, which keeps every pre-0105 test, where a shop has
+   * one scope and its priority decides nothing, saying exactly what it said.
+   */
+  const priorityOf = (priceScopeId: string, index: number): number => {
+    const declared = world.scopes.find((row) => row.id === priceScopeId);
+    if (declared?.priority !== undefined) {
+      return declared.priority;
+    }
+    return index === 0
+      ? DEFAULT_SCOPE_PRIORITY.STORE
+      : DEFAULT_SCOPE_PRIORITY.NATIONAL;
+  };
+
+  const stacks = {
+    stacksFor: jest.fn(
+      async (_manager: EntityManager, ids: readonly string[]) => {
+        const wanted = new Set(ids);
+        const answer = new Map<string, ScopeInStack[]>();
+        for (const row of world.locations) {
+          if (!wanted.has(row.id as string)) {
+            continue;
+          }
+          const stack = (
+            row.priceScopeIds ?? (row.priceScopeId ? [row.priceScopeId] : [])
+          ).map((priceScopeId, index) => ({
+            priceScopeId,
+            priority: priorityOf(priceScopeId, index),
+          }));
+          stack.sort(
+            (a, b) =>
+              a.priority - b.priority ||
+              a.priceScopeId.localeCompare(b.priceScopeId)
+          );
+          answer.set(row.id as string, stack);
+        }
+        return answer;
+      }
+    ),
+  } as unknown as LocationScopeService;
+
+  return new ScopeResolverService(locations, scopes, chains, stacks);
+}
+
+/**
+ * Every shop needs an id, because the stack is keyed on it. Filled in here
+ * rather than in each test, which is about the scopes and not the shops.
+ */
+function withIds(world: World): World {
+  return {
+    ...world,
+    locations: world.locations.map((row, index) => ({
+      id: `shop-${index}`,
+      ...row,
+    })),
+  };
 }
 
 /**
@@ -310,6 +395,7 @@ describe('ScopeResolverService', () => {
             id: 'scope-national',
             supermarketId: LIDL,
             kind: PriceScopeKind.NATIONAL,
+            priority: DEFAULT_SCOPE_PRIORITY.NATIONAL,
           },
         ],
         chains: [{ id: LIDL, defaultPriceScopeId: 'scope-fallback' }],
@@ -329,6 +415,12 @@ describe('ScopeResolverService', () => {
           // A chain that prices nationally has no location to be asked about,
           // so this is exact rather than approximate.
           approximate: false,
+          // A fallback for a missing shop rather than a tier of a stack (plan
+          // 0105, section 5), so there is no shop to name and it is the entry
+          // a scoped read quotes.
+          supermarketLocationId: null,
+          priority: DEFAULT_SCOPE_PRIORITY.NATIONAL,
+          quoted: true,
         },
       ]);
       expect(resolved.approximate).toBe(false);
@@ -337,7 +429,14 @@ describe('ScopeResolverService', () => {
     it('falls to the owner set default last, and says the answer is approximate', async () => {
       const resolver = build({
         locations: [],
-        scopes: [],
+        scopes: [
+          {
+            id: 'scope-madrid',
+            supermarketId: MERCADONA,
+            kind: PriceScopeKind.REGION,
+            priority: DEFAULT_SCOPE_PRIORITY.REGION,
+          },
+        ],
         chains: [{ id: MERCADONA, defaultPriceScopeId: 'scope-madrid' }],
       });
 
@@ -353,11 +452,34 @@ describe('ScopeResolverService', () => {
           postalCode: null,
           origin: 'CHAIN_DEFAULT',
           approximate: true,
+          supermarketLocationId: null,
+          priority: DEFAULT_SCOPE_PRIORITY.REGION,
+          quoted: true,
         },
       ]);
       // What lets the client say "prices shown for Madrid" instead of implying
       // the number is the caller's.
       expect(resolved.approximate).toBe(true);
+    });
+
+    it('contributes nothing for a default naming a scope that is gone', async () => {
+      // Rung three loads the scope since plan 0105, because the answer carries
+      // its priority. Dropping a dangling default is the point rather than the
+      // cost: the id used to come back on its own, so a read against it found
+      // no prices while `approximate` promised a real price somewhere else.
+      const resolver = build({
+        locations: [],
+        scopes: [],
+        chains: [{ id: MERCADONA, defaultPriceScopeId: 'scope-deleted' }],
+      });
+
+      const resolved = await resolver.resolve({
+        userId: CALLER,
+        supermarketIds: [MERCADONA],
+      });
+
+      expect(resolved.priceScopeIds).toEqual([]);
+      expect(resolved.approximate).toBe(false);
     });
 
     it('contributes nothing for a chain that falls off the end of the ladder', async () => {
@@ -563,5 +685,147 @@ describe('ScopeResolverService', () => {
       expect(north.priceScopeIds).toEqual(['scope-south']);
       expect(south.priceScopeIds).toEqual(['scope-north']);
     });
+  });
+});
+
+/**
+ * A shop that holds several scopes (plan 0105, section 5).
+ *
+ * The two halves of the answer say different things and this is the file that
+ * pins the difference: `scopes` is everything reached, so the stack is
+ * visible, and `priceScopeIds` is what a scoped read is handed, so a shop is
+ * never compared against its own wider tiers.
+ */
+describe('ScopeResolverService and a shop stack', () => {
+  const STORE = 'scope-store';
+  const REGION = 'scope-region';
+  const NATIONAL = 'scope-national';
+
+  /** One Mercadona in 28001, priced by shop, by region and nationally. */
+  function stacked() {
+    return build({
+      locations: [
+        {
+          id: 'shop-madrid',
+          supermarketId: MERCADONA,
+          // Listed widest first on purpose: the ranking is the priorities,
+          // not the order somebody wrote them in.
+          priceScopeIds: [NATIONAL, REGION, STORE],
+          postalCode: '28001',
+        },
+      ],
+      scopes: [
+        {
+          id: STORE,
+          supermarketId: MERCADONA,
+          kind: PriceScopeKind.STORE,
+          priority: DEFAULT_SCOPE_PRIORITY.STORE,
+        },
+        {
+          id: REGION,
+          supermarketId: MERCADONA,
+          kind: PriceScopeKind.REGION,
+          priority: DEFAULT_SCOPE_PRIORITY.REGION,
+        },
+        {
+          id: NATIONAL,
+          supermarketId: MERCADONA,
+          kind: PriceScopeKind.NATIONAL,
+          priority: DEFAULT_SCOPE_PRIORITY.NATIONAL,
+        },
+      ],
+      chains: [],
+    });
+  }
+
+  it('reports the whole stack, most specific first, with its priorities', async () => {
+    const resolved = await stacked().resolve({
+      userId: CALLER,
+      postalCodes: ['28001'],
+    });
+
+    expect(
+      resolved.scopes.map((scope) => [scope.priceScopeId, scope.priority])
+    ).toEqual([
+      [STORE, DEFAULT_SCOPE_PRIORITY.STORE],
+      [REGION, DEFAULT_SCOPE_PRIORITY.REGION],
+      [NATIONAL, DEFAULT_SCOPE_PRIORITY.NATIONAL],
+    ]);
+    expect(
+      resolved.scopes.every(
+        (scope) => scope.supermarketLocationId === 'shop-madrid'
+      )
+    ).toBe(true);
+  });
+
+  it('hands a scoped read only the tier the shop is quoted from', async () => {
+    // The rule D4 depends on. With all three ids in this list, a cheaper
+    // national fallback would beat the regional price the shop charges, and
+    // the shopper would be quoted a number no till will ring up.
+    const resolved = await stacked().resolve({
+      userId: CALLER,
+      postalCodes: ['28001'],
+    });
+
+    expect(resolved.priceScopeIds).toEqual([STORE]);
+    expect(resolved.scopes.filter((scope) => scope.quoted)).toHaveLength(1);
+  });
+
+  it('quotes one shop from a tier that is another shop wider one', async () => {
+    // Two shops of one chain: one has a scope of its own, the other is
+    // priced by the region both sit in. The region is one entry, and it is
+    // quoted, because the second shop is quoted from it.
+    const resolver = build({
+      locations: [
+        {
+          id: 'shop-with-own-price',
+          supermarketId: MERCADONA,
+          priceScopeIds: [STORE, REGION],
+          postalCode: '28001',
+        },
+        {
+          id: 'shop-on-the-region',
+          supermarketId: MERCADONA,
+          priceScopeIds: [REGION],
+          postalCode: '28001',
+        },
+      ],
+      scopes: [
+        {
+          id: STORE,
+          supermarketId: MERCADONA,
+          kind: PriceScopeKind.STORE,
+          priority: DEFAULT_SCOPE_PRIORITY.STORE,
+        },
+        {
+          id: REGION,
+          supermarketId: MERCADONA,
+          kind: PriceScopeKind.REGION,
+          priority: DEFAULT_SCOPE_PRIORITY.REGION,
+        },
+      ],
+      chains: [],
+    });
+
+    const resolved = await resolver.resolve({
+      userId: CALLER,
+      postalCodes: ['28001'],
+    });
+
+    expect([...resolved.priceScopeIds].sort()).toEqual([REGION, STORE].sort());
+    expect(resolved.scopes).toHaveLength(2);
+  });
+
+  it('resolves a caller who refused every shop to nothing', async () => {
+    const resolved = await stacked().resolve({
+      userId: CALLER,
+      postalCodes: ['28001'],
+      excludedSupermarketLocationIds: ['shop-madrid'],
+    });
+
+    expect(resolved.priceScopeIds).toEqual([]);
+    expect(resolved.scopes).toEqual([]);
+    // Coverage is a property of our data, not of what they will not walk to.
+    expect(resolved.coverage).toEqual([{ postalCode: '28001', served: true }]);
   });
 });

@@ -43,7 +43,7 @@ export const SUPERMARKETS = defineResource<Supermarket>({
     many: 'catalog.supermarkets.many',
   },
 
-  title: (row) => localizedTextValue(row.name, CONTENT_LOCALES),
+  title: (row, locales) => localizedTextValue(row.name, locales),
 
   fields: [
     {

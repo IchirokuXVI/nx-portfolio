@@ -11,6 +11,7 @@ import {
   HarvestRunTrigger,
   PriceSourceKind,
   adapterCapabilities,
+  type AdapterCapabilities,
   type HarvestDocument,
   type HarvestRunIdRequest,
   type HarvestRunPage,
@@ -76,6 +77,21 @@ const OFFICIAL_KINDS: readonly PriceSourceKind[] = [
   PriceSourceKind.OFFICIAL_WEB,
   PriceSourceKind.OFFICIAL_LEAFLET,
 ];
+
+/**
+ * Whether this adapter's walk is given the scopes it writes (plan 0108,
+ * section 4).
+ *
+ * The band is what says so. It is stated for an adapter whose walk covers scopes
+ * an operator selected, and null for every other one, so the two questions a
+ * caller has ("does this run take a list" and "which scopes may be on it") are
+ * one fact on the adapter rather than two lists in this file. `lidl-api` writes
+ * prices and names its own regions from the week's offers, so it selects
+ * nothing and states no band.
+ */
+function takesScopeList(capabilities: AdapterCapabilities): boolean {
+  return capabilities.writesPrices && capabilities.walkablePriorities !== null;
+}
 
 /** The statuses a run never leaves, and the only ones a revert is offered on. */
 const FINISHED_STATUSES: readonly HarvestRunStatus[] = [
@@ -160,7 +176,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     // where the chain does have one, because no source was used.
     const needsSource = req.mode !== HarvestRunMode.FILE_IMPORT;
     const { supermarketId, priceScopeId, payload, documentSha256 } =
-      this.validate(req, source);
+      await this.validate(req, source);
     if (needsSource && supermarketId && !source) {
       throw new ValidationException(
         'That supermarket has no configured source. Create one with ' +
@@ -392,15 +408,15 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
    * runner. A STORE_DISCOVERY belongs to a postal code and a radius; the other
    * two belong to a chain and a scope, and only one of them insists on the scope.
    */
-  private validate(
+  private async validate(
     req: SpawnHarvestRunRequest,
     source: SupermarketSource | null
-  ): {
+  ): Promise<{
     supermarketId: string | null;
     priceScopeId: string | null;
     payload: Record<string, unknown>;
     documentSha256: string | null;
-  } {
+  }> {
     if (req.mode === HarvestRunMode.FILE_IMPORT) {
       return this.validateFileImport(req);
     }
@@ -431,6 +447,13 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
           // over-fetch cheap and a large one tedious.
           radiusMetres: req.radiusMetres ?? 3000,
           brandKeys: req.brandKeys ?? [],
+          // The shops a chain's own list is filtered to (plan 0106, section 4).
+          // Not a centre and not a radius: it matches each shop's own code
+          // exactly, and an empty list is every shop. The OpenStreetMap case
+          // has a centre already and ignores it.
+          postalCodes: (req.postalCodes ?? [])
+            .map((code) => code.trim())
+            .filter((code) => code !== ''),
         },
       };
     }
@@ -478,6 +501,17 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
           'without the backfill switch.'
       );
     }
+    // The warehouses this walk covers, which are the scopes themselves (plan
+    // 0108). Nothing is asked of a backfill: it reads product pages for an EAN
+    // and writes no price.
+    const priceScopeIds =
+      takesScopeList(capabilities) && !detailBackfill
+        ? await this.walkableScopes(
+            req.supermarketId,
+            req.priceScopeIds ?? [],
+            capabilities.walkablePriorities
+          )
+        : [];
     return {
       supermarketId: req.supermarketId,
       priceScopeId: req.priceScopeId ?? null,
@@ -485,9 +519,78 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       payload: {
         supermarketId: req.supermarketId,
         priceScopeId: req.priceScopeId ?? null,
+        priceScopeIds,
         detailBackfill,
       },
     };
+  }
+
+  /**
+   * The scopes a walk was given, checked against what this adapter's walk may
+   * write (plan 0108, sections 1 and 4).
+   *
+   * Three refusals, and each of them names the scope it is about:
+   *
+   * - **An empty list.** The warehouse is no longer a field on the source row,
+   *   so a run that names no scope has nothing to fetch rather than a default to
+   *   fall back on.
+   * - **A scope with no `externalKey`.** That is a `STORE` scope somebody priced
+   *   by hand, and there is no warehouse to walk for it.
+   * - **A scope outside the adapter's priority band.** A crawl of one warehouse
+   *   may claim neither the chain's `NATIONAL` summary nor a `STORE` row an
+   *   operator typed.
+   *
+   * A scope of another chain is refused too, by not being in this chain's list
+   * at all: the read is per chain, so a foreign id is simply unknown here.
+   */
+  private async walkableScopes(
+    supermarketId: string,
+    requested: readonly string[],
+    band: { min: number; max: number } | null
+  ): Promise<string[]> {
+    // Deduplicated, because walking one warehouse twice fetches the same tree
+    // twice and reports the same price twice for the same scope.
+    const wanted = [
+      ...new Set(requested.map((id) => id.trim()).filter((id) => id !== '')),
+    ];
+    if (wanted.length === 0) {
+      throw new ValidationException(
+        "This chain's walk covers the warehouses you name, and it names them by " +
+          'price scope: each scope carries the warehouse in its own key. Choose ' +
+          'at least one.'
+      );
+    }
+
+    const held = new Map(
+      (await this.catalog.listAllPriceScopes(supermarketId)).map((scope) => [
+        scope.id,
+        scope,
+      ])
+    );
+    for (const id of wanted) {
+      const scope = held.get(id);
+      if (!scope) {
+        throw new ValidationException(
+          `The price scope ${id} does not belong to this chain, so there is no ` +
+            'warehouse of its to walk.'
+        );
+      }
+      if (!scope.externalKey) {
+        throw new ValidationException(
+          `The price scope ${id} carries no key of the chain's own, so there is ` +
+            'no warehouse to walk for it. It is a scope somebody priced by hand.'
+        );
+      }
+      if (band && (scope.priority < band.min || scope.priority > band.max)) {
+        throw new ValidationException(
+          `The price scope ${id} has priority ${scope.priority}, and this ` +
+            `chain's walk may only write ${band.min} to ${band.max}. A crawl of ` +
+            'one warehouse may not claim a price for a wider or a narrower group ' +
+            'of shops than the warehouse it walked.'
+        );
+      }
+    }
+    return wanted;
   }
 
   /**

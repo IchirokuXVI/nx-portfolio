@@ -8,16 +8,20 @@
  */
 
 export {
-  MERCADONA_BASE_URL,
-  MercadonaClient,
-  MercadonaHttpError,
-} from './lib/mercadona.client';
-export {
   CHEESE_CATEGORY_IDS,
   MERCADONA_ROOT_CATEGORY_MAP,
   resolveCategory,
 } from './lib/categories';
 export type { CategoryPathNode } from './lib/categories';
+export {
+  MERCADONA_BASE_URL,
+  MercadonaClient,
+  MercadonaHttpError,
+} from './lib/mercadona.client';
+export type {
+  ListStoresOptions,
+  ResolveWarehouseOptions,
+} from './lib/mercadona.client';
 export {
   normalizeCategories,
   normalizeCategoryProducts,
@@ -25,7 +29,14 @@ export {
   unavailableProduct,
 } from './lib/normalize';
 export type { NormalizeProductOptions } from './lib/normalize';
-export { isImportableSizeFormat, mapSizeFormat } from './lib/units';
+export {
+  MERCADONA_STORES_TOTAL_URL,
+  MERCADONA_STORES_URL,
+  openingHoursLine,
+  parseStoreDocument,
+  parseStoreTotals,
+} from './lib/stores';
+export type { MercadonaStore, MercadonaStoreList } from './lib/stores';
 export type {
   MercadonaCategory,
   MercadonaClientOptions,
@@ -33,3 +44,4 @@ export type {
   MercadonaListProduct,
   MercadonaProduct,
 } from './lib/types';
+export { isImportableSizeFormat, mapSizeFormat } from './lib/units';

@@ -17,6 +17,10 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MercadonaClient } from '../src/lib/mercadona.client';
+import {
+  MERCADONA_STORES_TOTAL_URL,
+  MERCADONA_STORES_URL,
+} from '../src/lib/stores';
 
 const OUT_DIR = join(__dirname, '..', 'src', 'lib', '__fixtures__');
 
@@ -28,27 +32,42 @@ const USER_AGENT =
 const POSTAL_CODE = process.env['MERCADONA_POSTAL_CODE'] ?? '14013';
 
 /** file name -> the product whose shape that fixture exists to pin. */
-const PRODUCTS: Array<{ file: string; id: string; lang: 'es' | 'en'; why: string }> =
-  [
-    {
-      file: 'product-detail-es.json',
-      id: '4241',
-      lang: 'es',
-      why: 'the ordinary product, with EAN and brand',
-    },
-    {
-      file: 'product-detail-en.json',
-      id: '4241',
-      lang: 'en',
-      why: 'the same product in English (section 2.3)',
-    },
-  ];
+const PRODUCTS: Array<{
+  file: string;
+  id: string;
+  lang: 'es' | 'en';
+  why: string;
+}> = [
+  {
+    file: 'product-detail-es.json',
+    id: '4241',
+    lang: 'es',
+    why: 'the ordinary product, with EAN and brand',
+  },
+  {
+    file: 'product-detail-en.json',
+    id: '4241',
+    lang: 'en',
+    why: 'the same product in English (section 2.3)',
+  },
+];
 
 async function main(): Promise<void> {
+  await captureStores();
+
   const warehouse = await MercadonaClient.resolveWarehouse(POSTAL_CODE, {
     userAgent: USER_AGENT,
   });
-  process.stdout.write(`postal code ${POSTAL_CODE} -> warehouse ${warehouse}\n`);
+  if (warehouse === null) {
+    throw new Error(
+      `Mercadona sells online to nobody at postal code ${POSTAL_CODE}, so ` +
+        'there is no warehouse to capture the product fixtures from. Set ' +
+        'MERCADONA_POSTAL_CODE to a code the chain serves.'
+    );
+  }
+  process.stdout.write(
+    `postal code ${POSTAL_CODE} -> warehouse ${warehouse}\n`
+  );
 
   const client = new MercadonaClient({
     warehouse,
@@ -77,6 +96,34 @@ async function main(): Promise<void> {
       continue;
     }
     write(file, payload);
+  }
+}
+
+/**
+ * The store finder's two documents, verbatim (plan 0106, section 2).
+ *
+ * Written as text and not re-serialized: `data.js` is a JavaScript assignment
+ * rather than JSON, and the parser exists to strip exactly that assignment, so a
+ * fixture that had already been through `JSON.parse` would prove nothing about
+ * the shape the source actually sends.
+ */
+async function captureStores(): Promise<void> {
+  for (const [file, url] of [
+    ['stores.js', MERCADONA_STORES_URL],
+    ['stores-total.js', MERCADONA_STORES_TOTAL_URL],
+  ] as const) {
+    const response = await fetch(url, {
+      headers: { accept: '*/*', 'user-agent': USER_AGENT },
+    });
+    if (!response.ok) {
+      process.stderr.write(
+        `${url} answered ${response.status}; ${file} was left as it was\n`
+      );
+      continue;
+    }
+    const body = await response.text();
+    writeFileSync(join(OUT_DIR, file), body, 'utf8');
+    process.stdout.write(`wrote ${file} (${body.length} bytes)\n`);
   }
 }
 

@@ -1,5 +1,6 @@
 import type {
   ItemCategory,
+  LocalizedText,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import type { CategoryPathNode } from './categories';
@@ -19,7 +20,15 @@ export interface MercadonaProduct {
   externalId: string;
   /** Present on the detail endpoint only, which is why discovery fetches detail. */
   ean: string | null;
-  name: { es: string; en?: string };
+  /**
+   * The languages this read asked for and got back (plan 0111, section 9).
+   *
+   * Spanish is not structural. It used to be, and the shape then could not
+   * express the one product the library itself produces with no name at all:
+   * {@link unavailableProduct} filled the required key with a blank string,
+   * which is exactly the shape the gateway and plan 0079 refuse.
+   */
+  name: LocalizedText;
   /** Detail only. Empty on the handful of novelty products that carry no brand. */
   brand: string | null;
   unitSize: number | null;

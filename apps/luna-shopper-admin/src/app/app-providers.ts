@@ -13,6 +13,7 @@ import {
 import {
   adminAuthInterceptor,
   clientVersionInterceptor,
+  contentLocaleInterceptor,
   DASHBOARD_SERVICE,
   DashboardApi,
   DEPLOYMENT_SERVICE,
@@ -73,9 +74,16 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // nothing else, and turns a 401 into a renewal, an overlay and a retry rather
   // than into a lost request (plan 0003, section 6). The second stamps the build
   // version on the same requests and reloads once on a `client_too_old` refusal.
+  // The third says which language the operator reads, so the server's own
+  // messages come back in it (admin plan 0026, section 4); it is last, so the
+  // request it clones already carries the token and the version.
   provideHttpClient(
     withFetch(),
-    withInterceptors([adminAuthInterceptor, clientVersionInterceptor])
+    withInterceptors([
+      adminAuthInterceptor,
+      clientVersionInterceptor,
+      contentLocaleInterceptor,
+    ])
   ),
 
   // The app's own services, which cannot provide themselves. The array is owned by

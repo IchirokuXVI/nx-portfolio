@@ -1,10 +1,13 @@
 import { ConfigService } from '@nestjs/config';
 import {
+  DEFAULT_SCOPE_PRIORITY,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  PriceScopeKind,
   PriceSourceKind,
   type HarvestDocument,
+  type PriceScopeView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
@@ -56,6 +59,26 @@ function harvestDocument(
         extra: { page: 1 },
       },
     ],
+  };
+}
+
+/**
+ * One of the chain's warehouse scopes, as catalog holds it (plan 0108).
+ *
+ * `externalKey` is the warehouse and `priority` is what the adapter's band is
+ * read against, so the two fields the spawn checks are the two a case varies.
+ */
+function warehouse(
+  patch: Partial<PriceScopeView> & { id?: string } = {}
+): PriceScopeView {
+  return {
+    id: SCOPE,
+    supermarketId: SUPERMARKET,
+    kind: PriceScopeKind.REGION,
+    externalKey: '4661',
+    label: null,
+    priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+    ...patch,
   };
 }
 
@@ -131,6 +154,8 @@ function build(
     createImpl?: HarvestRunStore['create'];
     /** The row `load` answers, for the cases that never spawn one. */
     run?: HarvestRun;
+    /** What catalog holds for this chain, for the scope list cases. */
+    scopes?: PriceScopeView[];
   } = {}
 ) {
   const admin = {
@@ -234,6 +259,10 @@ function build(
       reset: 3,
       recomputed: 217,
     })),
+    // The chain's scopes, which a Mercadona walk is checked against (plan 0108,
+    // section 4): each one carries the warehouse it is walked by, and its
+    // priority says whether a walk may write it at all.
+    listAllPriceScopes: jest.fn(async () => overrides.scopes ?? [warehouse()]),
   } as unknown as CatalogClient;
 
   const service = new HarvestRunService(
@@ -545,7 +574,7 @@ describe('HarvestRunService.spawn', () => {
         userId: ADMIN,
         mode: HarvestRunMode.CATALOG_DISCOVERY,
         supermarketId: SUPERMARKET,
-        priceScopeId: 'a-scope',
+        priceScopeIds: [SCOPE],
         detailBackfill: true,
       })
     ).rejects.toBeInstanceOf(ValidationException);
@@ -603,9 +632,10 @@ describe('HarvestRunService.spawn', () => {
   });
 
   it('refuses a store discovery for a chain whose shops it cannot read', async () => {
-    // Mercadona publishes no store list, so a run naming it is still a radius
-    // over OpenStreetMap and still needs a centre.
-    const { service } = build({ source: { adapterKey: 'mercadona-api' } });
+    // A chain that publishes an assortment and no store list is still a radius
+    // over OpenStreetMap and still needs a centre. Mercadona was this case
+    // until plan 0106 read its own store finder.
+    const { service } = build({ source: { adapterKey: 'deza-web' } });
     await expect(
       service.spawn({
         userId: ADMIN,
@@ -615,9 +645,33 @@ describe('HarvestRunService.spawn', () => {
     ).rejects.toBeInstanceOf(ValidationException);
   });
 
-  it('refuses a mercadona walk with no scope to write the prices for', async () => {
+  it('carries the postal code filter into the run a chain’s own list reads', async () => {
+    // Not a centre and not a radius: it matches each shop's own code exactly
+    // (plan 0106, section 4), and blank entries are dropped rather than asked
+    // about.
+    const { service, store } = build({
+      source: { adapterKey: 'mercadona-api' },
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      postalCodes: ['15006', '  ', ' 14013 '],
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supermarketId: SUPERMARKET,
+        payload: expect.objectContaining({ postalCodes: ['15006', '14013'] }),
+      })
+    );
+  });
+
+  it('refuses a mercadona walk that names no warehouse to walk', async () => {
     // The walk fetches a price for every one of 4,232 products (plan 0086, D4),
-    // so it needs somewhere to put them. This is the sentence a REFRESH used.
+    // so it needs somewhere to put them, and since plan 0108 the somewhere is
+    // also the where: a scope carries the warehouse the walk fetches.
     const { service } = build();
     await expect(
       service.spawn({
@@ -625,7 +679,109 @@ describe('HarvestRunService.spawn', () => {
         mode: HarvestRunMode.CATALOG_DISCOVERY,
         supermarketId: SUPERMARKET,
       })
-    ).rejects.toBeInstanceOf(ValidationException);
+    ).rejects.toThrow(/at least one/i);
+  });
+
+  it('starts a mercadona walk over several warehouses, in one run', async () => {
+    // The saving of plan 0108, section 3: the detail phase is what the eighteen
+    // minutes go on and it does not depend on the warehouse, so three
+    // warehouses are one run rather than three.
+    const second = '5efa0000-0000-4000-a000-0000000000fe';
+    const { service, store } = build({
+      scopes: [warehouse(), warehouse({ id: second, externalKey: '4804' })],
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeIds: [SCOPE, second],
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // No default scope: every price a walk of several warehouses writes
+        // names the warehouse it came from.
+        priceScopeId: null,
+        payload: expect.objectContaining({ priceScopeIds: [SCOPE, second] }),
+      })
+    );
+  });
+
+  it('refuses a scope that carries no warehouse, naming it', async () => {
+    // A STORE scope somebody priced by hand. There is no warehouse to walk for
+    // it, and the run would otherwise start and fetch nothing.
+    const { service } = build({ scopes: [warehouse({ externalKey: null })] });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [SCOPE],
+      })
+    ).rejects.toThrow(new RegExp(SCOPE));
+  });
+
+  it('refuses a scope outside the band this walk may write, naming its priority', async () => {
+    // A crawl of one warehouse may not claim the chain's NATIONAL price (plan
+    // 0108, section 4). The band lives on the adapter, so a chain that really
+    // does price nationally says so once rather than in a runner conditional.
+    const { service } = build({
+      scopes: [
+        warehouse({
+          kind: PriceScopeKind.NATIONAL,
+          priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.NATIONAL],
+        }),
+      ],
+    });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [SCOPE],
+      })
+    ).rejects.toThrow(
+      new RegExp(String(DEFAULT_SCOPE_PRIORITY[PriceScopeKind.NATIONAL]))
+    );
+  });
+
+  it('refuses a scope of another chain', async () => {
+    // The read is per chain, so a foreign id is simply not in the answer. It is
+    // worth its own case because the refusal is the only thing standing between
+    // an operator's typo and a walk writing prices under somebody else's chain.
+    const { service } = build();
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: ['5efa0000-0000-4000-a000-00000000ffff'],
+      })
+    ).rejects.toThrow(/does not belong to this chain/i);
+  });
+
+  it('reads no warehouse from the source config, whatever it still holds', async () => {
+    // `config.warehouse` is deleted rather than deprecated (plan 0108, D2). A
+    // row that still carries one is left alone and has no effect: the walk is
+    // keyed entirely on the scopes it was given.
+    const { service, store } = build({
+      source: { config: { warehouse: 'a-stale-one' } },
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeIds: [SCOPE],
+    });
+
+    const payload = (store.create as jest.Mock).mock.calls[0][0].payload;
+    expect(payload.priceScopeIds).toEqual([SCOPE]);
+    expect(JSON.stringify(payload)).not.toContain('a-stale-one');
   });
 
   it('starts a DEZA crawl with no scope, and ignores one it is given', async () => {
@@ -697,7 +853,7 @@ describe('HarvestRunService.spawn', () => {
         userId: ADMIN,
         mode: HarvestRunMode.CATALOG_DISCOVERY,
         supermarketId: SUPERMARKET,
-        priceScopeId: SCOPE,
+        priceScopeIds: [SCOPE],
       })
     ).rejects.toThrow(/run-already-going/);
     await expect(
@@ -705,7 +861,7 @@ describe('HarvestRunService.spawn', () => {
         userId: ADMIN,
         mode: HarvestRunMode.CATALOG_DISCOVERY,
         supermarketId: SUPERMARKET,
-        priceScopeId: SCOPE,
+        priceScopeIds: [SCOPE],
       })
     ).rejects.toBeInstanceOf(ConflictException);
   });

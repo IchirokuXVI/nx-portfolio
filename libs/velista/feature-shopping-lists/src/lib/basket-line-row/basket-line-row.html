@@ -73,7 +73,25 @@
     class="body"
     type="button"
   >
-    <span class="content">{{ line().content }}</span>
+    <!--
+      The words, with the first match of a search painted (velista 0074, section
+      4.5). The `<mark>` is presentational: the row's accessible name is composed
+      from `line().content` and is unchanged, so a screen reader hears the line
+      rather than the fragment.
+
+      The three pieces are written with no space between them, because there is
+      none in the string: Angular collapses the whitespace around an interpolation
+      into a real space, so a line break here would put one inside the word.
+    -->
+    <span class="content">
+      @if (highlighted(); as parts) {
+        <span>{{ parts.before }}</span
+        ><mark class="match">{{ parts.match }}</mark
+        ><span>{{ parts.after }}</span>
+      } @else {
+        {{ line().content }}
+      }
+    </span>
 
     <!--
       The picked product, named, and priced after the separator when the run's
@@ -82,7 +100,31 @@
       "best price" badge here; that comparison is the pick sheet's.
     -->
     @if (productName(); as product) {
-      <span class="product">{{ product }}</span>
+      <!--
+        The name, the price, and what this shop makes of it (velista 0078,
+        section 5). Three pieces on one caption line rather than three lines: a row
+        with a mark and a row without must be the same height, or the list jumps as
+        somebody switches shops.
+
+        The mark is **words** and the colour is never the only carrier. "Cheaper
+        elsewhere" is a decision the shopper faces rather than a fault, so it takes
+        the attention role (`0002`, section 4.4); "not listed" is a fact about the
+        shop, so it is only a shade brighter than the caption it sits in.
+      -->
+      <span class="product">
+        <span>{{ product }}</span>
+        @if (productPrice(); as price) {
+          <span> · {{ price }}</span>
+        }
+        @if (markCaption(); as mark) {
+          <span
+            [class.is-cheaper]="this.mark()?.kind === 'cheaper'"
+            [class.is-unlisted]="this.mark()?.kind === 'unlisted'"
+          >
+            · {{ mark }}</span
+          >
+        }
+      </span>
     } @else if (line().optionIds.length > 0) {
       <span class="product is-missing">{{
         'basket.product.none' | rokuT
@@ -187,6 +229,15 @@
     -->
     @if (caption(); as said) {
       <span aria-hidden="true" class="preview">{{ said }}</span>
+    } @else if (origin() !== null) {
+      <!--
+        Which household's share this row's number is (velista `0077`, section 4.1).
+
+        Drawn on every row under a list heading and not only on a partly settled one,
+        because the number above it is one list's and the glyph beside it is the
+        whole line's, and this sentence is the only thing on the row that says so.
+      -->
+      <span aria-hidden="true" class="progress">{{ progressCaption() }}</span>
     } @else if (state() === 'partly') {
       <!--
         Both numbers, so somebody can see what is left without arithmetic. A

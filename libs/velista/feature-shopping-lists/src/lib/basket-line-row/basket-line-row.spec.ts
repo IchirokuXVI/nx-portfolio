@@ -58,6 +58,8 @@ async function render(
     notice?: { key: string; count: number } | null;
     /** Whether the **trip** is over, which is not the same as a finished line. */
     finished?: boolean;
+    /** What the basket is being searched for, already folded (velista `0074`). */
+    highlight?: string;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -82,6 +84,7 @@ async function render(
   fixture.componentRef.setInput('busy', options.busy ?? false);
   fixture.componentRef.setInput('notice', options.notice ?? null);
   fixture.componentRef.setInput('finished', options.finished ?? false);
+  fixture.componentRef.setInput('highlight', options.highlight ?? '');
   fixture.detectChanges();
 
   return fixture;
@@ -567,5 +570,67 @@ describe('BasketLineRow: what somebody else did', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.line-notice')
     ).toBeNull();
+  });
+});
+
+/**
+ * The searched fragment, painted on the row (velista `0074`, section 4.5).
+ *
+ * Two things have to hold and the second is the easy one to break. The mark has to
+ * land on the letters that matched, accents and all, and **the words have to still
+ * read as the words**: splitting a string across three nodes is exactly how a space
+ * gets into the middle of a name.
+ */
+describe('the searched fragment', () => {
+  const content = (fixture: Awaited<ReturnType<typeof render>>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('.content');
+
+  it('marks the first match and leaves the words unchanged', async () => {
+    const fixture = await render(line({ content: 'Skimmed milk' }), {
+      highlight: 'mil',
+    });
+
+    const mark = content(fixture)?.querySelector('mark');
+    expect(mark?.textContent).toBe('mil');
+    // No space anywhere it was split. Angular collapses whitespace around an
+    // interpolation into a real one, so a line break between the pieces would put
+    // a space inside the word.
+    expect(content(fixture)?.textContent?.trim()).toBe('Skimmed milk');
+  });
+
+  it('marks the accented letters the query found without them', async () => {
+    const fixture = await render(line({ content: 'Zumo de plátano' }), {
+      highlight: 'platano',
+    });
+
+    expect(content(fixture)?.querySelector('mark')?.textContent).toBe(
+      'plátano'
+    );
+  });
+
+  it('marks nothing when nothing is being searched for', async () => {
+    const fixture = await render(line({ content: 'Skimmed milk' }));
+
+    expect(content(fixture)?.querySelector('mark')).toBeNull();
+    expect(content(fixture)?.textContent?.trim()).toBe('Skimmed milk');
+  });
+
+  it('marks nothing when the line matched on its product rather than its words', async () => {
+    // The page searched a brand, the line was kept, and there is nothing in its own
+    // words to point at. The caption is matched but never marked: it is 12px muted
+    // text and a mark on it competes with the name beside it.
+    const fixture = await render(line({ content: 'Milk' }), {
+      highlight: 'hacendado',
+    });
+
+    expect(content(fixture)?.querySelector('mark')).toBeNull();
+  });
+
+  it("leaves the row's accessible name alone, because the mark is presentational", async () => {
+    const fixture = await render(line({ content: 'Skimmed milk' }), {
+      highlight: 'mil',
+    });
+
+    expect(body(fixture)?.getAttribute('aria-label')).toContain('Skimmed milk');
   });
 });

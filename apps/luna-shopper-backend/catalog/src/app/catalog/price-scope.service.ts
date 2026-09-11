@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  DEFAULT_SCOPE_PRIORITY,
   PriceScopeKind,
   type CreatePriceScopeRequest,
   type ListPriceScopesRequest,
@@ -19,8 +20,8 @@ import {
 import { QueryFailedError, Repository } from 'typeorm';
 import { PriceScope, Supermarket } from '../entities';
 import {
-  type AuditedWrite,
   CatalogAuditService,
+  type AuditedWrite,
 } from './catalog-audit.service';
 import { toPriceScopeView } from './catalog.mappers';
 import { EffectivePriceService } from './effective-price.service';
@@ -39,9 +40,10 @@ interface PriceScopeCursor {
  * same in. Platform admin gated like every other catalog write.
  *
  * The invariant worth knowing: **a location cannot be left without a scope**, so
- * deleting a scope a location still points at is refused rather than cascaded.
- * The database enforces it too (`ON DELETE RESTRICT`); this turns the constraint
- * violation into a sentence the owner can act on.
+ * deleting a scope a location still holds is refused rather than cascaded. The
+ * database enforces it too, on the join table's own `ON DELETE RESTRICT` since
+ * plan 0105; this turns the constraint violation into a sentence the owner can
+ * act on.
  */
 @Injectable()
 export class PriceScopeService {
@@ -63,13 +65,17 @@ export class PriceScopeService {
       kind: req.kind,
       externalKey: req.externalKey ?? null,
       label: req.label ?? null,
+      // A creator that states no priority takes the default for its kind (plan
+      // 0105, section 2.2), which is what leaves every existing caller correct
+      // without being touched.
+      priority: req.priority ?? DEFAULT_SCOPE_PRIORITY[req.kind],
     });
     try {
       const saved = await this.audit.write(actor, async (tx) => {
         const created = await tx.create(PriceScope, draft);
-        // A scope made later inherits the chain's national prices on arrival
-        // (plan 0080, section 6).
-        await this.effective.inheritNational(tx.manager, created);
+        // A scope made later inherits the prices of everything it falls
+        // through to, on arrival (plan 0080, section 6).
+        await this.effective.inheritLessSpecific(tx.manager, created);
         return created;
       });
       return toPriceScopeView(saved);
@@ -95,6 +101,12 @@ export class PriceScopeService {
     }
     if (req.label !== undefined) {
       row.label = req.label;
+    }
+    // Not defaulted from a changed kind, and that is deliberate (plan 0105,
+    // section 2.1): moving a scope re-ranks every shop that holds it, so it is
+    // an act the caller states, never a side effect of relabelling one.
+    if (req.priority !== undefined) {
+      row.priority = req.priority;
     }
     return toPriceScopeView(
       await this.audit.write(actor, (tx) => tx.update(PriceScope, before, row))
@@ -186,11 +198,12 @@ export class PriceScopeService {
         kind: PriceScopeKind.STORE,
         externalKey: locationId,
         label,
+        priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.STORE],
       })
     );
     // The same inheritance `create` gives a scope made by hand (plan 0080,
     // section 6): a chain priced nationally prices its new shop at once.
-    await this.effective.inheritNational(tx.manager, created);
+    await this.effective.inheritLessSpecific(tx.manager, created);
     return created;
   }
 

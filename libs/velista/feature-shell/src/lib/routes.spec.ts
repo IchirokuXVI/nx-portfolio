@@ -718,18 +718,25 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the four sheets over the basket, and no units sheet', () => {
-      // Velista `0073`, test 11. There were six. `lines/:lineId/list` went with the
-      // send sheet it drew (`0068`), which folded every list into the units sheet;
-      // `lines/:lineId/units` went with the units sheet itself, whose rows are now
-      // drawn on the settle sheet under the product. Nothing in the app declares a
-      // sheet over a sheet any more.
+    it('offers the six sheets over the basket, and no units sheet', () => {
+      // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
+      // six, then four: `lines/:lineId/list` went with the send sheet it drew
+      // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
+      // went with the units sheet itself, whose rows are now drawn on the settle
+      // sheet under the product. Nothing in the app declares a sheet over a sheet
+      // any more, and `sheet/filter/shop` is no exception: it is a **sibling** of
+      // `sheet/filter`, which it replaces with `leaveTo` rather than covering.
+      //
+      // The longer path is declared first, which is this table's rule wherever two
+      // paths share a prefix.
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
           'sheet/lines/:lineId/settle',
           'sheet/people',
           'sheet/share',
           'sheet/finish',
+          'sheet/filter/shop',
+          'sheet/filter',
         ]
       );
     });
@@ -752,17 +759,22 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(4);
+      expect(sheets).toHaveLength(6);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
     });
 
-    it('provides the store and the socket on the page, not on the app', () => {
-      // Both scoped here, which is what makes the connection's lifetime the
+    it('provides the stores and the socket on the page, not on the app', () => {
+      // All three scoped here, which is what makes the connection's lifetime the
       // screen's: two baskets are never open at once, and presence answers "who is
       // here" rather than "who has ever opened this" precisely because leaving the
       // route destroys the socket (plan 0048, section 4).
+      //
+      // `BasketViewStore` is here rather than on the component because the sheets
+      // that set its controls are **child routes** of this page (velista `0074`,
+      // section 4.3), and a store the component provided is not one a sibling route
+      // can be sure to reach.
       //
       // Asserted by name rather than by counting, because a count says nothing about
       // *which* provider went missing, and the socket is the one whose absence would
@@ -771,7 +783,11 @@ describe('AppShellRoutes', () => {
         (provider) => (provider as { name?: string }).name
       );
 
-      expect(provided).toEqual(['BasketSocket', 'BasketStore']);
+      expect(provided).toEqual([
+        'BasketSocket',
+        'BasketStore',
+        'BasketViewStore',
+      ]);
     });
 
     it('keeps the page, the join screen and every sheet lazy', () => {
@@ -874,8 +890,9 @@ describe('the sheets and their exit animation', () => {
     //
     // It was twenty nine until velista `0068` deleted the send sheet, and twenty eight
     // until `0073` deleted the units sheet: its rows are drawn on the settle sheet
-    // under the product now.
-    expect(sheets).toHaveLength(27);
+    // under the product now. `0075` added the basket's filter sheet, which took it
+    // back to twenty eight, and `0078` added the shop picker beside it.
+    expect(sheets).toHaveLength(29);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

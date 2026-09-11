@@ -47,6 +47,8 @@ export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
     kind: 'NATIONAL',
     externalKey: null,
     label: { en: 'Nationwide', es: 'Nacional' },
+    // The defaults of backend plan 0105, section 2.2: lower is more specific.
+    priority: 1000,
   },
   {
     id: 'ps_mercadona_4661',
@@ -54,6 +56,7 @@ export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
     kind: 'REGION',
     externalKey: '4661',
     label: { en: 'Córdoba warehouse', es: 'Almacén de Córdoba' },
+    priority: 300,
   },
   {
     id: 'ps_mercadona_3421',
@@ -61,6 +64,7 @@ export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
     kind: 'REGION',
     externalKey: '3421',
     label: null,
+    priority: 300,
   },
   {
     id: 'ps_consum_centro',
@@ -68,6 +72,7 @@ export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
     kind: 'STORE',
     externalKey: null,
     label: null,
+    priority: 100,
   },
 ];
 
@@ -85,6 +90,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     id: 'loc_cordoba_centro',
     supermarketId: MERCADONA,
     priceScopeId: 'ps_mercadona_4661',
+    priceScopeIds: ['ps_mercadona_4661'],
     label: null,
     address: 'Avenida del Gran Capitán 12',
     city: 'Córdoba',
@@ -100,6 +106,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     id: 'loc_cordoba_oeste',
     supermarketId: MERCADONA,
     priceScopeId: 'ps_mercadona_4661',
+    priceScopeIds: ['ps_mercadona_4661'],
     label: null,
     address: 'Calle Historiador Domínguez Ortiz 4',
     city: 'Córdoba',
@@ -116,6 +123,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     id: 'loc_sierra',
     supermarketId: MERCADONA,
     priceScopeId: 'ps_mercadona_3421',
+    priceScopeIds: ['ps_mercadona_3421'],
     label: null,
     address: 'Carretera de Trassierra km 8',
     city: null,
@@ -133,6 +141,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     id: 'loc_consum_centro',
     supermarketId: CONSUM,
     priceScopeId: 'ps_consum_centro',
+    priceScopeIds: ['ps_consum_centro'],
     label: { en: 'Consum Centro', es: 'Consum Centro' },
     address: 'Calle Cruz Conde 20',
     city: 'Córdoba',

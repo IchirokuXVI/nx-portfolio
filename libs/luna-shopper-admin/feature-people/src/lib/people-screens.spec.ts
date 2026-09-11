@@ -4,12 +4,13 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DeploymentStore,
   DIRECTORY_SERVICE,
+  type DirectoryServiceI,
   ServerReachability,
   SessionStorage,
   SessionStore,
-  type DirectoryServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
@@ -71,6 +72,7 @@ async function boot(url: string, directory?: DirectoryServiceI) {
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       // Mounted at the root rather than under `/shoppers`: this file is about
       // the screens, and admin plan 0022's own mount is asserted against the

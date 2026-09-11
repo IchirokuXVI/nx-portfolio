@@ -6,7 +6,11 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
-import { BasketSocket, BasketStore } from '@portfolio/velista/data-access';
+import {
+  BasketSocket,
+  BasketStore,
+  BasketViewStore,
+} from '@portfolio/velista/data-access';
 import {
   RENDERS_WHILE_CONNECTING,
   SHEET_SEGMENT,
@@ -725,19 +729,25 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-shopping-lists').then(
                 (m) => m.BasketPage
               ),
-            // Both scoped to this route, so no other screen can reach a basket's
-            // connection or its lines (plan 0048, section 4). `BasketSocket` is listed
-            // first for readability only; the injector resolves it on demand either
-            // way.
+            // All three scoped to this route, so no other screen can reach a
+            // basket's connection, its lines, or what the page is showing of them
+            // (plan 0048, section 4). `BasketSocket` is listed first for readability
+            // only; the injector resolves them on demand either way.
+            //
+            // `BasketViewStore` is **here and not on the component** for the reason
+            // velista `0074` section 4.3 gives: the sheets that set its controls are
+            // child routes of this page rather than children of its component, and a
+            // store the component provided is not one a sibling route can be sure to
+            // reach.
             //
             // **Scoping them here does not end them.** Angular caches a route's
             // environment injector on the route config and destroys it only under
-            // `withExperimentalAutoCleanupInjectors()`, so both of these live as long
+            // `withExperimentalAutoCleanupInjectors()`, so all three live as long
             // as the page does and are handed back on the next visit. `BasketPage`
-            // closes the socket and clears the store from its own teardown, which is
-            // what makes presence answer "who is here" rather than "who has ever
-            // opened this".
-            providers: [BasketSocket, BasketStore],
+            // closes the socket and clears both stores from its own teardown, which
+            // is what makes presence answer "who is here" rather than "who has ever
+            // opened this", and what stops a basket opened later starting searched.
+            providers: [BasketSocket, BasketStore, BasketViewStore],
             children: [
               // Rule E1: each sheet covers the page without losing it, and Android's
               // back button dismisses it. None is guarded, because which of them a
@@ -779,6 +789,42 @@ export const AppShellRoutes: Route[] = [
                 loadComponent: () =>
                   import('@portfolio/velista/feature-shopping-lists').then(
                     (m) => m.FinishSheet
+                  ),
+              }),
+              // Ordering, grouping and narrowing the lines (velista `0075`). A sheet
+              // rather than a menu on the page, because it holds four groups of
+              // controls and one of them is a list of households.
+              //
+              // It is the first sheet over this page that is about the **screen**
+              // rather than about the basket, which is why it reads `BasketViewStore`
+              // and never `BasketStore`: it sets what is drawn and writes nothing.
+              // Which shop the prices come from (velista `0078`). A sheet of its
+              // own rather than a third radio group on the sheet below, because a
+              // profile can hold fifty shops and a flat list of them is a wall.
+              //
+              // A **sibling** of the filter sheet and not its child, although its
+              // path reads like one: the two replace each other with `leaveTo`, so
+              // neither is ever drawn over the other, and a nested route would put
+              // the filter sheet's panel behind this one on the way in. The path
+              // says what the sheet is about, which is the shop the filter sets.
+              //
+              // Declared **before** `filter`, which is the ordering rule the basket
+              // and its history already follow above: a childless route declines a
+              // URL it cannot consume whole, so the pair is unambiguous either way,
+              // and putting the longer path first makes that a decision rather than
+              // a piece of luck about how the router backtracks.
+              sheet({
+                path: 'filter/shop',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.ShopPickerSheet
+                  ),
+              }),
+              sheet({
+                path: 'filter',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.FilterSheet
                   ),
               }),
             ],

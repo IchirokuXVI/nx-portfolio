@@ -10,6 +10,7 @@
 
 import {
   AuthProvider,
+  DEFAULT_SCOPE_PRIORITY,
   ItemCategory,
   LineApprovalStatus,
   ListPermission,
@@ -227,12 +228,16 @@ export function makeSupermarket(
 export function makePriceScope(
   overrides: Partial<SeedPriceScope> = {}
 ): SeedPriceScope {
+  const kind = overrides.kind ?? PriceScopeKind.STORE;
   return {
     id: uuid(),
     supermarketId: uuid(),
-    kind: PriceScopeKind.STORE,
+    kind,
     externalKey: null,
     label: null,
+    // The default for the kind (backend plan 0105, section 2.2), read from
+    // the kind this scope ends up with rather than from the fallback above.
+    priority: DEFAULT_SCOPE_PRIORITY[kind],
     ...overrides,
   };
 }

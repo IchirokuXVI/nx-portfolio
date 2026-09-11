@@ -3,12 +3,13 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
   HarvestMemory,
-  ServerReachability,
   type HarvestServiceI,
+  ServerReachability,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { SUPERMARKETS } from '@portfolio/luna-shopper-admin/feature-catalog';
 import {
@@ -73,6 +74,7 @@ async function render<T>(component: new (...args: never[]) => T) {
   await TestBed.configureTestingModule({
     imports: [component as never, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       provideRouter([]),
       provideLocationMocks(),

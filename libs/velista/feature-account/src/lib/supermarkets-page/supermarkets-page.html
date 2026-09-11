@@ -118,7 +118,7 @@
               </section>
             } @else {
               <lib-franchise-buttons
-                (select)="select($event)"
+                (chosen)="select($event)"
                 [chains]="chains()"
                 [openKey]="selection()"
               />
@@ -145,7 +145,7 @@
                   </section>
                 } @else {
                   <lib-shop-list
-                    (toggle)="toggle($event)"
+                    (toggled)="toggle($event)"
                     [grouped]="false"
                     [groups]="flat()"
                   />
@@ -206,7 +206,7 @@
                     </p>
                   } @else {
                     <lib-shop-list
-                      (toggle)="toggle($event)"
+                      (toggled)="toggle($event)"
                       [groups]="groups()"
                     />
                   }

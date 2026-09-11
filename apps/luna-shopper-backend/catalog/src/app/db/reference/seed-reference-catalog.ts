@@ -1,4 +1,7 @@
-import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
+import {
+  DEFAULT_SCOPE_PRIORITY,
+  PriceSourceKind,
+} from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { In } from 'typeorm';
 import { recomputeEffectivePrices } from '../../catalog/effective-price.service';
@@ -9,6 +12,7 @@ import {
   ProductGroup,
   Supermarket,
   SupermarketLocation,
+  SupermarketLocationPriceScope,
 } from '../../entities';
 import { EL_JAMON_ITEMS, SUPERCASH_ITEMS } from './authored';
 import { REFERENCE_GROUPS } from './groups';
@@ -113,6 +117,7 @@ export async function seedReferenceCatalog(
             kind: store.scopeKind,
             externalKey: store.slug,
             label: store.scopeLabel,
+            priority: DEFAULT_SCOPE_PRIORITY[store.scopeKind],
           },
         ],
         ['id']
@@ -122,7 +127,6 @@ export async function seedReferenceCatalog(
           {
             id: locationId(store.slug),
             supermarketId: sId,
-            priceScopeId: scId,
             label: store.location.label,
             address: store.location.address,
             city: store.location.city,
@@ -132,6 +136,7 @@ export async function seedReferenceCatalog(
         ],
         ['id']
       );
+      await seedStack(m, locationId(store.slug), scId);
       report.stores++;
       await writeItems(
         m,
@@ -229,6 +234,7 @@ async function seedMercadona(
             en: 'Córdoba — warehouse 4661',
             es: 'Córdoba — almacén 4661',
           },
+          priority: DEFAULT_SCOPE_PRIORITY.REGION,
         },
       ],
       ['id']
@@ -238,7 +244,6 @@ async function seedMercadona(
         {
           id: locationId('mercadona'),
           supermarketId: id,
-          priceScopeId: scopeId,
           label: {
             en: 'Córdoba — Libertador Andrés de Santa Cruz',
             es: 'Córdoba — Libertador Andrés de Santa Cruz',
@@ -251,6 +256,7 @@ async function seedMercadona(
       ],
       ['id']
     );
+    await seedStack(m, locationId('mercadona'), scopeId);
     report.stores++;
   }
 
@@ -368,4 +374,24 @@ async function writeItems(
     })),
     now
   );
+}
+
+/**
+ * The one row that puts a seeded shop on its scope (plan 0105, section 3).
+ *
+ * Idempotent like every upsert above it: the seed runs on every deploy, and
+ * the pair is the table's primary key, so a second run conflicts on it and
+ * does nothing rather than failing the deploy.
+ */
+async function seedStack(
+  m: EntityManager,
+  supermarketLocationId: string,
+  priceScopeId: string
+): Promise<void> {
+  await m
+    .getRepository(SupermarketLocationPriceScope)
+    .upsert(
+      [{ supermarketLocationId, priceScopeId }],
+      ['supermarketLocationId', 'priceScopeId']
+    );
 }

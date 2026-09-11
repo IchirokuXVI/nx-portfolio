@@ -37,6 +37,21 @@ export interface ObservedPlace {
    * on the row is what the source said (plan 0038, section 8.2).
    */
   tags: Record<string, string>;
+  /**
+   * The group of shops this one is priced with, by the key a
+   * {@link RunReport.scope} declaration named (plan 0107, section 3.3).
+   *
+   * It is the source's own key and never a uuid of ours, like every other scope
+   * key. Only the trusted import reads it, to put a shop it creates in the
+   * scope the chain said prices it; a place that reaches the review queue is
+   * scoped by the admin importing it.
+   *
+   * Absent or null means the source declared no group for this shop, and the
+   * location then takes the `STORE` scope catalog gives any location that names
+   * none. A radius search always answers null: OpenStreetMap knows nothing
+   * about what a shop charges.
+   */
+  scopeKey?: string | null;
 }
 
 /**

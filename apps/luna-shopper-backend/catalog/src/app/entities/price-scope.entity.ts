@@ -1,8 +1,16 @@
 import {
+  DEFAULT_SCOPE_PRIORITY,
   PriceScopeKind,
   type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import {
+  BeforeInsert,
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+} from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { Supermarket } from './supermarket.entity';
 
@@ -42,4 +50,48 @@ export class PriceScope extends BaseEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   label!: LocalizedText | null;
+
+  /**
+   * How specific this scope is (plan 0105, section 2.1). Lower is more
+   * specific, and the most specific scope that has a price for a product is the
+   * price that shop charges.
+   *
+   * An integer and not an enum position, so a tier nobody anticipated is a
+   * number rather than a migration: a chain that prices by province fits at 250
+   * with no new {@link kind}, no contract change and no back office release.
+   * {@link DEFAULT_SCOPE_PRIORITY} is what a creator that states none takes.
+   *
+   * **Beside the kind and not instead of it.** The number says how a scope
+   * competes; the kind says how {@link externalKey} is read and how a shop
+   * attaches to it. A warehouse code, a postal code and a store id are not
+   * interchangeable, so a run declaring three kinds at once needs both facts.
+   * The unique index is unchanged: priority is not part of identity.
+   *
+   * Gaps of 100, and an existing row is never renumbered by a migration. A
+   * number that moved on its own would silently re-rank every shop holding the
+   * scope.
+   */
+  @Column({ type: 'integer' })
+  priority!: number;
+
+  /**
+   * The default of section 2.2, applied here rather than in the one service
+   * that happens to create scopes today.
+   *
+   * "A creator that states no priority takes the default for its kind" is a
+   * property of a scope, and there are four creators: the admin route, the
+   * store scope a location makes for itself, the reference seed and a run.
+   * Written once in a service, the other three insert a null into a NOT NULL
+   * column, and the failure is a constraint violation rather than a sentence.
+   *
+   * There is no database default beside it on purpose: the right number
+   * depends on the kind, and a column default would have to pick one and be
+   * silently wrong about the other three.
+   */
+  @BeforeInsert()
+  defaultPriority(): void {
+    if (this.priority === undefined || this.priority === null) {
+      this.priority = DEFAULT_SCOPE_PRIORITY[this.kind];
+    }
+  }
 }

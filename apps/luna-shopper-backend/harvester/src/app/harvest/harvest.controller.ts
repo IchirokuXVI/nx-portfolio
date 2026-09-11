@@ -377,4 +377,11 @@ export class HarvestController {
   ): Promise<SupermarketSourceView> {
     return this.sources.setEnabled(req);
   }
+
+  @MessagePattern(SUPERMARKET_SOURCE_PATTERNS.delete)
+  deleteSource(
+    @Payload() req: SupermarketSourceIdRequest
+  ): Promise<{ id: string }> {
+    return this.sources.delete(req);
+  }
 }

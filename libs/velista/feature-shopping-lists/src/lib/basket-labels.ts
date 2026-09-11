@@ -3,6 +3,7 @@ import {
   basketLineState,
   outstanding,
   type BasketLine,
+  type BasketLineOrigin,
   type BasketParticipant,
 } from '@portfolio/velista/models';
 
@@ -331,6 +332,37 @@ export function quantityCaption(
         count: line.quantity,
       })
     : '';
+}
+
+/**
+ * What one list asked for and got, for a row drawn under that list's heading
+ * (velista `0077`, section 4.1).
+ *
+ * Two sentences and the origin decides which. A list that has got some of its share
+ * says so, "2 of 6 got"; one that has got none says what it asked for instead, and
+ * says it against the line's own total, "this list asked for 6 of the 12".
+ *
+ * The second half of that sentence is the point of it. The number beside the row is
+ * this household's and the glyph is the whole line's, and without a sentence naming
+ * both a shopper has no way to tell which of the two they are reading. A list that
+ * has got none is exactly where that confusion would land, because the row then
+ * looks like an untouched line.
+ */
+export function listShareCaption(
+  line: BasketLine,
+  origin: BasketLineOrigin,
+  translator: RokuTranslatorService,
+  locale: string
+): string {
+  return origin.settled > 0
+    ? translator.t('basket.line.listPartly', undefined, locale, {
+        settled: origin.settled,
+        asked: origin.quantity,
+      })
+    : translator.t('basket.line.listShare', undefined, locale, {
+        asked: origin.quantity,
+        total: line.quantity,
+      });
 }
 
 /**

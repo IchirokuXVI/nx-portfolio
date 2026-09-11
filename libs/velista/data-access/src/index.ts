@@ -34,6 +34,7 @@ export * from './lib/generated-lists/basket-service';
 export * from './lib/generated-lists/basket-session-store';
 export * from './lib/generated-lists/basket-socket';
 export * from './lib/generated-lists/basket-store';
+export * from './lib/generated-lists/basket-view-store';
 export * from './lib/generated-lists/generated-list-api';
 export * from './lib/generated-lists/generated-list-memory';
 export * from './lib/generated-lists/generated-list-service';

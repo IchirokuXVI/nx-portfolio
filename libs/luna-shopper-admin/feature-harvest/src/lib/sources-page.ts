@@ -17,7 +17,11 @@ import {
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
-import { HarvestNotice, ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
+import {
+  ConfirmDialog,
+  HarvestNotice,
+  ReferencePicker,
+} from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
 import { formatInstant } from './format-instant';
 import { HarvestShell } from './harvest-shell';
@@ -51,6 +55,19 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
 ).sort((a, b) => ADAPTER_ORDER[a] - ADAPTER_ORDER[b]);
 
 /**
+ * The settings column as the text an operator edits.
+ *
+ * Indented, because the box is where somebody reads a setting as well as where
+ * they type one, and a single line of JSON is not something a person checks a
+ * warehouse id against.
+ */
+function configTextOf(
+  config: Record<string, unknown> | null | undefined
+): string {
+  return JSON.stringify(config ?? {}, null, 2);
+}
+
+/**
  * Per chain fetching configuration (plan 0006, sections 3 and 8).
  *
  * This is where the **one** switch of section 3 that the app is allowed to
@@ -68,10 +85,24 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
  * `enabled` gets its own route because describing a chain and starting to fetch
  * it are two decisions. The toggle calls that route directly, so turning a chain
  * on does not resend a configuration nobody was editing.
+ *
+ * `autoImportPlaces` is the second switch and the third decision (backend plan
+ * 0107, section 3.1): whether the shops this chain names may enter the catalog
+ * with nobody looking first. It is the one switch in the harvester that writes
+ * to the catalog without a review, which is why it carries a sentence saying so
+ * rather than a bare label. It has no route of its own and goes through the
+ * upsert, so the row's own values are sent back beside it rather than the edit
+ * form's.
  */
 @Component({
   selector: 'lib-sources-page',
-  imports: [FormsModule, RokuTranslatorPipe, HarvestNotice, ReferencePicker],
+  imports: [
+    FormsModule,
+    RokuTranslatorPipe,
+    ConfirmDialog,
+    HarvestNotice,
+    ReferencePicker,
+  ],
   template: `
     <header>
       <h1>{{ 'harvest.sources.heading' | rokuT }}</h1>
@@ -126,6 +157,20 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
               <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
               <input [(ngModel)]="rate" min="1" name="rate" type="number" />
             </label>
+            <label class="wide">
+              <span>{{ 'harvest.sources.field.config' | rokuT }}</span>
+              <textarea
+                [(ngModel)]="configText"
+                name="config"
+                rows="3"
+                spellcheck="false"
+              ></textarea>
+              <small>{{ 'harvest.sources.config.hint' | rokuT }}</small>
+            </label>
+
+            @if (formErrorKey(); as key) {
+              <p class="failure" role="alert">{{ key | rokuT }}</p>
+            }
 
             <div class="controls">
               <button
@@ -156,93 +201,158 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
         <p class="state">{{ 'harvest.sources.empty' | rokuT }}</p>
       } @else {
         <ul class="sources">
-        @for (source of sources(); track source.id) {
-          <li>
-            <div class="row">
-              <span class="chain">{{ names.nameOf(source.supermarketId) }}</span>
-              <span class="adapter">{{ source.adapterKey }}</span>
+          @for (source of sources(); track source.id) {
+            <li>
+              <div class="row">
+                <span class="chain">{{
+                  names.nameOf(source.supermarketId)
+                }}</span>
+                <span class="adapter">{{ source.adapterKey }}</span>
 
-              <button
-                (click)="toggle(source)"
-                [attr.aria-pressed]="source.enabled"
-                [class.on]="source.enabled"
-                [disabled]="busyId() === source.supermarketId"
-                class="toggle"
-                type="button"
-              >
-                {{
-                  (source.enabled
-                    ? 'harvest.sources.enabled'
-                    : 'harvest.sources.disabled'
-                  ) | rokuT
-                }}
-              </button>
-            </div>
+                <button
+                  (click)="toggle(source)"
+                  [attr.aria-pressed]="source.enabled"
+                  [class.on]="source.enabled"
+                  [disabled]="busyId() === source.supermarketId"
+                  class="toggle"
+                  type="button"
+                >
+                  {{
+                    (source.enabled
+                      ? 'harvest.sources.enabled'
+                      : 'harvest.sources.disabled'
+                    ) | rokuT
+                  }}
+                </button>
 
-            <dl>
-              <div>
-                <dt>{{ 'harvest.sources.field.workers' | rokuT }}</dt>
-                <dd>{{ source.workers }}</dd>
+                <button
+                  (click)="toggleTrust(source)"
+                  [attr.aria-pressed]="source.autoImportPlaces"
+                  [class.on]="source.autoImportPlaces"
+                  [disabled]="busyId() === source.supermarketId"
+                  class="toggle"
+                  type="button"
+                >
+                  {{
+                    (source.autoImportPlaces
+                      ? 'harvest.sources.trusted'
+                      : 'harvest.sources.untrusted'
+                    ) | rokuT
+                  }}
+                </button>
               </div>
-              <div>
-                <dt>{{ 'harvest.sources.field.rate' | rokuT }}</dt>
-                <dd>{{ source.maxRequestsPerSecond }}</dd>
-              </div>
-              <div>
-                <dt>{{ 'harvest.sources.field.lastRunAt' | rokuT }}</dt>
-                <dd>{{ instant(source.lastRunAt) }}</dd>
-              </div>
-              <div>
-                <dt>{{ 'harvest.sources.field.lastSuccessAt' | rokuT }}</dt>
-                <dd>{{ instant(source.lastSuccessAt) }}</dd>
-              </div>
-              <div>
-                <dt>{{ 'harvest.sources.field.failures' | rokuT }}</dt>
-                <dd>{{ source.consecutiveFailures }}</dd>
-              </div>
-            </dl>
 
-            @if (editing() === source.supermarketId) {
-              <div class="edit">
-                <label>
-                  <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
-                  <select [(ngModel)]="adapterKey" name="adapterKey">
-                    @for (option of adapters; track option) {
-                      <option [value]="option">{{ option }}</option>
-                    }
-                  </select>
-                </label>
-                <label>
-                  <span>{{ 'harvest.sources.field.workers' | rokuT }}</span>
-                  <input
-                    [(ngModel)]="workers"
-                    min="1"
-                    name="workers"
-                    type="number"
-                  />
-                </label>
-                <label>
-                  <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
-                  <input [(ngModel)]="rate" min="1" name="rate" type="number" />
-                </label>
+              <p class="hint">{{ 'harvest.sources.trust.hint' | rokuT }}</p>
 
+              <dl>
+                <div>
+                  <dt>{{ 'harvest.sources.field.workers' | rokuT }}</dt>
+                  <dd>{{ source.workers }}</dd>
+                </div>
+                <div>
+                  <dt>{{ 'harvest.sources.field.rate' | rokuT }}</dt>
+                  <dd>{{ source.maxRequestsPerSecond }}</dd>
+                </div>
+                <div>
+                  <dt>{{ 'harvest.sources.field.lastRunAt' | rokuT }}</dt>
+                  <dd>{{ instant(source.lastRunAt) }}</dd>
+                </div>
+                <div>
+                  <dt>{{ 'harvest.sources.field.lastSuccessAt' | rokuT }}</dt>
+                  <dd>{{ instant(source.lastSuccessAt) }}</dd>
+                </div>
+                <div>
+                  <dt>{{ 'harvest.sources.field.failures' | rokuT }}</dt>
+                  <dd>{{ source.consecutiveFailures }}</dd>
+                </div>
+              </dl>
+
+              @if (editing() === source.supermarketId) {
+                <div class="edit">
+                  <label>
+                    <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
+                    <select [(ngModel)]="adapterKey" name="adapterKey">
+                      @for (option of adapters; track option) {
+                        <option [value]="option">{{ option }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    <span>{{ 'harvest.sources.field.workers' | rokuT }}</span>
+                    <input
+                      [(ngModel)]="workers"
+                      min="1"
+                      name="workers"
+                      type="number"
+                    />
+                  </label>
+                  <label>
+                    <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
+                    <input
+                      [(ngModel)]="rate"
+                      min="1"
+                      name="rate"
+                      type="number"
+                    />
+                  </label>
+                  <label class="wide">
+                    <span>{{ 'harvest.sources.field.config' | rokuT }}</span>
+                    <textarea
+                      [(ngModel)]="configText"
+                      name="config"
+                      rows="3"
+                      spellcheck="false"
+                    ></textarea>
+                    <small>{{ 'harvest.sources.config.hint' | rokuT }}</small>
+                  </label>
+
+                  @if (formErrorKey(); as key) {
+                    <p class="failure" role="alert">{{ key | rokuT }}</p>
+                  }
+
+                  <div class="controls">
+                    <button
+                      (click)="save(source)"
+                      class="primary"
+                      type="button"
+                    >
+                      {{ 'resource.action.save' | rokuT }}
+                    </button>
+                    <button (click)="editing.set(null)" type="button">
+                      {{ 'resource.action.cancel' | rokuT }}
+                    </button>
+                  </div>
+                </div>
+              } @else {
                 <div class="controls">
-                  <button (click)="save(source)" class="primary" type="button">
-                    {{ 'resource.action.save' | rokuT }}
+                  <button (click)="edit(source)" type="button">
+                    {{ 'harvest.sources.edit' | rokuT }}
                   </button>
-                  <button (click)="editing.set(null)" type="button">
-                    {{ 'resource.action.cancel' | rokuT }}
+                  <button
+                    (click)="askDelete(source)"
+                    [disabled]="busyId() === source.supermarketId"
+                    class="danger"
+                    type="button"
+                  >
+                    {{ 'harvest.sources.remove.action' | rokuT }}
                   </button>
                 </div>
-              </div>
-            } @else {
-              <button (click)="edit(source)" type="button">
-                {{ 'harvest.sources.edit' | rokuT }}
-              </button>
-            }
-          </li>
-        }
+              }
+            </li>
+          }
         </ul>
+      }
+
+      @if (pendingDelete(); as target) {
+        <lib-confirm-dialog
+          (confirm)="confirmDelete(target)"
+          (dismiss)="pendingDelete.set(null)"
+          [bodyArgs]="{ chain: names.nameOf(target.supermarketId) }"
+          [busy]="busyId() === target.supermarketId"
+          bodyKey="harvest.sources.remove.body"
+          confirmKey="harvest.sources.remove.confirm"
+          headingKey="harvest.sources.remove.heading"
+        />
       }
     }
   `,
@@ -382,6 +492,37 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
       color: var(--admin-ink-muted);
     }
 
+    /* The settings box takes the whole row: it holds JSON, and a column of it
+       eight characters wide is unreadable beside three number fields. */
+    label.wide {
+      flex-basis: 100%;
+    }
+
+    label small {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    /* The global control rule covers button, input and select, and a textarea
+       is none of the three, so it wears the same clothes here. */
+    textarea {
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      font-family: monospace;
+      font-size: 1rem;
+      color: var(--admin-ink);
+      resize: vertical;
+    }
+
+    button.danger {
+      border-color: transparent;
+      background: var(--admin-danger);
+      font-weight: 600;
+      color: var(--admin-danger-ink);
+    }
+
     .controls {
       display: flex;
       gap: var(--admin-space-3);
@@ -434,6 +575,26 @@ export class SourcesPage {
   readonly adapterKey = signal<Wire.EnumsAdapterKey>('manual');
   readonly workers = signal(1);
   readonly rate = signal(1);
+  /**
+   * The adapter's own settings, as the JSON text an operator edits.
+   *
+   * It is free form on purpose, because the column is: `config` is whatever the
+   * adapter that reads it wants, and a form with a field per adapter would have
+   * to be extended in this screen every time a runner learns a setting. What
+   * the screen owes instead is that a value which is not JSON never reaches the
+   * backend, which is what {@link parsedConfig} is for.
+   */
+  readonly configText = signal('{}');
+  /**
+   * What is wrong with the form itself, as opposed to what the server said.
+   *
+   * Kept apart from {@link error} because the two are cleared at different
+   * times and mean different things: this one is answered by typing, and a
+   * gateway failure is not.
+   */
+  readonly formErrorKey = signal<string | null>(null);
+  /** The row a delete is being confirmed for, or null while nothing is asked. */
+  readonly pendingDelete = signal<Source | null>(null);
 
   readonly failed = computed(
     () => this.error() !== null && this.sources().length === 0
@@ -472,6 +633,8 @@ export class SourcesPage {
     this.adapterKey.set(source.adapterKey);
     this.workers.set(source.workers);
     this.rate.set(source.maxRequestsPerSecond);
+    this.configText.set(configTextOf(source.config));
+    this.formErrorKey.set(null);
   }
 
   /** Open the create panel, with the backend's own defaults in the fields. */
@@ -482,6 +645,8 @@ export class SourcesPage {
     this.adapterKey.set('manual');
     this.workers.set(4);
     this.rate.set(4);
+    this.configText.set('{}');
+    this.formErrorKey.set(null);
   }
 
   /**
@@ -499,6 +664,11 @@ export class SourcesPage {
       return;
     }
 
+    const config = this.parsedConfig();
+    if (config === null) {
+      return;
+    }
+
     this.busyId.set(chainId);
     this.error.set(null);
 
@@ -507,6 +677,7 @@ export class SourcesPage {
         adapterKey: this.adapterKey(),
         workers: this.workers(),
         maxRequestsPerSecond: this.rate(),
+        config,
       });
       // First, which is where the server's newest first ordering would put it
       // on the next load.
@@ -545,7 +716,40 @@ export class SourcesPage {
     }
   }
 
+  /**
+   * Trust this chain's own shop list, or stop.
+   *
+   * There is no route for this one, so it goes through the upsert with the
+   * **row's own** values beside it rather than the edit form's signals: the
+   * form may be closed, or open on another row, and a trust toggle must not
+   * rewrite a configuration nobody was editing.
+   */
+  async toggleTrust(source: Source): Promise<void> {
+    this.busyId.set(source.supermarketId);
+    this.error.set(null);
+
+    try {
+      const updated = await this._service.upsertSource(source.supermarketId, {
+        adapterKey: source.adapterKey,
+        workers: source.workers,
+        maxRequestsPerSecond: source.maxRequestsPerSecond,
+        config: source.config,
+        autoImportPlaces: !source.autoImportPlaces,
+      });
+      this._replace(updated);
+    } catch (error) {
+      this.error.set(toGatewayError(error));
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
   async save(source: Source): Promise<void> {
+    const config = this.parsedConfig();
+    if (config === null) {
+      return;
+    }
+
     this.busyId.set(source.supermarketId);
     this.error.set(null);
 
@@ -554,11 +758,7 @@ export class SourcesPage {
         adapterKey: this.adapterKey(),
         workers: this.workers(),
         maxRequestsPerSecond: this.rate(),
-        // The chain's own configuration is sent back unchanged. This form does
-        // not edit it: `config` is adapter shaped free form JSON, and a text box
-        // that let somebody paste anything into a column the harvester reads at
-        // fetch time is a bigger feature than this screen.
-        config: source.config,
+        config,
       });
       this._replace(updated);
       this.editing.set(null);
@@ -569,8 +769,75 @@ export class SourcesPage {
     }
   }
 
+  /** Ask before a row goes, because nothing here has an undo. */
+  askDelete(source: Source): void {
+    this.error.set(null);
+    this.pendingDelete.set(source);
+  }
+
+  /**
+   * Undescribe a chain.
+   *
+   * The row is keyed on the chain, so a source created against the wrong chain
+   * cannot be moved onto the right one: the upsert would write a second row
+   * beside it. Deleting and describing it again is the way back, and before
+   * this screen had it a wrong pick in the create panel was permanent.
+   *
+   * The backend refuses while a run of that chain is in flight, which arrives
+   * as an ordinary conflict and leaves the row where it is.
+   */
+  async confirmDelete(source: Source): Promise<void> {
+    this.busyId.set(source.supermarketId);
+    this.error.set(null);
+
+    try {
+      await this._service.deleteSource(source.supermarketId);
+      this.sources.update((rows) => rows.filter((row) => row.id !== source.id));
+      if (this.editing() === source.supermarketId) {
+        this.editing.set(null);
+      }
+      this.pendingDelete.set(null);
+    } catch (error) {
+      // The dialog stays open with the failure beneath it, because the operator
+      // asked for this row and a dialog that closes on a refusal reads as a
+      // delete that worked.
+      this.error.set(toGatewayError(error));
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
   instant(value: string | null): string {
     return formatInstant(value);
+  }
+
+  /**
+   * The settings box as an object, or null when it is not JSON.
+   *
+   * Null is refused rather than sent: `config` reaches the harvester as it is
+   * written and is read at fetch time, so a broken value would be found by a
+   * run rather than by the person who typed it. A blank box is `{}`, which is
+   * the column's own default and is what clearing the settings means.
+   */
+  private parsedConfig(): Record<string, unknown> | null {
+    const text = this.configText().trim();
+    if (text === '') {
+      this.formErrorKey.set(null);
+      return {};
+    }
+
+    try {
+      const value: unknown = JSON.parse(text);
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        this.formErrorKey.set('harvest.sources.config.invalid');
+        return null;
+      }
+      this.formErrorKey.set(null);
+      return value as Record<string, unknown>;
+    } catch {
+      this.formErrorKey.set('harvest.sources.config.invalid');
+      return null;
+    }
   }
 
   private _replace(source: Source): void {

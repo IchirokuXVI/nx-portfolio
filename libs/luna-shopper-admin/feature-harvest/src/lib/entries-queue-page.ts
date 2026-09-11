@@ -10,6 +10,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   HARVEST_SERVICE,
   QueueStore,
   RESOURCE_GATEWAYS,
@@ -727,6 +728,7 @@ const SCOPE_PAGE = 100;
 })
 export class EntriesQueuePage {
   private readonly _service = inject(HARVEST_SERVICE);
+  private readonly _content = inject(ContentLocaleStore);
   private readonly _route = inject(ActivatedRoute);
   /**
    * The chosen chain's scopes, read for their names.
@@ -1367,7 +1369,10 @@ export class EntriesQueuePage {
             ...names,
             ...page.items.map(
               (scope) =>
-                [scope.id, PRICE_SCOPES.title(scope)] as [string, string]
+                [
+                  scope.id,
+                  PRICE_SCOPES.title(scope, this._content.order()),
+                ] as [string, string]
             ),
           ])
       );

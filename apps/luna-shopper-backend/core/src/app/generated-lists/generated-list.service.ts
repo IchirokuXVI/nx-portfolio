@@ -35,6 +35,7 @@ import {
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProfileService } from '../profiles/profile.service';
+import { GeneratedListOrderService } from './generated-list-order.service';
 import {
   NO_GENERATED_LINE_COUNTS,
   toBasketLineView,
@@ -130,7 +131,11 @@ export class GeneratedListService {
     private readonly settlements: Repository<LineSettlement>,
     private readonly profiles: ProfileService,
     private readonly claims: LineClaimService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // The order a shopper walks (plan 0110), asked once per run and never
+    // afterwards. A service of its own because it is a read of the owner's past
+    // trips rather than anything about the lists this run drew from.
+    private readonly order: GeneratedListOrderService
   ) {}
 
   // --- The run ---------------------------------------------------------------
@@ -195,7 +200,11 @@ export class GeneratedListService {
       })),
     };
 
-    const saved = await this.write(req, snapshot, composed);
+    // The order the owner walks (plan 0110), decided here and written once. The
+    // positions below are the index in **this** array, not the order the source
+    // lists happened to be read in.
+    const walked = await this.order.order(req.userId, composed);
+    const saved = await this.write(req, snapshot, walked);
     const view = await this.viewFor(saved);
     this.events.emitToUsers(
       RealtimeEvent.GeneratedListCreated,
@@ -714,7 +723,7 @@ export class GeneratedListService {
       return [];
     }
     const lineIds = lines.map((line) => line.id);
-    const [origins, options] = await Promise.all([
+    const [origins, options, facts] = await Promise.all([
       this.origins.find({
         where: { generatedListLineId: In(lineIds) },
         order: { createdAt: 'ASC' },
@@ -723,18 +732,21 @@ export class GeneratedListService {
         where: { generatedListLineId: In(lineIds) },
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
+      this.settlementFacts(lineIds),
     ]);
     return lines.map((line) =>
       toGeneratedLineView(line, {
         origins: origins.filter((row) => row.generatedListLineId === line.id),
         options: options.filter((row) => row.generatedListLineId === line.id),
+        settledPerOrigin:
+          facts.get(line.id)?.settledPerOrigin ?? NO_SETTLED_ORIGINS,
       })
     );
   }
 
   /** One line's view, for the endpoints that answer with a single line. */
   async lineViewFor(line: GeneratedListLine): Promise<GeneratedListLineView> {
-    const [origins, options] = await Promise.all([
+    const [origins, options, facts] = await Promise.all([
       this.origins.find({
         where: { generatedListLineId: line.id },
         order: { createdAt: 'ASC' },
@@ -743,8 +755,14 @@ export class GeneratedListService {
         where: { generatedListLineId: line.id },
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
+      this.settlementFacts([line.id]),
     ]);
-    return toGeneratedLineView(line, { origins, options });
+    return toGeneratedLineView(line, {
+      origins,
+      options,
+      settledPerOrigin:
+        facts.get(line.id)?.settledPerOrigin ?? NO_SETTLED_ORIGINS,
+    });
   }
 
   /**
@@ -857,13 +875,26 @@ export class GeneratedListService {
       const known = facts.get(row.generatedListLineId) ?? {
         lastOutcome: null,
         waitingSettled: 0,
+        settledPerOrigin: new Map<string, number>(),
       };
       known.lastOutcome = row.outcome;
-      if (row.lineId === null && row.outcome === SettlementOutcome.BOUGHT) {
-        // Bought, and still belonging to no list (plan 0093, section 4). A
-        // `NOT_AVAILABLE` waiting row is not counted, because it moved no units:
-        // it is an outcome rather than a quantity.
-        known.waitingSettled += row.quantity;
+      if (row.outcome === SettlementOutcome.BOUGHT) {
+        if (row.lineId === null) {
+          // Bought, and still belonging to no list (plan 0093, section 4). A
+          // `NOT_AVAILABLE` waiting row is not counted, because it moved no
+          // units: it is an outcome rather than a quantity.
+          known.waitingSettled += row.quantity;
+        } else {
+          // What this origin got (plan 0109, section 4). Keyed on the zone line
+          // the purchase landed on, which is what an origin row is unique on,
+          // and counted for `BOUGHT` alone: a shop that had none closes the
+          // outstanding amount without buying anything, so it cannot raise what
+          // a household can be said to have received.
+          known.settledPerOrigin.set(
+            row.lineId,
+            (known.settledPerOrigin.get(row.lineId) ?? 0) + row.quantity
+          );
+        }
       }
       facts.set(row.generatedListLineId, known);
     }
@@ -875,7 +906,23 @@ export class GeneratedListService {
 interface BasketLineSettlementFacts {
   lastOutcome: SettlementOutcome | null;
   waitingSettled: number;
+  /**
+   * How many units each of the line's origins got, keyed on its zone line (plan
+   * 0109, section 4).
+   *
+   * Read off the rows this query already loads rather than by a second, grouped
+   * one: the basket's live settlements are all here, and asking the database
+   * twice for two sums over one set of rows would be a second definition of
+   * "reverted" free to drift from the first.
+   */
+  settledPerOrigin: Map<string, number>;
 }
+
+/** A line nobody has settled: no last outcome, and nothing against any origin. */
+const NO_SETTLED_ORIGINS: ReadonlyMap<string, number> = new Map<
+  string,
+  number
+>();
 
 /** A basket line as the run composed it, before it is written. */
 interface ComposedLine {

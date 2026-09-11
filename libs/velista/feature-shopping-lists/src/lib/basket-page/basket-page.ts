@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -8,6 +9,7 @@ import {
   signal,
   untracked,
   viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -18,6 +20,7 @@ import {
 import {
   BASKET_REOPEN_AVAILABLE,
   BasketStore,
+  BasketViewStore,
   GeneratedListStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
@@ -27,6 +30,9 @@ import {
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   type BasketLine,
+  type BasketLineOrigin,
+  type BasketViewRow,
+  type BasketViewSection,
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import {
@@ -36,11 +42,16 @@ import {
 } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
+  ChipRow,
+  CloseIcon,
+  FilterIcon,
   FlagIcon,
   LineComposer,
   OfflineIcon,
   PersonIcon,
+  SearchIcon,
   ShareIcon,
+  type ChipRowItem,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
 import { outstandingCaption, participantInitials } from '../basket-labels';
@@ -104,12 +115,17 @@ import { BASKET_PATHS } from '../basket-paths';
   imports: [
     BasketLineRow,
     ChevronLeftIcon,
+    ChipRow,
+    CloseIcon,
+    FilterIcon,
     FlagIcon,
     LineComposer,
+    NgTemplateOutlet,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
     RouterOutlet,
+    SearchIcon,
     ShareIcon,
   ],
   templateUrl: './basket-page.html',
@@ -118,6 +134,13 @@ import { BASKET_PATHS } from '../basket-paths';
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
+  /**
+   * What this screen is showing of the basket, as opposed to what is in it.
+   *
+   * Route provided beside {@link BasketStore}, so the sheets `0075` and `0078` add
+   * reach the same instance the page reads. See the class comment there.
+   */
+  private readonly _view = inject(BasketViewStore);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
@@ -235,9 +258,7 @@ export class BasketPage {
    */
   protected readonly ownName = computed(() => this._session.username());
 
-  protected readonly products = computed(
-    () => this._store.basket()?.products ?? new Map()
-  );
+  protected readonly products = this._store.products;
 
   /**
    * What to call this basket.
@@ -391,7 +412,17 @@ export class BasketPage {
   );
 
   constructor() {
-    void this._store.open(this._id);
+    /**
+     * The basket, and then what this device remembers about how to draw it
+     * (`0076`, section 3).
+     *
+     * After the load and not beside it, because the two things the remembered
+     * record is checked against — the basket's price scopes and the lists it drew
+     * from — arrive with the basket. Once, here, rather than watched: a value whose
+     * date passes while the shopper is standing in an aisle must not move the rows
+     * in front of them.
+     */
+    void this._store.open(this._id).then(() => this._view.restore());
 
     /**
      * The socket is closed from **here**, and it has to be.
@@ -404,7 +435,14 @@ export class BasketPage {
      * is destroyed on leaving for certain, which makes it the only honest place to say
      * the shopper has gone.
      */
-    inject(DestroyRef).onDestroy(() => this._store.leave());
+    inject(DestroyRef).onDestroy(() => {
+      this._store.leave();
+      // The view store is provided on the same route and has the same problem, so
+      // it is let go in the same place. Without this a basket opened later starts
+      // on whatever the last one was searched for, and the search is the one thing
+      // on this screen that is never remembered (section 4.7).
+      this._view.leave();
+    });
   }
 
   protected isBusy(line: BasketLine): boolean {
@@ -505,6 +543,145 @@ export class BasketPage {
   }
 
   /**
+   * A section's count as the heading draws it, or empty where it has none.
+   *
+   * "1 of 3 got", in the same words and from the same function as the sentence in
+   * the tools row above it, plus "· 1 not available" where a shop had none of
+   * something. The unavailable half is a separate key for the reason the page's own
+   * sentence keeps it separate: it is a different claim from a purchase, and a
+   * heading that folded the two would report a shop that had none as shopping done.
+   *
+   * Empty for the unheaded section of an ungrouped view, whose count would only
+   * repeat the sentence above it. `composeBasketView` decides that, not this.
+   */
+  protected sectionCount(section: BasketViewSection): string {
+    const progress = section.progress;
+    if (progress === null) {
+      return '';
+    }
+
+    const locale = this._locale();
+    const got = this._translator.t('basket.group.progress', undefined, locale, {
+      done: progress.done,
+      total: progress.total,
+    });
+
+    if (progress.unavailable === 0) {
+      return got;
+    }
+    return `${got} · ${this._translator.t(
+      'basket.group.unavailable',
+      undefined,
+      locale,
+      { count: progress.unavailable }
+    )}`;
+  }
+
+  /**
+   * The whole heading as one accessible name, "Dairy, 1 of 3 got" (section 6).
+   *
+   * One string rather than a heading whose count is a separate node, because a
+   * reader moving by heading hears the `h2` and nothing else in it: a count drawn
+   * beside the name would be visible to everybody and announced to nobody.
+   *
+   * A list's own name goes in as it is. It is the only half of this sentence this
+   * app did not write, which is the distinction {@link BasketViewHeading} exists to
+   * keep, and a name run through the translator would be looked up as a key.
+   */
+  protected headingLabel(section: BasketViewSection): string {
+    const heading = section.heading;
+    if (heading === null) {
+      return '';
+    }
+
+    const name =
+      heading.kind === 'key'
+        ? this._translator.t(
+            heading.key,
+            undefined,
+            this._locale(),
+            // What the sentence interpolates, which is `0078`'s sink alone: "Not
+            // listed at Mercadona" names a chain inside words this app owns.
+            heading.args
+          )
+        : heading.text;
+    const count = this.sectionCount(section);
+    return count === '' ? name : `${name}, ${count}`;
+  }
+
+  /**
+   * A row's reel was let go: the whole line, or one household's share of it.
+   *
+   * Two writes behind one gesture, and **the row does not choose between them**: it
+   * reports where the number went and this decides, because the row it belongs to is
+   * what carries the origin and the page is what holds the store. A row under a list
+   * heading commits that list's own purchase through velista `0073`'s per list write;
+   * every other row commits the line's, exactly as it always has.
+   */
+  protected async setRowOutstanding(
+    row: BasketViewRow,
+    change: { from: number; to: number }
+  ): Promise<void> {
+    const origin = row.origin;
+    if (origin === null) {
+      await this.setOutstanding(row.line, change);
+      return;
+    }
+    await this.setOriginOutstanding(row.line, origin, change);
+  }
+
+  /**
+   * One household's share of a line moved (velista `0077`, section 4.1).
+   *
+   * The reel counts what is **still to get** and the write takes what has been
+   * **got**, so the two numbers are subtracted from what the list asked for on the
+   * way past. `from` is that list's settled count as this screen last read it, which
+   * is the same stale check every other write on this page sends: the server refuses
+   * a move whose origin no longer matches rather than applying it as the opposite
+   * act (backend `0056`, section 3.2).
+   *
+   * The answer carries the **whole line**, and the store applies it, so the row
+   * redraws from what the server now says rather than from the number that was sent.
+   * That matters here for `0073`'s own reason: taking back a `NOT_AVAILABLE` close
+   * has no units to divide, so the whole close comes back and the number lands above
+   * where the control was dragged.
+   */
+  private async setOriginOutstanding(
+    line: BasketLine,
+    origin: BasketLineOrigin,
+    change: { from: number; to: number }
+  ): Promise<void> {
+    // One sentence at a time across the whole basket, exactly as `setOutstanding`
+    // clears it: a stale refusal under a row somebody has since moved again is a lie
+    // about the present.
+    this._notice.set(null);
+
+    const result = await this._store.setOriginSettled(line.id, {
+      lineId: origin.lineId,
+      settled: Math.max(0, origin.quantity - change.to),
+      from: origin.settled,
+    });
+
+    if (result === null) {
+      this._reportOutstanding(line);
+      return;
+    }
+
+    this._say(
+      outstandingCaption(
+        change.from,
+        change.to,
+        this._translator,
+        this._locale()
+      ) ?? ''
+    );
+
+    if (result.skippedCount > 0) {
+      this.openLine(line);
+    }
+  }
+
+  /**
    * Say what went wrong, once, on the row it went wrong on.
    *
    * The count is read back off the store rather than off the line this was called
@@ -581,6 +758,211 @@ export class BasketPage {
 
   protected retry(): void {
     void this._store.refresh();
+  }
+
+  // --- The tools row and the search (plan 0074) -----------------------------
+
+  /**
+   * The lines actually drawn, which is the whole basket until somebody searches.
+   *
+   * Read from {@link BasketViewStore} and never filtered here, because `0075` to
+   * `0078` grow the same signal into an order, a filter and a grouping, and a page
+   * that did its own narrowing would be a second answer to the same question.
+   *
+   * {@link progress} is deliberately **not** derived from this. "4 of 12 got" is
+   * about the trip and stays about the trip: a search hides rows and changes nothing
+   * about how much shopping is left.
+   */
+  protected readonly visibleLines = this._view.visibleLines;
+
+  /** What is in the search field, for the count and for the no match sentence. */
+  protected readonly searchQuery = this._view.query;
+
+  /**
+   * Whether anything is being searched for, which decides **which** empty state is
+   * drawn: the search's, quoting what was typed, or the filter's (`0075`).
+   */
+  protected readonly searching = this._view.searching;
+
+  /** The query folded once, handed to every row to draw its `<mark>` from. */
+  protected readonly highlight = this._view.folded;
+
+  /**
+   * Whether the field has replaced the row, which is not the same as searching.
+   *
+   * A field that is open and empty draws the whole basket, and the count under it
+   * says so. The two questions are separate because opening is a gesture and
+   * searching is a string: the field stays open through a query somebody deletes a
+   * character at a time, and Cancel is what closes it.
+   */
+  private readonly _searchOpen = signal(false);
+
+  protected readonly searchOpen = this._searchOpen.asReadonly();
+
+  /**
+   * Which control the keyboard should be on once the row has been redrawn.
+   *
+   * A signal and not a call, because neither control exists at the moment the
+   * gesture happens: opening the search destroys the button that was pressed, and
+   * cancelling destroys the field. The effect below waits for whichever one arrives.
+   */
+  private readonly _focusWanted = signal<'field' | 'button' | null>(null);
+
+  private readonly _searchField =
+    viewChild<ElementRef<HTMLInputElement>>('searchField');
+
+  private readonly _searchButton =
+    viewChild<ElementRef<HTMLButtonElement>>('searchButton');
+
+  /**
+   * Put the focus where the gesture said, as soon as there is something to put it
+   * on (section 6).
+   *
+   * Focus never lands on the page body, which is what a naive open and close does:
+   * the field takes it when it appears, and Cancel or Escape gives it back to the
+   * search button, so a keyboard reader is never dropped at the top of the document
+   * in the middle of a basket.
+   */
+  private readonly _focusEffect = effect(() => {
+    const wanted = this._focusWanted();
+    const field = this._searchField();
+    const button = this._searchButton();
+
+    const target =
+      wanted === 'field' ? field : wanted === 'button' ? button : null;
+    if (target === undefined || target === null) {
+      return;
+    }
+
+    untracked(() => this._focusWanted.set(null));
+    target.nativeElement.focus();
+  });
+
+  /** Replace the row with the field, and put the caret in it. */
+  protected openSearch(): void {
+    this._searchOpen.set(true);
+    this._focusWanted.set('field');
+  }
+
+  protected onSearch(event: Event): void {
+    this._view.search((event.target as HTMLInputElement).value);
+  }
+
+  /** Empty the field without closing it, which is the control inside it. */
+  protected clearSearch(): void {
+    this._view.search('');
+    this._focusWanted.set('field');
+  }
+
+  /**
+   * Cancel, the scrim of this particular control: Escape does exactly the same.
+   *
+   * It **clears the query as well as closing the field**, so the row that comes
+   * back is over the whole basket. A search left running behind a closed field is a
+   * screen missing rows for a reason nothing on it says.
+   */
+  protected closeSearch(): void {
+    this._view.search('');
+    this._searchOpen.set(false);
+    this._focusWanted.set('button');
+  }
+
+  // --- The filter sheet and its chips (plan 0075) ----------------------------
+
+  /**
+   * The lines, cut into the sections the page draws (section 3).
+   *
+   * One section with no heading for an ungrouped, unfiltered basket, which is the
+   * ordinary case, so the template's loop over sections is the same list it always
+   * drew with one more level around it.
+   */
+  protected readonly sections = this._view.sections;
+
+  /** How many lines are on the screen, for the chip row's count. */
+  protected readonly visibleCount = this._view.visibleCount;
+
+  /**
+   * The scope every row quotes, or null for the cheapest anywhere (`0078`).
+   *
+   * Asked once for the whole basket and handed to each row, which is what this page
+   * already does with `canReopen` and its own name: a component built once per line
+   * has no business asking the same question a dozen times.
+   */
+  protected readonly pricedShop = this._view.pricedShop;
+
+  /** How many of the four properties are on, for the filter button's badge. */
+  protected readonly activeCount = this._view.activeCount;
+
+  /**
+   * The chips, with their words resolved.
+   *
+   * Resolved here rather than in `ChipRow`, because each label's arguments come from
+   * this screen's state and `ChipRow` knows nothing about baskets; and resolved
+   * through the translator service rather than the pipe because this is a list the
+   * component computes. The spec asserts the **key and its arguments** through
+   * `basketViewChips`, which is pure, so nothing here tests the translator.
+   */
+  protected readonly chipItems = computed<readonly ChipRowItem[]>(() => {
+    const locale = this._locale();
+    return this._view.chips().map((chip) => {
+      const label = this._translator.t(
+        chip.key,
+        undefined,
+        locale,
+        chip.args ?? undefined
+      );
+      return {
+        id: chip.property,
+        label,
+        // "Remove: A to Z". The chip's own words go inside the name, so a screen
+        // reader hears what pressing the x gets rid of rather than "button, x".
+        removeLabel: this._translator.t(
+          'basket.view.chip.remove',
+          undefined,
+          locale,
+          { name: label }
+        ),
+      };
+    });
+  });
+
+  /**
+   * The count at the chip row's trailing edge, or null.
+   *
+   * **Drawn only while fewer lines are shown than the basket holds.** A row saying
+   * "12 of 12" next to a chip that reorders is noise: the chips say what is on, and
+   * this says what it cost.
+   */
+  protected readonly chipCount = computed(() => {
+    const shown = this.visibleCount();
+    const total = this.lines().length;
+    if (shown >= total) {
+      return null;
+    }
+    return this._translator.t('basket.view.count', undefined, this._locale(), {
+      shown,
+      total,
+    });
+  });
+
+  /**
+   * A chip's x: put that one property back to its default.
+   *
+   * Looked up rather than cast. The id is a property name this page put on the chip,
+   * so a cast would be correct today and silent the day a chip carries something
+   * else.
+   */
+  protected removeChip(id: string): void {
+    const chip = this._view.chips().find((item) => item.property === id);
+    if (chip !== undefined) {
+      this._view.resetProperty(chip.property);
+    }
+  }
+
+  protected openFilter(): void {
+    void this._router.navigate(sheetSegments('filter'), {
+      relativeTo: this._route,
+    });
   }
 
   // --- The composer (plan 0053) ---------------------------------------------

@@ -706,6 +706,25 @@ export class AdminHarvestSourcesController {
       { ...adminCredential(admin), supermarketId, enabled: dto.enabled }
     );
   }
+
+  /**
+   * Undescribe a chain.
+   *
+   * The row is keyed on the chain, so `upsert` cannot move one that was
+   * created against the wrong chain: it would write a second row. This is the
+   * way back, and it refuses while a run of that chain is in flight.
+   */
+  @Delete(':supermarketId')
+  @ApiContractResponse(SUPERMARKET_SOURCE_PATTERNS.delete)
+  remove(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('supermarketId') supermarketId: string
+  ): Promise<{ id: string }> {
+    return this.nats.send(SUPERMARKET_SOURCE_PATTERNS.delete, {
+      ...adminCredential(admin),
+      supermarketId,
+    });
+  }
 }
 
 /**

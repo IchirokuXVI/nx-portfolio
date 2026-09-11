@@ -22,16 +22,19 @@ import {
   decodeCursor,
   encodeCursor,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { randomUUID } from 'node:crypto';
-import { Repository, type SelectQueryBuilder } from 'typeorm';
+import { In, Repository, type SelectQueryBuilder } from 'typeorm';
 import type { CatalogConfig } from '../config/app-config';
-import { Supermarket, SupermarketLocation } from '../entities';
+import { PriceScope, Supermarket, SupermarketLocation } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
   toSupermarketLocationView,
   toSupermarketView,
 } from './catalog.mappers';
+import { EffectivePriceService } from './effective-price.service';
+import { idsOf, LocationScopeService } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
@@ -63,6 +66,8 @@ export class SupermarketLocationService {
     private readonly admin: PlatformAdminService,
     private readonly audit: CatalogAuditService,
     private readonly postalCodes: PostalCodeService,
+    private readonly effective: EffectivePriceService,
+    private readonly stacks: LocationScopeService,
     config: ConfigService
   ) {
     this.deriveMaxMetres =
@@ -79,8 +84,13 @@ export class SupermarketLocationService {
    *
    * The id is generated here rather than by the database because the scope and
    * the location each need the other's key: the scope's `externalKey` is the
-   * location id, and the location's `priceScopeId` is the scope. Choosing the id
-   * first breaks the cycle without a nullable column or a second UPDATE.
+   * location id, and the stack row names the location. Choosing the id first
+   * breaks the cycle without a nullable column or a second UPDATE.
+   *
+   * A caller may state a whole stack with `priceScopeIds` (plan 0105, section
+   * 3). `priceScopeId` is the one entry shorthand it had before, and naming
+   * both is refused rather than merged: a caller that stated the stack twice
+   * does not agree with itself.
    */
   async create(
     req: CreateSupermarketLocationRequest
@@ -94,19 +104,18 @@ export class SupermarketLocationService {
     }
 
     const id = randomUUID();
-    // The named scope is only checked, so it is resolved before the transaction.
-    // The store scope is created, so it is not: it belongs inside, with the
-    // location that is the reason it exists (plan 0075).
-    const namedScopeId = req.priceScopeId
-      ? (await this.scopes.requireScopeOf(req.priceScopeId, req.supermarketId))
-          .id
-      : null;
+    // The named scopes are only checked, so they are resolved before the
+    // transaction. The store scope is created, so it is not: it belongs
+    // inside, with the location that is the reason it exists (plan 0075).
+    const namedScopeIds = await this.requestedStack(
+      req.priceScopeId,
+      req.priceScopeIds,
+      req.supermarketId
+    );
 
     const draft = this.locations.create({
       id,
       supermarketId: req.supermarketId,
-      // Filled inside the transaction below when no scope was named.
-      priceScopeId: namedScopeId as string,
       label: req.label ?? null,
       address: req.address ?? null,
       city: req.city ?? null,
@@ -123,19 +132,100 @@ export class SupermarketLocationService {
     await this.fillPostalCodeFromCentroid(draft);
 
     const saved = await this.audit.write(actor, async (tx) => {
-      if (!namedScopeId) {
-        draft.priceScopeId = (
-          await this.scopes.ensureStoreScope(
-            tx,
-            req.supermarketId,
-            id,
-            req.label ?? null
-          )
-        ).id;
-      }
-      return tx.create(SupermarketLocation, draft);
+      const stack =
+        namedScopeIds.length > 0
+          ? namedScopeIds
+          : [
+              (
+                await this.scopes.ensureStoreScope(
+                  tx,
+                  req.supermarketId,
+                  id,
+                  req.label ?? null
+                )
+              ).id,
+            ];
+      const row = await tx.create(SupermarketLocation, draft);
+      await this.writeStack(tx.manager, id, stack);
+      return row;
     });
-    return toSupermarketLocationView(saved);
+    return toSupermarketLocationView(saved, await this.stackOf(saved.id));
+  }
+
+  /**
+   * The scopes a request named, checked against the chain, or empty when it
+   * named none.
+   *
+   * Order is not kept: the stack is ranked by each scope's own `priority`, so
+   * the order a caller happened to list them in decides nothing and pretending
+   * otherwise would make two equivalent requests look different.
+   */
+  private async requestedStack(
+    single: string | undefined,
+    plural: string[] | undefined,
+    supermarketId: string
+  ): Promise<string[]> {
+    if (single !== undefined && plural !== undefined) {
+      throw new ValidationException(
+        'Name either priceScopeId or priceScopeIds, not both'
+      );
+    }
+    const named = plural ?? (single === undefined ? [] : [single]);
+    const unique = [...new Set(named)];
+    for (const priceScopeId of unique) {
+      await this.scopes.requireScopeOf(priceScopeId, supermarketId);
+    }
+    return unique;
+  }
+
+  /**
+   * Write a shop's stack, then let the scopes it now holds inherit.
+   *
+   * The second half is the part that is easy to leave out: attaching a shop to
+   * a region is what makes that region reachable from the shop's own scope, so
+   * until every scope of the stack has recomputed, the shop's quoted rows
+   * still answer from the stack it had (plan 0105, section 3).
+   */
+  private async writeStack(
+    manager: SupermarketLocationService['locations']['manager'],
+    supermarketLocationId: string,
+    priceScopeIds: readonly string[]
+  ): Promise<void> {
+    const { added, removed } = await this.stacks.setStack(
+      manager,
+      supermarketLocationId,
+      priceScopeIds
+    );
+    if (added.length === 0 && removed.length === 0) {
+      return;
+    }
+    const scopes = await manager.find(PriceScope, {
+      where: { id: In([...priceScopeIds]) },
+    });
+    for (const scope of scopes) {
+      await this.effective.inheritLessSpecific(manager, scope);
+    }
+  }
+
+  /** One shop's stack, most specific first. */
+  private async stackOf(supermarketLocationId: string): Promise<string[]> {
+    const stacks = await this.stacks.stacksFor(this.locations.manager, [
+      supermarketLocationId,
+    ]);
+    return idsOf(stacks.get(supermarketLocationId));
+  }
+
+  /** The stacks of a page of shops, in one read, keyed by shop. */
+  private async stacksOf(
+    rows: readonly SupermarketLocation[]
+  ): Promise<Map<string, string[]>> {
+    const stacks = await this.stacks.stacksFor(
+      this.locations.manager,
+      rows.map((row) => row.id)
+    );
+    return new Map(
+      [...stacks].map(([locationId, stack]) => [locationId, idsOf(stack)])
+    );
   }
 
   async update(
@@ -144,10 +234,17 @@ export class SupermarketLocationService {
     const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.supermarketLocationId);
     const before = { ...row };
-    if (req.priceScopeId !== undefined) {
-      row.priceScopeId = (
-        await this.scopes.requireScopeOf(req.priceScopeId, row.supermarketId)
-      ).id;
+    // Resolved before the transaction, like create's, and written after the
+    // row so an update that fails leaves the stack as it was.
+    const namedScopeIds = await this.requestedStack(
+      req.priceScopeId,
+      req.priceScopeIds,
+      row.supermarketId
+    );
+    if (namedScopeIds.length === 0 && req.priceScopeIds?.length === 0) {
+      throw new ValidationException(
+        'A shop must sell at one scope at least. Name the scopes it keeps.'
+      );
     }
     if (req.label !== undefined) {
       row.label = req.label;
@@ -184,11 +281,14 @@ export class SupermarketLocationService {
     }
     await this.fillPostalCodeFromCentroid(row);
 
-    return toSupermarketLocationView(
-      await this.audit.write(actor, (tx) =>
-        tx.update(SupermarketLocation, before, row)
-      )
-    );
+    const saved = await this.audit.write(actor, async (tx) => {
+      const updated = await tx.update(SupermarketLocation, before, row);
+      if (namedScopeIds.length > 0) {
+        await this.writeStack(tx.manager, row.id, namedScopeIds);
+      }
+      return updated;
+    });
+    return toSupermarketLocationView(saved, await this.stackOf(saved.id));
   }
 
   async delete(req: SupermarketLocationIdRequest): Promise<{ id: string }> {
@@ -201,9 +301,8 @@ export class SupermarketLocationService {
   async get(
     req: SupermarketLocationIdRequest
   ): Promise<SupermarketLocationView> {
-    return toSupermarketLocationView(
-      await this.load(req.supermarketLocationId)
-    );
+    const row = await this.load(req.supermarketLocationId);
+    return toSupermarketLocationView(row, await this.stackOf(row.id));
   }
 
   /**
@@ -230,8 +329,17 @@ export class SupermarketLocationService {
     this.applySearch(qb, req.query);
     if (req.priceScopeId) {
       // Plan 0066, section 4: the shops that sell at one scope, which is how a
-      // price keyed by scope becomes somewhere a person can go.
-      qb.andWhere('l."priceScopeId" = :scope', { scope: req.priceScopeId });
+      // price keyed by scope becomes somewhere a person can go. Since plan
+      // 0105 a shop sells at several, so this asks whether the scope is in the
+      // stack rather than whether it is the stack.
+      qb.andWhere(
+        `EXISTS (
+           SELECT 1 FROM "supermarket_location_price_scopes" ls
+            WHERE ls."supermarketLocationId" = l."id"
+              AND ls."priceScopeId" = :scope
+         )`,
+        { scope: req.priceScopeId }
+      );
     }
     if (req.postalCodeSource) {
       // Plan 0073, section 4: the shops whose postal code was guessed, which is
@@ -257,7 +365,13 @@ export class SupermarketLocationService {
         ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
         : null;
 
-    return { items: page.map(toSupermarketLocationView), nextCursor };
+    const stacks = await this.stacksOf(page);
+    return {
+      items: page.map((row) =>
+        toSupermarketLocationView(row, stacks.get(row.id) ?? [])
+      ),
+      nextCursor,
+    };
   }
 
   /**
@@ -459,9 +573,10 @@ export class SupermarketLocationService {
         ? encodeCursor({ value: last.postalCode ?? '', id: last.id })
         : null;
 
+    const stacks = await this.stacksOf(page);
     return {
       items: page.map((row) => ({
-        location: toSupermarketLocationView(row),
+        location: toSupermarketLocationView(row, stacks.get(row.id) ?? []),
         supermarket: toSupermarketView(row.supermarket),
         excluded: refusedLocations.has(row.id),
         excludedChain: refusedChains.has(row.supermarketId),

@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   RESOURCE_GATEWAYS,
@@ -12,10 +13,15 @@ import {
   SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  CONTENT_LOCALES,
   defineResource,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { NotFoundPage, Viewport } from '@portfolio/luna-shopper-admin/ui';
+import {
+  APP_AVAILABLE_LOCALES,
+  NotFoundPage,
+  Viewport,
+} from '@portfolio/luna-shopper-admin/ui';
 import { provideSections, type AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
 import { adminRoutes } from './routes';
@@ -89,6 +95,7 @@ async function render(
   await TestBed.configureTestingModule({
     imports: [AdminShellPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       // The chrome's own children, not the branch that draws the chrome: this
       // spec creates the shell itself, so handing the router the outer route
@@ -350,5 +357,68 @@ describe('AdminShellPage when compact', () => {
     const fixture = await render('/catalog', SECTIONS, true);
 
     expect(fixture.nativeElement.querySelector('.second')).toBeNull();
+  });
+});
+
+/**
+ * The content language control (admin plan 0026, section 7).
+ *
+ * In the header beside the operator's name, because it is a property of who is
+ * reading and not of what is on screen. It offers the **content** locales and
+ * never `APP_AVAILABLE_LOCALES`, which is the interface's list and is one entry
+ * long: conflating the two is exactly what the plan exists to avoid.
+ */
+describe('AdminShellPage content language', () => {
+  const control = (fixture: { nativeElement: HTMLElement }) =>
+    fixture.nativeElement.querySelector(
+      '.identity select'
+    ) as HTMLSelectElement | null;
+
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it('offers one option per content locale, beside the operator', async () => {
+    const fixture = await render('/');
+    const select = control(fixture);
+
+    expect(select).not.toBeNull();
+    expect(
+      [...(select?.options ?? [])].map((option) => option.value)
+    ).toEqual([...CONTENT_LOCALES]);
+  });
+
+  it('shows the language the operator is reading in', async () => {
+    const fixture = await render('/');
+
+    expect(control(fixture)?.value).toBe(CONTENT_LOCALES[0]);
+  });
+
+  it('records a choice, so every reader and the next tab pick it up', async () => {
+    const fixture = await render('/');
+    const select = control(fixture);
+
+    if (select === null) {
+      throw new Error('there is no content language control');
+    }
+    select.value = 'es';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(TestBed.inject(ContentLocaleStore).locale()).toBe('es');
+    expect(TestBed.inject(ContentLocaleStore).order()).toEqual(['es', 'en']);
+  });
+
+  /**
+   * The interface stays English whatever the catalog is read in. The labels
+   * around the control are the app's own keys, and the app ships one locale.
+   */
+  it('leaves the interface locale alone', async () => {
+    const fixture = await render('/');
+    const select = control(fixture);
+
+    select?.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(APP_AVAILABLE_LOCALES).toEqual(['en']);
   });
 });

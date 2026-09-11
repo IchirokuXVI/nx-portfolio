@@ -509,7 +509,8 @@ describe('what a finished basket still does (section 3.4)', () => {
       {} as never,
       {} as unknown as ProfileService,
       fakeLineClaims().service,
-      {} as unknown as CoreEventsPublisher
+      {} as unknown as CoreEventsPublisher,
+      {} as never
     );
 
     await service.listMine({ userId: OWNER });
@@ -568,7 +569,8 @@ describe('finishing and unfinishing (section 2)', () => {
         ) => {
           events.push({ event, userIds, view });
         },
-      } as unknown as CoreEventsPublisher
+      } as unknown as CoreEventsPublisher,
+      {} as never
     );
     return { service, saved, events, claims };
   }
