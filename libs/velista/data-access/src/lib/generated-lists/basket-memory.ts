@@ -169,6 +169,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     size: 1,
     unit: 'LITER',
     offer: offer(0.95, 0.95, 'EUR/L'),
+    categories: ['DAIRY'],
   },
   {
     id: 'item-milk-pascual',
@@ -177,6 +178,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     size: 1,
     unit: 'LITER',
     offer: offer(0.89, 0.89, 'EUR/L'),
+    categories: ['DAIRY'],
   },
   {
     id: 'item-milk-central',
@@ -188,6 +190,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     size: 1,
     unit: 'LITER',
     offer: null,
+    categories: ['DAIRY'],
   },
   {
     id: 'item-eggs',
@@ -196,6 +199,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     size: 12,
     unit: 'UNIT',
     offer: offer(2.85, 0.24, 'EUR/ud'),
+    categories: ['DAIRY'],
   },
 ];
 
@@ -510,6 +514,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-1',
           quantity: 2,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
         {
           id: 'o-2',
@@ -517,6 +524,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-groceries',
           lineId: 'zl-2',
           quantity: 1,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -542,6 +552,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-3',
           quantity: 12,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -568,6 +581,9 @@ export class BasketMemory implements BasketServiceI {
           listId: 'list-weekly',
           lineId: 'zl-4',
           quantity: 1,
+          // The settlement facts are the authority; `_project` reads this off
+          // them on every read, so the seed is only what an untouched line holds.
+          settled: 0,
         },
       ],
     },
@@ -1009,6 +1025,9 @@ export class BasketMemory implements BasketServiceI {
       listId: body.listId,
       lineId: zoneLineId,
       quantity: wanted,
+      // Whatever this list had already bought, which a raise never changes: the
+      // read recomputes it from the facts, and this is the shape's own default.
+      settled: this._facts(originId).settledHere,
     };
 
     const kept =
@@ -1710,9 +1729,25 @@ export class BasketMemory implements BasketServiceI {
    * Deleting the key rather than nulling it, because that is what the server
    * does and the difference is what the screen branches on.
    */
+  /**
+   * One line as this reader gets it: origins carrying their own settled count, or
+   * no origins at all.
+   *
+   * `settled` per origin is what backend `0109` section 4 added to the read, and this
+   * fake models it the way that plan describes: the number is read off the
+   * settlement facts rather than stored twice, so the read and `setOriginSettled`
+   * cannot disagree about what a household has got. It rides on `origins`, so
+   * stripping those takes it with them and the redaction stays one statement.
+   */
   private _project(line: BasketLine): BasketLine {
     if (this.seesZoneData) {
-      return line;
+      return {
+        ...line,
+        origins: (line.origins ?? []).map((origin) => ({
+          ...origin,
+          settled: this._facts(origin.id).settledHere,
+        })),
+      };
     }
     // `targetListId` goes with `origins`, for the same reason: which household
     // list a line was sent to is a household this reader may not be told about. It

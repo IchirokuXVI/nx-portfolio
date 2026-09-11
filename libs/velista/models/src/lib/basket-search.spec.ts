@@ -46,6 +46,7 @@ function product(
     size: null,
     unit: null,
     offer: null,
+    categories: ['OTHER'],
   };
 }
 

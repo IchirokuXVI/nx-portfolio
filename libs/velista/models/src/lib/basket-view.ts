@@ -4,6 +4,7 @@ import type {
   BasketOriginUnavailableReason,
   LineApprovalStatus,
   ParticipantKind,
+  ProductCategory,
   SettlementOutcome,
 } from './enums';
 import { isLiveGeneratedList } from './enums';
@@ -118,6 +119,20 @@ export interface BasketLineOrigin {
   lineId: string;
   /** What this origin contributed to the line's summed quantity. */
   quantity: number;
+  /**
+   * How many of {@link quantity} were bought for this list (luna `0109`, section 4;
+   * velista `0077`, section 4.1).
+   *
+   * `BOUGHT` rows only, with anything reverted excluded, which is the same floor
+   * `0104` checks before it lets a take back through. It is what the reel under a
+   * list heading is bound to and what that row sends as its `from`, so the two
+   * cannot drift: the screen reads and writes one number.
+   *
+   * It rides on the line's `origins`, so it is absent for exactly the readers
+   * `origins` is absent for, and that absence is the redaction rule rather than a
+   * second one here.
+   */
+  settled: number;
 }
 
 /**
@@ -152,6 +167,17 @@ export interface BasketProduct {
   unit: string | null;
   /** The cheapest price at the run's scopes, or null where there is none. */
   readonly offer: ProductOffer | null;
+  /**
+   * What aisles this product belongs to, for the category grouping (velista
+   * `0077`, section 2).
+   *
+   * A **list** where the wire carries one value, and that costs nothing today: the
+   * brief says a product will one day carry several, a pipeline written over a list
+   * is the same pipeline either way, and the day the wire grows a second value
+   * nothing above the mapper changes. Never empty: an unreadable value maps to
+   * `OTHER` rather than dropping the product out of every section.
+   */
+  readonly categories: readonly ProductCategory[];
 }
 
 /**
@@ -561,6 +587,45 @@ export function basketLineState(line: BasketLine): BasketLineState {
 /** How many are still to get. Never negative, however the numbers arrived. */
 export function outstanding(line: BasketLine): number {
   return Math.max(0, line.quantity - line.settled);
+}
+
+/** How a run of lines is progressing: got, had none, and how many there are. */
+export interface BasketProgress {
+  readonly done: number;
+  readonly unavailable: number;
+  readonly total: number;
+}
+
+/**
+ * What a run of lines comes to, counted in **lines and not units**.
+ *
+ * "Four things done out of twelve" is what somebody in a shop is tracking, and a
+ * basket of one line asking for twelve tins would otherwise read as almost
+ * finished. That is `0047`'s rule for a zone list and this is the same count.
+ *
+ * **`done` is not `finished`.** A `NOT_AVAILABLE` settle closes a line's outstanding
+ * amount without buying anything, so counting every finished line as one somebody
+ * got would report a shop that had none as a purchase, which is the claim the row's
+ * own caption is careful not to make.
+ *
+ * Here rather than in the store because velista `0077` gives every section of a
+ * grouped basket its own count, and a heading that said "1 of 3 got" by one rule
+ * while the sentence above it said "4 of 12 got" by another would be two answers to
+ * one question. The store's `progress` is this function over the whole basket.
+ */
+export function basketLinesProgress(
+  lines: readonly BasketLine[]
+): BasketProgress {
+  const finished = lines.filter((line) => outstanding(line) === 0);
+  const unavailable = finished.filter(
+    (line) => line.lastOutcome === 'NOT_AVAILABLE'
+  ).length;
+
+  return {
+    done: finished.length - unavailable,
+    unavailable,
+    total: lines.length,
+  };
 }
 
 /**

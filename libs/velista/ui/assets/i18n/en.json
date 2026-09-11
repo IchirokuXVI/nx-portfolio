@@ -992,12 +992,15 @@
       "free": "No product chosen",
       "busy": "Saving",
       "takenBack_one": "1 taken back",
-      "takenBack_other": "{{count}} taken back"
+      "takenBack_other": "{{count}} taken back",
+      "listShare": "this list asked for {{asked}} of the {{total}}",
+      "listPartly": "{{settled}} of {{asked}} got"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
       "bought_one": "{{count}} bought",
-      "bought_other": "{{count}} bought"
+      "bought_other": "{{count}} bought",
+      "listLabel": "{{list}}, {{name}}, still to get"
     },
     "touched": {
       "got": "{{name}} got it",
@@ -1063,7 +1066,12 @@
     },
     "group": {
       "noList": "On no list yet",
-      "noListHint": "added in the shop"
+      "noListHint": "added in the shop",
+      "noCategory": "No category",
+      "noCategoryHint": "lines with no product",
+      "progress": "{{done}} of {{total}} got",
+      "unavailable_one": "{{count}} not available",
+      "unavailable_other": "{{count}} not available"
     },
     "settle": {
       "title": "{{name}}",
@@ -1249,6 +1257,20 @@
       "isNone": "{{name}} was not available",
       "isWanted": "{{name}} is still to get",
       "isPartly": "{{name}} is partly got"
+    },
+    "category": {
+      "PRODUCE": "Produce",
+      "DAIRY": "Dairy",
+      "BAKERY": "Bakery",
+      "MEAT": "Meat",
+      "SEAFOOD": "Seafood",
+      "FROZEN": "Frozen",
+      "BEVERAGES": "Beverages",
+      "SNACKS": "Snacks",
+      "PANTRY": "Pantry",
+      "HOUSEHOLD": "Household",
+      "PERSONAL_CARE": "Personal care",
+      "OTHER": "Other"
     }
   },
   "getList": {

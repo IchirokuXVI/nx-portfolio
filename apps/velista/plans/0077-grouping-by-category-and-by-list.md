@@ -1,3 +1,5 @@
+> **PR:** [#348](https://github.com/IchirokuXVI/nx-portfolio/pull/348)
+
 # 0077: grouping by category and by list
 
 > Fourth of the five basket finding plans (`0074` to `0078`). `0075` built the sheet's

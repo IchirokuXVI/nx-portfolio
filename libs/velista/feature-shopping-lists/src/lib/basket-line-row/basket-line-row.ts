@@ -21,6 +21,7 @@ import {
   outstanding,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   type BasketLine,
+  type BasketLineOrigin,
   type BasketParticipant,
   type BasketProduct,
 } from '@portfolio/velista/models';
@@ -34,6 +35,7 @@ import {
 } from '@portfolio/velista/ui';
 import {
   addedCaption,
+  listShareCaption,
   originsCaption,
   outstandingCaption,
   quantityCaption,
@@ -167,6 +169,22 @@ export class BasketLineRow {
 
   /** List names for the "from" caption. Empty for a reader who has no origins. */
   readonly listNames = input<ReadonlyMap<string, string>>(new Map());
+
+  /**
+   * The one list this row is about, or null for a row about the whole line
+   * (velista `0077`, section 4.1).
+   *
+   * Set only under the list grouping, where a line two households asked for is drawn
+   * twice, once under each heading. It changes **what the numbers on this row mean**
+   * and nothing about what the row says: the ceiling, the value and the progress
+   * caption all become this list's, and the status glyph stays the line's.
+   *
+   * That split is deliberate and it is section 4.1's whole point. A tick beside "6
+   * of 6 got" under one household while the other household's six are still to get
+   * would be a contradiction on one row, so the glyph reads the line, the number
+   * reads the origin, and the caption between them says which is which.
+   */
+  readonly origin = input<BasketLineOrigin | null>(null);
 
   /** The reader's own participant id, so their own edits can be named. */
   readonly meId = input<string | null>(null);
@@ -320,11 +338,21 @@ export class BasketLineRow {
   /**
    * How many are still to get, which is what the reel is bound to.
    *
+   * **The origin's, on a row drawn under one** (velista `0077`, section 4.1): a
+   * household that asked for six and got two has four still to get, whatever the
+   * other households on the same line have done. The line's own outstanding amount
+   * everywhere else, which is what this row has always drawn.
+   *
    * Not called `outstanding`: the output that reports a move of it has that name,
    * and it belongs to the thing a caller listens for rather than to a number they
    * could read off the line themselves.
    */
-  protected readonly stillToGet = computed(() => outstanding(this.line()));
+  protected readonly stillToGet = computed(() => {
+    const origin = this.origin();
+    return origin === null
+      ? outstanding(this.line())
+      : Math.max(0, origin.quantity - origin.settled);
+  });
 
   /**
    * What the reel shows while a write is out.
@@ -353,14 +381,36 @@ export class BasketLineRow {
    * and up takes purchases back. A line of six dragged to zero offers a reel from
    * zero to six.
    */
-  protected readonly ceiling = computed(() => this.line().quantity);
-
-  /** What the reel is counting: how many are still to get, not how many to buy. */
-  protected readonly reelLabel = computed(() =>
-    this._translator.t('basket.outstanding.label', undefined, this._locale(), {
-      name: this.line().content,
-    })
+  protected readonly ceiling = computed(
+    () => this.origin()?.quantity ?? this.line().quantity
   );
+
+  /**
+   * What the reel is counting: how many are still to get, not how many to buy.
+   *
+   * **Under a list heading it names the list first**, "Flat, Eggs, still to get",
+   * which is the shape `0073` gave the settle sheet's per list reels and is the only
+   * thing that tells two identically named reels apart for somebody who hears the
+   * row rather than seeing which heading it sits under.
+   *
+   * A list with no name falls back to the reel's ordinary name rather than drawing a
+   * leading comma, which is the rule `originsCaption` and the filter sheet's rows
+   * already follow for the same data. The pipeline heads no section for such a list,
+   * so this is a guard and not a case anybody meets.
+   */
+  protected readonly reelLabel = computed(() => {
+    const name = this.line().content;
+    const origin = this.origin();
+    const list =
+      origin === null ? '' : (this.listNames().get(origin.listId) ?? '');
+
+    return this._translator.t(
+      list === '' ? 'basket.outstanding.label' : 'basket.outstanding.listLabel',
+      undefined,
+      this._locale(),
+      { list, name }
+    );
+  });
 
   /** Where the thumb is, while it is down. Null the moment the overlay closes. */
   private readonly _preview = signal<number | null>(null);
@@ -544,6 +594,22 @@ export class BasketLineRow {
     quantityCaption(this.line(), this._translator, this._locale())
   );
 
+  /**
+   * The sentence under the number: the line's, or this list's share of it.
+   *
+   * One slot and not two, because they answer the same question about the same
+   * number and a row that drew both would say it twice. The line's version is drawn
+   * only for a partly settled line, which is what {@link quantity} has always done;
+   * the list's is drawn on every row under a list heading, because the number beside
+   * it is a household's share and nothing else on the row says so.
+   */
+  protected readonly progressCaption = computed(() => {
+    const origin = this.origin();
+    return origin === null
+      ? this.quantity()
+      : listShareCaption(this.line(), origin, this._translator, this._locale());
+  });
+
   protected readonly touched = computed(() =>
     touchedCaption(
       this.line(),
@@ -573,14 +639,22 @@ export class BasketLineRow {
     )
   );
 
-  /** Null for a reader who may not see origins. See the class comment. */
+  /**
+   * Null for a reader who may not see origins, and null under a list heading.
+   *
+   * The second is velista `0077`, section 4.1: "from Weekly shop" is not drawn on a
+   * row that sits under Weekly shop's own heading, because the heading already says
+   * it. Drawing both would put the same three words on every row of the section.
+   */
   protected readonly from = computed(() =>
-    originsCaption(
-      this.line(),
-      this.listNames(),
-      this._translator,
-      this._locale()
-    )
+    this.origin() !== null
+      ? null
+      : originsCaption(
+          this.line(),
+          this.listNames(),
+          this._translator,
+          this._locale()
+        )
   );
 
   /**
@@ -593,7 +667,7 @@ export class BasketLineRow {
   protected readonly label = computed(() => {
     const parts = [
       this.line().content,
-      this.quantity(),
+      this.progressCaption(),
       this.productName() ?? '',
       this.touched() ?? '',
       this.added() ?? '',

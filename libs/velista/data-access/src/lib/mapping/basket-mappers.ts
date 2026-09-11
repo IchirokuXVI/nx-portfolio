@@ -5,6 +5,8 @@ import {
   LINE_APPROVAL_STATUSES,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
+  PRODUCT_CATEGORIES,
+  PRODUCT_CATEGORY_FALLBACK,
   type BasketLine,
   type BasketLineOrigin,
   type BasketLineOriginDetail,
@@ -154,9 +156,23 @@ function toBasketLineOrigin(raw: unknown): BasketLineOrigin | null {
   const listId = str(raw['listId']);
   const lineId = str(raw['lineId']);
 
-  return id === null || zoneId === null || listId === null || lineId === null
-    ? null
-    : { id, zoneId, listId, lineId, quantity: numOr(raw['quantity'], 0) };
+  if (id === null || zoneId === null || listId === null || lineId === null) {
+    return null;
+  }
+
+  return {
+    id,
+    zoneId,
+    listId,
+    lineId,
+    quantity: numOr(raw['quantity'], 0),
+    // Required on the wire since luna `0109`, and defaulted exactly as `quantity`
+    // above it is. Zero on an unreadable value is the safe direction rather than an
+    // honest one: the row would draw a full reel, and the write it sends carries
+    // that zero as its `from`, which the server refuses as stale instead of
+    // applying as the opposite act (backend `0056`, section 3.2).
+    settled: numOr(raw['settled'], 0),
+  };
 }
 
 /** From `GeneratedListBasketLineView`. */
@@ -455,6 +471,14 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         size: typeof raw['unitSize'] === 'number' ? raw['unitSize'] : null,
         unit: nullableStr(raw['defaultUnit']),
         offer: toProductOffer(raw['bestOffer']),
+        // One wire value into a one element list (velista `0077`, section 2). The
+        // field is required on `ItemView` and has been since the catalog existed, so
+        // the fallback covers a thirteenth category rather than an older backend,
+        // and it folds onto `OTHER` rather than dropping the product: a line whose
+        // aisle this build cannot name is still a line to buy.
+        categories: [
+          oneOf(raw['category'], PRODUCT_CATEGORIES, PRODUCT_CATEGORY_FALLBACK),
+        ],
       };
 }
 
