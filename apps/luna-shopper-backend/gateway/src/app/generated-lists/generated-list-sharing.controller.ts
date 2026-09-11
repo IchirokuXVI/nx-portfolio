@@ -466,7 +466,12 @@ export class GeneratedListParticipantController {
 
     const req: GetItemsRequest =
       priceScopeIds && priceScopeIds.length > 0
-        ? { ids, priceScopeIds }
+        ? // Plan 0109, section 3: every scope's offer rather than the cheapest
+          // alone, so the screen can answer "what does this shop charge" as well
+          // as "what will this cost". The flag is sent only on the priced
+          // branch, because a lookup with no scopes has no offers to list and
+          // the unpriced request is unchanged by this plan.
+          { ids, priceScopeIds, offers: 'all' }
         : { ids };
     try {
       const found = await this.nats.send<GetItemsResult>(
@@ -526,7 +531,16 @@ export class GeneratedListParticipantController {
     const referenced = [
       ...new Set(
         products.flatMap((product) =>
-          product.bestOffer ? [product.bestOffer.priceScopeId] : []
+          product.offers
+            ? // Every scope that quoted anything, not only the ones that quoted
+              // the cheapest of something (plan 0109, section 3). A chain that
+              // stocks a product but is dearer than its neighbour names no
+              // `bestOffer` at all, and a scope this array skipped would reach
+              // the client as a price with no shop behind it.
+              product.offers.map((offer) => offer.priceScopeId)
+            : product.bestOffer
+              ? [product.bestOffer.priceScopeId]
+              : []
         )
       ),
     ];

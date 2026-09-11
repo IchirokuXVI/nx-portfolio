@@ -365,11 +365,24 @@ export class ItemService {
       // second argument, which `toItemView` reads as `bestOffer`.
       return { items: rows.map((row) => toItemView(row)) };
     }
-    const offers = await this.offersFor(
-      rows.map((row) => row.id),
-      scopeIds,
-      'price'
-    );
+    const itemIds = rows.map((row) => row.id);
+    if (req.offers === 'all') {
+      const perItem = await this.allOffersFor(itemIds, scopeIds);
+      return {
+        items: rows.map((row) => {
+          const offers = perItem.get(row.id) ?? [];
+          return {
+            ...toItemView(row),
+            // Filled from the same array rather than from a second query, so
+            // "the cheapest" and "the first of all of them" cannot disagree
+            // (plan 0109, section 2).
+            bestOffer: offers[0] ?? null,
+            offers,
+          };
+        }),
+      };
+    }
+    const offers = await this.offersFor(itemIds, scopeIds, 'price');
     return {
       items: rows.map((row) => ({
         ...toItemView(row),
@@ -728,6 +741,59 @@ export class ItemService {
       .getMany();
     for (const row of rows) {
       offers.set(row.itemId, toItemOfferView(row));
+    }
+    return offers;
+  }
+
+  /**
+   * Every price each of these items has at these scopes, cheapest first (plan
+   * 0109, section 2).
+   *
+   * {@link offersFor} without the `DISTINCT ON`, and that is the whole of the
+   * difference: the same rows, the same `available` filter, the same ordering,
+   * and nothing thrown away. It exists because the cheapest offer is the right
+   * answer to "what will this cost" and cannot answer "what does this shop
+   * charge": a product a chain stocks but is cheaper elsewhere has no row in the
+   * collapsed answer at all, so a filter built on it silently drops exactly the
+   * products it was asked about.
+   *
+   * Ranked by **price** and not by unit price, for {@link getMany}'s reason
+   * (plan 0066, section 2.1): this quotes what the till charges, and the caller
+   * reads the first entry as the cheapest.
+   *
+   * Unpaged, and bounded by the caller: a basket of forty lines against ten
+   * scopes is four hundred rows in one query, which is less than the product
+   * detail the same read already carries.
+   */
+  private async allOffersFor(
+    itemIds: string[],
+    priceScopeIds?: string[]
+  ): Promise<Map<string, ItemOfferView[]>> {
+    const offers = new Map<string, ItemOfferView[]>();
+    if (itemIds.length === 0 || !priceScopeIds || priceScopeIds.length === 0) {
+      return offers;
+    }
+    const rows = await this.prices
+      .createQueryBuilder('si')
+      .where('si."itemId" IN (:...itemIds)', { itemIds })
+      .andWhere('si."priceScopeId" IN (:...scopeIds)', {
+        scopeIds: priceScopeIds,
+      })
+      // A row that says the product is not on the shelf is absent rather than
+      // listed as unavailable, exactly as it is from the cheapest answer, so
+      // "no row" is the client's one way of reading "not sold here".
+      .andWhere('si."available"')
+      .orderBy('si."itemId"', 'ASC')
+      .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
+      .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
+      .getMany();
+    for (const row of rows) {
+      const list = offers.get(row.itemId);
+      if (list) {
+        list.push(toItemOfferView(row));
+      } else {
+        offers.set(row.itemId, [toItemOfferView(row)]);
+      }
     }
     return offers;
   }

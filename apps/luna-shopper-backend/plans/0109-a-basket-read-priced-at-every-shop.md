@@ -1,3 +1,5 @@
+> **PR:** [#351](https://github.com/IchirokuXVI/nx-portfolio/pull/351)
+
 # 0109: a basket read priced at every shop
 
 > Client half: `apps/velista/plans/0078` (prices from one shop) and `0077` section 4 (the

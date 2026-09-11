@@ -99,6 +99,17 @@ export interface GeneratedListLineOriginView {
   lineId: string;
   /** What this origin contributed to the basket line's summed quantity. */
   quantity: number;
+  /**
+   * How many of that contribution have been bought for this origin (plan 0109,
+   * section 4).
+   *
+   * **`BOUGHT` rows only, and reverted ones excluded**, which is the same number
+   * `GeneratedListLineOriginDetail.settledHere` answers and the floor plan 0104
+   * checks a correction against. A `NOT_AVAILABLE` outcome closes an outstanding
+   * amount without buying anything, so it counts zero here: a shop that did not
+   * have the milk cannot raise what a household can be said to have received.
+   */
+  settled: number;
   lineVersion: number;
 }
 

@@ -1774,6 +1774,7 @@ export type CatalogItemView = {
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
+  offers?: CatalogItemOfferView[];
 };
 
 /**
@@ -2618,6 +2619,7 @@ export type GeneratedListGeneratedListLineOriginView = {
   listId: string;
   lineId: string;
   quantity: number;
+  settled: number;
   lineVersion: number;
 };
 

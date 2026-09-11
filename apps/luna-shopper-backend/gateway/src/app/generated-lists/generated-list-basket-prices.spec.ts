@@ -232,7 +232,12 @@ function build(world: World = {}) {
     calls
       .filter((call) => call.subject === ITEM_PATTERNS.getMany)
       .map(
-        (call) => call.payload as { ids: string[]; priceScopeIds?: string[] }
+        (call) =>
+          call.payload as {
+            ids: string[];
+            priceScopeIds?: string[];
+            offers?: string;
+          }
       );
   const locationReads = () =>
     calls
@@ -259,6 +264,9 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
       {
         ids: ['i-hacendado', 'i-pascual', 'i-unpriced'],
         priceScopeIds: [SCOPE_A, SCOPE_B],
+        // Plan 0109, section 3: every scope's offer, so the screen can answer
+        // "what does this shop charge" as well as "what will this cost".
+        offers: 'all',
       },
     ]);
   });
@@ -473,5 +481,103 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
     // much". The client is written to resolve a scope id to nothing.
     expect(result.products[0].bestOffer?.price).toBe(0.95);
     expect(result.scopes).toEqual([]);
+  });
+});
+
+/**
+ * Every scope's price, on the read the whole screen is built on (plan 0109,
+ * section 3).
+ *
+ * The cheapest offer answers "what will this cost" and cannot answer "what does
+ * this shop charge", so a shop filter built on it drops every product a chain
+ * stocks but is dearer at. The read now asks catalog for all of them, and the
+ * two things that has to hold are that nothing else about the read moved, and
+ * that a scope reaching the client on `offers` alone is still named.
+ */
+describe('GET /v1/generated-lists/:id/basket: every shop (plan 0109)', () => {
+  /** A product quoted by both scopes, cheaper at the first. */
+  const quotedTwice = (): ItemView => ({
+    ...item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
+    offers: [
+      offer('i-hacendado', SCOPE_A, 0.95),
+      offer('i-hacendado', SCOPE_B, 1.15),
+    ],
+  });
+
+  it('carries every scope on every product, cheapest first and still on bestOffer', async () => {
+    const { controller } = build({
+      items: [quotedTwice(), { ...item('i-unpriced', null), offers: [] }],
+    });
+
+    const result = await controller.getBasket(participant(), BASKET_ID);
+
+    expect(result.products[0].offers?.map((row) => row.priceScopeId)).toEqual([
+      SCOPE_A,
+      SCOPE_B,
+    ]);
+    expect(result.products[0].bestOffer?.priceScopeId).toBe(SCOPE_A);
+    // A product nothing quotes says so with an empty list rather than by being
+    // absent: the line still has a name to draw.
+    expect(result.products[1].offers).toEqual([]);
+  });
+
+  it('names a chain that quotes a product without ever being the cheapest', async () => {
+    // The whole reason the read was widened. `i-pascual` is dearer at Carrefour
+    // than the Mercadona line beside it, so no `bestOffer` on this basket names
+    // Carrefour at all, and a scopes array read off `bestOffer` would leave the
+    // client a price with no shop behind it.
+    const { controller } = build({
+      seesZoneData: false,
+      items: [
+        quotedTwice(),
+        {
+          ...item('i-pascual', offer('i-pascual', SCOPE_A, 1.15)),
+          offers: [
+            offer('i-pascual', SCOPE_A, 1.15),
+            offer('i-pascual', SCOPE_B, 1.35),
+          ],
+        },
+      ],
+    });
+
+    const result = await controller.getBasket(participant(), BASKET_ID);
+
+    expect(result.scopes.map((scope) => scope.priceScopeId)).toEqual([
+      SCOPE_A,
+      SCOPE_B,
+    ]);
+    expect(result.scopes.map((scope) => scope.supermarketName.en)).toEqual([
+      'Mercadona',
+      'Carrefour',
+    ]);
+  });
+
+  it('still describes nothing when no scope quoted anything', async () => {
+    const { controller } = build({
+      items: [{ ...item('i-unpriced', null), offers: [] }],
+    });
+
+    const result = await controller.getBasket(participant(), BASKET_ID);
+
+    expect(result.scopes).toEqual([]);
+  });
+
+  it('asks for the cheapest alone when the run resolves to no scopes', async () => {
+    const { controller, lookups } = build({
+      resolves: {
+        priceScopeIds: [],
+        scopes: [],
+        coverage: [],
+        approximate: false,
+        profileId: PROFILE,
+        explicit: false,
+      },
+    });
+
+    await controller.getBasket(participant(), BASKET_ID);
+
+    // A lookup that prices nothing has no offers to list, so the unpriced
+    // request is exactly the one it always was.
+    expect(lookups()[0]).not.toHaveProperty('offers');
   });
 });
