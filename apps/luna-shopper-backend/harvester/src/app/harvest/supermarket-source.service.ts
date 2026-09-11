@@ -11,6 +11,7 @@ import type {
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
+  ConflictException,
   decodeCursor,
   encodeCursor,
   NotFoundException,
@@ -18,6 +19,7 @@ import {
 import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { SupermarketSource } from '../entities';
+import { HarvestRunStore } from './harvest-run.store';
 import { toSupermarketSourceView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 
@@ -40,7 +42,8 @@ export class SupermarketSourceService {
     @InjectRepository(SupermarketSource)
     private readonly sources: Repository<SupermarketSource>,
     private readonly admin: PlatformAdminService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly runs: HarvestRunStore
   ) {}
 
   private defaults(): HarvesterConfig {
@@ -103,6 +106,37 @@ export class SupermarketSourceService {
     const row = await this.load(req.supermarketId);
     row.enabled = req.enabled;
     return toSupermarketSourceView(await this.sources.save(row));
+  }
+
+  /**
+   * Take a chain's row away.
+   *
+   * **The only way back from a row on the wrong chain.** The row is keyed on
+   * the chain it belongs to, so a source described against the wrong one cannot
+   * be moved: `upsert` keys on the same column and would write a second row
+   * beside the first. Without this, one wrong pick in the create panel was
+   * permanent.
+   *
+   * A run in flight for that chain refuses it, because the run reads its worker
+   * count and its rate from the row while it works. Finished runs are left
+   * alone and keep their `sourceId`: they are what this chain's fetching did,
+   * and a history that forgets it because the configuration was deleted is a
+   * worse answer than an id pointing at a row that is gone.
+   */
+  async delete(req: SupermarketSourceIdRequest): Promise<{ id: string }> {
+    await this.admin.requireAdmin(req);
+    const row = await this.load(req.supermarketId);
+
+    const active = await this.runs.findActiveBySupermarket(req.supermarketId);
+    if (active) {
+      throw new ConflictException(
+        `A run is in progress for this chain: ${active.id}. Abort it first, ` +
+          'then delete the source.'
+      );
+    }
+
+    await this.sources.delete({ id: row.id });
+    return { id: row.id };
   }
 
   async list(

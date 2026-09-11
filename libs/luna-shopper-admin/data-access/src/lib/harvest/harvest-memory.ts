@@ -757,6 +757,18 @@ export class HarvestMemory implements HarvestServiceI {
     return { ...source };
   }
 
+  async deleteSource(supermarketId: string): Promise<{ id: string }> {
+    const at = this._sources.findIndex(
+      (candidate) => candidate.supermarketId === supermarketId
+    );
+    if (at === -1) {
+      throw notFound();
+    }
+
+    const [removed] = this._sources.splice(at, 1);
+    return { id: removed.id };
+  }
+
   /**
    * A running run, one poll further along.
    *

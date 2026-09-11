@@ -915,11 +915,22 @@
       "trusted": "Trusted",
       "untrusted": "Not trusted",
       "trust": {
-        "hint": "Trusted means the shops this chain names go straight into the catalog, with nobody looking first. A shop that is missing a name, a position, its own postal code, a country or a chain still waits in the places queue. This is the only switch here that writes to the catalog without a review."
+        "hint": "Trusted means the shops this chain names go straight into the catalog, with nobody looking first. A shop that is missing a position, its own postal code, a country or a chain still waits in the places queue. A name is not required, because many chains publish none. This is the only switch here that writes to the catalog without a review."
+      },
+      "remove": {
+        "action": "Delete this source",
+        "heading": "Delete this chain's source?",
+        "body": "{{chain}} will have no source row, so no run can be started for it and its adapter, workers, rate and switches are forgotten. The runs it has already done are kept. Describe the chain again to fetch it once more.",
+        "confirm": "Delete the source"
+      },
+      "config": {
+        "hint": "Adapter specific settings, as JSON. An empty box means no settings at all. The harvester reads this when a run starts, so a value that is wrong is found by the run rather than here.",
+        "invalid": "That is not a JSON object, so nothing was saved. Fix it, or empty the box."
       },
       "field": {
         "chain": "Chain",
         "adapter": "Adapter",
+        "config": "Adapter settings",
         "workers": "Workers",
         "rate": "Requests per second",
         "lastRunAt": "Last run",

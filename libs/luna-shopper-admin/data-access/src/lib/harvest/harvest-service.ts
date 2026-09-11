@@ -203,6 +203,15 @@ export interface HarvestServiceI {
     supermarketId: string,
     enabled: boolean
   ): Promise<Wire.HarvestSupermarketSourceView>;
+  /**
+   * Take a chain's source row away.
+   *
+   * The row is keyed on the chain, so a source created against the wrong chain
+   * cannot be moved to another one: the upsert would write a second row. This
+   * is the way back from that. It is refused while a run of that chain is in
+   * flight, which reads as `resource.error.conflict`.
+   */
+  deleteSource(supermarketId: string): Promise<{ id: string }>;
 }
 
 /** A cursor and a size, which every collection route here accepts. */

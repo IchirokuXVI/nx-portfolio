@@ -20696,6 +20696,89 @@
         "tags": [
           "admin-harvest"
         ]
+      },
+      "delete": {
+        "operationId": "AdminHarvestSourcesController_remove_v1",
+        "parameters": [
+          {
+            "name": "supermarketId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `supermarketSource.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
       }
     },
     "/v1/admin/harvest/sources/{supermarketId}/enabled": {
@@ -23516,7 +23599,7 @@
           },
           "autoImportPlaces": {
             "type": "boolean",
-            "description": "Let the shops this chain names enter the catalog without a person looking first. Off by default, and a separate decision from `enabled`: reading the shops of a chain and trusting them are decided at two different times. A shop that is missing a name, a position, its own postal code, a country or a chain still goes to the review queue."
+            "description": "Let the shops this chain names enter the catalog without a person looking first. Off by default, and a separate decision from `enabled`: reading the shops of a chain and trusting them are decided at two different times. A shop that is missing a position, its own postal code, a country or a chain still goes to the review queue. A name is not required: many chains publish none, and the address is what identifies a shop."
           },
           "config": {
             "type": "object",

@@ -275,6 +275,10 @@ export class HarvestApi implements HarvestServiceI {
     );
   }
 
+  deleteSource(supermarketId: string): Promise<{ id: string }> {
+    return this._send('delete', `${ROOT}/sources/${segment(supermarketId)}`);
+  }
+
   private async _send<R>(
     method: 'get' | 'post' | 'put' | 'delete',
     path: string,

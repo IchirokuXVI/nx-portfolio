@@ -168,14 +168,14 @@ describeIntegration('a trusted source imports a place (real Postgres)', () => {
   });
 
   it('leaves an incomplete place NEW and writes no location', async () => {
-    const result = await service.observe([observed({ name: null })], {
+    const result = await service.observe([observed({ country: null })], {
       runId: '33333333-3333-4333-8333-333333333107',
       deriveMaxMetres: 5000,
       autoImport: true,
     });
 
     expect(result.blocked).toEqual([
-      { externalRef: 'shop-1', missing: ['name'] },
+      { externalRef: 'shop-1', missing: ['country'] },
     ]);
     expect(
       sent.some((call) => call.subject === SUPERMARKET_LOCATION_PATTERNS.create)

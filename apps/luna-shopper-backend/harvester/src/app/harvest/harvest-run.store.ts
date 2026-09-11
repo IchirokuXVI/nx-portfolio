@@ -7,7 +7,7 @@ import {
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
-import { LessThan, QueryFailedError, Repository } from 'typeorm';
+import { In, LessThan, QueryFailedError, Repository } from 'typeorm';
 import { HarvestRun } from '../entities';
 
 const PG_UNIQUE_VIOLATION = '23505';
@@ -202,6 +202,24 @@ export class HarvestRunStore {
       qb.andWhere('r."supermarketId" IS NULL');
     }
     return qb.getOne();
+  }
+
+  /**
+   * Whether this chain has a run in flight, whatever mode it is.
+   *
+   * {@link findActive} answers the same question when it is given a chain, but
+   * it demands a mode it then ignores, and a caller with no mode to give had to
+   * invent one. This one asks what it means.
+   */
+  async findActiveBySupermarket(
+    supermarketId: string
+  ): Promise<HarvestRun | null> {
+    return this.runs.findOne({
+      where: {
+        supermarketId,
+        status: In([HarvestRunStatus.PENDING, HarvestRunStatus.RUNNING]),
+      },
+    });
   }
 
   async load(runId: string): Promise<HarvestRun> {
