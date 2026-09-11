@@ -66,6 +66,11 @@
     "waiting": "{{count}} waiting for a decision",
     "signOut": "Sign out",
     "screens": "Screens in this section",
+    "contentLanguage": "Read the catalog in",
+    "language": {
+      "en": "English",
+      "es": "Spanish"
+    },
     "sections": {
       "overview": "Overview",
       "catalog": "Catalog",

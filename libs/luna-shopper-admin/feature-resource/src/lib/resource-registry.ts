@@ -15,6 +15,7 @@ import type {
   ReferenceOption,
   ReferenceScope,
 } from '@portfolio/luna-shopper-admin/ui';
+import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
 import { ADMIN_SECTIONS } from './admin-section';
 
 /**
@@ -96,6 +97,17 @@ export class ResourceReferences implements ReferenceLookup {
   private readonly _registry = inject(ResourceRegistry);
 
   /**
+   * The operator's reading order, for the names this answers with (admin plan
+   * 0026, section 5).
+   *
+   * A picker is one of the three places a descriptor's `title` is called, and
+   * the only one that is a service rather than a screen. The order is read per
+   * call rather than kept, so a picker opened after a switch offers the names
+   * in the language the operator is reading now.
+   */
+  private readonly _content = inject(ContentLocaleStore);
+
+  /**
    * The rows of `resource` a picker offers, narrowed by what was typed and by
    * what the screen already decided.
    *
@@ -133,7 +145,7 @@ export class ResourceReferences implements ReferenceLookup {
 
     return page.items.map((row) => ({
       id: idOf(descriptor, row),
-      title: descriptor.title(row),
+      title: descriptor.title(row, this._content.order()),
     }));
   }
 
@@ -145,7 +157,10 @@ export class ResourceReferences implements ReferenceLookup {
 
     try {
       const row = await this._registry.gatewayFor(descriptor).read(id);
-      return { id: idOf(descriptor, row), title: descriptor.title(row) };
+      return {
+        id: idOf(descriptor, row),
+        title: descriptor.title(row, this._content.order()),
+      };
     } catch {
       // A reference can outlive what it points at. That is a state the picker
       // draws rather than a failure, so it is `null` here and a sentence there.

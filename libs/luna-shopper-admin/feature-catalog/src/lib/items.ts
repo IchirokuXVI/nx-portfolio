@@ -43,7 +43,7 @@ export const ITEMS = defineResource<Item>({
   segment: 'items',
   labels: { one: 'catalog.items.one', many: 'catalog.items.many' },
 
-  title: (row) => localizedTextValue(row.name, CONTENT_LOCALES),
+  title: (row, locales) => localizedTextValue(row.name, locales),
 
   fields: [
     { kind: 'text', name: 'id', label: 'catalog.items.id', editable: false },

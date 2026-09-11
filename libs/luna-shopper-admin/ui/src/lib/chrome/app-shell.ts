@@ -95,6 +95,26 @@ export interface ShellLink {
         <lib-environment-badge [deployment]="deployment()" />
 
         <div class="identity">
+          <!-- The language the catalog is read in (admin plan 0026, section 7).
+               Beside the operator's name rather than in a screen's toolbar,
+               because it is a property of who is reading and not of what is on
+               screen: in a filter bar it would read as narrowing the rows,
+               which is the one thing it never does. -->
+          <label class="language">
+            <span class="sr-only">{{ 'shell.contentLanguage' | rokuT }}</span>
+            <select
+              (change)="chooseContent($event)"
+              [attr.aria-label]="'shell.contentLanguage' | rokuT"
+              [value]="contentLocale()"
+            >
+              @for (locale of contentLocales(); track locale) {
+                <option [value]="locale">
+                  {{ 'shell.language.' + locale | rokuT }}
+                </option>
+              }
+            </select>
+          </label>
+
           <span class="who">{{ operator() }}</span>
           <button (click)="signOut.emit()" type="button">
             {{ 'shell.signOut' | rokuT }}
@@ -235,6 +255,26 @@ export interface ShellLink {
       color: var(--admin-ink-muted);
     }
 
+    .language select {
+      min-block-size: 2.75rem;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      font: inherit;
+      color: var(--admin-ink);
+      cursor: pointer;
+    }
+
+    .sr-only {
+      position: absolute;
+      overflow: hidden;
+      clip-path: inset(50%);
+      inline-size: 1px;
+      block-size: 1px;
+      white-space: nowrap;
+    }
+
     nav ul {
       display: flex;
       flex-wrap: wrap;
@@ -364,13 +404,34 @@ export class AppShell {
   readonly operator = input('');
   readonly compact = input(false);
 
+  /**
+   * The language the operator reads the catalog in (admin plan 0026).
+   *
+   * **Not the interface language.** The labels around it are English whatever
+   * this says, because the catalog is read by shoppers and the back office is
+   * read by one operator, and the two lists are different lengths.
+   */
+  readonly contentLocale = input('');
+  /** The languages the content is written in, as the options to offer. */
+  readonly contentLocales = input<readonly string[]>([]);
+
   readonly signOut = output<void>();
+  /** The operator picked a language to read the catalog in. */
+  readonly chooseContentLocale = output<string>();
 
   /** Whether the collapsed navigation is showing. Ignored on a wide screen. */
   readonly open = signal(false);
 
   toggle(): void {
     this.open.update((open) => !open);
+  }
+
+  /** The select's choice, as the language it names. */
+  chooseContent(event: Event): void {
+    const select = event.target as HTMLSelectElement | null;
+    if (select !== null) {
+      this.chooseContentLocale.emit(select.value);
+    }
   }
 
   /**

@@ -5,6 +5,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DeploymentStore,
   ServerReachability,
   SessionStorage,
@@ -73,6 +74,7 @@ async function boot(url: string) {
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       provideRouter(adminRoutes([SECTION])),
       provideLocationMocks(),

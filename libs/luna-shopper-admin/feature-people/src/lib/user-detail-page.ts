@@ -6,7 +6,10 @@ import {
   signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { DIRECTORY_SERVICE } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  ContentLocaleStore,
+  DIRECTORY_SERVICE,
+} from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceRegistry } from '@portfolio/luna-shopper-admin/feature-resource';
 import { idOf } from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
@@ -200,6 +203,7 @@ const ZONE_LIMIT = 50;
 export class UserDetailPage extends DetailPage<UserRow> {
   private readonly _directory = inject(DIRECTORY_SERVICE);
   private readonly _registry = inject(ResourceRegistry);
+  private readonly _content = inject(ContentLocaleStore);
 
   readonly zones = signal<readonly UserZone[]>([]);
   /**
@@ -317,7 +321,7 @@ export class UserDetailPage extends DetailPage<UserRow> {
       this.zones.set(
         page.items.map((row) => ({
           id: idOf(zones, row),
-          name: zones.title(row),
+          name: zones.title(row, this._content.order()),
         }))
       );
     } catch {

@@ -1,3 +1,4 @@
+import { CONTENT_LOCALES } from '@portfolio/luna-shopper-admin/models';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
 import { APP_AVAILABLE_LOCALES } from './app-locales';
@@ -220,6 +221,35 @@ describe('the translation catalogue', () => {
     ];
 
     expect(keys.filter((key) => !resolves(key))).toEqual([]);
+  });
+
+  /**
+   * The content language control's keys (admin plan 0026, section 7).
+   *
+   * Listed rather than left to the scan, because the option labels are built
+   * from a value (`'shell.language.' + locale`) and the scan counts a key like
+   * that rather than checking it. One per content locale, and the scan cannot
+   * know that list.
+   */
+  it('holds a name for every language the catalog is read in', () => {
+    const keys = [
+      'shell.contentLanguage',
+      ...CONTENT_LOCALES.map((locale) => `shell.language.${locale}`),
+    ];
+
+    expect(keys.filter((key) => !resolves(key))).toEqual([]);
+  });
+
+  /**
+   * The interface language and the content language are two settings, and this
+   * is the line between them. The catalog is read by shoppers, so its names
+   * exist in both languages; the back office is read by one operator, in
+   * English. Conflating them would make the Spanish name unreadable until
+   * somebody translated the admin interface.
+   */
+  it('ships one interface locale and two content locales', () => {
+    expect(APP_AVAILABLE_LOCALES).toEqual(['en']);
+    expect(CONTENT_LOCALES).toEqual(['en', 'es']);
   });
 
   /**

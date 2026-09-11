@@ -126,7 +126,7 @@ describe('the postal codes descriptor', () => {
     const row = { id: 'postal-14013', postalCode: '14013' } as ResourceRow;
 
     expect(POSTAL_CODES.rowId?.(row)).toBe('14013');
-    expect(POSTAL_CODES.title(row)).toBe('14013');
+    expect(POSTAL_CODES.title(row, ['en', 'es'])).toBe('14013');
   });
 });
 

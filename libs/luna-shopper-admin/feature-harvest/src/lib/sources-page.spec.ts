@@ -7,6 +7,7 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
@@ -89,6 +90,7 @@ async function render() {
   await TestBed.configureTestingModule({
     imports: [SourcesPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       provideRouter([]),
       provideLocationMocks(),

@@ -41,6 +41,10 @@ import { SUPERMARKETS } from './supermarkets';
  * and the screens themselves are `catalog-screens.spec.ts`.
  */
 
+/** The two reading orders an operator can choose (admin plan 0026). */
+const ENGLISH_FIRST: readonly string[] = ['en', 'es'];
+const SPANISH_FIRST: readonly string[] = ['es', 'en'];
+
 const ALL = [
   SUPERMARKETS,
   LOCATIONS,
@@ -148,15 +152,39 @@ describe('reference columns that name their target', () => {
 
   /** Section 3.3: the compact card's heading gets the same name the column gets. */
   it('titles a price by its product, id only when the join found nothing', () => {
-    expect(PRICES.title(PRICE_SEED[0] as unknown as ResourceRow)).toBe(
-      'Whole milk 1 L'
-    );
     expect(
-      PRICES.title({
-        ...(PRICE_SEED[0] as unknown as ResourceRow),
-        itemName: null,
-      })
+      PRICES.title(PRICE_SEED[0] as unknown as ResourceRow, ENGLISH_FIRST)
+    ).toBe('Whole milk 1 L');
+    expect(
+      PRICES.title(
+        {
+          ...(PRICE_SEED[0] as unknown as ResourceRow),
+          itemName: null,
+        },
+        ENGLISH_FIRST
+      )
     ).toBe('it_milk_1l');
+  });
+
+  /**
+   * The title takes the operator's reading order (admin plan 0026, section 5).
+   *
+   * A descriptor that collapses a localized name is one of six, and the
+   * argument is what stops all six being read English first whatever the
+   * operator chose. It is an order and not a filter: a product named in one
+   * language only keeps the name it has under either choice.
+   */
+  it('titles a price in the language the operator reads', () => {
+    const row = {
+      ...(PRICE_SEED[0] as unknown as ResourceRow),
+      itemName: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
+    };
+
+    expect(PRICES.title(row, ENGLISH_FIRST)).toBe('Whole milk 1 L');
+    expect(PRICES.title(row, SPANISH_FIRST)).toBe('Leche entera 1 L');
+    expect(
+      PRICES.title({ ...row, itemName: { es: 'Leche entera 1 L' } }, ENGLISH_FIRST)
+    ).toBe('Leche entera 1 L');
   });
 });
 

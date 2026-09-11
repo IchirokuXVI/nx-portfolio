@@ -56,8 +56,8 @@ export const LOCATIONS = defineResource<Location>({
    * two Mercadonas in one city. The label is set by hand and most shops have
    * none.
    */
-  title: (row) => {
-    const label = localizedTextValue(row.label, CONTENT_LOCALES);
+  title: (row, locales) => {
+    const label = localizedTextValue(row.label, locales);
     if (label !== '') {
       return label;
     }

@@ -4,6 +4,7 @@ import { SessionBootstrap } from './auth/session-bootstrap';
 import { SessionLifecycle } from './auth/session-lifecycle';
 import { SessionStorage } from './auth/session-storage';
 import { SessionStore } from './auth/session-store';
+import { ContentLocaleStore } from './content-locale-store';
 import { DeploymentStore } from './deployment/deployment-store';
 import { ServerReachability } from './health/server-reachability';
 
@@ -30,4 +31,9 @@ export const LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS: Provider[] = [
   SessionStore,
   SessionBootstrap,
   SessionLifecycle,
+  // Which language the catalog is read in (admin plan 0026). Here rather than
+  // `providedIn: 'root'` for the reason every store above is: one instance on
+  // the app injector, reachable from a spec that spreads this list and from
+  // nothing that did not.
+  ContentLocaleStore,
 ];
