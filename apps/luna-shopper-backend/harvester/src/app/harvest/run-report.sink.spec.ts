@@ -121,7 +121,12 @@ function build(
   const places = {
     observe: jest.fn(async (chunk: readonly ObservedPlace[]) => {
       placesObserved.push([...chunk]);
-      return { created: chunk.length, refreshed: 0 };
+      return {
+        created: chunk.length,
+        refreshed: 0,
+        imported: 0,
+        blocked: [],
+      };
     }),
   } as unknown as DiscoveredPlaceService;
 
@@ -177,6 +182,9 @@ function build(
       defaultPriceScopeId: SCOPE,
       sourceKind: PriceSourceKind.OFFICIAL_API,
       postalCodeDeriveMaxMetres: 5000,
+      // Every chain is untrusted until an operator says otherwise (plan 0107,
+      // D2); the trusted path has its own spec.
+      autoImportPlaces: false,
     },
     { ingest, scopes, places, shops, catalog, entries }
   );

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  adapterCapabilities,
   DiscoveredPlaceStatus,
   PostalCodeDiscoveryStatus,
   type AddPostalCodeDiscoveryRequest,
@@ -25,9 +26,43 @@ import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { DiscoveredPlace, PostalCodeDiscoveryRequest } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { HarvestRunStore } from './harvest-run.store';
 import { toPostalCodeDiscoveryRequestView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
+import { SupermarketSourceService } from './supermarket-source.service';
+
+/**
+ * One source a postal code is asked of (plan 0107, section 2).
+ *
+ * OpenStreetMap is always in the set and is **not** a `supermarket_sources`
+ * row: it is about a place rather than about a chain, and it finds many chains
+ * at once. Every other member is an enabled row whose adapter lists its own
+ * stores, which is the `listsItsOwnStores` capability and not a second table.
+ */
+export interface PlaceSourceRef {
+  /** The chain's source row, and null for OpenStreetMap. */
+  sourceId: string | null;
+  /** The chain, and null for OpenStreetMap, which belongs to no chain. */
+  supermarketId: string | null;
+  /** What to call it in a log line and on the queue row's error. */
+  label: string;
+  /**
+   * Whether this source's shops may enter the catalog unreviewed.
+   *
+   * **Always false for OpenStreetMap**, which has no row to carry the flag
+   * (D3). A place from a radius search stays `NEW` and waits for a person.
+   */
+  autoImportPlaces: boolean;
+}
+
+/** The one member of the set that is not a chain. */
+const OPEN_STREET_MAP: PlaceSourceRef = {
+  sourceId: null,
+  supermarketId: null,
+  label: 'OpenStreetMap',
+  autoImportPlaces: false,
+};
 
 interface QueueCursor {
   value: string;
@@ -74,6 +109,8 @@ export class PostalCodeDiscoveryService {
     private readonly places: Repository<DiscoveredPlace>,
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
+    private readonly sources: SupermarketSourceService,
+    private readonly runs: HarvestRunStore,
     private readonly config: ConfigService
   ) {}
 
@@ -156,6 +193,79 @@ export class PostalCodeDiscoveryService {
     return view.counts
       .filter((count) => count.locations === 0)
       .map((count) => count.postalCode);
+  }
+
+  /**
+   * The sources a code is asked of (plan 0107, section 2).
+   *
+   * OpenStreetMap is always in the set and is not a `supermarket_sources` row:
+   * it is about a place rather than about a chain, and it finds many chains at
+   * once. Every other member is an enabled row whose adapter lists its own
+   * stores.
+   *
+   * **A disabled chain is not asked.** That is plan 0083's rule unchanged:
+   * whether a chain may be fetched is a row, and this plan does not add a
+   * second switch beside it.
+   *
+   * The country is what the set is *about*, and no source declares one today,
+   * so every enabled listing source is asked of every country. It is a
+   * parameter rather than a constant because the question genuinely is per
+   * country: LIDL is read one country at a time and Mercadona's document holds
+   * two, so the day a chain's row says which countries it covers, the filter
+   * belongs here and nowhere else.
+   */
+  async placeSourcesFor(country: string): Promise<PlaceSourceRef[]> {
+    // Read and not used, deliberately: no `supermarket_sources` row says which
+    // countries its chain covers, so there is nothing here to filter on yet.
+    // See the note above for why the question still takes one.
+    void country;
+    const rows = await this.sources.listEnabled();
+    return [
+      OPEN_STREET_MAP,
+      ...rows
+        .filter((row) => adapterCapabilities(row.adapterKey).listsItsOwnStores)
+        .map((row) => ({
+          sourceId: row.id,
+          supermarketId: row.supermarketId,
+          label: row.adapterKey,
+          autoImportPlaces: row.autoImportPlaces,
+        })),
+    ];
+  }
+
+  /**
+   * Of those sources, the ones that owe this code an answer (section 2.1).
+   *
+   * **Due is per code and per source**, which is D5. Asking the question per
+   * code, as plan 0063 did when OpenStreetMap was the only source, would let
+   * the first source to answer a code silence the other two for thirty days.
+   *
+   * Three things make a source due: it has never answered this code, its last
+   * answer is older than `discoveryCooldownDays`, or an operator has requeued
+   * the code since that answer. The third exists because plan 0097 section 6.2
+   * promises that requeueing ignores the cooldown, and a per source cooldown
+   * would otherwise turn that button into a row that goes straight to DONE.
+   */
+  async dueSourcesFor(
+    country: string,
+    postalCode: string,
+    requeuedAt: Date | null
+  ): Promise<PlaceSourceRef[]> {
+    const sources = await this.placeSourcesFor(country);
+    const answered = await this.runs.lastAnsweredBySource(country, postalCode);
+    const cooldownStart = new Date(
+      Date.now() - this.settings().discoveryCooldownDays * 86_400_000
+    );
+    return sources.filter((source) => {
+      const last = answered.get(source.sourceId);
+      if (!last) {
+        return true;
+      }
+      if (last < cooldownStart) {
+        return true;
+      }
+      return requeuedAt !== null && last < requeuedAt;
+    });
   }
 
   /**

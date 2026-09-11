@@ -64,6 +64,22 @@ export class PostalCodeDiscoveryRequest extends BaseEntity {
   @Column({ type: 'timestamptz', nullable: true })
   nextAttemptAt!: Date | null;
 
+  /**
+   * When an operator last asked for this code to be looked at again (plan 0107,
+   * section 2.1).
+   *
+   * A code is due **per source** now, and a source that answered it last week
+   * is not due again for thirty days. That rule alone would make `requeue` a no
+   * op on a code every source has already answered, which is exactly the button
+   * plan 0097 section 6.2 says ignores the cooldown. So a requeue stamps this,
+   * a source is due again when its last completed run for the code is older
+   * than it, and {@link markDone} clears it once every source has answered.
+   *
+   * Null on a row nobody has asked about twice, which is almost all of them.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  requeuedAt!: Date | null;
+
   @Column({ type: 'integer', default: 0 })
   attempts!: number;
 

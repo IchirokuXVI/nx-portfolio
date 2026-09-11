@@ -293,6 +293,20 @@ export interface SupermarketSourceView {
   supermarketId: string;
   adapterKey: AdapterKey;
   enabled: boolean;
+  /**
+   * The shops this chain names may enter the catalog without a person looking
+   * first (plan 0107, section 3.1).
+   *
+   * Off by default, and a separate decision from {@link enabled} for the reason
+   * `HARVEST_ENABLED` is separate from the Helm switch: reading a chain's shops
+   * and letting them into the catalog unreviewed are two things an operator
+   * decides at two different times.
+   *
+   * **A place still has to pass the completeness check**, and one that fails it
+   * becomes an ordinary `NEW` row in the review queue. The flag is a fast lane
+   * and not a replacement for the queue.
+   */
+  autoImportPlaces: boolean;
   config: Record<string, unknown>;
   workers: number;
   maxRequestsPerSecond: number;
@@ -1056,6 +1070,8 @@ export interface UpsertSupermarketSourceRequest extends AdminCredential {
   supermarketId: string;
   adapterKey: AdapterKey;
   enabled?: boolean;
+  /** Trust this chain's own shop list, per plan 0107, section 3.1. */
+  autoImportPlaces?: boolean;
   config?: Record<string, unknown>;
   workers?: number;
   maxRequestsPerSecond?: number;

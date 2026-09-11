@@ -68,6 +68,14 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
  * `enabled` gets its own route because describing a chain and starting to fetch
  * it are two decisions. The toggle calls that route directly, so turning a chain
  * on does not resend a configuration nobody was editing.
+ *
+ * `autoImportPlaces` is the second switch and the third decision (backend plan
+ * 0107, section 3.1): whether the shops this chain names may enter the catalog
+ * with nobody looking first. It is the one switch in the harvester that writes
+ * to the catalog without a review, which is why it carries a sentence saying so
+ * rather than a bare label. It has no route of its own and goes through the
+ * upsert, so the row's own values are sent back beside it rather than the edit
+ * form's.
  */
 @Component({
   selector: 'lib-sources-page',
@@ -177,7 +185,25 @@ const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
                   ) | rokuT
                 }}
               </button>
+
+              <button
+                (click)="toggleTrust(source)"
+                [attr.aria-pressed]="source.autoImportPlaces"
+                [class.on]="source.autoImportPlaces"
+                [disabled]="busyId() === source.supermarketId"
+                class="toggle"
+                type="button"
+              >
+                {{
+                  (source.autoImportPlaces
+                    ? 'harvest.sources.trusted'
+                    : 'harvest.sources.untrusted'
+                  ) | rokuT
+                }}
+              </button>
             </div>
+
+            <p class="hint">{{ 'harvest.sources.trust.hint' | rokuT }}</p>
 
             <dl>
               <div>
@@ -537,6 +563,34 @@ export class SourcesPage {
         source.supermarketId,
         !source.enabled
       );
+      this._replace(updated);
+    } catch (error) {
+      this.error.set(toGatewayError(error));
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
+  /**
+   * Trust this chain's own shop list, or stop.
+   *
+   * There is no route for this one, so it goes through the upsert with the
+   * **row's own** values beside it rather than the edit form's signals: the
+   * form may be closed, or open on another row, and a trust toggle must not
+   * rewrite a configuration nobody was editing.
+   */
+  async toggleTrust(source: Source): Promise<void> {
+    this.busyId.set(source.supermarketId);
+    this.error.set(null);
+
+    try {
+      const updated = await this._service.upsertSource(source.supermarketId, {
+        adapterKey: source.adapterKey,
+        workers: source.workers,
+        maxRequestsPerSecond: source.maxRequestsPerSecond,
+        config: source.config,
+        autoImportPlaces: !source.autoImportPlaces,
+      });
       this._replace(updated);
     } catch (error) {
       this.error.set(toGatewayError(error));

@@ -28,6 +28,7 @@ function store(options: {
   ref: string;
   region: number | null;
   regionName?: string;
+  zip?: string;
 }): Record<string, unknown> {
   return {
     objectNumber: options.ref,
@@ -36,7 +37,7 @@ function store(options: {
       streetName: 'Avda. Madrid,',
       streetNumber: '34',
       city: 'Fraga',
-      zip: '22520',
+      zip: options.zip ?? '22520',
       state: 'Aragón',
       latitude: 41.5223,
       longitude: 0.33812,
@@ -159,6 +160,122 @@ describe('LidlStoreDiscoveryRunner', () => {
     // decided on, is `discovered-place.service`'s. A run reports what the
     // source said and never a status.
     expect(report.places[0]).not.toHaveProperty('status');
+  });
+
+  it('names the region as the scope the shop is priced in', async () => {
+    // What a trusted import reads to put the shop in the group the chain
+    // prices it with (plan 0107, section 3.3). A shop with no region names
+    // none and takes a STORE scope of its own.
+    const runner = new TestRunner([
+      store({ ref: 'ES1', region: 21 }),
+      store({ ref: 'ES2', region: null }),
+    ]);
+
+    await runner.run(
+      context(),
+      report,
+      {
+        postalCode: '',
+        country: 'es',
+        radiusMetres: 0,
+        supermarketId: CHAIN,
+        chain: CHAIN_IDENTITY,
+      },
+      source()
+    );
+
+    expect(report.places.map((place) => place.scopeKey)).toEqual(['21', null]);
+  });
+
+  // --- The postal code filter (plan 0107, section 1) -----------------------
+
+  it('reports only the shops in the codes it was asked for', async () => {
+    // Three requests read the whole country whatever is asked of it. What the
+    // filter saves is a chain wide store list being written again for every
+    // code in the queue.
+    const runner = new TestRunner([
+      store({ ref: 'ES1', region: 21, zip: '22520' }),
+      store({ ref: 'ES2', region: 26, zip: '14013' }),
+      store({ ref: 'ES3', region: 21, zip: '28001' }),
+    ]);
+
+    await runner.run(
+      context(),
+      report,
+      {
+        postalCode: '14013',
+        country: 'es',
+        radiusMetres: 0,
+        postalCodes: ['14013'],
+        supermarketId: CHAIN,
+        chain: CHAIN_IDENTITY,
+      },
+      source()
+    );
+
+    expect(report.places.map((place) => place.externalRef)).toEqual(['ES2']);
+    // Only the regions of the shops it reported, so a filtered run does not
+    // create scopes for shops it said nothing about.
+    expect(report.scopes.map((scope) => scope.key)).toEqual(['26']);
+  });
+
+  it('reports every shop when the run names no code', async () => {
+    // An empty array and an absent field are the same thing, which is every
+    // shop the chain publishes.
+    const stores = [
+      store({ ref: 'ES1', region: 21, zip: '22520' }),
+      store({ ref: 'ES2', region: 26, zip: '14013' }),
+    ];
+
+    for (const postalCodes of [undefined, []]) {
+      report = new RecordingRunReport();
+      await new TestRunner(stores).run(
+        context(),
+        report,
+        {
+          postalCode: '',
+          country: 'es',
+          radiusMetres: 0,
+          postalCodes,
+          supermarketId: CHAIN,
+          chain: CHAIN_IDENTITY,
+        },
+        source()
+      );
+      expect(report.places).toHaveLength(2);
+    }
+  });
+
+  it('names a code no shop sits on rather than refusing the run', async () => {
+    // A filter that matched nothing is a run that reports nothing, and the
+    // operator needs to know which code was the wrong one.
+    const run = context();
+    const runner = new TestRunner([
+      store({ ref: 'ES1', region: 21, zip: '22520' }),
+    ]);
+
+    await runner.run(
+      run,
+      report,
+      {
+        postalCode: '99999',
+        country: 'es',
+        radiusMetres: 0,
+        postalCodes: ['99999'],
+        supermarketId: CHAIN,
+        chain: CHAIN_IDENTITY,
+      },
+      source()
+    );
+
+    expect(report.places).toHaveLength(0);
+    expect(run.setReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stores: 0,
+        storesInDocument: 1,
+        postalCodesWithNoShop: ['99999'],
+      })
+    );
   });
 
   it('declares one scope per region, and none twice', async () => {

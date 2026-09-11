@@ -111,8 +111,18 @@ export class PostalCodeDiscoveryStore {
     return rows[0] ?? null;
   }
 
-  /** The run finished. DONE means we looked, never that we found shops. */
-  async markDone(id: string, runId: string): Promise<void> {
+  /**
+   * Every source answered. DONE means we looked, never that we found shops.
+   *
+   * `runId` is the **last** run the code produced and may be null, because a
+   * code every source had already answered recently is done without starting
+   * one (plan 0107, section 2.2). A null leaves whatever run the row already
+   * names rather than erasing it.
+   *
+   * `requeuedAt` is cleared here and only here: the operator asked for a fresh
+   * look, and every source has now given one.
+   */
+  async markDone(id: string, runId: string | null): Promise<void> {
     await this.requests.update(
       { id },
       {
@@ -120,7 +130,8 @@ export class PostalCodeDiscoveryStore {
         discoveredAt: new Date(),
         nextAttemptAt: null,
         error: null,
-        runId,
+        requeuedAt: null,
+        ...(runId === null ? {} : { runId }),
       }
     );
   }
@@ -223,20 +234,26 @@ export class PostalCodeDiscoveryStore {
     const status = discoverNow
       ? PostalCodeDiscoveryStatus.QUEUED
       : PostalCodeDiscoveryStatus.PARKED;
+    // `requeuedAt` is stamped only when the operator asked for a run. A parked
+    // code has not been asked about yet, so it forces nothing (plan 0107,
+    // section 2.1).
     await this.requests.query(
       `INSERT INTO "postal_code_discovery_requests"
-         ("country", "postalCode", "status", "requestedAt")
-       VALUES ($1, $2, $3, now())
+         ("country", "postalCode", "status", "requestedAt", "requeuedAt")
+       VALUES ($1, $2, $3, now(), CASE WHEN $4::boolean THEN now() END)
        ON CONFLICT ("country", "postalCode") DO UPDATE
           SET "status" = $3,
               "attempts" = 0,
               "nextAttemptAt" = NULL,
               "error" = NULL,
               "dismissed" = false,
+              "requeuedAt" = CASE WHEN $4::boolean THEN now()
+                                  ELSE "postal_code_discovery_requests"."requeuedAt"
+                             END,
               "updatedAt" = now()
         WHERE "postal_code_discovery_requests"."status" IN
               ('DONE', 'FAILED', 'PARKED')`,
-      [country, postalCode, status]
+      [country, postalCode, status, discoverNow]
     );
     // Read the row back rather than trusting `RETURNING`, which answers nothing
     // when the conflict target matched and the WHERE clause refused the update.
@@ -269,6 +286,10 @@ export class PostalCodeDiscoveryStore {
         nextAttemptAt: null,
         error: null,
         dismissed: false,
+        // What makes the cooldown yield, now that it is per source (plan 0107,
+        // section 2.1). Without it a code every source answered last week would
+        // find nothing due and go straight back to DONE.
+        requeuedAt: new Date(),
       }
     );
   }
