@@ -27,7 +27,7 @@ const descriptor: ResourceDescriptor<Shop> = {
   name: 'shops',
   segment: 'shops',
   labels: { one: 'shops.one', many: 'shops.many' },
-  title: (row) => localizedTextValue(row.name, ['en', 'es']),
+  title: (row, locales) => localizedTextValue(row.name, locales),
   fields: [
     { kind: 'text', name: 'id', label: 'shops.id', editable: false },
     {
@@ -258,6 +258,63 @@ describe('toRowView', () => {
 
   it('keeps the row, for a named action that needs it', () => {
     expect(toRowView(descriptor, row, options).row).toBe(row);
+  });
+});
+
+/**
+ * The operator's reading order (admin plan 0026).
+ *
+ * `contentLocales` used to be the `CONTENT_LOCALES` constant at every call
+ * site, so every localized value on screen was read English first whatever the
+ * operator was working in. It is an order now, and the two properties that make
+ * it an order rather than a filter are asserted here: a row named in one
+ * language only still shows the name it has, under **either** choice, and the
+ * cell still reports the language it is missing.
+ */
+describe('a localized value under a chosen reading order', () => {
+  const english: RenderOptions = { locale: 'en', contentLocales: ['en', 'es'] };
+  const spanish: RenderOptions = { locale: 'en', contentLocales: ['es', 'en'] };
+
+  const bilingual: Shop = {
+    ...row,
+    name: { en: 'Bakery', es: 'Panaderia' },
+  };
+  const spanishOnly: Shop = { ...row, name: { es: 'Panaderia' } };
+
+  const nameCell = (shop: Shop, render: RenderOptions) =>
+    toCell(
+      descriptor.fields.find((field) => field.name === 'name') ??
+        descriptor.fields[0],
+      shop,
+      render
+    );
+
+  it('reads the chosen language first', () => {
+    expect(nameCell(bilingual, english)).toEqual({ text: 'Bakery' });
+    expect(nameCell(bilingual, spanish)).toEqual({ text: 'Panaderia' });
+  });
+
+  /**
+   * The row an operator is looking for. Nothing is hidden and no cell goes
+   * blank: the name it has is shown and the gap is still marked, so the screen
+   * that finds untranslated rows is not the one screen that cannot show them.
+   */
+  it('falls through to the language a name has, and still reports the gap', () => {
+    expect(nameCell(spanishOnly, english)).toEqual({
+      text: 'Panaderia',
+      missing: ['en'],
+    });
+    expect(nameCell(spanishOnly, spanish)).toEqual({
+      text: 'Panaderia',
+      missing: ['en'],
+    });
+  });
+
+  /** The title takes the order too, so a heading agrees with its own table. */
+  it('titles a row in the chosen language', () => {
+    expect(toRowView(descriptor, bilingual, english).title).toBe('Bakery');
+    expect(toRowView(descriptor, bilingual, spanish).title).toBe('Panaderia');
+    expect(toRowView(descriptor, spanishOnly, english).title).toBe('Panaderia');
   });
 });
 

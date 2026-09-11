@@ -1,6 +1,9 @@
 import { inject } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  ContentLocaleStore,
+  RESOURCE_GATEWAYS,
+} from '@portfolio/luna-shopper-admin/data-access';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
 import { provideResources, provideSections } from './admin-section';
 import { ResourceReferences, ResourceRegistry } from './resource-registry';
@@ -37,7 +40,8 @@ const scopes = defineResource<Scope>({
 describe('ResourceRegistry', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideResources(scopes)],
+      providers: [
+      ContentLocaleStore,provideResources(scopes)],
     });
   });
 
@@ -84,7 +88,8 @@ describe('ResourceRegistry', () => {
 describe('ResourceReferences', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideResources(scopes)],
+      providers: [
+      ContentLocaleStore,provideResources(scopes)],
     });
   });
 
@@ -148,6 +153,7 @@ describe('ResourceRegistry pathOf', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
+      ContentLocaleStore,
         provideSections(
           {
             key: 'catalog',

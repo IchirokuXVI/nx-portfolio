@@ -10,6 +10,8 @@ export * from './lib/auth/session-service';
 export * from './lib/auth/session-storage';
 export * from './lib/auth/session-store';
 export * from './lib/client-version-interceptor';
+export * from './lib/content-locale-interceptor';
+export * from './lib/content-locale-store';
 export * from './lib/dashboard/dashboard-api';
 export * from './lib/dashboard/dashboard-memory';
 export * from './lib/dashboard/dashboard-seed';

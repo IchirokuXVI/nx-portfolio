@@ -1,10 +1,12 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
 import {
   defineResource,
   type ResourceGateway,
   type ResourcePage,
+  type ResourceQuery,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { provideSections } from './admin-section';
@@ -55,8 +57,18 @@ const factoriesGateway: ResourceGateway<ResourceRow> = {
   remove: () => Promise.reject(new Error('not used')),
 };
 
+/** Every listing of the gadgets, so what a re-read asked for is observable. */
+const gadgetListCalls: ResourceQuery[] = [];
+
 const gadgetsGateway: ResourceGateway<ResourceRow> = {
-  list: async () => pageOf(GADGET_ROWS as unknown as ResourceRow[]),
+  list: async (query: ResourceQuery = {}) => {
+    gadgetListCalls.push(query);
+    // A cursor, so that a page which has one can be shown to lose it.
+    return {
+      items: GADGET_ROWS as unknown as ResourceRow[],
+      nextCursor: 'the-english-cursor',
+    };
+  },
   read: () => Promise.reject(new Error('not used')),
   create: () => Promise.reject(new Error('not used')),
   update: () => Promise.reject(new Error('not used')),
@@ -125,6 +137,7 @@ async function render(): Promise<ComponentFixture<ResourceListPage>> {
   await TestBed.configureTestingModule({
     imports: [ResourceListPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       provideRouter([]),
       // The section is what the registry reads, so the links below come out
       // of the mount and not out of anything a descriptor spelled.
@@ -155,7 +168,11 @@ async function settle(fixture: ComponentFixture<ResourceListPage>) {
 
 beforeEach(() => {
   factoryReads.length = 0;
+  gadgetListCalls.length = 0;
+  localStorage.clear();
 });
+
+afterEach(() => localStorage.clear());
 
 describe('a reference cell on the list page (admin plan 0023)', () => {
   it('derives the link from the registry, so a section move carries it', async () => {
@@ -210,5 +227,71 @@ describe('a reference cell on the list page (admin plan 0023)', () => {
     expect(cell.key).toBe('resource.value.none');
     expect(cell.reference).toBeUndefined();
     expect(cell.link).toBeUndefined();
+  });
+});
+
+/**
+ * A switch of the content language invalidates the page (admin plan 0026,
+ * section 6).
+ *
+ * The thing that looks cosmetic and is not. Once backend plan `0111` lands, a
+ * listing is ordered and its cursor is cut in the caller's language, so the
+ * rows on screen were chosen under the old one: redrawing them under the new
+ * one reorders nothing and the next page continues from a cursor cut
+ * elsewhere. The page is read again from the start instead.
+ */
+describe('the list page when the content language changes', () => {
+  it('reads the first page again and drops the cursor', async () => {
+    const fixture = await render();
+    await settle(fixture);
+
+    const before = gadgetListCalls.length;
+    // A page was loaded, so there is a cursor to lose.
+    expect(fixture.componentInstance.store.hasMore()).toBe(true);
+
+    TestBed.inject(ContentLocaleStore).choose('es');
+    fixture.detectChanges();
+    await settle(fixture);
+
+    const since = gadgetListCalls.slice(before);
+    expect(since).toHaveLength(1);
+    // The first page: no cursor, rather than the one the English page ended on.
+    expect(since[0].cursor).toBeUndefined();
+  });
+
+  /**
+   * The resolved reference names go with the rows. They are titles this page
+   * asked the lookup for in the old language, and `_asked` would otherwise stop
+   * it ever asking again, so a switch would leave every reference cell reading
+   * English on an otherwise Spanish screen.
+   */
+  it('asks the lookup again, so a resolved name is not left in the old language', async () => {
+    const fixture = await render();
+    await settle(fixture);
+
+    expect(factoryReads.filter((id) => id === 'f1')).toHaveLength(1);
+
+    TestBed.inject(ContentLocaleStore).choose('es');
+    fixture.detectChanges();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(factoryReads.filter((id) => id === 'f1')).toHaveLength(2);
+  });
+
+  /** What the operator narrowed by is a choice about which rows, and survives. */
+  it('keeps the filter and the order', async () => {
+    const fixture = await render();
+    await fixture.componentInstance.store.setFilter('factoryId', 'f1');
+    await fixture.componentInstance.store.setOrder('name');
+    await settle(fixture);
+
+    TestBed.inject(ContentLocaleStore).choose('es');
+    fixture.detectChanges();
+    await settle(fixture);
+
+    const last = gadgetListCalls[gadgetListCalls.length - 1];
+    expect(last.filters).toEqual({ factoryId: 'f1' });
+    expect(last.order).toBe('name');
   });
 });

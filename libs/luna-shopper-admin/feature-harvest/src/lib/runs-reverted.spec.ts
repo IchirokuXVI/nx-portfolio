@@ -3,12 +3,13 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
-  ServerReachability,
   type HarvestServiceI,
   type RunQuery,
+  ServerReachability,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { HarvestRun } from '@portfolio/luna-shopper-admin/models';
 import { RunsPage } from './runs-page';
@@ -95,6 +96,7 @@ async function render(rows: HarvestRun[]): Promise<{
   await TestBed.configureTestingModule({
     imports: [RunsPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       provideRouter([]),
       provideLocationMocks(),

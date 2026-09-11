@@ -10,9 +10,11 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
-import { ResourceListStore } from '@portfolio/luna-shopper-admin/data-access';
 import {
-  CONTENT_LOCALES,
+  ContentLocaleStore,
+  ResourceListStore,
+} from '@portfolio/luna-shopper-admin/data-access';
+import {
   fieldOf,
   hasDetailScreen,
   toRowView,
@@ -132,6 +134,7 @@ export class ResourceListPage {
   private readonly _router = inject(Router);
   private readonly _viewport = inject(Viewport);
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _content = inject(ContentLocaleStore);
 
   /** How a reference filter finds the resource it points at. */
   readonly references = inject(ResourceReferences);
@@ -191,10 +194,19 @@ export class ResourceListPage {
   /** Every key already sent to the lookup, answered or still in flight. */
   private readonly _asked = new Set<string>();
 
+  /**
+   * The language the rows on screen were read in.
+   *
+   * Seeded with the language the page opened in, so the effect watching the
+   * setting does nothing on its first run and the constructor's own `load()`
+   * stands. Without it every list would fetch its first page twice.
+   */
+  private _readIn = this._content.locale();
+
   readonly rows = computed(() => {
     const options = {
       locale: this._translator.locale(),
-      contentLocales: CONTENT_LOCALES,
+      contentLocales: this._content.order(),
     };
     const names = this._names();
     return this.store.rows().map((row) => {
@@ -278,6 +290,38 @@ export class ResourceListPage {
       const rows = this.store.rows();
       untracked(() => void this._resolveNames(rows));
     });
+
+    // A switch of the content language invalidates the page rather than only
+    // its render (admin plan 0026, section 6). Once backend plan `0111` lands,
+    // a listing is ordered and its cursor is cut in the caller's language, so
+    // the rows on screen were chosen under the old one: redrawing them under
+    // the new one reorders nothing and continues from a cursor cut elsewhere.
+    // Reading the first page again is the only honest answer, and it is correct
+    // today as well as necessary afterwards.
+    effect(() => {
+      const locale = this._content.locale();
+      untracked(() => this._readAgainIn(locale));
+    });
+  }
+
+  /**
+   * Read the list again in a language it was not read in.
+   *
+   * The resolved reference names go with the rows, because they are titles this
+   * page asked the lookup for in the old language and `_asked` would otherwise
+   * stop it ever asking again. Everything the operator narrowed by stays: a
+   * filter and an order are choices about which rows, and the language is a
+   * choice about how to read them.
+   */
+  private _readAgainIn(locale: string): void {
+    if (locale === this._readIn) {
+      return;
+    }
+
+    this._readIn = locale;
+    this._names.set(new Map());
+    this._asked.clear();
+    void this.store.load();
   }
 
   open(id: string): void {

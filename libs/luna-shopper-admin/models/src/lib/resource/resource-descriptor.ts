@@ -226,8 +226,14 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * A function rather than a field name, because a name is usually localized
    * text and choosing which locale to show is a decision the descriptor makes
    * once instead of every screen making it again.
+   *
+   * `locales` is the operator's reading order, chosen one first (admin plan
+   * 0026, section 5). **Not an injected service**: descriptors are module level
+   * constants built at import time, so there is no injector to read from, and
+   * every caller (a confirmation, a form heading, a picker) already has the
+   * order in hand. Most implementations return a plain field and ignore it.
    */
-  title(row: T): string;
+  title(row: T, locales: readonly string[]): string;
   readonly fields: readonly FieldDescriptor<T>[];
   readonly list: ListPresentation<T>;
   /**

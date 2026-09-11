@@ -3,12 +3,13 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
   HarvestMemory,
-  ServerReachability,
   type HarvestServiceI,
+  ServerReachability,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   LOCATIONS,
@@ -75,6 +76,7 @@ async function render() {
   await TestBed.configureTestingModule({
     imports: [ShopsQueuePage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       ServerReachability,
       provideRouter([]),
       provideLocationMocks(),
@@ -397,6 +399,7 @@ describe('the locations picker', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
+      ContentLocaleStore,
         provideResources({
           ...LOCATIONS,
           gateway: () => ({
@@ -626,6 +629,7 @@ describe('a chain with more shops than one page', () => {
     await TestBed.configureTestingModule({
       imports: [ShopsQueuePage, RokuTranslatorTestingModule.forTesting()],
       providers: [
+      ContentLocaleStore,
         ServerReachability,
         provideRouter([]),
         provideLocationMocks(),

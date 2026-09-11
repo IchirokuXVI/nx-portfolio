@@ -2,7 +2,6 @@ import { inject } from '@angular/core';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import {
   compositeIdOf,
-  CONTENT_LOCALES,
   defineResource,
   localizedTextValue,
   type ResourceGateway,
@@ -80,8 +79,8 @@ export const PRICES = defineResource<Price>({
    * fallback for a row whose product is gone. Pure and synchronous on purpose:
    * the compact card's heading cannot wait for a lookup.
    */
-  title: (row) => {
-    const name = localizedTextValue(row.itemName, CONTENT_LOCALES);
+  title: (row, locales) => {
+    const name = localizedTextValue(row.itemName, locales);
     return name === '' ? row.itemId : name;
   },
 

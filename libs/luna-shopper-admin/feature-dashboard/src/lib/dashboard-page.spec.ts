@@ -4,10 +4,11 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   DASHBOARD_SEED,
   DASHBOARD_SERVICE,
-  dashboardSeedWithout,
   type DashboardDocument,
+  dashboardSeedWithout,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { provideSections } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
@@ -92,6 +93,7 @@ async function render(
   await TestBed.configureTestingModule({
     imports: [DashboardPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
+      ContentLocaleStore,
       provideRouter([]),
       provideLocationMocks(),
       // The sections are real and their gateways are not, so a chain resolves
@@ -367,6 +369,7 @@ describe('DashboardPage with nothing to draw', () => {
     await TestBed.configureTestingModule({
       imports: [DashboardPage, RokuTranslatorTestingModule.forTesting()],
       providers: [
+      ContentLocaleStore,
         provideRouter([]),
         provideLocationMocks(),
         provideSections(...SECTIONS),
