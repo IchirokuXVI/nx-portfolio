@@ -13,12 +13,15 @@ import {
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ProfileService } from '../profiles/profile.service';
+import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListService } from './generated-list.service';
 import {
   CANDIDATE_LINES_SQL,
   CANDIDATE_LINE_ITEMS_SQL,
   LIVE_OVERLAP_SQL,
+  ORDER_HISTORY_SQL,
   WRITABLE_LISTS_SQL,
+  type OrderHistoryRow,
 } from './generated-list.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 
@@ -65,6 +68,8 @@ interface Harness {
   };
   events: { event: RealtimeEvent; userIds: readonly string[] }[];
   claims: FakeLineClaims;
+  /** How many times the run asked for the owner's past trips (plan 0110). */
+  orderReads: () => number;
 }
 
 function build(options: {
@@ -96,6 +101,11 @@ function build(options: {
    * about generation states them here rather than reaching into the write.
    */
   claiming?: { zoneId: string; listId: string; lineId: string }[];
+  /**
+   * The owner's past trips, which decide the order the basket is written in
+   * (plan 0110). Empty by default, so a basket here comes out alphabetically.
+   */
+  history?: OrderHistoryRow[];
 }): Harness {
   const writable = options.writable ?? [
     { listId: LIST_A, zoneId: ZONE_A },
@@ -141,6 +151,19 @@ function build(options: {
       }));
     }
     throw new Error(`unmocked query: ${sql.slice(0, 60)}`);
+  };
+
+  // The order's own read (plan 0110), counted, because the run may make it once
+  // and only once: it is a query per create and the plan says so.
+  let orderReads = 0;
+  const orderRepo = {
+    query: async (sql: string): Promise<unknown[]> => {
+      if (sql !== ORDER_HISTORY_SQL) {
+        throw new Error(`unmocked query: ${sql.slice(0, 60)}`);
+      }
+      orderReads += 1;
+      return options.history ?? [];
+    },
   };
 
   let findOneCalls = 0;
@@ -269,10 +292,11 @@ function build(options: {
     { find: async () => [] } as never,
     profiles,
     claims.service,
-    publisher
+    publisher,
+    new GeneratedListOrderService(orderRepo as never)
   );
 
-  return { service, written, events, claims };
+  return { service, written, events, claims, orderReads: () => orderReads };
 }
 
 /**
@@ -291,7 +315,7 @@ function uniqueViolation(): QueryFailedError {
 }
 
 describe('the generation run', () => {
-  it('composes one line per qualifying zone line, in list order', async () => {
+  it('composes one line per qualifying zone line', async () => {
     const { service, written } = build({
       candidates: [
         { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 2 },
@@ -302,11 +326,52 @@ describe('the generation run', () => {
     const result = await service.create({ userId: OWNER });
 
     expect(written.lines).toHaveLength(2);
+    // Alphabetically, not in list order, because this owner has walked no trip
+    // the order could be read from (plan 0110, section 3).
     expect(written.lines.map((line) => line.content)).toEqual([
-      'Milk',
       'Bread',
+      'Milk',
     ]);
+    expect(written.lines.map((line) => line.position)).toEqual([1, 2]);
     expect(result.skipped).toEqual([]);
+  });
+
+  it('writes the positions of the order the owner walks, once', async () => {
+    const { service, written, orderReads } = build({
+      candidates: [
+        { id: 'a1', listId: LIST_A, content: 'Juice', quantity: 1 },
+        { id: 'a2', listId: LIST_A, content: 'Milk', quantity: 1 },
+        { id: 'a3', listId: LIST_A, content: 'Anchovies', quantity: 1 },
+      ],
+      history: [
+        {
+          tripId: 't1',
+          content: 'Milk',
+          pickItemId: null,
+          settledItemIds: [],
+          offsetSeconds: 0,
+        },
+        {
+          tripId: 't1',
+          content: 'Juice',
+          pickItemId: null,
+          settledItemIds: [],
+          offsetSeconds: 12,
+        },
+      ],
+    });
+
+    await service.create({ userId: OWNER });
+
+    // The two the owner has walked, in the order they walked them, and then the
+    // one they never have.
+    expect(written.lines.map((line) => [line.content, line.position])).toEqual([
+      ['Milk', 1],
+      ['Juice', 2],
+      ['Anchovies', 3],
+    ]);
+    // One query per create, which is the whole cost the plan budgets for.
+    expect(orderReads()).toBe(1);
   });
 
   it('merges lines carrying the same product set and sums their quantities', async () => {

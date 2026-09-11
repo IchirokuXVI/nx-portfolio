@@ -115,7 +115,8 @@ describeIntegration('a run history row (real Postgres)', () => {
       dataSource.getRepository(LineSettlement),
       {} as never,
       fakeLineClaims({}).service,
-      { emitToUsers: jest.fn() } as never
+      { emitToUsers: jest.fn() } as never,
+      {} as never
     );
 
     const zone = await dataSource.getRepository(Zone).save(
