@@ -798,6 +798,28 @@ export const AppShellRoutes: Route[] = [
               // It is the first sheet over this page that is about the **screen**
               // rather than about the basket, which is why it reads `BasketViewStore`
               // and never `BasketStore`: it sets what is drawn and writes nothing.
+              // Which shop the prices come from (velista `0078`). A sheet of its
+              // own rather than a third radio group on the sheet below, because a
+              // profile can hold fifty shops and a flat list of them is a wall.
+              //
+              // A **sibling** of the filter sheet and not its child, although its
+              // path reads like one: the two replace each other with `leaveTo`, so
+              // neither is ever drawn over the other, and a nested route would put
+              // the filter sheet's panel behind this one on the way in. The path
+              // says what the sheet is about, which is the shop the filter sets.
+              //
+              // Declared **before** `filter`, which is the ordering rule the basket
+              // and its history already follow above: a childless route declines a
+              // URL it cannot consume whole, so the pair is unambiguous either way,
+              // and putting the longer path first makes that a decision rather than
+              // a piece of luck about how the router backtracks.
+              sheet({
+                path: 'filter/shop',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.ShopPickerSheet
+                  ),
+              }),
               sheet({
                 path: 'filter',
                 loadComponent: () =>

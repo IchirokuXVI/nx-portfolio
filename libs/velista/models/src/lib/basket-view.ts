@@ -168,6 +168,24 @@ export interface BasketProduct {
   /** The cheapest price at the run's scopes, or null where there is none. */
   readonly offer: ProductOffer | null;
   /**
+   * One offer per scope that lists this product, cheapest first (velista `0078`,
+   * section 2; backend `0109`).
+   *
+   * What {@link offer} cannot answer. That one is a `DISTINCT ON (itemId)`, so it
+   * says which scope is cheapest and never which scopes carry the product at all,
+   * and a view of one shop's prices needs the second question answered: standing in
+   * a Mercadona, what this chain charges and whether it stocks the line are two
+   * different things and the cheapest price anywhere says neither.
+   *
+   * **Empty means unlisted everywhere**, and it means that for exactly the reason a
+   * row with `available = false` never reaches here: the server excludes it, so
+   * absent is the only way a product can fail to be listed and there is no third
+   * state to draw. Empty is also what an older backend answers, which draws as a
+   * basket nobody has priced and is the same screen staging and production already
+   * show.
+   */
+  readonly offers: readonly ProductOffer[];
+  /**
    * What aisles this product belongs to, for the category grouping (velista
    * `0077`, section 2).
    *
@@ -587,6 +605,31 @@ export function basketLineState(line: BasketLine): BasketLineState {
 /** How many are still to get. Never negative, however the numbers arrived. */
 export function outstanding(line: BasketLine): number {
   return Math.max(0, line.quantity - line.settled);
+}
+
+/**
+ * What one scope charges for a product, or null when that scope does not list it
+ * (velista `0078`, section 2).
+ *
+ * The one place the lookup lives, so the row that draws a price and the pipeline
+ * that decides a line has sunk cannot answer the question differently. A product
+ * this basket has no entry for at all answers null too, which is the same null: to
+ * the reader, a pick the catalog cannot resolve and a pick this chain does not
+ * stock are both "no price from here".
+ *
+ * Null rather than the cheapest offer as a fallback. Quoting Dia's price under a
+ * heading that says Mercadona is the defect this whole plan exists to remove.
+ */
+export function offerAt(
+  product: BasketProduct | undefined,
+  priceScopeId: string
+): ProductOffer | null {
+  if (product === undefined) {
+    return null;
+  }
+  return (
+    product.offers.find((offer) => offer.priceScopeId === priceScopeId) ?? null
+  );
 }
 
 /** How a run of lines is progressing: got, had none, and how many there are. */

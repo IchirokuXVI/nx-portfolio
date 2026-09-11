@@ -13,7 +13,6 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  OTHER_CHAINS,
   REALTIME_CLIENT,
   ShoppingProfileStore,
   ShopStore,
@@ -22,6 +21,7 @@ import {
 import {
   APP_BASE_PATH,
   inLocale,
+  OTHER_CHAINS,
   type Shop,
   type ShoppingProfile,
 } from '@portfolio/velista/models';
@@ -30,10 +30,16 @@ import {
   PageNavigation,
   profileIdOf,
 } from '@portfolio/velista/platform';
-import { AppBar, ChevronLeftIcon, SearchIcon } from '@portfolio/velista/ui';
+import {
+  AppBar,
+  ChevronLeftIcon,
+  FranchiseButtons,
+  SearchIcon,
+  ShopList,
+  type ShopGroup,
+  type ShopRow,
+} from '@portfolio/velista/ui';
 import { AttributionNote } from '../attribution-note/attribution-note';
-import { FranchiseButtons } from '../franchise-buttons/franchise-buttons';
-import { ShopList, type ShopGroup, type ShopRow } from '../shop-list/shop-list';
 
 /**
  * How long the field is quiet before the search goes out.

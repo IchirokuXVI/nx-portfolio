@@ -45,8 +45,8 @@ const THE_SUPERMARKETS_SCREEN: readonly string[] = [
   'velista/data-access/src/lib/shops/shop-store.ts',
   'velista/data-access/src/lib/mapping/shop-mappers.ts',
   'velista/feature-account/src/lib/supermarkets-page/supermarkets-page.ts',
-  'velista/feature-account/src/lib/franchise-buttons/franchise-buttons.ts',
-  'velista/feature-account/src/lib/shop-list/shop-list.ts',
+  'velista/ui/src/lib/shops/franchise-buttons.ts',
+  'velista/ui/src/lib/shops/shop-list.ts',
   'velista/feature-account/src/lib/attribution-note/attribution-note.ts',
 ];
 

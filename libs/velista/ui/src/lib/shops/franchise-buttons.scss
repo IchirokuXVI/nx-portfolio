@@ -1,5 +1,3 @@
-@use '../account-page' as page;
-
 :host {
   display: block;
 }
@@ -31,7 +29,14 @@
   text-align: start;
   cursor: pointer;
 
-  @include page.focus-ring;
+  // The ring, written out rather than taken from a mixin. Sass resolves `@use`
+  // against the filesystem, so a mixin cannot cross a library boundary, and this
+  // component left `feature-account` for `ui` in velista `0078`. The ring's
+  // *geometry* is a token precisely so the copies cannot disagree about it.
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }
 
 // Open, which is a different fact from excluded: it says whose rows are underneath.

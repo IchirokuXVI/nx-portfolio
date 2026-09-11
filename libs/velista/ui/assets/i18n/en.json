@@ -1050,6 +1050,22 @@
         "list": "List",
         "listHint": "each list’s own amounts"
       },
+      "shop": {
+        "legend": "Prices from",
+        "any": "Any of your shops",
+        "anyGuest": "Any of the shops",
+        "anyHint": "the cheapest",
+        "none": "One shop",
+        "choose": "Choose",
+        "chooseLabel": "Choose the shop prices are from",
+        "change": "Change",
+        "changeLabel": "Change the shop prices are from",
+        "title": "Prices from",
+        "back": "Back to filter and order",
+        "search": "Shop, chain or street",
+        "count_one": "{{count}} shop",
+        "count_other": "{{count}} shops"
+      },
       "lists": {
         "legend": "Lists",
         "only": "Only {{name}}",
@@ -1064,9 +1080,15 @@
         "moreLabel": "{{count}} more, open filter and order"
       }
     },
+    "price": {
+      "cheaperAt": "{{price}} at {{chain}}",
+      "notListedAt": "not listed at {{chain}}"
+    },
     "group": {
       "noList": "On no list yet",
       "noListHint": "added in the shop",
+      "notListed": "Not listed at {{chain}}",
+      "notListedHint": "still yours to get",
       "noCategory": "No category",
       "noCategoryHint": "lines with no product",
       "progress": "{{done}} of {{total}} got",

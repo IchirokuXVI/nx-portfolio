@@ -6,7 +6,7 @@
         than by the shade it is drawn in (section 7).
       -->
       <button
-        (click)="select.emit(row.key)"
+        (click)="chosen.emit(row.key)"
         [attr.aria-pressed]="row.open"
         [class.excluded-chain]="row.state === 'chain'"
         [class.excluded-some]="row.state === 'some'"

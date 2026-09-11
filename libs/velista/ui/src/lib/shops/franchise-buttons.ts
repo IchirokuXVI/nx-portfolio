@@ -11,11 +11,11 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  inLocale,
   OTHER_CHAINS,
   type FranchiseButton,
-} from '@portfolio/velista/data-access';
-import { inLocale } from '@portfolio/velista/models';
-import { HalfCircleIcon, SlashCircleIcon } from '@portfolio/velista/ui';
+} from '@portfolio/velista/models';
+import { HalfCircleIcon, SlashCircleIcon } from '../icons/icons';
 
 /** One button as this list draws it: a name in the reader's language, and a state. */
 interface FranchiseRow extends FranchiseButton {
@@ -44,6 +44,14 @@ interface FranchiseRow extends FranchiseButton {
  * is imported, and for many people it is the biggest button on the screen: plan 0038
  * measured 35 of the 75 places in one city radius as independents. Its exclude control
  * therefore reads in the plural, because it refuses several brands rather than one.
+ *
+ * ## Why it lives in `ui`
+ *
+ * It was `feature-account`'s, and velista `0078` gives the basket's shop picker the
+ * same buttons over a **basket's** price scopes. `feature-shopping-lists` cannot
+ * import a lazy loaded feature library, so the component moved to where two features
+ * can both reach it, which is what `ui` is for. Nothing about it changed in the move:
+ * it takes rows and emits a key, exactly as rule D1 asks.
  */
 @Component({
   selector: 'lib-franchise-buttons',
@@ -64,8 +72,12 @@ export class FranchiseButtons {
    * The only thing this list emits. Refusing a brand sits on the open franchise rather
    * than on its button (plan 0059, section 3.3), where the shops it covers are on screen
    * beside it and the word "brand" is not a claim about a row somebody cannot see.
+   *
+   * Named `chosen` and not `select`, which is a DOM event an input fires:
+   * `@angular-eslint/no-output-native` refuses an output that shadows one, because a
+   * host listener for the native event would be caught by this one instead.
    */
-  readonly select = output<string>();
+  readonly chosen = output<string>();
 
   private readonly _locale = inject(RokuLocaleStore).locale;
 

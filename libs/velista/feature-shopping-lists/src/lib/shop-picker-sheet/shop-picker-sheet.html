@@ -1,0 +1,94 @@
+<lib-sheet-shell (dismiss)="back()" labelledBy="shop-picker-title">
+  <!--
+    The chevron beside the title, which is this sheet's own way back. It is a
+    dismissal rather than a navigation: the entry this sheet replaced is the filter
+    sheet's, so popping lands there and nothing is pushed (`0031`).
+  -->
+  <div class="head">
+    <button
+      (click)="back()"
+      [attr.aria-label]="'basket.view.shop.back' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="back-glyph" />
+    </button>
+    <h2 class="title" id="shop-picker-title">
+      {{ 'basket.view.shop.title' | rokuT }}
+    </h2>
+  </div>
+
+  <!--
+    The search, across every chain, and always drawn: somebody typing a street name
+    is looking for a shop and not for a shop of a particular brand (`0059`,
+    section 3.1). The label is visible, as it is on the supermarkets page.
+  -->
+  <div class="search">
+    <label class="field-label" for="basket-shop-search">
+      {{ 'shops.search.label' | rokuT }}
+    </label>
+    <span class="search-field">
+      <lib-search-icon class="search-glyph" />
+      <input
+        (input)="onQuery($event)"
+        [placeholder]="'basket.view.shop.search' | rokuT"
+        [value]="typed()"
+        autocapitalize="none"
+        autocomplete="off"
+        class="search-input"
+        enterkeyhint="search"
+        id="basket-shop-search"
+        type="search"
+      />
+    </span>
+  </div>
+
+  <!--
+    One button per chain among the basket's scopes, with the count of its shops
+    under it. They stay while a query is typed, exactly as they do on the
+    supermarkets page: the search narrows what is below them and not what they are.
+  -->
+  <lib-franchise-buttons
+    (chosen)="select($event)"
+    [chains]="chains()"
+    [openKey]="openChain()"
+  />
+
+  @if (searching()) {
+    <!--
+      The count, announced. A search that silently empties the screen is
+      indistinguishable from one that broke (section 7).
+    -->
+    <p aria-live="polite" class="result-count" role="status">
+      {{ 'shops.search.results' | rokuT: { count: matches() } }}
+    </p>
+
+    @if (matches() === 0) {
+      <p class="empty">{{ 'shops.empty.noMatch' | rokuT }}</p>
+    } @else {
+      <lib-shop-list
+        (pick)="pickShop($event)"
+        [grouped]="false"
+        [groups]="flat()"
+        [mode]="'pick'"
+        [pickedId]="pickedId()"
+      />
+    }
+  } @else if (openChain() !== null && hasLocations()) {
+    <section class="chain">
+      <h3 class="chain-title">{{ openName() }}</h3>
+
+      <!--
+        The open chain's shops, under their postal codes. Two shops of one scope are
+        two rows and picking either is the same pick, because the price belongs to
+        the scope and not to the door.
+      -->
+      <lib-shop-list
+        (pick)="pickShop($event)"
+        [groups]="groups()"
+        [mode]="'pick'"
+        [pickedId]="pickedId()"
+      />
+    </section>
+  }
+</lib-sheet-shell>

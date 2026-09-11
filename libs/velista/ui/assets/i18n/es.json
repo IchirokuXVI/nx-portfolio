@@ -1050,6 +1050,22 @@
         "list": "Lista",
         "listHint": "las cantidades de cada lista"
       },
+      "shop": {
+        "legend": "Precios de",
+        "any": "Cualquiera de tus tiendas",
+        "anyGuest": "Cualquiera de las tiendas",
+        "anyHint": "el más barato",
+        "none": "Una tienda",
+        "choose": "Elegir",
+        "chooseLabel": "Elegir la tienda de la que vienen los precios",
+        "change": "Cambiar",
+        "changeLabel": "Cambiar la tienda de la que vienen los precios",
+        "title": "Precios de",
+        "back": "Volver a filtrar y ordenar",
+        "search": "Tienda, cadena o calle",
+        "count_one": "{{count}} tienda",
+        "count_other": "{{count}} tiendas"
+      },
       "lists": {
         "legend": "Listas",
         "only": "Solo {{name}}",
@@ -1064,9 +1080,15 @@
         "moreLabel": "{{count}} más, abrir filtrar y ordenar"
       }
     },
+    "price": {
+      "cheaperAt": "{{price}} en {{chain}}",
+      "notListedAt": "no está en {{chain}}"
+    },
     "group": {
       "noList": "Todavía en ninguna lista",
       "noListHint": "añadido en la tienda",
+      "notListed": "No está en {{chain}}",
+      "notListedHint": "sigue pendiente",
       "noCategory": "Sin categoría",
       "noCategoryHint": "líneas sin producto",
       "progress": "{{done}} de {{total}} conseguidos",

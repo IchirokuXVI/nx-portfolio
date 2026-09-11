@@ -1,9 +1,11 @@
 import type {
   BasketLine,
   BasketLineOrigin,
+  BasketPriceScope,
   BasketProduct,
 } from './basket-view';
 import {
+  basketPricedScope,
   basketViewActiveCount,
   basketViewChips,
   basketViewLines,
@@ -13,6 +15,7 @@ import {
   type BasketViewContext,
   type BasketViewState,
 } from './compose-basket-view';
+import type { ProductOffer } from './domain';
 import type { ProductCategory } from './enums';
 
 function line(
@@ -69,7 +72,70 @@ const CONTEXT: BasketViewContext = {
   products: new Map(),
   locale: 'en',
   listNames: new Map(),
+  scopes: new Map(),
 };
+
+/** One offer at one scope, which is all the price marks read off it. */
+function offer(priceScopeId: string, price: number | null): ProductOffer {
+  return {
+    price,
+    currency: 'EUR',
+    unitPrice: null,
+    unitPriceLabel: null,
+    observedAt: null,
+    sourceKind: 'OFFICIAL_WEB',
+    stale: false,
+    priceScopeId,
+  };
+}
+
+/** One scope, named. Locations are nothing to this pipeline: it draws chains. */
+function scope(priceScopeId: string, chain: string): BasketPriceScope {
+  return {
+    priceScopeId,
+    supermarketName: { en: chain, es: chain },
+    locations: [],
+  };
+}
+
+/**
+ * A basket priced at two chains, which is the smallest world the marks need.
+ *
+ * Milk is listed at both and cheaper at Dia; bread is listed at Mercadona alone;
+ * eggs are listed at Dia alone, so a view of Mercadona sinks them.
+ */
+function priced(): BasketViewContext {
+  return {
+    ...CONTEXT,
+    products: new Map([
+      [
+        'p-milk',
+        {
+          ...product('p-milk', 'Milk', null),
+          offers: [offer('s-dia', 0.79), offer('s-merca', 0.95)],
+        },
+      ],
+      [
+        'p-bread',
+        {
+          ...product('p-bread', 'Bread', null),
+          offers: [offer('s-merca', 1.2)],
+        },
+      ],
+      [
+        'p-eggs',
+        {
+          ...product('p-eggs', 'Eggs', null),
+          offers: [offer('s-dia', 2.4)],
+        },
+      ],
+    ]),
+    scopes: new Map([
+      ['s-merca', scope('s-merca', 'Mercadona')],
+      ['s-dia', scope('s-dia', 'Dia')],
+    ]),
+  };
+}
 
 function state(over: Partial<BasketViewState> = {}): BasketViewState {
   return { ...DEFAULT_BASKET_VIEW_STATE, ...over };
@@ -680,5 +746,194 @@ describe('resetBasketViewProperty', () => {
 
     expect(next.order).toBe('shop');
     expect(next.lists).toBe(on.lists);
+  });
+});
+
+/**
+ * Prices from one shop (velista `0078`, section 5).
+ *
+ * Two questions rather than one, and these keep them apart: **what a row says**,
+ * which is the mark, and **where the line sits**, which is the sink. The pipeline
+ * answers both from one decision, so a test that asserted only the first would pass
+ * on a build that marked a line and left it where it was.
+ */
+describe('composeBasketView: prices from one shop', () => {
+  const MILK = line('a', 'Milk', { pickId: 'p-milk' });
+  const BREAD = line('b', 'Bread', { pickId: 'p-bread' });
+  const EGGS = line('c', 'Eggs', { pickId: 'p-eggs' });
+
+  it('marks a line another shop sells cheaper, and names the chain', () => {
+    const sections = composeBasketView(
+      [MILK, BREAD],
+      state({ shop: 's-merca' }),
+      priced()
+    );
+
+    expect(sections[0].rows[0].mark).toEqual({
+      kind: 'cheaper',
+      price: 0.79,
+      currency: 'EUR',
+      chain: 'Dia',
+    });
+    // Listed here and cheapest here: there is nothing to say.
+    expect(sections[0].rows[1].mark).toBeNull();
+  });
+
+  it('marks a line this shop does not list, with the cheapest price elsewhere', () => {
+    const sections = composeBasketView(
+      [MILK, EGGS],
+      state({ shop: 's-merca' }),
+      priced()
+    );
+
+    const sunk = sections[1].rows[0];
+    expect(sunk.line.id).toBe('c');
+    expect(sunk.mark).toEqual({
+      kind: 'unlisted',
+      chain: 'Mercadona',
+      elsewhere: { price: 2.4, currency: 'EUR', chain: 'Dia' },
+    });
+  });
+
+  it('sinks the unlisted lines under their own heading, ungrouped', () => {
+    const sections = composeBasketView(
+      [EGGS, MILK, BREAD],
+      state({ shop: 's-merca' }),
+      priced()
+    );
+
+    expect(sections).toHaveLength(2);
+    expect(sections[0].rows.map((row) => row.line.id)).toEqual(['a', 'b']);
+    expect(sections[1].heading).toEqual({
+      kind: 'key',
+      key: 'basket.group.notListed',
+      args: { chain: 'Mercadona' },
+    });
+    expect(sections[1].hint).toBe('basket.group.notListedHint');
+    expect(sections[1].rows.map((row) => row.line.id)).toEqual(['c']);
+  });
+
+  /**
+   * Grouped, the sink is the **end of each group** rather than a section of its own,
+   * which is what keeps a category's own unlisted lines inside that category.
+   */
+  it('sinks to the end of a group, keeping the relative order of what sank', () => {
+    const second = line('d', 'More eggs', { pickId: 'p-eggs' });
+
+    const sections = composeBasketView(
+      [EGGS, MILK, second, BREAD],
+      state({ shop: 's-merca', grouping: 'category' }),
+      priced()
+    );
+
+    // One category, because every product here is `OTHER`: the two sunk lines are
+    // last inside it, in the order they arrived in.
+    expect(sections).toHaveLength(1);
+    expect(sections[0].rows.map((row) => row.line.id)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ]);
+  });
+
+  it('leaves a line with no pick unmarked, and never sinks it', () => {
+    const typed = line('d', 'Something for the cat');
+
+    // Milk is here so that the shop prices *something*, which is what turns the
+    // marks on at all (section 5.1): without it nothing on this basket is marked.
+    const sections = composeBasketView(
+      [typed, MILK, EGGS],
+      state({ shop: 's-merca' }),
+      priced()
+    );
+
+    expect(sections[0].rows.map((row) => row.line.id)).toEqual(['d', 'a']);
+    expect(sections[0].rows[0].mark).toBeNull();
+    expect(sections[1].rows.map((row) => row.line.id)).toEqual(['c']);
+  });
+
+  /**
+   * Section 5.1, and the case staging and production are actually in: a shop nobody
+   * has priced is not a shop that stocks nothing.
+   */
+  it('marks nothing and sinks nothing at a shop that lists no line of the basket', () => {
+    const context = priced();
+
+    const sections = composeBasketView(
+      [EGGS, BREAD],
+      state({ shop: 's-empty' }),
+      {
+        ...context,
+        scopes: new Map([
+          ...context.scopes,
+          ['s-empty', scope('s-empty', 'Carrefour')],
+        ]),
+      }
+    );
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].rows.map((row) => row.mark)).toEqual([null, null]);
+  });
+
+  it('marks nothing for a shop this basket was not priced at', () => {
+    const sections = composeBasketView(
+      [MILK, EGGS],
+      state({ shop: 's-gone' }),
+      priced()
+    );
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].rows.map((row) => row.mark)).toEqual([null, null]);
+  });
+
+  /**
+   * A scope the read could not name is skipped rather than drawn with its id: "1.99
+   * € at 7f3c…" is not a sentence. The line is still unlisted and still sinks.
+   */
+  it('names no chain it cannot name, and says the line is unlisted anyway', () => {
+    const context = priced();
+
+    const sections = composeBasketView(
+      [MILK, EGGS],
+      state({ shop: 's-merca' }),
+      {
+        ...context,
+        scopes: new Map([['s-merca', scope('s-merca', 'Mercadona')]]),
+      }
+    );
+
+    expect(sections[0].rows[0].mark).toBeNull();
+    expect(sections[1].rows[0].mark).toEqual({
+      kind: 'unlisted',
+      chain: 'Mercadona',
+      elsewhere: null,
+    });
+  });
+});
+
+describe('basketPricedScope', () => {
+  it('answers the chosen scope when it prices something on the basket', () => {
+    expect(
+      basketPricedScope(
+        [line('a', 'Milk', { pickId: 'p-milk' })],
+        state({ shop: 's-merca' }),
+        priced()
+      )
+    ).toBe('s-merca');
+  });
+
+  it('answers null for a shop with no offer on any line', () => {
+    expect(
+      basketPricedScope(
+        [line('c', 'Eggs', { pickId: 'p-eggs' })],
+        state({ shop: 's-merca' }),
+        priced()
+      )
+    ).toBeNull();
+  });
+
+  it('answers null when no shop is chosen', () => {
+    expect(basketPricedScope([], state(), priced())).toBeNull();
   });
 });

@@ -18,12 +18,14 @@ import {
   basketLineState,
   basketMatchRange,
   inLocale,
+  offerAt,
   outstanding,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   type BasketLine,
   type BasketLineOrigin,
   type BasketParticipant,
   type BasketProduct,
+  type BasketRowMark,
 } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
 import {
@@ -185,6 +187,30 @@ export class BasketLineRow {
    * reads the origin, and the caption between them says which is which.
    */
   readonly origin = input<BasketLineOrigin | null>(null);
+
+  /**
+   * The price scope this row quotes, or null for the cheapest anywhere
+   * (velista `0078`, section 5).
+   *
+   * An input rather than a store read, exactly as {@link canReopen} and
+   * {@link ownName} are: one basket has a dozen of these components and the answer
+   * is the same for every one of them.
+   *
+   * It changes **which** number the caption carries and nothing else about the row:
+   * a row priced at Mercadona and a row priced at the cheapest of five shops are the
+   * same shape, which is `0062` section 2's rule and holds here too.
+   */
+  readonly shop = input<string | null>(null);
+
+  /**
+   * What this row says about that shop, beside the number, or null.
+   *
+   * Composed by the pipeline rather than here, because the **sink** is decided
+   * there: the line that says "not listed at Mercadona" is the line that moved to
+   * the end of the list, and a component working the first half out for itself would
+   * be a second place for the two to disagree.
+   */
+  readonly mark = input<BasketRowMark | null>(null);
 
   /** The reader's own participant id, so their own edits can be named. */
   readonly meId = input<string | null>(null);
@@ -572,22 +598,81 @@ export class BasketLineRow {
    * cheapest option there would put a number on a product nobody has chosen.
    */
   protected readonly productName = computed<string | null>(() => {
-    const pickId = this.line().pickId;
-    if (pickId === null) {
-      return null;
-    }
-    const product = this.products().get(pickId);
+    const product = this._product();
     // A pick catalog no longer has: the basket outlives the catalog it was built
     // from, and a line with an unnameable product is still a line to buy.
-    if (!product) {
+    return product === null ? null : inLocale(product.name, this._locale());
+  });
+
+  /** The pick, or null for a free text line and for a pick catalog cannot resolve. */
+  private readonly _product = computed<BasketProduct | null>(() => {
+    const pickId = this.line().pickId;
+    return pickId === null ? null : (this.products().get(pickId) ?? null);
+  });
+
+  /**
+   * The price after the product's name, or null where there is none.
+   *
+   * **The chosen shop's**, when one is in use (velista `0078`, section 5), and the
+   * cheapest at the run's scopes otherwise, which is what `0062` drew and what the
+   * default still draws. A scope that carries the product with no number on it draws
+   * nothing, which is the same blank a product nobody has priced leaves: the row has
+   * no way to say "listed, price unknown" in the space it has, and the pick sheet is
+   * where that distinction is worth drawing (`0062`, section 5.3).
+   */
+  protected readonly productPrice = computed<string | null>(() => {
+    const product = this._product();
+    if (product === null) {
       return null;
     }
+
+    const shop = this.shop();
+    const offer = shop === null ? product.offer : offerAt(product, shop);
+    if (offer === null || offer.price === null) {
+      return null;
+    }
+    return formatMoney(offer.price, offer.currency, this._locale());
+  });
+
+  /**
+   * The mark's own sentence, composed, or null when the row carries none.
+   *
+   * One string and not two spans, because the unlisted mark is genuinely two
+   * clauses about one thing — "not listed at Mercadona · 2.85 € at Dia" — and
+   * drawing them as separate pieces would let a line break fall between a price and
+   * the shop it belongs to. The separator is the one this row already joins its
+   * captions with.
+   */
+  protected readonly markCaption = computed<string | null>(() => {
+    const mark = this.mark();
+    if (mark === null) {
+      return null;
+    }
+
     const locale = this._locale();
-    const name = inLocale(product.name, locale);
-    const offer = product.offer;
-    return offer !== null && offer.price !== null
-      ? `${name} · ${formatMoney(offer.price, offer.currency, locale)}`
-      : name;
+    if (mark.kind === 'cheaper') {
+      return this._translator.t('basket.price.cheaperAt', undefined, locale, {
+        price: formatMoney(mark.price, mark.currency, locale),
+        chain: mark.chain,
+      });
+    }
+
+    const missing = this._translator.t(
+      'basket.price.notListedAt',
+      undefined,
+      locale,
+      { chain: mark.chain }
+    );
+    const elsewhere = mark.elsewhere;
+    if (elsewhere === null) {
+      return missing;
+    }
+
+    const at = this._translator.t('basket.price.cheaperAt', undefined, locale, {
+      price: formatMoney(elsewhere.price, elsewhere.currency, locale),
+      chain: elsewhere.chain,
+    });
+    return `${missing} · ${at}`;
   });
 
   protected readonly quantity = computed(() =>
@@ -668,7 +753,12 @@ export class BasketLineRow {
     const parts = [
       this.line().content,
       this.progressCaption(),
+      // The product, its price and what the row says about the shop, each a
+      // sentence of its own: a mark is words beside a number and a reader who
+      // hears the row hears it (velista `0078`, section 7).
       this.productName() ?? '',
+      this.productPrice() ?? '',
+      this.markCaption() ?? '',
       this.touched() ?? '',
       this.added() ?? '',
       this.from() ?? '',

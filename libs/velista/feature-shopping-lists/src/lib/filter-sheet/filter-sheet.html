@@ -116,9 +116,100 @@
   </fieldset>
 
   <!--
-    PRICES FROM is `0078`'s and is deliberately absent, not disabled: a control that
-    cannot do anything is an invitation `0038` section 2.1 refuses to draw.
+    Which shop's prices the rows show (velista `0078`, section 3).
+
+    Absent for a basket with no price scopes, drawn from the data exactly as the
+    LISTS section below is: a run scoped by hand, a profile since deleted or a
+    gateway that could not price the read has nothing to choose between, and a
+    control that cannot do anything is an invitation `0038` section 2.1 will not
+    draw.
   -->
+  @if (hasShops()) {
+    <fieldset class="group shops">
+      <legend class="legend">{{ 'basket.view.shop.legend' | rokuT }}</legend>
+
+      <label [class.picked]="!oneShop()" class="choice">
+        <input
+          (change)="setAnyShop()"
+          [checked]="!oneShop()"
+          class="control"
+          name="basket-shop"
+          type="radio"
+        />
+        <span class="choice-title">
+          @if (ownShops()) {
+            {{ 'basket.view.shop.any' | rokuT }}
+          } @else {
+            {{ 'basket.view.shop.anyGuest' | rokuT }}
+          }
+        </span>
+        <span class="choice-note">{{
+          'basket.view.shop.anyHint' | rokuT
+        }}</span>
+      </label>
+
+      <!--
+        The second radio is the shop, and it is **disabled rather than hidden**
+        before one has been chosen (section 7): the group then reads as two choices
+        with one not yet available, rather than as a group that grows a second option
+        after a trip to another sheet.
+
+        The button beside it is a text button and its accessible name says which
+        section it belongs to, because "Change" alone is four other things on this
+        screen.
+      -->
+      <div [class.picked]="oneShop()" class="choice">
+        <!--
+          A `div` holding a label and a button, where every other row here is one
+          label: a label wrapping a button would make the button's tap toggle the
+          radio too, which is the one thing Change must not do.
+        -->
+        <label class="choice-pick">
+          <input
+            (change)="setOneShop()"
+            [checked]="oneShop()"
+            [disabled]="shopRow() === null"
+            class="control"
+            name="basket-shop"
+            type="radio"
+          />
+
+          @if (shopRow(); as shop) {
+            <span class="choice-body">
+              <span class="choice-title">{{ shop.chain }}</span>
+              @if (shop.shop !== null) {
+                <span class="choice-hint">{{ shop.shop }}</span>
+              }
+            </span>
+          } @else {
+            <span class="choice-title is-muted">
+              {{ 'basket.view.shop.none' | rokuT }}
+            </span>
+          }
+        </label>
+
+        @if (shopRow() === null) {
+          <button
+            (click)="openPicker()"
+            [attr.aria-label]="'basket.view.shop.chooseLabel' | rokuT"
+            class="pick"
+            type="button"
+          >
+            {{ 'basket.view.shop.choose' | rokuT }}
+          </button>
+        } @else {
+          <button
+            (click)="openPicker()"
+            [attr.aria-label]="'basket.view.shop.changeLabel' | rokuT"
+            class="pick"
+            type="button"
+          >
+            {{ 'basket.view.shop.change' | rokuT }}
+          </button>
+        }
+      </div>
+    </fieldset>
+  }
 
   <!--
     The lists this basket drew from (section 6). Checkboxes, because the options are

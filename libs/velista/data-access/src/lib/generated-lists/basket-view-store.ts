@@ -8,16 +8,19 @@ import {
 } from '@angular/core';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
+  basketPricedScope,
   basketViewActiveCount,
   basketViewChips,
   basketViewLines,
   composeBasketView,
   DEFAULT_BASKET_VIEW_STATE,
   foldForSearch,
+  inLocale,
   resetBasketViewProperty,
   type BasketGrouping,
   type BasketLine,
   type BasketOrder,
+  type BasketPriceScope,
   type BasketViewProperty,
   type BasketViewState,
 } from '@portfolio/velista/models';
@@ -31,6 +34,30 @@ import {
   remember,
   type BasketViewMemory,
 } from './basket-view-memory';
+
+/**
+ * The chosen shop, named for a person (velista `0078`, section 3).
+ *
+ * What the filter sheet's second radio draws and what the chip says. Resolved here
+ * rather than in the sheet because the chip row on the page behind it needs the same
+ * words, and two places resolving a `LocalizedName` is two places to forget the
+ * locale changed.
+ */
+export interface BasketChosenShop {
+  readonly priceScopeId: string;
+  /** The chain, which is what the chip says and what every mark on a row names. */
+  readonly chain: string;
+  /**
+   * The shop itself, under the chain in the sheet, or null.
+   *
+   * The scope's **first** location, which is `0062` section 5.1's rule for a place
+   * with several: a scope is a set of shops one chain charges the same in, so any of
+   * them is where the price comes from and enumerating four addresses answers a
+   * question the sheet cannot answer anyway. Null for a reader the server sent no
+   * locations to, which is a guest, and for a scope catalog cannot place.
+   */
+  readonly shop: string | null;
+}
 
 /** One row of the filter sheet's LISTS section, and of nothing else. */
 export interface BasketSourceList {
@@ -110,6 +137,46 @@ export class BasketViewStore {
   readonly lists = computed(() => this._state().lists);
 
   /**
+   * Every scope the basket was priced at, in the order the read named them
+   * (velista `0078`, section 4).
+   *
+   * What the shop picker is built from, and what the filter sheet's PRICES FROM
+   * section tests for emptiness: a run scoped by hand, a profile since deleted or a
+   * gateway that could not price the read has none, and then the section is absent
+   * rather than offering a choice between one thing and nothing.
+   */
+  readonly priceScopes = computed<readonly BasketPriceScope[]>(() => [
+    ...(this._basket.basket()?.scopes.values() ?? []),
+  ]);
+
+  /**
+   * The chosen shop, named, or null while prices come from anywhere.
+   *
+   * Null too for a shop this basket was not priced at, which {@link restore} already
+   * refuses to apply: a state that survived the check could still be outrun by a
+   * refetch that changed the run's scopes, and the honest answer then is the same
+   * one the sheet gives before anything is chosen.
+   */
+  readonly chosenShop = computed<BasketChosenShop | null>(() => {
+    const shop = this._state().shop;
+    if (shop === null) {
+      return null;
+    }
+
+    const scope = this._basket.basket()?.scopes.get(shop);
+    if (scope === undefined) {
+      return null;
+    }
+
+    const locale = this._locale();
+    return {
+      priceScopeId: scope.priceScopeId,
+      chain: inLocale(scope.supermarketName, locale),
+      shop: shopNameOf(scope, locale),
+    };
+  });
+
+  /**
    * The source lists the filter offers, named and counted (section 6).
    *
    * Taken from the run's own `sources` rather than from the lines, so a list the
@@ -182,6 +249,9 @@ export class BasketViewStore {
       products: this._basket.products(),
       locale: this._locale(),
       listNames: this._basket.listNames(),
+      // Empty until the basket loads, and empty for a read the gateway could not
+      // price: the pipeline then marks nothing, which is the same screen as before.
+      scopes: this._basket.basket()?.scopes ?? new Map(),
     })
   );
 
@@ -207,6 +277,21 @@ export class BasketViewStore {
    */
   readonly visibleCount = computed(() => this.visibleLines().length);
 
+  /**
+   * The scope every row quotes, or null for the cheapest anywhere (`0078`).
+   *
+   * Not the same question as {@link shop}, which is what the sheet's radio says: a
+   * shop this basket was not priced at, and a shop that lists nothing on it, both
+   * answer null here and leave the rows exactly as they were. What the page hands
+   * each row, so one basket asks the question once.
+   */
+  readonly pricedShop = computed(() =>
+    basketPricedScope(this._basket.lines(), this._state(), {
+      products: this._basket.products(),
+      scopes: this._basket.basket()?.scopes ?? new Map(),
+    })
+  );
+
   /** How many of the four properties are on, for the filter button's badge. */
   readonly activeCount = computed(() => basketViewActiveCount(this._state()));
 
@@ -221,9 +306,11 @@ export class BasketViewStore {
     basketViewChips(this._state(), {
       listNames: this._basket.listNames(),
       listCount: this.sourceLists().length,
-      // `0078` names the chain of the chosen shop. Until it does, a chosen shop is
-      // unreachable, because that plan draws the only control that sets one.
-      chainName: null,
+      // The chain and never the shop (velista `0078`, section 5): the chip row is
+      // one line on a 390 wide phone, and "Mercadona" is what distinguishes this
+      // view from the default while a street name distinguishes one Mercadona from
+      // another.
+      chainName: this.chosenShop()?.chain ?? null,
     })
   );
 
@@ -481,4 +568,23 @@ export class BasketViewStore {
   ): void {
     this._write(change(this._read() ?? NO_BASKET_VIEW_MEMORY, Date.now()));
   }
+}
+
+/**
+ * A scope's shop in one string, or null when the scope names none.
+ *
+ * The label the catalog holds, falling back to the street and then to the town,
+ * which is the order the pick sheet reads them in: any of the three identifies the
+ * place to somebody standing outside it, and a scope with all three null is one the
+ * catalog cannot put on a map.
+ */
+function shopNameOf(scope: BasketPriceScope, locale: string): string | null {
+  const shop = scope.locations[0];
+  if (shop === undefined) {
+    return null;
+  }
+
+  const label = shop.label === null ? '' : inLocale(shop.label, locale);
+  const named = label !== '' ? label : (shop.address ?? shop.city ?? '');
+  return named === '' ? null : named;
 }

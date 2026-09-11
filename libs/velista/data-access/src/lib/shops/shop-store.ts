@@ -1,39 +1,16 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import {
   chainState,
-  type ChainState,
-  type LocalizedName,
+  OTHER_CHAINS,
+  type FranchiseButton,
   type Shop,
   type ShopChainSummary,
 } from '@portfolio/velista/models';
 import { ShoppingProfileStore } from '../profiles/shopping-profile-store';
 import { SHOP_SERVICE, type ShopServiceI } from './shop-service';
 
-/**
- * The key of the OTHER button, which is not a chain id and cannot collide with one:
- * every chain id is a UUID.
- *
- * OTHER is a client side bucket (backend plan 0068, section 4) and the server has never
- * heard the word. It is the chains with no `externalBrandKey`, which is what survives
- * the import of a shop that had no brand at all, and plan 0059 section 3.2 measured it
- * as the **largest** button on the screen for many people: 35 of the 75 places in one
- * city radius were independents.
- */
-export const OTHER_CHAINS = 'other';
-
 /** How a read of the shop rows has got on. `idle` is "no franchise chosen yet". */
 export type ShopListState = 'idle' | 'loading' | 'loaded' | 'failed';
-
-/** One franchise button, ready to draw (plan 0059, section 3.2). */
-export interface FranchiseButton {
-  /** A chain id, or {@link OTHER_CHAINS}. */
-  readonly key: string;
-  /** Null for OTHER, which is a bucket rather than a brand and is named by the screen. */
-  readonly name: LocalizedName | null;
-  readonly locations: number;
-  readonly excluded: number;
-  readonly state: ChainState;
-}
 
 /** A page of shops, capped so a server echoing its own cursor cannot spin a phone. */
 const SHOP_PAGE_SIZE = 100;

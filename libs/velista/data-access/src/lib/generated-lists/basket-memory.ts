@@ -131,8 +131,16 @@ function unionOf(
 /** The basket every read here is about. */
 const BASKET_ID = 'basket-saturday';
 
-/** The one scope the mock prices against: Mercadona's Córdoba warehouse. */
+/**
+ * The two scopes the mock prices against, which are two chains.
+ *
+ * Two rather than one since velista `0078`: a screen that shows one shop's prices
+ * and says where a product is cheaper cannot be looked at against a basket priced at
+ * a single shop. Mercadona carries two locations and Dia one, which is also what
+ * makes the shop picker worth opening in this mode.
+ */
 const SCOPE_MERCADONA = 'scope-mercadona-cordoba';
+const SCOPE_DIA = 'scope-dia-cordoba';
 
 /**
  * A price on a product, for the pick sheet to have something to compare.
@@ -146,7 +154,8 @@ const SCOPE_MERCADONA = 'scope-mercadona-cordoba';
 const offer = (
   price: number,
   unitPrice: number | null,
-  unitPriceLabel: string | null
+  unitPriceLabel: string | null,
+  priceScopeId: string = SCOPE_MERCADONA
 ): ProductOffer => ({
   price,
   currency: 'EUR',
@@ -155,8 +164,24 @@ const offer = (
   observedAt: new Date('2026-09-01T06:00:00.000Z'),
   sourceKind: 'OFFICIAL_WEB',
   stale: false,
-  priceScopeId: SCOPE_MERCADONA,
+  priceScopeId,
 });
+
+/**
+ * Every scope's offer, cheapest first, and the cheapest of them again.
+ *
+ * The pair backend `0109` answers with, built here out of one list so the two cannot
+ * disagree: `offer` is the first entry by construction rather than a second literal
+ * somebody has to keep in step with the first.
+ */
+const priced = (
+  ...offers: readonly ProductOffer[]
+): Pick<BasketProduct, 'offer' | 'offers'> => {
+  const sorted = [...offers].sort(
+    (left, right) => (left.price ?? Infinity) - (right.price ?? Infinity)
+  );
+  return { offer: sorted[0] ?? null, offers: sorted };
+};
 
 const PRODUCTS: readonly BasketProduct[] = [
   {
@@ -168,7 +193,11 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Hacendado',
     size: 1,
     unit: 'LITER',
-    offer: offer(0.95, 0.95, 'EUR/L'),
+    // Dearer at Dia, so the Mercadona view draws no mark and the Dia view does.
+    ...priced(
+      offer(0.95, 0.95, 'EUR/L'),
+      offer(1.05, 1.05, 'EUR/L', SCOPE_DIA)
+    ),
     categories: ['DAIRY'],
   },
   {
@@ -177,7 +206,11 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Pascual',
     size: 1,
     unit: 'LITER',
-    offer: offer(0.89, 0.89, 'EUR/L'),
+    // Cheaper at Dia, which is the "cheaper elsewhere" mark on the Mercadona view.
+    ...priced(
+      offer(0.89, 0.89, 'EUR/L'),
+      offer(0.79, 0.79, 'EUR/L', SCOPE_DIA)
+    ),
     categories: ['DAIRY'],
   },
   {
@@ -189,7 +222,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Central Lechera Asturiana',
     size: 1,
     unit: 'LITER',
-    offer: null,
+    // Priced nowhere, which is `0062` section 5.3's unpriced option among priced ones.
+    ...priced(),
     categories: ['DAIRY'],
   },
   {
@@ -198,7 +232,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     brand: 'Hacendado',
     size: 12,
     unit: 'UNIT',
-    offer: offer(2.85, 0.24, 'EUR/ud'),
+    // Mercadona alone, so the Dia view sinks this line and says where it is sold.
+    ...priced(offer(2.85, 0.24, 'EUR/ud')),
     categories: ['DAIRY'],
   },
 ];
@@ -215,6 +250,26 @@ const SCOPES: readonly BasketPriceScope[] = [
         address: 'Ronda de los Tejares 32',
         city: 'Córdoba',
         postalCode: '14008',
+      },
+      {
+        id: 'loc-barcelona',
+        label: null,
+        address: 'Avenida de Barcelona 4',
+        city: 'Córdoba',
+        postalCode: '14001',
+      },
+    ],
+  },
+  {
+    priceScopeId: SCOPE_DIA,
+    supermarketName: { en: 'Dia', es: 'Dia' },
+    locations: [
+      {
+        id: 'loc-dia-victoria',
+        label: null,
+        address: 'Paseo de la Victoria 21',
+        city: 'Córdoba',
+        postalCode: '14004',
       },
     ],
   },
