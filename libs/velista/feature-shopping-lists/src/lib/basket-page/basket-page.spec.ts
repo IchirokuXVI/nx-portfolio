@@ -1540,6 +1540,29 @@ describe('searching the basket', () => {
       expect(query(fixture, 'lib-filter-icon')).not.toBeNull();
     });
 
+    /**
+     * The field replaces the count and the search control, which the field is. It
+     * must not take the filter with it: somebody searching a grouped basket would
+     * have to cancel the search to change what it is grouped by.
+     */
+    it('stays beside the open search field', async () => {
+      const { fixture, store } = await render({ lines: threeLines });
+      // The first tool in the row is the search control.
+      query(fixture, '.tools .tool')?.click();
+      fixture.detectChanges();
+      expect(query(fixture, '.search')).not.toBeNull();
+
+      const tool = query(fixture, '.search .tool');
+      expect(tool).not.toBeNull();
+      expect(tool?.querySelector('lib-filter-icon')).not.toBeNull();
+
+      tool?.click();
+      expect(store.navigate).toHaveBeenCalledWith(
+        ['sheet', 'filter'],
+        expect.anything()
+      );
+    });
+
     it('opens the sheet at the basket’s own sheet URL', async () => {
       const { fixture, store } = await render({ lines: threeLines });
 

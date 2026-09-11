@@ -196,10 +196,12 @@ describe('ShopPickerSheet', () => {
 
     // The second shop of the first scope: both rows pick that one scope.
     expect(view.shop()).toBe('s-merca');
-    expect(sheets.leaveTo).toHaveBeenCalledWith(
+    // A pop, because the filter sheet pushed this one: the filter sheet's URL is
+    // only the fallback for a cold load on this sheet's own address.
+    expect(sheets.dismiss).toHaveBeenCalledWith(
       `/en/shopping-lists/${BASKET_ID}/sheet/filter`
     );
-    expect(sheets.dismiss).not.toHaveBeenCalled();
+    expect(sheets.leaveTo).not.toHaveBeenCalled();
   });
 
   it('checks the scope’s first shop when it is already the chosen one', () => {
@@ -285,7 +287,7 @@ describe('ShopPickerSheet', () => {
       tapChain(fixture, 1);
 
       expect(view.shop()).toBe('s-dia');
-      expect(sheets.leaveTo).toHaveBeenCalledWith(
+      expect(sheets.dismiss).toHaveBeenCalledWith(
         `/en/shopping-lists/${BASKET_ID}/sheet/filter`
       );
     });

@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -119,6 +120,7 @@ import { BASKET_PATHS } from '../basket-paths';
     FilterIcon,
     FlagIcon,
     LineComposer,
+    NgTemplateOutlet,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,

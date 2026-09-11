@@ -72,10 +72,10 @@ export function settleSheetPath(
 /**
  * The filter sheet's own URL, which the shop picker returns to (velista `0078`).
  *
- * The picker is reached from this sheet with `leaveTo` and goes back the same way,
- * so neither is pushed over the other and one back gesture from the picker lands on
- * the filter sheet exactly once (`0031`). Both name the other in full, for the reason
- * every dismissal in this app names its page in full.
+ * The picker is pushed over this sheet and pops back onto it, so one back gesture
+ * from the picker lands on the filter sheet exactly once (`0031`); this URL is the
+ * picker's fallback for a cold load on its own address. Both name the other in full,
+ * for the reason every dismissal in this app names its page in full.
  */
 export function filterSheetPath(
   locale: string,
