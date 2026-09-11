@@ -709,6 +709,29 @@ export class BasketStore {
     // last (velista `0069`, section 4).
     this._lastAdded.set(line);
     this._lastSplit.set(null);
+
+    // A line arrives bare, and the products it names do not come with it: the add
+    // answers the line alone and the broadcast carries the same shape, while
+    // `products` is composed once per basket read at the gateway. So a line added
+    // with a product drew "not linked to a product" until the next reload, because
+    // the row could not resolve a pick the map had never been told about. The
+    // basket is re-read, quietly, so the row names its product a moment later.
+    if (this._namesUnknownProducts(line)) {
+      void this.refresh();
+    }
+  }
+
+  /** Whether the line picks or offers a product this basket's map does not hold. */
+  private _namesUnknownProducts(line: BasketLine): boolean {
+    const products = this._basket()?.products;
+    if (products === undefined) {
+      return false;
+    }
+    const named = [...line.optionIds];
+    if (line.pickId !== null) {
+      named.push(line.pickId);
+    }
+    return named.some((id) => !products.has(id));
   }
 
   /**

@@ -71,12 +71,14 @@ interface PickerShop {
  * both are answers to "where am I looking", and coming back to this sheet is coming
  * back to look again.
  *
- * ## In and out with `leaveTo`, both ways
+ * ## Pushed over the filter sheet, and popped back onto it both ways
  *
- * Change replaced the filter sheet with this one and picking replaces this one with
- * the filter sheet, so neither is stacked over the other. A push either way would
- * leave the filter sheet's URL under this one, and the back gesture that a phone
- * dismisses a sheet with would then walk through it twice (`0031`).
+ * The filter sheet pushes this one, and every way out of here pops: the chevron,
+ * the scrim, Escape, the phone's back gesture and a pick all land on the filter
+ * sheet, exactly once (`0031`). This used to go both ways with `leaveTo`, so the
+ * filter sheet's entry was replaced by this one and the chevron, which pops, landed
+ * on the basket instead. The filter sheet's URL is the fallback for a cold load on
+ * this sheet's own address.
  *
  * ## A guest picks a chain
  *
@@ -337,17 +339,21 @@ export class ShopPickerSheet {
     }
   }
 
+  /**
+   * The pick is written to the store first, so the filter sheet this pops back onto
+   * draws it the moment it is recreated.
+   */
   private pick(priceScopeId: string): void {
     this._view.setShop(priceScopeId);
-    void this._sheet.leaveTo(this._filterUrl());
+    void this._sheet.dismiss(this._filterUrl());
   }
 
   /**
    * The way back, which is the chevron, Escape, the scrim and the back gesture.
    *
-   * `dismiss` and not `leaveTo`, because leaving without picking is leaving: the
-   * entry this sheet replaced is the filter sheet's, so popping lands on it, and the
-   * URL is the fallback for a cold load on this sheet's own address.
+   * `dismiss` and not `leaveTo`: the entry under this sheet is the filter sheet's,
+   * which pushed it, so popping lands there, and the URL is the fallback for a cold
+   * load on this sheet's own address.
    */
   back(): void {
     void this._sheet.dismiss(this._filterUrl());

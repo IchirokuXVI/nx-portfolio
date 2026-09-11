@@ -292,6 +292,14 @@
               >
                 {{ 'basket.search.cancel' | rokuT }}
               </button>
+
+              <!--
+                The filter stays while the field is open. The field replaces the
+                count and the search control, which the field is; it must not
+                take the filter with it, or a shopper searching a grouped basket
+                has to cancel the search to change what it is grouped by.
+              -->
+              <ng-container [ngTemplateOutlet]="filterTool" />
             </div>
           </div>
 
@@ -344,30 +352,11 @@
             </button>
 
             <!--
-              Filtering and ordering (plan 0075, section 5). The badge is how many
-              properties are not at their default, and the **name carries it too**:
-              "Filter and order, 2 on". A count that only exists as a dot over a
-              glyph is a count a screen reader never hears, and the chips under this
-              row are the other half of saying the same thing.
+              Filtering and ordering (plan 0075, section 5). One template, drawn
+              here and again beside the open search field, so the two cannot
+              disagree about the control's name or its badge.
             -->
-            <button
-              (click)="openFilter()"
-              [attr.aria-label]="
-                activeCount() === 0
-                  ? ('basket.view.open' | rokuT)
-                  : ('basket.view.openCount' | rokuT: { count: activeCount() })
-              "
-              [class.is-on]="activeCount() > 0"
-              class="tool"
-              type="button"
-            >
-              <lib-filter-icon class="tool-glyph" />
-              @if (activeCount() > 0) {
-                <span aria-hidden="true" class="tool-badge">
-                  {{ activeCount() }}
-                </span>
-              }
-            </button>
+            <ng-container [ngTemplateOutlet]="filterTool" />
           </div>
         }
 
@@ -594,3 +583,31 @@
   keeps its scroll underneath and Android's back button dismisses them.
 -->
 <router-outlet />
+
+<!--
+  The filter control, in one place, for the tools row and for the search row. The
+  badge is how many properties are not at their default, and the **name carries
+  it too**: "Filter and order, 2 on". A count that only exists as a dot over a
+  glyph is a count a screen reader never hears, and the chips under the row are
+  the other half of saying the same thing.
+-->
+<ng-template #filterTool>
+  <button
+    (click)="openFilter()"
+    [attr.aria-label]="
+      activeCount() === 0
+        ? ('basket.view.open' | rokuT)
+        : ('basket.view.openCount' | rokuT: { count: activeCount() })
+    "
+    [class.is-on]="activeCount() > 0"
+    class="tool"
+    type="button"
+  >
+    <lib-filter-icon class="tool-glyph" />
+    @if (activeCount() > 0) {
+      <span aria-hidden="true" class="tool-badge">
+        {{ activeCount() }}
+      </span>
+    }
+  </button>
+</ng-template>

@@ -2,11 +2,26 @@
 
 // Ruled off above and below, so the rows read as their own block between the product
 // entry and the settle buttons rather than as more of either.
+//
+// **One grid for the headings and every row**, with the three columns declared
+// here and inherited downwards as subgrids. The two number columns used to be a
+// fixed `--app-quantity-width` on the headings and on the reels separately, which
+// held only while the words fitted: "Conseguido" is wider than a reel, so in Spanish
+// the heading spread past its column and sat over the wrong number. Sized by
+// content, a column is as wide as the widest thing in it, heading or reel, and the
+// headings and the numbers under them cannot disagree.
 .summary {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: var(--app-space-3);
   margin-block: var(--app-space-4);
   padding-block: var(--app-space-3);
   border-block: 1px solid var(--app-border-subtle);
+
+  // Everything that is not a row of the table spans the whole width.
+  > * {
+    grid-column: 1 / -1;
+  }
 }
 
 .heading {
@@ -55,9 +70,8 @@
 // says which column it is, and a screen reader reading a header row would hear the
 // words twice.
 .columns {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--app-space-3);
+  display: grid;
+  grid-template-columns: subgrid;
   margin: 0 0 var(--app-space-1);
   font-size: var(--app-text-2xs);
   text-transform: uppercase;
@@ -65,16 +79,26 @@
   color: var(--app-text-muted);
 }
 
+// Each heading sits in the column of the number it names, so the column is as wide
+// as the heading when the heading is the wider of the two.
 .columns-asked,
 .columns-got {
   min-inline-size: var(--app-quantity-width);
   text-align: center;
 }
 
+.columns-asked {
+  grid-column: 2;
+}
+
+.columns-got {
+  grid-column: 3;
+}
+
 .rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-1);
+  display: grid;
+  grid-template-columns: subgrid;
+  row-gap: var(--app-space-1);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -82,12 +106,14 @@
 
 // The two reels are the right hand end of every row and keep their size at the
 // smallest supported width: the numbers are the controls and the text beside them is
-// not, so the name truncates rather than a target shrinking (section 7).
+// not, so the name truncates rather than a target shrinking (section 7). The row is
+// a subgrid too, so a reel lands in its heading's column whatever the name beside it
+// measures.
 .row {
-  display: flex;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--app-space-2);
   min-block-size: var(--app-touch-target);
   padding-block: var(--app-space-1);
   border-block-end: 1px solid var(--app-border-subtle);
@@ -95,11 +121,17 @@
   &:last-child {
     border-block-end: none;
   }
+
+  // A reel, or the number standing in for one, centred in its column.
+  > .asked-reel,
+  > .got-reel,
+  > .row-number {
+    justify-self: center;
+  }
 }
 
 .row-label {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--app-space-1);
   min-inline-size: 0;

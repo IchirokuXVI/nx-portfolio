@@ -531,6 +531,56 @@ describe('BasketStore', () => {
       expect(store.lines()).toHaveLength(before + 1);
     });
 
+    /**
+     * The add answers the line alone, and the product map is composed per basket
+     * read, so a line added with a product drew "not linked to a product" until the
+     * next reload. The store re-reads when a line names a product it has not met.
+     */
+    it('re-reads the basket when the line names a product it has not been told about', async () => {
+      const inner = new BasketMemory();
+      let reads = 0;
+      const { store } = build({
+        getBasket: async () => {
+          reads += 1;
+          const basket = await inner.getBasket();
+          if (reads > 1) {
+            const [known] = basket.products.values();
+            basket.products.set('item-new', { ...known, id: 'item-new' });
+          }
+          return basket;
+        },
+        addLine: async (id, body) => ({
+          ...(await inner.addLine(id, body)),
+          pickId: body.itemId ?? null,
+          optionIds: [...(body.options ?? [])],
+        }),
+      });
+      await store.open('basket-saturday');
+      expect(reads).toBe(1);
+
+      // A product the first read already named: nothing to fetch.
+      const [known] = store.products().keys();
+      await store.addLine({
+        content: 'Milk',
+        itemId: known,
+        options: [known],
+      });
+      expect(reads).toBe(1);
+
+      await store.addLine({
+        content: 'Batteries',
+        itemId: 'item-new',
+        options: ['item-new'],
+      });
+
+      expect(reads).toBe(2);
+      // The re-read is not awaited by the add: the line is on screen already and
+      // the product follows it. Let the read land.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(store.products().has('item-new')).toBe(true);
+      expect(store.lines().at(-1)?.content).toBe('Batteries');
+    });
+
     it('appends a line somebody else added, with no refetch', async () => {
       const { store, socket } = build();
       await store.open('basket-saturday');

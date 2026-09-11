@@ -128,7 +128,10 @@ function render(options: {
       // the one `localStorage` jsdom shares with every other test in this file.
       provideFakeBrowserFacade(new Map()),
       { provide: SheetNavigation, useValue: sheets },
-      { provide: Router, useValue: { navigate: jest.fn() } },
+      {
+        provide: Router,
+        useValue: { navigate: jest.fn(), navigateByUrl: jest.fn() },
+      },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
@@ -355,7 +358,7 @@ describe('FilterSheet', () => {
       expect(legends(fixture)).not.toContain('basket.view.shop.legend');
     });
 
-    it('draws "One shop" disabled with Choose before anything is picked', () => {
+    it('draws "One shop" unchecked and live, with Choose, before anything is picked', () => {
       const { fixture } = render({
         lines: OWNER_LINES,
         scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
@@ -369,12 +372,39 @@ describe('FilterSheet', () => {
       expect(shopRadio).toHaveLength(2);
       // The first radio is "any of your shops" and is what a basket opens on.
       expect(shopRadio[0].checked).toBe(true);
-      // Disabled and not hidden, so the group reads as two choices with one not
-      // yet available (section 7).
-      expect(shopRadio[1].disabled).toBe(true);
+      // Live and not disabled: a tap on it is the answer to "which shop", and a
+      // radio that did nothing when tapped read as broken.
+      expect(shopRadio[1].disabled).toBe(false);
+      expect(shopRadio[1].checked).toBe(false);
 
       expect(text(fixture, '.shops .is-muted')).toBe('basket.view.shop.none');
       expect(text(fixture, '.shops .pick')).toBe('basket.view.shop.choose');
+    });
+
+    /**
+     * The empty radio opens the picker, and it stays unchecked while it does: the
+     * group must not claim a shop the picker has not yet answered with.
+     */
+    it('opens the picker from the empty radio and leaves it unchecked', () => {
+      const { fixture, view, sheets } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      const radio = fixture.debugElement.queryAll(
+        By.css('input[name="basket-shop"]')
+      )[1];
+      const input = radio.nativeElement as HTMLInputElement;
+      // What a native radio does before `change` fires.
+      input.checked = true;
+      radio.triggerEventHandler('change', { target: input });
+
+      expect(input.checked).toBe(false);
+      expect(view.shop()).toBeNull();
+      expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+        `/en/shopping-lists/${BASKET_ID}/sheet/filter/shop`
+      );
+      expect(sheets.leaveTo).not.toHaveBeenCalled();
     });
 
     it('draws the chain, the shop and Change once one is picked', () => {
@@ -442,8 +472,13 @@ describe('FilterSheet', () => {
       );
     });
 
-    /** Change leaves for the picker with `leaveTo`, so nothing is stacked. */
-    it('leaves for the shop picker rather than pushing it', () => {
+    /**
+     * Change **pushes** the picker over this sheet, so the picker's own back pops
+     * onto this sheet rather than onto the basket. It used to `leaveTo`, which
+     * replaced this sheet's entry and left the picker's chevron two screens away
+     * from here.
+     */
+    it('pushes the shop picker over this sheet', () => {
       const { fixture, sheets } = render({
         lines: OWNER_LINES,
         scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
@@ -452,7 +487,8 @@ describe('FilterSheet', () => {
       fixture.debugElement.query(By.css('.shops .pick')).nativeElement.click();
 
       expect(sheets.dismiss).not.toHaveBeenCalled();
-      expect(sheets.leaveTo).toHaveBeenCalledWith(
+      expect(sheets.leaveTo).not.toHaveBeenCalled();
+      expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
         `/en/shopping-lists/${BASKET_ID}/sheet/filter/shop`
       );
     });

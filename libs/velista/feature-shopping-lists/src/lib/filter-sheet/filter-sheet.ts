@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -61,10 +61,10 @@ import { basketPath, shopPickerPath } from '../basket-paths';
  * one not yet available.
  *
  * Choosing **which** shop is a sheet of its own, because a profile can hold fifty of
- * them. Change goes there with `leaveTo` and the picker comes back the same way, so
- * this sheet is never pushed under that one and the back gesture from the picker
- * lands here exactly once (`0031`). That is also why nothing here is a draft: a
- * component holding one would not survive the trip.
+ * them. Change **pushes** the picker over this sheet, and the picker pops back onto
+ * it whether a shop was picked or not, so its back gesture lands here exactly once
+ * (`0031`). That is also why nothing here is a draft: a component holding one would
+ * not survive the trip.
  */
 @Component({
   selector: 'lib-filter-sheet',
@@ -76,6 +76,7 @@ import { basketPath, shopPickerPath } from '../basket-paths';
 export class FilterSheet {
   private readonly _view = inject(BasketViewStore);
   private readonly _sheet = inject(SheetNavigation);
+  private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -186,23 +187,38 @@ export class FilterSheet {
     this._view.setShop(null);
   }
 
-  /** Prices from the shop the row names, without opening the picker. */
-  protected setOneShop(): void {
+  /**
+   * Prices from the shop the row names, or the picker when the row names none.
+   *
+   * A native radio checks itself before `change` fires, so with no shop to choose
+   * the control is put back by hand, exactly as {@link toggleList} puts a refused
+   * checkbox back: the group must not read as "one shop" while the picker is still
+   * open, and if the picker is left without a pick the sheet comes back with the
+   * store unchanged and the first radio checked.
+   */
+  protected setOneShop(event: Event): void {
     const shop = this.shopRow();
     if (shop !== null) {
       this._view.setShop(shop.priceScopeId);
+      return;
     }
+    (event.target as HTMLInputElement).checked = false;
+    this.openPicker();
   }
 
   /**
-   * Leave for the shop picker, which is Change and Choose both.
+   * Open the shop picker, which is Change, Choose and the empty radio alike.
    *
-   * `leaveTo` and not a push: this sheet is replaced rather than covered, so the
-   * picker's own way back reaches it once rather than falling through two sheets
-   * (`0031`). Nothing is lost by it, because every control here has already applied.
+   * A **push** and not `leaveTo`, and that reverses what this did at first: the
+   * picker used to replace this sheet, so the picker's own back control, which pops,
+   * landed on the basket rather than here, and a shopper who changed their mind was
+   * two screens away from the sheet they had left. Pushed, the picker sits over this
+   * sheet's entry: its chevron, the scrim, Escape and the phone's back gesture all
+   * pop onto this sheet exactly once, and picking a shop pops the same way. Nothing
+   * here is lost by the trip, because every control here has already applied.
    */
   protected openPicker(): void {
-    void this._sheet.leaveTo(
+    void this._router.navigateByUrl(
       shopPickerPath(this._locale(), this._basePath, this._generatedListId())
     );
   }

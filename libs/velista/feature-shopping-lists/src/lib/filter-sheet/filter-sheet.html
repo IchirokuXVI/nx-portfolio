@@ -149,10 +149,11 @@
       </label>
 
       <!--
-        The second radio is the shop, and it is **disabled rather than hidden**
-        before one has been chosen (section 7): the group then reads as two choices
-        with one not yet available, rather than as a group that grows a second option
-        after a trip to another sheet.
+        The second radio is the shop. Before one has been chosen it is **live, and
+        it opens the picker**: a radio that did nothing when tapped read as broken,
+        and the tap on it was already the answer to "which shop". It stays
+        unchecked until the picker answers, so the group never claims a shop it
+        does not have.
 
         The button beside it is a text button and its accessible name says which
         section it belongs to, because "Change" alone is four other things on this
@@ -166,9 +167,8 @@
         -->
         <label class="choice-pick">
           <input
-            (change)="setOneShop()"
+            (change)="setOneShop($event)"
             [checked]="oneShop()"
-            [disabled]="shopRow() === null"
             class="control"
             name="basket-shop"
             type="radio"
