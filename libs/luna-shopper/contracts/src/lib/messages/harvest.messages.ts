@@ -18,7 +18,11 @@ import type {
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
-import type { BulkOperationError, ItemView } from './catalog.messages';
+import type {
+  BulkOperationError,
+  ContentLocale,
+  ItemView,
+} from './catalog.messages';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
@@ -185,7 +189,7 @@ export type AdapterKey = (typeof ADAPTER_KEYS)[number];
  *
  * Each field is a fact about the storefront rather than a switch somebody sets.
  * The spawn turns them into the fields a run requires, and the back office turns
- * the same four booleans into the fields a form offers, so the two cannot
+ * the same facts into the fields a form offers, so the two cannot
  * disagree about what a chain needs. Three arrays in `harvest-run.service.ts`
  * and one constant in `runs-page.ts` said this before, and they already
  * disagreed: the backend required a price scope for `carrefour-web` and the form
@@ -201,10 +205,20 @@ export interface AdapterCapabilities {
   listsItsOwnStores: boolean;
   /** The source has a product page, so an EAN backfill has something to read. */
   hasProductPages: boolean;
+  /**
+   * The language this source's own text is written in, or null when nothing is
+   * known (plan 0111, section 7).
+   *
+   * A printed name belongs to the language the chain prints in, so accepting a
+   * queued row files it under that key rather than under a constant. A null
+   * means the string belongs to no language this build can name, and the accept
+   * then requires the operator to say which rather than guessing.
+   */
+  printedLocale: ContentLocale | null;
 }
 
 /**
- * The four facts, per adapter.
+ * The facts, per adapter.
  *
  * **A reader that does not know an adapter must answer no to everything.** A
  * back office one release behind a backend that added an adapter then draws a
@@ -221,6 +235,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: true,
     hasProductPages: false,
+    printedLocale: 'es',
   },
   // The site prints no price at all, so a scope would be a required field that
   // does nothing (plan 0085).
@@ -229,12 +244,14 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: 'es',
   },
   'carrefour-web': {
     writesPrices: true,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: true,
+    printedLocale: 'es',
   },
   // The one source that states the region of every price it publishes and names
   // its own 730 shops (plan 0089).
@@ -243,28 +260,41 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: true,
+    printedLocale: 'es',
   },
+  // OpenStreetMap carries a place's name and never a language for it, and a
+  // shop name is a proper noun in any case, so there is nothing to claim here.
   'osm-places': {
     writesPrices: false,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: null,
   },
+  // Nothing is printed: whatever a manual row holds, an operator typed, and the
+  // operator says which language they typed it in.
   manual: {
     writesPrices: false,
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    printedLocale: null,
   },
 };
 
 /**
- * The capabilities of an adapter this build knows, and all four false otherwise.
+ * The capabilities of an adapter this build knows, and "I know nothing"
+ * otherwise: every boolean false, and no printed language.
  *
  * The lookup is a function rather than an index so the "answers no to
  * everything" rule is written once. A caller reading the record directly gets
  * `undefined` for an adapter added after it shipped, and every call site would
  * have to remember to handle it.
+ *
+ * A null `printedLocale` is that rule for the language too, and it is the safe
+ * direction for the same reason: an unknown adapter's printed string gets filed
+ * under no language rather than guessed into one, so the accept asks the
+ * operator instead of writing a name in a language nobody checked.
  */
 export function adapterCapabilities(
   adapterKey: string | null | undefined
@@ -275,6 +305,7 @@ export function adapterCapabilities(
       scopesItsOwn: false,
       listsItsOwnStores: false,
       hasProductPages: false,
+      printedLocale: null,
     }
   );
 }

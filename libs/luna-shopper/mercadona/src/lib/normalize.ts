@@ -165,6 +165,11 @@ function readProductCategoryPath(raw: Json): CategoryPathNode[] {
  * The unavailable product (section 2.6): a 404 from a detail call is a **value**
  * meaning "not stocked in this warehouse", not an error. It sets availability
  * rather than failing a run, and carries no price at all rather than a stale one.
+ *
+ * It carries no **name** either, and now says so: `{}` rather than `{ es: '' }`
+ * (plan 0111, section 9). An empty object is not a name and no caller may treat
+ * it as one. This row exists to carry availability, and a blank string in a
+ * required key was the old type forcing it to claim otherwise.
  */
 export function unavailableProduct(
   externalId: string,
@@ -173,7 +178,7 @@ export function unavailableProduct(
   return {
     externalId,
     ean: null,
-    name: { es: '' },
+    name: {},
     brand: null,
     unitSize: null,
     unit: null,

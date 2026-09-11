@@ -24,7 +24,9 @@ import { In, Repository, type EntityManager } from 'typeorm';
 import { SourceCatalogEntry } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { PlatformAdminService } from './platform-admin.service';
+import { acceptedName } from './source-entry-name';
 import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
+import { SupermarketSourceService } from './supermarket-source.service';
 
 /** The two statuses a decision may be made about (plan 0086, D7). */
 const QUEUED: readonly SourceEntryStatus[] = [
@@ -88,7 +90,8 @@ export class SourceEntryBatchService {
     private readonly entries: Repository<SourceCatalogEntry>,
     private readonly catalog: CatalogClient,
     private readonly prices: SourceEntryPriceWriter,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    private readonly sources: SupermarketSourceService
   ) {}
 
   async applyDecisions(
@@ -137,14 +140,21 @@ export class SourceEntryBatchService {
         where: { id: In(creates.map((operation) => operation.entryId)) },
       });
       const byId = new Map(rows.map((row) => [row.id, row]));
+      // What each chain prints its own text in, so a row accepted with no name
+      // of its own files the printed string under the right language (plan
+      // 0111, section 7). One read per chain on the file rather than one per
+      // row: a thousand row file names a handful of chains.
+      const adapterKeys = await this.adapterKeysOf(rows);
       try {
         const result = await this.catalog.createItems(
-          creates.map((operation) =>
-            itemFrom(
+          creates.map((operation) => {
+            const entry = byId.get(operation.entryId) as SourceCatalogEntry;
+            return itemFrom(
               operation,
-              byId.get(operation.entryId) as SourceCatalogEntry
-            )
-          )
+              entry,
+              adapterKeys.get(entry.supermarketId) ?? null
+            );
+          })
         );
         created = result.items;
       } catch (error) {
@@ -352,29 +362,49 @@ export class SourceEntryBatchService {
     }
     return orphaned;
   }
+
+  /**
+   * The adapter key of every chain the named rows belong to.
+   *
+   * A chain with no source row answers nothing, which `adapterCapabilities`
+   * then reads as "I know nothing" and the accept turns into a refusal rather
+   * than a guessed language.
+   */
+  private async adapterKeysOf(
+    rows: readonly SourceCatalogEntry[]
+  ): Promise<Map<string, string | null>> {
+    const keys = new Map<string, string | null>();
+    for (const supermarketId of new Set(rows.map((row) => row.supermarketId))) {
+      const source = await this.sources.findBySupermarket(supermarketId);
+      keys.set(supermarketId, source?.adapterKey ?? null);
+    }
+    return keys;
+  }
 }
 
 /**
  * The product a `createItem` operation asks for, over the row's own defaults.
  *
  * Every field the file omits falls back to what the row holds, exactly as the
- * one at a time route does. **The English name is not fetched**, which is the
- * one way the two differ: that route pays one request to the chain for the one
- * product an operator is looking at, and a thousand of them inside one call
- * would be a thousand requests. The file already carries the name it decided.
+ * one at a time route does, and the name is built by the same function for the
+ * same reason (plan 0111, section 6): the two routes drifted once already, and
+ * the batch route's copy quietly required Spanish without ever saying so.
+ * **The English name is not fetched**, which is the one way the two differ:
+ * that route pays one request to the chain for the one product an operator is
+ * looking at, and a thousand of them inside one call would be a thousand
+ * requests. The file already carries the name it decided.
  */
 function itemFrom(
   operation: CreateItemFromSourceEntryOperation,
-  entry: SourceCatalogEntry
+  entry: SourceCatalogEntry,
+  adapterKey: string | null
 ): CreateItemInput {
   const item = operation.item;
-  const spanish = item.name?.es?.trim() || entry.name;
-  const english = item.name?.en?.trim();
   return {
     // Plan 0079: a product with no English name gets no `en` key rather than a
     // copy of the Spanish one, so the gap stays visible and a reader still sees
-    // the Spanish string through the fallback.
-    name: english ? { es: spanish, en: english } : { es: spanish },
+    // the Spanish string through the fallback. Plan 0111 says the same of `es`.
+    name: acceptedName(item.name, entry.name, adapterKey),
     brand: item.brand === undefined ? entry.brand : item.brand,
     ean: item.ean === undefined ? entry.ean : item.ean,
     unitSize:

@@ -23,6 +23,12 @@ export interface FileImportInput {
   supermarketId: string;
   priceScopeId: string;
   sourceKind: PriceSourceKind;
+  /**
+   * The chain's adapter, for the language a scope this file declares is named
+   * in (plan 0111, section 8). Null when the chain has no source row, and the
+   * scope is then created unnamed rather than under a guessed language.
+   */
+  adapterKey: string | null;
 }
 
 /**
@@ -151,7 +157,7 @@ export class FileImportRunner {
     // written (plan 0103, section 5.1). A document with none is every leaflet
     // and every version 1 file: its prices name no scope and fall to the one
     // the operator chose at the spawn.
-    const scopes = this.scopes.forRun(input.supermarketId);
+    const scopes = this.scopes.forRun(input.supermarketId, input.adapterKey);
     for (const scope of document.scopes ?? []) {
       await scopes.declare({
         key: scope.key,

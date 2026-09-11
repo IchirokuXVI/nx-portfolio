@@ -130,7 +130,7 @@ its use as one.
 
 ## 6. A switch invalidates the page, not just the render
 
-This is the part that looks cosmetic and is not. Once backend plan `0109` lands, the three
+This is the part that looks cosmetic and is not. Once backend plan `0111` lands, the three
 catalog listings order and cut their keyset cursor in the caller's language, so a page fetched
 under English was sorted by English names. Re-rendering those same rows under Spanish reorders
 nothing and the operator sees a Spanish sorted screen that is really an English page: the rows
@@ -170,14 +170,14 @@ in the same file as the control.
 - **It does not touch velista.** The shopper app already sends `Accept-Language` and already
   falls through both halves of a name.
 
-## 9. The seam with backend plan 0109
+## 9. The seam with backend plan 0111
 
 Two plans, one per direction, and they build in either order:
 
 - **0026 alone** puts the names and the server messages in the chosen language, which is most
-  of what an operator notices. Listing order stays English first until 0109 lands, because that
+  of what an operator notices. Listing order stays English first until 0111 lands, because that
   order is decided in SQL.
-- **0109 alone** makes the backend answer in the caller's language and changes nothing here,
+- **0111 alone** makes the backend answer in the caller's language and changes nothing here,
   because a request with no header still resolves to English.
 
 Section 6 is the one place where this plan depends on that one, and it is a dependency in the

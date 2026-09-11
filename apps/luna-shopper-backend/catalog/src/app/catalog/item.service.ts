@@ -26,10 +26,12 @@ import {
 import {
   clampPageSize,
   ConflictException,
-  decodeCursor,
+  DEFAULT_LOCALE,
   encodeCursor,
+  getRequestContext,
   NotFoundException,
   ValidationException,
+  type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
 import {
   In,
@@ -41,6 +43,7 @@ import { Item, ProductGroup, SupermarketItem } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
+  decodeCursorForLocale,
   displayName,
   displayNameSql,
   toItemOfferView,
@@ -62,6 +65,8 @@ import {
 
 interface ItemCursor {
   order: ItemOrder;
+  /** The language the `value` was cut under (plan 0111, section 5). */
+  locale: SupportedLocale;
   /** A sort value for a keyset order; an offset for `relevance`. */
   value: string;
   id: string;
@@ -409,14 +414,17 @@ export class ItemService {
    */
   async search(req: SearchItemsRequest): Promise<ItemPage> {
     const limit = clampPageSize(req.limit);
-    const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
+    // The caller's language, off the request context the gateway propagated
+    // (plan 0111, section 3).
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    const cursor = decodeCursorForLocale<ItemCursor>(req.cursor, locale);
     const term = parseSearchTerm(req.query);
     const order = this.resolveOrder(req.order, term);
 
     const rows =
       order === 'relevance' && term
         ? await this.rankedItems(req, term, limit, cursor)
-        : await this.listedItems(req, term, order, limit, cursor);
+        : await this.listedItems(req, term, order, locale, limit, cursor);
 
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
@@ -428,7 +436,7 @@ export class ItemService {
     const nextCursor =
       !hasMore || !last
         ? null
-        : this.nextCursor(order, page, cursor, limit, last);
+        : this.nextCursor(order, locale, cursor, limit, last);
 
     return {
       items: page.map((row) => toItemView(row, offers.get(row.id))),
@@ -454,7 +462,8 @@ export class ItemService {
    */
   async searchOffers(req: SearchOffersRequest): Promise<ProductGroupOfferPage> {
     const limit = clampPageSize(req.limit);
-    const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    const cursor = decodeCursorForLocale<ItemCursor>(req.cursor, locale);
     const term = parseSearchTerm(req.query);
     const offset = Number(cursor?.value ?? 0) || 0;
     const scopeIds = req.priceScopeIds ?? [];
@@ -589,6 +598,7 @@ export class ItemService {
       nextCursor: hasMore
         ? encodeCursor({
             order: 'relevance',
+            locale,
             value: String(offset + limit),
             id: '',
           })
@@ -854,6 +864,7 @@ export class ItemService {
     req: SearchItemsRequest,
     term: SearchTerm | null,
     order: ItemOrder,
+    locale: SupportedLocale,
     limit: number,
     cursor?: ItemCursor
   ): Promise<Item[]> {
@@ -912,24 +923,30 @@ export class ItemService {
       // nothing, which is what the two clauses together mean.
       qb.andWhere('i."productGroupId" IS NULL');
     }
-    this.applyOrder(qb, order, cursor);
+    this.applyOrder(qb, order, locale, cursor);
     return qb.getMany();
   }
 
   private nextCursor(
     order: ItemOrder,
-    page: Item[],
+    locale: SupportedLocale,
     cursor: ItemCursor | undefined,
     limit: number,
     last: Item
   ): string {
     if (order === 'relevance') {
       const offset = Number(cursor?.value ?? 0) || 0;
-      return encodeCursor({ order, value: String(offset + limit), id: '' });
+      return encodeCursor({
+        order,
+        locale,
+        value: String(offset + limit),
+        id: '',
+      });
     }
     return encodeCursor({
       order,
-      value: this.cursorValue(order, last),
+      locale,
+      value: this.cursorValue(order, locale, last),
       id: last.id,
     });
   }
@@ -1008,6 +1025,7 @@ export class ItemService {
   private applyOrder(
     qb: SelectQueryBuilder<Item>,
     order: ItemOrder,
+    locale: SupportedLocale,
     cursor?: ItemCursor
   ): void {
     if (order === 'created') {
@@ -1027,9 +1045,9 @@ export class ItemService {
         });
       }
     } else {
-      qb.orderBy(displayNameSql('i'), 'ASC').addOrderBy('i.id', 'ASC');
+      qb.orderBy(displayNameSql('i', locale), 'ASC').addOrderBy('i.id', 'ASC');
       if (cursor) {
-        qb.andWhere(`(${displayNameSql('i')}, i.id) > (:cv, :cid)`, {
+        qb.andWhere(`(${displayNameSql('i', locale)}, i.id) > (:cv, :cid)`, {
           cv: cursor.value,
           cid: cursor.id,
         });
@@ -1037,14 +1055,18 @@ export class ItemService {
     }
   }
 
-  private cursorValue(order: ItemOrder, row: Item): string {
+  private cursorValue(
+    order: ItemOrder,
+    locale: SupportedLocale,
+    row: Item
+  ): string {
     if (order === 'created') {
       return row.createdAt.toISOString();
     }
     if (order === 'updated') {
       return row.updatedAt.toISOString();
     }
-    return displayName(row.name);
+    return displayName(row.name, locale);
   }
 }
 

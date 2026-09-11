@@ -135,7 +135,10 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         observed += 1;
         report.product({
           externalId: detail.externalId,
-          name: detail.name.es,
+          // What the chain printed, which for this one is always Spanish. The
+          // key is optional since plan 0111 widened the type, and the only row
+          // that carries no name is the unavailable one, which returned above.
+          name: detail.name.es ?? '',
           brand: detail.brand,
           ean: detail.ean,
           unitSize: detail.unitSize,
