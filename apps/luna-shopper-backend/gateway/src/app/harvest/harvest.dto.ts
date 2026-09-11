@@ -73,11 +73,22 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices. A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself.',
+      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead.',
   })
   @IsOptional()
   @IsUUID()
   priceScopeId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    description:
+      'The scopes a `mercadona-api` CATALOG_DISCOVERY covers, one warehouse each, and required and non-empty for one. Each scope’s own `externalKey` is the warehouse the walk fetches, so a run cannot walk one warehouse and label its prices with another. A list and not one id because the detail phase, which is where the eighteen minutes go, is shared across warehouses: six of them cost about 5,300 requests together against 26,298 apart. A scope with no key is refused, and so is one whose priority is outside the band the adapter’s walk may write.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  priceScopeIds?: string[];
 
   @ApiPropertyOptional({
     maxLength: 16,
@@ -445,7 +456,7 @@ export class UpsertSupermarketSourceDto {
     type: 'object',
     additionalProperties: true,
     description:
-      'Adapter specific settings. For `mercadona-api` this is where the resolved `warehouse` lives, e.g. `{ "warehouse": "4661" }`.',
+      'Adapter specific settings, such as `carrefour-web`’s `detailBudget`. It no longer holds a warehouse: a Mercadona walk reads each warehouse from the price scope it writes for, so the two cannot disagree (plan 0108).',
   })
   @IsOptional()
   @IsObject()

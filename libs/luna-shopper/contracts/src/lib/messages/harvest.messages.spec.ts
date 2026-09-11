@@ -1,3 +1,4 @@
+import { DEFAULT_SCOPE_PRIORITY, PriceScopeKind } from '../enums/catalog.enums';
 import { CONTENT_LOCALES } from './catalog.messages';
 import {
   ADAPTER_CAPABILITIES,
@@ -26,6 +27,7 @@ describe('adapterCapabilities', () => {
       listsItsOwnStores: false,
       hasProductPages: false,
       printedLocale: null,
+      walkablePriorities: null,
     });
   });
 
@@ -62,6 +64,33 @@ describe('adapterCapabilities', () => {
     // both cases the operator names the language, because nobody else can.
     expect(ADAPTER_CAPABILITIES['osm-places'].printedLocale).toBeNull();
     expect(ADAPTER_CAPABILITIES['manual'].printedLocale).toBeNull();
+  });
+
+  it('lets a Mercadona walk write REGION scopes and nothing else', () => {
+    // The switch an operator asked for, and it lives on the adapter rather than
+    // in the runner (plan 0108, D5). A NATIONAL row for this chain is an
+    // operator's summary and a STORE row is a hand entered price, and a crawl of
+    // one warehouse may claim neither.
+    const band = ADAPTER_CAPABILITIES['mercadona-api'].walkablePriorities;
+    expect(band).toEqual({
+      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+    });
+    expect(band?.min).toBeGreaterThan(
+      DEFAULT_SCOPE_PRIORITY[PriceScopeKind.STORE]
+    );
+    expect(band?.max).toBeLessThan(
+      DEFAULT_SCOPE_PRIORITY[PriceScopeKind.NATIONAL]
+    );
+  });
+
+  it('states no band for an adapter whose walk selects no scope', () => {
+    // A band is about scopes a run is given. DEZA writes no price, Carrefour
+    // takes one default the operator chose, and LIDL creates its own regions
+    // from the week's offers, so none of the three has anything to refuse.
+    for (const key of ['deza-web', 'carrefour-web', 'lidl-api'] as const) {
+      expect(ADAPTER_CAPABILITIES[key].walkablePriorities).toBeNull();
+    }
   });
 
   it('says every storefront this build reads prints Spanish', () => {

@@ -503,8 +503,8 @@ export class SourceEntryService {
     ) {
       return null;
     }
-    const warehouse = source.config?.['warehouse'];
-    if (typeof warehouse !== 'string' || warehouse.length === 0) {
+    const warehouse = await this.anyWarehouse(entry.supermarketId);
+    if (warehouse === null) {
       return null;
     }
 
@@ -524,6 +524,32 @@ export class SourceEntryService {
       // other one later.
       this.logger.warn(
         `Could not fetch the English name for ${entry.externalId}: ${String(error)}`
+      );
+      return null;
+    }
+  }
+
+  /**
+   * A warehouse of this chain's, for a read that does not care which one.
+   *
+   * **The warehouse is a price scope's own `externalKey`** and is no longer a
+   * field on the source row (plan 0108, D2). It used to be `config.warehouse`,
+   * one string for the whole chain, and deleting it rather than deprecating it
+   * is the point: leaving two answers in place leaves the wrong one with no
+   * error attached.
+   *
+   * Any of them will do here. The detail endpoint answers for every warehouse
+   * that stocks the product, and an English name is the same string in all of
+   * them, so this takes the first scope that carries a key rather than asking
+   * an operator to choose one for a name.
+   */
+  private async anyWarehouse(supermarketId: string): Promise<string | null> {
+    try {
+      const scopes = await this.catalog.listAllPriceScopes(supermarketId);
+      return scopes.find((scope) => scope.externalKey)?.externalKey ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `Could not read the scopes of ${supermarketId}: ${String(error)}`
       );
       return null;
     }

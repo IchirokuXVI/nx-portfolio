@@ -123,6 +123,26 @@ export class CatalogClient {
   }
 
   /**
+   * Every scope one chain holds, paged to the end.
+   *
+   * Two callers need the whole set and neither can page: the spawn checks the
+   * scopes a walk was given against what the adapter may write (plan 0108,
+   * section 4), and `RunScopeResolver` builds the key to id map a run resolves
+   * every price through. A chain's scopes are a handful to a few hundred rows,
+   * so reading them all is two or three round trips and not a table scan.
+   */
+  async listAllPriceScopes(supermarketId: string): Promise<PriceScopeView[]> {
+    const held: PriceScopeView[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.listPriceScopes(supermarketId, cursor);
+      held.push(...page.items);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return held;
+  }
+
+  /**
    * Step 2 of the matching ladder. A lookup rather than a search: EAN is unique
    * when present, so it either finds the one item or finds nothing, and finding
    * nothing is a normal answer.

@@ -142,19 +142,13 @@ export class RunScopeResolver {
       return this.held;
     }
     const held = new Map<string, string>();
-    let cursor: string | undefined;
-    do {
-      const page = await this.catalog.listPriceScopes(
-        this.supermarketId,
-        cursor
-      );
-      for (const scope of page.items) {
-        if (scope.externalKey) {
-          held.set(scope.externalKey, scope.id);
-        }
+    for (const scope of await this.catalog.listAllPriceScopes(
+      this.supermarketId
+    )) {
+      if (scope.externalKey) {
+        held.set(scope.externalKey, scope.id);
       }
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor);
+    }
     this.held = held;
     return held;
   }
