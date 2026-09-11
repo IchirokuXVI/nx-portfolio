@@ -1,0 +1,205 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ ONLY ONE LIST ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ONLY GROCERIES &middot; the owner&rsquo;s list filter; lines on no list yet stay, at the end, named as such</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Saturday big shop</div>
+        <div style="display: flex; align-items: center; padding: 0 6px;">
+          <span style="width: 26px; height: 26px; border-radius: 999px; background: #7c3aed; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
+          <span style="width: 26px; height: 26px; border-radius: 999px; background: #2563eb; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">D</span>
+          <span style="width: 26px; height: 26px; border-radius: 999px; background: #262b40; border: 2px dashed #6f7899; color: #c2c8db; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">G</span>
+        </div>
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="m8.2 10.9 6.6-3.8M8.2 13.1l6.6 3.8"/></svg>
+        </div>
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>
+        </div>
+      </div>
+
+      <div style="flex: 0 0 auto; padding: 0 8px 0 20px; display: flex; align-items: center;">
+        <span style="flex: 1 1 auto; font-size: 13px; color: #98a0bb; font-variant-numeric: tabular-nums;">4 of 12 got <span style="color: #6f7899;">&middot; 1 not available</span></span>
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+        </div>
+        <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"/><circle cx="14.5" cy="7" r="2.3"/><circle cx="9.5" cy="17" r="2.3"/></svg>
+          <span style="position: absolute; top: 4px; right: 3px; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: #ffb454; color: #0a0c14; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid #0a0c14;">1</span>
+        </div>
+      </div>
+
+      <div style="flex: 0 0 auto; padding: 2px 20px 10px; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden;">
+        <span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 12px; border-radius: 999px; border: 1px solid rgba(255,180,84,0.4); background: rgba(255,180,84,0.08); color: #ffd39a; font-size: 13px; font-weight: 600;">Only Groceries <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffd39a" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
+        <span style="margin-left: auto; font-size: 12px; color: #6f7899; font-variant-numeric: tabular-nums;">8 of 12</span>
+      </div>
+
+      <div style="flex: 1 1 auto; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #ffb454; background: linear-gradient(90deg, #ffb454 50%, transparent 50%);"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Eggs</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Huevos L, 12 &middot; 1.99&nbsp;&euro;</div>
+            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">Marc got 2 &middot; from Weekly shop and Groceries</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">10<span style="font-size: 10px; font-weight: 500; color: #6f7899;">of 12</span></span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; background: #34d399; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3; color: #98a0bb;">Olive oil</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Ana got it &middot; from Groceries</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: #6f7899;">0</span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Tomatoes</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Tomate rama, 1 kg &middot; 1.89&nbsp;&euro;</div>
+            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">from Groceries &middot; Parents&rsquo; house</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">6</span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Chicken thighs</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Contramuslos, 1 kg &middot; 3.95&nbsp;&euro;</div>
+            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">from Groceries &middot; Parents&rsquo; house</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Bananas</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Pl&aacute;tano de Canarias, 1 kg &middot; 1.35&nbsp;&euro;</div>
+            <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">from Groceries &middot; Parents&rsquo; house</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Birthday candles</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Added by Dani &middot; from Groceries</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
+        </div>
+
+        <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 16px 16px 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">On no list yet</span>
+          <span style="font-size: 12px; color: #6f7899;">added in the shop</span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Something for the cat</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Added by Marc</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
+        </div>
+
+        <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Sparkling water</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Added by Guest 2 &middot; Waiting for that list to approve it</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">2</span>
+        </div>
+
+      </div>
+
+      <div style="flex: 0 0 auto; padding: 10px 16px 14px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px; align-items: center;">
+        <div style="flex: 1 1 auto; height: 44px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 14px; color: #6f7899; font-size: 15px;">Add a line</div>
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ A SEARCH THAT MATCHES NOTHING ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NO MATCH &middot; the search hid every line; the screen says so, and the composer still adds one</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Saturday big shop</div>
+        <div style="display: flex; align-items: center; padding: 0 6px;">
+          <span style="width: 26px; height: 26px; border-radius: 999px; background: #7c3aed; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
+          <span style="width: 26px; height: 26px; border-radius: 999px; background: #2563eb; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">D</span>
+        </div>
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="m8.2 10.9 6.6-3.8M8.2 13.1l6.6 3.8"/></svg>
+        </div>
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>
+        </div>
+      </div>
+
+      <div style="flex: 0 0 auto; padding: 2px 8px 6px 16px; display: flex; align-items: center; gap: 4px;">
+        <div style="flex: 1 1 auto; height: 44px; border-radius: 12px; background: #161a28; border: 1px solid #60a5fa; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 12px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+          <span style="flex: 1 1 auto; font-size: 16px; color: #f7f8fc;">yogurt<span style="display: inline-block; width: 1.5px; height: 18px; background: #f7f8fc; vertical-align: -3px; margin-left: 1px;"></span></span>
+          <span style="width: 28px; height: 28px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
+        </div>
+        <div style="height: 44px; padding: 0 10px 0 6px; display: flex; align-items: center; font-size: 14.5px; font-weight: 500; color: #ffb454;">Cancel</div>
+      </div>
+
+      <div style="flex: 0 0 auto; padding: 0 20px 8px; font-size: 12px; color: #6f7899; font-variant-numeric: tabular-nums;">0 of 12 lines</div>
+
+      <div style="flex: 1 1 auto; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 56px 32px 0; text-align: center;">
+        <div style="font-size: 16px; font-weight: 600; color: #f7f8fc;">No line matches &ldquo;yogurt&rdquo;</div>
+        <div style="margin-top: 6px; font-size: 13.5px; line-height: 1.5; color: #98a0bb;">Add it below and it goes on this list.</div>
+
+        <div style="margin-top: 260px; padding: 14px 16px; font-size: 12px; line-height: 1.5; color: #525a78; border-top: 1px dashed rgba(255,255,255,0.1); text-align: left;">
+          Distinct from the basket&rsquo;s own empty state (&ldquo;Nothing on this list&rdquo;), because the lines exist and the search hid them. The count above says so too. The composer stays: the thing somebody searched for and did not find is very often the next line. Submitting it clears the search so the new row is seen landing.
+        </div>
+      </div>
+
+      <div style="flex: 0 0 auto; padding: 10px 16px 14px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px; align-items: center;">
+        <div style="flex: 1 1 auto; height: 44px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 14px; color: #f7f8fc; font-size: 15px;">yogurt</div>
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
