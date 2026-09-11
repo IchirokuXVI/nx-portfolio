@@ -1,3 +1,5 @@
+> **PR:** [#353](https://github.com/IchirokuXVI/nx-portfolio/pull/353)
+
 # 0078: prices from one shop
 
 > Last of the five basket finding plans (`0074` to `0078`). Server half: backend `0109`,
