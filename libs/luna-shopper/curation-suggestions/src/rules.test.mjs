@@ -368,6 +368,46 @@ test('a CREATE carrying no item is not a document the schema allows', () => {
   }
 });
 
+test('a half filled item is refused by the loose root, with no alternation', () => {
+  // The claude engine never sees the alternatives: the Messages API refuses an
+  // `anyOf` at the top level of a tool schema, so `claude-cli.mjs` strips it.
+  // The loose root is therefore the whole of what holds sonnet to a shape, and
+  // 26 of 80 SuperCash rows were re-asked for `a CREATE needs
+  // "item.defaultUnit"` before it required anything.
+  const { anyOf, ...root } = SCHEMA;
+  assert.ok(anyOf);
+
+  assert.equal(validates(root, CREATE), true);
+  for (const field of ['nameEs', 'category', 'defaultUnit']) {
+    const stripped = { ...CREATE.item };
+    delete stripped[field];
+    assert.equal(validates(root, { ...CREATE, item: stripped }), false, field);
+  }
+
+  // `item` stays nullable at the root, because the root describes a LINK and a
+  // REVIEW too and neither carries one. `required` applies to an object, so a
+  // null item is left alone.
+  assert.equal(
+    validates(root, {
+      decision: 'REVIEW',
+      item: null,
+      confidence: 0.5,
+      issues: [],
+      reasoning: 'Rule 1 cannot be tested.',
+    }),
+    true
+  );
+
+  // The two halves agree by construction: every alternative that carries an
+  // item requires the same three fields.
+  for (const alternative of anyOf) {
+    const item = alternative.properties.item;
+    if (item) {
+      assert.deepEqual(item.required, SCHEMA.properties.item.required);
+    }
+  }
+});
+
 test('a LINK naming no target is not a document the schema allows', () => {
   const link = {
     decision: 'LINK',

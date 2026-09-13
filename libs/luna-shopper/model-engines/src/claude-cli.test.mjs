@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   MINIMAL_ARGS,
+  ROOT_ALTERNATION_KEYWORDS,
   TOOL_SHAPE_HINT,
   claudeChildEnv,
   makeClaudeEngine,
   readClaudeEnvelope,
+  toolInputSchema,
 } from './claude-cli.mjs';
 import { emptyUsage } from './usage.mjs';
 
@@ -60,6 +62,93 @@ test('the claude engine carries the rules and the shape as flags, not as prose',
 
   // The packet is the whole of stdin: the rules reach the model once.
   assert.equal(seen[0].options.input, 'the packet');
+});
+
+// ---------------------------------------------------------------------------
+// The root alternation a tool schema may not carry
+// ---------------------------------------------------------------------------
+
+/** A decider's schema, in the shape `curation-suggestions` builds one. */
+const ALTERNATED = {
+  type: 'object',
+  properties: {
+    decision: { type: 'string', enum: ['LINK', 'CREATE', 'REVIEW'] },
+    item: { type: ['object', 'null'], required: ['nameEs'] },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+  },
+  required: ['decision', 'confidence'],
+  anyOf: [
+    {
+      type: 'object',
+      properties: { decision: { const: 'CREATE' } },
+      required: ['decision', 'item'],
+    },
+    {
+      type: 'object',
+      properties: { decision: { const: 'REVIEW' } },
+      required: ['decision'],
+    },
+  ],
+};
+
+test('the argv carries no root alternation, and the rest of the schema is untouched', async () => {
+  const seen = [];
+  const engine = makeClaudeEngine({
+    spawn: async (command, args) => {
+      seen.push(args);
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+  });
+
+  await engine.ask('the packet', { system: 'THE RULES', schema: ALTERNATED });
+
+  const sent = JSON.parse(seen[0][seen[0].indexOf('--json-schema') + 1]);
+  // `input_schema does not support oneOf, allOf, or anyOf at the top level`
+  // is a 400, and the CLI reports it as an api_error with an empty stderr.
+  for (const keyword of ROOT_ALTERNATION_KEYWORDS) {
+    assert.ok(!(keyword in sent), keyword);
+  }
+  // Everything else arrives as it was written. The loose root describes every
+  // answer on its own, which is what makes dropping the alternation safe.
+  const { anyOf, ...rest } = ALTERNATED;
+  assert.ok(anyOf);
+  assert.deepEqual(sent, rest);
+});
+
+test('toolInputSchema touches only the root, and only when it has to', () => {
+  // A schema with no root alternation is passed through byte for byte, and is
+  // the same object rather than a copy of one.
+  const plain = { type: 'object', properties: { a: { type: 'string' } } };
+  assert.equal(toolInputSchema(plain), plain);
+  assert.deepEqual(JSON.parse(JSON.stringify(plain)), plain);
+
+  // A nested alternation is what the API refuses only at the top level, so it
+  // survives.
+  const nested = {
+    type: 'object',
+    properties: { a: { anyOf: [{ type: 'string' }, { type: 'null' }] } },
+  };
+  assert.equal(toolInputSchema(nested), nested);
+
+  // Every keyword the API names, together and one at a time.
+  const all = { type: 'object', anyOf: [], oneOf: [], allOf: [], keep: 1 };
+  assert.deepEqual(toolInputSchema(all), { type: 'object', keep: 1 });
+  for (const keyword of ROOT_ALTERNATION_KEYWORDS) {
+    const one = { type: 'object', [keyword]: [{ type: 'object' }] };
+    assert.deepEqual(toolInputSchema(one), { type: 'object' });
+  }
+
+  // The caller's object is never mutated: the engine builds a copy, so a
+  // schema shared with the ollama engine keeps its alternatives.
+  const shared = { ...ALTERNATED };
+  toolInputSchema(shared);
+  assert.ok(Array.isArray(shared.anyOf));
+
+  // Nothing to do, and nothing that throws.
+  assert.equal(toolInputSchema(null), null);
+  assert.equal(toolInputSchema(undefined), undefined);
 });
 
 test('a schema brings the tool shape hint with it, and nothing else does', async () => {

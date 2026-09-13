@@ -86,6 +86,55 @@ export const MINIMAL_ARGS = [
  * is no tool to name, and it belongs to this adapter rather than to a decider's
  * `prompt.md` because the Messages API adapter has no such tool.
  */
+/**
+ * The keywords the Messages API refuses at the top level of a tool schema.
+ *
+ * `--json-schema` is not a response format (see above): the CLI turns it into a
+ * synthetic tool named `StructuredOutput`, and a tool's `input_schema` is held
+ * to a narrower subset of JSON Schema than a response format is. An alternation
+ * at the root of one is rejected outright:
+ *
+ *     API Error: 400 tools.11.custom.input_schema: input_schema does not
+ *     support oneOf, allOf, or anyOf at the top level
+ *
+ * What that looks like from here is not an error message. The CLI answers
+ * `terminal_reason: api_error` with zero tokens and exits 1 with an empty
+ * stderr, so a run dies on its first row after three retries having been told
+ * nothing at all.
+ */
+export const ROOT_ALTERNATION_KEYWORDS = ['anyOf', 'oneOf', 'allOf'];
+
+/**
+ * A schema this adapter can send, which is the caller's minus a root
+ * alternation.
+ *
+ * Nothing is lost by dropping it. A decider that writes one writes it beside a
+ * root that already describes every field of every answer, precisely so that an
+ * engine which cannot read the alternatives is no worse off than it was before
+ * they existed (`curation-suggestions`, plan 0003). Ollama is the engine the
+ * alternation is for: llama.cpp reads `anyOf` before `properties` and builds a
+ * grammar that cannot emit a wrong shape at all, which took the re-asks of an
+ * eighty row run from 31 to 8. This adapter is held to the loose root and to
+ * the validators behind it, exactly as it was before the alternatives existed.
+ *
+ * Only the root is touched. An alternation nested inside a property is what the
+ * API refuses only at the top level, so it is left alone, and a schema with no
+ * root alternation is passed through as it arrived.
+ */
+export function toolInputSchema(schema) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+    return schema;
+  }
+  if (!ROOT_ALTERNATION_KEYWORDS.some((keyword) => keyword in schema)) {
+    return schema;
+  }
+  const copy = { ...schema };
+  for (const keyword of ROOT_ALTERNATION_KEYWORDS) {
+    delete copy[keyword];
+  }
+  return copy;
+}
+
 export const TOOL_SHAPE_HINT = [
   '',
   '## How to send your answer',
@@ -223,7 +272,11 @@ export function makeClaudeEngine({
       model,
       ...(effort ? ['--effort', effort] : []),
       ...(withHint ? ['--system-prompt', withHint] : []),
-      ...(schema ? ['--json-schema', JSON.stringify(schema)] : []),
+      // The schema goes through `toolInputSchema` and never raw: a root
+      // alternation is a 400 from the API and an empty stderr from the CLI.
+      ...(schema
+        ? ['--json-schema', JSON.stringify(toolInputSchema(schema))]
+        : []),
       ...MINIMAL_ARGS,
     ];
 

@@ -279,7 +279,27 @@ export function buildDecisionSchema({ categories, units }) {
   };
   const reasoning = { type: 'string', maxLength: REASONING_MAX };
 
-  /** The item as the root describes it: every field optional and nullable. */
+  /**
+   * The item as the root describes it: still nullable, and no longer half
+   * filled.
+   *
+   * `item` stays `["object", "null"]` here, because the root has to describe a
+   * LINK and a REVIEW too and neither carries one. What it does now say is that
+   * **an item which is present is a complete one**: the three fields
+   * `checkDecisionShape` refuses a CREATE without are `required`, which a
+   * validator only applies to an object and so leaves `null` alone.
+   *
+   * That one line is what the claude engine gets, because the Messages API
+   * refuses an alternation at the top level of a tool schema and the adapter
+   * strips it (`claude-cli.mjs`, `toolInputSchema`). It is the failure sonnet
+   * actually had: 26 of 80 SuperCash rows were re-asked for `a CREATE needs
+   * "item.defaultUnit"`, which is the same defect class as the missing `item`
+   * and is closed here without the alternation.
+   *
+   * The two halves agree by construction. Every `anyOf` alternative that
+   * carries an item requires the same three fields, so an answer the grammar
+   * lets Ollama produce is an answer this root also accepts.
+   */
   const looseItem = {
     type: ['object', 'null'],
     properties: {
@@ -291,6 +311,7 @@ export function buildDecisionSchema({ categories, units }) {
       category: { type: ['string', 'null'], enum: [...categories, null] },
       ean: nullableString,
     },
+    required: ['nameEs', 'category', 'defaultUnit'],
   };
 
   /**
