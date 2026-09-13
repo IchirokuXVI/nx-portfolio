@@ -52,6 +52,22 @@ export const KEEP_ALIVE = '30m';
 export const NUM_CTX_CEILING = 16384;
 
 /**
+ * The most tokens one answer may generate, unless `OLLAMA_NUM_PREDICT` says
+ * otherwise.
+ *
+ * Ollama's own default is unlimited, and unlimited is not a safe setting for a
+ * pool. A request that loops holds one server slot for as long as the model
+ * keeps writing, and on a server with four slots that is a quarter of the
+ * machine spent on an answer nobody will be able to parse. A curation decision
+ * is a few hundred tokens of JSON, so this ceiling is several times the largest
+ * honest answer and is only ever reached by a reply that has gone wrong.
+ *
+ * A truncated answer is not silently accepted: it is not one JSON object, so
+ * `decideRow` asks again and then records a REVIEW.
+ */
+export const NUM_PREDICT_CEILING = 1024;
+
+/**
  * The most generous characters per token this workload could honestly run at.
  *
  * Text here was measured between 2.6 and 3.3 characters per token at both ends
@@ -145,6 +161,64 @@ export function wideBatchNotice(width) {
 }
 
 /**
+ * The one line stderr gets when the server answered the first round one by one.
+ *
+ * `OLLAMA_BATCH` only pays when the server it talks to runs
+ * `OLLAMA_NUM_PARALLEL` at least that high. The two knobs belong to two
+ * machines and nothing in Ollama's API reports the server's value, so the only
+ * way to learn it is to send a round and watch how it comes back. A server
+ * running one request at a time turned a measured 2.2x into 6% and said
+ * nothing, which is the whole reason this line exists.
+ */
+export function serializedNotice(width) {
+  return `OLLAMA_BATCH is ${width}, and the server answered the first round one request at a time, so batching is buying nothing. Set OLLAMA_NUM_PARALLEL to ${width} or more on the machine running Ollama and restart it. On Windows that is a user environment variable, then the Ollama tray app restarted; the server writes OLLAMA_NUM_PARALLEL:<n> into %LOCALAPPDATA%\\Ollama\\server.log when it starts.\n`;
+}
+
+/**
+ * Whether a round of requests came back as a staircase rather than together.
+ *
+ * Every request of the first round is sent at once, so a server with enough
+ * slots answers them in about the same time and finishes them together, while a
+ * server with one slot runs them end to end: the first takes `d`, the second
+ * `2d`, the Nth `Nd`, and the finish times are `d` apart all the way up.
+ *
+ * Both halves are asked, and neither on its own would do. A ratio alone is met
+ * by one genuinely long row among short ones. A spread of finish times alone is
+ * met by a parallel server whose rows differ in length. Together they describe
+ * the one shape a serialized server has and a parallel server cannot.
+ *
+ * It is deliberately a reading of the timings and never a claim about the
+ * server's configuration, which this adapter cannot see. A false positive costs
+ * one line on stderr.
+ */
+export function looksSerialized(timings) {
+  const width = timings.length;
+  if (width < 2 || timings.some((entry) => !entry)) {
+    return false;
+  }
+  const durations = timings.map((entry) => entry.finishedAt - entry.startedAt);
+  const fastest = Math.min(...durations);
+  const slowest = Math.max(...durations);
+  // A round that took no measurable time says nothing, and dividing by it would
+  // report every fast server as serialized.
+  if (!(fastest > 0)) {
+    return false;
+  }
+  if (slowest < (width - 0.5) * fastest) {
+    return false;
+  }
+  const finishes = timings
+    .map((entry) => entry.finishedAt)
+    .sort((first, second) => first - second);
+  for (let index = 1; index < finishes.length; index++) {
+    if (finishes[index] - finishes[index - 1] < fastest / 2) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * How many requests `OLLAMA_BATCH` asks for, or the default when it says
  * nothing.
  *
@@ -199,9 +273,30 @@ export function modelContextLength(shown) {
  * The local Ollama path.
  *
  * `fetchImpl` is the injected test seam the whole suite runs on, so none of
- * this needs a server. `env` reaches `create` already, which is how the three
- * knobs this adapter has (`OLLAMA_HOST`, `OLLAMA_NUM_CTX` and `OLLAMA_BATCH`)
- * get here without a new flag.
+ * this needs a server. `env` reaches `create` already, which is how the four
+ * knobs this adapter has get here without a new flag:
+ *
+ * - `OLLAMA_HOST`: where the server listens, default `http://localhost:11434`.
+ * - `OLLAMA_NUM_CTX`: the widest context window to ask for, default 16384.
+ * - `OLLAMA_NUM_PREDICT`: the most tokens one answer may generate, default
+ *   1024.
+ * - `OLLAMA_BATCH`: how many requests the pool holds in flight, default 4.
+ *
+ * **`OLLAMA_BATCH` is a client knob and it only pays against a server
+ * configured to match.** Ollama answers `OLLAMA_NUM_PARALLEL` requests at a
+ * time and queues the rest, so a batch of four against a server running one
+ * slot is four requests run end to end and roughly the time of walking the rows
+ * one by one. Set `OLLAMA_NUM_PARALLEL` on the machine running Ollama, to the
+ * same number as `OLLAMA_BATCH` or higher. On Windows that is a user
+ * environment variable and then the Ollama tray app restarted, and the server
+ * writes `OLLAMA_NUM_PARALLEL:<n>` into `%LOCALAPPDATA%\Ollama\server.log`
+ * when it starts, which is the one place the running value can be read. The
+ * adapter cannot read it over the API, so it watches the first round instead
+ * and writes `serializedNotice` to stderr when the answers came back one at a
+ * time.
+ *
+ * `now` is the clock the first round is timed on, injected so the notice can be
+ * tested without a slow server.
  */
 export function makeOllamaEngine({
   fetchImpl = fetch,
@@ -212,11 +307,15 @@ export function makeOllamaEngine({
   retryDelays = RETRY_DELAYS,
   stderr = process.stderr,
   signal = null,
+  now = () => Date.now(),
 }) {
   const host = ollamaHost(env);
   const ceiling = positiveInteger(env?.OLLAMA_NUM_CTX) ?? NUM_CTX_CEILING;
+  const predictCeiling =
+    positiveInteger(env?.OLLAMA_NUM_PREDICT) ?? NUM_PREDICT_CEILING;
   const width = ollamaBatchSize(env);
   let noticed = false;
+  let serialized = false;
 
   /**
    * The answer to `/api/show`, asked once and held for the life of the engine.
@@ -309,7 +408,16 @@ export function makeOllamaEngine({
       //
       // `temperature: 0` because a curation row has one right answer and a
       // rerun of it gives the same one.
-      options: { num_ctx: numCtx, temperature: 0 },
+      //
+      // `num_predict` is always sent too, and for the pool rather than for the
+      // row: Ollama generates without a limit by default, and one reply that
+      // loops holds a server slot for minutes and blocks the requests beside
+      // it. See `NUM_PREDICT_CEILING`.
+      options: {
+        num_ctx: numCtx,
+        num_predict: predictCeiling,
+        temperature: 0,
+      },
       messages,
     });
 
@@ -425,6 +533,13 @@ export function makeOllamaEngine({
    * `num_ctx` for the whole engine, the truncation floor measured per reply,
    * `think`, `format`, `keep_alive` and `temperature: 0`. The pool decides when
    * a request is sent and nothing about what is in it.
+   *
+   * **The first round is timed, and a serialized server is named.** The width
+   * this pool holds in flight only pays against a server whose own
+   * `OLLAMA_NUM_PARALLEL` is at least as high, and nothing in Ollama's API
+   * reports that number. So the first round, which is the one round every
+   * request of starts at the same moment, is measured, and a staircase gets one
+   * line on stderr. See `looksSerialized` and `serializedNotice`.
    */
   async function askMany(prompts, options = {}) {
     if (width > OLLAMA_WIDEST_MEASURED_BATCH && !noticed) {
@@ -434,6 +549,14 @@ export function makeOllamaEngine({
 
     const answers = new Array(prompts.length);
     let next = 0;
+
+    // The first round is the prompts the workers take before any of them has
+    // answered, which is one prompt per worker. Only those are timed: every
+    // later request starts when a slot came free rather than at the same moment
+    // as its neighbours, so their durations say nothing about the server.
+    const roundWidth = Math.max(1, Math.min(width, prompts.length));
+    const timings = new Array(roundWidth).fill(null);
+    let timed = 0;
 
     const worker = async () => {
       for (;;) {
@@ -448,10 +571,27 @@ export function makeOllamaEngine({
           return;
         }
         next += 1;
+        const startedAt = index < roundWidth ? now() : 0;
         // The answer is written to the slot the prompt came from, so the order
         // the answers are read in is the order they were asked in and not the
         // order they finished in.
         answers[index] = await askEntry(ask, prompts[index], options, signal);
+        if (index < roundWidth) {
+          timings[index] = { startedAt, finishedAt: now() };
+          timed += 1;
+          // Read once the whole round is in, and at most once for the life of
+          // the engine: the operator is told what to change, and repeating it
+          // every batch would bury the run's own output.
+          if (
+            timed === roundWidth &&
+            !serialized &&
+            roundWidth > 1 &&
+            looksSerialized(timings)
+          ) {
+            serialized = true;
+            stderr.write(serializedNotice(width));
+          }
+        }
       }
     };
 

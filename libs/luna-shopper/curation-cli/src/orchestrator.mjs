@@ -206,6 +206,14 @@ export async function fetchBatch(decider, width) {
  * with the signal's own reason, the rows already recorded stay recorded, and
  * nothing still in flight is applied. A batch is not a transaction and was
  * never going to be one, which is what makes a stopped run resumable.
+ *
+ * **`limit` stops handing rows to the model after that many** (plan 0003), and
+ * is the whole of what it does. It is not a stop: the rows already handed out
+ * are decided, the report is written over them, and the run ends the way a
+ * finished one does, so the exit code is 0 and the decisions file is a file
+ * `--apply` takes. It narrows the batch it asks for rather than trimming one it
+ * already fetched, because a fetched row carries a handout the decider is
+ * holding open and nothing would ever close it.
  */
 export async function runCuration({
   slots,
@@ -216,6 +224,7 @@ export async function runCuration({
   mainUser = null,
   model = null,
   chain = null,
+  limit = null,
   services = REHEARSAL_SERVICES,
   waitForGateway,
   stripFence,
@@ -260,6 +269,9 @@ export async function runCuration({
     runId = opened.runId;
     const total = opened.remaining ?? 0;
     stderr.write(`run ${opened.runId}: ${total} rows\n`);
+    if (limit !== null) {
+      stderr.write(`limit ${limit}: the walk ends after ${limit} rows\n`);
+    }
 
     // How many rows one round of the walk asks about: what the engine holds in
     // flight, and never more than the decider will hand out at once. There is
@@ -274,16 +286,28 @@ export async function runCuration({
       )
     );
 
+    let handed = 0;
+
     walk: for (;;) {
       if (signal?.aborted) {
         stopped = true;
         break;
       }
+      if (limit !== null && handed >= limit) {
+        stderr.write(`limit ${limit} reached: ${handed} rows handed out\n`);
+        break;
+      }
       try {
-        const batch = await fetchBatch(decider, width);
+        // Never wider than the rows the limit has left, so the batch that ends
+        // the walk is the exact remainder rather than a batch whose tail would
+        // have to be thrown away with its handouts still open.
+        const room =
+          limit === null ? width : Math.min(width, Math.max(1, limit - handed));
+        const batch = await fetchBatch(decider, room);
         if (batch.rows.length === 0) {
           break;
         }
+        handed += batch.rows.length;
 
         // One call for the whole batch, and the whole of the saving. A batch is
         // composed so that no two of its rows can be about the same product, so

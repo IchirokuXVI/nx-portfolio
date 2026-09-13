@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   NUM_CTX_CEILING,
+  NUM_PREDICT_CEILING,
   OLLAMA_DEFAULT_BATCH,
   OLLAMA_DEFAULT_HOST,
   OLLAMA_MAX_BATCH,
+  looksSerialized,
   makeOllamaEngine,
   modelContextLength,
   ollamaBatchSize,
@@ -729,4 +731,132 @@ test('an empty batch is an empty answer and asks nothing', async () => {
   const fake = pooledServer();
   assert.deepEqual(await engineOn(fake).askMany([]), []);
   assert.deepEqual(fake.seen.chat, []);
+});
+
+// ---------------------------------------------------------------------------
+// num_predict, and the server that answers one request at a time
+// ---------------------------------------------------------------------------
+
+test('every request caps generation, and OLLAMA_NUM_PREDICT moves the cap', async () => {
+  const fake = server();
+  await engineOn(fake).ask('the packet', { system: 'THE RULES' });
+  // Ollama generates without a limit by default, and one reply that loops holds
+  // a server slot for minutes and blocks the requests beside it.
+  assert.equal(fake.seen.chat[0].body.options.num_predict, NUM_PREDICT_CEILING);
+
+  const moved = server();
+  await engineOn(moved, { env: { OLLAMA_NUM_PREDICT: '256' } }).ask('x');
+  assert.equal(moved.seen.chat[0].body.options.num_predict, 256);
+
+  // A value this cannot read is the ceiling rather than an unlimited request.
+  const bad = server();
+  await engineOn(bad, { env: { OLLAMA_NUM_PREDICT: 'lots' } }).ask('x');
+  assert.equal(bad.seen.chat[0].body.options.num_predict, NUM_PREDICT_CEILING);
+});
+
+/**
+ * A clock the test drives, so a staircase does not cost a test four seconds.
+ *
+ * `looksSerialized` reads nothing but the numbers this answers, so a fake
+ * server that runs instantly can still describe a server that took a minute.
+ */
+function clock(readings) {
+  const queue = [...readings];
+  return () => (queue.length > 1 ? queue.shift() : queue[0]);
+}
+
+test('looksSerialized knows a staircase from a round that answered together', () => {
+  // d, 2d, 3d, 4d from one start, which is what one slot produces.
+  assert.equal(
+    looksSerialized([
+      { startedAt: 0, finishedAt: 100 },
+      { startedAt: 0, finishedAt: 200 },
+      { startedAt: 0, finishedAt: 300 },
+      { startedAt: 0, finishedAt: 400 },
+    ]),
+    true
+  );
+
+  // Four slots: they start together and they finish together.
+  assert.equal(
+    looksSerialized([
+      { startedAt: 0, finishedAt: 100 },
+      { startedAt: 0, finishedAt: 110 },
+      { startedAt: 0, finishedAt: 95 },
+      { startedAt: 0, finishedAt: 120 },
+    ]),
+    false
+  );
+
+  // One genuinely long row among short ones clears the ratio and fails the
+  // spread, which is why both halves are asked.
+  assert.equal(
+    looksSerialized([
+      { startedAt: 0, finishedAt: 100 },
+      { startedAt: 0, finishedAt: 105 },
+      { startedAt: 0, finishedAt: 110 },
+      { startedAt: 0, finishedAt: 900 },
+    ]),
+    false
+  );
+
+  // A round of one says nothing, and neither does a round that took no
+  // measurable time.
+  assert.equal(looksSerialized([{ startedAt: 0, finishedAt: 100 }]), false);
+  assert.equal(
+    looksSerialized([
+      { startedAt: 0, finishedAt: 0 },
+      { startedAt: 0, finishedAt: 0 },
+    ]),
+    false
+  );
+});
+
+test('a server that answered the first round one by one is named once', async () => {
+  const stderr = sink();
+  const fake = pooledServer();
+  // Four starts at 0, then finishes at 100, 200, 300 and 400: the shape one
+  // slot produces. The pool takes all four prompts before any of them answers,
+  // so the clock is read four times for the starts and then once per finish.
+  const engine = engineOn(fake, {
+    stderr,
+    now: clock([0, 0, 0, 0, 100, 200, 300, 400, 1000]),
+  });
+
+  await engine.askMany(prompts(4));
+
+  assert.equal(stderr.written.length, 1);
+  assert.match(stderr.written[0], /OLLAMA_NUM_PARALLEL/);
+  assert.match(stderr.written[0], /one request at a time/);
+  // The operator is told where to read the value the server is actually
+  // running, because the API does not report it.
+  assert.match(stderr.written[0], /server\.log/);
+
+  // Once for the life of the engine: repeating it every batch would bury the
+  // run's own output.
+  await engine.askMany(prompts(4));
+  assert.equal(stderr.written.length, 1);
+});
+
+test('a server with the slots to answer together is accused of nothing', async () => {
+  const stderr = sink();
+  const engine = engineOn(pooledServer(), {
+    stderr,
+    now: clock([0, 0, 0, 0, 100, 104, 98, 110, 1000]),
+  });
+
+  await engine.askMany(prompts(4));
+  assert.deepEqual(stderr.written, []);
+});
+
+test('a batch of one is never called serialized, because one request cannot be', async () => {
+  const stderr = sink();
+  const engine = engineOn(pooledServer(), {
+    env: { OLLAMA_BATCH: '1' },
+    stderr,
+    now: clock([0, 100, 100, 300, 300, 600]),
+  });
+
+  await engine.askMany(prompts(3));
+  assert.deepEqual(stderr.written, []);
 });

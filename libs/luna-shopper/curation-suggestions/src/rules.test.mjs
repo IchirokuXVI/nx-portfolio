@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  ISSUE_DETAIL_MAX,
+  REASONING_MAX,
   buildDecisionSchema,
   buildSystemPrompt,
   carriesBrand,
+  carriesGlitch,
   carriesSize,
   indexPrivateLabels,
   loadPrivateLabels,
+  loadPromptTemplate,
   loadVocabularies,
   normalizeName,
 } from './rules.mjs';
@@ -41,6 +45,50 @@ test('carriesBrand compares normalized tokens', () => {
   assert.equal(carriesBrand('Queso Ifa Unnia curado', 'Ifa Unnia'), true);
   assert.equal(carriesBrand('Queso curado', 'Ifa Unnia'), false);
   assert.equal(carriesBrand('anything', ''), false);
+});
+
+test('carriesGlitch knows a broken word from a real one', () => {
+  assert.equal(carriesGlitch('May1onesa'), true);
+  assert.equal(carriesGlitch('Yogur de fres1a'), true);
+  assert.equal(carriesGlitch('Beb1ida de avena'), true);
+
+  assert.equal(carriesGlitch('Leche entera'), false);
+  assert.equal(carriesGlitch('Omega 3'), false);
+  assert.equal(carriesGlitch('Vitamina B12'), false);
+  assert.equal(carriesGlitch('Agua H2O'), false);
+  assert.equal(carriesGlitch('agua h2o'), false);
+  assert.equal(carriesGlitch(null), false);
+});
+
+test('carriesGlitch leaves a shade code alone, which is not negotiable', () => {
+  // A shade code is the only thing telling two shades of one line apart, and
+  // rule 1 merges anything the name does not separate. A validator that
+  // refused `n4N` would refuse every cosmetics row on the queue.
+  assert.equal(carriesGlitch('Corrector Terracotta n4N'), false);
+  assert.equal(carriesGlitch('Sombra dúo Monochrome n30'), false);
+  assert.equal(
+    carriesGlitch('Polvos compactos Terracotta Original n03'),
+    false
+  );
+  assert.equal(carriesGlitch('Protector solar spf25'), false);
+});
+
+test('the prompt names the line rule, both domains, and the glitch code', () => {
+  const template = loadPromptTemplate();
+  // A line name and a shade code stay in the name and the brand leaves it.
+  // One grocery example and two cosmetics ones, because the defect was
+  // measured on both queues and reads differently on each.
+  assert.match(template, /\+Proteínas/);
+  assert.match(template, /Delicias del mar/);
+  assert.match(template, /Monochrome n30/);
+  assert.match(template, /Terracotta Original n03/);
+  // Every code the validators can emit is named in the prompt, so a model can
+  // read its answer against the list before it sends it.
+  assert.match(template, /NAME_GLITCH/);
+  // The two caps are stated in prose as well as in the schema, because a
+  // schema `maxLength` is advice to some providers.
+  assert.match(template, new RegExp(String(REASONING_MAX)));
+  assert.match(template, new RegExp(String(ISSUE_DETAIL_MAX)));
 });
 
 test('the private label map is normalized on both sides', () => {
@@ -113,16 +161,240 @@ test('the decision schema takes its enums from the same two vocabularies', () =>
   ]);
 });
 
-test('the decision schema leaves every conditional field to the validators', () => {
+test('the decision schema leaves the semantics to the validators', () => {
   const schema = buildDecisionSchema({
     categories: ['DAIRY'],
     units: ['UNIT'],
   });
 
-  // `itemId` belongs on a LINK and nowhere else, exactly one of itemId and
-  // itemRef is allowed, and the id has to be one this row was offered. None of
-  // that is expressible here, so a schema valid answer is still refusable.
+  // The root stays the object it has always been, so an engine that reads no
+  // `anyOf` is exactly as well off as it was before the alternatives existed.
   for (const field of ['itemId', 'itemRef', 'item']) {
     assert.ok(!schema.required.includes(field), field);
   }
+  // The id a LINK names still has to be one of the candidates this row was
+  // offered, and nothing expressible here can say so.
+  assert.equal(JSON.stringify(schema).includes('candidate'), false);
+});
+
+// ---------------------------------------------------------------------------
+// The four shapes a decision can take (plan 0003)
+// ---------------------------------------------------------------------------
+
+/**
+ * The keywords the schema is allowed to use.
+ *
+ * This is the real constraint and not a stylistic one: the schema is converted
+ * to a grammar by llama.cpp on the Ollama path, and that converter understands
+ * a subset of JSON Schema. `if`/`then` is the obvious way to write a
+ * discriminated shape and is not in the subset, which is why the alternatives
+ * are an `anyOf`. Asserting the keyword set is how a later edit that reaches
+ * for an unsupported one is caught here rather than by a run that quietly
+ * stops constraining anything.
+ */
+const ALLOWED_KEYWORDS = new Set([
+  'anyOf',
+  'const',
+  'enum',
+  'items',
+  'maxLength',
+  'maximum',
+  'minimum',
+  'properties',
+  'required',
+  'type',
+]);
+
+function keywordsOf(schema, found = new Set()) {
+  if (!schema || typeof schema !== 'object') {
+    return found;
+  }
+  if (Array.isArray(schema)) {
+    for (const entry of schema) {
+      keywordsOf(entry, found);
+    }
+    return found;
+  }
+  for (const [key, value] of Object.entries(schema)) {
+    found.add(key);
+    // Under `properties` the keys are field names rather than keywords.
+    if (key === 'properties') {
+      for (const child of Object.values(value ?? {})) {
+        keywordsOf(child, found);
+      }
+      continue;
+    }
+    if (key === 'required' || key === 'enum') {
+      continue;
+    }
+    keywordsOf(value, found);
+  }
+  return found;
+}
+
+/**
+ * A validator for exactly the keywords above, and no more.
+ *
+ * Hand written rather than pulled from npm, because this library has no npm
+ * dependencies and because the subset is the point: a validator that supported
+ * more than the grammar converter does would pass documents the real run
+ * cannot enforce.
+ */
+function validates(schema, value) {
+  if (Array.isArray(schema.anyOf)) {
+    return schema.anyOf.some((alternative) => validates(alternative, value));
+  }
+  if ('const' in schema) {
+    return value === schema.const;
+  }
+  if (Array.isArray(schema.enum)) {
+    return schema.enum.includes(value);
+  }
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+  const actual =
+    value === null
+      ? 'null'
+      : Array.isArray(value)
+        ? 'array'
+        : typeof value === 'number'
+          ? 'number'
+          : typeof value;
+  if (schema.type !== undefined && !types.includes(actual)) {
+    return false;
+  }
+  if (actual === 'string' && typeof schema.maxLength === 'number') {
+    return value.length <= schema.maxLength;
+  }
+  if (actual === 'array' && schema.items) {
+    return value.every((entry) => validates(schema.items, entry));
+  }
+  if (actual !== 'object') {
+    return true;
+  }
+  for (const field of schema.required ?? []) {
+    if (!(field in value)) {
+      return false;
+    }
+  }
+  for (const [field, child] of Object.entries(schema.properties ?? {})) {
+    if (field in value && !validates(child, value[field])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const SCHEMA = buildDecisionSchema({
+  categories: ['DAIRY', 'PANTRY'],
+  units: ['LITER', 'UNIT'],
+});
+
+const CREATE = {
+  decision: 'CREATE',
+  item: {
+    nameEs: 'Leche entera',
+    nameEn: 'Whole milk',
+    brand: 'Hacendado',
+    unitSize: 1,
+    defaultUnit: 'LITER',
+    category: 'DAIRY',
+    ean: null,
+  },
+  confidence: 0.95,
+  issues: [],
+  reasoning: 'Rule 1: no candidate is the same format.',
+};
+
+test('the schema uses only keywords the grammar converter understands', () => {
+  const used = [...keywordsOf(SCHEMA)].filter(
+    (keyword) => !ALLOWED_KEYWORDS.has(keyword)
+  );
+  assert.deepEqual(used, []);
+});
+
+test('every decision the checker accepts is a decision the schema allows', () => {
+  assert.equal(validates(SCHEMA, CREATE), true);
+  assert.equal(
+    validates(SCHEMA, {
+      decision: 'LINK',
+      itemId: 'i1',
+      confidence: 0.97,
+      issues: [],
+      reasoning: 'Rule 1: same brand, same format.',
+    }),
+    true
+  );
+  assert.equal(
+    validates(SCHEMA, {
+      decision: 'LINK',
+      itemRef: 'ref-e1',
+      confidence: 0.97,
+      issues: [],
+      reasoning: 'Rule 1: the product this run created two rows ago.',
+    }),
+    true
+  );
+  assert.equal(
+    validates(SCHEMA, {
+      decision: 'REVIEW',
+      confidence: 0.5,
+      issues: [{ code: 'FORMAT_UNKNOWN', detail: 'No size anywhere.' }],
+      reasoning: 'Rule 1 cannot be tested.',
+    }),
+    true
+  );
+});
+
+test('a CREATE carrying no item is not a document the schema allows', () => {
+  // This is the whole of plan 0003's largest lever. The schema used to type
+  // `item` as `["object", "null"]` and leave it optional, so a CREATE with a
+  // null item was a legal token stream, and the decider refused it one request
+  // later as `a CREATE needs an "item" object`.
+  assert.equal(validates(SCHEMA, { ...CREATE, item: null }), false);
+  const { item, ...withoutItem } = CREATE;
+  assert.ok(item);
+  assert.equal(validates(SCHEMA, withoutItem), false);
+
+  // The three fields the checker refuses a CREATE without are required here
+  // too, for the same reason and at the same cost.
+  for (const field of ['nameEs', 'category', 'defaultUnit']) {
+    const stripped = { ...CREATE.item };
+    delete stripped[field];
+    assert.equal(
+      validates(SCHEMA, { ...CREATE, item: stripped }),
+      false,
+      field
+    );
+  }
+});
+
+test('a LINK naming no target is not a document the schema allows', () => {
+  const link = {
+    decision: 'LINK',
+    confidence: 0.97,
+    issues: [],
+    reasoning: 'Rule 1.',
+  };
+  assert.equal(validates(SCHEMA, link), false);
+  assert.equal(validates(SCHEMA, { ...link, itemId: null }), false);
+  assert.equal(validates(SCHEMA, { ...link, itemRef: null }), false);
+});
+
+test('the schema caps the two fields that are billed on every row', () => {
+  assert.equal(SCHEMA.properties.reasoning.maxLength, REASONING_MAX);
+  assert.equal(
+    SCHEMA.properties.issues.items.properties.detail.maxLength,
+    ISSUE_DETAIL_MAX
+  );
+  assert.equal(
+    validates(SCHEMA, { ...CREATE, reasoning: 'x'.repeat(REASONING_MAX + 1) }),
+    false
+  );
+  assert.equal(
+    validates(SCHEMA, {
+      ...CREATE,
+      issues: [{ code: 'X', detail: 'y'.repeat(ISSUE_DETAIL_MAX + 1) }],
+    }),
+    false
+  );
 });

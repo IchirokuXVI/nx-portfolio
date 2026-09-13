@@ -10,6 +10,7 @@ import {
   installInterrupt,
   main,
   parseArgs,
+  parseLimit,
   resolveImplementation,
   spawnCapture,
   usageText,
@@ -225,6 +226,43 @@ test('an unknown effort is refused before anything is started', async () => {
   assert.deepEqual(spawned, []);
 });
 
+test('parseLimit reads a row count and refuses everything else', () => {
+  assert.equal(parseLimit(undefined), null);
+  assert.equal(parseLimit('40'), 40);
+  assert.equal(parseLimit(' 1 '), 1);
+  for (const value of ['0', '-3', '2.5', 'lots', '']) {
+    assert.throws(
+      () => parseLimit(value),
+      /it has to be a whole number of rows, one or more/,
+      String(value)
+    );
+  }
+  // `--limit` with no value is a flag with nothing to limit to, and reading it
+  // as one row or as no limit would both be a run nobody asked for.
+  assert.throws(() => parseLimit(true), /--limit is \(nothing\)/);
+});
+
+test('an unreadable --limit is refused before anything is started', async () => {
+  const spawned = [];
+  await assert.rejects(
+    () =>
+      main(['--implementation', 'groups', '--limit', 'lots'], {
+        env: {},
+        stdout: sink(),
+        stderr: sink(),
+        isTty: false,
+        spawn: async (...call) => {
+          spawned.push(call);
+          return { code: 0, stdout: '{}', stderr: '' };
+        },
+        repoRoot: '/repo',
+        platform: 'linux',
+      }),
+    /--limit is lots/
+  );
+  assert.deepEqual(spawned, []);
+});
+
 test('--help answers the usage and does nothing else', async () => {
   const stdout = sink();
   const code = await main(['--help'], {
@@ -238,6 +276,10 @@ test('--help answers the usage and does nothing else', async () => {
   });
   assert.equal(code, 0);
   assert.match(stdout.text(), /--implementation <suggestions\|groups>/);
+  assert.match(stdout.text(), /--limit <n>/);
+  // The one server side knob a batching run depends on and cannot read for
+  // itself, named where an operator looks for flags.
+  assert.match(stdout.text(), /OLLAMA_NUM_PARALLEL/);
 });
 
 test('the help text names every engine the registry holds', () => {
