@@ -119,7 +119,9 @@ list and you `LINK` onto it.
 - `item.nameEn` is the English name when you are confident of the translation, else null.
 - `item.brand` is the brand, or null when the product carries none.
 - `item.unitSize` is a number, or null when the product has no size.
-- `item.defaultUnit` is one value from the unit vocabulary below.
+- `item.defaultUnit` is one value from the unit vocabulary below, and is never null: a
+  product with no printed size is sold by the piece, so `defaultUnit` is `UNIT` and
+  `unitSize` is null.
 - `item.category` is one value from the category vocabulary below.
 - `item.ean` is the entry's own barcode when it has one, else null. Never invent one, and
   never copy one off a candidate.

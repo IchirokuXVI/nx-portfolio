@@ -143,15 +143,21 @@ test('the decision schema takes its enums from the same two vocabularies', () =>
   ]);
   // A category the catalog does not have cannot be answered at all, rather
   // than being described in prose and refused after the fact.
+  // Neither vocabulary admits `null`: a required field whose type admits
+  // `null` is satisfied by `null`, and the checker refuses both of them null.
+  // A product with no printed size is sold by the piece, so its unit is UNIT
+  // and only `unitSize` stays nullable.
   assert.deepEqual(schema.properties.item.properties.category.enum, [
     'DAIRY',
     'PANTRY',
-    null,
   ]);
   assert.deepEqual(schema.properties.item.properties.defaultUnit.enum, [
     'LITER',
     'UNIT',
-    null,
+  ]);
+  assert.deepEqual(schema.properties.item.properties.unitSize.type, [
+    'number',
+    'null',
   ]);
   assert.deepEqual(schema.required, [
     'decision',
@@ -398,12 +404,27 @@ test('a half filled item is refused by the loose root, with no alternation', () 
     true
   );
 
+  // Required and nullable is not required. Sonnet low answered
+  // `unitSize: null, defaultUnit: null` on 15 of 80 sizeless SuperCash rows
+  // while the unit was required but nullable, and every one was re-asked.
+  // The loose root refuses a null unit, and a null size stays allowed.
+  assert.equal(
+    validates(root, { ...CREATE, item: { ...CREATE.item, defaultUnit: null } }),
+    false
+  );
+  assert.equal(
+    validates(root, { ...CREATE, item: { ...CREATE.item, unitSize: null } }),
+    true
+  );
+
   // The two halves agree by construction: every alternative that carries an
-  // item requires the same three fields.
+  // item requires the same three fields and types them the same way.
   for (const alternative of anyOf) {
     const item = alternative.properties.item;
     if (item) {
       assert.deepEqual(item.required, SCHEMA.properties.item.required);
+      assert.deepEqual(item.properties, SCHEMA.properties.item.properties);
+      assert.equal(item.type, 'object');
     }
   }
 });

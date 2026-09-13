@@ -296,30 +296,23 @@ export function buildDecisionSchema({ categories, units }) {
    * "item.defaultUnit"`, which is the same defect class as the missing `item`
    * and is closed here without the alternation.
    *
+   * **Required and nullable is not required.** Those three fields are also
+   * non null here, and that is the other half of the same fix rather than a
+   * tidy up: a `required` field whose type admits `null` is satisfied by
+   * `null`, and `checkDecisionShape` refuses all three of them null. Measured
+   * on sonnet low over 80 SuperCash rows, 15 were re-asked for `a CREATE needs
+   * "item.defaultUnit"`, every one of them a product with no printed size,
+   * answered `unitSize: null, defaultUnit: null`. `unitSize` stays nullable,
+   * because a product with no size is a real thing and `null` is the right
+   * answer for it. A unit is not: a sizeless product is sold by the piece.
+   *
    * The two halves agree by construction. Every `anyOf` alternative that
-   * carries an item requires the same three fields, so an answer the grammar
-   * lets Ollama produce is an answer this root also accepts.
+   * carries an item requires the same three fields and types them the same
+   * way, so an answer the grammar lets Ollama produce is an answer this root
+   * also accepts.
    */
   const looseItem = {
     type: ['object', 'null'],
-    properties: {
-      nameEs: nullableString,
-      nameEn: nullableString,
-      brand: nullableString,
-      unitSize: { type: ['number', 'null'] },
-      defaultUnit: { type: ['string', 'null'], enum: [...units, null] },
-      category: { type: ['string', 'null'], enum: [...categories, null] },
-      ean: nullableString,
-    },
-    required: ['nameEs', 'category', 'defaultUnit'],
-  };
-
-  /**
-   * The item a CREATE has to carry: an object, and the three fields
-   * `checkDecisionShape` refuses a CREATE without.
-   */
-  const createItem = {
-    type: 'object',
     properties: {
       nameEs: { type: 'string' },
       nameEn: nullableString,
@@ -331,6 +324,16 @@ export function buildDecisionSchema({ categories, units }) {
     },
     required: ['nameEs', 'category', 'defaultUnit'],
   };
+
+  /**
+   * The item a CREATE has to carry: the same item, minus the `null`.
+   *
+   * Built from `looseItem` rather than written out beside it, so the two cannot
+   * disagree about a field. The only difference a CREATE makes is that the item
+   * is there at all, which is the `type`, and the alternative it sits in is
+   * what makes it `required`.
+   */
+  const createItem = { ...looseItem, type: 'object' };
 
   const shared = { confidence, issues, reasoning };
   const sharedRequired = ['confidence', 'issues', 'reasoning'];
