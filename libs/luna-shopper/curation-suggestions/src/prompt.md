@@ -48,6 +48,21 @@ Rules 2, 3 and 5 shape a `CREATE` name. Take the brand out of the name and put i
 Rule 6 is a hard stop. When the brand is one chain's private label and the entry belongs to
 another chain, do not link across and do not merge. Say so in `issues` and answer `REVIEW`.
 
+## The line name and the shade code stay in the name
+
+The brand leaves the name, by rule 2. A **line** or range name (`Terracotta`, `Monochrome`,
+`Rouge G`, `+Proteínas`, `Delicias del mar`) and a **shade or variant code** (`n30`, `n4N`,
+`spf25`) stay in it, by rule 4. They are what tells two products of one brand and one
+format apart, and rule 1 merges anything they do not separate.
+
+- `Hacendado +Proteínas Yogur natural` is `nameEs` "Yogur natural +Proteínas", brand
+  `Hacendado`. `+Proteínas` is a range of the house label and is never the brand.
+- `Sombra dúo SHOW BY PASTEL Monochrome n30` is `nameEs` "Sombra dúo Monochrome n30", brand
+  `Show By Pastel`. "Sombra dúo" alone is every shade of the range at once.
+- `Polvos compactos GUERLAIN Terracotta Original n03` is `nameEs`
+  "Polvos compactos Terracotta Original n03", brand `Guerlain`.
+- `Hacendado Ensaladilla Delicias del mar` is `nameEs` "Ensaladilla Delicias del mar".
+
 ## What you are given
 
 `entry` is the product as the chain published it.
@@ -109,9 +124,13 @@ list and you `LINK` onto it.
 - `item.ean` is the entry's own barcode when it has one, else null. Never invent one, and
   never copy one off a candidate.
 - `confidence` is a number from 0 to 1.
-- `issues` is a list, possibly empty. Each entry has a short upper case `code` and a one
-  sentence `detail`.
-- `reasoning` is one or two sentences naming the rule you applied.
+- `issues` is a list, possibly empty. Each entry has a short upper case `code` and a
+  `detail` of at most 120 characters.
+- `reasoning` is one clause naming the rule you applied, at most 160 characters. Not a
+  paragraph, not a restatement of the entry, and never a repeat of what `issues` says.
+
+Every word you write is paid for on every row of the run, and nothing reads `reasoning` or
+`detail` as prose. Be short.
 
 ## What the tool refuses
 
@@ -125,6 +144,8 @@ send it:
   `item.ean` a catalog product already holds.
 - `NAME_CARRIES_BRAND` and `NAME_CARRIES_SIZE`: rules 2 and 3, checked on `nameEs` and
   `nameEn` alike.
+- `NAME_GLITCH`: a digit inside a word of `nameEs` or `nameEn`, as in `fres1a` or
+  `may1onesa`. Read both names back before you send them.
 - `UNKNOWN_CATEGORY` and `UNKNOWN_UNIT`: a value outside the two vocabularies below. Copy
   one of those strings exactly.
 - `PRIVATE_LABEL_CROSSES_CHAIN`: rule 6.
@@ -139,7 +160,7 @@ An entry that matches a candidate on brand and on format:
   "itemId": "8f1c2d34-0000-4000-8000-000000000001",
   "confidence": 0.97,
   "issues": [],
-  "reasoning": "Rule 1: the candidate is Hacendado semi skimmed milk at 1 L and so is the entry."
+  "reasoning": "Rule 1: same brand, same 1 L format."
 }
 ```
 
@@ -159,7 +180,7 @@ An entry whose only candidate is the same product in another size:
   },
   "confidence": 0.94,
   "issues": [],
-  "reasoning": "The one candidate is the 1 L bottle, which rule 1 refuses, so this 750 ml is its own product."
+  "reasoning": "Rule 1: the only candidate is 1 L, so 750 ml is its own product."
 }
 ```
 
@@ -172,10 +193,10 @@ An entry the packet cannot settle:
   "issues": [
     {
       "code": "FORMAT_UNKNOWN",
-      "detail": "The name states no size and neither unitSize nor sizeFormat carries one."
+      "detail": "No size in the name, unitSize or sizeFormat."
     }
   ],
-  "reasoning": "Without a format, rule 1 cannot be tested against two candidates that differ only in size."
+  "reasoning": "Rule 1 cannot be tested: two candidates differ only in size."
 }
 ```
 

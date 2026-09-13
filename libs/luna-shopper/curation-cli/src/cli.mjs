@@ -115,10 +115,27 @@ ${line('--main-user <name>', 'default dev-admin')}
 ${line('--main-password <p>', 'default dev-admin-password, which is')}
 ${indent}what every slot seeds
 ${line('--chain <supermarket id>', 'work one chain only (suggestions)')}
+${line('--limit <n>', 'stop handing rows to the model after n')}
+${indent}of them, then end the run normally
 ${line('--services <a,b>', 'rehearsal services, default')}
 ${indent}${REHEARSAL_SERVICES.join(',')}
 ${line('--apply <decisions.jsonl>', 'replay a decisions file into the main')}
 ${indent}gateway: no slot, no model
+
+  The ollama engine reads four environment variables: OLLAMA_HOST,
+  OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT and OLLAMA_BATCH (how many requests are
+  held in flight, default 4).
+
+  OLLAMA_BATCH only pays against a server configured to match it. Ollama
+  answers OLLAMA_NUM_PARALLEL requests at a time and queues the rest, so a
+  batch of four against a server running one slot is four requests run end to
+  end, which is roughly the time of walking the rows one by one. Set
+  OLLAMA_NUM_PARALLEL on the machine running Ollama, to OLLAMA_BATCH or
+  higher. On Windows that is a user environment variable and then the Ollama
+  tray app restarted, and the server prints OLLAMA_NUM_PARALLEL:<n> into
+  %LOCALAPPDATA%\\Ollama\\server.log when it starts. Nothing in Ollama's API
+  reports the running value, so a run that sees the first round answered one
+  request at a time says so on stderr.
 `;
 }
 
@@ -139,6 +156,28 @@ export function parseArgs(argv) {
     }
   }
   return flags;
+}
+
+/**
+ * How many rows `--limit` asks for, or null when it asks for none.
+ *
+ * A short run over the front of a real queue is how the toolchain is measured
+ * and how a prompt change is judged, and until this flag existed every harness
+ * that wanted one capped the rows itself outside the CLI. `--limit` with no
+ * value is a flag with nothing to limit to, so it is refused rather than read
+ * as one row or as no limit at all.
+ */
+export function parseLimit(value) {
+  if (value === undefined) {
+    return null;
+  }
+  const rows = Number(String(value).trim());
+  if (!Number.isInteger(rows) || rows < 1) {
+    throw new Error(
+      `--limit is ${value === true ? '(nothing)' : value}, and it has to be a whole number of rows, one or more.`
+    );
+  }
+  return rows;
 }
 
 /** A run directory nobody has to name, and no two runs share. */
@@ -365,6 +404,11 @@ export async function main(
     );
   }
 
+  // Refused here, before a slot is taken and a rehearsal catalog is built, for
+  // the same reason a misspelled engine is: a flag that cannot be read is a run
+  // that was never going to do what was asked of it.
+  const limit = parseLimit(flags.limit);
+
   const implementation = await resolveImplementation({
     flag: flags.implementation,
     isTty,
@@ -452,6 +496,7 @@ export async function main(
       mainUser,
       model,
       chain: typeof flags.chain === 'string' ? flags.chain : null,
+      limit,
       services,
       waitForGateway,
       stripFence,

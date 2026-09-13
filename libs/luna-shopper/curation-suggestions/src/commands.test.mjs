@@ -491,6 +491,62 @@ test('--final turns a broken reply into a recorded REVIEW', async () => {
   assert.equal(readJsonl(join(dir, 'decisions.jsonl')).length, 2);
 });
 
+test('a glitched name is retryable and writes nothing', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Mayonesa 450 ml')] });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: { ...CREATE_MILK.item, nameEs: 'May1onesa', nameEn: null },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  // Not a judgment the model stands by: one token of the generation went
+  // wrong, so the row is asked again rather than handed to a person.
+  assert.equal(answer.retryable, true);
+  assert.equal(answer.accepted, false);
+  assert.equal(answer.decision, null);
+  assert.deepEqual(
+    answer.issues.map((i) => i.code),
+    ['NAME_GLITCH']
+  );
+  assert.equal(readJsonl(join(dir, 'decisions.jsonl')).length, 1);
+  assert.equal(w.rehearsalCatalog.rows.length, 0);
+});
+
+test('--final records a second glitch as a REVIEW carrying the code', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Mayonesa 450 ml')] });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: { ...CREATE_MILK.item, nameEs: 'May1onesa', nameEn: null },
+    },
+    final: true,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  assert.equal(answer.retryable, false);
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.equal(answer.decision.proposedDecision, 'CREATE');
+  assert.ok(answer.issues.some((i) => i.code === 'NAME_GLITCH'));
+  assert.equal(w.rehearsalCatalog.rows.length, 0);
+  assert.equal(readJsonl(join(dir, 'decisions.jsonl')).length, 2);
+});
+
 test('an entry already decided is refused rather than asked twice', async () => {
   const dir = runDir();
   const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });

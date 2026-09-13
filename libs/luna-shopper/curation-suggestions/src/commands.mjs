@@ -13,6 +13,7 @@ import {
   CONFIDENCE_THRESHOLD,
   checkDecisionShape,
   issue,
+  retryableIssues,
   validateDecision,
 } from './decision.mjs';
 import { CANDIDATE_LIMIT, makeGateway, toCreateItemBody } from './gateway.mjs';
@@ -480,7 +481,9 @@ function supermarketOf(state, entry) {
  * writes nothing, because the caller owns the retry (plan 0098's semantics, now
  * one layer up). `final: true` says the caller has run out of retries, and the
  * row is then recorded as a REVIEW with the parse failure as its issue, which
- * is where the single file tool left such a row too.
+ * is where the single file tool left such a row too. A name carrying a
+ * generation glitch answers the same way, for the same reason and not because
+ * of the schema: see `RETRYABLE_ISSUE_CODES`.
  *
  * REVIEW writes nothing anywhere. Only a CREATE that survived every validator
  * reaches the rehearsal catalog, and nothing ever reaches the main one.
@@ -665,6 +668,22 @@ export async function decide({
       units: vocabularies.units,
     })
   );
+
+  // A glitched name is the generation going wrong for one token rather than a
+  // judgment the model stands by, so it buys the same second attempt an
+  // unparseable reply buys. Nothing is written, exactly as nothing is written
+  // for a `MODEL_OUTPUT_INVALID`, and `final: true` falls through to the REVIEW
+  // below carrying the code.
+  const retryable = retryableIssues(found);
+  if (retryable.length > 0 && !final) {
+    return {
+      accepted: false,
+      retryable: true,
+      decision: null,
+      issues: retryable,
+      remaining: remainingNow(),
+    };
+  }
 
   const outcome = found.length > 0 ? 'REVIEW' : proposal.decision;
 

@@ -1042,6 +1042,136 @@ test('a decider that composes no batches is walked one row at a time', async () 
   assert.equal(engine.prompts.length, 1);
 });
 
+// ---------------------------------------------------------------------------
+// --limit (plan 0003)
+// ---------------------------------------------------------------------------
+
+test('--limit ends the walk after that many rows, and ends it normally', async () => {
+  const decider = fakeBatchDecider({
+    batches: [
+      ['e1', 'e2', 'e3', 'e4'].map((id) => batchRow(id, `Producto ${id}`)),
+      ['e5', 'e6', 'e7', 'e8'].map((id) => batchRow(id, `Producto ${id}`)),
+    ],
+    total: 8,
+  });
+  const engine = fakeBatchEngine([LINKED, LINKED, LINKED, LINKED]);
+  const stderr = sink();
+
+  const outcome = await runCuration({
+    slots: fakeSlots({ taken: [1] }),
+    makeDeciderFor: () => decider,
+    engine,
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    limit: 4,
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr,
+  });
+
+  // One batch asked, four rows decided, and the second batch never fetched.
+  assert.equal(engine.batches.length, 1);
+  assert.equal(engine.prompts.length, 4);
+  assert.deepEqual(
+    decider.calls.filter((call) => call.command === 'next').map((c) => c.count),
+    [4]
+  );
+  assert.equal(
+    decider.calls.filter((call) => call.command === 'decide').length,
+    4
+  );
+
+  // A limit is not a stop: the report is written, the slot comes down, and the
+  // run ends the way a finished one does.
+  assert.equal(outcome.stopped, false);
+  assert.ok(decider.calls.some((call) => call.command === 'end'));
+  assert.match(stderr.text(), /limit 4 reached: 4 rows handed out/);
+});
+
+test('--limit narrows the last batch rather than trimming one it fetched', async () => {
+  // A fetched row carries a handout the decider is holding open, so a batch
+  // asked for and then trimmed would leave one open for the life of the run.
+  const decider = fakeBatchDecider({
+    batches: [
+      ['e1', 'e2', 'e3', 'e4'].map((id) => batchRow(id, `Producto ${id}`)),
+      [batchRow('e5', 'Producto e5')],
+    ],
+    total: 8,
+  });
+  const engine = fakeBatchEngine([LINKED, LINKED, LINKED, LINKED, LINKED]);
+
+  await runCuration({
+    slots: fakeSlots({ taken: [1] }),
+    makeDeciderFor: () => decider,
+    engine,
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    limit: 5,
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+  });
+
+  // Four, then the one row the limit has left, asked for as one row and not
+  // as four.
+  assert.deepEqual(
+    decider.calls.filter((call) => call.command === 'next').map((c) => c.count),
+    [4, null]
+  );
+  assert.equal(engine.prompts.length, 5);
+});
+
+test('a limit past the end of the queue is the whole queue', async () => {
+  const decider = fakeBatchDecider({
+    batches: [[batchRow('e1', 'Leche'), batchRow('e2', 'Pan')]],
+    total: 2,
+  });
+  const engine = fakeBatchEngine([LINKED, LINKED]);
+
+  await runCuration({
+    slots: fakeSlots({ taken: [1] }),
+    makeDeciderFor: () => decider,
+    engine,
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    limit: 100,
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+  });
+
+  assert.equal(engine.prompts.length, 2);
+  assert.ok(decider.calls.some((call) => call.command === 'end'));
+});
+
+test('no limit walks the whole queue, which is what it has always done', async () => {
+  const decider = fakeBatchDecider({
+    batches: [
+      ['e1', 'e2'].map((id) => batchRow(id, `Producto ${id}`)),
+      ['e3', 'e4'].map((id) => batchRow(id, `Producto ${id}`)),
+    ],
+    total: 4,
+  });
+  const engine = fakeBatchEngine([LINKED, LINKED, LINKED, LINKED]);
+
+  await runCuration({
+    slots: fakeSlots({ taken: [1] }),
+    makeDeciderFor: () => decider,
+    engine,
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+  });
+
+  assert.equal(engine.prompts.length, 4);
+});
+
 test('the run reports the re-ask rate the decider counted', async () => {
   const decider = fakeDecider({ rows: [] });
   decider.end = async () => ({

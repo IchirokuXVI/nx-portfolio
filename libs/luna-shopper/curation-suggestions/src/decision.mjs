@@ -9,6 +9,7 @@
 
 import {
   carriesBrand,
+  carriesGlitch,
   carriesSize,
   chainName,
   normalizeName,
@@ -16,6 +17,30 @@ import {
 
 /** Below this a decision is a REVIEW, whatever the model wrote. */
 export const CONFIDENCE_THRESHOLD = 0.9;
+
+/**
+ * The issues that buy the model a second attempt rather than a REVIEW.
+ *
+ * Every other validator reports a judgment the model made and stands by: a
+ * format that does not match, a name that carries its brand, a private label
+ * on the wrong chain. Asking again would get the same answer, so the row goes
+ * to a person.
+ *
+ * `NAME_GLITCH` is the one that is not a judgment. A digit inside a word is the
+ * generation going wrong for one token, and the same row asked again almost
+ * always comes back spelled correctly, which makes it a `MODEL_OUTPUT_INVALID`
+ * in every way but the shape of the reply. So `decide` answers `retryable` on
+ * it and writes nothing, and a second glitch on the same row is recorded as a
+ * REVIEW carrying the code, exactly as a second unparseable reply is.
+ */
+export const RETRYABLE_ISSUE_CODES = new Set(['NAME_GLITCH']);
+
+/** Whether these issues are worth asking the same row about once more. */
+export function retryableIssues(issues) {
+  return (issues ?? []).filter((entry) =>
+    RETRYABLE_ISSUE_CODES.has(entry?.code)
+  );
+}
 
 const DECISIONS = new Set(['LINK', 'CREATE', 'REVIEW']);
 
@@ -193,6 +218,14 @@ export function validateDecision({
           issue(
             'NAME_CARRIES_SIZE',
             `${field} "${name}" states a size, which belongs in unitSize and defaultUnit (rule 3).`
+          )
+        );
+      }
+      if (carriesGlitch(name)) {
+        issues.push(
+          issue(
+            'NAME_GLITCH',
+            `${field} "${name}" has a digit inside a word, which is a generation glitch and not a name.`
           )
         );
       }

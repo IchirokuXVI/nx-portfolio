@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkDecisionShape, validateDecision } from './decision.mjs';
+import {
+  checkDecisionShape,
+  issue,
+  retryableIssues,
+  validateDecision,
+} from './decision.mjs';
 import { indexPrivateLabels } from './rules.mjs';
 
 const CATEGORIES = ['DAIRY', 'PANTRY', 'OTHER'];
@@ -206,6 +211,65 @@ test('NAME_CARRIES_SIZE fires on a name holding its size', () => {
     units: UNITS,
   });
   assert.ok(codes(issues).includes('NAME_CARRIES_SIZE'));
+});
+
+test('NAME_GLITCH fires on a digit wedged inside a word, on either name', () => {
+  // The measured shape of the defect: one token of a local model's generation
+  // goes wrong and the rest of the decision is perfectly good.
+  for (const item of [
+    goodItem({ nameEs: 'May1onesa' }),
+    goodItem({ nameEn: 'Straw1berry yoghurt' }),
+    goodItem({ nameEs: 'Beb1ida de avena' }),
+  ]) {
+    const issues = validateDecision({
+      decision: createDecision(item),
+      entry: ENTRY,
+      supermarket: MERCADONA,
+      privateLabels: LABELS,
+      categories: CATEGORIES,
+      units: UNITS,
+    });
+    assert.ok(codes(issues).includes('NAME_GLITCH'), item.nameEs);
+  }
+});
+
+test('NAME_GLITCH leaves a real name alone, digit or no digit', () => {
+  for (const name of [
+    'Leche entera',
+    'Agua H2O',
+    'Omega 3',
+    'Vitamina B12',
+    'Yogur 0% M.G.',
+    'Refresco de cola zero',
+    // The shade code is the whole of what tells two shades of one line apart.
+    'Corrector Terracotta n4N',
+    'Sombra dúo Monochrome n30',
+  ]) {
+    const issues = validateDecision({
+      decision: createDecision(goodItem({ nameEs: name, nameEn: null })),
+      entry: ENTRY,
+      supermarket: MERCADONA,
+      privateLabels: LABELS,
+      categories: CATEGORIES,
+      units: UNITS,
+    });
+    assert.equal(codes(issues).includes('NAME_GLITCH'), false, name);
+  }
+});
+
+test('NAME_GLITCH is the one issue worth asking the same row about again', () => {
+  // Every other validator reports a judgment the model stands by, and asking
+  // again would get the same answer.
+  assert.deepEqual(
+    retryableIssues([
+      issue('NAME_GLITCH', 'nameEs "May1onesa" has a digit inside a word.'),
+      issue('NAME_CARRIES_SIZE', 'it states a size'),
+      issue('FORMAT_MISMATCH', 'one litre against one and a half'),
+    ]).map((entry) => entry.code),
+    ['NAME_GLITCH']
+  );
+  assert.deepEqual(retryableIssues([]), []);
+  assert.deepEqual(retryableIssues(undefined), []);
 });
 
 test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the openapi vocabularies', () => {
