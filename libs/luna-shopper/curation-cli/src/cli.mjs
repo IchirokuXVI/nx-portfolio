@@ -495,6 +495,9 @@ export async function main(
       mainUrl,
       mainUser,
       model,
+      // The registry is the authority about engines, so the walk asks the entry
+      // rather than the name (plan 0003).
+      local: entry.local === true,
       chain: typeof flags.chain === 'string' ? flags.chain : null,
       limit,
       services,

@@ -66,7 +66,17 @@ function appendJsonl(path, value) {
  */
 export function createRun(
   dir,
-  { runId, mainUrl, rehearsalUrl, mainUser, model, chains, supermarkets, total }
+  {
+    runId,
+    mainUrl,
+    rehearsalUrl,
+    mainUser,
+    model,
+    local,
+    chains,
+    supermarkets,
+    total,
+  }
 ) {
   mkdirSync(dir, { recursive: true });
   if (existsSync(statePath(dir))) {
@@ -93,6 +103,11 @@ export function createRun(
     // directory an operator may keep, copy or attach to a report.
     mainUser: mainUser ?? null,
     model: model ?? null,
+    // Whether the model answering this run runs on the operator's own machine
+    // (plan 0003). It is written once and read by every later `decide`, because
+    // a resumed run has to apply the rule it was started under or the decisions
+    // file means two things from top to bottom.
+    local: local === true,
     startedAt: header.startedAt,
     total: total ?? 0,
     // The chains as catalog answers them, so `next` and `decide` need no

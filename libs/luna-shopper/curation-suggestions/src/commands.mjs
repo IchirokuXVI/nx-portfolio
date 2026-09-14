@@ -96,6 +96,10 @@ export async function start({
   rehearsalPassword,
   runDir,
   model = null,
+  // Whether that model runs on the operator's own machine, as the engine
+  // registry states it (plan 0003). It is recorded here and read by every later
+  // `decide`, which is the only way a resumed run applies one rule throughout.
+  local = false,
   chain = null,
   makeSession = defaultMakeSession,
   vocabularies = loadVocabularies(),
@@ -162,6 +166,7 @@ export async function start({
     rehearsalUrl: normalizeUrl(rehearsalUrl),
     mainUser,
     model,
+    local,
     chains,
     supermarkets,
     total,
@@ -666,6 +671,10 @@ export async function decide({
       privateLabels,
       categories: vocabularies.categories,
       units: vocabularies.units,
+      // What the run was started against, not what is running now. A run
+      // directory is walked by many invocations and the answer has to be the
+      // same in all of them.
+      local: state.local === true,
     })
   );
 
