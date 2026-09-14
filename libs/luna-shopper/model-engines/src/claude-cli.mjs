@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from './claude-models.mjs';
 import {
   RETRY_DELAYS,
+  askEachInOrder,
   askManyInOrder,
   defaultSleep,
   stopReason,
@@ -330,10 +331,17 @@ export function makeClaudeEngine({
     effort,
     // One call is one `claude -p` process with a session behind it, and this
     // adapter has no measurement saying that several of them at once answer
-    // sooner. One is the honest answer, and `askMany` below is the shared
-    // default rather than a pool this adapter invented for itself.
+    // sooner. One is the honest answer, and the two list calls below are the
+    // shared defaults rather than a pool this adapter invented for itself.
     batchSize: 1,
+    // A round of one, for the same reason. A round wider than the pool is worth
+    // having where the pool refills itself while the caller is busy, and a pool
+    // of one has nothing to refill: every row of a wider round would sit in a
+    // queue here rather than be worked on sooner.
+    roundSize: 1,
     ask,
+    askEach: (prompts, options = {}) =>
+      askEachInOrder(ask, prompts, options, signal),
     askMany: (prompts, options = {}) =>
       askManyInOrder(ask, prompts, options, signal),
   };

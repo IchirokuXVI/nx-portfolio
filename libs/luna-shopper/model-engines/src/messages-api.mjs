@@ -12,6 +12,7 @@
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from './claude-models.mjs';
 import {
   RETRY_DELAYS,
+  askEachInOrder,
   askManyInOrder,
   defaultSleep,
   stopReason,
@@ -162,9 +163,15 @@ export function makeApiEngine({
     effort,
     // The account behind the key has rate limits this adapter cannot read, and
     // nothing here was measured against them, so it holds one request in flight
-    // and says so. `askMany` is the shared default, unchanged.
+    // and says so. `askEach` and `askMany` are the shared defaults, unchanged.
     batchSize: 1,
+    // And a round of one with it: a round wider than the pool only pays where
+    // the pool refills itself while the caller is busy, and this one holds a
+    // single request.
+    roundSize: 1,
     ask,
+    askEach: (prompts, options = {}) =>
+      askEachInOrder(ask, prompts, options, signal),
     askMany: (prompts, options = {}) =>
       askManyInOrder(ask, prompts, options, signal),
   };
