@@ -28,7 +28,17 @@ test('parseArgs refuses a bare argument', () => {
 
 test('no command answers the usage rather than doing anything', async () => {
   const answer = await run([]);
-  assert.match(answer.usage, /start\|next\|decide\|end\|apply/);
+  assert.match(answer.usage, /start\|next\|decide\|end\|apply\|serve/);
+});
+
+test('serve is in the usage and not in the commands that answer one object', async () => {
+  // It owns stdin and stdout for as long as it runs, so it cannot answer one
+  // object the way the other five do. `serve.mjs` is the loop and `cli.mjs`
+  // dispatches it from the command line only.
+  await assert.rejects(
+    () => run(['serve']),
+    /serve is not one of the commands/
+  );
 });
 
 test('an unknown command names itself and prints the usage', async () => {
