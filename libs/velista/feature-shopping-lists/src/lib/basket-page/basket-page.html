@@ -239,19 +239,29 @@
           about the lines, which is what the controls are about too.
 
           Drawn for every reader, guests included. Nothing in it names a household.
+
+          **The row and the chips stay on screen** (velista 0079, section 2). One
+          sticky bar holds both, so a shopper halfway down a long basket can still
+          search, filter, and see what is on without scrolling back to the top.
+          The empty state and the no match block stay below it, in the scroll.
         -->
-        @if (searchOpen()) {
-          <!--
+        <div class="tools-bar">
+          @if (searchOpen()) {
+            <!--
             The field takes the whole row, count and control together, which is
             what makes it usable one handed on a phone. Cancel is beside it rather
             than inside it: it is not a clear, it puts the row back.
-          -->
-          <div class="search">
-            <label class="field-label" for="basket-search">
-              {{ 'basket.search.label' | rokuT }}
-            </label>
 
-            <div class="search-row">
+            **One row, the height of the closed one** (velista 0079, section 3,
+            which reverses 0074 section 6 on two points). Opening the search must
+            not move the first line by a pixel, so the label and the count are
+            still here for a screen reader and no longer drawn.
+          -->
+            <div class="search">
+              <label class="visually-hidden" for="basket-search">
+                {{ 'basket.search.label' | rokuT }}
+              </label>
+
               <span class="search-field">
                 <lib-search-icon class="search-glyph" />
                 <input
@@ -301,23 +311,31 @@
               -->
               <ng-container [ngTemplateOutlet]="filterTool" />
             </div>
-          </div>
 
-          <!--
+            <!--
             How many are left, and it is the reason the search is trustworthy: a
             search that silently empties the screen is indistinguishable from one
             that broke (`0059` section 7). One polite region, and the only thing
             announced on a keystroke.
+
+            Heard and not seen since velista 0079. The rows narrowing under the
+            field are what a sighted reader checks, and a visible sentence made the
+            open search twice the height of the row it replaced.
           -->
-          <p aria-live="polite" class="search-count" role="status">
-            {{
-              'basket.search.count'
-                | rokuT: { shown: visibleLines().length, total: lines().length }
-            }}
-          </p>
-        } @else {
-          <div class="tools">
-            <!--
+            <p
+              aria-live="polite"
+              class="visually-hidden search-count"
+              role="status"
+            >
+              {{
+                'basket.search.count'
+                  | rokuT
+                    : { shown: visibleLines().length, total: lines().length }
+              }}
+            </p>
+          } @else {
+            <div class="tools">
+              <!--
               "got" means bought. A line closed because the shop had none is
               counted separately rather than folded in, because folding it in would
               claim a purchase that never happened.
@@ -326,41 +344,41 @@
               this is about how much shopping is left, and hiding rows does not buy
               anything.
             -->
-            <p class="progress">
-              {{
-                'basket.progress'
-                  | rokuT: { done: progress().done, total: progress().total }
-              }}
-              @if (progress().unavailable > 0) {
-                <span class="progress-unavailable">
-                  {{
-                    'basket.progressUnavailable'
-                      | rokuT: { count: progress().unavailable }
-                  }}
-                </span>
-              }
-            </p>
+              <p class="progress">
+                {{
+                  'basket.progress'
+                    | rokuT: { done: progress().done, total: progress().total }
+                }}
+                @if (progress().unavailable > 0) {
+                  <span class="progress-unavailable">
+                    {{
+                      'basket.progressUnavailable'
+                        | rokuT: { count: progress().unavailable }
+                    }}
+                  </span>
+                }
+              </p>
 
-            <button
-              (click)="openSearch()"
-              [attr.aria-label]="'basket.search.open' | rokuT"
-              #searchButton
-              class="tool"
-              type="button"
-            >
-              <lib-search-icon class="tool-glyph" />
-            </button>
+              <button
+                (click)="openSearch()"
+                [attr.aria-label]="'basket.search.open' | rokuT"
+                #searchButton
+                class="tool"
+                type="button"
+              >
+                <lib-search-icon class="tool-glyph" />
+              </button>
 
-            <!--
+              <!--
               Filtering and ordering (plan 0075, section 5). One template, drawn
               here and again beside the open search field, so the two cannot
               disagree about the control's name or its badge.
             -->
-            <ng-container [ngTemplateOutlet]="filterTool" />
-          </div>
-        }
+              <ng-container [ngTemplateOutlet]="filterTool" />
+            </div>
+          }
 
-        <!--
+          <!--
           What the sheet turned on, named on the page (section 5). Absent entirely
           when nothing is on, so the lines move up: a row that is always there but
           usually empty is a band of wasted height on a 390 wide phone.
@@ -371,15 +389,16 @@
           alphabetical with nothing saying so looks broken to the next person handed
           the phone.
         -->
-        @if (chipItems().length > 0) {
-          <lib-chip-row
-            (more)="openFilter()"
-            (remove)="removeChip($event)"
-            [chips]="chipItems()"
-            [count]="chipCount()"
-            class="chips"
-          />
-        }
+          @if (chipItems().length > 0) {
+            <lib-chip-row
+              (more)="openFilter()"
+              (remove)="removeChip($event)"
+              [chips]="chipItems()"
+              [count]="chipCount()"
+              class="chips"
+            />
+          }
+        </div>
 
         <!--
           Every line is settled, so the screen asks (plan 0057, section 4). The last

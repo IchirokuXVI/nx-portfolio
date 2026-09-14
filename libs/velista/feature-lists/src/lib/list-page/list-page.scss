@@ -88,10 +88,30 @@ lib-line-composer {
 // Tinted and coloured, so which one it is is visible before it is read. The quiet
 // version stays quiet on purpose: a confirmation that shouts is a confirmation people
 // learn to dismiss unread.
+//
+// The tint is laid over the strip's own opaque surface rather than painted alone
+// (velista 0079, section 6). `--app-status-danger-bg` is translucent, so on its own the
+// rows scrolling under the pinned dock showed through the sentence. A colour can only
+// be the last background layer, which is why the tint is written as a flat gradient.
 .voice-strip.failed {
-  background: var(--app-status-danger-bg);
+  background:
+    linear-gradient(var(--app-status-danger-bg), var(--app-status-danger-bg)),
+    var(--app-surface-raised);
   border-block-start-color: var(--app-status-danger-border);
   color: var(--app-status-danger-fg);
+}
+
+// The spinner in front of "Working out what you said…", on the sentence's own line.
+.voice-working {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+}
+
+.voice-working-glyph {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
 }
 
 .voice-said {

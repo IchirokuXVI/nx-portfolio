@@ -131,6 +131,10 @@ import { BASKET_PATHS } from '../basket-paths';
   templateUrl: './basket-page.html',
   styleUrl: './basket-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    // Which element scrolls, for the stylesheet's sake: see `standalone`.
+    '[class.standalone]': 'standalone',
+  },
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
@@ -147,6 +151,20 @@ export class BasketPage {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+
+  /**
+   * Whether this is the standalone build, where the document scrolls and not `.page`.
+   *
+   * The sticky tools bar needs to know (velista `0079`, section 2). A sticky box
+   * sticks to its nearest scroll container, and `overflow-y: auto` makes `.page` one
+   * whether or not it ever overflows. Mounted in the shell `.page` has a definite
+   * height and really scrolls, so that is right. Standalone it is as tall as its lines
+   * and never scrolls, so the bar would stick to a box that does not move and leave
+   * with the lines. The stylesheet lets the document be the container instead.
+   *
+   * Read from `APP_BASE_PATH`, which the standalone build supplies as the empty string.
+   */
+  protected readonly standalone = this._basePath === '';
   /**
    * The account, for the one name the basket does not carry: the owner's own.
    *

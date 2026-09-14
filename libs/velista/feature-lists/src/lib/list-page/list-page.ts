@@ -70,6 +70,7 @@ import {
   ListHeader,
   ListNotice,
   RowSkeleton,
+  SpinnerIcon,
   type LineRowAction,
 } from '@portfolio/velista/ui';
 import {
@@ -134,6 +135,7 @@ import { voiceFailureCopy } from '../voice-error-copy';
     ListHeader,
     ListNotice,
     RowSkeleton,
+    SpinnerIcon,
   ],
   templateUrl: './list-page.html',
   styleUrl: './list-page.scss',
@@ -200,7 +202,21 @@ export class ListPage {
   /** What the live region is currently saying. Cleared after it has been read. */
   readonly announcement = signal('');
 
-  readonly composerBusy = signal(false);
+  /**
+   * Whether a typed add or a recording is out, which holds the composer (velista
+   * `0079`, section 7).
+   *
+   * Two flags and not one, because the two requests overlap. With one flag a line
+   * typed while the assistant was still working out a recording finished first,
+   * cleared the flag, and let the next line in beside whatever the assistant was
+   * about to add.
+   */
+  private readonly _typedBusy = signal(false);
+  private readonly _voiceBusy = signal(false);
+
+  readonly composerBusy = computed(
+    () => this._typedBusy() || this._voiceBusy()
+  );
 
   private readonly _assistant = inject<AssistantServiceI>(ASSISTANT_SERVICE);
   private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
@@ -218,6 +234,9 @@ export class ListPage {
    * what was added and the reason nothing was, and those read identically in plain
    * text: somebody who glances at it has to read a sentence to find out which happened.
    * A mishearing counts as a failure, because nothing was added.
+   *
+   * `working` is the stretch between sending a recording and the answer, drawn with a
+   * spinner in front of the sentence (velista `0079`, section 5).
    */
   readonly voiceStrip = signal<{
     heard: string;
@@ -225,6 +244,7 @@ export class ListPage {
     messageKey: string | null;
     messageArgs?: Record<string, string | number>;
     failed: boolean;
+    working?: boolean;
   } | null>(null);
 
   private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
@@ -802,7 +822,7 @@ export class ListPage {
     itemIds?: readonly string[];
   }): Promise<void> {
     const current = this.loaded();
-    this.composerBusy.set(true);
+    this._typedBusy.set(true);
 
     // Before the call, not after it. `addLine` puts the optimistic row on screen
     // synchronously and only then goes to the network, so both land in one change
@@ -827,7 +847,7 @@ export class ListPage {
     // The list the suggestions were for has been added. Clearing here rather than in
     // the composer keeps the two from disagreeing about whether a dropdown is open.
     this._suggestQuery.set('');
-    this.composerBusy.set(false);
+    this._typedBusy.set(false);
 
     if (outcome.state === 'failed') {
       this._reportPageError(outcome.error, 'lines.write');
@@ -867,8 +887,17 @@ export class ListPage {
     // on by staying quiet.
     this._tone.play();
 
-    this.composerBusy.set(true);
-    this.voiceStrip.set(null);
+    this._voiceBusy.set(true);
+    // Said at once, and replaced by the reply or the failure exactly as nothing used
+    // to be (velista `0079`, section 5). A turn takes seconds, and a strip that is
+    // empty for all of them reads as a recording that went nowhere.
+    this.voiceStrip.set({
+      heard: '',
+      reply: '',
+      messageKey: 'list.add.working',
+      failed: false,
+      working: true,
+    });
 
     try {
       const reply = await this._assistant.askAboutList(
@@ -905,7 +934,7 @@ export class ListPage {
         failed: true,
       });
     } finally {
-      this.composerBusy.set(false);
+      this._voiceBusy.set(false);
     }
   }
 

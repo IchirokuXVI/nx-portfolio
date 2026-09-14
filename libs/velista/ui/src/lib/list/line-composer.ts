@@ -138,7 +138,14 @@ export type LineComposerButton = 'add' | 'record';
   },
 })
 export class LineComposer {
-  /** Whether a submit is in flight. The field stays usable; only the button waits. */
+  /**
+   * Whether a submit is in flight.
+   *
+   * The field stays editable, so the next item can be typed while this one lands. What
+   * waits is every way of sending it: the button, Enter and a suggestion (velista
+   * `0079`, section 7). Only the button used to, so Enter and a tapped suggestion sent
+   * a line while the assistant was still adding the one somebody had just said.
+   */
   readonly busy = input(false);
 
   /**
@@ -409,6 +416,11 @@ export class LineComposer {
    * decides which brand later, on the line page, by trimming a set it already has.
    */
   choose(suggestion: CatalogSuggestion): void {
+    // Held like the button while a submit is out. See `busy`.
+    if (this.busy()) {
+      return;
+    }
+
     const content =
       suggestion.kind === 'group'
         ? inLocale(suggestion.group.name, this._locale())
@@ -599,7 +611,9 @@ export class LineComposer {
    * button that was tapped has it, and on a phone that is enough to drop the keyboard.
    */
   submit(): void {
-    if (!this.canSubmit()) {
+    // Enter reaches this through the form's submit, which a disabled button does not
+    // stop, so the hold has to be here as well as on the button. See `busy`.
+    if (this.busy() || !this.canSubmit()) {
       return;
     }
 

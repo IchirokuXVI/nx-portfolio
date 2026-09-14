@@ -45,6 +45,14 @@
   padding-block-end: var(--app-space-5);
 }
 
+// Standalone the document scrolls, so `.page` must not be a scroll container of its
+// own, or the sticky tools bar sticks to a box that never moves (velista 0079,
+// section 2). Nothing else changes: standalone `.page` is already as tall as its
+// content, so `overflow-y: auto` never produced a scroll there anyway.
+:host(.standalone) .page {
+  overflow-y: visible;
+}
+
 // Always at the bottom of the screen, which is what makes the field reachable with
 // a thumb no matter how long the basket is. The same treatment, and the same
 // reasoning, as the list page's dock.
@@ -224,13 +232,38 @@ lib-line-composer {
   font-size: var(--app-text-2xs);
 }
 
+// The tools row, closed or searching, and the chips under it, held at the top of the
+// scroll (velista 0079, section 2).
+//
+// Sticky inside `.page`, which is the scroll container whenever the page has a
+// definite height. The ground is painted so the rows passing under the bar never show
+// through it. `z-index: 1` puts it over the rows, which set no stacking order of their
+// own, and level with the reel's overlay, which comes later in the document and so
+// still paints over a stuck bar. Sheets and the composer dock are above both.
+//
+// The gap is what used to be the chips' negative margin: the page's own gap no longer
+// reaches between the row and the chips once both are inside this box.
+.tools-bar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  background: var(--app-surface-ground);
+}
+
 // The tools row (plan 0074, section 3): the count at the leading edge and the
 // controls at the trailing one. The row already existed as a bare sentence; what
 // is new is that it is a row, with somewhere for `0075` to put the filter button.
+//
+// At least one control tall, which is the height the open search keeps too, so
+// opening and closing it leaves the lines where they are (velista 0079, section 3).
 .tools {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
+  min-block-size: var(--app-control-height);
   padding-inline-end: var(--app-space-2);
 }
 
@@ -300,12 +333,6 @@ lib-line-composer {
   font-variant-numeric: tabular-nums;
 }
 
-// The chip row, between the tools row and the first line. Absent when nothing is on,
-// so this rule only ever applies to a row that has something in it.
-.chips {
-  margin-block-start: calc(-1 * var(--app-space-2));
-}
-
 .progress {
   flex: 1;
   min-inline-size: 0;
@@ -318,33 +345,28 @@ lib-line-composer {
 // its own, down to the ring being drawn by the wrapper rather than by the input,
 // because a reader who has met one search in this app must not have to learn a
 // second one.
+//
+// One row, and the same height as the closed one (velista 0079, section 3): the field,
+// Cancel and the filter side by side, with no visible label and no visible count.
 .search {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-2);
-  padding-inline: var(--app-space-4) var(--app-space-2);
-}
-
-.field-label {
-  font-size: var(--app-text-2xs);
-  font-weight: 600;
-  letter-spacing: var(--app-tracking-wordmark);
-  text-transform: uppercase;
-  color: var(--app-text-muted);
-}
-
-.search-row {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
+  min-block-size: var(--app-control-height);
+  padding-inline: var(--app-space-4) var(--app-space-2);
 }
 
+// Exactly one control tall, border included, so the row it sits in is no taller than
+// the buttons beside it. `border-box` is set here rather than trusted to a global
+// reset, because the shell mounts this page under stylesheets that are not velista's.
 .search-field {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: var(--app-space-3);
   flex: 1;
   min-inline-size: 0;
+  block-size: var(--app-control-height);
   padding-inline: var(--app-space-4) var(--app-space-2);
   border: 1px solid var(--app-border-strong);
   border-radius: var(--app-field-radius);
@@ -362,10 +384,14 @@ lib-line-composer {
   color: var(--app-text-muted);
 }
 
+// The whole height of the field it sits in, which is what keeps the tap target the
+// full control height without adding to it.
 .search-input {
   flex: 1 1 auto;
   min-inline-size: 0;
-  min-block-size: var(--app-control-height);
+  align-self: stretch;
+  block-size: auto;
+  min-block-size: 0;
   border: none;
   background: transparent;
   color: var(--app-text-primary);
@@ -439,15 +465,6 @@ lib-line-composer {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
-}
-
-// Quieter than the progress sentence it stands in for: it is about the field
-// above it and not about the shopping.
-.search-count {
-  margin: 0;
-  padding-inline: var(--app-space-4);
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
 }
 
 // Quieter than the count beside it: it is a fact about the trip rather than

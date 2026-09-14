@@ -3,6 +3,7 @@ import {
   QUANTITY_REEL_IDLE_MS,
   QUANTITY_REEL_PX_PER_UNIT,
   QUANTITY_REEL_TAP_MAX_MS,
+  QUANTITY_REEL_TAP_SLOP_PX,
 } from '@portfolio/velista/models';
 import { QuantityReel } from './quantity-reel';
 
@@ -20,8 +21,8 @@ import { QuantityReel } from './quantity-reel';
  * events are `MouseEvent`s carrying the two fields the component reads, and the
  * capture call is optional at the call site precisely so this runs.
  */
-function pointer(type: string, clientX: number): Event {
-  const event = new MouseEvent(type, { bubbles: true, clientX });
+function pointer(type: string, clientX: number, clientY = 0): Event {
+  const event = new MouseEvent(type, { bubbles: true, clientX, clientY });
   Object.defineProperty(event, 'pointerId', { value: 1 });
   Object.defineProperty(event, 'isPrimary', { value: true });
   return event;
@@ -311,10 +312,12 @@ describe('QuantityReel', () => {
   });
 
   describe('the neighbours in the overlay', () => {
+    // Opened with a tap. A press alone opens nothing since velista `0079`, because a
+    // press might be the start of a scroll.
     it('shows the one before and the one after', async () => {
       const { fixture, host } = await render(3);
 
-      host.dispatchEvent(pointer('pointerdown', 0));
+      tap(host);
       fixture.detectChanges();
 
       expect(fixture.componentInstance.previous()).toBe(2);
@@ -326,11 +329,122 @@ describe('QuantityReel', () => {
       // the end without a disabled control or a bounce to explain it (section 4).
       const { fixture, host } = await render(0);
 
-      host.dispatchEvent(pointer('pointerdown', 0));
+      tap(host);
       fixture.detectChanges();
 
       expect(fixture.componentInstance.previous()).toBeNull();
       expect(fixture.componentInstance.next()).toBe(1);
+    });
+  });
+
+  /**
+   * Velista `0079`, section 8. The reel sits in a list that scrolls, so a thumb that
+   * lands on it on the way up or down the list is scrolling, and must open nothing.
+   */
+  describe('a press that turns out to be a scroll', () => {
+    const scrolled = QUANTITY_REEL_TAP_SLOP_PX + 30;
+
+    it('opens nothing on the press alone', async () => {
+      const { fixture, host } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+      expect(host.querySelector('.overlay')).toBeNull();
+    });
+
+    it('opens nothing and sends nothing when the press goes up the list and lifts', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0, 0));
+      host.dispatchEvent(pointer('pointermove', 0, -scrolled));
+      host.dispatchEvent(pointer('pointerup', 0, -scrolled));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+      expect(host.querySelector('.overlay')).toBeNull();
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([]);
+    });
+
+    it('opens nothing when the browser takes the press away for a scroll', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0, 0));
+      host.dispatchEvent(pointer('pointermove', 0, scrolled));
+      host.dispatchEvent(pointer('pointercancel', 0, scrolled));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+      expect(host.querySelector('.overlay')).toBeNull();
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([]);
+    });
+
+    it('opens nothing on a cancel that arrives before any move', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      host.dispatchEvent(pointer('pointercancel', 0));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([]);
+    });
+
+    it('is not a tap when it comes back to where it started', async () => {
+      // The decision is made on the way, not at the end: a thumb that scrolled down
+      // and back up has still scrolled.
+      const { fixture, host } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0, 0));
+      host.dispatchEvent(pointer('pointermove', 0, scrolled));
+      host.dispatchEvent(pointer('pointermove', 0, 0));
+      host.dispatchEvent(pointer('pointerup', 0, 0));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+    });
+
+    it('leaves an open overlay alone, and lets it close the ordinary way', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      tap(host);
+      fixture.detectChanges();
+
+      const target = number(host, 3);
+      target.dispatchEvent(pointer('pointerdown', 0, 0));
+      target.dispatchEvent(pointer('pointermove', 0, scrolled));
+      target.dispatchEvent(pointer('pointerup', 0, scrolled));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(2);
+      expect(fixture.componentInstance.open()).toBe(true);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.open()).toBe(false);
+      expect(deltas).toEqual([]);
+    });
+
+    it('still drags when the finger drifts a little vertically before going sideways', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0, 0));
+      host.dispatchEvent(pointer('pointermove', 0, 3));
+      host.dispatchEvent(
+        pointer('pointermove', -2 * QUANTITY_REEL_PX_PER_UNIT, 5)
+      );
+      host.dispatchEvent(
+        pointer('pointerup', -2 * QUANTITY_REEL_PX_PER_UNIT, 5)
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(4);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([2]);
     });
   });
 
@@ -641,9 +755,12 @@ describe('QuantityReel', () => {
       // between two frames draws the one it landed on, not all three.
       const { fixture, host, previews } = await render(2);
 
+      // A press alone previews nothing since velista `0079`, section 8: it might be
+      // the start of a scroll, and a caption that flashed on the way would be a
+      // claim about a gesture nobody made. The first sideways move is the drag.
       host.dispatchEvent(pointer('pointerdown', 0));
       fixture.detectChanges();
-      expect(previews[previews.length - 1]).toBe(2);
+      expect(previews.every((seen) => seen === null)).toBe(true);
 
       for (const units of [1, 2, 3]) {
         host.dispatchEvent(

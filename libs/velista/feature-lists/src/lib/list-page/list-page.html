@@ -171,7 +171,21 @@
                 {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
               </p>
             }
-            @if (strip.messageKey) {
+            <!--
+              The assistant is still working out what was said (velista 0079,
+              section 5). The spinner is decoration beside a sentence that says the
+              same thing, and it sits inside the strip's own polite region, so the
+              reply that replaces it is announced like any other.
+            -->
+            @if (strip.working) {
+              <p class="voice-reply voice-working">
+                <lib-spinner-icon
+                  aria-hidden="true"
+                  class="voice-working-glyph"
+                />
+                <span>{{ 'list.add.working' | rokuT }}</span>
+              </p>
+            } @else if (strip.messageKey) {
               <p class="voice-reply">
                 {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
               </p>
