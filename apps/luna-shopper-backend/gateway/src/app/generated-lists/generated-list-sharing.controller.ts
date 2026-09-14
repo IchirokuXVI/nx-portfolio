@@ -6,6 +6,7 @@ import {
   Headers,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -52,6 +53,8 @@ import {
   type MintParticipantTokenResult,
   type ParticipantTokenResult,
   type ProductGroupOfferPage,
+  type RenameGeneratedListBasketLineRequest,
+  type RenameGeneratedListBasketLineResult,
   type ReopenGeneratedListLineRequest,
   type SetGeneratedListLineOutstandingRequest,
   type SetGeneratedListOriginQuantityRequest,
@@ -86,6 +89,7 @@ import {
   BasketSuggestQueryDto,
   EnsureShareLinkDto,
   JoinGeneratedListDto,
+  RenameGeneratedListBasketLineDto,
   RevokeShareLinkDto,
   SetGeneratedListLineOutstandingDto,
   SetGeneratedListOriginQuantityDto,
@@ -750,6 +754,52 @@ export class GeneratedListParticipantController {
     };
     return this.nats.send<GeneratedListBasketLineView>(
       GENERATED_LIST_SHARING_PATTERNS.addLine,
+      req
+    );
+  }
+
+  /**
+   * Rename a basket line, and every zone line it came from (plan 0113).
+   *
+   * Under `basket` for the reason {@link addLine} gives: `PATCH :id/lines/:lineId`
+   * is the owner's own edit on `GeneratedListController`, and a second handler
+   * there would never be reached.
+   *
+   * No `seesZoneData` check here, and none is needed: core refuses a guest, and
+   * anybody who cannot write every list the line came from, which is a stricter
+   * question than the basket read asks. The answer's line is projected for the
+   * caller as the basket read projects it.
+   *
+   * A name already taken, on one of those lists or in the basket, is refused
+   * with `line_merge_required` until the same request carries `confirmMerge`.
+   * Its details name every list, with its zone, and the basket line.
+   */
+  @Patch(':id/basket/lines/:lineId')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.renameLine)
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    membership: true,
+    finishedBasket: true,
+    lineMerge: true,
+  })
+  renameLine(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: RenameGeneratedListBasketLineDto
+  ): Promise<RenameGeneratedListBasketLineResult> {
+    const req: RenameGeneratedListBasketLineRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+      content: dto.content,
+      confirmMerge: dto.confirmMerge,
+    };
+    return this.nats.send<RenameGeneratedListBasketLineResult>(
+      GENERATED_LIST_SHARING_PATTERNS.renameLine,
       req
     );
   }

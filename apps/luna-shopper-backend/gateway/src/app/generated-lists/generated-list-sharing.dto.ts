@@ -419,3 +419,30 @@ export class SetGeneratedListLineOutstandingDto {
   @Max(LINE_QUANTITY_MAX)
   from!: number;
 }
+
+/**
+ * Rename a basket line and every zone line it came from (plan 0113, section 7).
+ *
+ * The same bounds a basket line's content has on every other route, so the DTO,
+ * the JSON Schema and the service agree about what a name may be.
+ */
+export class RenameGeneratedListBasketLineDto {
+  @ApiProperty({
+    minLength: 1,
+    maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
+    description:
+      'The new name. It renames the basket line and every zone line the basket line came from, in one transaction.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(GENERATED_LIST_LIMITS.contentMaxLength)
+  content!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Merge where the new name is already taken, on one of those lists or in the basket. Without it such a rename is refused with `line_merge_required`, whose details name every list and the basket line it collided with, and nothing is written.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  confirmMerge?: boolean;
+}

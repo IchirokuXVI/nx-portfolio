@@ -10076,7 +10076,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/generated-list.GeneratedListLineView"
+                  "$ref": "#/components/schemas/generated-list.UpdateGeneratedListLineResult"
                 }
               }
             }
@@ -10113,6 +10113,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11010,6 +11020,124 @@
           },
           "409": {
             "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/basket/lines/{lineId}": {
+      "patch": {
+        "operationId": "GeneratedListParticipantController_renameLine_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameGeneratedListBasketLineDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `generatedList.renameLine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.generatedList.renameLine.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -22212,6 +22340,10 @@
             "format": "uuid",
             "nullable": true,
             "description": "Send an added line into a zone list. Only meaningful on a line added to this basket, and it promotes the line once."
+          },
+          "confirmMerge": {
+            "type": "boolean",
+            "description": "A new content renames every zone line this line came from as well (plan 0113). Merge where the new name is already taken, on one of those lists or in the basket. Without it such a rename is refused with `line_merge_required`, and nothing is written."
           }
         }
       },
@@ -22276,6 +22408,24 @@
             "items": {
               "type": "string"
             }
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "RenameGeneratedListBasketLineDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "The new name. It renames the basket line and every zone line the basket line came from, in one transaction."
+          },
+          "confirmMerge": {
+            "type": "boolean",
+            "description": "Merge where the new name is already taken, on one of those lists or in the basket. Without it such a rename is refused with `line_merge_required`, whose details name every list and the basket line it collided with, and nothing is written."
           }
         },
         "required": [
@@ -28683,6 +28833,75 @@
         ],
         "additionalProperties": false
       },
+      "generated-list.UpdateGeneratedListLineResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledQuantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "origin": {
+            "$ref": "#/components/schemas/enums.GeneratedLineOrigin"
+          },
+          "targetListId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "origins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.GeneratedListLineOriginView"
+            }
+          },
+          "absorbedLineId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "quantity",
+          "settledQuantity",
+          "itemId",
+          "options",
+          "origin",
+          "targetListId",
+          "position",
+          "origins"
+        ],
+        "additionalProperties": false
+      },
       "harvest.AdapterCapabilityTable": {
         "type": "object",
         "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes REGION rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.",
@@ -30749,6 +30968,22 @@
         ],
         "additionalProperties": false
       },
+      "msg.generatedList.renameLine.response": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+          },
+          "absorbedLineId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "line"
+        ],
+        "additionalProperties": false
+      },
       "msg.generatedList.setOriginQuantity.response": {
         "type": "object",
         "properties": {
@@ -31064,7 +31299,7 @@
           "details": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`, where it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with."
+            "description": "Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null."
           }
         }
       },

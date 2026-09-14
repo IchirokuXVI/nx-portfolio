@@ -22,6 +22,8 @@ import {
   type JoinGeneratedListRequest,
   type ListParticipantsRequest,
   type PreviewShareLinkRequest,
+  type RenameGeneratedListBasketLineRequest,
+  type RenameGeneratedListBasketLineResult,
   type ReopenGeneratedListLineRequest,
   type ResolveParticipantRequest,
   type RevokeParticipantRequest,
@@ -36,6 +38,7 @@ import {
   type SplitGeneratedListLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
+import { GeneratedListLineRenameService } from './generated-list-line-rename.service';
 import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
@@ -65,8 +68,20 @@ export class GeneratedListSharingController {
     private readonly basket: GeneratedListBasketService,
     private readonly origins: GeneratedListOriginsService,
     private readonly originSettled: GeneratedListOriginSettledService,
-    private readonly split: GeneratedListSplitService
+    private readonly split: GeneratedListSplitService,
+    private readonly renames: GeneratedListLineRenameService
   ) {}
+
+  /**
+   * Rename a basket line and every zone line it came from (plan 0113). Refused
+   * to a guest, and to anybody who cannot write every one of those lists.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.renameLine)
+  renameLine(
+    @Payload() req: RenameGeneratedListBasketLineRequest
+  ): Promise<RenameGeneratedListBasketLineResult> {
+    return this.renames.renameAsParticipant(req);
+  }
 
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
   ensureLink(

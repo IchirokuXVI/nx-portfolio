@@ -16,6 +16,7 @@ import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
+import { GeneratedListLineRenameService } from './generated-list-line-rename.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
@@ -111,6 +112,11 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // says how much of it this basket bought for them, and the two move in
     // opposite directions on the same row of the same sheet.
     GeneratedListOriginSettledService,
+    // Renaming a basket line and every zone line it came from (plan 0113). A
+    // provider of its own, because it is the one write here that renames zone
+    // lines, merges them through plan 0112's merge, and merges two basket lines,
+    // all in one transaction. The owner's line edit calls it too.
+    GeneratedListLineRenameService,
     // The purchases waiting for a list to arrive (plan 0092 section 4.3, filled
     // by plan 0093). It does nothing yet, and it is provided rather than left
     // out so the two origin inserts already call the one method.

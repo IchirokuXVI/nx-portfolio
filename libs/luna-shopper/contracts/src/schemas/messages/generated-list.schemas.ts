@@ -53,6 +53,8 @@ export const GENERATED_LIST_SCHEMA_IDS = {
   updateRequest: schemaId('msg/generatedList.update/request'),
   addLineRequest: schemaId('msg/generatedList.addLine/request'),
   updateLineRequest: schemaId('msg/generatedList.updateLine/request'),
+  /** The line, and the basket line a rename merged away (plan 0113). */
+  updateLineResult: schemaId('generated-list/UpdateGeneratedListLineResult'),
   lineIdRequest: schemaId('msg/generatedList.lineId/request'),
   reorderRequest: schemaId('msg/generatedList.reorderLines/request'),
 } as const;
@@ -71,34 +73,46 @@ const lineOriginView = object(
   ['id', 'zoneId', 'listId', 'lineId', 'quantity', 'settled', 'lineVersion']
 );
 
+const lineViewProperties = {
+  id: nonEmptyString(),
+  content: string(),
+  quantity: integer({ minimum: 0 }),
+  settledQuantity: integer({ minimum: 0 }),
+  // Nullable rather than absent: a free text line has no product identity, so
+  // it has no pick to make (plan 0050, section 1).
+  itemId: nullableString(),
+  options: array(nonEmptyString()),
+  origin: ref(GENERATED_LIST_SCHEMA_IDS.generatedLineOrigin),
+  targetListId: nullableString(),
+  position: integer({ minimum: 0 }),
+  origins: array(ref(GENERATED_LIST_SCHEMA_IDS.lineOriginView)),
+};
+
+const lineViewRequired = [
+  'id',
+  'content',
+  'quantity',
+  'settledQuantity',
+  'itemId',
+  'options',
+  'origin',
+  'targetListId',
+  'position',
+  'origins',
+];
+
 const lineView = object(
   GENERATED_LIST_SCHEMA_IDS.lineView,
-  {
-    id: nonEmptyString(),
-    content: string(),
-    quantity: integer({ minimum: 0 }),
-    settledQuantity: integer({ minimum: 0 }),
-    // Nullable rather than absent: a free text line has no product identity, so
-    // it has no pick to make (plan 0050, section 1).
-    itemId: nullableString(),
-    options: array(nonEmptyString()),
-    origin: ref(GENERATED_LIST_SCHEMA_IDS.generatedLineOrigin),
-    targetListId: nullableString(),
-    position: integer({ minimum: 0 }),
-    origins: array(ref(GENERATED_LIST_SCHEMA_IDS.lineOriginView)),
-  },
-  [
-    'id',
-    'content',
-    'quantity',
-    'settledQuantity',
-    'itemId',
-    'options',
-    'origin',
-    'targetListId',
-    'position',
-    'origins',
-  ]
+  lineViewProperties,
+  lineViewRequired
+);
+
+// What an owner's line edit answers: the surviving line, and the basket line a
+// rename merged away when there was one (plan 0113). Absent when nothing merged.
+const updateLineResult = object(
+  GENERATED_LIST_SCHEMA_IDS.updateLineResult,
+  { ...lineViewProperties, absorbedLineId: nonEmptyString() },
+  lineViewRequired
 );
 
 /**
@@ -281,6 +295,9 @@ const updateLineRequest = object(
     }),
     itemId: nullableString(),
     targetListId: nullableString(),
+    // A new content renames the zone lines too (plan 0113). Anything but `true`
+    // refuses such a rename where the name is taken, and writes nothing.
+    confirmMerge: boolean(),
   },
   ['userId', 'generatedListId', 'lineId']
 );
@@ -333,6 +350,7 @@ export const generatedListSchemas: JsonSchema[] = [
   updateRequest,
   addLineRequest,
   updateLineRequest,
+  updateLineResult,
   lineIdRequest,
   reorderRequest,
 ];
@@ -367,7 +385,7 @@ export const generatedListMessageContracts: Record<
   },
   [GENERATED_LIST_PATTERNS.updateLine]: {
     request: GENERATED_LIST_SCHEMA_IDS.updateLineRequest,
-    response: GENERATED_LIST_SCHEMA_IDS.lineView,
+    response: GENERATED_LIST_SCHEMA_IDS.updateLineResult,
   },
   [GENERATED_LIST_PATTERNS.deleteLine]: {
     request: GENERATED_LIST_SCHEMA_IDS.lineIdRequest,
