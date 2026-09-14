@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { emptyUsage, stripFence } from '../../model-engines/src/index.mjs';
+import {
+  emptyUsage,
+  handleAbandoned,
+  stripFence,
+} from '../../model-engines/src/index.mjs';
 import {
   decideRow,
   fetchBatch,
   parseDecision,
+  roundWidth,
   rowIdentity,
   runCuration,
   toPacket,
@@ -646,10 +651,15 @@ function fakeBatchDecider({
 /**
  * An engine that holds `batchSize` questions at a time.
  *
- * A queued reply is a string, or an entry of its own for the case `askMany`
+ * A queued reply is a string, or an entry of its own for the case `askEach`
  * exists to express: one prompt the engine gave up on while the rest answered.
+ *
+ * `batches` is one entry per call, which is how a test says whether the re-asks
+ * of a round were sent together or one at a time. `roundSize` is passed only by
+ * a test about the width, because most of them want the width to be the number
+ * they already named.
  */
-function fakeBatchEngine(replies, batchSize = 4) {
+function fakeBatchEngine(replies, batchSize = 4, { roundSize = null } = {}) {
   const prompts = [];
   const batches = [];
   const options = [];
@@ -659,8 +669,9 @@ function fakeBatchEngine(replies, batchSize = 4) {
     }
     return typeof reply === 'string' ? { text: reply } : reply;
   };
-  return {
+  const engine = {
     batchSize,
+    ...(roundSize === null ? {} : { roundSize }),
     prompts,
     batches,
     options,
@@ -673,15 +684,18 @@ function fakeBatchEngine(replies, batchSize = 4) {
       }
       return entry;
     },
-    askMany: async (bodies, opts = {}) => {
+    askEach: (bodies, opts = {}) => {
       batches.push(bodies);
       return bodies.map((body) => {
         prompts.push(body);
         options.push(opts);
-        return entryOf(replies.shift());
+        return Promise.resolve(entryOf(replies.shift()));
       });
     },
+    askMany: async (bodies, opts = {}) =>
+      Promise.all(engine.askEach(bodies, opts)),
   };
+  return engine;
 }
 
 const LINKED = '{"decision":"LINK","itemId":"i1","confidence":0.95}';
@@ -784,18 +798,26 @@ test('a batch whose third row goes stale records four, and asks once more', asyn
     stderr: sink(),
   });
 
-  // Four in the batch and one more for the row that was asked the wrong
-  // question, which is what a collision costs.
-  assert.equal(engine.batches.length, 1);
+  // Four in the round and one more for the row that was asked the wrong
+  // question, which is what a collision costs. The re-ask is its own pass over
+  // the round rather than a request in the middle of the decide loop.
+  assert.deepEqual(
+    engine.batches.map((bodies) => bodies.length),
+    [4, 1]
+  );
   assert.equal(engine.prompts.length, 5);
   assert.match(engine.prompts[4], /ref-e2/);
   // The re-ask is the packet alone, not a retry: it carries no reproach.
   assert.ok(!engine.prompts[4].includes('could not be used'));
 
   const decides = decider.calls.filter((call) => call.command === 'decide');
+  // The stale row waits for the rest of its round and is re-asked at the end of
+  // it (plan 0004), so it is recorded last rather than in its own place. The
+  // round is composed so that no two of its rows can be about the same product,
+  // which is what makes the order of one round's rows free.
   assert.deepEqual(
     decides.map((call) => call.entryId),
-    ['e1', 'e2', 'e3', 'e3', 'e4']
+    ['e1', 'e2', 'e3', 'e4', 'e3']
   );
   // Every one of them a first attempt: staleness spends nothing.
   assert.deepEqual(
@@ -875,23 +897,26 @@ test('a prompt the engine gave up on is a reply that cannot be used', async () =
   });
 
   // The failed entry costs its own row one retry and costs the row beside it
-  // nothing, which is why a batch reports a failure per prompt.
+  // nothing, which is why a round reports a failure per prompt.
   assert.equal(engine.prompts.length, 3);
   assert.match(
     engine.prompts[2],
     /could not be used: the ollama engine gave up/
   );
   const decides = decider.calls.filter((call) => call.command === 'decide');
+  // e1 records nothing on the round's own pass, because there was no reply to
+  // record, so e2 is recorded first and e1 is recorded from the re-ask pass
+  // with the attempt `--final` counts.
   assert.deepEqual(
     decides.map((call) => [call.entryId, call.final]),
     [
-      ['e1', true],
       ['e2', false],
+      ['e1', true],
     ]
   );
 });
 
-test('a stop inside askMany records what was recorded and applies nothing in flight', async () => {
+test('a stop inside a round records what was recorded and applies nothing in flight', async () => {
   const controller = new AbortController();
   const decider = fakeBatchDecider({
     batches: [
@@ -906,15 +931,21 @@ test('a stop inside askMany records what was recorded and applies nothing in fli
   let round = 0;
   const engine = {
     batchSize: 2,
-    ask: async () => assert.fail('a batched walk asks through askMany'),
-    askMany: async (bodies) => {
+    ask: async () => assert.fail('a batched walk asks through askEach'),
+    askEach: (bodies) => {
       round += 1;
       if (round === 1) {
-        return bodies.map(() => ({ text: LINKED }));
+        return bodies.map(() => Promise.resolve({ text: LINKED }));
       }
-      // The keystroke lands while the second batch is in flight.
+      // The keystroke lands while the second round is in flight, and every
+      // reply that had not arrived rejects with the signal's own reason. Every
+      // one of them is handled here, as the contract says an engine handles
+      // them, because the walk is entitled to abandon a round it stopped
+      // reading.
       controller.abort(new Error('the run was stopped with Ctrl+C'));
-      throw controller.signal.reason;
+      return handleAbandoned(
+        bodies.map(() => Promise.reject(controller.signal.reason))
+      );
     },
   };
 
@@ -992,6 +1023,7 @@ test('an engine that holds one request in flight never calls askMany', async () 
   const engine = fakeEngine([LINKED]);
   engine.batchSize = 1;
   engine.askMany = async () => assert.fail('a width of one asks one at a time');
+  engine.askEach = () => assert.fail('a width of one asks one at a time');
 
   await runCuration({
     slots: fakeSlots({ taken: [1] }),
@@ -1022,6 +1054,7 @@ test('a decider that composes no batches is walked one row at a time', async () 
   });
   const engine = fakeBatchEngine([LINKED], 4);
   engine.askMany = async () => assert.fail('the decider hands out no batches');
+  engine.askEach = () => assert.fail('the decider hands out no batches');
 
   await runCuration({
     slots: fakeSlots({ taken: [1] }),
@@ -1040,6 +1073,290 @@ test('a decider that composes no batches is walked one row at a time', async () 
     [null, null]
   );
   assert.equal(engine.prompts.length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// The walk that decides as replies arrive (plan 0004)
+// ---------------------------------------------------------------------------
+
+/** A round of `ids`, and the decider that hands it out in one go. */
+function roundOf(ids, answers = {}) {
+  return fakeBatchDecider({
+    batches: [ids.map((id) => batchRow(id, `Producto ${id}`))],
+    total: ids.length,
+    answers,
+  });
+}
+
+/** A run over one round, with everything a test does not care about faked. */
+function walk(decider, engine, extra = {}) {
+  return runCuration({
+    slots: fakeSlots({ taken: [1] }),
+    makeDeciderFor: () => decider,
+    engine,
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+    ...extra,
+  });
+}
+
+/** The decisions a run recorded, as `[entryId, final]` in the order it made them. */
+function decidesOf(decider) {
+  return decider.calls
+    .filter((call) => call.command === 'decide')
+    .map((call) => [call.entryId, call.final]);
+}
+
+test('a row is decided as its own reply arrives, not once the round is back', async () => {
+  const decider = roundOf(['e1', 'e2']);
+  // The second reply is only written once the first row has been recorded, so
+  // a walk that waited for the whole round before deciding anything would never
+  // finish this test rather than merely asserting slower.
+  let release = null;
+  const second = new Promise((resolve) => {
+    release = resolve;
+  });
+  const inner = decider.decide;
+  decider.decide = async (entryId, decision, options) => {
+    if (entryId === 'e1') {
+      release({ text: LINKED });
+    }
+    return inner(entryId, decision, options);
+  };
+
+  await walk(decider, {
+    batchSize: 2,
+    ask: async () => assert.fail('a round asks through askEach'),
+    askEach: () => [Promise.resolve({ text: LINKED }), second],
+  });
+
+  assert.deepEqual(decidesOf(decider), [
+    ['e1', false],
+    ['e2', false],
+  ]);
+});
+
+test('a later prompt that answers first is still decided in its own place', async () => {
+  const decider = roundOf(['e1', 'e2', 'e3']);
+
+  await walk(decider, {
+    batchSize: 3,
+    ask: async () => assert.fail('a round asks through askEach'),
+    // The server answers this round backwards, which is what a pool does when
+    // the earlier rows are the slower ones.
+    askEach: (bodies) =>
+      bodies.map(
+        (unused, index) =>
+          new Promise((resolve) => {
+            setTimeout(
+              () => resolve({ text: LINKED }),
+              (bodies.length - index) * 5
+            );
+          })
+      ),
+  });
+
+  assert.deepEqual(decidesOf(decider), [
+    ['e1', false],
+    ['e2', false],
+    ['e3', false],
+  ]);
+});
+
+test('the re-asks of a round are asked together, as one more pass', async () => {
+  const refreshed = {
+    entry: { id: 'e3', name: 'Producto e3' },
+    candidates: [{ ref: 'ref-e2', origin: 'run' }],
+    eanMatch: null,
+  };
+  const decider = roundOf(['e1', 'e2', 'e3', 'e4'], {
+    e1: [
+      {
+        accepted: false,
+        retryable: true,
+        issues: [
+          { code: 'MODEL_OUTPUT_INVALID', detail: 'confidence is missing' },
+        ],
+      },
+      { accepted: true, retryable: false, entryId: 'e1' },
+    ],
+    e3: [
+      { accepted: false, retryable: false, stale: true, packet: refreshed },
+      { accepted: true, retryable: false, entryId: 'e3' },
+    ],
+  });
+  const engine = fakeBatchEngine(new Array(6).fill(LINKED));
+
+  await walk(decider, engine);
+
+  // Two calls, not five: the round, and then the two rows it set aside asked
+  // together rather than one at a time in the middle of the decide loop.
+  assert.deepEqual(
+    engine.batches.map((bodies) => bodies.length),
+    [4, 2]
+  );
+  // A retry carries the reason it was refused; a stale row carries the
+  // refreshed packet and no reproach at all.
+  assert.match(
+    engine.batches[1][0],
+    /could not be used: confidence is missing/
+  );
+  assert.match(engine.batches[1][1], /ref-e2/);
+  assert.ok(!engine.batches[1][1].includes('could not be used'));
+  // Every row of the round is offered to the decider on the round's own pass,
+  // which is what answers `retryable` and `stale` in the first place, and the
+  // two that were refused are recorded again from the re-ask pass.
+  assert.deepEqual(decidesOf(decider), [
+    ['e1', false],
+    ['e2', false],
+    ['e3', false],
+    ['e4', false],
+    ['e1', true],
+    ['e3', false],
+  ]);
+});
+
+test('a re-ask that goes stale again is another pass, and spends nothing', async () => {
+  const refreshed = (ref) => ({
+    entry: { id: 'e2', name: 'Producto e2' },
+    candidates: [{ ref, origin: 'run' }],
+    eanMatch: null,
+  });
+  const decider = roundOf(['e1', 'e2'], {
+    e2: [
+      {
+        accepted: false,
+        retryable: false,
+        stale: true,
+        packet: refreshed('ref-one'),
+      },
+      {
+        accepted: false,
+        retryable: false,
+        stale: true,
+        packet: refreshed('ref-two'),
+      },
+      { accepted: true, retryable: false, entryId: 'e2' },
+    ],
+  });
+  const engine = fakeBatchEngine(new Array(4).fill(LINKED));
+
+  await walk(decider, engine);
+
+  // The round, and then one pass for each time the packet moved under it. The
+  // passes are bounded by the retry budget and by nothing else, which is why a
+  // row can be asked a third time without a counter saying it may.
+  assert.deepEqual(
+    engine.batches.map((bodies) => bodies.length),
+    [2, 1, 1]
+  );
+  assert.match(engine.batches[1][0], /ref-one/);
+  assert.match(engine.batches[2][0], /ref-two/);
+  // Not one of them final: a question that was never asked costs no attempt.
+  assert.deepEqual(decidesOf(decider), [
+    ['e1', false],
+    ['e2', false],
+    ['e2', false],
+    ['e2', false],
+  ]);
+});
+
+test('a re-ask that breaks the schema twice is recorded, final, in its pass', async () => {
+  const decider = roundOf(['e1', 'e2'], {
+    e1: [
+      {
+        accepted: false,
+        retryable: true,
+        issues: [{ code: 'MODEL_OUTPUT_INVALID', detail: 'no itemId' }],
+      },
+      { accepted: true, retryable: false, decision: 'REVIEW', entryId: 'e1' },
+    ],
+  });
+  const engine = fakeBatchEngine([LINKED, LINKED, 'still not JSON']);
+
+  await walk(decider, engine);
+
+  assert.deepEqual(decidesOf(decider), [
+    ['e1', false],
+    ['e2', false],
+    ['e1', true],
+  ]);
+  // The second answer is recorded whatever it says, which is what `--final`
+  // means, so an unusable one reaches the decider as the reply it was.
+  const last = decider.calls.filter((call) => call.command === 'decide').pop();
+  assert.deepEqual(last.decision, { modelReply: 'still not JSON' });
+});
+
+test('the round is what the engine advises, capped by what the decider composes', () => {
+  assert.equal(roundWidth({ batchSize: 4, roundSize: 12 }, 20), 12);
+  // The decider's queue page is the cap: a round never crosses one.
+  assert.equal(roundWidth({ batchSize: 4, roundSize: 12 }, 8), 8);
+  // An engine that advises no round falls back to what it holds in flight,
+  // which is what the width was before plan 0004.
+  assert.equal(roundWidth({ batchSize: 4 }, 20), 4);
+  assert.equal(roundWidth({ roundSize: 1, batchSize: 1 }, 20), 1);
+  // An engine that reports neither, and a decider that composes no batches,
+  // are both one row at a time.
+  assert.equal(roundWidth({}, 20), 1);
+  assert.equal(roundWidth({ batchSize: 4, roundSize: 12 }, 0), 1);
+});
+
+test('the round the engine advises is what the decider is asked for', async () => {
+  const decider = fakeBatchDecider({
+    batches: [
+      ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'].map((id) =>
+        batchRow(id, `Producto ${id}`)
+      ),
+    ],
+    total: 6,
+    width: 20,
+  });
+  const engine = fakeBatchEngine(new Array(6).fill(LINKED), 2, {
+    roundSize: 6,
+  });
+
+  await walk(decider, engine);
+
+  // Six rows in one round, asked of an engine that holds two in flight: the
+  // round and the in flight count are two numbers.
+  assert.deepEqual(
+    decider.calls.filter((call) => call.command === 'next').map((c) => c.count),
+    [6, 6]
+  );
+  assert.deepEqual(
+    engine.batches.map((bodies) => bodies.length),
+    [6]
+  );
+});
+
+test('--limit narrows a wide round to the exact remainder', async () => {
+  const decider = fakeBatchDecider({
+    batches: [
+      ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'].map((id) =>
+        batchRow(id, `Producto ${id}`)
+      ),
+      ['e7', 'e8'].map((id) => batchRow(id, `Producto ${id}`)),
+    ],
+    total: 20,
+    width: 20,
+  });
+  const engine = fakeBatchEngine(new Array(8).fill(LINKED), 2, {
+    roundSize: 6,
+  });
+
+  await walk(decider, engine, { limit: 8 });
+
+  // Six, then the two the limit has left, asked for as two rather than as six
+  // and trimmed: a fetched row carries a handout nothing would ever close.
+  assert.deepEqual(
+    decider.calls.filter((call) => call.command === 'next').map((c) => c.count),
+    [6, 2]
+  );
+  assert.equal(engine.prompts.length, 8);
 });
 
 // ---------------------------------------------------------------------------

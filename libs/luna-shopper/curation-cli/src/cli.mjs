@@ -122,9 +122,19 @@ ${indent}${REHEARSAL_SERVICES.join(',')}
 ${line('--apply <decisions.jsonl>', 'replay a decisions file into the main')}
 ${indent}gateway: no slot, no model
 
-  The ollama engine reads four environment variables: OLLAMA_HOST,
-  OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT and OLLAMA_BATCH (how many requests are
-  held in flight, default 4).
+  The ollama engine reads five environment variables: OLLAMA_HOST,
+  OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT, OLLAMA_BATCH (how many requests are held
+  in flight, default 4) and OLLAMA_ROUND (how many rows are fetched, asked and
+  decided as one round, default three times OLLAMA_BATCH).
+
+  OLLAMA_BATCH above 4 buys nothing on a single 4080 class card: six and eight
+  in flight both measured slower than four, and what a higher value needs is
+  the server's own OLLAMA_NUM_PARALLEL rather than this one. OLLAMA_ROUND is
+  the lever for what is left. A round only as wide as the pool pays a tail
+  every round, where the last request answers with every other slot idle and
+  the walk then goes to the decider before anything is sent again, and a wider
+  round pays that tail and that trip a third as often. It asks nothing more of
+  the server.
 
   OLLAMA_BATCH only pays against a server configured to match it. Ollama
   answers OLLAMA_NUM_PARALLEL requests at a time and queues the rest, so a

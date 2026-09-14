@@ -169,11 +169,21 @@ test('every entry builds an engine that answers both methods and says how wide i
     // job rather than each adapter's, so there is no entry whose engine cannot
     // answer a list of prompts.
     assert.equal(typeof engine.askMany, 'function');
+    // And one promise per prompt beside it (plan 0004), for a caller that wants
+    // to act on the first answer rather than on the last.
+    assert.equal(typeof engine.askEach, 'function');
     assert.ok(Number.isInteger(engine.batchSize) && engine.batchSize > 0);
+    assert.ok(Number.isInteger(engine.roundSize) && engine.roundSize > 0);
   }
   assert.deepEqual(
     built.map((engine) => engine.batchSize),
     [1, 1, 4]
+  );
+  // The two numbers are two numbers: an adapter that holds one request in
+  // flight advises a round of one, and the pool advises three rounds' worth.
+  assert.deepEqual(
+    built.map((engine) => engine.roundSize),
+    [1, 1, 12]
   );
 });
 
@@ -188,13 +198,16 @@ test('OLLAMA_BATCH reaches the ollama entry, and its notice reaches the injected
           ? { capabilities: [], model_info: {} }
           : { message: { content: 'ok' } },
     }),
-    env: { OLLAMA_BATCH: '12' },
+    env: { OLLAMA_BATCH: '12', OLLAMA_ROUND: '30' },
     model: 'gemma4:12b',
     effort: null,
     stderr,
   });
 
   assert.equal(engine.batchSize, 12);
+  // OLLAMA_ROUND reaches the same entry, and is not derived from the width once
+  // the operator has named it.
+  assert.equal(engine.roundSize, 30);
   const answers = await engine.askMany(['one', 'two']);
   assert.deepEqual(answers, [{ text: 'ok' }, { text: 'ok' }]);
   assert.equal(stderr.written.length, 1);

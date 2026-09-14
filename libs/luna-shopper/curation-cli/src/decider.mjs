@@ -316,9 +316,11 @@ export function makeDecider({
      *
      * With a count it is `{ rows, remaining }` instead, up to that many rows
      * the decider composed so that no two of them can be about the same
-     * product (plan 0002 of this library). The count is `engine.batchSize` and
-     * nothing else, so an engine that holds one request in flight passes none
-     * and the command is the one it has always been.
+     * product (plan 0002 of this library). The count is the round the engine
+     * advises, which is `engine.roundSize` and falls back to how many requests
+     * it holds in flight (plan 0004 of this library), so an engine that walks
+     * one row at a time passes none and the command is the one it has always
+     * been.
      */
     next(count = null) {
       return call('next', [

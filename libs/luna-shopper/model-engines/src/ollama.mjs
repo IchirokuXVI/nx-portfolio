@@ -20,6 +20,7 @@ import {
   RETRY_DELAYS,
   askEntry,
   defaultSleep,
+  handleAbandoned,
   stopReason,
   withRetries,
 } from './retry.mjs';
@@ -299,6 +300,55 @@ export function ollamaBatchSize(env = {}) {
 }
 
 /**
+ * How many rows a round covers, as a multiple of the in flight width, when the
+ * operator names none (plan 0004).
+ *
+ * The two numbers answer two questions and this is the whole reason they are
+ * two: `OLLAMA_BATCH` is how many requests the server is asked at once, which
+ * is bounded by the server's own slot count, and the round is how many rows the
+ * caller fetches and works through as one unit, which is bounded by nothing on
+ * the server at all.
+ *
+ * A round only as wide as the pool pays a tail every round: the last request of
+ * it is answered with every other slot already idle, and the caller then goes
+ * away to fetch the next round before anything is sent again. A round three
+ * times the width refills the slots eight more times before it pays that tail
+ * once, and it costs the server nothing, because the pool still holds
+ * `OLLAMA_BATCH` in flight and queues the rest here rather than there.
+ *
+ * Three is not a measured optimum and is not offered as one. It is the smallest
+ * multiple that pays the tail a third as often, and `OLLAMA_ROUND` moves it.
+ */
+export const OLLAMA_DEFAULT_ROUND_MULTIPLIER = 3;
+
+/**
+ * How many rows `OLLAMA_ROUND` asks a round to cover, or the default when it
+ * says nothing.
+ *
+ * Refused here, while the engine is being built, for the same reason
+ * `OLLAMA_BATCH` is: a misconfigured knob should stop a run before a slot is
+ * taken or a model is loaded.
+ *
+ * A round narrower than the width is not refused. It is not what anybody wants,
+ * because it leaves slots with nothing to do, but the operator's machine is
+ * theirs to experiment on and the caller clamps the round to what it can hand
+ * out anyway.
+ */
+export function ollamaRoundSize(env = {}, width = OLLAMA_DEFAULT_BATCH) {
+  const raw = String(env?.OLLAMA_ROUND ?? '').trim();
+  if (raw === '') {
+    return width * OLLAMA_DEFAULT_ROUND_MULTIPLIER;
+  }
+  const rows = positiveInteger(raw);
+  if (rows === null) {
+    throw new Error(
+      `OLLAMA_ROUND is ${raw}, and it has to be a whole number of rows, one or more. It is how many rows the caller works through as one round, and OLLAMA_BATCH is how many requests are held in flight inside it.`
+    );
+  }
+  return rows;
+}
+
+/**
  * The model's own context length, out of `/api/show`.
  *
  * The field is named for the model family and not for the tag the operator
@@ -323,7 +373,7 @@ export function modelContextLength(shown) {
  * The local Ollama path.
  *
  * `fetchImpl` is the injected test seam the whole suite runs on, so none of
- * this needs a server. `env` reaches `create` already, which is how the four
+ * this needs a server. `env` reaches `create` already, which is how the five
  * knobs this adapter has get here without a new flag:
  *
  * - `OLLAMA_HOST`: where the server listens, default `http://localhost:11434`.
@@ -331,6 +381,20 @@ export function modelContextLength(shown) {
  * - `OLLAMA_NUM_PREDICT`: the most tokens one answer may generate, default
  *   1024.
  * - `OLLAMA_BATCH`: how many requests the pool holds in flight, default 4.
+ * - `OLLAMA_ROUND`: how many rows the caller is advised to work through as one
+ *   round, default three times `OLLAMA_BATCH`, which is 12.
+ *
+ * **The two batching knobs are not the same knob, and only one of them is
+ * worth raising on a single card.** `OLLAMA_BATCH` is bounded by the server's
+ * own slot count: on the 4080 class card everything here was measured on, four
+ * in flight ran 2.25x against one at a time, six and eight both ran slower than
+ * four, so a value above 4 buys nothing and the reward for raising it is the
+ * server's `OLLAMA_NUM_PARALLEL` rather than this. `OLLAMA_ROUND` is the lever
+ * for what is left: a round only as wide as the pool pays a tail, where the
+ * last request of it answers with every other slot already idle and the caller
+ * then goes away to fetch the next round, and a wider round pays that tail and
+ * that trip a third as often. It asks nothing more of the server, because the
+ * pool still holds `OLLAMA_BATCH` in flight and queues the remainder here.
  *
  * **`OLLAMA_BATCH` is a client knob and it only pays against a server
  * configured to match.** Ollama answers `OLLAMA_NUM_PARALLEL` requests at a
@@ -367,6 +431,7 @@ export function makeOllamaEngine({
   const predictCeiling =
     positiveInteger(env?.OLLAMA_NUM_PREDICT) ?? NUM_PREDICT_CEILING;
   const width = ollamaBatchSize(env);
+  const rows = ollamaRoundSize(env, width);
   let noticed = false;
   let serialized = false;
 
@@ -604,14 +669,32 @@ export function makeOllamaEngine({
    * reports that number. So the first round, which is the one round every
    * request of starts at the same moment, is measured, and a staircase gets one
    * line on stderr. See `looksSerialized` and `serializedNotice`.
+   *
+   * It answers `{ answers, done }`: one promise per prompt, settled as each
+   * reply arrives, and one promise for the workers themselves. `askEach` hands
+   * back the first and `askMany` waits on the second, which is the only thing
+   * the two of them do differently.
    */
-  async function askMany(prompts, options = {}) {
+  function runPool(prompts, options = {}) {
     if (width > OLLAMA_WIDEST_MEASURED_BATCH && !noticed) {
       noticed = true;
       stderr.write(wideBatchNotice(width));
     }
 
-    const answers = new Array(prompts.length);
+    // One promise per prompt, settled by the worker that answers it, so a
+    // caller reading them in order works on the first answer while the rest are
+    // still in flight (plan 0004). The array is in input order and the
+    // settlements are in the order the server finished, which is exactly the
+    // difference this buys.
+    const settle = new Array(prompts.length);
+    const answers = handleAbandoned(
+      prompts.map(
+        (unused, index) =>
+          new Promise((resolve, reject) => {
+            settle[index] = { resolve, reject };
+          })
+      )
+    );
     let next = 0;
 
     // The first round is the prompts the workers take before any of them has
@@ -636,10 +719,12 @@ export function makeOllamaEngine({
         }
         next += 1;
         const startedAt = index < roundWidth ? now() : 0;
-        // The answer is written to the slot the prompt came from, so the order
-        // the answers are read in is the order they were asked in and not the
-        // order they finished in.
-        answers[index] = await askEntry(ask, prompts[index], options, signal);
+        // The answer settles the promise the prompt came with, so the order the
+        // answers are read in is the order they were asked in and not the order
+        // they finished in.
+        settle[index].resolve(
+          await askEntry(ask, prompts[index], options, signal)
+        );
         if (index < roundWidth) {
           timings[index] = { startedAt, finishedAt: now() };
           timed += 1;
@@ -671,11 +756,45 @@ export function makeOllamaEngine({
     ) {
       workers.push(worker());
     }
-    // A stop rejects here with the signal's own reason, which is what a caller
-    // that pressed Ctrl+C is owed: an answer about the run rather than an array
-    // of two hundred entries each reporting the same stop as a failure.
-    await Promise.all(workers);
-    return answers;
+    // A stop reaches every prompt that has not answered yet, with the signal's
+    // own reason, which is what a caller that pressed Ctrl+C is owed: an answer
+    // about the run rather than an entry reporting the same stop as a failure.
+    // Rejecting a promise that already settled does nothing, so the answers
+    // that were in before the keystroke stay answers.
+    const done = Promise.all(workers);
+    done.catch((error) => {
+      for (const slot of settle) {
+        slot.reject(error);
+      }
+    });
+    return { answers, done };
+  }
+
+  /**
+   * One promise per prompt, settled as each reply arrives (plan 0004).
+   *
+   * The pool above, read one answer at a time. Nothing about what is sent
+   * changes and nothing about the order the array is in changes: what the
+   * caller gains is the right to act on the first answer before the last one
+   * has been written, which for the curation walk is the decider running while
+   * the card is still busy.
+   */
+  function askEach(prompts, options = {}) {
+    return runPool(prompts, options).answers;
+  }
+
+  /**
+   * The pool read to the end, in input order.
+   *
+   * The workers are awaited rather than only the answers, because a stop is not
+   * an array of entries: it rejects this call with the signal's own reason,
+   * including the stop that arrives after the last prompt of the batch was
+   * answered.
+   */
+  async function askMany(prompts, options = {}) {
+    const { answers, done } = runPool(prompts, options);
+    await done;
+    return Promise.all(answers);
   }
 
   return {
@@ -688,7 +807,13 @@ export function makeOllamaEngine({
     // reports is the number it holds in flight. A caller reads this rather than
     // asking which adapter it is holding.
     batchSize: width,
+    // How many rows a caller is advised to work through as one round, which is
+    // a different question from how many requests are in flight inside it: this
+    // one costs the server nothing and is what stops a round tail being paid
+    // every few rows. See `ollamaRoundSize`.
+    roundSize: rows,
     ask,
+    askEach,
     askMany,
   };
 }

@@ -5,12 +5,14 @@ import {
   NUM_PREDICT_CEILING,
   OLLAMA_DEFAULT_BATCH,
   OLLAMA_DEFAULT_HOST,
+  OLLAMA_DEFAULT_ROUND_MULTIPLIER,
   OLLAMA_MAX_BATCH,
   looksSerialized,
   makeOllamaEngine,
   modelContextLength,
   ollamaBatchSize,
   ollamaHost,
+  ollamaRoundSize,
   replyTimings,
   truncationFloor,
 } from './ollama.mjs';
@@ -840,6 +842,197 @@ test('an empty batch is an empty answer and asks nothing', async () => {
   const fake = pooledServer();
   assert.deepEqual(await engineOn(fake).askMany([]), []);
   assert.deepEqual(fake.seen.chat, []);
+});
+
+// ---------------------------------------------------------------------------
+// One promise per prompt, and the round (plan 0004)
+// ---------------------------------------------------------------------------
+
+test('askEach settles each prompt as it is answered, in input order', async () => {
+  // The server answers this list very nearly backwards, so a caller reading the
+  // promises in order reads the last answer first and the array still holds
+  // each answer against the prompt it belongs to.
+  const fake = pooledServer({
+    delayFor: (prompt) => (6 - Number(prompt.slice(1))) * 10,
+  });
+  const engine = engineOn(fake);
+
+  const answers = engine.askEach(prompts(6));
+  assert.equal(answers.length, 6);
+  // Returned at once, before anything has been answered, which is the whole
+  // point of handing back promises rather than a list.
+  assert.ok(answers.every((entry) => entry instanceof Promise));
+
+  const settled = [];
+  await Promise.all(
+    answers.map(async (entry, index) => {
+      await entry;
+      settled.push(index);
+    })
+  );
+
+  assert.deepEqual(
+    await Promise.all(answers),
+    prompts(6).map((prompt) => ({ text: `answer to ${prompt}` }))
+  );
+  // The settlements are the order the server finished in, and the array is the
+  // order the prompts were asked in. Both at once is the contract.
+  assert.notDeepEqual(settled, [0, 1, 2, 3, 4, 5]);
+  assert.notDeepEqual(fake.seen.finished, prompts(6));
+});
+
+test('a caller that reads one askEach promise can act before the rest arrive', async () => {
+  const fake = pooledServer({
+    delayFor: (prompt) => (prompt === 'p0' ? 5 : 200),
+  });
+
+  const answers = engineOn(fake).askEach(prompts(4));
+  assert.deepEqual(await answers[0], { text: 'answer to p0' });
+  // The first answer is in while the rest are still being written, which is
+  // what a caller buys by reading them one at a time.
+  assert.deepEqual(fake.seen.finished, ['p0']);
+  await Promise.all(answers);
+});
+
+test('one prompt that gave up settles as its own entry and the rest answer', async () => {
+  const fake = pooledServer({
+    replyFor: (prompt) =>
+      prompt === 'p2'
+        ? { status: 500 }
+        : reply({ content: `answer to ${prompt}` }),
+  });
+
+  const answers = engineOn(fake).askEach(prompts(4));
+
+  assert.match(
+    String((await answers[2]).error),
+    /The ollama engine gave up: HTTP 500/
+  );
+  for (const index of [0, 1, 3]) {
+    assert.equal((await answers[index]).text, `answer to p${index}`);
+  }
+});
+
+test('a stop rejects the askEach promises that had not answered', async () => {
+  const controller = new AbortController();
+  const fake = pooledServer({
+    delayFor: () => 5,
+    onStart: (prompt, seen) => {
+      if (seen.started.length === 3) {
+        controller.abort(new Error('the run was stopped with Ctrl+C'));
+      }
+    },
+  });
+
+  const answers = engineOn(fake, {
+    env: { OLLAMA_BATCH: '2' },
+    signal: controller.signal,
+  }).askEach(prompts(8));
+
+  // The prompts that were in flight when the keystroke landed answered, and
+  // every prompt behind them rejects with the reason the caller aborted with
+  // rather than with an entry reporting the stop as a failure.
+  await assert.rejects(() => answers[7], /stopped with Ctrl\+C/);
+  assert.deepEqual(fake.seen.started, ['p0', 'p1', 'p2']);
+});
+
+test('the promises a caller abandons are handled, so a stop kills nothing', async () => {
+  const controller = new AbortController();
+  const fake = pooledServer({
+    delayFor: () => 5,
+    onStart: (prompt, seen) => {
+      if (seen.started.length === 1) {
+        controller.abort(new Error('the run was stopped with Ctrl+C'));
+      }
+    },
+  });
+
+  // Every promise of this round rejects and not one of them is ever read,
+  // which is exactly what a walk that broke out of its round leaves behind. An
+  // unhandled rejection would end the process rather than fail an assertion,
+  // so the assertion is that the run reaches the line below.
+  engineOn(fake, {
+    env: { OLLAMA_BATCH: '1' },
+    signal: controller.signal,
+  }).askEach(prompts(4));
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.ok(true);
+});
+
+test('askMany is askEach read to the end, and a late stop still rejects it', async () => {
+  const controller = new AbortController();
+  const fake = pooledServer({
+    delayFor: () => 1,
+    // The keystroke lands as the last prompt of the batch is answered, so every
+    // entry is in and there is nothing left to reject. It is still a stop.
+    onStart: (prompt, seen) => {
+      if (seen.started.length === 2) {
+        controller.abort(new Error('the run was stopped with Ctrl+C'));
+      }
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      engineOn(fake, {
+        env: { OLLAMA_BATCH: '2' },
+        signal: controller.signal,
+      }).askMany(prompts(2)),
+    /stopped with Ctrl\+C/
+  );
+});
+
+test('the round is three times the width, and OLLAMA_ROUND moves it', () => {
+  assert.equal(ollamaRoundSize({}, 4), 4 * OLLAMA_DEFAULT_ROUND_MULTIPLIER);
+  assert.equal(ollamaRoundSize({}, 1), OLLAMA_DEFAULT_ROUND_MULTIPLIER);
+  assert.equal(ollamaRoundSize({ OLLAMA_ROUND: '20' }, 4), 20);
+  // A round narrower than the width is not refused: the operator's machine is
+  // theirs, and the caller clamps the round to what it can hand out anyway.
+  assert.equal(ollamaRoundSize({ OLLAMA_ROUND: '2' }, 4), 2);
+  assert.equal(ollamaRoundSize({ OLLAMA_ROUND: '  ' }, 4), 12);
+});
+
+test('a round that is not a positive whole number is refused', () => {
+  assert.throws(
+    () => ollamaRoundSize({ OLLAMA_ROUND: '0' }, 4),
+    /OLLAMA_ROUND/
+  );
+  assert.throws(() => ollamaRoundSize({ OLLAMA_ROUND: '2.5' }, 4), /rows/);
+  assert.throws(() => ollamaRoundSize({ OLLAMA_ROUND: 'wide' }, 4), /rows/);
+  // Refused while the engine is being built, not when the first round is sent.
+  assert.throws(
+    () => engineOn(pooledServer(), { env: { OLLAMA_ROUND: 'wide' } }),
+    /OLLAMA_ROUND/
+  );
+});
+
+test('the engine reports the round beside the width, and they are not one number', () => {
+  assert.equal(engineOn(pooledServer()).roundSize, 12);
+  assert.equal(
+    engineOn(pooledServer(), { env: { OLLAMA_BATCH: '2' } }).roundSize,
+    6
+  );
+  const engine = engineOn(pooledServer(), {
+    env: { OLLAMA_BATCH: '2', OLLAMA_ROUND: '9' },
+  });
+  assert.equal(engine.batchSize, 2);
+  assert.equal(engine.roundSize, 9);
+});
+
+test('a wide round is still only batchSize requests in flight', async () => {
+  const fake = pooledServer({ delayFor: () => 5 });
+  const engine = engineOn(fake, {
+    env: { OLLAMA_BATCH: '2', OLLAMA_ROUND: '9' },
+  });
+
+  await Promise.all(engine.askEach(prompts(9)));
+
+  // The round says how many prompts are handed over at once. What is in flight
+  // is the pool's own width, and the remainder queues here rather than on the
+  // server.
+  assert.equal(fake.seen.chat.length, 9);
+  assert.equal(fake.seen.peak, 2);
 });
 
 // ---------------------------------------------------------------------------

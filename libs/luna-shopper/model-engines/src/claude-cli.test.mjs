@@ -468,8 +468,11 @@ test('the claude engine holds one request in flight and says so', async () => {
   });
 
   // One is the honest answer for an adapter with no reason to do more, and a
-  // caller reads it rather than asking which adapter it is holding.
+  // caller reads it rather than asking which adapter it is holding. The round
+  // is one for the same reason: a round wider than the pool only pays where the
+  // pool refills itself while the caller is busy.
   assert.equal(engine.batchSize, 1);
+  assert.equal(engine.roundSize, 1);
 
   const options = { system: 'THE RULES', schema: { type: 'object' } };
   const answers = await engine.askMany(['first', 'second'], options);
@@ -523,4 +526,59 @@ test('one claude prompt that gave up is an entry, and the others answer', async 
   assert.equal(typeof answers[0].text, 'string');
   assert.match(String(answers[1].error), /The claude engine gave up: exit 1/);
   assert.equal(typeof answers[2].text, 'string');
+});
+
+test('askEach settles one prompt at a time, in the order it asked them', async () => {
+  const started = [];
+  let inFlight = 0;
+  let peak = 0;
+  const engine = makeClaudeEngine({
+    spawn: async (command, args, options) => {
+      started.push(options.input);
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+  });
+
+  const answers = engine.askEach(['first', 'second', 'third']);
+  assert.equal(answers.length, 3);
+
+  // The first promise settles before the last prompt has been sent, which is
+  // what reading them one at a time buys even here.
+  assert.equal(typeof (await answers[0]).text, 'string');
+  assert.ok(!started.includes('third'));
+
+  await Promise.all(answers);
+  assert.deepEqual(started, ['first', 'second', 'third']);
+  // And never two at once. An adapter that holds one request in flight does not
+  // become a pool because the caller asked for its answers one at a time.
+  assert.equal(peak, 1);
+});
+
+test('a stop reaches every claude prompt behind the one it landed on', async () => {
+  const controller = new AbortController();
+  const engine = makeClaudeEngine({
+    spawn: async () => {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      return { code: 1, stdout: '', stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1, 1],
+    signal: controller.signal,
+  });
+
+  const answers = engine.askEach(['first', 'second']);
+  await assert.rejects(() => answers[0], /stopped with Ctrl\+C/);
+  // The chain each promise waits on is the one that rejected, so a stop is one
+  // answer about the run rather than one entry per prompt.
+  await assert.rejects(() => answers[1], /stopped with Ctrl\+C/);
 });
