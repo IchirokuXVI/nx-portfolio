@@ -29,6 +29,9 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|serve> [options]
 
   start   --main-url <u> --rehearsal-url <u> --run-dir <dir>
           [--main-user <name>] [--main-password <p>] [--model <name>] [--chain <id>]
+          [--local]
+          --local says the model answering this run is on this machine, which
+          buys the run one extra validator (plan 0003).
           Verifies both admin logins, counts the queue, and answers
           { runId, remaining, prompt }.
 
@@ -129,6 +132,7 @@ export async function run(argv, { stdin = readStdin } = {}) {
           ? flags['main-password']
           : undefined,
       model: typeof flags.model === 'string' ? flags.model : null,
+      local: flags.local === true,
       chain: typeof flags.chain === 'string' ? flags.chain : null,
     });
   }

@@ -293,7 +293,7 @@ export function makeDecider({
     close,
 
     /** Verifies both logins, counts the queue, answers the rules prompt. */
-    start({ mainUrl, rehearsalUrl, mainUser, model, chain }) {
+    start({ mainUrl, rehearsalUrl, mainUser, model, local, chain }) {
       return call('start', [
         '--main-url',
         mainUrl,
@@ -303,6 +303,9 @@ export function makeDecider({
         runDir,
         ...(mainUser ? ['--main-user', mainUser] : []),
         ...(model ? ['--model', model] : []),
+        // A bare flag, and absent when the engine is not a local one, so a run
+        // against a Claude model builds the argument list it always built.
+        ...(local ? ['--local'] : []),
         ...(chain ? ['--chain', chain] : []),
         ...password,
       ]);

@@ -101,6 +101,33 @@ test('start passes both urls, the run directory and the model', async () => {
   await decider.close();
 });
 
+test('a local engine adds one bare flag and nothing else', async () => {
+  const { requests, decider } = fakeDecider([{ runId: 'r1', remaining: 1 }]);
+
+  await decider.start({
+    mainUrl: 'http://localhost:3000',
+    rehearsalUrl: 'http://localhost:43000',
+    mainUser: null,
+    model: 'gemma4:12b',
+    local: true,
+    chain: null,
+  });
+
+  assert.equal(requests[0].command, 'start');
+  assert.deepEqual(requests[0].args, [
+    '--main-url',
+    'http://localhost:3000',
+    '--rehearsal-url',
+    'http://localhost:43000',
+    '--run-dir',
+    '/runs/x',
+    '--model',
+    'gemma4:12b',
+    '--local',
+  ]);
+  await decider.close();
+});
+
 test('a password given once is repeated on every request that talks to a gateway', async () => {
   const { requests, decider } = fakeDecider(
     [{ done: true }, { report: '/runs/x/report.json' }],

@@ -43,6 +43,10 @@ test('every entry carries the whole of what a provider is', () => {
     assert.equal(typeof entry.defaultModel, 'string');
     assert.ok(Array.isArray(entry.effortLevels));
     assert.equal(typeof entry.create, 'function');
+    // Whether the model runs on the machine that asked is a fact about a
+    // provider and not about a run, so a fourth entry that does not answer it
+    // fails here rather than in a walk that silently trusts it.
+    assert.equal(typeof entry.local, 'boolean');
     // An entry that takes effort has a default that is one of its own levels.
     if (entry.effortLevels.length > 0) {
       assert.ok(entry.effortLevels.includes(entry.defaultEffort));
@@ -79,6 +83,10 @@ test('the ollama entry fights none of the four things plan 0001 named', async ()
   assert.deepEqual(entry.effortLevels, []);
   assert.equal(entry.defaultEffort, null);
   assert.equal(entry.gate, null);
+  // And the one entry of the three that runs on the operator's own machine.
+  assert.equal(entry.local, true);
+  assert.equal(engineEntry('claude').local, false);
+  assert.equal(engineEntry('api').local, false);
 
   const usage = emptyUsage();
   const seen = [];
