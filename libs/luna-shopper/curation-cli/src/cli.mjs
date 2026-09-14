@@ -333,6 +333,23 @@ export function spawnCapture(
   });
 }
 
+/**
+ * The decider, as one long lived child (plan 0002 of `curation-suggestions`).
+ *
+ * Unlike `spawnCapture` this answers the child itself rather than what it
+ * printed, because the decider is now talked to over its pipes for the whole
+ * run instead of being started again per step. `decider.mjs` asks it for three
+ * streams, `on` and `kill`, and nothing else.
+ */
+export function spawnChild(command, args, { env, cwd } = {}) {
+  return spawnProcess(command, args, {
+    cwd,
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+}
+
 /** One line from the terminal. */
 function askLine() {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -400,6 +417,7 @@ export async function main(
     stderr = process.stderr,
     isTty = Boolean(process.stdin.isTTY),
     spawn = spawnCapture,
+    startChild = spawnChild,
     ask = askLine,
     repoRoot = REPO_ROOT,
     platform = process.platform,
@@ -456,10 +474,11 @@ export async function main(
   });
   const cliPath = deciderPath(implementation, repoRoot);
 
-  // `--apply` skips all of it: no slot, no model, one request.
+  // `--apply` skips all of it: no slot, no model, one request. `apply` closes
+  // the decider itself, so there is nothing to tear down here.
   if (typeof flags.apply === 'string') {
     const decider = makeDecider({
-      spawn,
+      startChild,
       cliPath,
       runDir: null,
       mainPassword,
@@ -523,12 +542,26 @@ export async function main(
     slotOf: () => slot,
   });
 
+  // The decider is one child for the whole run now, and the orchestrator never
+  // disposes of what `makeDeciderFor` built: it asks for a decider and drives
+  // it. So the one that was built is held here and closed in the `finally`
+  // below, which is the only place that sees a run end whichever way it ended.
+  // `end` closes it too, and `close` is idempotent, so the two cannot fight.
+  let decider = null;
+
   let outcome;
   try {
     outcome = await runCuration({
       slots,
-      makeDeciderFor: ({ runDir: dir }) =>
-        makeDecider({ spawn, cliPath, runDir: dir, mainPassword }),
+      makeDeciderFor: ({ runDir: dir }) => {
+        decider = makeDecider({
+          startChild,
+          cliPath,
+          runDir: dir,
+          mainPassword,
+        });
+        return decider;
+      },
       engine,
       runDir,
       mainUrl,
@@ -558,10 +591,17 @@ export async function main(
     // Written here rather than after the run so that a run which was stopped or
     // which failed still reports what the rows it did reach cost. A run that
     // made no timed call at all has nothing to say and says nothing.
+    //
+    // Before the close below, because the line is what the operator reads and
+    // the close is teardown that is allowed to take a couple of seconds.
     const line = serverTimingsLine(usage, engine.name);
     if (line) {
       stderr.write(line);
     }
+    // A run that failed or was stopped never reached `end`, so its decider is
+    // still holding a child. A child whose stdin is still open is another
+    // reason this process would not exit.
+    await decider?.close();
   }
 
   // A stopped run wrote its report, and it is still not a finished run: 130 is
