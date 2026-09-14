@@ -190,6 +190,45 @@ export function parseLimit(value) {
   return rows;
 }
 
+/**
+ * What the model server said it spent, in one line, or null when it said
+ * nothing (model-engines plan 0005).
+ *
+ * Wall clock says almost nothing on this machine. Two identical 80 row walks
+ * measured 157 s and 207 s, about 30% apart, so a run that claims to be 20%
+ * faster than the one before it has claimed nothing. These three numbers are
+ * per call properties of the server rather than of the afternoon the run
+ * happened in: decode throughput holds still while the wall clock wanders, the
+ * prompt share says how much of the time went on reading rather than writing,
+ * and a load time that grows through a run means the model is being unloaded
+ * between rows and `keep_alive` is not holding it.
+ *
+ * One line, because two runs are compared by reading the same line twice, and
+ * that stops being easy the moment it is a table. It is a pure function of the
+ * usage and the engine's name, so the arithmetic is tested without a run, and
+ * it answers null for every engine whose provider reports no durations, which
+ * today is every engine but ollama.
+ */
+export function serverTimingsLine(usage, name) {
+  const timings = usage?.timings;
+  if (!timings || !(timings.calls > 0)) {
+    return null;
+  }
+  const parts = [];
+  if (timings.evalMs > 0) {
+    const perSecond = timings.evalTokens / (timings.evalMs / 1000);
+    parts.push(`${perSecond.toFixed(1)} decode tok/s`);
+  }
+  if (timings.totalMs > 0) {
+    const share = Math.round((timings.promptEvalMs / timings.totalMs) * 100);
+    parts.push(
+      `prompt eval ${share}% of ${(timings.totalMs / 1000).toFixed(1)} s`
+    );
+  }
+  parts.push(`load ${(timings.loadMs / 1000).toFixed(1)} s`);
+  return `${name}: ${parts.join(', ')} over ${timings.calls} calls\n`;
+}
+
 /** A run directory nobody has to name, and no two runs share. */
 export function defaultRunDir(now = new Date()) {
   const stamp = now.toISOString().replace(/[:.]/g, '-');
@@ -304,6 +343,23 @@ export function spawnCapture(
   });
 }
 
+/**
+ * The decider, as one long lived child (plan 0002 of `curation-suggestions`).
+ *
+ * Unlike `spawnCapture` this answers the child itself rather than what it
+ * printed, because the decider is now talked to over its pipes for the whole
+ * run instead of being started again per step. `decider.mjs` asks it for three
+ * streams, `on` and `kill`, and nothing else.
+ */
+export function spawnChild(command, args, { env, cwd } = {}) {
+  return spawnProcess(command, args, {
+    cwd,
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+}
+
 /** One line from the terminal. */
 function askLine() {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -371,6 +427,7 @@ export async function main(
     stderr = process.stderr,
     isTty = Boolean(process.stdin.isTTY),
     spawn = spawnCapture,
+    startChild = spawnChild,
     ask = askLine,
     repoRoot = REPO_ROOT,
     platform = process.platform,
@@ -427,10 +484,11 @@ export async function main(
   });
   const cliPath = deciderPath(implementation, repoRoot);
 
-  // `--apply` skips all of it: no slot, no model, one request.
+  // `--apply` skips all of it: no slot, no model, one request. `apply` closes
+  // the decider itself, so there is nothing to tear down here.
   if (typeof flags.apply === 'string') {
     const decider = makeDecider({
-      spawn,
+      startChild,
       cliPath,
       runDir: null,
       mainPassword,
@@ -494,17 +552,34 @@ export async function main(
     slotOf: () => slot,
   });
 
+  // The decider is one child for the whole run now, and the orchestrator never
+  // disposes of what `makeDeciderFor` built: it asks for a decider and drives
+  // it. So the one that was built is held here and closed in the `finally`
+  // below, which is the only place that sees a run end whichever way it ended.
+  // `end` closes it too, and `close` is idempotent, so the two cannot fight.
+  let decider = null;
+
   let outcome;
   try {
     outcome = await runCuration({
       slots,
-      makeDeciderFor: ({ runDir: dir }) =>
-        makeDecider({ spawn, cliPath, runDir: dir, mainPassword }),
+      makeDeciderFor: ({ runDir: dir }) => {
+        decider = makeDecider({
+          startChild,
+          cliPath,
+          runDir: dir,
+          mainPassword,
+        });
+        return decider;
+      },
       engine,
       runDir,
       mainUrl,
       mainUser,
       model,
+      // The registry is the authority about engines, so the walk asks the entry
+      // rather than the name (plan 0003).
+      local: entry.local === true,
       chain: typeof flags.chain === 'string' ? flags.chain : null,
       limit,
       services,
@@ -523,6 +598,20 @@ export async function main(
     // The listener is what keeps the process alive after the run, so it is
     // taken off whether the run ended, failed or was stopped.
     releaseInterrupt();
+    // Written here rather than after the run so that a run which was stopped or
+    // which failed still reports what the rows it did reach cost. A run that
+    // made no timed call at all has nothing to say and says nothing.
+    //
+    // Before the close below, because the line is what the operator reads and
+    // the close is teardown that is allowed to take a couple of seconds.
+    const line = serverTimingsLine(usage, engine.name);
+    if (line) {
+      stderr.write(line);
+    }
+    // A run that failed or was stopped never reached `end`, so its decider is
+    // still holding a child. A child whose stdin is still open is another
+    // reason this process would not exit.
+    await decider?.close();
   }
 
   // A stopped run wrote its report, and it is still not a finished run: 130 is

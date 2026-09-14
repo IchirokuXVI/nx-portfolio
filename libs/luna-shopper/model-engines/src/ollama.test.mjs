@@ -13,6 +13,7 @@ import {
   ollamaBatchSize,
   ollamaHost,
   ollamaRoundSize,
+  replyTimings,
   truncationFloor,
 } from './ollama.mjs';
 import { emptyUsage } from './usage.mjs';
@@ -284,6 +285,95 @@ test('a reply that reports no counts at all still counts as one call', async () 
     cacheReadInputTokens: 0,
     cacheCreationInputTokens: 0,
   });
+});
+
+/** The four durations a real reply carries, in the nanoseconds Ollama writes. */
+const DURATIONS = {
+  total_duration: 2_412_000_000,
+  load_duration: 6_900_000_000,
+  prompt_eval_duration: 301_400_000,
+  eval_duration: 2_000_600_000,
+};
+
+test('the four durations come back as whole milliseconds beside the raw counts', () => {
+  assert.deepEqual(
+    replyTimings({
+      ...reply({ promptTokens: 2993, evalCount: 42 }),
+      ...DURATIONS,
+    }),
+    {
+      totalMs: 2412,
+      loadMs: 6900,
+      promptTokens: 2993,
+      promptEvalMs: 301,
+      evalTokens: 42,
+      evalMs: 2001,
+    }
+  );
+});
+
+test('the timings report the prompt tokens the server evaluated, cache and all', () => {
+  const timings = replyTimings({
+    ...reply({ promptTokens: 2993, cached: 2900, evalCount: 42 }),
+    ...DURATIONS,
+  });
+
+  // The usage counters take the cached tokens off, which is right for a count
+  // of what was read and wrong for a rate: a throughput computed from 93 would
+  // be a rate against tokens the server never evaluated.
+  assert.equal(timings.promptTokens, 2993);
+});
+
+test('a reply with no durations is measured as nothing rather than as zero', () => {
+  assert.equal(replyTimings(reply()), null);
+  assert.equal(replyTimings({}), null);
+});
+
+test('the reply carries the timings and the total accumulates their sums', async () => {
+  const usage = emptyUsage();
+  const fake = server({
+    chats: [
+      {
+        ...reply({ promptTokens: 2993, cached: 2900, evalCount: 42 }),
+        ...DURATIONS,
+      },
+    ],
+  });
+
+  const answer = await engineOn(fake, { usage }).ask('the packet', {
+    system: 'THE RULES',
+  });
+
+  assert.equal(answer.text, '{"decision":"LINK"}');
+  assert.equal(answer.timings.evalTokens, 42);
+  assert.deepEqual(usage.timings, {
+    calls: 1,
+    totalMs: 2412,
+    loadMs: 6900,
+    promptTokens: 2993,
+    promptEvalMs: 301,
+    evalTokens: 42,
+    evalMs: 2001,
+  });
+  // Decode throughput and the prompt share are divisions of these sums, and
+  // neither is stored beside them.
+  assert.equal(
+    usage.timings.evalTokens / (usage.timings.evalMs / 1000) > 20,
+    true
+  );
+});
+
+test('a server that reported no durations leaves the block off the total', async () => {
+  const usage = emptyUsage();
+  const fake = server({ chats: [reply()] });
+
+  const answer = await engineOn(fake, { usage }).ask('the packet');
+
+  assert.equal(answer.timings, null);
+  // Zeros would be a measurement, and there was none. The five counters still
+  // count the call.
+  assert.equal(usage.timings, undefined);
+  assert.equal(usage.calls, 1);
 });
 
 test('a truncated reply is refused, fatally, and the refusal names OLLAMA_NUM_CTX', async () => {
@@ -649,6 +739,25 @@ test('the counters add up across every reply in a batch', async () => {
   assert.equal(usage.inputTokens, 200);
   assert.equal(usage.cacheReadInputTokens, 300);
   assert.equal(usage.outputTokens, 35);
+});
+
+test('a batch accumulates its timings even though an entry carries none', async () => {
+  const usage = emptyUsage();
+  const fake = pooledServer({
+    replyFor: (prompt) => ({
+      ...reply({ content: prompt, evalCount: 7 }),
+      ...DURATIONS,
+    }),
+  });
+
+  // A batch entry is `{ text }` or `{ error }`, because widening it means
+  // widening `askEntry`, which two adapters with nothing to put in it share.
+  // Nothing is lost: the sums are accumulated inside `ask`.
+  const answers = await engineOn(fake, { usage }).askMany(prompts(5));
+
+  assert.equal(answers[0].timings, undefined);
+  assert.equal(usage.timings.calls, 5);
+  assert.equal(usage.timings.evalTokens, 35);
 });
 
 test('OLLAMA_BATCH=1 is plan 0002 back exactly, one request at a time', async () => {

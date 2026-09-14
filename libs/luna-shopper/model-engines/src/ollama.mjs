@@ -94,6 +94,56 @@ export function truncationFloor(characters) {
 }
 
 /**
+ * A nanosecond duration as whole milliseconds, or 0 when there is none.
+ *
+ * Ollama measures itself in nanoseconds and nobody reasons in them. Rounding to
+ * the millisecond loses nothing a curation call cares about, because a call
+ * here is measured in seconds and the report reads the sums. A model that is
+ * already resident rounds its load to 0, which is the true answer to what
+ * loading cost that call: `keep_alive` is sent precisely so that it costs
+ * nothing after the first one.
+ */
+function millisFrom(nanoseconds) {
+  return typeof nanoseconds === 'number' && Number.isFinite(nanoseconds)
+    ? Math.round(nanoseconds / 1e6)
+    : 0;
+}
+
+/**
+ * What the server says it spent on one reply, in milliseconds and tokens
+ * (plan 0005).
+ *
+ * Wall clock measured from out here cannot settle a speed argument on this
+ * machine: two identical 80 row walks measured 157 s and 207 s, about 30%
+ * apart, so a change worth 20% is invisible against it. Decode tokens per
+ * second, the share of the time spent reading the prompt and the load time are
+ * properties of the server rather than of the afternoon the run happened in,
+ * and the server has measured all three for every reply all along.
+ *
+ * The token counts here are the raw ones, and that is not an oversight.
+ * `input_tokens` in the usage counters has the cached tokens taken off it,
+ * which is right for a count of what was read and wrong for a rate: a
+ * throughput computed from it would be a rate against tokens the server never
+ * evaluated.
+ *
+ * A reply that carries no `total_duration` answers null rather than six zeros,
+ * because zeros are a measurement and this is the absence of one.
+ */
+export function replyTimings(payload) {
+  if (typeof payload?.total_duration !== 'number') {
+    return null;
+  }
+  return {
+    totalMs: millisFrom(payload.total_duration),
+    loadMs: millisFrom(payload.load_duration),
+    promptTokens: payload.prompt_eval_count ?? 0,
+    promptEvalMs: millisFrom(payload.prompt_eval_duration),
+    evalTokens: payload.eval_count ?? 0,
+    evalMs: millisFrom(payload.eval_duration),
+  };
+}
+
+/**
  * The address `OLLAMA_HOST` names, with a scheme.
  *
  * `OLLAMA_HOST` is Ollama's own variable and its value is written both as a
@@ -360,7 +410,10 @@ export function modelContextLength(shown) {
  * time.
  *
  * `now` is the clock the first round is timed on, injected so the notice can be
- * tested without a slow server.
+ * tested without a slow server. It is the client's clock and it answers a
+ * question about the server's configuration. The server's own clock, which
+ * answers a question about the model, is `replyTimings`: `ask` answers
+ * `{ text, timings }` and the sums reach the run through `usage`.
  */
 export function makeOllamaEngine({
   fetchImpl = fetch,
@@ -492,7 +545,7 @@ export function makeOllamaEngine({
       (system ? system.length : 0) + String(prompt ?? '').length;
     const floor = truncationFloor(characters);
 
-    const text = await withRetries(
+    const answered = await withRetries(
       async () => {
         let response;
         try {
@@ -550,6 +603,10 @@ export function makeOllamaEngine({
           };
         }
 
+        // Read once and used twice: the usage counters take the tokens, and
+        // the caller takes the durations beside them.
+        const timings = replyTimings(payload);
+
         if (usage) {
           // The mapping is not a rename. `prompt_eval_count` includes the
           // cached tokens and Anthropic's `input_tokens` excludes them, so
@@ -557,12 +614,16 @@ export function makeOllamaEngine({
           // row after the first. `cache_creation_input_tokens` is zero rather
           // than absent because Ollama neither charges for filling its cache
           // nor reports a number for it.
-          addUsage(usage, {
-            input_tokens: Math.max(0, (promptTokens ?? 0) - cached),
-            output_tokens: payload?.eval_count ?? 0,
-            cache_read_input_tokens: cached,
-            cache_creation_input_tokens: 0,
-          });
+          addUsage(
+            usage,
+            {
+              input_tokens: Math.max(0, (promptTokens ?? 0) - cached),
+              output_tokens: payload?.eval_count ?? 0,
+              cache_read_input_tokens: cached,
+              cache_creation_input_tokens: 0,
+            },
+            timings
+          );
         }
 
         const answer = payload?.message?.content;
@@ -571,12 +632,15 @@ export function makeOllamaEngine({
         }
         // A model that fenced its object is still answering. The measured
         // model never did, and unwrapping costs nothing.
-        return { ok: true, value: stripFence(answer) };
+        return { ok: true, value: { text: stripFence(answer), timings } };
       },
       { name: 'ollama', sleep, retryDelays, signal }
     );
 
-    return { text };
+    // The timings belong to the attempt that answered, which is why they
+    // travel out of the retry loop with the text rather than being read from a
+    // variable an earlier failed attempt could have written.
+    return answered;
   }
 
   /**

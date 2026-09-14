@@ -299,6 +299,7 @@ export async function runCuration({
   mainUrl,
   mainUser = null,
   model = null,
+  local = false,
   chain = null,
   limit = null,
   services = REHEARSAL_SERVICES,
@@ -339,6 +340,7 @@ export async function runCuration({
       rehearsalUrl: url,
       mainUser,
       model,
+      local,
       chain,
     });
 

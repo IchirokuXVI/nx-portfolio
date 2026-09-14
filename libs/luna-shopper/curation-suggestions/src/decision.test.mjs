@@ -272,6 +272,92 @@ test('NAME_GLITCH is the one issue worth asking the same row about again', () =>
   assert.deepEqual(retryableIssues(undefined), []);
 });
 
+test('SIZELESS_CREATE fires on a CREATE with no size, from a local model only', () => {
+  const sizeless = createDecision(
+    goodItem({ nameEs: 'Sombra dúo Monochrome n30', unitSize: null })
+  );
+  const validate = (local) =>
+    validateDecision({
+      decision: sizeless,
+      entry: { ...ENTRY, name: 'Sombra dúo Monochrome n30', unitSize: null },
+      supermarket: MERCADONA,
+      privateLabels: LABELS,
+      categories: CATEGORIES,
+      units: UNITS,
+      local,
+    });
+
+  const flagged = validate(true);
+  assert.ok(codes(flagged).includes('SIZELESS_CREATE'));
+  // The detail names the product, because the row an operator is handed is
+  // read on its name and not on its entry id.
+  assert.match(
+    flagged.find((entry) => entry.code === 'SIZELESS_CREATE').detail,
+    /Sombra dúo Monochrome n30/
+  );
+
+  // The same decision from a Claude model stands. Twenty seven of eighty
+  // SuperCash rows carry no printed size, and sonnet is trusted to have meant
+  // the ones it creates.
+  assert.deepEqual(validate(false), []);
+});
+
+test('SIZELESS_CREATE leaves a CREATE that states a size alone, local or not', () => {
+  // Zero is a size the model measured, not a size it could not find, and only
+  // null says the second thing.
+  for (const unitSize of [1, 0, 750]) {
+    for (const local of [true, false]) {
+      const issues = validateDecision({
+        decision: createDecision(goodItem({ unitSize })),
+        entry: ENTRY,
+        supermarket: MERCADONA,
+        privateLabels: LABELS,
+        categories: CATEGORIES,
+        units: UNITS,
+        local,
+      });
+      assert.equal(
+        codes(issues).includes('SIZELESS_CREATE'),
+        false,
+        `${unitSize} local=${local}`
+      );
+    }
+  }
+});
+
+test('SIZELESS_CREATE says nothing about a LINK, sizeless target or not', () => {
+  for (const unitSize of [null, 1]) {
+    for (const local of [true, false]) {
+      const issues = validateDecision({
+        decision: linkDecision('i1'),
+        entry: { ...ENTRY, unitSize: null },
+        supermarket: MERCADONA,
+        linkTarget: { id: 'i1', brand: null, ean: null, unitSize },
+        privateLabels: LABELS,
+        categories: CATEGORIES,
+        units: UNITS,
+        local,
+      });
+      assert.equal(
+        codes(issues).includes('SIZELESS_CREATE'),
+        false,
+        `${unitSize} local=${local}`
+      );
+    }
+  }
+});
+
+test('SIZELESS_CREATE is a judgment the model stands by, so it is not retryable', () => {
+  // The model is applying the rule the prompt gave it, so the same row asked
+  // again comes back the same. It goes to a person instead.
+  assert.deepEqual(
+    retryableIssues([
+      issue('SIZELESS_CREATE', '"Corrector Terracotta n4N" has no size.'),
+    ]),
+    []
+  );
+});
+
 test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the openapi vocabularies', () => {
   const issues = validateDecision({
     decision: createDecision(

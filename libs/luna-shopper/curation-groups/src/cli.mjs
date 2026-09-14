@@ -14,6 +14,12 @@
  *   node .../cli.mjs decide --run-dir <dir> --item <id>   # decision on stdin
  *   node .../cli.mjs end --run-dir <dir>
  *   node .../cli.mjs apply --main-url <u> --file <decisions.jsonl>
+ *   node .../cli.mjs serve                                # one process, many steps
+ *
+ * `serve` is the same five commands over a line protocol, so a walk pays one
+ * process start instead of one per step (plan 0002 of `curation-suggestions`).
+ * `curation-cli` drives every decider that way, so a decider without it would
+ * answer nothing. See `serve.mjs`.
  *
  * Progress and errors go to stderr. stdout is machine readable, always.
  */
@@ -21,8 +27,9 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { apply, decide, end, next, start } from './commands.mjs';
+import { serve } from './serve.mjs';
 
-const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply> [options]
+const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|serve> [options]
 
   start   --main-url <u> --rehearsal-url <u> --run-dir <dir>
           [--main-user <name>] [--main-password <p>] [--model <name>] [--limit <n>]
@@ -46,6 +53,11 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply> [options]
           [--main-user <name>] [--main-password <p>] [--route <path>]
           The replay: no model, no slot, one request that lands whole or not
           at all.
+
+  serve   The five commands above over one process instead of one process
+          each. Reads one request per line on stdin,
+          { id, command, args, input }, and answers one line per request,
+          { id, answer } or { id, error }. Ends when stdin closes.
 `;
 
 export function parseArgs(argv) {
@@ -167,13 +179,35 @@ export async function run(argv, { stdin = readStdin } = {}) {
     });
   }
 
+  // `serve` is in the usage but not here: it owns stdin and stdout for as long
+  // as it runs, so it cannot answer one object the way the other five do. It is
+  // dispatched at the bottom of this file instead.
+  if (command === 'serve') {
+    throw new Error(
+      'serve is not one of the commands that answer one object; it is dispatched from the command line only.'
+    );
+  }
+
   throw new Error(`Unknown command ${command}.\n\n${USAGE}`);
 }
 
 const invokedDirectly =
   process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-if (invokedDirectly) {
+// `serve` is the one command that is not "answer one object and exit", so it is
+// dispatched here rather than from `run`: it owns the streams for as long as it
+// runs, and the answer lines are written by the loop itself.
+if (invokedDirectly && process.argv[2] === 'serve') {
+  serve({ input: process.stdin, output: process.stdout, run }).then(
+    () => {
+      process.exitCode = 0;
+    },
+    (error) => {
+      process.stderr.write(`${error.message ?? error}\n`);
+      process.exitCode = 1;
+    }
+  );
+} else if (invokedDirectly) {
   run(process.argv.slice(2)).then(
     (answer) => {
       process.stdout.write(`${JSON.stringify(answer)}\n`);

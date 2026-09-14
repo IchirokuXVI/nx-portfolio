@@ -22,13 +22,40 @@ test('parseArgs reads flags with and without a value', () => {
   });
 });
 
+test('start reads --local as a bare flag, whatever follows it', () => {
+  // The orchestrator appends it between `--model` and the password, so the
+  // token after it is another flag and never a value this one would swallow.
+  const parsed = parseArgs([
+    'start',
+    '--model',
+    'gemma4:12b',
+    '--local',
+    '--main-password',
+    'secret',
+  ]);
+  assert.equal(parsed.flags.local, true);
+  assert.equal(parsed.flags['main-password'], 'secret');
+  // And a run that never names it is not a local run.
+  assert.equal(parseArgs(['start', '--model', 'x']).flags.local, undefined);
+});
+
 test('parseArgs refuses a bare argument', () => {
   assert.throws(() => parseArgs(['next', 'oops']), /Unexpected argument oops/);
 });
 
 test('no command answers the usage rather than doing anything', async () => {
   const answer = await run([]);
-  assert.match(answer.usage, /start\|next\|decide\|end\|apply/);
+  assert.match(answer.usage, /start\|next\|decide\|end\|apply\|serve/);
+});
+
+test('serve is in the usage and not in the commands that answer one object', async () => {
+  // It owns stdin and stdout for as long as it runs, so it cannot answer one
+  // object the way the other five do. `serve.mjs` is the loop and `cli.mjs`
+  // dispatches it from the command line only.
+  await assert.rejects(
+    () => run(['serve']),
+    /serve is not one of the commands/
+  );
 });
 
 test('an unknown command names itself and prints the usage', async () => {
