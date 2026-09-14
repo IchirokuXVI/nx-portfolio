@@ -1,3 +1,5 @@
+> **PR:** [#362](https://github.com/IchirokuXVI/nx-portfolio/pull/362)
+
 # 0079: the tools row stays, and five small fixes
 
 > Seven independent changes, each too small for a plan of its own, collected so they ship

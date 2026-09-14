@@ -10,10 +10,12 @@
   // number two digits wide while walking is the failure this exists to avoid, and it
   // is why the host stretches rather than wrapping the pill tightly.
   min-height: var(--app-touch-target);
-  // Without this the browser reads a horizontal drag that wanders vertically as a
-  // scroll of the page and takes the gesture away mid movement. It is the same line
-  // the reorder grip needs, and for the same reason.
-  touch-action: none;
+  // Vertical panning belongs to the browser, so a swipe up or down that starts on the
+  // number scrolls the list rather than opening the reel (velista 0079, section 8).
+  // Sideways is left to the component, which claims the pointer once the press has
+  // gone past the slop in that direction. The overlay keeps `touch-action: none`: once
+  // it is up, the whole of it is the control.
+  touch-action: pan-y;
   cursor: grab;
   -webkit-user-select: none;
   user-select: none;

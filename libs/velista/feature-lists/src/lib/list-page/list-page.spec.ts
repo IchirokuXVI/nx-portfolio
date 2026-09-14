@@ -27,6 +27,7 @@ import {
   provideFakeZoneStore,
   REALTIME_CLIENT,
   RealtimeMemory,
+  type AssistantServiceI,
   type FakeLineStore,
   type FakeListStore,
   type FakePresenceOptions,
@@ -47,7 +48,7 @@ import {
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { LineList, ListHeader } from '@portfolio/velista/ui';
+import { LineComposer, LineList, ListHeader } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { ListPage } from './list-page';
 
@@ -392,6 +393,87 @@ describe('ListPage', () => {
       fixture.detectChanges();
 
       expect(query(fixture, '.voice-strip')?.classList).not.toContain('failed');
+    });
+  });
+
+  /**
+   * Velista `0079`, sections 5 and 7: a recording takes seconds to work out, and the
+   * screen says so and holds the composer for all of them.
+   */
+  describe('while the assistant works out a recording', () => {
+    type Reply = Awaited<ReturnType<AssistantServiceI['askAboutList']>>;
+
+    const RECORDING = {
+      blob: new Blob(['audio'], { type: 'audio/webm' }),
+      mimeType: 'audio/webm',
+      durationSeconds: 3,
+    };
+
+    /** Hold the assistant's answer until the test hands it over. */
+    function holdTheAnswer(): (reply: Reply) => void {
+      let answer: (reply: Reply) => void = () => undefined;
+      jest
+        .spyOn(TestBed.inject(ASSISTANT_SERVICE), 'askAboutList')
+        .mockReturnValue(
+          new Promise<Reply>((resolve) => {
+            answer = resolve;
+          })
+        );
+      return (reply) => answer(reply);
+    }
+
+    const HEARD = { heard: 'add olives', text: 'Added olives.' } as Reply;
+
+    it('says it is working until the reply lands, then shows the reply', async () => {
+      const { fixture } = await render();
+      const answer = holdTheAnswer();
+
+      const sent = fixture.componentInstance.addAloud(RECORDING);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.voiceStrip()).toMatchObject({
+        messageKey: 'list.add.working',
+        failed: false,
+        working: true,
+      });
+      const working = query(fixture, '.voice-strip .voice-working');
+      expect(working?.textContent).toContain('list.add.working');
+      expect(working?.querySelector('lib-spinner-icon')).not.toBeNull();
+      // Inside the strip's own polite region, so the reply replacing it is announced.
+      expect(query(fixture, '.voice-strip')?.getAttribute('aria-live')).toBe(
+        'polite'
+      );
+
+      answer(HEARD);
+      await sent;
+      fixture.detectChanges();
+
+      expect(query(fixture, '.voice-working')).toBeNull();
+      expect(query(fixture, '.voice-reply')?.textContent).toContain(
+        'Added olives.'
+      );
+    });
+
+    it('stays busy when a typed add lands while a recording is still out', async () => {
+      const { fixture } = await render();
+      const page = fixture.componentInstance;
+      const answer = holdTheAnswer();
+
+      const spoken = page.addAloud(RECORDING);
+      await page.add({ content: 'Olives', quantity: 1 });
+      fixture.detectChanges();
+
+      expect(page.composerBusy()).toBe(true);
+      expect(
+        fixture.debugElement
+          .query(By.directive(LineComposer))
+          .componentInstance.busy()
+      ).toBe(true);
+
+      answer(HEARD);
+      await spoken;
+
+      expect(page.composerBusy()).toBe(false);
     });
   });
 

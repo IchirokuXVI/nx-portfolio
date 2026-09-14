@@ -1267,6 +1267,34 @@ describe('searching the basket', () => {
       expect(row?.querySelector('.progress')).not.toBeNull();
       expect(row?.querySelector('.tool')).not.toBeNull();
     });
+
+    it('keeps the row and the chips in one bar, closed and while searching', async () => {
+      // Velista `0079`, section 2: one sticky bar, so both stay on screen down a long
+      // basket. The lines are not in it; they scroll under it.
+      const { fixture } = await render({ lines: threeLines });
+      TestBed.inject(BasketViewStore).setOrder('alpha');
+      fixture.detectChanges();
+
+      expect(query(fixture, '.tools-bar .tools')).not.toBeNull();
+      expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
+
+      openSearch(fixture);
+
+      expect(query(fixture, '.tools-bar .search')).not.toBeNull();
+      expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
+      expect(query(fixture, '.tools-bar lib-basket-line-row')).toBeNull();
+    });
+
+    it('marks the standalone build, where the document is what scrolls', async () => {
+      // This harness supplies the standalone base path. The class is what lets the
+      // stylesheet stop `.page` being the bar's scroll container there, which jsdom
+      // cannot lay out, so the class is the half a spec can see.
+      const { fixture } = await render({ lines: threeLines });
+
+      expect(
+        (fixture.nativeElement as HTMLElement).classList.contains('standalone')
+      ).toBe(true);
+    });
   });
 
   describe('opening and closing it', () => {
@@ -1400,6 +1428,28 @@ describe('searching the basket', () => {
       expect(query(fixture, '.search-count')).toBeNull();
       openSearch(fixture);
       expect(query(fixture, '.search-count')).not.toBeNull();
+    });
+
+    it('is heard and not seen, beside a field named by a label nobody sees', async () => {
+      // Velista `0079`, section 3: the open search keeps the closed row's height, so
+      // neither sentence is drawn, and both are still there for a screen reader.
+      const { fixture } = await render({ lines: threeLines });
+      openSearch(fixture);
+      search(fixture, 'milk');
+
+      expect(query(fixture, '.search-count')?.classList).toContain(
+        'visually-hidden'
+      );
+
+      const input = searchField(fixture);
+      const label = query(fixture, `label[for="${input?.id}"]`);
+      expect(label?.textContent?.trim()).toBe('basket.search.label');
+      expect(label?.classList).toContain('visually-hidden');
+
+      const drawn = Array.from(
+        query(fixture, '.tools-bar')?.querySelectorAll('label, p') ?? []
+      ).filter((element) => !element.classList.contains('visually-hidden'));
+      expect(drawn).toEqual([]);
     });
   });
 
