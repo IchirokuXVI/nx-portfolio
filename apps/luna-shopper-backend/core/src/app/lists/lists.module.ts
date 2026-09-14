@@ -15,6 +15,7 @@ import { IdempotencyModule } from '../events/idempotency.module';
 import { LineClaimModule } from '../generated-lists/line-claim.module';
 import { ZonesModule } from '../zones/zones.module';
 import { CommentService } from './comment.service';
+import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { ListController } from './list.controller';
@@ -57,6 +58,9 @@ import { SharedListGrantModule } from './shared-list-grant.module';
   providers: [
     ListService,
     LineService,
+    // Two lines becoming one on a rename (plan 0112). A provider of its own
+    // because a basket rename merges list lines too (plan 0113).
+    LineMergeService,
     CommentService,
     SettlementService,
     ListAccessService,

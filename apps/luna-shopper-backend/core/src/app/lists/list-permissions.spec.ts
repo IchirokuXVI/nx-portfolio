@@ -8,17 +8,19 @@ import {
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
-import type { ListAccess, ListLine, ShoppingList } from '../entities';
+import type { ListAccess, ListLine } from '../entities';
 import {
   LineSettlement,
   ListLineGroupRemoval,
   ListLineItem,
+  ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { CommentService } from './comment.service';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
+import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -192,6 +194,12 @@ function world(options: {
           if (entity === ListLineItem) {
             return lineItems.repo;
           }
+          // The list's own row, which a rename locks and reads again for its
+          // `autoApproveLines` (plan 0112). Bound by name, because the line
+          // repository answering for it hands back a line with no such field.
+          if (entity === ShoppingList) {
+            return listRepo;
+          }
           return entity === LineSettlement ? settlementRepo : lineRepo;
         },
       }),
@@ -214,7 +222,8 @@ function world(options: {
     fakeLineClaims().service,
     publisher,
     // No operator write here, so nothing reaches the trail.
-    {} as never
+    {} as never,
+    new LineMergeService()
   );
 
   const settlements = new SettlementService(

@@ -27,6 +27,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { LineMergeService } from '../lists/line-merge.service';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -142,7 +143,8 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
       listAccess,
       claims.service,
       { emitToUsers: jest.fn(), emit: jest.fn() } as never,
-      new CoreAuditService(dataSource)
+      new CoreAuditService(dataSource),
+      new LineMergeService()
     );
     lineWrites = new GeneratedListLineService(
       dataSource.getRepository(GeneratedListLine),

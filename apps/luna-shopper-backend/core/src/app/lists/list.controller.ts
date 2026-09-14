@@ -38,6 +38,7 @@ import {
   type SetListAccessRequest,
   type SettleLineRequest,
   type UpdateLineRequest,
+  type UpdateLineResult,
   type UpdateListRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { CommentService } from './comment.service';
@@ -106,7 +107,7 @@ export class ListController {
   }
 
   @MessagePattern(LINE_PATTERNS.update)
-  updateLine(@Payload() req: UpdateLineRequest): Promise<LineView> {
+  updateLine(@Payload() req: UpdateLineRequest): Promise<UpdateLineResult> {
     return this.lines.update(req);
   }
 

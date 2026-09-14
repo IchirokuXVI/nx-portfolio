@@ -96,6 +96,20 @@ export const ERROR_CATALOG: Record<
     en: 'This postal code is being discovered right now. Wait for that run to finish.',
     es: 'Este código postal se está descubriendo ahora mismo. Espera a que termine esa ejecución.',
   },
+  // A rename onto a name the list already holds (plan 0112, section 7). The first
+  // names the other line, because the person is being asked a question about it.
+  [ERROR_CODES.LINE_MERGE_REQUIRED]: {
+    en: 'This list already has a line called "{content}". Confirm to merge the two lines into one.',
+    es: 'Esta lista ya tiene una línea llamada "{content}". Confirma para unir las dos líneas en una.',
+  },
+  [ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL]: {
+    en: 'That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.',
+    es: 'Ese nombre pertenece a una línea aprobada. Solo quien puede aprobar líneas puede unir una línea pendiente con ella.',
+  },
+  [ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS]: {
+    en: 'Together these two lines would hold more than {max} products, so they cannot be merged.',
+    es: 'Juntas, estas dos líneas tendrían más de {max} productos, así que no se pueden unir.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

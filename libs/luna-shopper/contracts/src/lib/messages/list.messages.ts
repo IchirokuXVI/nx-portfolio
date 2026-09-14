@@ -683,6 +683,39 @@ export interface UpdateLineRequest {
    * ever settle a product onto the person holding the line.
    */
   adoptItemIds?: string[];
+  /**
+   * Merge this line with the line the new name already belongs to (plan 0112,
+   * section 2).
+   *
+   * A rename onto a name another line of the list holds is refused with
+   * `line_merge_required` unless this is `true`, and the refusal writes nothing.
+   * The same request sent again with it merges the two lines into the earlier
+   * one. It changes nothing on a rename to a free name, or on an edit that does
+   * not rename.
+   */
+  confirmMerge?: boolean;
+}
+
+/**
+ * What a line edit answers (plan 0112, section 6): the line as it now stands.
+ *
+ * After a merge that is the **surviving** line, whose `id` can differ from the
+ * line the request addressed, and {@link absorbedLineId} names the line that went
+ * away. The field is absent when no merge happened.
+ */
+export interface UpdateLineResult extends LineView {
+  absorbedLineId?: string;
+}
+
+/**
+ * The `details` a `line_merge_required` refusal carries (plan 0112, section 2):
+ * the line the new name already belongs to, as it stood when the rename was
+ * refused.
+ */
+export interface LineMergeRequiredDetails {
+  otherLineId: string;
+  otherContent: string;
+  otherQuantity: number;
 }
 
 /**

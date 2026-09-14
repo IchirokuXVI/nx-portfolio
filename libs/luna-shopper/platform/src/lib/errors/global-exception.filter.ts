@@ -141,6 +141,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     messageArgs?: Record<string, string | number>;
     errors?: Record<string, string[]>;
     retryAfterSeconds?: number;
+    details?: Record<string, unknown>;
   } {
     if (isDomainException(exception)) {
       return {
@@ -150,6 +151,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         // Lifted out of the details bag onto the envelope, so a throttled client
         // reads the wait from the body (plan 0021, section 2).
         retryAfterSeconds: retryAfterSecondsOf(exception),
+        // Only from a class that publishes its bag (plan 0112, section 2).
+        details: exception.exposesDetails ? exception.details : undefined,
       };
     }
     if (exception instanceof HttpException) {

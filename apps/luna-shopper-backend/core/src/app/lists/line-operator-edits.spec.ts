@@ -8,17 +8,19 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
-import type { ListAccess, ShoppingList } from '../entities';
+import type { ListAccess } from '../entities';
 import {
   LineSettlement,
   ListLine,
   ListLineGroupRemoval,
   ListLineItem,
+  ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
+import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -98,6 +100,9 @@ function build(
 
   const lineRepo = {
     findOne: async () => line,
+    // What a rename reads to learn whether the new name is taken (plan 0112).
+    // A copy, so the fold cannot hand the edit a row it has already assigned to.
+    find: async () => [{ ...line }],
     create: (data: Partial<ListLine>) => ({ ...data }),
     save: async (row: Partial<ListLine>) => {
       const stored = { ...row, updatedAt: AT };
@@ -135,11 +140,13 @@ function build(
       }) as ListAccess,
   };
 
+  const listRepo = {
+    findOne: async ({ where }: { where: { id: string } }) =>
+      where.id === LIST_ID ? list : null,
+  };
+
   const listAccess = new ListAccessService(
-    {
-      findOne: async ({ where }: { where: { id: string } }) =>
-        where.id === LIST_ID ? list : null,
-    } as never,
+    listRepo as never,
     accessRepo as never,
     lineRepo as never,
     new ZoneAuthzService(memberships as never)
@@ -158,6 +165,10 @@ function build(
     }
     if (entity === LineSettlement) {
       return settlements.repo;
+    }
+    // A rename locks the list's own row (plan 0112).
+    if (entity === ShoppingList) {
+      return listRepo;
     }
     return lineRepo;
   };
@@ -191,6 +202,8 @@ function build(
       LineSettlement,
       { name: 'line_settlements', repository: settlements.repo as never },
     ],
+    // Read, never written: a rename locks the list's row (plan 0112).
+    [ShoppingList, { name: 'shopping_lists', repository: listRepo as never }],
   ]);
 
   return {
@@ -203,7 +216,8 @@ function build(
       listAccess,
       fakeLineClaims().service,
       publisher,
-      audit.service
+      audit.service,
+      new LineMergeService()
     ),
     saved,
     deleted,

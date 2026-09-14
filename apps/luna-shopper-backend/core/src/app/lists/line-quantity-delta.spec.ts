@@ -17,6 +17,7 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
+import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -209,7 +210,8 @@ function build(options: {
     fakeLineClaims().service,
     publisher,
     // No operator write here, so nothing reaches the trail.
-    {} as never
+    {} as never,
+    new LineMergeService()
   );
 
   return { service, saved, events };

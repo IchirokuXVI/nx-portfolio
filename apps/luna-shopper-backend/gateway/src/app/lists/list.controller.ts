@@ -42,6 +42,7 @@ import {
   type ListsHoldingItemRequest,
   type ListsHoldingItemResult,
   type ListView,
+  type UpdateLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   PageQueryDto,
@@ -357,21 +358,31 @@ export class LinesController {
     private readonly transcription: CommentTranscriptionService
   ) {}
 
+  /**
+   * Edit a line (plan 0007, section 2), and merge it on a rename that collides
+   * (plan 0112).
+   *
+   * The answer is always the line as it now stands, which after a merge is the
+   * surviving line and can carry a different `id` from the path. A client that
+   * ignores `absorbedLineId` still converges, because the `line.deleted` event
+   * for the absorbed line arrives anyway.
+   */
   @Patch(':id')
   @ApiContractResponse(LINE_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, lineMerge: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Body() dto: UpdateLineDto
-  ): Promise<LineView> {
-    return this.nats.send<LineView>(LINE_PATTERNS.update, {
+  ): Promise<UpdateLineResult> {
+    return this.nats.send<UpdateLineResult>(LINE_PATTERNS.update, {
       userId: user.userId,
       lineId: id,
       content: dto.content,
       quantity: dto.quantity,
       itemIds: dto.itemIds,
       adoptItemIds: dto.adoptItemIds,
+      confirmMerge: dto.confirmMerge,
     });
   }
 

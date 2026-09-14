@@ -59,6 +59,12 @@ export const PROBLEM_DETAILS_SCHEMA = {
       description:
         'Whole seconds to wait before retrying. Present only when `code` is `rate_limited`. Read this rather than assuming a fixed wait: the limits are enforced per gateway pod, so two requests from the same client can legitimately return different numbers.',
     },
+    details: {
+      type: 'object',
+      additionalProperties: true,
+      description:
+        'Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`, where it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with.',
+    },
   },
 } as const;
 

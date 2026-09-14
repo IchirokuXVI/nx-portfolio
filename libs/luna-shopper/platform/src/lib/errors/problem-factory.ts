@@ -17,6 +17,7 @@ export function buildProblemDetails(input: {
   messageArgs?: Record<string, string | number>;
   errors?: Record<string, string[]>;
   retryAfterSeconds?: number;
+  details?: Record<string, unknown>;
 }): ProblemDetails {
   const status = ERROR_STATUS[input.code] ?? ERROR_STATUS[ERROR_CODES.INTERNAL];
   const message = resolveErrorMessage(
@@ -37,5 +38,6 @@ export function buildProblemDetails(input: {
     ...(input.retryAfterSeconds !== undefined
       ? { retryAfterSeconds: input.retryAfterSeconds }
       : {}),
+    ...(input.details ? { details: input.details } : {}),
   };
 }

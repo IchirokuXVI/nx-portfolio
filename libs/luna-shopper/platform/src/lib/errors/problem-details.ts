@@ -28,6 +28,12 @@ export interface ProblemDetails {
   errors?: Record<string, string[]>;
   /** Whole seconds to wait before retrying. Present only for `rate_limited`. */
   retryAfterSeconds?: number;
+  /**
+   * Machine readable facts about this occurrence, present only for a code whose
+   * exception publishes them (plan 0112, section 2). `line_merge_required` is the
+   * one that does, and names the line the rename collided with.
+   */
+  details?: Record<string, unknown>;
 }
 
 /** The `Content-Type` RFC 7807 defines for these responses. */
