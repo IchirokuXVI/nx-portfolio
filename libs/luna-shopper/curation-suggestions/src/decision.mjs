@@ -183,6 +183,7 @@ export function validateDecision({
   privateLabels = new Map(),
   categories = [],
   units = [],
+  local = false,
 }) {
   const issues = [];
   const item = decision.item;
@@ -307,6 +308,29 @@ export function validateDecision({
         )
       );
     }
+  }
+
+  // The last check, and the only one that asks who answered rather than what
+  // was answered (plan 0003). A product with no printed size is a real product
+  // and the prompt tells the model to create one, so this is not a defect of
+  // the answer. It is the half of the judgment a smaller model does not make:
+  // measured on eighty SuperCash cosmetics rows, sonnet sent all twenty seven
+  // sizeless rows to review and gemma4:12b created all twenty seven, at a stuck
+  // confidence of 0.95 that no threshold can catch. Rule 1 merges on brand plus
+  // format, so a product with no format is one rule 1 cannot be tested against,
+  // and that is a person's call.
+  if (
+    local &&
+    decision.decision === 'CREATE' &&
+    item &&
+    item.unitSize === null
+  ) {
+    issues.push(
+      issue(
+        'SIZELESS_CREATE',
+        `"${item.nameEs}" is created with no size, so rule 1 cannot be tested against it. A local model is not trusted to settle that.`
+      )
+    );
   }
 
   return issues;

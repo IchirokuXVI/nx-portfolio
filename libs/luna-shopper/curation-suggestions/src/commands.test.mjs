@@ -152,6 +152,9 @@ test('start verifies both logins, counts the queue and answers the prompt', asyn
   assert.equal(state.rehearsalUrl, REHEARSAL_URL);
   assert.equal(state.mainUser, 'dev-admin');
   assert.equal(state.total, 2);
+  // A run started against a Claude model reads as false rather than as
+  // undefined, so nothing downstream has to tell the two apart.
+  assert.equal(state.local, false);
   // The run directory never holds a password.
   assert.equal(JSON.stringify(state).includes('password'), false);
 
@@ -545,6 +548,81 @@ test('--final records a second glitch as a REVIEW carrying the code', async () =
   assert.ok(answer.issues.some((i) => i.code === 'NAME_GLITCH'));
   assert.equal(w.rehearsalCatalog.rows.length, 0);
   assert.equal(readJsonl(join(dir, 'decisions.jsonl')).length, 2);
+});
+
+test('a sizeless CREATE from a local model is recorded as a REVIEW', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Sombra dúo Monochrome n30')] });
+  await startIn(dir, w, { model: 'gemma4:12b', local: true });
+
+  const state = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'));
+  assert.equal(state.local, true);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'Sombra dúo Monochrome n30',
+        nameEn: null,
+        unitSize: null,
+        defaultUnit: 'UNIT',
+      },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  // A judgment and not a glitch, so the row goes to a person on the first
+  // answer rather than buying a second attempt.
+  assert.equal(answer.retryable, false);
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.equal(answer.decision.proposedDecision, 'CREATE');
+  assert.ok(answer.issues.some((i) => i.code === 'SIZELESS_CREATE'));
+  // A REVIEW writes no product into the rehearsal catalog, so the next row's
+  // search does not meet a twin nobody accepted.
+  assert.equal(w.rehearsalCatalog.rows.length, 0);
+
+  // And the report carries it with no special casing, because every REVIEW is
+  // reported with its issues verbatim.
+  const { report } = end({ runDir: dir });
+  const written = JSON.parse(readFileSync(report, 'utf8'));
+  assert.equal(written.counts.REVIEW, 1);
+  assert.ok(
+    written.reviews[0].issues.some((i) => i.code === 'SIZELESS_CREATE')
+  );
+});
+
+test('the same sizeless CREATE from a Claude model is a CREATE', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Sombra dúo Monochrome n30')] });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'Sombra dúo Monochrome n30',
+        nameEn: null,
+        unitSize: null,
+        defaultUnit: 'UNIT',
+      },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+    privateLabels: LABELS,
+  });
+
+  assert.equal(answer.accepted, true);
+  assert.equal(answer.decision.decision, 'CREATE');
+  assert.deepEqual(answer.issues, []);
+  assert.equal(w.rehearsalCatalog.rows.length, 1);
 });
 
 test('an entry already decided is refused rather than asked twice', async () => {
