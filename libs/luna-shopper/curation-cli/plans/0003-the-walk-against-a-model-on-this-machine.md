@@ -188,15 +188,42 @@ four shapes a decision can take, discriminated on `decision` as a `const`:
 A LINK names exactly one target, so the two ways of naming one are two
 alternatives rather than two optional fields.
 
-`anyOf` and not `oneOf`, because Anthropic's structured outputs take `anyOf` and
-llama.cpp, which is what Ollama converts a schema with, reads the two as the
-same alternation. `anyOf` and not `if`/`then`, which says this more directly and
-which llama.cpp does not support. llama.cpp checks for `anyOf` before it checks
-for `properties`, which is what makes the root safe to leave as it is: the
-grammar is built from the alternatives and the root's loose types are ignored.
+`anyOf` and not `oneOf`, because llama.cpp reads the two as the same alternation
+and `anyOf` is the one Anthropic's structured outputs accept. `anyOf` and not
+`if`/`then`, which says this more directly and which llama.cpp does not support.
+llama.cpp checks for `anyOf` before it checks for `properties`, which is what
+makes the root safe to leave as it is: the grammar is built from the
+alternatives and the root's loose types are ignored.
 
 `checkDecisionShape` is unchanged and is now strictly looser than the schema, so
 no answer it accepts has become unanswerable.
+
+### The alternation reaches Ollama, and the claude engine strips it
+
+**It was written as though it reached every engine, and it does not.** Ollama is
+where it works and where it was worth having: llama.cpp builds a grammar from
+the alternatives, and an eighty row run went from 31 re-asks to 8.
+
+The claude engine cannot be sent it at all. `--json-schema` is not a response
+format: the CLI turns it into a synthetic tool, and a tool's `input_schema` is a
+narrower subset of JSON Schema than a response format is. The API answers
+
+    API Error: 400 tools.11.custom.input_schema: input_schema does not support
+    oneOf, allOf, or anyOf at the top level
+
+and what reaches the operator is nothing at all: `terminal_reason: api_error`
+with zero tokens, exit 1, empty stderr, and a walk that dies on its first row
+after three retries. So `claude-cli.mjs` drops a top level `anyOf`, `oneOf` or
+`allOf` from a copy of the schema before it sends it (`toolInputSchema`). Only
+the root is touched, because only the root is refused.
+
+That is why the loose root has to stand on its own, and it now does a little
+more of the work. **Its `item` requires `nameEs`, `category` and
+`defaultUnit`**, which a validator applies only to an object and so leaves a
+`null` item alone. That is the failure sonnet actually had: 26 of 80 SuperCash
+rows were re-asked for `a CREATE needs "item.defaultUnit"`. The two halves agree
+by construction, because every alternative carrying an item requires the same
+three fields.
 
 ## Where each piece lives
 
