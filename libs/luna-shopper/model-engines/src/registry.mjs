@@ -31,6 +31,11 @@ import { OLLAMA_DEFAULT_MODEL, makeOllamaEngine } from './ollama.mjs';
  * - `gate`, the confirmation this entry needs before it runs, or null. It is
  *   asked before anything is built, and whatever it answers reaches `create`
  *   as `gated`;
+ * - `local`, whether the model runs on the operator's own machine. It is a
+ *   property of the entry rather than of the built engine because it is asked
+ *   before a run starts and never during one, and `curation-suggestions` reads
+ *   it to decide how much of a decision a smaller model is trusted to make on
+ *   its own (curation-suggestions plan 0003);
  * - `create`, which builds the engine from the injected `spawn`, `fetch`,
  *   `env`, usage total and signal, so the whole library runs under
  *   `node --test` with no network and no `claude` installed.
@@ -38,6 +43,7 @@ import { OLLAMA_DEFAULT_MODEL, makeOllamaEngine } from './ollama.mjs';
 export const ENGINES = [
   {
     name: 'claude',
+    local: false,
     defaultModel: DEFAULT_MODEL,
     defaultEffort: DEFAULT_EFFORT,
     effortLevels: EFFORT_LEVELS,
@@ -66,6 +72,7 @@ export const ENGINES = [
   },
   {
     name: 'api',
+    local: false,
     defaultModel: DEFAULT_MODEL,
     defaultEffort: DEFAULT_EFFORT,
     effortLevels: EFFORT_LEVELS,
@@ -89,6 +96,10 @@ export const ENGINES = [
   },
   {
     name: 'ollama',
+    // The one entry that runs on the machine that asked, which is what the
+    // gate, the default model and the absent effort levels all already say in
+    // their own way and nothing above the library could read as one answer.
+    local: true,
     // Not a Claude model, which is the point of stating it per entry. Unlike
     // the Claude default it names something the operator must have pulled,
     // which is why a 404 from the server is fatal and names `ollama pull`.
