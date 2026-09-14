@@ -22,6 +22,23 @@ test('parseArgs reads flags with and without a value', () => {
   });
 });
 
+test('start reads --local as a bare flag, whatever follows it', () => {
+  // The orchestrator appends it between `--model` and the password, so the
+  // token after it is another flag and never a value this one would swallow.
+  const parsed = parseArgs([
+    'start',
+    '--model',
+    'gemma4:12b',
+    '--local',
+    '--main-password',
+    'secret',
+  ]);
+  assert.equal(parsed.flags.local, true);
+  assert.equal(parsed.flags['main-password'], 'secret');
+  // And a run that never names it is not a local run.
+  assert.equal(parseArgs(['start', '--model', 'x']).flags.local, undefined);
+});
+
 test('parseArgs refuses a bare argument', () => {
   assert.throws(() => parseArgs(['next', 'oops']), /Unexpected argument oops/);
 });

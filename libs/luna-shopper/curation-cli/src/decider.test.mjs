@@ -77,6 +77,39 @@ test('start passes both urls, the run directory and the model', async () => {
   ]);
 });
 
+test('a local engine adds one bare flag and nothing else', async () => {
+  const { calls, spawn } = fakeDecider([{ runId: 'r1', remaining: 1 }]);
+  const decider = makeDecider({
+    spawn,
+    cliPath: '/repo/cli.mjs',
+    runDir: '/runs/x',
+    node: '/usr/bin/node',
+  });
+
+  await decider.start({
+    mainUrl: 'http://localhost:3000',
+    rehearsalUrl: 'http://localhost:43000',
+    mainUser: null,
+    model: 'gemma4:12b',
+    local: true,
+    chain: null,
+  });
+
+  assert.deepEqual(calls[0].args, [
+    '/repo/cli.mjs',
+    'start',
+    '--main-url',
+    'http://localhost:3000',
+    '--rehearsal-url',
+    'http://localhost:43000',
+    '--run-dir',
+    '/runs/x',
+    '--model',
+    'gemma4:12b',
+    '--local',
+  ]);
+});
+
 test('a password given once is repeated on every subcommand', async () => {
   const { calls, spawn } = fakeDecider([
     { done: true },
