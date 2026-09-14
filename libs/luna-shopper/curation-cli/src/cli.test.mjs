@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -13,8 +19,11 @@ import {
   parseLimit,
   resolveImplementation,
   spawnCapture,
+  spawnChild,
   usageText,
 } from './cli.mjs';
+import { deciderPath, makeDecider } from './decider.mjs';
+import { fakeChild } from './test-fakes.mjs';
 
 function sink() {
   const written = [];
@@ -98,7 +107,9 @@ test('a pipe is not asked, it is told', async () => {
 
 test('--apply takes no slot and makes no model call', async () => {
   const spawned = [];
+  const started = [];
   const stdout = sink();
+  const { requests, startChild } = fakeChild([{ results: [], priceSkips: [] }]);
   const code = await main(
     [
       '--implementation',
@@ -115,11 +126,11 @@ test('--apply takes no slot and makes no model call', async () => {
       isTty: false,
       spawn: async (command, args) => {
         spawned.push({ command, args });
-        return {
-          code: 0,
-          stdout: '{"results":[],"priceSkips":[]}\n',
-          stderr: '',
-        };
+        return { code: 0, stdout: '{}', stderr: '' };
+      },
+      startChild: (command, args) => {
+        started.push({ command, args });
+        return startChild();
       },
       repoRoot: '/repo',
       platform: 'linux',
@@ -127,13 +138,14 @@ test('--apply takes no slot and makes no model call', async () => {
   );
 
   assert.equal(code, 0);
-  assert.equal(spawned.length, 1);
-  assert.equal(spawned[0].args[1], 'apply');
-  assert.match(spawned[0].args[0], /curation-suggestions\/src\/cli\.mjs$/);
+  // One decider child, in serve mode, and one request over it.
+  assert.equal(started.length, 1);
+  assert.match(started[0].args[0], /curation-suggestions\/src\/cli\.mjs$/);
+  assert.equal(started[0].args[1], 'serve');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].command, 'apply');
   // No luna-slot, no docker, no claude.
-  assert.ok(
-    !spawned.some((call) => /luna-slot|docker|claude/.test(String(call.args)))
-  );
+  assert.deepEqual(spawned, []);
   assert.equal(stdout.text().trim(), '{"results":[],"priceSkips":[]}');
 });
 
@@ -442,6 +454,32 @@ test('the second Ctrl+C names no slot when none was taken yet', () => {
   handler();
   assert.deepEqual(exits, [130]);
   assert.ok(!stderr.text().includes('--ephemeral --down'));
+});
+
+// The one test that starts a real decider. Everything else fakes the child, so
+// nothing else would notice that `serve` was never dispatched, that the line
+// framing disagrees, or that the answer is nested under a different key.
+// `apply` over an empty decisions file is the one command that reaches no
+// gateway, so the round trip costs one process and no network.
+test('a real decider answers a real serve request', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-serve-'));
+  const file = join(dir, 'decisions.jsonl');
+  writeFileSync(
+    file,
+    `${JSON.stringify({ header: true, runId: 'r1', mainUrl: 'http://x' })}\n`
+  );
+
+  const decider = makeDecider({
+    startChild: spawnChild,
+    cliPath: deciderPath('suggestions', REPO_ROOT),
+    runDir: null,
+  });
+  const answer = await decider.apply({ mainUrl: 'http://x', file });
+
+  assert.equal(answer.runId, 'r1');
+  assert.equal(answer.operations, 0);
+  assert.equal(answer.applied, true);
+  rmSync(dir, { recursive: true, force: true });
 });
 
 test('the manual smoke run is documented at the top of this CLI', () => {
