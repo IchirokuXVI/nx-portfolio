@@ -75,7 +75,25 @@ function issuesText(issues) {
 }
 
 /**
- * One row: ask, record, and one retry when the reply cannot be used.
+ * What a row carries between the attempts it takes to record it (plan 0004).
+ *
+ * `body` is the packet the model was last shown, which a stale answer replaces
+ * with the refreshed one. `retried` is the whole of the retry budget: it is
+ * what `--final` is passed on the next attempt, so a row is asked at most twice
+ * about one packet whichever pass those two attempts fall in.
+ */
+export function rowAttempt(row) {
+  return { row, body: JSON.stringify(toPacket(row), null, 2), retried: false };
+}
+
+/**
+ * One attempt at one row: read the reply, record it, and say what is left.
+ *
+ * It answers `{ answer }` when the row is recorded and `{ prompt }` when it has
+ * to be asked again, and it is where every rule about asking again lives. The
+ * caller decides when that next prompt is sent, which is the one thing that
+ * differs between a walk of one row at a time and a round that collects its
+ * re-asks and sends them together.
  *
  * The retry is the plan 0098 semantics moved out of the model layer: a first
  * decision that breaks the schema comes back from the decider as
@@ -83,16 +101,63 @@ function issuesText(issues) {
  * reason, and the second answer goes in with `--final`, which records a REVIEW
  * rather than asking a third time.
  *
- * **A stale packet re-enters the loop and spends nothing** (plan 0002). The
- * decider re-runs its two lookups before it records, and a candidate set that
- * changed since the row was handed out means the model was asked the wrong
- * question, not that it answered badly. So the row is asked again on the
- * refreshed packet with the retry budget untouched, and a row that goes stale
- * and then breaks the schema still gets both of the attempts `--final` counts.
+ * **A stale packet is asked again and spends nothing** (plan 0002). The decider
+ * re-runs its two lookups before it records, and a candidate set that changed
+ * since the row was handed out means the model was asked the wrong question,
+ * not that it answered badly. So the row is asked again on the refreshed packet
+ * with the retry budget untouched, and a row that goes stale and then breaks
+ * the schema still gets both of the attempts `--final` counts.
+ */
+export async function stepRow({ attempt, reply, decider, stripFence }) {
+  const { id } = rowIdentity(attempt.row);
+
+  // A prompt the engine gave up on comes back as its own entry rather than as
+  // a throw, so that one failure does not discard the answers beside it. Here
+  // it is a reply that cannot be used, which is what the retry is for.
+  const gaveUp = reply?.error
+    ? String(reply.error?.message ?? reply.error)
+    : null;
+  const text = gaveUp ? '' : String(reply?.text ?? '');
+
+  const decision = gaveUp ? null : parseDecision(text, { stripFence });
+  let reason = gaveUp ?? 'the reply is not one JSON object';
+
+  // A last attempt is recorded whatever it says: `--final` turns an unusable
+  // reply into a REVIEW carrying the reason, so the walk moves on rather than
+  // stopping.
+  if (decision || attempt.retried) {
+    const answer = await decider.decide(
+      id,
+      decision ?? { modelReply: (gaveUp ?? text).slice(0, 2000) },
+      { final: attempt.retried }
+    );
+    if (answer?.stale) {
+      attempt.body = JSON.stringify(toPacket(answer.packet), null, 2);
+      return { prompt: attempt.body };
+    }
+    if (attempt.retried || !answer.retryable) {
+      return { answer };
+    }
+    reason = issuesText(answer.issues);
+  }
+
+  attempt.retried = true;
+  return {
+    prompt: `${attempt.body}\n\n${RETRY_INSTRUCTION.replace('{error}', reason || 'it broke the schema')}`,
+  };
+}
+
+/**
+ * One row, from its first reply to the decision that is recorded for it.
  *
- * `reply` is the answer a batch already carries for this row, so a batched walk
- * spends its first attempt in `askMany` rather than here. Absent, the row is
- * asked here, which is what a walk of one row at a time does.
+ * `stepRow` in a loop around a single row, which is what a walk of one row at a
+ * time is. `reply` is the answer a round already carries for this row, so a
+ * batched walk spends its first attempt in the round rather than here. Absent,
+ * the row is asked here.
+ *
+ * The whole of the walk goes through the same step, so there is one place a
+ * retry is spent and one place a stale packet is re-asked, whichever width the
+ * walk is running at.
  */
 export async function decideRow({
   row,
@@ -103,56 +168,55 @@ export async function decideRow({
   stripFence,
   reply = null,
 }) {
-  const { id } = rowIdentity(row);
-  let body = JSON.stringify(toPacket(row), null, 2);
+  const attempt = rowAttempt(row);
 
   // The rules go in the system half and the packet in the user half, and the
   // rules are never repeated in the user half. Both engines send the system
   // half on every call, so the one thing that changes between calls is the
   // packet, and the unchanging remainder is what the server side cache serves.
-  const ask = async (text) =>
-    String((await engine.ask(text, { system: prompt, schema })).text ?? '');
+  const ask = async (text) => ({
+    text: String(
+      (await engine.ask(text, { system: prompt, schema })).text ?? ''
+    ),
+  });
 
-  // A prompt the engine gave up on comes back as its own entry rather than as
-  // a throw, so that one failure does not discard the answers beside it. Here
-  // it is a reply that cannot be used, which is what the retry is for.
-  let gaveUp = reply?.error
-    ? String(reply.error?.message ?? reply.error)
-    : null;
-  let text = gaveUp ? '' : reply ? String(reply.text ?? '') : await ask(body);
-
-  let retried = false;
+  let current = reply ?? (await ask(attempt.body));
   for (;;) {
-    const decision = gaveUp ? null : parseDecision(text, { stripFence });
-    let reason = gaveUp ?? 'the reply is not one JSON object';
-
-    // A last attempt is recorded whatever it says: `--final` turns an unusable
-    // reply into a REVIEW carrying the reason, so the walk moves on rather
-    // than stopping.
-    if (decision || retried) {
-      const answer = await decider.decide(
-        id,
-        decision ?? { modelReply: (gaveUp ?? text).slice(0, 2000) },
-        { final: retried }
-      );
-      if (answer?.stale) {
-        body = JSON.stringify(toPacket(answer.packet), null, 2);
-        gaveUp = null;
-        text = await ask(body);
-        continue;
-      }
-      if (retried || !answer.retryable) {
-        return answer;
-      }
-      reason = issuesText(answer.issues);
+    const outcome = await stepRow({
+      attempt,
+      reply: current,
+      decider,
+      stripFence,
+    });
+    if (outcome.answer) {
+      return outcome.answer;
     }
-
-    gaveUp = null;
-    text = await ask(
-      `${body}\n\n${RETRY_INSTRUCTION.replace('{error}', reason || 'it broke the schema')}`
-    );
-    retried = true;
+    current = await ask(outcome.prompt);
   }
+}
+
+/**
+ * How many rows one round of the walk covers (plan 0004).
+ *
+ * What the engine advises, and never more than the decider will hand out at
+ * once. There is no flag for either half. An engine that advises nothing falls
+ * back to how many requests it holds in flight, which is what the width was
+ * until this plan, and an engine that reports neither is walked one row at a
+ * time.
+ *
+ * `batches` is the decider's own cap and is the reason a round never crosses
+ * its queue page: a batch composed across two pages is a batch whose collision
+ * guarantee nobody proved. A decider that composes no batches answers nothing
+ * here and is walked exactly as it has always been walked.
+ */
+export function roundWidth(engine, batches) {
+  const advised = Math.trunc(
+    Number(engine?.roundSize ?? engine?.batchSize ?? 1)
+  );
+  return Math.max(
+    1,
+    Math.min(advised || 1, Math.trunc(Number(batches ?? 1)) || 1)
+  );
 }
 
 /**
@@ -194,18 +258,30 @@ export async function fetchBatch(decider, width) {
  * was stopping is the stop, and the walk breaks rather than throwing.
  *
  * **The walk asks several rows at a time** (plan 0002), as many as the engine
- * holds in flight and the decider composes. A batch is one `askMany` and then
- * one `decide` per row in input order, and the order is what makes it
- * equivalent to walking one row at a time: at the moment row k is recorded, the
- * rehearsal catalog holds the creations of the rows before it in its own batch,
- * so the decider's lookups answer exactly what they would have answered
- * sequentially. A row whose candidates changed since it was handed out is asked
- * again on the refreshed packet, inside `decideRow`.
+ * advises and the decider composes. A round is one `askEach` and then one
+ * `decide` per row in input order, and the order is what makes it equivalent to
+ * walking one row at a time: at the moment row k is recorded, the rehearsal
+ * catalog holds the creations of the rows before it in its own round, so the
+ * decider's lookups answer exactly what they would have answered sequentially.
  *
- * A stop part way through a batch is a stop like any other: `askMany` rejects
- * with the signal's own reason, the rows already recorded stay recorded, and
- * nothing still in flight is applied. A batch is not a transaction and was
- * never going to be one, which is what makes a stopped run resumable.
+ * **Each row is decided as its own reply arrives** (plan 0004), rather than
+ * once the whole round is back, so the engine is still answering the rows
+ * behind row k for the whole of the time row k spends in the decider. Row k is
+ * recorded before the reply to row k plus one is read, so the order above is
+ * the order there has always been.
+ *
+ * **A row that has to be asked again waits for the rest of its round**, and the
+ * re-asks are then sent together as another pass over the same rows. What makes
+ * that safe is the round's composition rather than the order: no two of its
+ * rows can be about the same product, so deferring one of them to the end
+ * cannot change what any of them is shown. A round ends when a pass sets
+ * nothing aside, and the retry budget is what bounds the passes.
+ *
+ * A stop part way through a round is a stop like any other: the replies that
+ * have not arrived reject with the signal's own reason, the rows already
+ * recorded stay recorded, and nothing still in flight is applied. A round is
+ * not a transaction and was never going to be one, which is what makes a
+ * stopped run resumable.
  *
  * **`limit` stops handing rows to the model after that many** (plan 0003), and
  * is the whole of what it does. It is not a stop: the rows already handed out
@@ -273,18 +349,31 @@ export async function runCuration({
       stderr.write(`limit ${limit}: the walk ends after ${limit} rows\n`);
     }
 
-    // How many rows one round of the walk asks about: what the engine holds in
-    // flight, and never more than the decider will hand out at once. There is
-    // no flag for either half. An engine that answers one request at a time
-    // says so, and a decider that composes no batches answers nothing here and
-    // is walked exactly as it has always been walked.
-    const width = Math.max(
-      1,
-      Math.min(
-        Math.trunc(Number(engine.batchSize ?? 1)) || 1,
-        Math.trunc(Number(opened.batches ?? 1)) || 1
-      )
-    );
+    const width = roundWidth(engine, opened.batches);
+    const askOptions = {
+      // A decider that answers no schema is driven exactly as before, which is
+      // what keeps the two implementations independent of each other.
+      system: opened.prompt,
+      schema: opened.schema ?? null,
+    };
+
+    /**
+     * The replies to a pass, one promise per prompt, in input order.
+     *
+     * A round wider than one goes through `askEach`, so the caller reads the
+     * answers as they arrive and the engine is still working on the rows behind
+     * the one being decided. A width of one goes through `ask`, which is the
+     * walk plan 0001 shipped: one request, and a failure the engine gave up on
+     * ends the run rather than being recorded as an unusable reply.
+     */
+    const askPass = (texts) =>
+      width > 1
+        ? engine.askEach(texts, askOptions)
+        : texts.map((text) =>
+            engine
+              .ask(text, askOptions)
+              .then((answer) => ({ text: String(answer?.text ?? '') }))
+          );
 
     let handed = 0;
 
@@ -309,45 +398,64 @@ export async function runCuration({
         }
         handed += batch.rows.length;
 
-        // One call for the whole batch, and the whole of the saving. A batch is
+        // One call for the whole round, and the whole of the saving. A round is
         // composed so that no two of its rows can be about the same product, so
         // asking them together shows each of them what asking them one after
         // another would have shown it.
-        const replies =
-          width > 1
-            ? await engine.askMany(
-                batch.rows.map((row) => JSON.stringify(toPacket(row), null, 2)),
-                { system: opened.prompt, schema: opened.schema ?? null }
-              )
-            : null;
+        let attempts = batch.rows.map(rowAttempt);
+        let replies = askPass(attempts.map((attempt) => attempt.body));
+        let first = true;
 
-        // In input order, and only in input order. At the moment row k is
-        // recorded the rehearsal catalog holds the creations of rows 1 to k-1
-        // of this batch, which is the state the sequential walk would have
-        // shown it. Applied in any other order that equivalence is gone.
-        for (let index = 0; index < batch.rows.length; index++) {
-          if (signal?.aborted) {
-            stopped = true;
-            break walk;
+        // A round is a series of passes and ends when a pass sets nothing
+        // aside. The retry budget is what bounds them: a row either spends its
+        // one retry, and its next answer is recorded whatever it says, or the
+        // decider refreshed its packet, which is a question that was never
+        // asked. There is no pass counter, on purpose.
+        while (attempts.length > 0) {
+          const again = [];
+          const prompts = [];
+
+          // In input order, and one row at a time: row k is recorded before the
+          // reply to row k plus one is even read, which is what makes the round
+          // equivalent to walking its rows one after another. What is not
+          // waited for is the rest of the round, which the engine is still
+          // answering while the decider works.
+          for (let index = 0; index < attempts.length; index++) {
+            if (signal?.aborted) {
+              stopped = true;
+              break walk;
+            }
+            const attempt = attempts[index];
+            if (first) {
+              const { name } = rowIdentity(attempt.row);
+              const position = Math.max(1, total - batch.remaining + 1 + index);
+              stderr.write(`${position}/${total} - ${name}\n`);
+            }
+
+            const outcome = await stepRow({
+              attempt,
+              reply: await replies[index],
+              decider,
+              stripFence,
+            });
+            if (outcome.answer) {
+              stdout.write(`${JSON.stringify(outcome.answer)}\n`);
+              continue;
+            }
+            // A row that has to be asked again waits for the rest of its round
+            // rather than being asked here on its own (plan 0004). A re-ask
+            // alone is a round of one, with every other slot idle for as long
+            // as it takes, and the round's composition is what makes deferring
+            // it safe: no two of its rows can be about the same product.
+            again.push(attempt);
+            prompts.push(outcome.prompt);
           }
-          const row = batch.rows[index];
-          const { name } = rowIdentity(row);
-          const position = Math.max(1, total - batch.remaining + 1 + index);
-          stderr.write(`${position}/${total} - ${name}\n`);
 
-          const answer = await decideRow({
-            row,
-            prompt: opened.prompt,
-            // A decider that answers no schema is driven exactly as before,
-            // which is what keeps the two implementations independent of each
-            // other.
-            schema: opened.schema ?? null,
-            engine,
-            decider,
-            stripFence,
-            reply: replies?.[index] ?? null,
-          });
-          stdout.write(`${JSON.stringify(answer)}\n`);
+          attempts = again;
+          first = false;
+          if (attempts.length > 0) {
+            replies = askPass(prompts);
+          }
         }
       } catch (error) {
         if (!signal?.aborted) {
