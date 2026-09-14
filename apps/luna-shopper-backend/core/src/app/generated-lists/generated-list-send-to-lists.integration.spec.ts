@@ -30,6 +30,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { LineMergeService } from '../lists/line-merge.service';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -146,7 +147,8 @@ describeIntegration(
         listAccess,
         claims.service,
         { emitToUsers: jest.fn(), emit: jest.fn() } as never,
-        new CoreAuditService(dataSource)
+        new CoreAuditService(dataSource),
+        new LineMergeService()
       );
       const waiting = new WaitingSettlementService(claims.service, {
         emit: jest.fn(),

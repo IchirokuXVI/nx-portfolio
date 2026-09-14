@@ -468,6 +468,9 @@ export type ProblemDetails = {
     | 'account_locked'
     | 'postal_code_unknown'
     | 'run_in_progress'
+    | 'line_merge_required'
+    | 'line_merge_needs_approval'
+    | 'line_merge_too_many_products'
     | 'internal';
   detail?: string;
   message: string;
@@ -476,6 +479,9 @@ export type ProblemDetails = {
     [key: string]: string[];
   };
   retryAfterSeconds?: number;
+  details?: {
+    [key: string]: unknown;
+  };
 };
 
 /**
@@ -881,6 +887,7 @@ export type UpdateLineDto = {
   quantity?: number;
   itemIds?: string[];
   adoptItemIds?: string[];
+  confirmMerge?: boolean;
 };
 
 /**
@@ -3280,6 +3287,32 @@ export type ListListView = {
   myPermissions: EnumsListPermission[];
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * `list.UpdateLineResult` in the gateway's OpenAPI document.
+ */
+export type ListUpdateLineResult = {
+  id: string;
+  listId: string;
+  content: string;
+  quantity: number;
+  itemIds: string[];
+  itemSetHash: string | null;
+  productGroupId: string | null;
+  groupItemIds: string[];
+  position: number;
+  approvalStatus: EnumsLineApprovalStatus;
+  createdByUserId: string;
+  approvedByUserId: string | null;
+  version: number;
+  boughtCount: number;
+  lastSettlementOutcome: EnumsSettlementOutcome | null;
+  claimed: boolean;
+  claimedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  absorbedLineId?: string;
 };
 
 /**

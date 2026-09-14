@@ -50,6 +50,13 @@ export interface ProblemResponseOptions {
    * client turns into "this basket is finished" rather than into a retry.
    */
   finishedBasket?: boolean;
+  /**
+   * The route renames a line, so a name the list already holds can answer 409
+   * with one of the three merge codes (plan 0112, section 7), each told apart
+   * from a plain conflict because the client asks, explains, or explains with a
+   * number.
+   */
+  lineMerge?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -116,6 +123,13 @@ export function ApiProblemResponses(
   }
   if (options.finishedBasket) {
     codes.push(ERROR_CODES.GENERATED_LIST_FINISHED);
+  }
+  if (options.lineMerge) {
+    codes.push(
+      ERROR_CODES.LINE_MERGE_REQUIRED,
+      ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL,
+      ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS
+    );
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);

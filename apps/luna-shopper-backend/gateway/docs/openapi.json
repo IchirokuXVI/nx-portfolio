@@ -6935,7 +6935,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineView"
+                  "$ref": "#/components/schemas/list.UpdateLineResult"
                 }
               }
             }
@@ -6972,6 +6972,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21660,6 +21670,10 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "confirmMerge": {
+            "type": "boolean",
+            "description": "Merge this line with the line the new content already belongs to (plan 0112, section 2). A rename onto a name another line of the list holds answers 409 line_merge_required and writes nothing unless this is true; the refusal names the other line in details. With it, the earlier of the two lines survives with the summed quantity and both lines’ products, comments, settlements and basket origins, and the answer names the removed line in absorbedLineId. It changes nothing on a rename to a free name."
           }
         }
       },
@@ -30459,6 +30473,127 @@
         ],
         "additionalProperties": false
       },
+      "list.UpdateLineResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "itemSetHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "productGroupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "position": {
+            "type": "integer"
+          },
+          "approvalStatus": {
+            "$ref": "#/components/schemas/enums.LineApprovalStatus"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "boughtCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastSettlementOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.SettlementOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "claimedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "absorbedLineId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "listId",
+          "content",
+          "quantity",
+          "itemIds",
+          "itemSetHash",
+          "productGroupId",
+          "groupItemIds",
+          "position",
+          "approvalStatus",
+          "createdByUserId",
+          "approvedByUserId",
+          "version",
+          "boughtCount",
+          "lastSettlementOutcome",
+          "claimed",
+          "claimedByUserId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
       "merge.MergeRequestPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -30892,6 +31027,9 @@
               "account_locked",
               "postal_code_unknown",
               "run_in_progress",
+              "line_merge_required",
+              "line_merge_needs_approval",
+              "line_merge_too_many_products",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
@@ -30922,6 +31060,11 @@
             "type": "integer",
             "minimum": 0,
             "description": "Whole seconds to wait before retrying. Present only when `code` is `rate_limited`. Read this rather than assuming a fixed wait: the limits are enforced per gateway pod, so two requests from the same client can legitimately return different numbers."
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`, where it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with."
           }
         }
       },

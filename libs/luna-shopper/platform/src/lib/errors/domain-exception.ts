@@ -28,6 +28,17 @@ export abstract class DomainException extends Error {
    */
   readonly messageArgs?: Record<string, string | number>;
 
+  /**
+   * Whether {@link details} reaches the client on the error envelope (plan 0112,
+   * section 2).
+   *
+   * Off unless a class turns it on, because the bag was written for logs and
+   * for the thrower's own tests long before anything published it: most of what
+   * it carries today is a field message nobody reviewed as a public contract. A
+   * class that turns it on is stating that its details are part of the API.
+   */
+  readonly exposesDetails: boolean = false;
+
   constructor(
     message: string,
     options?: {
@@ -192,6 +203,36 @@ export class PostalCodeUnknownException extends DomainException {
  */
 export class RunInProgressException extends DomainException {
   readonly code = ERROR_CODES.RUN_IN_PROGRESS;
+}
+
+/**
+ * The new name belongs to another line of the list, and the rename did not
+ * confirm the merge (plan 0112, section 2).
+ *
+ * The one class that publishes its details, because the client cannot ask the
+ * question without them: `otherLineId`, `otherContent` and `otherQuantity` name
+ * the line the rename collided with. Nothing was written when this is thrown.
+ */
+export class LineMergeRequiredException extends DomainException {
+  readonly code = ERROR_CODES.LINE_MERGE_REQUIRED;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A pending or rejected line was renamed onto an approved one by somebody who
+ * holds neither `DECIDE` nor `MANAGE`, on a list that does not auto approve
+ * (plan 0112, section 2).
+ */
+export class LineMergeNeedsApprovalException extends DomainException {
+  readonly code = ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL;
+}
+
+/**
+ * The merged product set would pass the bound a line is held to (plan 0112,
+ * section 2). The bound travels in `messageArgs.max`.
+ */
+export class LineMergeTooManyProductsException extends DomainException {
+  readonly code = ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS;
 }
 
 /**

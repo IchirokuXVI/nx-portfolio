@@ -106,6 +106,29 @@ export const ERROR_CODES = {
    * attempt count of an attempt still in progress.
    */
   RUN_IN_PROGRESS: 'run_in_progress',
+  /**
+   * The new name belongs to another line of the same list, and the request did
+   * not say to merge the two (plan 0112, section 2).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the client's
+   * reaction is particular: ask the person, then send the same request again
+   * with `confirmMerge`. The envelope's `details` name the other line, so the
+   * question can say which line it is and how many it holds.
+   */
+  LINE_MERGE_REQUIRED: 'line_merge_required',
+  /**
+   * A pending or rejected line was renamed onto an approved one by somebody who
+   * cannot approve lines (plan 0112, section 2).
+   *
+   * Refused rather than merged, because the merge would leave one approved line
+   * holding a request nobody with the right to approve it agreed to.
+   */
+  LINE_MERGE_NEEDS_APPROVAL: 'line_merge_needs_approval',
+  /**
+   * The two lines together would hold more products than one line may (plan
+   * 0112, section 2). The bound travels in `messageArgs.max`.
+   */
+  LINE_MERGE_TOO_MANY_PRODUCTS: 'line_merge_too_many_products',
   INTERNAL: 'internal',
 } as const;
 
@@ -169,5 +192,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 for the ordinary reason: the request was well formed and the caller is
   // allowed to make it, and what refuses it is the state of the row.
   [ERROR_CODES.RUN_IN_PROGRESS]: HttpStatus.CONFLICT,
+  // All three 409 for the ordinary reason, and told apart by code because the
+  // client does three different things with them: ask, explain, or explain with
+  // a number (plan 0112, section 7).
+  [ERROR_CODES.LINE_MERGE_REQUIRED]: HttpStatus.CONFLICT,
+  [ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL]: HttpStatus.CONFLICT,
+  [ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

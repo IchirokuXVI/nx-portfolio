@@ -272,6 +272,14 @@ export class UpdateLineDto {
   @ArrayMaxSize(LINE_ITEM_SET_CEILING)
   @IsUUID(undefined, { each: true })
   adoptItemIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Merge this line with the line the new content already belongs to (plan 0112, section 2). A rename onto a name another line of the list holds answers 409 line_merge_required and writes nothing unless this is true; the refusal names the other line in details. With it, the earlier of the two lines survives with the summed quantity and both lines’ products, comments, settlements and basket origins, and the answer names the removed line in absorbedLineId. It changes nothing on a rename to a free name.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  confirmMerge?: boolean;
 }
 
 export class SetApprovalDto {
