@@ -12,6 +12,7 @@ import {
   parseArgs,
   parseLimit,
   resolveImplementation,
+  serverTimingsLine,
   spawnCapture,
   usageText,
 } from './cli.mjs';
@@ -32,6 +33,60 @@ test('parseArgs reads values and bare switches', () => {
   });
   assert.deepEqual(parseArgs([]), {});
   assert.throws(() => parseArgs(['groups']), /Unexpected argument groups/);
+});
+
+/** The sums an 80 row walk against a local model leaves behind. */
+const WALK_TIMINGS = {
+  calls: 80,
+  totalMs: 157_200,
+  loadMs: 6_900,
+  promptTokens: 239_440,
+  promptEvalMs: 28_300,
+  evalTokens: 4_900,
+  evalMs: 156_000,
+};
+
+test('the run reports the decode rate, the prompt share and the load on one line', () => {
+  const line = serverTimingsLine(
+    { calls: 80, timings: WALK_TIMINGS },
+    'ollama'
+  );
+
+  // One line, because two runs are compared by reading the same line twice.
+  assert.equal(line.split('\n').filter(Boolean).length, 1);
+  assert.equal(
+    line,
+    'ollama: 31.4 decode tok/s, prompt eval 18% of 157.2 s, load 6.9 s over 80 calls\n'
+  );
+});
+
+test('a run whose provider reported no durations says nothing at all', () => {
+  // Every engine but ollama, and an ollama run that never reached a row.
+  assert.equal(serverTimingsLine({ calls: 12 }, 'claude'), null);
+  assert.equal(serverTimingsLine(undefined, 'ollama'), null);
+  assert.equal(
+    serverTimingsLine({ timings: { ...WALK_TIMINGS, calls: 0 } }, 'ollama'),
+    null
+  );
+});
+
+test('a rate with nothing to divide by is left out rather than reported as zero', () => {
+  const line = serverTimingsLine(
+    {
+      timings: {
+        calls: 2,
+        totalMs: 0,
+        loadMs: 0,
+        promptTokens: 0,
+        promptEvalMs: 0,
+        evalTokens: 0,
+        evalMs: 0,
+      },
+    },
+    'ollama'
+  );
+
+  assert.equal(line, 'ollama: load 0.0 s over 2 calls\n');
 });
 
 test('a run directory nobody named is unique and under the run root', () => {

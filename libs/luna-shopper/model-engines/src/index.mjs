@@ -25,6 +25,13 @@
  * wrote the prompt. `engine.name`, `engine.model` and `engine.effort` are
  * readable, because the run reports what answered it.
  *
+ * **Usage** is accumulated into the `usage` object an adapter is built with:
+ * the five token counters of `emptyUsage`, and beside them an optional
+ * `timings` block of sums, which a provider that measures itself fills in
+ * (plan 0005). Ollama is the only one that does today, and it is the only one
+ * whose `ask` answers `{ text, timings }` rather than `{ text }`. See
+ * `usage.mjs` for the field names and the two rates they are there to compute.
+ *
  * **What an adapter never holds**: a gateway URL, a token, a slot number, a row
  * count, or anything else about the run.
  *
@@ -64,6 +71,7 @@ export {
   modelContextLength,
   ollamaBatchSize,
   ollamaHost,
+  replyTimings,
   truncationFloor,
   wideBatchNotice,
 } from './ollama.mjs';
