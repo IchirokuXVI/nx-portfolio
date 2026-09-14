@@ -13,11 +13,12 @@ written to disk changes, and the orchestrator is not touched.
 
 Build two things and change one.
 
-1. **`serve`, a new entry point of the decider CLI.** It reads one JSON request
-   per line on stdin, calls the same command function the one shot path calls,
-   and writes one JSON answer per line on stdout. The loop lives in
-   `curation-suggestions/src/serve.mjs` and `cli.mjs` dispatches to it.
-   `commands.mjs` is not edited at all.
+1. **`serve`, a new entry point of both decider CLIs.** It reads one JSON
+   request per line on stdin, calls the same command function the one shot path
+   calls, and writes one JSON answer per line on stdout. The loop lives in
+   `curation-suggestions/src/serve.mjs`, `cli.mjs` dispatches to it, and
+   `curation-groups` gets the twin of both. `commands.mjs` is not edited at all,
+   in either library.
 2. **A channel in `curation-cli/src/decider.mjs`.** `makeDecider` starts the
    child on its first call, writes a request line per call, matches the answer
    by id, and closes the child at `end` (and from `cli.mjs` on any other way out
@@ -170,11 +171,26 @@ importing it, so the two files do not form an import cycle.
 in `cli.mjs`, and the `close` in the run's `finally`. `orchestrator.mjs` is not
 edited.
 
-**`curation-groups`** is not edited and does not have to be. It keeps being
-driven as one process per command, because `makeDecider` starts whatever CLI its
-path names and a CLI with no `serve` would answer nothing. That is the one thing
-this plan leaves unfinished, and it is a paste of `serve.mjs` plus a dispatch
-line whenever that library is next worked on.
+**`curation-groups`** gets `serve.mjs` and the same dispatch line, and it is not
+optional. `makeDecider` starts whatever CLI its path names, so once the driver
+speaks only the line protocol a decider without the loop answers nothing at all:
+`--implementation groups` would hang on its first call.
+
+**Its `serve.mjs` is a copy, not an import.** The two deciders share
+`curation-auth` and nothing else, and `run-dir`, `gateway`, `packet`, `rules`,
+`decision` and `test-fakes` are each already a pair of files by that design. A
+loop that knows only its own `run` is the smallest of those pairs, and making it
+the first thing one library imports out of the other would buy a hundred lines
+and cost the independence. Each file names the other, so a defect is fixed in
+both.
+
+## The one thing `curation-groups` gains beside the loop
+
+Its CLI never set exit code 2 on a refused `apply`, where the suggestions CLI
+does. So the one shot driver threw for one decider and reported success for the
+other, over the same `applied: false` answer. Reading the verdict in the channel
+settles that: a refused replay now throws whichever decider answered it, which
+is what the suggestions CLI's own comment says the exit code is for.
 
 ## Verification
 
@@ -201,6 +217,12 @@ process:
   `report.json`, and leave `state.json` and `decisions.jsonl` untouched. `end`
   is the command an equivalence test can drive for real, because it reads the
   whole run directory, writes a file out of it, and reaches no gateway.
+
+In `curation-groups`, the same loop over its own `run`, plus the two that answer
+the regression this closes: a `start` request reaches `start` and answers a
+line, and `node cli.mjs serve` dispatches the loop from the command line. Both
+send a `start` missing a flag, so both reach the command and neither reaches a
+gateway.
 
 And one test that starts a real child, because nothing above would notice that
 `serve` was never dispatched or that the framing disagrees: `apply` over an

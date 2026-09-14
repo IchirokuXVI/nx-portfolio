@@ -1,10 +1,13 @@
 /**
- * The long lived mode (plan 0002).
+ * The long lived mode (plan 0002 of `curation-suggestions`).
  *
- * **`curation-groups/src/serve.mjs` is the twin of this file.** The two
- * deciders share `curation-auth` and nothing else, and `run-dir`, `gateway`,
- * `packet`, `rules`, `decision` and `test-fakes` are each already a pair of
- * files by that design. Fix a defect in both.
+ * **The twin of `curation-suggestions/src/serve.mjs`, and deliberately a
+ * copy.** The two deciders share `curation-auth` and nothing else: neither
+ * imports the other, and `run-dir`, `gateway`, `packet`, `rules`, `decision`
+ * and `test-fakes` are each a pair of files by the same design. A loop that
+ * knows only its own `run` is the smallest of those pairs, and making it the
+ * first thing one library imports out of the other would buy a hundred lines
+ * and cost the independence. Fix a defect in both.
  *
  * Every subcommand used to be a fresh Node process, which is roughly 200 ms of
  * start for a step that does one HTTP request. A walk of eighty rows pays that
@@ -17,7 +20,7 @@
  * always was, so a killed session leaves the same run directory a killed
  * process would have left.
  *
- *   { "id": 3, "command": "decide", "args": ["--run-dir", "/runs/x", "--entry", "e1"], "input": "{...}" }
+ *   { "id": 3, "command": "decide", "args": ["--run-dir", "/runs/x", "--item", "i1"], "input": "{...}" }
  *   { "id": 3, "answer": { "accepted": true, "remaining": 17 } }
  *   { "id": 3, "error": "the decision on stdin is not JSON: ..." }
  *
