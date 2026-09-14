@@ -6,16 +6,27 @@
  *   engine.ask(prompt, { system, schema }) -> { text }
  *
  * A caller holding several questions that do not depend on each other asks them
- * together instead (plan 0003):
+ * together instead (plan 0003), and reads the answers either at the end or as
+ * each one arrives (plan 0004):
  *
  *   engine.askMany(prompts, { system, schema }) -> Array<{ text } | { error }>
- *   engine.batchSize                            // 1 means one at a time
+ *   engine.askEach(prompts, { system, schema })
+ *     -> Array<Promise<{ text } | { error }>>
+ *   engine.batchSize   // how many requests are held in flight, 1 means one
+ *   engine.roundSize   // how many prompts a caller is advised to send at once
  *
- * `askMany` answers in input order, one entry per prompt, and a prompt the
- * engine gave up on is reported in its own entry while the rest still answer. A
- * stop is different from a failure and rejects the whole call with the signal's
- * own reason. `batchSize` is how many requests the engine holds in flight, and
- * every adapter reports it, so no caller has to ask which one it is holding.
+ * Both answer in input order, one entry per prompt, and a prompt the engine
+ * gave up on is reported in its own entry while the rest still answer. A stop
+ * is different from a failure: it rejects the whole of `askMany` with the
+ * signal's own reason, and every `askEach` promise that has not settled. The
+ * promises `askEach` hands back are safe to abandon half way through, because
+ * each of them is given a handler when it is made.
+ *
+ * `batchSize` and `roundSize` are two numbers because they answer two
+ * questions. The first is bounded by the server or the account behind the
+ * engine. The second is bounded by nothing there, and a round wider than the
+ * pool is what keeps the pool full while the caller works on an answer. Every
+ * adapter reports both, so no caller has to ask which one it is holding.
  *
  * `prompt` is the user half and `system` is the standing half, and the two are
  * never joined by the caller, because an adapter that can cache the standing
@@ -58,12 +69,14 @@ export {
   OLLAMA_DEFAULT_BATCH,
   OLLAMA_DEFAULT_HOST,
   OLLAMA_DEFAULT_MODEL,
+  OLLAMA_DEFAULT_ROUND_MULTIPLIER,
   OLLAMA_MAX_BATCH,
   OLLAMA_WIDEST_MEASURED_BATCH,
   makeOllamaEngine,
   modelContextLength,
   ollamaBatchSize,
   ollamaHost,
+  ollamaRoundSize,
   truncationFloor,
   wideBatchNotice,
 } from './ollama.mjs';
@@ -75,8 +88,10 @@ export {
 } from './registry.mjs';
 export {
   RETRY_DELAYS,
+  askEachInOrder,
   askEntry,
   askManyInOrder,
+  handleAbandoned,
   stopReason,
   withRetries,
 } from './retry.mjs';
