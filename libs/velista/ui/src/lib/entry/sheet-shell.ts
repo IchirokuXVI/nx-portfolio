@@ -86,7 +86,8 @@ const SPEED_WINDOW = 120;
  * ## Semantics
  *
  * `role="dialog"`, `aria-modal="true"` and a label from the title the caller renders,
- * addressed by id. Focus moves inside on open and returns to the control that opened
+ * addressed by id. Focus moves to the panel on open, or to its first control when the
+ * sheet asks for that through {@link initialFocus}, and returns to the control that opened
  * it on close, which the browser does for free here: the sheet is a route, so closing
  * it restores the page beneath with its focus intact, and the explicit restore below
  * covers the case where it does not.
@@ -133,6 +134,20 @@ export class SheetShell implements FallingSheet {
    * the nine sheets that want no footer say nothing and get nothing.
    */
   readonly hasFooter = input(false);
+
+  /**
+   * Where focus goes when the sheet opens: the panel, or its first control.
+   *
+   * The panel by default (plan 0081). Thirteen of the sheets start with a text field,
+   * and focusing it raises the phone keyboard over half of a sheet nobody has read yet.
+   * The labelled dialog taking focus is also what makes a screen reader say the
+   * sheet's name on open, which the title alone would not.
+   *
+   * `'first'` is for a sheet whose whole job is to type one value, with nothing on it
+   * to read or choose before typing. Anything with a warning, a list, or a second kind
+   * of control stays on the panel.
+   */
+  readonly initialFocus = input<'panel' | 'first'>('panel');
 
   readonly dismiss = output<void>();
 
@@ -238,10 +253,12 @@ export class SheetShell implements FallingSheet {
       const active = doc.activeElement;
       this._returnFocusTo = active instanceof HTMLElement ? active : null;
 
-      // The field, in practice: it is the first focusable thing the caller projects.
-      // Focusing the panel itself instead would announce the dialog and then leave
-      // the person a tab away from the only control that matters.
-      this._focusable()[0]?.focus();
+      if (this.initialFocus() === 'first') {
+        this._focusable()[0]?.focus();
+        return;
+      }
+
+      this._panel()?.focus();
     });
   }
 
@@ -502,6 +519,15 @@ export class SheetShell implements FallingSheet {
     const doc = this._host.nativeElement.ownerDocument;
     const active = doc.activeElement;
 
+    // The panel itself holds focus when the sheet opens, and it is outside the list of
+    // controls, so neither end below matches it. The browser's own next stop from the
+    // panel is its first control, but its previous stop is the page behind the scrim.
+    if (active === this._panel()) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+      return;
+    }
+
     if (event.shiftKey && active === first) {
       event.preventDefault();
       last.focus();
@@ -522,7 +548,7 @@ export class SheetShell implements FallingSheet {
    * nothing focusable but could. A stale list would trap focus on a removed element.
    */
   private _focusable(): HTMLElement[] {
-    const panel = this._host.nativeElement.querySelector('.panel');
+    const panel = this._panel();
     if (panel === null) {
       return [];
     }
@@ -532,5 +558,10 @@ export class SheetShell implements FallingSheet {
         'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       )
     );
+  }
+
+  /** The dialog element, which is what takes focus when the sheet opens. */
+  private _panel(): HTMLElement | null {
+    return this._host.nativeElement.querySelector<HTMLElement>('.panel');
   }
 }

@@ -1,3 +1,5 @@
+@use '../styles/tokens' as tokens;
+
 // The sheet covers the page it was opened over, so it is fixed to the viewport
 // rather than positioned inside whatever the host page's layout happens to be.
 :host {
@@ -50,6 +52,11 @@
   border-start-start-radius: var(--app-sheet-radius);
   border-start-end-radius: var(--app-sheet-radius);
   box-shadow: var(--app-sheet-shadow);
+
+  // The panel takes focus when the sheet opens (plan 0081). `:focus-visible` draws no
+  // ring for that when the sheet was opened by a tap, and draws one when a keyboard
+  // opened it, which is the person who needs to see where focus went.
+  @include tokens.app-focus-ring;
 
   // The rise. A transform, so it is composited, and so it is one declaration to
   // skip: under `prefers-reduced-motion` the motion token is zero and the panel is

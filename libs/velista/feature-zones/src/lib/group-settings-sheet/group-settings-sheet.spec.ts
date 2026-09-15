@@ -89,6 +89,15 @@ async function render(
 }
 
 describe('GroupSettingsSheet', () => {
+  it('opens with focus on the sheet and not on a field, so no keyboard rises (plan 0081)', async () => {
+    const { fixture } = await render();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('input')).not.toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('.panel'));
+    expect(document.activeElement?.tagName).not.toBe('INPUT');
+  });
+
   describe('minting a new join code', () => {
     it('closes both sheets, so the group page is what is left on screen', async () => {
       const { fixture, sheets } = await render();

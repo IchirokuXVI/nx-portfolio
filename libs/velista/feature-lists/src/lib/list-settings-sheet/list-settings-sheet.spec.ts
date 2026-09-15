@@ -186,6 +186,15 @@ describe('ListSettingsSheet', () => {
     expect(fixture.nativeElement.textContent).toContain('list.settings.share');
   });
 
+  it('opens with focus on the sheet and not on a field, so no keyboard rises (plan 0081)', async () => {
+    const { fixture } = await render();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('input')).not.toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('.panel'));
+    expect(document.activeElement?.tagName).not.toBe('INPUT');
+  });
+
   describe('who is fixed and what is locked (section 6.3)', () => {
     it('fixes a group admin, fully ticked, with the corrected note', async () => {
       // Group admins hold all four on every list in the zone by derivation, so there is
