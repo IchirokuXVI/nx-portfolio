@@ -50,11 +50,14 @@ services:
       # worktree slot publishes is irrelevant inside this network.
       REDIS_URL: redis://redis:6379
       LOG_LEVEL: debug
-      # Both front end origins, as luna-slot.sh already allows: the portfolio
-      # shell, which mounts velista as a remote, and velista's own origin,
-      # which is where a confirmation link now lands (MAIL_VERIFY_BASE_URL
-      # below) and so is an origin this stack has to answer.
-      CORS_ORIGINS: http://localhost:4200,http://localhost:4205
+      # The front end origins this stack answers. The default is the two
+      # luna-slot.sh already allows: the portfolio shell, which mounts velista as
+      # a remote, and velista's own origin, which is where a confirmation link
+      # lands (MAIL_VERIFY_BASE_URL below). The browser gate (velista plan 0080)
+      # drives the staging velista image from `https://staging.velista.app`
+      # instead, so the list comes from the environment; it is one variable on
+      # every service because every service reads it.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4205}
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       # The operator trust root (plan 0071, section 3). Required, so this file
       # states it rather than inheriting: it does not read luna-slot.sh's output,
@@ -136,11 +139,8 @@ services:
       # and dedupe counters), so this is what makes more than one replica correct.
       REDIS_URL: redis://redis:6379
       LOG_LEVEL: debug
-      # Both front end origins, as luna-slot.sh already allows: the portfolio
-      # shell, which mounts velista as a remote, and velista's own origin,
-      # which is where a confirmation link now lands (MAIL_VERIFY_BASE_URL
-      # below) and so is an origin this stack has to answer.
-      CORS_ORIGINS: http://localhost:4200,http://localhost:4205
+      # From the environment, for the reason the gateway above states.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4205}
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       PORT: '3001'
       OTEL_SERVICE_NAME: luna-shopper-backend-realtime
@@ -172,11 +172,8 @@ services:
     environment:
       NATS_URL: nats://nats:4222
       LOG_LEVEL: debug
-      # Both front end origins, as luna-slot.sh already allows: the portfolio
-      # shell, which mounts velista as a remote, and velista's own origin,
-      # which is where a confirmation link now lands (MAIL_VERIFY_BASE_URL
-      # below) and so is an origin this stack has to answer.
-      CORS_ORIGINS: http://localhost:4200,http://localhost:4205
+      # From the environment, for the reason the gateway above states.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4205}
       AUTH_DB_URL: postgres://luna_auth:luna_auth@auth-db:5432/luna_auth
       AUTH_JWT_PRIVATE_KEY_FILE: /run/secrets/luna/jwt.key
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
@@ -237,11 +234,8 @@ services:
     environment:
       NATS_URL: nats://nats:4222
       LOG_LEVEL: debug
-      # Both front end origins, as luna-slot.sh already allows: the portfolio
-      # shell, which mounts velista as a remote, and velista's own origin,
-      # which is where a confirmation link now lands (MAIL_VERIFY_BASE_URL
-      # below) and so is an origin this stack has to answer.
-      CORS_ORIGINS: http://localhost:4200,http://localhost:4205
+      # From the environment, for the reason the gateway above states.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4205}
       CORE_DB_URL: postgres://luna_core:luna_core@core-db:5432/luna_core
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       # The operator public key (plan 0074). Core gates its own back office
@@ -291,11 +285,8 @@ services:
     environment:
       NATS_URL: nats://nats:4222
       LOG_LEVEL: debug
-      # Both front end origins, as luna-slot.sh already allows: the portfolio
-      # shell, which mounts velista as a remote, and velista's own origin,
-      # which is where a confirmation link now lands (MAIL_VERIFY_BASE_URL
-      # below) and so is an origin this stack has to answer.
-      CORS_ORIGINS: http://localhost:4200,http://localhost:4205
+      # From the environment, for the reason the gateway above states.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4205}
       CATALOG_DB_URL: postgres://luna_catalog:luna_catalog@catalog-db:5432/luna_catalog
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       # The operator trust root (plan 0072). Required, and stated here rather
