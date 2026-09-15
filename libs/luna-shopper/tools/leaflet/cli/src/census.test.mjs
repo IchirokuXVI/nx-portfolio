@@ -53,7 +53,7 @@ test('PyMuPDF answers the whole census in one call and wins over the scan', asyn
     pdf: 'a.pdf',
     renderer: { key: 'pymupdf', command: 'python' },
     readFile: () => THREE_PAGES,
-    run: async (command, args) => {
+    run: async (command) => {
       calls.push(command);
       return {
         started: true,

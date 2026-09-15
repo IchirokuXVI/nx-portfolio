@@ -1,0 +1,201 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { listChains } from './chains.mjs';
+import {
+  DEFAULT_ENGINE,
+  MANUAL,
+  defaultOutDir,
+  main,
+  parseArgs,
+  parseNumber,
+  usageText,
+} from './cli.mjs';
+import { parsePages } from './run.mjs';
+
+/** Somewhere to write that is not a terminal. */
+const sink = () => {
+  const written = [];
+  return {
+    written,
+    write: (text) => written.push(text),
+    text: () => written.join(''),
+  };
+};
+
+/** Everything `main` would otherwise touch. */
+const harness = (extra = {}) => {
+  const stdout = sink();
+  const stderr = sink();
+  const calls = [];
+  return {
+    stdout,
+    stderr,
+    calls,
+    options: {
+      stdout,
+      stderr,
+      env: {},
+      isTty: false,
+      exists: () => true,
+      stat: () => ({ isDirectory: () => false }),
+      read: async (config) => {
+        calls.push(config);
+        return { code: 0 };
+      },
+      now: () => new Date('2026-09-15T00:00:00.000Z'),
+      ...extra,
+    },
+  };
+};
+
+test('--help prints the usage, with the -- in it', async () => {
+  const { stdout, options } = harness();
+  assert.equal(await main(['--help'], options), 0);
+  assert.match(
+    stdout.text(),
+    /npx nx run luna-shopper\/leaflet-cli:read -- \[options\]/
+  );
+  assert.match(stdout.text(), /Keep the `--`/);
+});
+
+test('the usage lists every chain that has a folder', () => {
+  const text = usageText();
+  for (const slug of listChains()) {
+    assert.ok(text.includes(slug), `lists ${slug}`);
+  }
+});
+
+test('the usage lists manual beside the registry engines', () => {
+  assert.match(usageText(), /claude, api, ollama, manual/);
+  assert.match(usageText(), /a person, with any model at all/);
+});
+
+test('a missing chain lists the slugs there are', async () => {
+  const { options } = harness();
+  await assert.rejects(
+    main(['--pdf', 'a.pdf'], options),
+    new RegExp(`--chain is required.*${listChains().join(', ')}`, 's')
+  );
+});
+
+test('an unknown chain lists the slugs there are', async () => {
+  const { options } = harness();
+  await assert.rejects(
+    main(['--pdf', 'a.pdf', '--chain', 'nope'], options),
+    /Unknown chain nope.*deza, dia, el-jamon, lidl.*written by hand first/s
+  );
+});
+
+test('an unknown engine is refused by the registry, before anything is rendered', async () => {
+  const { options, calls } = harness();
+  await assert.rejects(
+    main(['--pdf', 'a.pdf', '--chain', 'deza', '--engine', 'gemini'], options),
+    /Unknown engine gemini/
+  );
+  assert.equal(calls.length, 0);
+});
+
+test('a leaflet that is not there is refused before a chain is loaded', async () => {
+  const { options } = harness({ exists: () => false });
+  await assert.rejects(
+    main(['--pdf', 'gone.pdf', '--chain', 'deza'], options),
+    /--pdf gone.pdf is not there/
+  );
+});
+
+test('the default engine is ollama and the default out directory is dated', async () => {
+  const { options, calls } = harness();
+  await main(['--pdf', 'a.pdf', '--chain', 'deza'], options);
+  assert.equal(calls[0].engineName, DEFAULT_ENGINE);
+  assert.equal(calls[0].isLocal, true);
+  assert.equal(calls[0].outDir, 'tmp/leaflet/deza-2026-09-15');
+  assert.equal(
+    defaultOutDir('dia', new Date('2026-01-02T00:00:00Z')),
+    'tmp/leaflet/dia-2026-01-02'
+  );
+});
+
+test('the dpi comes from the chain, and --dpi overrides it', async () => {
+  const { options, calls } = harness();
+  await main(['--pdf', 'a.pdf', '--chain', 'deza'], options);
+  // Deza is 128 because its pages are flat 2.2 to 1 images.
+  assert.equal(calls[0].dpi, 128);
+  await main(['--pdf', 'a.pdf', '--chain', 'el-jamon'], options);
+  assert.equal(calls[1].dpi, 160);
+  await main(['--pdf', 'a.pdf', '--chain', 'deza', '--dpi', '200'], options);
+  assert.equal(calls[2].dpi, 200);
+});
+
+test('--model overrides the engine default, and manual builds no engine at all', async () => {
+  const { options, calls } = harness();
+  await main(
+    ['--pdf', 'a.pdf', '--chain', 'deza', '--model', 'qwen3-vl:8b'],
+    options
+  );
+  assert.equal(calls[0].model, 'qwen3-vl:8b');
+  assert.ok(calls[0].engine, 'ollama builds an engine');
+
+  await main(
+    ['--pdf', 'a.pdf', '--chain', 'deza', '--engine', MANUAL],
+    options
+  );
+  assert.equal(calls[1].engine, null);
+  assert.equal(calls[1].manual, true);
+  assert.equal(calls[1].isLocal, false);
+});
+
+test('--page-timeout is a whole number of seconds, and 120 by default', async () => {
+  const { options, calls } = harness();
+  await main(['--pdf', 'a.pdf', '--chain', 'deza'], options);
+  assert.equal(calls[0].timeoutMs, 120000);
+  await main(
+    ['--pdf', 'a.pdf', '--chain', 'deza', '--page-timeout', '30'],
+    options
+  );
+  assert.equal(calls[1].timeoutMs, 30000);
+  await assert.rejects(
+    main(
+      ['--pdf', 'a.pdf', '--chain', 'deza', '--page-timeout', 'soon'],
+      options
+    ),
+    /--page-timeout is soon/
+  );
+});
+
+test('the run code is what the command exits with', async () => {
+  const { options } = harness({ read: async () => ({ code: 1 }) });
+  assert.equal(await main(['--pdf', 'a.pdf', '--chain', 'deza'], options), 1);
+});
+
+test('a flag with no value is a flag', () => {
+  assert.deepEqual(parseArgs(['--resume', '--chain', 'deza']), {
+    resume: true,
+    chain: 'deza',
+  });
+});
+
+test('a loose argument is refused rather than ignored', () => {
+  assert.throws(() => parseArgs(['deza']), /Unexpected argument deza/);
+});
+
+test('parseNumber refuses anything that is not a whole number', () => {
+  assert.equal(parseNumber('--dpi', undefined, 160), 160);
+  assert.equal(parseNumber('--dpi', '200', 160), 200);
+  assert.throws(() => parseNumber('--dpi', '1.5', 160), /--dpi is 1.5/);
+  assert.throws(() => parseNumber('--dpi', true, 160), /--dpi is \(nothing\)/);
+});
+
+test('--pages reads a list of pages and ranges', () => {
+  assert.deepEqual(parsePages('1-4,9', 12), [1, 2, 3, 4, 9]);
+  assert.deepEqual(parsePages(undefined, 3), [1, 2, 3]);
+  assert.deepEqual(parsePages('2', 3), [2]);
+});
+
+test('--pages past the end of the leaflet is refused', () => {
+  assert.throws(
+    () => parsePages('1-4', 3),
+    /--pages names 4, and the leaflet has 3/
+  );
+  assert.throws(() => parsePages('9-2', 12), /counts backwards/);
+  assert.throws(() => parsePages('cover', 12), /not a page or a range/);
+});

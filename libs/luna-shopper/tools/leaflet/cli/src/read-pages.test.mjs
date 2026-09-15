@@ -38,7 +38,7 @@ const options = (extra) => ({
   importDir: '/import',
   stripFence,
   imagesFor: (page) => [{ mediaType: 'image/png', data: `page${page}` }],
-  stderr: { write() {} },
+  stderr: { write: () => undefined },
   ...extra,
 });
 
@@ -130,7 +130,8 @@ test('an answer that is an object and not an array is unparseable', () => {
 });
 
 test('a page that does not answer in time is empty, warned, and not asked again', async () => {
-  const engine = fakeEngine([() => new Promise(() => {}), '[{"name":"f"}]']);
+  const never = () => new Promise(() => undefined);
+  const engine = fakeEngine([never, '[{"name":"f"}]']);
   const fs = files();
   const { readings, warnings } = await readPages(
     options({

@@ -152,8 +152,8 @@ export async function censusPdf({
 }
 
 /** The census of a directory that already holds the page images. */
-export function censusImages(dir) {
-  const pages = pagesInDirectory(dir);
+export function censusImages(dir, listPages = pagesInDirectory) {
+  const pages = listPages(dir);
   return {
     kind: 'images',
     source: dir,

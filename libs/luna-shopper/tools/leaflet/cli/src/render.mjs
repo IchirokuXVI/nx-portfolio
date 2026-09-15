@@ -30,6 +30,9 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runCommand } from './child.mjs';
 
+/** What a caller that wants no per page progress line passes. */
+const noop = () => undefined;
+
 /** One page of a rendered leaflet, `page_01.png` upwards. */
 export const pageName = (page) => `page_${String(page).padStart(2, '0')}.png`;
 
@@ -182,7 +185,7 @@ export async function renderPages({
   pages,
   run = runCommand,
   cwd,
-  onPage = () => {},
+  onPage = noop,
 }) {
   const rendered = [];
   for (const page of pages) {

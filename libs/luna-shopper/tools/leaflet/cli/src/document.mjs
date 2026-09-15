@@ -26,6 +26,7 @@
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -262,6 +263,9 @@ export function formatReport({
     );
   }
 
+  lines.push(
+    `  build: ${outcome.built ? 'done' : 'failed, see the lines above'}`
+  );
   lines.push(`  drift check: ${outcome.drift}`);
   lines.push(`  validate: ${outcome.validated}`);
 
@@ -289,6 +293,17 @@ export function formatReport({
     return lines.join('\n');
   }
 
+  // No upload call for a reading that is not ready. A path printed under an
+  // upload sentence reads as an invitation, and the one review this pipeline
+  // has is the person who reads that sentence.
+  if (!outcome.built || outcome.validated !== 'valid') {
+    lines.push(
+      '',
+      'This reading is not ready, so there is nothing to upload yet. Fix what the lines above name and run the same command again with --resume.'
+    );
+    return lines.join('\n');
+  }
+
   lines.push(
     '',
     `The document is at ${outcome.document}`,
@@ -298,6 +313,35 @@ export function formatReport({
     'so the next leaflet is checked against this one.'
   );
   return lines.join('\n');
+}
+
+/**
+ * The bytes a leaflet that arrived as images is digested from.
+ *
+ * `build-document.mjs` reads `leaflet.json`'s `pdf` field and takes its sha256,
+ * which is what the run level dedupe keys on. `--pdf <directory>` has no one
+ * file to take it of, so the run writes one: a manifest naming every page image
+ * and its own digest. It changes when any page changes, which is the whole
+ * property the digest is there for, and no existing script had to learn about
+ * it. LIDL is read this way, because its flyer endpoint serves every page as an
+ * image and no PDF is ever fetched.
+ */
+export function writePagesManifest({
+  importDir,
+  imageDir,
+  pages,
+  pageFile,
+  readFile = readFileSync,
+  writeFile = writeFileSync,
+}) {
+  const lines = pages.map((page) => {
+    const path = pageFile(imageDir, page);
+    const digest = createHash('sha256').update(readFile(path)).digest('hex');
+    return `${String(page).padStart(2, '0')} ${digest}`;
+  });
+  const path = join(importDir, 'pages.manifest.txt');
+  writeFile(path, `${lines.join('\n')}\n`, 'utf8');
+  return path;
 }
 
 /** `leaflet.json` written where `build-document.mjs` is told to read it. */

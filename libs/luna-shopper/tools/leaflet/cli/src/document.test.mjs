@@ -29,7 +29,7 @@ function streamer(codes = {}) {
   return { stream, calls };
 }
 
-const quiet = { write() {} };
+const quiet = { write: () => undefined };
 
 test('leaflet.json carries the fields the README names', () => {
   const leaflet = buildLeafletJson({
