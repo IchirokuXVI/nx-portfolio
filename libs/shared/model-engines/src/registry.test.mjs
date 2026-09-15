@@ -214,6 +214,52 @@ test('OLLAMA_BATCH reaches the ollama entry, and its notice reaches the injected
   assert.match(stderr.written[0], /OLLAMA_NUM_PARALLEL/);
 });
 
+test('numPredict reaches the ollama entry, and the operator still wins over it', async () => {
+  const bodies = [];
+  const build = (extra) =>
+    engineEntry('ollama').create({
+      fetchImpl: async (url, options) => {
+        if (!url.endsWith('/api/show')) {
+          bodies.push(JSON.parse(options.body));
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () =>
+            url.endsWith('/api/show')
+              ? { capabilities: [], model_info: {} }
+              : { message: { content: 'ok' } },
+        };
+      },
+      env: {},
+      model: 'gemma4:12b',
+      effort: null,
+      stderr: sink(),
+      ...extra,
+    });
+
+  // A caller building an engine by name says how long its answers are on the
+  // same road `model` and `env` travel, with no new flag.
+  await build({ numPredict: 4096 }).ask('a page');
+  assert.equal(bodies[0].options.num_predict, 4096);
+
+  await build({ numPredict: 4096, env: { OLLAMA_NUM_PREDICT: '700' } }).ask(
+    'a page'
+  );
+  assert.equal(bodies[1].options.num_predict, 700);
+
+  // An entry with no such ceiling is handed the key and ignores it.
+  const claude = engineEntry('claude').create({
+    spawn: async () => ({ code: 0, stdout: ENVELOPE, stderr: '' }),
+    env: {},
+    model: 'claude-sonnet-5',
+    effort: 'medium',
+    numPredict: 4096,
+    stderr: sink(),
+  });
+  assert.equal(typeof claude.ask, 'function');
+});
+
 test('the api entry names the billing gate, and its answer builds the engine', async () => {
   const entry = engineEntry('api');
   assert.equal(entry.gate, confirmApiBilling);
