@@ -10,6 +10,14 @@
     "luna-shopper/curation-groups"
   ],
   "targets": {
+    "curate": {
+      "//": "The alias. Nx addresses a project by name, so the operator never types the path, and the path is free to be as deep as the arrangement needs. cwd stays the workspace root, which is the default, because the CLI resolves its own paths against the root and every --run-dir an operator has typed is relative to it.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node libs/luna-shopper/tools/curation/cli/src/cli.mjs",
+        "forwardAllArgs": true
+      }
+    },
     "test": {
       "//": "Plain ESM with zero npm dependencies, so the tests are Node's own runner rather than jest. The glob is quoted because Node expands it itself; a shell that expanded it first would answer a different set of files on Windows than on Linux.",
       "executor": "nx:run-commands",
