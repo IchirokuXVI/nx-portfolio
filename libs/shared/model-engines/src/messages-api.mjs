@@ -10,6 +10,7 @@
  */
 
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from './claude-models.mjs';
+import { checkImages } from './images.mjs';
 import {
   RETRY_DELAYS,
   askEachInOrder,
@@ -26,6 +27,31 @@ const MAX_TOKENS = 8000;
 
 /** The word the operator has to type before an API billed run starts. */
 export const API_CONFIRMATION = 'API_KEY';
+
+/**
+ * The user message content: the plain prompt, or blocks with the images first.
+ *
+ * The image goes before the text, which is what Anthropic's own guidance says
+ * reads better and is free to comply with. With no images the content stays the
+ * plain string it has always been, so no call that existed before plan 0004
+ * changes shape on the wire.
+ */
+export function userContent(prompt, images) {
+  if (images.length === 0) {
+    return prompt;
+  }
+  return [
+    ...images.map((image) => ({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: image.mediaType,
+        data: image.data,
+      },
+    })),
+    { type: 'text', text: prompt },
+  ];
+}
 
 /** The text block of a Messages API reply, skipping any thinking block. */
 export function textOf(payload) {
@@ -87,7 +113,13 @@ export function makeApiEngine({
   retryDelays = RETRY_DELAYS,
   signal = null,
 }) {
-  async function ask(prompt, { system = null, schema = null } = {}) {
+  async function ask(
+    prompt,
+    { system = null, schema = null, images = [] } = {}
+  ) {
+    // Before the request, because a 400 from the API reaches the caller as
+    // `HTTP 400` and says nothing about which entry was wrong.
+    const pictures = checkImages(images);
     const body = JSON.stringify({
       model,
       max_tokens: MAX_TOKENS,
@@ -110,7 +142,7 @@ export function makeApiEngine({
             ],
           }
         : {}),
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: userContent(prompt, pictures) }],
     });
 
     const text = await withRetries(

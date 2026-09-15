@@ -16,6 +16,7 @@
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
+import { checkImages } from './images.mjs';
 import {
   RETRY_DELAYS,
   askEntry,
@@ -486,7 +487,14 @@ export function makeOllamaEngine({
     };
   }
 
-  async function ask(prompt, { system = null, schema = null } = {}) {
+  async function ask(
+    prompt,
+    { system = null, schema = null, images = [] } = {}
+  ) {
+    // Before the model is described and long before anything is sent, because
+    // a media type this library does not carry is the caller's mistake and
+    // Ollama would sniff the bytes and answer about something else.
+    const pictures = checkImages(images);
     if (!profile) {
       profile = describeModel();
     }
@@ -502,7 +510,17 @@ export function makeOllamaEngine({
       // halves into one string would put the packet inside the prefix and
       // lose the cache on every row.
       ...(system ? [{ role: 'system', content: system }] : []),
-      { role: 'user', content: prompt },
+      // `/api/chat` takes the pictures on the message itself, as base64
+      // strings with no media type, which the server sniffs. The key is
+      // absent rather than empty when there are none, so a call with no image
+      // sends exactly the message it sent before this plan.
+      {
+        role: 'user',
+        content: prompt,
+        ...(pictures.length
+          ? { images: pictures.map((image) => image.data) }
+          : {}),
+      },
     ];
     const body = JSON.stringify({
       model,

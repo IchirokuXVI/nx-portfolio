@@ -8,10 +8,11 @@
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from './claude-models.mjs';
+import { IMAGE_EXTENSIONS, checkImages } from './images.mjs';
 import {
   RETRY_DELAYS,
   askEachInOrder,
@@ -161,6 +162,61 @@ export function makeScratchDir() {
 }
 
 /**
+ * The pictures of one call, written into the scratch directory (plan 0004).
+ *
+ * `claude -p` has no image flag. There is no `--image`, and `--file` downloads
+ * a file resource by id, which is not this. The only way a picture reaches the
+ * model is the **Read tool** pointed at a path, so the bytes the caller handed
+ * over as base64 are written to disk here and the paths are what the prompt
+ * names.
+ *
+ * They go in the scratch directory the engine already makes and the caller
+ * already removes, so the pictures are removed with it and nothing new has to
+ * be cleaned up. The names are `image_1` upwards, in the order the caller
+ * passed them, with the extension of the media type, because the Read tool
+ * decides what a file is from its extension.
+ */
+export function writeImages(dir, images) {
+  return images.map((image, index) => {
+    const path = join(
+      dir,
+      `image_${index + 1}${IMAGE_EXTENSIONS[image.mediaType]}`
+    );
+    writeFileSync(path, Buffer.from(image.data, 'base64'));
+    return path;
+  });
+}
+
+/**
+ * `MINIMAL_ARGS` with the Read tool put back, and the scratch directory
+ * allowed.
+ *
+ * This is the one place plan 0001's work is undone, and only for a call that
+ * carries a picture. `--tools ''` is half of why a call whose whole reply is
+ * `ok` costs 2,546 input tokens rather than 45,805, so exactly one tool comes
+ * back and every call with no image keeps the empty list. `--add-dir` is
+ * needed beside it because the scratch directory is the cwd of the spawn but
+ * the Read tool is still held to the directories it was given.
+ */
+export function imageToolArgs(dir) {
+  const args = [...MINIMAL_ARGS];
+  args[args.indexOf('--tools') + 1] = 'Read';
+  return [...args, '--add-dir', dir];
+}
+
+/**
+ * The one line put in front of the prompt, naming the files in order.
+ *
+ * The model is holding a prompt about a page and a tool that reads files, and
+ * nothing joins the two unless the prompt says where the page is. One line is
+ * the whole of it: the caller's prompt is about the picture and does not need
+ * rewriting to mention a path.
+ */
+export function imagePromptLine(paths) {
+  return `Read these image files with the Read tool before you answer, in this order: ${paths.join(', ')}`;
+}
+
+/**
  * The child environment a `claude -p` call runs in.
  *
  * `ANTHROPIC_API_KEY` is deleted, so the call bills the operator's logged in
@@ -248,7 +304,13 @@ export function makeClaudeEngine({
   // never asked anything leaves no directory behind.
   let cwd = scratchDir;
 
-  async function ask(prompt, { system = null, schema = null } = {}) {
+  async function ask(
+    prompt,
+    { system = null, schema = null, images = [] } = {}
+  ) {
+    // Before the scratch directory is made, so a call refused for a media type
+    // this library does not carry leaves nothing behind.
+    const pictures = checkImages(images);
     if (hadKey && !noticed) {
       noticed = true;
       stderr.write(
@@ -265,6 +327,14 @@ export function makeClaudeEngine({
     // the model's standing context. `--append-system-prompt` would keep both.
     const withHint =
       system && schema ? `${system}\n${TOOL_SHAPE_HINT}` : system;
+    // A text ask is unchanged byte for byte: the files are not written, the
+    // arguments are `MINIMAL_ARGS` as they were, and the prompt is the
+    // caller's own. Everything about the picture path costs nothing when there
+    // is no picture.
+    const paths = pictures.length ? writeImages(cwd, pictures) : [];
+    const stdin = paths.length
+      ? `${imagePromptLine(paths)}\n\n${prompt}`
+      : prompt;
     const args = [
       '-p',
       '--output-format',
@@ -278,7 +348,7 @@ export function makeClaudeEngine({
       ...(schema
         ? ['--json-schema', JSON.stringify(toolInputSchema(schema))]
         : []),
-      ...MINIMAL_ARGS,
+      ...(paths.length ? imageToolArgs(cwd) : MINIMAL_ARGS),
     ];
 
     const text = await withRetries(
@@ -286,7 +356,7 @@ export function makeClaudeEngine({
         let answer;
         try {
           answer = await spawn('claude', args, {
-            input: prompt,
+            input: stdin,
             env: childEnv,
             cwd,
             timeoutMs,
