@@ -208,7 +208,10 @@ function build(status: GeneratedListStatus): Harness {
     claims.service,
     sharing,
     waiting,
-    publisher
+    publisher,
+    // The rename (plan 0113). No test here renames, because a finished basket
+    // is refused before the line service reaches it.
+    {} as never
   );
   const settle = new GeneratedListSettleService(
     dataSource,

@@ -385,6 +385,27 @@ export interface UpdateGeneratedListLineRequest {
   itemId?: string | null;
   /** Only meaningful on an `ADDED` line; setting it promotes the line once. */
   targetListId?: string | null;
+  /**
+   * Whether a rename that collides may merge (plan 0113, section 7).
+   *
+   * A new `content` renames the zone lines this line came from as well, through
+   * the participant route's own rule, so a name already taken on one of those
+   * lists or in the basket is refused with `line_merge_required` unless this is
+   * `true`.
+   */
+  confirmMerge?: boolean;
+}
+
+/**
+ * What an owner's line edit answers: the line as it now stands.
+ *
+ * After a rename that merged two basket lines, that is the surviving line, whose
+ * `id` can differ from the line the request addressed, and
+ * {@link absorbedLineId} names the line that went away. The field is absent when
+ * no basket line merged.
+ */
+export interface UpdateGeneratedListLineResult extends GeneratedListLineView {
+  absorbedLineId?: string;
 }
 
 export interface GeneratedListLineIdRequest {

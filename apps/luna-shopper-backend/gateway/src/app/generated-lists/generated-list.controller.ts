@@ -17,6 +17,7 @@ import {
   type GeneratedListPage,
   type GeneratedListRunResult,
   type GeneratedListView,
+  type UpdateGeneratedListLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -193,9 +194,12 @@ export class GeneratedListController {
   /**
    * Edit one line: its text, its quantity, its pick, or its target list.
    *
-   * Everything but the last is local to the basket. That is the rule the whole
-   * plan turns on: a user tidying up their own shopping list at the till must not
-   * rewrite a list four other people depend on.
+   * The quantity and the pick are local to the basket. A new text renames every
+   * zone line this line came from as well (plan 0113), through the same rule the
+   * participant rename has, so the owner needs write access to each of those
+   * lists, and a name already taken is refused until the request carries
+   * `confirmMerge`. After a merge in the basket the answer is the surviving line
+   * and names the one that went away.
    */
   @Patch(':id/lines/:lineId')
   @ApiContractResponse(GENERATED_LIST_PATTERNS.updateLine)
@@ -204,14 +208,16 @@ export class GeneratedListController {
     body: true,
     membership: true,
     notFound: true,
+    finishedBasket: true,
+    lineMerge: true,
   })
   updateLine(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Param('lineId') lineId: string,
     @Body() dto: UpdateGeneratedListLineDto
-  ): Promise<GeneratedListLineView> {
-    return this.nats.send<GeneratedListLineView>(
+  ): Promise<UpdateGeneratedListLineResult> {
+    return this.nats.send<UpdateGeneratedListLineResult>(
       GENERATED_LIST_PATTERNS.updateLine,
       { userId: user.userId, generatedListId: id, lineId, ...dto }
     );

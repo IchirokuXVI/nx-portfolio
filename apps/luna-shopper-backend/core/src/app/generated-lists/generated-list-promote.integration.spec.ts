@@ -162,7 +162,9 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
       new WaitingSettlementService(claims.service, {
         emit: jest.fn(),
       } as never),
-      { emitToUsers: jest.fn(), emit: jest.fn() } as never
+      { emitToUsers: jest.fn(), emit: jest.fn() } as never,
+      // The rename (plan 0113), which `promote` never reaches.
+      undefined as never
     );
 
     const zone = await dataSource.getRepository(Zone).save(

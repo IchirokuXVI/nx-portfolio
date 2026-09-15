@@ -12,6 +12,7 @@ import type {
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { LineService } from '../lists/line.service';
 import type { ListAccessService } from '../lists/list-access.service';
+import type { GeneratedListLineRenameService } from './generated-list-line-rename.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
 import type { GeneratedListService } from './generated-list.service';
@@ -54,6 +55,13 @@ interface Harness {
   saved: Partial<GeneratedListLine>[];
   events: RealtimeEvent[];
   claims: FakeLineClaims;
+  /** Every rename the line service handed to the rename service (plan 0113). */
+  renames: {
+    lineId: string;
+    content: string;
+    confirmMerge: boolean;
+    participantId: string;
+  }[];
 }
 
 function build(options: {
@@ -199,6 +207,27 @@ function build(options: {
     ensureOwnerParticipant: async () => ({ id: OWNER_PARTICIPANT }),
   } as unknown as GeneratedListSharingService;
 
+  // The rename (plan 0113), which owns the rule for a new name and is proved in
+  // its own specs. Here it records what it was asked and answers the renamed
+  // line, so this file can prove that a new name goes there and nowhere else.
+  const renames: Harness['renames'] = [];
+  const renameService = {
+    rename: async (input: {
+      lineId: string;
+      content: string;
+      confirmMerge: boolean;
+      participant: { id: string };
+    }) => {
+      renames.push({
+        lineId: input.lineId,
+        content: input.content,
+        confirmMerge: input.confirmMerge,
+        participantId: input.participant.id,
+      });
+      return { line: { ...line, content: input.content.trim() } };
+    },
+  } as unknown as GeneratedListLineRenameService;
+
   const service = new GeneratedListLineService(
     lineRepo as never,
     optionRepo as never,
@@ -210,15 +239,32 @@ function build(options: {
     // Plan 0092's seam, filled by plan 0093, and real rather than stubbed: no
     // line in this file has a waiting purchase, so it must answer nothing.
     new WaitingSettlementService(claims.service, publisher),
-    publisher
+    publisher,
+    renameService
   );
 
-  return { service, zoneAdds, promotions, saved, events, claims };
+  return { service, zoneAdds, promotions, saved, events, claims, renames };
 }
 
 describe('editing a basket line', () => {
-  it('changes the basket copy and never the zone line', async () => {
-    const { service, zoneAdds, saved } = build({});
+  it('changes the quantity on the basket copy and never adds a zone line', async () => {
+    const { service, zoneAdds, saved, renames } = build({});
+
+    await service.updateLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      lineId: 'gll-1',
+      quantity: 4,
+    });
+
+    expect(saved[0].quantity).toBe(4);
+    // The rule the whole plan turns on.
+    expect(zoneAdds).toEqual([]);
+    expect(renames).toEqual([]);
+  });
+
+  it('hands a new name to the rename, as the owner, with the confirmation (plan 0113)', async () => {
+    const { service, zoneAdds, saved, renames } = build({});
 
     await service.updateLine({
       userId: OWNER,
@@ -226,12 +272,53 @@ describe('editing a basket line', () => {
       lineId: 'gll-1',
       content: 'Whole milk',
       quantity: 4,
+      confirmMerge: true,
     });
 
+    // One rename rule: the participant route's, with the owner's own
+    // participant row as the actor.
+    expect(renames).toEqual([
+      {
+        lineId: 'gll-1',
+        content: 'Whole milk',
+        confirmMerge: true,
+        participantId: OWNER_PARTICIPANT,
+      },
+    ]);
+    // The other fields still land on the line the rename answered.
     expect(saved[0].content).toBe('Whole milk');
     expect(saved[0].quantity).toBe(4);
-    // The rule the whole plan turns on.
     expect(zoneAdds).toEqual([]);
+  });
+
+  it('answers a rename alone without saving or announcing the line again', async () => {
+    const { service, saved, events, renames } = build({});
+
+    const view = await service.updateLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      lineId: 'gll-1',
+      content: 'Oat milk',
+    });
+
+    expect(renames.map((rename) => rename.confirmMerge)).toEqual([false]);
+    expect(view).toEqual({ id: 'gll-1' });
+    expect(saved).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it('does not rename when the text is the name the line already has', async () => {
+    const { service, renames } = build({});
+
+    await service.updateLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      lineId: 'gll-1',
+      content: '  Milk ',
+      quantity: 3,
+    });
+
+    expect(renames).toEqual([]);
   });
 
   it('allows a quantity of zero on an edit, as a zone line does', async () => {

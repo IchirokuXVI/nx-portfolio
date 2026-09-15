@@ -209,6 +209,14 @@ export class UpdateGeneratedListLineDto {
   @IsOptional()
   @IsUUID()
   targetListId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'A new content renames every zone line this line came from as well (plan 0113). Merge where the new name is already taken, on one of those lists or in the basket. Without it such a rename is refused with `line_merge_required`, and nothing is written.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  confirmMerge?: boolean;
 }
 
 export class ReorderGeneratedListLinesDto {

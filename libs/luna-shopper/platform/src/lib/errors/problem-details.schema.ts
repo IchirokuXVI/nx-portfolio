@@ -63,7 +63,7 @@ export const PROBLEM_DETAILS_SCHEMA = {
       type: 'object',
       additionalProperties: true,
       description:
-        'Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`, where it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with.',
+        'Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null.',
     },
   },
 } as const;

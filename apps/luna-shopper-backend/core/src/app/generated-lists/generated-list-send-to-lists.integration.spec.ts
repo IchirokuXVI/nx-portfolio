@@ -162,7 +162,9 @@ describeIntegration(
         claims.service,
         undefined as never,
         waiting,
-        { emitToUsers: jest.fn(), emit: jest.fn() } as never
+        { emitToUsers: jest.fn(), emit: jest.fn() } as never,
+        // The rename (plan 0113), which nothing in this file reaches.
+        undefined as never
       );
 
       // The two access questions, answered as they are for an owner who holds

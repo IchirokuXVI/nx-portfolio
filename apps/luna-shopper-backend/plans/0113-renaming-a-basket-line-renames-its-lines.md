@@ -1,3 +1,5 @@
+> **PR:** [#365](https://github.com/IchirokuXVI/nx-portfolio/pull/365)
+
 # 0113: renaming a basket line renames its lines
 
 > Client half: `apps/velista/plans/0084`. Builds on `0112`, whose merge this plan calls.

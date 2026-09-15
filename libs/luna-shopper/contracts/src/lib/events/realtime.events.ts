@@ -184,6 +184,16 @@ export enum RealtimeEvent {
    * write to a guest.
    */
   GeneratedListLineAdded = 'generatedList.lineAdded',
+  /**
+   * A line left a basket because a rename merged it into another line of the
+   * same basket (plan 0113, section 6), on the basket's own room and to the
+   * owner's own sessions.
+   *
+   * Its own name rather than a whole `generatedList.updated`, because the basket
+   * room holds guests and a basket view names zone data. The payload is the
+   * basket and the id of the line that went away, and nothing else.
+   */
+  GeneratedListLineRemoved = 'generatedList.lineRemoved',
   GeneratedListDeleted = 'generatedList.deleted',
 
   /**
@@ -271,6 +281,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.GeneratedListUpdated,
   RealtimeEvent.GeneratedListLineUpdated,
   RealtimeEvent.GeneratedListLineAdded,
+  RealtimeEvent.GeneratedListLineRemoved,
   RealtimeEvent.GeneratedListDeleted,
   RealtimeEvent.GeneratedListLineSettled,
   RealtimeEvent.GeneratedListParticipantJoined,

@@ -222,6 +222,19 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * same tin end up disagreeing about who bought it.
    */
   setOutstanding: 'generatedList.setOutstanding',
+  /**
+   * Rename a basket line, and every zone line it came from, in one transaction
+   * (plan 0113).
+   *
+   * A participant route, because the person fixing "leche" in the aisle is not
+   * always the owner. It is refused to a guest, and to anybody who cannot write
+   * every list the line came from, since the rename writes all of them. A line
+   * with no origin writes no list, and only the owner renames it.
+   *
+   * A name that is already taken, on one of those lists or in the basket, merges
+   * only after the caller confirms, and one confirmation covers every merge.
+   */
+  renameLine: 'generatedList.renameLine',
 } as const;
 
 /**
@@ -910,6 +923,89 @@ export interface GeneratedListReopenResult {
 export interface GeneratedListLineMovedEvent {
   generatedListId: string;
   line: GeneratedListBasketLineView;
+}
+
+/**
+ * What the basket's own room hears when a rename merged one of its lines into
+ * another (plan 0113, section 6).
+ *
+ * An id and nothing else, so it names no zone data and needs no redaction. The
+ * surviving line arrives beside it as a {@link GeneratedListLineMovedEvent}.
+ */
+export interface GeneratedListLineRemovedEvent {
+  generatedListId: string;
+  /** The basket line that went away. */
+  lineId: string;
+}
+
+// --- Renaming a basket line ------------------------------------------------
+
+/**
+ * Rename a basket line and every zone line it came from (plan 0113).
+ *
+ * ## Who may
+ *
+ * - **A guest never**, because a guest holds no access to any list.
+ * - **A line with origins**: anybody with an account who holds `WRITE` on every
+ *   list the line came from, the owner included. Writing some of them and not
+ *   all is refused whole, and nothing is renamed.
+ * - **A line with no origin** writes no list, and only the owner renames it.
+ */
+export interface RenameGeneratedListBasketLineRequest {
+  generatedListId: string;
+  /** The basket line, not the zone line. */
+  lineId: string;
+  /** The actor, resolved from their credential by the gateway's guard. */
+  participantId: string;
+  /** The new name, trimmed and bounded as a basket line's content is. */
+  content: string;
+  /**
+   * Whether the collisions may merge. Anything but `true` refuses a rename that
+   * collides with `line_merge_required`, and the refusal writes nothing.
+   */
+  confirmMerge?: boolean;
+}
+
+/**
+ * What a rename answers, projected for the participant who made it (plan 0113,
+ * section 7).
+ *
+ * After a basket merge, {@link line} is the surviving line, whose `id` can differ
+ * from the line the request addressed, and {@link absorbedLineId} names the line
+ * that went away. The field is absent when no basket line merged.
+ */
+export interface RenameGeneratedListBasketLineResult {
+  line: GeneratedListBasketLineView;
+  absorbedLineId?: string;
+}
+
+/** One list where the new name is taken (plan 0113, section 4). */
+export interface BasketLineMergeRequiredListDetails {
+  listId: string;
+  listName: string;
+  zoneName: string;
+  /** The line of that list that already carries the name. */
+  otherContent: string;
+  otherQuantity: number;
+}
+
+/** The basket line that already carries the name (plan 0113, section 4). */
+export interface BasketLineMergeRequiredBasketDetails {
+  otherLineId: string;
+  otherContent: string;
+  otherQuantity: number;
+}
+
+/**
+ * The `details` a `line_merge_required` refusal of a basket rename carries
+ * (plan 0113, section 4).
+ *
+ * Every name here belongs to a list the caller can write, because the rename is
+ * refused before this point to anybody who cannot write every one of them.
+ */
+export interface BasketLineMergeRequiredDetails {
+  lists: BasketLineMergeRequiredListDetails[];
+  basket: BasketLineMergeRequiredBasketDetails | null;
 }
 
 // --- The basket, as a participant reads it ---------------------------------
