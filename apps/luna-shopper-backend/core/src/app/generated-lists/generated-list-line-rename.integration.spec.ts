@@ -125,6 +125,7 @@ describeIntegration(
         undefined as never,
         claims.service,
         basketEvents as never,
+        undefined as never,
         undefined as never
       );
       const participants = dataSource.getRepository(GeneratedListParticipant);

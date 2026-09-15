@@ -66,6 +66,10 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
   participantList: 'generatedList.participant.list',
   /** Revoke exactly one participant: the lost phone (section 3.4). */
   participantRevoke: 'generatedList.participant.revoke',
+  /** Add one of the owner's contacts to the basket (plan 0114, section 4). */
+  participantAdd: 'generatedList.participant.add',
+  /** A registered participant leaves the basket (plan 0114, section 6). */
+  participantLeave: 'generatedList.participant.leave',
   /**
    * Turn a presented credential into a participant, for the gateway's guard.
    *
@@ -329,7 +333,7 @@ export interface GeneratedListParticipantView {
    *
    * Served to every reader of the basket, guests included, and that is a
    * deliberate disclosure: the people on one basket are shopping together and
-   * already see each other's faces, join times and typed names. What stays
+   * already see each other's faces and typed names. What stays
    * private is everything on the other side of the all or nothing rule, and a
    * username is not zone data.
    *
@@ -342,9 +346,21 @@ export interface GeneratedListParticipantView {
   guestNumber: number | null;
   /** Set for `OWNER` and `REGISTERED`, null for a `GUEST`. */
   userId: string | null;
-  joinedAt: string;
-  lastSeenAt: string;
-  /** Null for the owner, who arrived by owning the basket rather than by a link. */
+  /**
+   * When they joined and when they were last seen, present **only** for a reader
+   * who passes section 5.2, beside {@link userAgent} (plan 0114, section 11).
+   *
+   * Absent rather than null for everybody else, guests included: when somebody
+   * arrived is part of inspecting them, as the device string is. Both were served
+   * to every reader until plan 0114, against the mapper's own comment.
+   */
+  joinedAt?: string;
+  lastSeenAt?: string;
+  /**
+   * The link this person came by. Null for the owner, who arrived by owning the
+   * basket, and for a person the owner added from their groups (plan 0114,
+   * section 3), who arrived with no link and so is not reached by revoking one.
+   */
   shareLinkId: string | null;
   /**
    * The device string, present **only** for a reader who passes section 5.2.
@@ -613,6 +629,42 @@ export interface ParticipantTokenResult {
  */
 export interface RevokeParticipantRequest extends GeneratedListShareRequest {
   participantId: string;
+}
+
+/**
+ * Add one of the owner's contacts to the basket (plan 0114, section 4).
+ *
+ * Owner only, like every request on {@link GeneratedListShareRequest}, and the
+ * person must share an approved group with the owner at this moment. What
+ * happens to a row they already have is section 4's table.
+ */
+export interface AddGeneratedListParticipantRequest extends GeneratedListShareRequest {
+  /** The person to add. Never the owner. */
+  memberUserId: string;
+  /**
+   * That person's global username, resolved by the gateway from auth (section
+   * 9). Core owns no usernames, so it is told this one, and uses it only when the
+   * two people share no approved group or more than one.
+   */
+  globalUsername?: string | null;
+}
+
+/**
+ * Leave a basket (plan 0114, section 6), as the participant the gateway's guard
+ * resolved. A registered participant only: a guest is refused, and so is the
+ * owner, whose standing comes from owning the basket.
+ */
+export interface LeaveGeneratedListRequest {
+  generatedListId: string;
+  participantId: string;
+}
+
+/**
+ * What a person's own sessions hear when a basket is shared with them, or stops
+ * being (plan 0114, section 10): the basket's id and nothing else.
+ */
+export interface GeneratedListAccessEvent {
+  generatedListId: string;
 }
 
 /** Everybody on a basket, for the share sheet and for presence. */

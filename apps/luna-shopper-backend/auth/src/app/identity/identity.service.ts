@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  AUTH_USERNAMES_MAX,
   AuthProvider,
   UserKind,
   UsernamePropagation,
@@ -10,6 +11,7 @@ import {
   type DeleteAccountResult,
   type ForgotPasswordRequest,
   type GetProfileRequest,
+  type GetUsernamesRequest,
   type GoogleLoginRequest,
   type LoginRequest,
   type MintOAuthStateRequest,
@@ -23,6 +25,7 @@ import {
   type SetUsernameRequest,
   type UpgradeRequest,
   type UserProfileView,
+  type UserUsernameView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
@@ -35,7 +38,7 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { randomUUID } from 'node:crypto';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, In, type EntityManager } from 'typeorm';
 import {
   AuthAuditService,
   type AuditedWrite,
@@ -963,6 +966,35 @@ export class IdentityService {
       throw new NotFoundException('User not found');
     }
     return this.toProfile(user);
+  }
+
+  /**
+   * Several accounts' global usernames at once (plan 0114, section 9).
+   *
+   * For the gateway, which names people core knows only by id: the owner of a
+   * basket somebody was given, and a person being added to one. An id that names
+   * no account, or is not an id at all, is left out of the answer rather than
+   * refused or answered with a blank name, because every caller already has a
+   * fallback to draw and none of them should fail for want of one name.
+   */
+  async getUsernames(req: GetUsernamesRequest): Promise<UserUsernameView[]> {
+    const uuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const ids = [...new Set(req.userIds ?? [])].filter((id) => uuid.test(id));
+    if (ids.length > AUTH_USERNAMES_MAX) {
+      throw new ValidationException(
+        `at most ${AUTH_USERNAMES_MAX} accounts can be named at once`,
+        { messageArgs: { field: 'userIds' } }
+      );
+    }
+    if (ids.length === 0) {
+      return [];
+    }
+    const users = await this.dataSource.getRepository(User).find({
+      where: { id: In(ids) },
+      select: { id: true, username: true },
+    });
+    return users.map((user) => ({ userId: user.id, username: user.username }));
   }
 
   private toProfile(user: User): UserProfileView {

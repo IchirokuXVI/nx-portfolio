@@ -132,9 +132,15 @@ export class GeneratedListBasketService {
    * The names behind the (zone, list) pairs the run drew from.
    *
    * So a row can say "from Weekly shop" rather than "from 0f3a…". Read from the
-   * snapshot rather than from the lines' origins, because the snapshot is what
-   * the run actually drew from and is the thing a three week old basket can
-   * still be explained by (plan 0050, section 4).
+   * snapshot, because the snapshot is what the run actually drew from and is the
+   * thing a three week old basket can still be explained by (plan 0050,
+   * section 4).
+   *
+   * **Narrowed to the lists the basket's origins point at** (plan 0114, section
+   * 11). `seesZoneData` is decided from those origins, not from the snapshot, and
+   * the two differ in an ordinary way: a run may read a list that contributed no
+   * line. A reader who passed the origins test was never tested against such a
+   * list, so naming it would hand over a household the rule never let them see.
    *
    * A list that has since been deleted simply drops out: a basket outlives the
    * lists it came from, and a caption naming fewer households is a better answer
@@ -143,9 +149,12 @@ export class GeneratedListBasketService {
   private async sourceNames(
     list: GeneratedList
   ): Promise<GeneratedListSourceName[]> {
+    const origins = new Set(await this.sharing.sourceListIds(list.id));
     const named = await namesOfLists(
       this.shoppingLists,
-      list.sourceSnapshot.sources.map((source) => source.listId)
+      list.sourceSnapshot.sources
+        .map((source) => source.listId)
+        .filter((listId) => origins.has(listId))
     );
     // A list that has since been deleted is absent from the map and therefore
     // from the captions, which is the intended answer: naming fewer households

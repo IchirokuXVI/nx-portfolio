@@ -97,6 +97,26 @@ export enum ParticipantKind {
 }
 
 /**
+ * Why a participant row stopped being live (plan 0114, section 3).
+ *
+ * Set together with `revokedAt` and never without it. The reason decides what
+ * the share link does for that person afterwards: somebody who left may come
+ * back through it, and somebody the owner removed, or whose link was revoked
+ * with its people, may not (section 7).
+ *
+ * Never on the wire. A client learns that a person is gone from the event, and
+ * nothing it draws depends on why.
+ */
+export enum ParticipantEndedReason {
+  /** The owner removed this one person. Every row revoked before plan 0114. */
+  REMOVED = 'REMOVED',
+  /** The owner revoked the link this person came by, and its people with it. */
+  LINK_REVOKED = 'LINK_REVOKED',
+  /** The person left on their own. */
+  LEFT = 'LEFT',
+}
+
+/**
  * Why a list holding the same thing cannot be put into a basket line (plan 0057,
  * section 3.2, as plan 0092 section 3.2 revised it).
  *

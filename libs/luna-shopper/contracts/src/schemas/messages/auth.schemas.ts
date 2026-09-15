@@ -1,5 +1,9 @@
-import { AUTH_PATTERNS } from '../../lib/messages/auth.messages';
 import {
+  AUTH_PATTERNS,
+  AUTH_USERNAMES_MAX,
+} from '../../lib/messages/auth.messages';
+import {
+  array,
   boolean,
   integer,
   JsonSchema,
@@ -43,6 +47,10 @@ export const AUTH_SCHEMA_IDS = {
   setUsernameRequest: schemaId('msg/auth.setUsername/request'),
   getProfileRequest: schemaId('msg/auth.getProfile/request'),
   userProfileView: schemaId('auth/UserProfileView'),
+  // Several accounts' global usernames at once (plan 0114, section 9).
+  getUsernamesRequest: schemaId('msg/auth.getUsernames/request'),
+  userUsernameView: schemaId('auth/UserUsernameView'),
+  getUsernamesResult: schemaId('msg/auth.getUsernames/response'),
 } as const;
 
 const authTokens = object(
@@ -246,6 +254,27 @@ const userProfileView = object(
   ['userId', 'kind', 'username', 'email', 'emailVerified', 'displayName']
 );
 
+const getUsernamesRequest = object(
+  AUTH_SCHEMA_IDS.getUsernamesRequest,
+  {
+    userIds: { ...array(nonEmptyString()), maxItems: AUTH_USERNAMES_MAX },
+  },
+  ['userIds']
+);
+
+const userUsernameView = object(
+  AUTH_SCHEMA_IDS.userUsernameView,
+  { userId: nonEmptyString(), username: nonEmptyString() },
+  ['userId', 'username']
+);
+
+// A bare array, as plan 0114 section 9 states the answer. An id auth does not
+// know is left out rather than answered with a blank name.
+const getUsernamesResult: JsonSchema = {
+  $id: AUTH_SCHEMA_IDS.getUsernamesResult,
+  ...array(ref(AUTH_SCHEMA_IDS.userUsernameView)),
+};
+
 export const authSchemas: JsonSchema[] = [
   authTokens,
   accessTokenClaims,
@@ -269,6 +298,9 @@ export const authSchemas: JsonSchema[] = [
   setUsernameRequest,
   getProfileRequest,
   userProfileView,
+  getUsernamesRequest,
+  userUsernameView,
+  getUsernamesResult,
 ];
 
 export const authMessageContracts: Record<
@@ -335,6 +367,10 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.getProfile]: {
     request: AUTH_SCHEMA_IDS.getProfileRequest,
     response: AUTH_SCHEMA_IDS.userProfileView,
+  },
+  [AUTH_PATTERNS.getUsernames]: {
+    request: AUTH_SCHEMA_IDS.getUsernamesRequest,
+    response: AUTH_SCHEMA_IDS.getUsernamesResult,
   },
   [AUTH_PATTERNS.mintParticipantToken]: {
     request: AUTH_SCHEMA_IDS.mintParticipantTokenRequest,

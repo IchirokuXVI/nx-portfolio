@@ -21,6 +21,7 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AddGeneratedListParticipantLineRequest,
+  type AddGeneratedListParticipantRequest,
   type BasketPriceScopeView,
   type BasketScopeLocationView,
   type CatalogScopeView,
@@ -36,6 +37,7 @@ import {
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
+  type GeneratedListParticipantView,
   type GeneratedListReopenResult,
   type GeneratedListSettleResult,
   type GeneratedListShareLinkResult,
@@ -44,9 +46,11 @@ import {
   type GetGeneratedListLineOriginsRequest,
   type GetItemsRequest,
   type GetItemsResult,
+  type GetUsernamesRequest,
   type ItemPage,
   type ItemView,
   type JoinGeneratedListRequest,
+  type LeaveGeneratedListRequest,
   type ListSupermarketLocationsRequest,
   type ListSupermarketsRequest,
   type MintParticipantTokenRequest,
@@ -67,6 +71,7 @@ import {
   type SupermarketLocationPage,
   type SupermarketPage,
   type UserProfileView,
+  type UserUsernameView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
@@ -85,6 +90,7 @@ import {
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  AddGeneratedListParticipantDto,
   AddGeneratedListParticipantLineDto,
   BasketSuggestQueryDto,
   EnsureShareLinkDto,
@@ -134,6 +140,30 @@ async function resolveUsername(
     return profile.username ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Several accounts' global usernames at once, for the messages that name people
+ * core knows only by id (plan 0114, section 9).
+ *
+ * **It fails empty**, for the reason {@link resolveUsername} fails null: a name
+ * is an improvement on a fallback the client still draws, and losing a share or
+ * a page of shared baskets because auth was briefly unreachable would not be.
+ */
+export async function resolveUsernames(
+  nats: NatsClient,
+  userIds: readonly string[]
+): Promise<UserUsernameView[]> {
+  const ids = [...new Set(userIds)];
+  if (ids.length === 0) {
+    return [];
+  }
+  try {
+    const req: GetUsernamesRequest = { userIds: ids };
+    return await nats.send<UserUsernameView[]>(AUTH_PATTERNS.getUsernames, req);
+  } catch {
+    return [];
   }
 }
 
@@ -262,6 +292,46 @@ export class GeneratedListShareController {
         // share, so an owner who has never minted a link is still named here.
         username: await resolveUsername(this.nats, user.userId),
       }
+    );
+  }
+
+  /**
+   * Add one of the caller's contacts to the basket (plan 0114, section 4).
+   *
+   * Owner only, and not found for anybody else's basket. The person must share
+   * an approved group with the owner right now, or the answer is
+   * `validation_failed`. A person already on the basket by the link becomes an
+   * added member, whom revoking the link no longer reaches, and a person who was
+   * removed or who left is brought back.
+   *
+   * Their global name is resolved here and handed to core, which uses it only
+   * when the two people share no group or several (section 9).
+   */
+  @Post(':id/participants')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantAdd, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+  })
+  async addParticipant(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: AddGeneratedListParticipantDto
+  ): Promise<GeneratedListParticipantView> {
+    const [named] = await resolveUsernames(this.nats, [dto.userId]);
+    const req: AddGeneratedListParticipantRequest = {
+      userId: user.userId,
+      generatedListId: id,
+      memberUserId: dto.userId,
+      globalUsername: named?.username ?? null,
+    };
+    return this.nats.send<GeneratedListParticipantView>(
+      GENERATED_LIST_SHARING_PATTERNS.participantAdd,
+      req
     );
   }
 
@@ -1314,6 +1384,43 @@ export class GeneratedListParticipantController {
   }
 
   /**
+   * Leave the basket (plan 0114, section 6).
+   *
+   * A registered participant only: a guest is `forbidden` and the owner is
+   * `validation_failed`. Somebody who left may come back through the link while
+   * they still hold it, which a removed person may not.
+   *
+   * It only works because this controller is registered before the owner's
+   * sheet. `DELETE :id/participants/:participantId` there matches `mine` as a
+   * participant id, and the first matching route is the one that runs, so the
+   * other order would send every leave to the account guard and to a core lookup
+   * for a participant called `mine`. See {@link GENERATED_LIST_SHARING_CONTROLLERS}.
+   */
+  @Delete(':id/participants/mine')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantLeave)
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    membership: true,
+    notFound: true,
+  })
+  leave(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string
+  ): Promise<{ id: string }> {
+    const req: LeaveGeneratedListRequest = {
+      generatedListId: id,
+      participantId: participant.participantId,
+    };
+    return this.nats.send<{ id: string }>(
+      GENERATED_LIST_SHARING_PATTERNS.participantLeave,
+      req
+    );
+  }
+
+  /**
    * A fresh socket token, presented with the participant credential (section 9).
    *
    * This is where revocation bites for the socket: the token itself cannot be
@@ -1356,12 +1463,18 @@ export class GeneratedListParticipantController {
 }
 
 /**
- * The three controllers sharing adds, in the order their guards get stricter:
- * the owner's account authenticated sheet, the unauthenticated pair, and the
- * participant surface.
+ * The three controllers sharing adds.
+ *
+ * **The order is a routing rule.** The participant surface comes first, because
+ * its `DELETE :id/participants/mine` (plan 0114, section 6) and the owner's
+ * `DELETE :id/participants/:participantId` both match a leave: Nest registers
+ * routes in controller order and the first match runs, so the literal path has
+ * to be registered before the parameter. No other participant route matches one
+ * of the owner's, which is what makes the move safe. The owner's account
+ * authenticated sheet and the unauthenticated pair follow.
  */
 export const GENERATED_LIST_SHARING_CONTROLLERS = [
+  GeneratedListParticipantController,
   GeneratedListShareController,
   ShareLinkController,
-  GeneratedListParticipantController,
 ];

@@ -34,6 +34,13 @@ export type AddGeneratedListLineDto = {
 };
 
 /**
+ * `AddGeneratedListParticipantDto` in the gateway's OpenAPI document.
+ */
+export type AddGeneratedListParticipantDto = {
+  userId: string;
+};
+
+/**
  * `AddGeneratedListParticipantLineDto` in the gateway's OpenAPI document.
  */
 export type AddGeneratedListParticipantLineDto = {
@@ -175,6 +182,7 @@ export type CreateGeneratedListDto = {
   name?: string | null;
   defaultTargetListId?: string | null;
   idempotencyKey?: string;
+  memberUserIds?: string[];
 };
 
 /**
@@ -2543,8 +2551,8 @@ export type GeneratedListSharingParticipantView = {
   username: string | null;
   guestNumber: number | null;
   userId: string | null;
-  joinedAt: string;
-  lastSeenAt: string;
+  joinedAt?: string;
+  lastSeenAt?: string;
   shareLinkId: string | null;
   userAgent?: string | null;
 };
@@ -2657,6 +2665,14 @@ export type GeneratedListGeneratedListLineView = {
 };
 
 /**
+ * `generated-list.GeneratedListOwnerView` in the gateway's OpenAPI document.
+ */
+export type GeneratedListGeneratedListOwnerView = {
+  userId: string;
+  name: string;
+};
+
+/**
  * `generated-list.GeneratedListPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2727,6 +2743,33 @@ export type GeneratedListGeneratedListView = {
   generatedAt: string;
   sourceSnapshot: GeneratedListGeneratedListSourceSnapshot;
   lines: GeneratedListGeneratedListLineView[];
+};
+
+/**
+ * `generated-list.SharedGeneratedListPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type GeneratedListSharedGeneratedListPage = {
+  items: GeneratedListSharedGeneratedListView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `generated-list.SharedGeneratedListView` in the gateway's OpenAPI document.
+ */
+export type GeneratedListSharedGeneratedListView = {
+  id: string;
+  name: string | null;
+  status: EnumsGeneratedListStatus;
+  generatedAt: string;
+  lineCount: number;
+  settledLineCount: number;
+  boughtLineCount: number;
+  notAvailableLineCount: number;
+  presentCount: number;
+  owner: GeneratedListGeneratedListOwnerView;
+  sharedAt: string;
 };
 
 /**
@@ -3574,6 +3617,25 @@ export type StatsPlatformStatsResponse = {
   identity: StatsIdentityStats | null;
   core: StatsCoreStats | null;
   measuredAt: string;
+};
+
+/**
+ * `zone.ContactPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type ZoneContactPage = {
+  items: ZoneContactView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `zone.ContactView` in the gateway's OpenAPI document.
+ */
+export type ZoneContactView = {
+  userId: string;
+  zoneId: string;
+  username: string;
 };
 
 /**

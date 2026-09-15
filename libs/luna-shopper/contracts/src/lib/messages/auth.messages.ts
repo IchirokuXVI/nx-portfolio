@@ -41,6 +41,11 @@ export const AUTH_PATTERNS = {
   /** Read the caller's own profile (plan 0018, section 12). */
   getProfile: 'auth.getProfile',
   /**
+   * The global usernames of several accounts at once (plan 0114, section 9), so
+   * the gateway can name people core knows only by id.
+   */
+  getUsernames: 'auth.getUsernames',
+  /**
    * Sign a short lived, basket scoped socket token for a participant (plan 0051,
    * section 9).
    *
@@ -237,6 +242,23 @@ export interface UserProfileView {
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
+}
+
+/** How many accounts one {@link GetUsernamesRequest} may name. */
+export const AUTH_USERNAMES_MAX = 100;
+
+/** Several accounts' global usernames at once (plan 0114, section 9). */
+export interface GetUsernamesRequest {
+  userIds: string[];
+}
+
+/**
+ * One account and its global username. An id auth does not know is left out of
+ * the answer rather than answered with a blank name.
+ */
+export interface UserUsernameView {
+  userId: string;
+  username: string;
 }
 
 /** A verified Google profile, resolved by the gateway's passport callback. */

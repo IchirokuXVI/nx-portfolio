@@ -1,4 +1,6 @@
 import {
+  generatedListPresenceRoom,
+  generatedListRoom,
   listPresenceRoom,
   listRoom,
   RealtimeEvent,
@@ -29,7 +31,7 @@ import type { RelayDirective } from '../relay/event-relay.service';
  * in and therefore a sweep that reports success having checked nothing.
  */
 export function sweepsFor(envelope: DomainEvent): RelayDirective[] {
-  const { zoneId, listId, payload } = envelope;
+  const { zoneId, listId, generatedListId, payload } = envelope;
 
   switch (envelope.event) {
     // The member named in the payload lost the zone, and with it every list in
@@ -80,6 +82,28 @@ export function sweepsFor(envelope: DomainEvent): RelayDirective[] {
     case RealtimeEvent.ListCreated:
       return zoneId
         ? [{ direction: 'admit', rooms: [zoneRoom(zoneId)], zoneId }]
+        : [];
+
+    // A shared basket lost somebody, or went (plan 0114, section 10): a removal,
+    // a link revoked with its people, somebody leaving, or the deletion itself.
+    // Neither payload names a socket, and a basket socket carries a participant
+    // rather than a user, so both basket rooms are swept: every socket there
+    // re-asks whether its participant is still live, and the ones that are not
+    // leave at once rather than when their token lapses. Both events name the
+    // basket on the envelope, the deletion since plan 0114, and that is what this
+    // reads.
+    case RealtimeEvent.GeneratedListParticipantLeft:
+    case RealtimeEvent.GeneratedListDeleted:
+      return generatedListId
+        ? [
+            {
+              direction: 'evict',
+              rooms: [
+                generatedListRoom(generatedListId),
+                generatedListPresenceRoom(generatedListId),
+              ],
+            },
+          ]
         : [];
 
     default:

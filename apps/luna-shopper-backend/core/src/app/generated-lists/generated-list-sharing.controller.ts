@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   GENERATED_LIST_SHARING_PATTERNS,
   type AddGeneratedListParticipantLineRequest,
+  type AddGeneratedListParticipantRequest,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
   type GeneratedListBasketScope,
@@ -12,6 +13,7 @@ import {
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
+  type GeneratedListParticipantView,
   type GeneratedListReopenResult,
   type GeneratedListSettleResult,
   type GeneratedListShareLinkResult,
@@ -20,6 +22,7 @@ import {
   type GetGeneratedListBasketRequest,
   type GetGeneratedListLineOriginsRequest,
   type JoinGeneratedListRequest,
+  type LeaveGeneratedListRequest,
   type ListParticipantsRequest,
   type PreviewShareLinkRequest,
   type RenameGeneratedListBasketLineRequest,
@@ -132,6 +135,23 @@ export class GeneratedListSharingController {
     @Payload() req: RevokeParticipantRequest
   ): Promise<{ id: string }> {
     return this.sharing.revokeParticipant(req);
+  }
+
+  /** Add one of the owner's contacts to the basket (plan 0114, section 4). */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.participantAdd)
+  addParticipant(
+    @Payload() req: AddGeneratedListParticipantRequest
+  ): Promise<GeneratedListParticipantView> {
+    return this.sharing.addParticipant(req);
+  }
+
+  /**
+   * Leave a basket, as the participant the gateway's guard resolved (plan 0114,
+   * section 6). Refused to a guest and to the owner.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.participantLeave)
+  leave(@Payload() req: LeaveGeneratedListRequest): Promise<{ id: string }> {
+    return this.sharing.leave(req);
   }
 
   /**

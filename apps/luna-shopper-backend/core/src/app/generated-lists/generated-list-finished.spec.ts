@@ -513,6 +513,7 @@ describe('what a finished basket still does (section 3.4)', () => {
       {} as unknown as ProfileService,
       fakeLineClaims().service,
       {} as unknown as CoreEventsPublisher,
+      {} as never,
       {} as never
     );
 
@@ -573,6 +574,7 @@ describe('finishing and unfinishing (section 2)', () => {
           events.push({ event, userIds, view });
         },
       } as unknown as CoreEventsPublisher,
+      {} as never,
       {} as never
     );
     return { service, saved, events, claims };
