@@ -10,26 +10,38 @@ The contract is
 `libs/luna-shopper/contracts/src/schemas/harvest-document/harvest-document-1.schema.ts`,
 and it is the only authority. Nothing here restates it.
 
-**It belongs to the harvester now, not to catalog.** The harvester's
-`FILE_IMPORT` mode is what consumes the finished document, so this is where the
-producer that builds one lives.
+**It is an operator's tool, and no deployed process loads it.** The harvester's
+`FILE_IMPORT` mode consumes the finished document, so it used to live inside
+that app. It is two projects now, and the line between them is what is the same
+for every chain against what one chain prints:
+
+| Project                       | Directory                                | What it holds                                                                    |
+| ----------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------- |
+| `luna-shopper/leaflet-cli`    | `libs/luna-shopper/tools/leaflet/cli`    | The command and the four shared scripts                                          |
+| `luna-shopper/leaflet-chains` | `libs/luna-shopper/tools/leaflet/chains` | One folder per chain: `layout.md`, `prompt.txt`, `headings.mjs`, `baseline.json` |
+
+`leaflet-cli` names `leaflet-chains` in its `implicitDependencies`, so an edit
+to `dia/prompt.txt` marks the command affected and runs its tests.
 
 ## What is here
 
-Shared files apply to every chain. A chain's own folder under `chains/` holds
-only what that one chain needs.
-
 | File                          | What it is                                                                                                 |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `cli.mjs`                     | The command. `nx run luna-shopper/leaflet-cli:read`. Procedure (a) below.                                  |
 | `to-harvest-document.mjs`     | A leaflet reading into a `HarvestDocument`. **Owns the three price rules.**                                |
 | `build-document.mjs`          | Per page model readings, plus one leaflet's own small `leaflet.json`, into one document.                   |
 | `drift-check.mjs`             | Compares a build's statistics with the chain's `baseline.json` and refuses a reading that drifted too far. |
 | `validate.mjs`                | Validates a built document against the contract itself, not a copy of it.                                  |
-| `AGENT-PROMPT.md`             | The two prompts to paste to a model agent: a leaflet of a known chain, and a chain's first leaflet.        |
+| `AGENT-PROMPT.md`             | The prompt to paste to a model agent that writes a new chain's folder.                                     |
 | `chains/<slug>/prompt.txt`    | What a model is asked for one page of that chain's leaflet.                                                |
-| `chains/<slug>/headings.mjs`  | That chain's department heading vocabulary, its default fixed pages, and the model it has used so far.     |
+| `chains/<slug>/headings.mjs`  | That chain's heading vocabulary, its fixed pages, its render dpi, and the model it has used so far.        |
 | `chains/<slug>/layout.md`     | What one page of that chain's leaflet looks like, for a person (and a model) to check before reading.      |
 | `chains/<slug>/baseline.json` | That chain's own statistics from its last accepted reading. `drift-check.mjs`'s reference point.           |
+
+The command's own parts sit beside `cli.mjs`: `chains.mjs` resolves a slug,
+`census.mjs` and `render.mjs` are steps 1 and 2, `layout-check.mjs` is step 3,
+`read-pages.mjs` is step 4, `sanity.mjs` is step 5, `document.mjs` is steps 6 to
+8, `manual.mjs` is `--engine manual`, and `run.mjs` is the eight in order.
 
 **One leaflet's own values never belong in a chain's script.** A leaflet's own
 PDF, its page count, which pages carry no department heading, its printed
@@ -155,48 +167,112 @@ from the current report, once a person has accepted the reading it came from.
 
 ## Procedure (a): a new leaflet of a known chain
 
-1. Render the new leaflet's pages to images.
-2. Read `chains/<slug>/layout.md`, then look at the first three page images.
-   If they do not match the description, stop and report before reading any
-   further page.
-3. Send each page image to a capable model with `chains/<slug>/prompt.txt`,
-   and keep one JSON array per page as `page_NN.json` under
-   `tmp/leaflet/<slug>-import/`.
-4. Write `tmp/leaflet/<slug>-import/leaflet.json`: the PDF path, the page
-   count, any fixed section pages that moved, the printed validity window,
-   and the tool that read it.
-5. Build:
+One command:
 
-   ```sh
-   node libs/luna-shopper/tools/leaflet/cli/src/build-document.mjs \
-     --readings tmp/leaflet/<slug>-import \
-     --leaflet tmp/leaflet/<slug>-import/leaflet.json \
-     --chain <slug> \
-     --out tmp/leaflet/<slug>.harvest-document.json
-   ```
+```sh
+npx nx run luna-shopper/leaflet-cli:read -- --pdf tmp/dia_leaflet.pdf --chain dia
+```
 
-6. Drift check the report:
+Keep the `--`. Nx reads what comes before it as its own flags, so an option
+typed without it is dropped in silence. `--help` prints every flag.
 
-   ```sh
-   node libs/luna-shopper/tools/leaflet/cli/src/drift-check.mjs \
-     --report tmp/leaflet/<slug>.harvest-document.report.json --chain <slug>
-   ```
+It does eight things, in order, and each one can refuse.
 
-   A refusal means stop and look. Do not proceed to validate or upload a
-   refused reading without understanding why it drifted.
+1. **Census.** Page count, page size and which pages carry a text layer. It is
+   printed first, because the two chains read so far are not the same kind of
+   document: El Jamon is 40 pages with text on 28 of them, Deza is 62 pages of
+   flat images.
+2. **Render.** Every page to a PNG under `<out>/pages/`, at the dpi
+   `chains/<slug>/headings.mjs` names, which `--dpi` overrides. It shells out to
+   `pdftoppm`, then `magick`, then a Python with PyMuPDF, and prints the install
+   line for each when it finds none. `--pdf <directory>` of `page_NN.png` skips
+   this step, which is how LIDL is read.
+3. **Layout check.** `chains/<slug>/layout.md` against the first three pages. A
+   mismatch stops the run and names what differs.
+4. **Read.** One call per page, in order, writing `<out>/import/page_NN.json` as
+   it goes. A page that answers nothing parseable is asked once more and then
+   recorded as an empty array with a named warning.
+5. **Sanity pass.** Six checks against what a printed page can support, naming
+   the page, the product and the rule for every row that fails. It runs for
+   every engine, because every model has a systematic defect and only the defect
+   differs. It never edits a row and it never drops one.
+6. **Leaflet metadata.** `<out>/import/leaflet.json`, with the validity window
+   asked of the cover. Every field it filled is printed for you to confirm: a
+   wrong date silently mis-scopes every price.
+7. **Build, drift check, validate.** The three scripts below, unchanged, as
+   child processes. A drift refusal stops the run before validate.
+   `--update-baseline` is never passed.
+8. **Report.** What was read, every row to look at, and the document's path.
 
-7. Validate:
+Then two things are yours, and stay yours:
 
-   ```sh
-   node --experimental-strip-types \
-     libs/luna-shopper/tools/leaflet/cli/src/validate.mjs \
-     tmp/leaflet/<slug>.harvest-document.json
-   ```
+- **Upload the document** through the back office at `harvest/imports/upload`,
+  with the chain, the price scope and the source kind `OFFICIAL_LEAFLET`. The
+  command prints the call and never makes it. A tool that posted its own output
+  would remove the only review this pipeline has.
+- **Once the reading is accepted**, run `build-document.mjs` with
+  `--update-baseline` so the next leaflet is checked against this one.
 
-8. Upload the document through the back office at `harvest/imports/upload`,
-   with the chain, the price scope and the source kind `OFFICIAL_LEAFLET`.
-9. Once the reading is accepted, run `build-document.mjs` again with
-   `--update-baseline` so the next leaflet is checked against this one.
+### Which engine reads it
+
+`--engine ollama` is the default, and it is not good enough to accept unseen.
+It is free, a leaflet reading is cheap to redo, and the drift check already
+catches a bad one, so a first pass over a 40 page leaflet is worth having. What
+it costs is measured in the plan's section 7: it found every tile and invented
+nothing, and it got 63% of headline prices, 55% of ANTES prices and 31% of unit
+prices right, against 95%, 100% and 100% for Sonnet 5. On every price drop tile
+it invented a single unit price the page does not print.
+
+So the run prints that **before** it starts as well as after, because a warning
+is worth nothing to somebody who has already waited eleven minutes. The first
+line of it is written into `leaflet.json`'s `extraction.tool`, which is the
+field that reaches the document's `producer.name`, so a person reading the file
+next week sees what read it.
+
+**For a reading that matters, use `--engine manual`.** The most accurate reader
+measured here is Sonnet 5, and manual mode reaches it by not being clever: it
+renders the pages, writes `<out>/PROMPT.md`, and stops.
+
+```sh
+# 1. Render, and write the prompt to paste.
+npx nx run luna-shopper/leaflet-cli:read -- --pdf tmp/dia.pdf --chain dia --engine manual
+
+# 2. Paste <out>/PROMPT.md into Claude Code, or any model you like. It writes
+#    <out>/import/page_NN.json, one JSON array per page.
+
+# 3. Pick the run back up.
+npx nx run luna-shopper/leaflet-cli:read -- --out <out> --resume --engine manual
+```
+
+A Claude Code session already reads a PNG with its Read tool and the tokens are
+already paid for. `PROMPT.md` carries `chains/<slug>/prompt.txt` byte for byte,
+so it cannot drift from the chain's own rules, and it is generated every run and
+never committed. The pick up refuses a reading it cannot trust rather than
+repairing one: a `page_NN.json` that is not a JSON array is named by page and
+stops the run, and so is a page with no file at all unless `--pages` excluded
+it.
+
+### The three scripts the command calls
+
+Run them by hand for a reading that was produced some other way.
+
+```sh
+node libs/luna-shopper/tools/leaflet/cli/src/build-document.mjs \
+  --readings tmp/leaflet/<slug>-import \
+  --leaflet tmp/leaflet/<slug>-import/leaflet.json \
+  --chain <slug> \
+  --out tmp/leaflet/<slug>.harvest-document.json
+
+node libs/luna-shopper/tools/leaflet/cli/src/drift-check.mjs \
+  --report tmp/leaflet/<slug>.harvest-document.report.json --chain <slug>
+
+node --experimental-strip-types \
+  libs/luna-shopper/tools/leaflet/cli/src/validate.mjs \
+  tmp/leaflet/<slug>.harvest-document.json
+```
+
+A drift refusal means stop and look. Do not validate or upload a refused
+reading without understanding why it drifted.
 
 **El Jamon does not yet follow this procedure.** It has no per page readings
 and no `leaflet.json`: its one committed reading is already a whole document
