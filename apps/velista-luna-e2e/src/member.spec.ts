@@ -1,11 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
-  DANA_ID,
   LIST_GROCERIES_ID,
   LIST_HARDWARE_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import {
-  addParticipant,
   ALICE_EMAIL,
   DANA_EMAIL,
   listLines,
@@ -23,6 +21,7 @@ import {
   readShareLinkFromSheet,
   reel,
   row,
+  sheet,
   signIn,
 } from './support/app';
 
@@ -35,19 +34,13 @@ import {
  * the basket draws from. So where a guest sees lines and nothing else, she sees
  * the zone behind them: which list asked for what, on the settle sheet.
  *
- * **How she gets on the basket differs from the plan's wording, and on purpose.**
- * Section 5.3 has her open the share link while signed in. Today that attaches
- * her as a guest: `BasketApi.join` sends the join with the `anonymous` request
- * context, which tells the gateway interceptor to leave her token off, so the
- * gateway's optional JWT sees nobody and writes a `GUEST` row with no user id.
- * The join page's own contract says a signed in person "is attached as
- * themselves", and backend plan 0051 makes a registered participant exactly
- * that, so this is a defect in the join call rather than a rule. The plan
- * forbids changing application code here, so the owner adds her through the
- * API instead (backend plan 0114, the owner adding a person they share a group
- * with), which is the other way a registered participant comes to exist, and
- * the screens she then sees are the ones under test. When the join is fixed,
- * step 2 can go back to opening the link.
+ * **How she gets on the basket is the share link**, opened while she is signed
+ * in, which is the same act a guest performs in `guest.spec.ts` and the same
+ * link. The join page never asks her anything: somebody already signed in is
+ * attached as themselves, so the request carries her bearer, the gateway's
+ * optional JWT resolves her, and core writes a `REGISTERED` row against her
+ * account. That is the whole difference between the two specs, and the people
+ * sheet is where it shows: her row carries no guest mark.
  *
  * The second half is the owner's, and it is the lists summary doing the thing
  * plan 0068 built it for: a line added in the aisle, bought, and then raised for
@@ -73,6 +66,7 @@ test.describe('a registered participant', () => {
     browser,
   }) => {
     let basketId = '';
+    let link = '';
     const aisleLine = `Torch ${Date.now()}`;
 
     await test.step('1. Alice generates a basket from Groceries and Hardware and shares it', async () => {
@@ -82,17 +76,43 @@ test.describe('a registered participant', () => {
         ['Groceries', 'Hardware'],
         `Member trip ${Date.now()}`
       );
-      const link = await readShareLinkFromSheet(page, basketId);
+      link = await readShareLinkFromSheet(page, basketId);
       expect(link).toMatch(/\/s\/[A-Za-z0-9_-]+$/);
-      await addParticipant(alice, basketId, DANA_ID);
     });
 
-    await test.step('2. Dana, signed in, opens the basket and sees zone details', async () => {
+    await test.step('2. Dana, signed in, opens the share link and sees zone details', async () => {
       dana = await newVisitor(browser);
       await signIn(dana, DANA_EMAIL);
-      await dana.goto(`/en/shopping-lists/${basketId}`);
+      // The path, for `guest.spec.ts` step 2's reason: the link names velista's
+      // compiled in standalone origin, and what is under test is what the path
+      // does for somebody who is already signed in.
+      await dana.goto(new URL(link).pathname);
+
+      // Straight to the basket, with nothing asked of her: the offer screen is
+      // for a stranger, and she is a member of the group this list belongs to.
       await expectBasketUrl(dana, basketId);
+      await expect(
+        dana.getByRole('heading', { name: 'You’ve been invited to shop' })
+      ).toHaveCount(0);
       await expect(row(dana, 'Milk')).toBeVisible();
+
+      // Who the server decided she is, in the one place the screen says it: her
+      // own row, under her account's name and with no guest mark on it. The name
+      // is the username the session already holds, because she typed none on the
+      // way in and core keeps no display name for a participant who did not. The
+      // guest mark is the part that says which kind of participant she is, and
+      // the absence of it is what the join fix bought.
+      await dana
+        .getByRole('button', { name: 'See who is on this list' })
+        .click();
+      const people = sheet(dana, 'On this list');
+      const her = people.locator('li.person', {
+        has: dana.locator('.you-tag'),
+      });
+      await expect(her.locator('.person-name')).toHaveText('Calm Harbour');
+      await expect(her.locator('.guest-tag')).toHaveCount(0);
+      await people.getByRole('button', { name: 'Close', exact: true }).click();
+      await expectBasketUrl(dana, basketId);
 
       // What a guest never gets: the lists summary on the settle sheet, with
       // the list that asked for the line named.
@@ -109,13 +129,10 @@ test.describe('a registered participant', () => {
     });
 
     await test.step('3. Alice adds a line in the aisle, buys it, and raises it for both lists', async () => {
-      // Dana's arrival reached this page as a burst of socket events, and the
-      // basket store answers a burst with one coalesced re-read, a moment
-      // after the last of them. A re-read still in flight when the line below
-      // is added answers after the add does, from before it, and redraws the
-      // basket without the new row. So the page is reloaded first: one fresh
-      // read, and no timer pending when Alice types.
-      await page.reload();
+      // Typed straight after Dana's arrival, with no reload in between, which is
+      // the timing the store's read guard exists for: her arrival reached this
+      // page as a burst of socket events and the coalesced re-read they schedule
+      // is still out when the line below is added (velista `0086`).
       await expect(row(page, 'Milk')).toBeVisible();
 
       const composer = page.locator('lib-line-composer');
