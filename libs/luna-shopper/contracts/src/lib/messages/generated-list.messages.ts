@@ -3,6 +3,7 @@ import type {
   GeneratedListStatus,
 } from '../enums/generated-list.enums';
 import type { Paginated } from '../pagination';
+import type { UserUsernameView } from './auth.messages';
 
 /**
  * Generated shopping list contracts (plan 0050): the basket a person actually
@@ -52,6 +53,11 @@ export const GENERATED_LIST_PATTERNS = {
   deleteLine: 'generatedList.deleteLine',
   /** Reorder the basket, which is a local edit like every other one here. */
   reorderLines: 'generatedList.reorderLines',
+  /**
+   * The baskets other people shared with the caller, newest share first (plan
+   * 0114, section 8).
+   */
+  listShared: 'generatedList.listShared',
 } as const;
 
 /**
@@ -314,6 +320,20 @@ export interface CreateGeneratedListRequest {
    */
   defaultTargetListId?: string | null;
   idempotencyKey?: string;
+  /**
+   * People to share the basket with as it is created (plan 0114, section 4).
+   *
+   * Every id must be one of the owner's contacts at that moment, and the whole
+   * run is refused otherwise, before anything is written. At most one fewer than
+   * the participant limit, which leaves room for the owner.
+   */
+  memberUserIds?: string[];
+  /**
+   * The global usernames of {@link memberUserIds}, resolved by the gateway from
+   * auth (section 9). Core owns no usernames, so it is told them, and uses one
+   * only for a person the owner shares no approved group with, or several.
+   */
+  globalUsernames?: UserUsernameView[];
 }
 
 export interface GeneratedListIdRequest {
@@ -332,6 +352,52 @@ export interface ListGeneratedListsRequest {
 }
 
 export type GeneratedListPage = Paginated<GeneratedListSummaryView>;
+
+/**
+ * The baskets shared with the caller (plan 0114, section 8).
+ *
+ * Every live `REGISTERED` row the caller holds, on a basket that is not
+ * `ARCHIVED`, so a finished trip still shows. A basket they own is never here,
+ * because the owner's row is an `OWNER` row.
+ */
+export interface ListSharedGeneratedListsRequest {
+  userId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/** One shared basket as core answers it, before the gateway names the owner. */
+export interface SharedGeneratedListCoreView extends GeneratedListSummaryView {
+  ownerUserId: string;
+  /**
+   * The owner's membership name in the one approved group the two people share,
+   * or null when they share none or more than one (section 9). Core owns no
+   * global usernames, so a null is the gateway's cue to ask auth.
+   */
+  ownerZoneUsername: string | null;
+  /** When the owner added the caller, and otherwise when they joined by link. */
+  sharedAt: string;
+}
+
+export type SharedGeneratedListCorePage =
+  Paginated<SharedGeneratedListCoreView>;
+
+/** Who shared a basket, named as section 9 names them. */
+export interface GeneratedListOwnerView {
+  userId: string;
+  name: string;
+}
+
+/**
+ * One row of the shared baskets tab (section 8): a history row, plus who shared
+ * it and when.
+ */
+export interface SharedGeneratedListView extends GeneratedListSummaryView {
+  owner: GeneratedListOwnerView;
+  sharedAt: string;
+}
+
+export type SharedGeneratedListPage = Paginated<SharedGeneratedListView>;
 
 /** Rename a basket, or move it between the four statuses. */
 export interface UpdateGeneratedListRequest {

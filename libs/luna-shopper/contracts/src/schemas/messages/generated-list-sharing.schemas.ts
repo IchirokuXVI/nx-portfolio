@@ -129,6 +129,12 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   setOriginSettledResult: schemaId(
     'msg/generatedList.setOriginSettled/response'
   ),
+  /** Add one of the owner's contacts (plan 0114, section 4). */
+  addParticipantRequest: schemaId('msg/generatedList.participant.add/request'),
+  /** Leave a basket as a registered participant (plan 0114, section 6). */
+  leaveRequest: schemaId('msg/generatedList.participant.leave/request'),
+  /** What a person's own sessions hear about their access (section 10). */
+  accessEvent: schemaId('generated-list-sharing/AccessEvent'),
 } as const;
 
 const shareLinkView = object(
@@ -190,6 +196,8 @@ const participantView = object(
     // "you may not see this" against "there is nothing to see" (section 7).
     userAgent: nullableString(),
   },
+  // `joinedAt` and `lastSeenAt` are optional for the same reason, and travel with
+  // `userAgent` since plan 0114 (section 11).
   [
     'id',
     'kind',
@@ -197,8 +205,6 @@ const participantView = object(
     'username',
     'guestNumber',
     'userId',
-    'joinedAt',
-    'lastSeenAt',
     'shareLinkId',
   ]
 );
@@ -1095,7 +1101,34 @@ const setOriginSettledRequest = object(
   ]
 );
 
+const addParticipantRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.addParticipantRequest,
+  {
+    userId: nonEmptyString(),
+    generatedListId: nonEmptyString(),
+    memberUserId: nonEmptyString(),
+    globalUsername: nullableString(),
+  },
+  ['userId', 'generatedListId', 'memberUserId']
+);
+
+const leaveRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.leaveRequest,
+  { generatedListId: nonEmptyString(), participantId: nonEmptyString() },
+  ['generatedListId', 'participantId']
+);
+
+// Ids only, because the person hearing it may be in no room that may read more.
+const accessEvent = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.accessEvent,
+  { generatedListId: nonEmptyString() },
+  ['generatedListId']
+);
+
 export const generatedListSharingSchemas: JsonSchema[] = [
+  addParticipantRequest,
+  leaveRequest,
+  accessEvent,
   shareLinkView,
   shareLinkResult,
   participantView,
@@ -1185,6 +1218,15 @@ export const generatedListSharingMessageContracts: Record<
   },
   [GENERATED_LIST_SHARING_PATTERNS.participantRevoke]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantRequest,
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantResult,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.participantAdd]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.addParticipantRequest,
+    // The owner's view of the row, device string and join time included.
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.participantView,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.participantLeave]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.leaveRequest,
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantResult,
   },
   [GENERATED_LIST_SHARING_PATTERNS.participantResolve]: {

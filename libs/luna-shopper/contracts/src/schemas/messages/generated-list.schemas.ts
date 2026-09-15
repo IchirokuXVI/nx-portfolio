@@ -2,6 +2,7 @@ import {
   GeneratedLineOrigin,
   GeneratedListStatus,
 } from '../../lib/enums/generated-list.enums';
+import { GENERATED_LIST_SHARING_LIMITS } from '../../lib/messages/generated-list-sharing.messages';
 import {
   GENERATED_LIST_LIMITS,
   GENERATED_LIST_PATTERNS,
@@ -21,6 +22,7 @@ import {
   string,
 } from '../builders';
 import { COMMON_IDS } from '../common.schemas';
+import { AUTH_SCHEMA_IDS } from './auth.schemas';
 
 /**
  * Generated shopping list schemas (plan 0050, section 9). Core owns the tables and
@@ -57,6 +59,14 @@ export const GENERATED_LIST_SCHEMA_IDS = {
   updateLineResult: schemaId('generated-list/UpdateGeneratedListLineResult'),
   lineIdRequest: schemaId('msg/generatedList.lineId/request'),
   reorderRequest: schemaId('msg/generatedList.reorderLines/request'),
+  // The baskets shared with the caller (plan 0114, section 8).
+  listSharedRequest: schemaId('msg/generatedList.listShared/request'),
+  sharedCoreView: schemaId('generated-list/SharedGeneratedListCoreView'),
+  sharedCorePage: schemaId('generated-list/SharedGeneratedListCorePage'),
+  ownerView: schemaId('generated-list/GeneratedListOwnerView'),
+  /** The gateway's composed row: core's, with the owner named (section 9). */
+  sharedView: schemaId('generated-list/SharedGeneratedListView'),
+  sharedPage: schemaId('generated-list/SharedGeneratedListPage'),
 } as const;
 
 const lineOriginView = object(
@@ -159,30 +169,67 @@ const listView = object(
   ['id', 'name', 'status', 'generatedAt', 'sourceSnapshot', 'lines']
 );
 
+const summaryViewProperties = {
+  id: nonEmptyString(),
+  name: nullableString(),
+  status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
+  generatedAt: nonEmptyString(),
+  lineCount: integer({ minimum: 0 }),
+  settledLineCount: integer({ minimum: 0 }),
+  boughtLineCount: integer({ minimum: 0 }),
+  notAvailableLineCount: integer({ minimum: 0 }),
+  presentCount: integer({ minimum: 0 }),
+};
+
+const summaryViewRequired = [
+  'id',
+  'name',
+  'status',
+  'generatedAt',
+  'lineCount',
+  'settledLineCount',
+  'boughtLineCount',
+  'notAvailableLineCount',
+  'presentCount',
+];
+
 const summaryView = object(
   GENERATED_LIST_SCHEMA_IDS.summaryView,
+  summaryViewProperties,
+  summaryViewRequired
+);
+
+// A shared basket as core answers it (plan 0114, section 8): a history row, its
+// owner, the owner's name in the one group the two people share, and the date.
+const sharedCoreView = object(
+  GENERATED_LIST_SCHEMA_IDS.sharedCoreView,
   {
-    id: nonEmptyString(),
-    name: nullableString(),
-    status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
-    generatedAt: nonEmptyString(),
-    lineCount: integer({ minimum: 0 }),
-    settledLineCount: integer({ minimum: 0 }),
-    boughtLineCount: integer({ minimum: 0 }),
-    notAvailableLineCount: integer({ minimum: 0 }),
-    presentCount: integer({ minimum: 0 }),
+    ...summaryViewProperties,
+    ownerUserId: nonEmptyString(),
+    // Null when the two people share no approved group or several, which is the
+    // gateway's cue to ask auth for the global name (section 9).
+    ownerZoneUsername: nullableString(),
+    sharedAt: nonEmptyString(),
   },
-  [
-    'id',
-    'name',
-    'status',
-    'generatedAt',
-    'lineCount',
-    'settledLineCount',
-    'boughtLineCount',
-    'notAvailableLineCount',
-    'presentCount',
-  ]
+  [...summaryViewRequired, 'ownerUserId', 'ownerZoneUsername', 'sharedAt']
+);
+
+const ownerView = object(
+  GENERATED_LIST_SCHEMA_IDS.ownerView,
+  { userId: nonEmptyString(), name: string() },
+  ['userId', 'name']
+);
+
+// The same row once the gateway has named the owner, which is what the route
+// answers.
+const sharedView = object(
+  GENERATED_LIST_SCHEMA_IDS.sharedView,
+  {
+    ...summaryViewProperties,
+    owner: ref(GENERATED_LIST_SCHEMA_IDS.ownerView),
+    sharedAt: nonEmptyString(),
+  },
+  [...summaryViewRequired, 'owner', 'sharedAt']
 );
 
 const skippedLineView = object(
@@ -224,6 +271,13 @@ const createRequest = object(
     },
     defaultTargetListId: nullableString(),
     idempotencyKey: nonEmptyString(),
+    // The people to share the basket with as it is created (plan 0114, section 4).
+    memberUserIds: {
+      ...array(nonEmptyString()),
+      maxItems: GENERATED_LIST_SHARING_LIMITS.maxParticipants - 1,
+      uniqueItems: true,
+    },
+    globalUsernames: array(ref(AUTH_SCHEMA_IDS.userUsernameView)),
   },
   ['userId']
 );
@@ -242,6 +296,16 @@ const listMineRequest = object(
     limit: integer({ minimum: 1 }),
     order: string(),
     includeArchived: boolean(),
+  },
+  ['userId']
+);
+
+const listSharedRequest = object(
+  GENERATED_LIST_SCHEMA_IDS.listSharedRequest,
+  {
+    userId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
   },
   ['userId']
 );
@@ -343,10 +407,22 @@ export const generatedListSchemas: JsonSchema[] = [
     GENERATED_LIST_SCHEMA_IDS.page,
     GENERATED_LIST_SCHEMA_IDS.summaryView
   ),
+  sharedCoreView,
+  ownerView,
+  sharedView,
+  paginated(
+    GENERATED_LIST_SCHEMA_IDS.sharedCorePage,
+    GENERATED_LIST_SCHEMA_IDS.sharedCoreView
+  ),
+  paginated(
+    GENERATED_LIST_SCHEMA_IDS.sharedPage,
+    GENERATED_LIST_SCHEMA_IDS.sharedView
+  ),
   sourceInput,
   createRequest,
   idRequest,
   listMineRequest,
+  listSharedRequest,
   updateRequest,
   addLineRequest,
   updateLineRequest,
@@ -366,6 +442,12 @@ export const generatedListMessageContracts: Record<
   [GENERATED_LIST_PATTERNS.listMine]: {
     request: GENERATED_LIST_SCHEMA_IDS.listMineRequest,
     response: GENERATED_LIST_SCHEMA_IDS.page,
+  },
+  [GENERATED_LIST_PATTERNS.listShared]: {
+    request: GENERATED_LIST_SCHEMA_IDS.listSharedRequest,
+    // Core's page, with the owner half named. The route answers `sharedPage`,
+    // which the gateway composes from this and auth.
+    response: GENERATED_LIST_SCHEMA_IDS.sharedCorePage,
   },
   [GENERATED_LIST_PATTERNS.get]: {
     request: GENERATED_LIST_SCHEMA_IDS.idRequest,

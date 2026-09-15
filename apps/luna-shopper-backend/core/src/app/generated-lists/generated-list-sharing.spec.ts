@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import type { DataSource } from 'typeorm';
 import { GeneratedListParticipant, GeneratedListShareLink } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import {
   BASKET_SOURCE_LISTS_SQL,
@@ -42,7 +43,12 @@ interface Harness {
   service: GeneratedListSharingService;
   links: Partial<GeneratedListShareLink>[];
   participants: Partial<GeneratedListParticipant>[];
-  events: { event: RealtimeEvent; generatedListId?: string }[];
+  /** Basket room events carry the basket, and a person's own carry the user. */
+  events: {
+    event: RealtimeEvent;
+    generatedListId?: string;
+    userIds?: string[];
+  }[];
 }
 
 function hash(raw: string): string {
@@ -204,7 +210,18 @@ function build(
     create: (_entity: unknown, data: Partial<GeneratedListParticipant>) => ({
       ...data,
     }),
+    findOne: async (
+      entity: unknown,
+      { where }: { where: Record<string, unknown> }
+    ) => rowsOf(entity).find((row) => matches(row, where)) ?? null,
     save: async (row: Partial<GeneratedListParticipant>) => {
+      // A row read back and changed is that row rather than a second one, which
+      // is what bringing somebody back through the link writes (plan 0114).
+      const existing = participants.find((p) => p.id && p.id === row.id);
+      if (existing) {
+        Object.assign(existing, row);
+        return existing;
+      }
       const saved = { ...row, id: id('p') };
       participants.push(saved);
       return saved;
@@ -227,15 +244,20 @@ function build(
       fn(manager),
   } as unknown as DataSource;
 
+  const publisher = {
+    emitToGeneratedList: (event: RealtimeEvent, generatedListId: string) =>
+      events.push({ event, generatedListId }),
+    // A person's own sessions (plan 0114, section 10).
+    emitToUsers: (event: RealtimeEvent, userIds: readonly string[]) =>
+      events.push({ event, userIds: [...userIds] }),
+  } as unknown as CoreEventsPublisher;
+
   const service = new GeneratedListSharingService(
     dataSource,
     listRepo as never,
     linkRepo as never,
     participantRepo as never,
-    {
-      emitToGeneratedList: (event: RealtimeEvent, generatedListId: string) =>
-        events.push({ event, generatedListId }),
-    } as unknown as CoreEventsPublisher
+    new GeneratedListMembersService(dataSource, publisher)
   );
 
   return { service, links, participants, events };

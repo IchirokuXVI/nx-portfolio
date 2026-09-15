@@ -9,6 +9,7 @@ import {
   type DeleteAccountResult,
   type ForgotPasswordRequest,
   type GetProfileRequest,
+  type GetUsernamesRequest,
   type GoogleLoginRequest,
   type IdentityStats,
   type LoginRequest,
@@ -26,6 +27,7 @@ import {
   type SetUsernameRequest,
   type UpgradeRequest,
   type UserProfileView,
+  type UserUsernameView,
   type VerifyEmailRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { TokenService } from '../tokens/token.service';
@@ -136,6 +138,14 @@ export class IdentityController {
   @MessagePattern(AUTH_PATTERNS.getProfile)
   getProfile(@Payload() req: GetProfileRequest): Promise<UserProfileView> {
     return this.identity.getProfile(req);
+  }
+
+  /** Several accounts' global usernames at once (plan 0114, section 9). */
+  @MessagePattern(AUTH_PATTERNS.getUsernames)
+  getUsernames(
+    @Payload() req: GetUsernamesRequest
+  ): Promise<UserUsernameView[]> {
+    return this.identity.getUsernames(req);
   }
 
   /**

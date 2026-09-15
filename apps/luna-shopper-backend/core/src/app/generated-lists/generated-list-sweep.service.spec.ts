@@ -153,6 +153,7 @@ function build(options: {
     {} as unknown as ProfileService,
     claims.service,
     publisher,
+    {} as never,
     {} as never
   );
 

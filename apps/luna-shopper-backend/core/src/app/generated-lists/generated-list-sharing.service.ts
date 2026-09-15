@@ -3,8 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_SHARING_LIMITS,
   GeneratedListStatus,
+  ParticipantEndedReason,
   ParticipantKind,
-  RealtimeEvent,
+  type AddGeneratedListParticipantRequest,
   type EnsureShareLinkRequest,
   type GeneratedListJoinCoreResult,
   type GeneratedListLinkPreview,
@@ -15,6 +16,7 @@ import {
   type GeneratedListShareLinkView,
   type GeneratedListShareRequest,
   type JoinGeneratedListRequest,
+  type LeaveGeneratedListRequest,
   type ListParticipantsRequest,
   type ParticipantPresenceEntry,
   type PreviewShareLinkRequest,
@@ -23,7 +25,7 @@ import {
   type RevokeShareLinkRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  ConflictException,
+  ForbiddenException,
   NotFoundException,
   UnauthorizedException,
   ValidationException,
@@ -35,7 +37,7 @@ import {
   GeneratedListParticipant,
   GeneratedListShareLink,
 } from '../entities';
-import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { GeneratedListMembersService } from './generated-list-members.service';
 import {
   toParticipantView,
   toShareLinkView,
@@ -82,7 +84,9 @@ export class GeneratedListSharingService {
     private readonly links: Repository<GeneratedListShareLink>,
     @InjectRepository(GeneratedListParticipant)
     private readonly participants: Repository<GeneratedListParticipant>,
-    private readonly events: CoreEventsPublisher
+    // Adding people, the room check every door shares, and the announcements
+    // every change of access makes (plan 0114).
+    private readonly members: GeneratedListMembersService
   ) {}
 
   // --- The owner's share sheet ---------------------------------------------
@@ -181,20 +185,23 @@ export class GeneratedListSharingService {
         return;
       }
       // The owner is never minted from a link, so a cascade cannot lock them out
-      // of their own basket. Guests and registered joiners both go.
+      // of their own basket. Guests and registered joiners both go. A person the
+      // owner added has no link on their row and stays (plan 0114, section 5),
+      // including somebody who came by this link and was added afterwards.
       const minted = await manager.find(GeneratedListParticipant, {
         where: { shareLinkId: live.id, revokedAt: IsNull() },
       });
       for (const participant of minted) {
         await manager.update(GeneratedListParticipant, participant.id, {
           revokedAt: now,
+          endedReason: ParticipantEndedReason.LINK_REVOKED,
         });
         evicted.push(participant);
       }
     });
 
     for (const participant of evicted) {
-      this.announceLeft(list.id, participant);
+      this.members.announceEnded(list.id, participant);
     }
     return { revoked: evicted.length };
   }
@@ -224,9 +231,88 @@ export class GeneratedListSharingService {
     }
     if (!participant.revokedAt) {
       participant.revokedAt = new Date();
+      // The reason the link reads (plan 0114, section 7): a removed person may
+      // not come back through it.
+      participant.endedReason = ParticipantEndedReason.REMOVED;
       await this.participants.save(participant);
-      this.announceLeft(list.id, participant);
+      this.members.announceEnded(list.id, participant);
     }
+    return { id: participant.id };
+  }
+
+  /**
+   * Add one of the owner's contacts to the basket (plan 0114, section 4).
+   *
+   * Owner only and not found for anybody else, like every gesture on the share
+   * sheet. The person must share an approved group with the owner now, and what
+   * happens to a row they already have is the table on
+   * {@link GeneratedListMembersService.invite}.
+   *
+   * The answer is the owner's view of the row, device string and join time
+   * included, because the owner passes section 5.2 by construction. The room
+   * hears the least privileged view, and only when the row became live.
+   */
+  async addParticipant(
+    req: AddGeneratedListParticipantRequest
+  ): Promise<GeneratedListParticipantView> {
+    const list = await this.loadOwned(req.userId, req.generatedListId);
+    const common = await this.members.requireContacts(
+      list.ownerUserId,
+      [req.memberUserId],
+      'userId'
+    );
+    const username = this.members.nameFor(
+      common.get(req.memberUserId),
+      req.globalUsername
+    );
+
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      await this.members.lock(manager, list.id);
+      return this.members.invite(manager, {
+        generatedListId: list.id,
+        userId: req.memberUserId,
+        invitedByUserId: req.userId,
+        username,
+      });
+    });
+
+    if (outcome.becameLive) {
+      this.members.announceLive(list.id, outcome.participant);
+    }
+    return toParticipantView(outcome.participant, true);
+  }
+
+  /**
+   * Leave a basket (plan 0114, section 6), as the participant the gateway's
+   * guard resolved.
+   *
+   * A registered participant only. A guest's place on a basket is the link's to
+   * give and the owner's to take away, and the plan leaves it there. The owner's
+   * standing comes from owning the basket, which no row can give up.
+   *
+   * Leaving is the one ending the link can undo: the reason written here is what
+   * lets the same person join again through it (section 7).
+   */
+  async leave(req: LeaveGeneratedListRequest): Promise<{ id: string }> {
+    const participant = await this.liveParticipantById(
+      req.participantId,
+      req.generatedListId
+    );
+    if (!participant) {
+      throw new UnauthorizedException('Not a participant of this basket');
+    }
+    if (participant.kind === ParticipantKind.GUEST) {
+      throw new ForbiddenException('A guest cannot leave a basket');
+    }
+    if (participant.kind === ParticipantKind.OWNER) {
+      throw new ValidationException('The owner cannot leave their own basket', {
+        messageArgs: { field: 'participantId' },
+      });
+    }
+    participant.revokedAt = new Date();
+    participant.endedReason = ParticipantEndedReason.LEFT;
+    await this.participants.save(participant);
+    this.members.announceEnded(req.generatedListId, participant);
     return { id: participant.id };
   }
 
@@ -313,26 +399,7 @@ export class GeneratedListSharingService {
         where: { generatedListId: list.id, userId: req.userId },
       });
       if (existing) {
-        if (existing.revokedAt) {
-          // Rejoining a link you were thrown off is not a way back on. Section
-          // 3.4's per participant revoke would mean nothing if it were.
-          throw new UnauthorizedException(
-            'This link is no longer available to you'
-          );
-        }
-        existing.lastSeenAt = new Date();
-        // Filled in when it is missing and left alone when it is not (plan
-        // 0054, section 2.4). A name already on the row is a snapshot taken when
-        // they joined, and somebody who has since renamed their account keeps
-        // the old one on baskets they are already on; a null is a row from
-        // before the plan, which is repair rather than a rename.
-        existing.username ??= normalizeUsername(req.username);
-        await this.participants.save(existing);
-        return {
-          generatedListId: list.id,
-          participant: this.view(existing),
-          sessionSecret: null,
-        };
+        return this.rejoin(list, link, existing, req);
       }
     }
 
@@ -341,22 +408,52 @@ export class GeneratedListSharingService {
       ? null
       : randomBytes(32).toString('base64url');
 
-    const participant = await this.dataSource.transaction(async (manager) => {
+    let participant: GeneratedListParticipant;
+    try {
+      participant = await this.mint(
+        list,
+        link,
+        req,
+        displayName,
+        sessionSecret
+      );
+    } catch (error) {
+      // Two first joins by one person at once (plan 0114, section 11). The lock
+      // serializes the inserts, but the lookup above ran before it, so the
+      // second join reaches the insert and loses the unique index. The row it
+      // lost to is the first join's, and section 7's table says what it means.
+      if (req.userId && isUniqueViolation(error)) {
+        const winner = await this.participants.findOne({
+          where: { generatedListId: list.id, userId: req.userId },
+        });
+        if (winner) {
+          return this.rejoin(list, link, winner, req);
+        }
+      }
+      throw error;
+    }
+
+    this.members.announceLive(list.id, participant);
+    return {
+      generatedListId: list.id,
+      participant: this.view(participant),
+      sessionSecret,
+    };
+  }
+
+  /** Write a new participant row from a link, under the basket's lock. */
+  private mint(
+    list: GeneratedList,
+    link: GeneratedListShareLink,
+    req: JoinGeneratedListRequest,
+    displayName: string | null,
+    sessionSecret: string | null
+  ): Promise<GeneratedListParticipant> {
+    return this.dataSource.transaction(async (manager) => {
       // Serializes concurrent joins on this basket, which is what lets the guest
       // number below be a `max + 1` rather than a sequence (see the SQL).
-      await manager.query(
-        `SELECT id FROM "generated_lists" WHERE id = $1 FOR UPDATE`,
-        [list.id]
-      );
-
-      const total = await manager.count(GeneratedListParticipant, {
-        where: { generatedListId: list.id, revokedAt: IsNull() },
-      });
-      if (total >= GENERATED_LIST_SHARING_LIMITS.maxParticipants) {
-        throw new ConflictException(
-          'This basket already has as many people as it takes'
-        );
-      }
+      await this.members.lock(manager, list.id);
+      await this.members.checkRoom(manager, list.id);
 
       let guestNumber: number | null = null;
       if (!req.userId) {
@@ -383,19 +480,97 @@ export class GeneratedListSharingService {
           joinedAt: new Date(),
           lastSeenAt: new Date(),
           revokedAt: null,
+          endedReason: null,
+          invitedAt: null,
+          invitedByUserId: null,
         })
       );
     });
+  }
 
-    this.events.emitToGeneratedList(
-      RealtimeEvent.GeneratedListParticipantJoined,
-      list.id,
-      this.view(participant)
-    );
+  /**
+   * A registered person opening a link while they already have a row on this
+   * basket (plan 0114, section 7).
+   *
+   * | Their row                              | Result                   |
+   * | -------------------------------------- | ------------------------ |
+   * | live                                   | as before plan 0114      |
+   * | ended with `LEFT`                      | brought back by the link |
+   * | ended with `REMOVED` or `LINK_REVOKED` | refused with 401         |
+   *
+   * Leaving was the person's own choice, so the link they still hold may undo
+   * it. A removal and a revoked link were the owner's, and the link is not a way
+   * round either: section 3.4's revoke would mean nothing if it were.
+   */
+  private async rejoin(
+    list: GeneratedList,
+    link: GeneratedListShareLink,
+    existing: GeneratedListParticipant,
+    req: JoinGeneratedListRequest
+  ): Promise<GeneratedListJoinCoreResult> {
+    if (!existing.revokedAt) {
+      existing.lastSeenAt = new Date();
+      // Filled in when it is missing and left alone when it is not (plan
+      // 0054, section 2.4). A name already on the row is a snapshot taken when
+      // they joined, and somebody who has since renamed their account keeps
+      // the old one on baskets they are already on; a null is a row from
+      // before the plan, which is repair rather than a rename.
+      existing.username ??= normalizeUsername(req.username);
+      await this.participants.save(existing);
+      return {
+        generatedListId: list.id,
+        participant: this.view(existing),
+        sessionSecret: null,
+      };
+    }
+    if (existing.endedReason !== ParticipantEndedReason.LEFT) {
+      throw new UnauthorizedException(
+        'This link is no longer available to you'
+      );
+    }
+
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      await this.members.lock(manager, list.id);
+      // Read again under the lock: another tab may have brought them back
+      // already, or the owner may have removed them since the read above.
+      const row = await manager.findOne(GeneratedListParticipant, {
+        where: { id: existing.id },
+      });
+      if (!row) {
+        throw new NotFoundException('This link is no longer accepting people');
+      }
+      if (!row.revokedAt) {
+        return { row, becameLive: false };
+      }
+      if (row.endedReason !== ParticipantEndedReason.LEFT) {
+        throw new UnauthorizedException(
+          'This link is no longer available to you'
+        );
+      }
+      await this.members.checkRoom(manager, list.id);
+
+      const now = new Date();
+      row.revokedAt = null;
+      row.endedReason = null;
+      // Back by the link, so the link holds them again: revoking it with its
+      // people reaches them, as it reaches anybody else it let in.
+      row.shareLinkId = link.id;
+      row.invitedAt = null;
+      row.invitedByUserId = null;
+      row.joinedAt = now;
+      row.lastSeenAt = now;
+      row.userAgent = normalizeUserAgent(req.userAgent) ?? row.userAgent;
+      row.username ??= normalizeUsername(req.username);
+      return { row: await manager.save(row), becameLive: true };
+    });
+
+    if (outcome.becameLive) {
+      this.members.announceLive(list.id, outcome.row);
+    }
     return {
       generatedListId: list.id,
-      participant: this.view(participant),
-      sessionSecret,
+      participant: this.view(outcome.row),
+      sessionSecret: null,
     };
   }
 
@@ -841,17 +1016,6 @@ export class GeneratedListSharingService {
     participant: GeneratedListParticipant
   ): GeneratedListParticipantView {
     return toParticipantView(participant, false);
-  }
-
-  private announceLeft(
-    generatedListId: string,
-    participant: GeneratedListParticipant
-  ): void {
-    this.events.emitToGeneratedList(
-      RealtimeEvent.GeneratedListParticipantLeft,
-      generatedListId,
-      this.view(participant)
-    );
   }
 }
 

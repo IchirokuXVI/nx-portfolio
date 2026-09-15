@@ -89,29 +89,31 @@ and after the defects, each with its spec run.
 
 ## 2. Contacts
 
-`GET /v1/contacts` answers the people the caller shares a group with, grouped by group:
+`GET /v1/contacts?cursor&limit` answers the people the caller shares a group with, one
+membership per row, a page at a time:
 
 ```ts
 {
-  zones: {
+  items: {
+    userId: string;
     zoneId: string;
-    zoneName: string;
-    members: {
-      userId: string;
-      username: string;
-    }
-    [];
+    username: string;
   }
   [];
+  nextCursor: string | null;
 }
 ```
 
-- Groups where the caller's membership is `APPROVED`, ordered by name.
-- Members whose membership is `APPROVED`, ordered by `username`, the caller excluded.
+- Every membership whose status is `APPROVED`, in every group where the caller's own
+  membership is `APPROVED`. The caller is excluded.
 - Temporary accounts are included.
-- `username` is the membership's name in that group.
-- If a group or a membership count is capped in the code, cite the cap and answer in one
-  read. If nothing bounds it, page by group with the house cursor, and stop and ask first.
+- `username` is the membership's name in that group, so a person in two groups is two rows.
+- **The answer is neither grouped nor ordered for display.** Nothing in the code caps the
+  members of a group or the groups one person joins. So the answer is paged by membership
+  with the house cursor, and a page holds a fixed number of rows however large one group is.
+  The client groups the rows by `zoneId` with the group names it reads from `GET /v1/zones`,
+  and sorts them. This replaced a grouped answer, by the user's decision while the plan was
+  built.
 
 ## 3. The participant row learns how it began and ended
 

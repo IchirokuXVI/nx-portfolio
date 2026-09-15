@@ -1,4 +1,7 @@
-import { ParticipantKind } from '@portfolio/luna-shopper/contracts';
+import {
+  ParticipantEndedReason,
+  ParticipantKind,
+} from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { GeneratedList } from './generated-list.entity';
@@ -32,6 +35,10 @@ import { GeneratedList } from './generated-list.entity';
 @Index('uq_generated_list_participants_user', ['generatedListId', 'userId'], {
   unique: true,
   where: '"userId" IS NOT NULL',
+})
+// The shared baskets read (plan 0114, section 8): one person's live rows.
+@Index('ix_generated_list_participants_user_live', ['userId'], {
+  where: '"userId" IS NOT NULL AND "revokedAt" IS NULL',
 })
 export class GeneratedListParticipant extends BaseEntity {
   @Column({ type: 'uuid' })
@@ -137,4 +144,28 @@ export class GeneratedListParticipant extends BaseEntity {
    */
   @Column({ type: 'timestamptz', nullable: true })
   revokedAt!: Date | null;
+
+  /**
+   * Why {@link revokedAt} is set (plan 0114, section 3), and null exactly when it
+   * is not, which a check constraint holds.
+   *
+   * The reason is what the link reads: a person who `LEFT` may come back through
+   * it, and a person `REMOVED` or `LINK_REVOKED` may not (section 7).
+   */
+  @Column({ type: 'varchar', nullable: true })
+  endedReason!: ParticipantEndedReason | null;
+
+  /**
+   * When the owner added this person from their groups (plan 0114, section 4).
+   *
+   * A live row with this set and {@link shareLinkId} null is an **invited
+   * member**: revoking the link does not reach it, because the cascade walks
+   * `shareLinkId`. Null for a person who came by the link and was never added.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  invitedAt!: Date | null;
+
+  /** The owner who added this person. Set exactly when {@link invitedAt} is. */
+  @Column({ type: 'uuid', nullable: true })
+  invitedByUserId!: string | null;
 }

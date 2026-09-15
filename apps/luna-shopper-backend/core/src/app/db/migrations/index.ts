@@ -15,6 +15,7 @@ import { ProfileLocationPreferences1756001600000 } from './1756001600000-Profile
 import { LineProductGroupSubscription1756001700000 } from './1756001700000-LineProductGroupSubscription';
 import { CoreAudit1756001800000 } from './1756001800000-CoreAudit';
 import { WaitingSettlements1756001900000 } from './1756001900000-WaitingSettlements';
+import { ParticipantInvitesAndEndings1756002000000 } from './1756002000000-ParticipantInvitesAndEndings';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -67,4 +68,8 @@ export const CORE_MIGRATIONS = [
   // migration last touched, so it follows both and nothing else (plan 0093,
   // section 5).
   WaitingSettlements1756001900000,
+  // Additive on `generated_list_participants`, which plan 0051's migration
+  // created and plan 0054's last touched, so it follows both and nothing else
+  // (plan 0114, section 3).
+  ParticipantInvitesAndEndings1756002000000,
 ];

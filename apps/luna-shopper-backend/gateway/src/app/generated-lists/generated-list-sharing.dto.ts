@@ -63,6 +63,17 @@ export class RevokeShareLinkDto {
   revokeParticipants?: boolean;
 }
 
+/** Add one of the caller's contacts to a basket (plan 0114, section 4). */
+export class AddGeneratedListParticipantDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The person to add, chosen from GET /v1/contacts. They must share an approved group with the caller at this moment.',
+  })
+  @IsUUID()
+  userId!: string;
+}
+
 export class JoinGeneratedListDto {
   @ApiPropertyOptional({
     maxLength: GENERATED_LIST_SHARING_LIMITS.displayNameMaxLength,

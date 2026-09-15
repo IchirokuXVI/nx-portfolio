@@ -13,6 +13,7 @@ import {
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ProfileService } from '../profiles/profile.service';
+import type { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListService } from './generated-list.service';
 import {
@@ -276,7 +277,21 @@ function build(options: {
     emitToUsers: (event: RealtimeEvent, userIds: readonly string[]) => {
       events.push({ event, userIds });
     },
+    // A deletion names the basket room beside the owner since plan 0114, so it
+    // goes through the explicit audience. Recorded by its users, as before.
+    emitTo: (
+      event: RealtimeEvent,
+      audience: { userIds?: readonly string[] }
+    ) => {
+      events.push({ event, userIds: audience.userIds ?? [] });
+    },
   } as unknown as CoreEventsPublisher;
+
+  // Nobody is shared a basket in these runs (plan 0114): no members are named,
+  // and a deletion finds nobody to tell.
+  const members = {
+    liveRegistered: async () => [],
+  } as unknown as GeneratedListMembersService;
 
   const claims = fakeLineClaims({}, () => options.claiming ?? []);
 
@@ -293,7 +308,8 @@ function build(options: {
     profiles,
     claims.service,
     publisher,
-    new GeneratedListOrderService(orderRepo as never)
+    new GeneratedListOrderService(orderRepo as never),
+    members
   );
 
   return { service, written, events, claims, orderReads: () => orderReads };

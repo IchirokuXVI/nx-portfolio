@@ -11,7 +11,9 @@ import {
   type GeneratedListRunResult,
   type GeneratedListView,
   type ListGeneratedListsRequest,
+  type ListSharedGeneratedListsRequest,
   type ReorderGeneratedListLinesRequest,
+  type SharedGeneratedListCorePage,
   type UpdateGeneratedListLineRequest,
   type UpdateGeneratedListRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -43,6 +45,14 @@ export class GeneratedListController {
     @Payload() req: ListGeneratedListsRequest
   ): Promise<GeneratedListPage> {
     return this.lists.listMine(req);
+  }
+
+  /** The baskets other people shared with the caller (plan 0114, section 8). */
+  @MessagePattern(GENERATED_LIST_PATTERNS.listShared)
+  listShared(
+    @Payload() req: ListSharedGeneratedListsRequest
+  ): Promise<SharedGeneratedListCorePage> {
+    return this.lists.listShared(req);
   }
 
   @MessagePattern(GENERATED_LIST_PATTERNS.get)

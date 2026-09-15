@@ -18,6 +18,7 @@ import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineRenameService } from './generated-list-line-rename.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
@@ -84,6 +85,10 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     GeneratedListOrderService,
     GeneratedListLineService,
     GeneratedListSharingService,
+    // The people an owner shares a basket with on purpose (plan 0114). The run
+    // and the share sheet both add people, so the contact check, the name rule
+    // and the row table live here rather than in either of them.
+    GeneratedListMembersService,
     GeneratedListSettleService,
     // The reverse of the settle (plan 0054, section 3), and a provider of its
     // own for the same reason: it is the other operation here that reaches a
