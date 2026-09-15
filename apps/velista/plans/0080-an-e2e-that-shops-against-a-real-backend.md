@@ -1,3 +1,5 @@
+> **PR:** [#370](https://github.com/IchirokuXVI/nx-portfolio/pull/370)
+
 # 0080: an e2e that shops against a real backend
 
 > `0050` section 6 asked for one browser test that follows an owner and a guest through a
