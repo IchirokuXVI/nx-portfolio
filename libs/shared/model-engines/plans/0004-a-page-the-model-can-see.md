@@ -1,3 +1,5 @@
+> **PR:** [#367](https://github.com/IchirokuXVI/nx-portfolio/pull/367)
+
 # 0004 A page the model can see
 
 `ask` takes an image. That is the whole of this plan, and it exists because the
