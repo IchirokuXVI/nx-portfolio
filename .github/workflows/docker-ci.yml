@@ -4,7 +4,7 @@ name: Staging deploy (main)
 # mutable `staging` image tag, and rolls the changed staging deployments so they
 # re-pull. Production is untouched here; it is deployed only by release.yml.
 #
-# Six jobs rather than one long one (k8s/plans/0007). Two reasons:
+# Seven jobs rather than one long one (k8s/plans/0007). Two reasons:
 #
 #   Speed. The suites and the build have no dependency on each other, so they run at
 #   the same time instead of in a line.
@@ -123,6 +123,7 @@ jobs:
       deployments: ${{ steps.lists.outputs.deployments }}
       e2e: ${{ steps.lists.outputs.e2e }}
       luna: ${{ steps.lists.outputs.luna }}
+      velista_luna: ${{ steps.lists.outputs.velista_luna }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -196,9 +197,21 @@ jobs:
           apps_tobuild=$(list --type app --with-target build:docker)
           e2e=$(list --with-target e2e)
 
+          # The browser gate (velista plan 0080) runs velista-luna-e2e on its own,
+          # against a backend, so it reads the flag rather than the list.
+          if echo "$e2e" | tr ',' '\n' | grep -qx 'velista-luna-e2e'; then
+            velista_luna=true
+          else
+            velista_luna=false
+          fi
+
+          # What e2e-frontend runs: browser specs with the network stubbed, and
+          # nothing that needs a backend. luna-shopper-backend-e2e is the API
+          # suite, run by e2e-luna against a stack; here it would skip itself and
+          # report green. velista-luna-e2e needs both halves and has its own job.
           # odontogram-e2e is excluded (pre-existing tsconfig/spec breakage; see
           # k8s/README.md).
-          e2e=$(echo "$e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^odontogram-e2e$' | paste -sd, - || true)
+          e2e=$(echo "$e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^(odontogram-e2e|luna-shopper-backend-e2e|velista-luna-e2e)$' | paste -sd, - || true)
 
           # The deployment name is the lowercased project name. The `-staging` suffix
           # went away with the env dimension (k8s plan 0002): staging is a different
@@ -214,6 +227,7 @@ jobs:
             echo "deployments=$deployments"
             echo "e2e=$e2e"
             echo "luna=$luna"
+            echo "velista_luna=$velista_luna"
           } >> "$GITHUB_OUTPUT"
 
           {
@@ -222,6 +236,7 @@ jobs:
             echo "- apps to build: \`${apps_tobuild:-(none)}\`"
             echo "- testable: \`${testable:-(none)}\`"
             echo "- e2e: \`${e2e:-(none)}\`"
+            echo "- browser gate (velista-luna-e2e): \`${velista_luna}\`"
             echo "- deployments: \`${deployments:-(none)}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -350,7 +365,7 @@ jobs:
       # around that: a direct push to main, a merge whose two sides were each
       # green alone, or a manual re-run. Everything after this step is expensive
       # or public. The images are built and pushed to a registry under a mutable
-      # tag, two e2e gates run against them, and then staging is upgraded with
+      # tag, three e2e gates run against them, and then staging is upgraded with
       # --atomic, where a bundle that cannot resolve an import does not kill one
       # pod but fails a Helm hook and rolls the whole release back.
       #
@@ -589,17 +604,167 @@ jobs:
             -f k8s/e2e/luna-shopper-backend/compose.apps.yml down -v --remove-orphans || true
 
   # ---------------------------------------------------------------------------
+  # The browser gate (velista plan 0080): velista-luna-e2e, Playwright specs that
+  # drive the staging velista image against the staging Luna images, seeded with
+  # the demo world.
+  #
+  # The other two gates each hold half of this. e2e-frontend has browsers and no
+  # backend, so its velista specs stub the network; e2e-luna has a backend and no
+  # browser, so it speaks to the gateway directly. A basket shared between an
+  # owner and a guest can only be tested with both, and this job stands both
+  # stacks up on one runner: the Luna tier 2 images through `stack.sh e2e-up`,
+  # then the frontend images behind the reverse proxy with compose.luna.yml,
+  # which answers the two backend hosts the staging velista bundle has compiled
+  # in (api. and rt.) by forwarding them to the published gateway and realtime
+  # ports on the host.
+  #
+  # It gates the deploy like the other two, and it runs only when the suite is
+  # affected, which its implicitDependencies make true for any change to velista
+  # or to the five services it drives.
+  # ---------------------------------------------------------------------------
+  e2e-velista-luna:
+    needs: [setup, build]
+    if: needs.setup.outputs.velista_luna == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # As on e2e-luna: a skip, an empty suite or a stack that fails to come up
+      # fails the job, and therefore blocks the deploy.
+      LUNA_REQUIRE_STACK: '1'
+      COMPOSE_PROJECT_NAME: luna-browser-${{ github.run_id }}
+      LUNA_IMAGE_TAG: staging
+      E2E_IMAGE_TAG: staging
+      E2E_SEED: '1'
+      # The origin the browser runs the app from, which is the one origin the
+      # gateway and realtime images have to allow. compose.apps.yml reads it.
+      CORS_ORIGINS: https://staging.velista.app
+      # velista's origin and the gateway's, as the proxy serves them.
+      VELISTA_BASE_URL: https://staging.velista.app
+      E2E_GATEWAY_URL: https://api.staging.velista.app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Resolve the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Configure the Luna Shopper service environment
+        run: |
+          # As on e2e-luna: the service .env files the migration CLI and the seed
+          # read, and a throwaway JWT keypair the images mount.
+          bash k8s/e2e/luna-shopper-backend/luna-slot.sh 0
+          rm -f k8s/e2e/luna-shopper-backend/.env.slot
+
+      - name: Start the Luna Shopper images
+        run: |
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          export LUNA_IMAGE_PREFIX="ghcr.io/$REPO_LC"
+
+          # All six at the staging tag, for the reason e2e-luna pulls them: the
+          # combination about to be rolled out.
+          docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
+            -f k8s/e2e/luna-shopper-backend/compose.apps.yml pull
+
+          # Infrastructure with its migrations, then the images, and no suite:
+          # the stack stays up for the browser suite below.
+          bash k8s/e2e/luna-shopper-backend/stack.sh e2e-up
+
+      - name: Start the frontend images with the backend hosts
+        run: |
+          # The three hosts e2e-frontend names, plus the two backend hosts the
+          # staging velista bundle has compiled in, all at the local proxy.
+          echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app api.staging.velista.app rt.staging.velista.app" | sudo tee -a /etc/hosts
+
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          export E2E_IMAGE_PREFIX="ghcr.io/$REPO_LC"
+
+          docker compose -f k8s/e2e/portfolio-frontend/compose.yml \
+            -f k8s/e2e/portfolio-frontend/compose.luna.yml up -d --pull always
+
+          # velista through the proxy, and the gateway through the proxy: the
+          # second is the one this job adds, and a proxy that cannot reach the
+          # host is invisible until every spec sits on the startup gate.
+          for url in https://staging.velista.app/ https://api.staging.velista.app/health/ready; do
+            ok=''
+            for i in $(seq 1 45); do
+              if curl -kfsS "$url" >/dev/null 2>&1; then
+                echo "  ok  $url"; ok=1; break
+              fi
+              echo "waiting for $url ($i)..."; sleep 2
+            done
+            if [ -z "$ok" ]; then
+              echo "::error::$url did not answer through the e2e proxy"
+              exit 1
+            fi
+          done
+
+      # Uncached, like every suite whose result depends on a live stack: Nx
+      # hashes none of the URLs above.
+      - name: Browser e2e against the seeded backend
+        run: npx nx e2e velista-luna-e2e --skip-nx-cache
+
+      - name: Collect the compose logs
+        if: failure()
+        run: |
+          mkdir -p test-output/portfolio-frontend test-output/luna-shopper-backend
+          docker compose -f k8s/e2e/portfolio-frontend/compose.yml \
+            -f k8s/e2e/portfolio-frontend/compose.luna.yml logs --no-color \
+            > test-output/portfolio-frontend/compose.log 2>&1 || true
+          docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
+            -f k8s/e2e/luna-shopper-backend/compose.apps.yml logs --no-color \
+            > test-output/luna-shopper-backend/compose.log 2>&1 || true
+
+      - name: Upload the browser gate diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: velista-luna-e2e-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            test-output/luna-shopper-backend/
+            test-output/portfolio-frontend/
+            dist/.playwright/apps/velista-luna-e2e/
+
+      - name: Tear both stacks down
+        if: always()
+        run: |
+          docker compose -f k8s/e2e/portfolio-frontend/compose.yml \
+            -f k8s/e2e/portfolio-frontend/compose.luna.yml down -v || true
+          bash k8s/e2e/luna-shopper-backend/stack.sh e2e-down || true
+
+  # ---------------------------------------------------------------------------
   # The deploy, on its own, so it can be retried on its own.
   #
   # The `if` is not decoration. A job whose `needs` contains a SKIPPED job is skipped
-  # by default, and e2e-frontend / e2e-luna skip whenever nothing relevant is
+  # by default, and the three e2e gates skip whenever nothing relevant is
   # affected, so a plain needs list would silently refuse to deploy on exactly the
   # commits that are cheapest to deploy. Testing each result against 'failure' rather
   # than for 'success' is what lets `skipped` through, and `!cancelled()` rather than
   # `always()` is what stops a cancelled run from deploying anyway.
   # ---------------------------------------------------------------------------
   deploy:
-    needs: [setup, lint-test, build, e2e-frontend, e2e-luna]
+    needs: [setup, lint-test, build, e2e-frontend, e2e-luna, e2e-velista-luna]
     if: >-
       !cancelled()
       && needs.setup.result == 'success'
@@ -607,6 +772,7 @@ jobs:
       && needs.build.result != 'failure'
       && needs.e2e-frontend.result != 'failure'
       && needs.e2e-luna.result != 'failure'
+      && needs.e2e-velista-luna.result != 'failure'
     runs-on: ubuntu-latest
     steps:
       # Only the chart is needed here, and only at this commit.

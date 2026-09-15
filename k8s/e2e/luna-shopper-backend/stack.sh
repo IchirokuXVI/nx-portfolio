@@ -13,6 +13,8 @@
 #   nx run luna-shopper-backend:stack:down
 #   nx run luna-shopper-backend:test-integration:stack
 #   nx run luna-shopper-backend:e2e:stack
+#   stack.sh e2e-images        (CI tier 2: the same suite against the images)
+#   stack.sh e2e-up / e2e-down (that stack standing, for velista-luna-e2e)
 #   nx run luna-shopper-backend:observability:up
 #   nx run luna-shopper-backend:observability:down
 #
@@ -586,29 +588,61 @@ e2e() {
   return $rc
 }
 
-# Tier 2: the same suite, against the five built images (plan 0015, section 2).
-e2e_images() {
+# The tier 2 stack, standing, with no suite (velista plan 0080, section 4): the
+# infrastructure with its migrations, the service ports exported, and the six
+# service images up and healthy. It returns with everything listening, which is
+# what a suite that lives in another project needs. The browser gate runs
+# `velista-luna-e2e` against this stack from the workflow, with the frontend
+# images beside it, and neither of those belongs in here.
+#
+# `e2e_images` below is this plus the API suite plus the teardown, so the stack
+# the browser suite gets is the stack the API suite passed on, by construction
+# rather than by two copies of the same three steps.
+#
+# Nothing is left behind if the images cannot come up, on the same reasoning as
+# up_or_clean: a healthcheck that never passes would otherwise abort under
+# `set -e` with half a stack for the next run to inherit. The image logs are
+# collected first, because a service that dies on boot inside its image says so
+# there and nowhere else.
+e2e_up() {
   up_or_clean || return 1
 
   export_service_ports
 
-  local rc=0
-  echo "==> starting the five service images"
-  compose_apps up -d --wait || rc=$?
-
-  if [[ $rc -eq 0 ]]; then
-    run_suite || rc=$?
+  echo "==> starting the six service images"
+  if ! compose_apps up -d --wait; then
+    compose_apps logs --tail 100 || true
+    collect_logs compose_apps
+    compose_apps down -v --remove-orphans
+    return 1
   fi
 
+  echo "==> the service images are up: gateway :$LUNA_GATEWAY_PORT / realtime :$LUNA_REALTIME_PORT"
+}
+
+# Tier 2: the same suite, against the built images (plan 0015, section 2).
+e2e_images() {
+  e2e_up || return 1
+
+  local rc=0
+  run_suite || rc=$?
+
   if [[ $rc -ne 0 ]]; then
-    # The image logs are the whole point of tier 2: a service that dies on boot
-    # inside its image says so here and nowhere else.
+    # The image logs are the whole point of tier 2: a service that dies under
+    # the suite inside its image says so here and nowhere else.
     compose_apps logs --tail 100 || true
     collect_logs compose_apps
   fi
 
   compose_apps down -v --remove-orphans
   return $rc
+}
+
+# The teardown that matches e2e-up: both compose files, so the service
+# containers go with the infrastructure rather than being reported as orphans.
+e2e_down() {
+  echo "==> tearing the compose stack and the service images down (including volumes)"
+  compose_apps down -v --remove-orphans
 }
 
 # Run the Playwright suite against whatever is listening on the resolved ports.
@@ -635,7 +669,7 @@ run_suite() {
 }
 
 usage() {
-  echo "usage: stack.sh [-p|--profile <name>] {bootstrap | up | down | test-integration | e2e | e2e-images}" >&2
+  echo "usage: stack.sh [-p|--profile <name>] {bootstrap | up | down | test-integration | e2e | e2e-images | e2e-up | e2e-down}" >&2
 }
 
 # Options come before the verb. The loop stops at the first non-option so the
@@ -699,6 +733,10 @@ case "${1:-}" in
   test-integration) bootstrap_config && test_integration ;;
   e2e) bootstrap_config && e2e ;;
   e2e-images) bootstrap_config && e2e_images ;;
+  # The standing tier 2 stack for a suite in another project (velista plan
+  # 0080). `e2e-down` is exempt from configuration for the reason `down` is.
+  e2e-up) bootstrap_config && e2e_up ;;
+  e2e-down) e2e_down ;;
   *)
     usage
     exit 2
