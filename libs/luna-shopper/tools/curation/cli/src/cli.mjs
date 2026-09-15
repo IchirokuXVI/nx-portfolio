@@ -11,8 +11,11 @@
  * The rehearsal slot is ephemeral: this checkout is not configured for it, and
  * whatever slot you are serving here keeps running throughout. See `slots.mjs`.
  *
- *   node libs/luna-shopper/curation-cli/src/cli.mjs --implementation suggestions
- *   node libs/luna-shopper/curation-cli/src/cli.mjs --apply .curation-runs/<id>/decisions.jsonl
+ *   npx nx run luna-shopper/curation-cli:curate -- --implementation suggestions
+ *   npx nx run luna-shopper/curation-cli:curate -- --apply .curation-runs/<id>/decisions.jsonl
+ *
+ * Keep the `--`. Nx reads the flags in front of it as its own, and `--verbose`
+ * is one of them, so a flag typed without the `--` is dropped in silence.
  *
  * THE MANUAL SMOKE RUN, against slot 0 as the main API.
  *
@@ -25,7 +28,7 @@
  *      nothing is ever written to it before `--apply`.
  *   2. bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
  *      Note which slot the run will take, so the next step can be recognized.
- *   3. node libs/luna-shopper/curation-cli/src/cli.mjs \
+ *   3. npx nx run luna-shopper/curation-cli:curate -- \
  *        --implementation suggestions --main-url http://localhost:3000 \
  *        --run-dir .curation-runs/smoke --chain <one supermarket id>
  *      Watch stderr: it names the slot, then the run id and the row count, then
@@ -55,13 +58,15 @@ import {
   emptyUsage,
   engineEntry,
   stripFence,
-} from '../../model-engines/src/index.mjs';
+} from '../../../../../shared/model-engines/src/index.mjs';
 import { IMPLEMENTATION_NAMES, deciderPath, makeDecider } from './decider.mjs';
 import { runCuration } from './orchestrator.mjs';
 import { REHEARSAL_SERVICES, makeSlots, waitForGateway } from './slots.mjs';
 
-/** The workspace root, four directories above this file. */
-export const REPO_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
+/** The workspace root, six directories above this file. */
+export const REPO_ROOT = fileURLToPath(
+  new URL('../../../../../..', import.meta.url)
+);
 
 /** Where a run keeps its state when the operator names no directory. */
 const DEFAULT_RUN_ROOT = '.curation-runs';
@@ -94,7 +99,10 @@ export function usageText(engines = ENGINES) {
     })
     .join('\n');
 
-  return `Usage: node cli.mjs [options]
+  return `Usage: npx nx run luna-shopper/curation-cli:curate -- [options]
+
+  Keep the \`--\`. Nx reads what comes before it as its own flags, so an option
+  typed without the \`--\` is dropped in silence.
 
 ${line('--implementation <suggestions|groups>', 'which decider to drive; asked when the')}
 ${indent}terminal can be asked and it is absent

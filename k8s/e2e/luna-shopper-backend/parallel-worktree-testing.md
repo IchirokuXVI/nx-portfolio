@@ -260,7 +260,7 @@ which are generated only when they are absent because no service can boot withou
 them, and a `--keep-data` lock, which is in the main `.git` directory and is the
 only thing that stops `--auto` handing away databases somebody kept on purpose.
 
-The curation toolchain (`libs/luna-shopper/curation-cli`) takes its rehearsal slot
+The curation toolchain (`libs/luna-shopper/tools/curation/cli`) takes its rehearsal slot
 this way, which is why a rehearsal no longer disturbs the stack you are serving.
 
 ### A re-run never overwrites what you edited

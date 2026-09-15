@@ -9,7 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ENGINES } from '../../model-engines/src/index.mjs';
+import { ENGINES } from '../../../../../shared/model-engines/src/index.mjs';
 import {
   REPO_ROOT,
   defaultRunDir,
@@ -195,7 +195,7 @@ test('--apply takes no slot and makes no model call', async () => {
   assert.equal(code, 0);
   // One decider child, in serve mode, and one request over it.
   assert.equal(started.length, 1);
-  assert.match(started[0].args[0], /curation-suggestions\/src\/cli\.mjs$/);
+  assert.match(started[0].args[0], /curation\/suggestions\/src\/cli\.mjs$/);
   assert.equal(started[0].args[1], 'serve');
   assert.equal(requests.length, 1);
   assert.equal(requests[0].command, 'apply');
@@ -383,7 +383,7 @@ test('the repo root this file computes is the workspace root', () => {
   );
   assert.ok(
     existsSync(
-      `${REPO_ROOT}/libs/luna-shopper/curation-suggestions/src/cli.mjs`
+      `${REPO_ROOT}/libs/luna-shopper/tools/curation/suggestions/src/cli.mjs`
     )
   );
   assert.ok(

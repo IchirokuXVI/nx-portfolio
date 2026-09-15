@@ -20,7 +20,7 @@
  * while a real queue is part LINK. The one effect the other way is the trigram
  * branch. See the plan for what that means for the number.
  *
- * Usage: node libs/luna-shopper/curation-cli/tools/collision-rate.mjs [dump.sql]
+ * Usage: node libs/luna-shopper/tools/curation/cli/tools/collision-rate.mjs [dump.sql]
  *
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
