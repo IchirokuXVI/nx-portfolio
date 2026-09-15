@@ -102,5 +102,5 @@ docker/ddns/config/
 apps/luna-shopper-backend/*/tools/out/
 
 # Where a curation run keeps its state, its decisions and its rehearsal dump
-# when the operator names no --run-dir (libs/luna-shopper/curation-cli).
+# when the operator names no --run-dir (libs/luna-shopper/tools/curation/cli).
 .curation-runs/
