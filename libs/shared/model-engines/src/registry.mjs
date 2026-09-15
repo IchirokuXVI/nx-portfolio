@@ -38,7 +38,9 @@ import { OLLAMA_DEFAULT_MODEL, makeOllamaEngine } from './ollama.mjs';
  *   its own (curation-suggestions plan 0003);
  * - `create`, which builds the engine from the injected `spawn`, `fetch`,
  *   `env`, usage total and signal, so the whole library runs under
- *   `node --test` with no network and no `claude` installed.
+ *   `node --test` with no network and no `claude` installed. It also carries
+ *   `numPredict`, the longest answer the caller's workload has, which only the
+ *   entries that have such a ceiling read.
  */
 export const ENGINES = [
   {
@@ -116,6 +118,7 @@ export const ENGINES = [
       fetchImpl,
       env,
       model,
+      numPredict,
       usage = null,
       stderr = process.stderr,
       signal = null,
@@ -124,6 +127,11 @@ export const ENGINES = [
         ...(fetchImpl ? { fetchImpl } : {}),
         env,
         model,
+        // The longest answer this caller's workload has, which travels the same
+        // road `model` and `env` travel so a caller building an engine by name
+        // can say it. An entry with no such knob ignores the key, which is why
+        // it is named here and not on every entry.
+        ...(numPredict ? { numPredict } : {}),
         usage,
         // The one line an `OLLAMA_BATCH` above the measured optimum writes goes
         // where the claude entry's ignored key notice goes, and is injectable

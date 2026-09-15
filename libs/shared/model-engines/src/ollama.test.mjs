@@ -1056,6 +1056,38 @@ test('every request caps generation, and OLLAMA_NUM_PREDICT moves the cap', asyn
   assert.equal(bad.seen.chat[0].body.options.num_predict, NUM_PREDICT_CEILING);
 });
 
+test('numPredict is the caller workload, and the operator still wins over it', async () => {
+  // A leaflet page of nine offers does not fit in the curation ceiling, so the
+  // caller that reads pages says how long its answers are.
+  const asked = server();
+  await engineOn(asked, { numPredict: 4096 }).ask('a page');
+  assert.equal(asked.seen.chat[0].body.options.num_predict, 4096);
+
+  // The environment variable is the operator's override and outranks both.
+  const overridden = server();
+  await engineOn(overridden, {
+    numPredict: 4096,
+    env: { OLLAMA_NUM_PREDICT: '512' },
+  }).ask('a page');
+  assert.equal(overridden.seen.chat[0].body.options.num_predict, 512);
+
+  // A caller that names nothing is where it always was.
+  const plain = server();
+  await engineOn(plain).ask('a row');
+  assert.equal(
+    plain.seen.chat[0].body.options.num_predict,
+    NUM_PREDICT_CEILING
+  );
+
+  // And a value this cannot read is the ceiling, not an unlimited request.
+  const nonsense = server();
+  await engineOn(nonsense, { numPredict: 'lots' }).ask('a row');
+  assert.equal(
+    nonsense.seen.chat[0].body.options.num_predict,
+    NUM_PREDICT_CEILING
+  );
+});
+
 /**
  * A clock the test drives, so a staircase does not cost a test four seconds.
  *
