@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const OPENAPI_URL = new URL(
-  '../../../../apps/luna-shopper-backend/gateway/docs/openapi.json',
+  '../../../../../../apps/luna-shopper-backend/gateway/docs/openapi.json',
   import.meta.url
 );
 const PROMPT_URL = new URL('./prompt.md', import.meta.url);

@@ -19,8 +19,8 @@
 
 /** The two implementations, and the CLI each one names. */
 export const IMPLEMENTATIONS = {
-  suggestions: 'libs/luna-shopper/curation-suggestions/src/cli.mjs',
-  groups: 'libs/luna-shopper/curation-groups/src/cli.mjs',
+  suggestions: 'libs/luna-shopper/tools/curation/suggestions/src/cli.mjs',
+  groups: 'libs/luna-shopper/tools/curation/groups/src/cli.mjs',
 };
 
 export const IMPLEMENTATION_NAMES = Object.keys(IMPLEMENTATIONS);

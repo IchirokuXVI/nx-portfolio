@@ -13,7 +13,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { createAdminSession } from '../../curation-auth/src/session.mjs';
+import { createAdminSession } from '../../auth/src/session.mjs';
 import {
   CONFIDENCE_THRESHOLD,
   checkDecisionShape,
