@@ -1,3 +1,5 @@
+> **PR:** [#369](https://github.com/IchirokuXVI/nx-portfolio/pull/369)
+
 # 0114: a basket shared with people you know
 
 > Client half: `apps/velista/plans/0085`.
