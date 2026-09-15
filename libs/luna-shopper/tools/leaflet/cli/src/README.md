@@ -168,7 +168,7 @@ from the current report, once a person has accepted the reading it came from.
 5. Build:
 
    ```sh
-   node apps/luna-shopper-backend/harvester/tools/leaflet/build-document.mjs \
+   node libs/luna-shopper/tools/leaflet/cli/src/build-document.mjs \
      --readings tmp/leaflet/<slug>-import \
      --leaflet tmp/leaflet/<slug>-import/leaflet.json \
      --chain <slug> \
@@ -178,7 +178,7 @@ from the current report, once a person has accepted the reading it came from.
 6. Drift check the report:
 
    ```sh
-   node apps/luna-shopper-backend/harvester/tools/leaflet/drift-check.mjs \
+   node libs/luna-shopper/tools/leaflet/cli/src/drift-check.mjs \
      --report tmp/leaflet/<slug>.harvest-document.report.json --chain <slug>
    ```
 
@@ -189,7 +189,7 @@ from the current report, once a person has accepted the reading it came from.
 
    ```sh
    node --experimental-strip-types \
-     apps/luna-shopper-backend/harvester/tools/leaflet/validate.mjs \
+     libs/luna-shopper/tools/leaflet/cli/src/validate.mjs \
      tmp/leaflet/<slug>.harvest-document.json
    ```
 
@@ -204,7 +204,7 @@ in the old leaflet shape, from before this split, and `to-harvest-document.mjs`
 converts it directly:
 
 ```sh
-node apps/luna-shopper-backend/harvester/tools/leaflet/to-harvest-document.mjs \
+node libs/luna-shopper/tools/leaflet/cli/src/to-harvest-document.mjs \
   tmp/leaflet/eljamon.vision.json
 ```
 

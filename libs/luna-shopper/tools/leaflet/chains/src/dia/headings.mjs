@@ -40,3 +40,9 @@ export const FIXED_SECTIONS = {
  * with something else states its own `extraction.tool` in `leaflet.json`,
  * which then wins over this default. */
 export const TOOL_NAME = 'claude-opus-5 via Claude Code, chains/dia/prompt.txt';
+
+/** The dpi `cli.mjs` renders this chain's pages at, unless `--dpi` says
+ * otherwise. 160 is the default the other A4 chains use, and Dia's own
+ * `layout.md` names nothing that asks for more: the page is tall and narrow
+ * and the small print that matters is the comparison figure inside the badge. */
+export const DPI = 160;

@@ -1,0 +1,13 @@
+{
+  "name": "luna-shopper/leaflet-chains",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/tools/leaflet/chains/src",
+  "projectType": "library",
+  "tags": [],
+  "//": "Four files per chain and no code of its own, so there is no test target: what a chain folder says is proved by the reader's tests over in luna-shopper/leaflet-cli, which names this project in implicitDependencies so an edit here marks those tests affected.",
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

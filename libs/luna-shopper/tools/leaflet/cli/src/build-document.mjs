@@ -3,9 +3,12 @@
  * Turns a directory of per page model readings, plus one leaflet's own small
  * `leaflet.json`, into ONE harvest document for a named chain.
  *
- *   node apps/luna-shopper-backend/harvester/tools/leaflet/build-document.mjs \
+ *   node libs/luna-shopper/tools/leaflet/cli/src/build-document.mjs \
  *     --readings <dir of page_NN.json> --leaflet <leaflet.json> \
  *     --chain <slug> --out <out.json> [--update-baseline]
+ *
+ * `cli.mjs` runs this as a child process at step 7 of a read. It is still a
+ * script an operator runs by hand, which is what the usage line above is.
  *
  * The readings are what `chains/<slug>/prompt.txt` asks a model for, one JSON
  * array per page, named `page_NN.json`. They and the PDF are working material
@@ -39,12 +42,8 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { CHAINS_DIR } from './chains.mjs';
 import { toHarvestDocument } from './to-harvest-document.mjs';
-
-const HERE = new URL('.', import.meta.url).pathname.replace(
-  /^\/([A-Za-z]:)/,
-  '$1'
-);
 
 /** The reading's own size token, mapped onto format.unit. Generic across
  * chains: the units a Spanish leaflet prints are the same whoever prints it. */
@@ -199,7 +198,7 @@ export function computeStatistics(
 }
 
 async function loadChain(chain) {
-  const dir = join(HERE, 'chains', chain);
+  const dir = join(CHAINS_DIR, chain);
   const headings = await import(pathToFileURL(join(dir, 'headings.mjs')).href);
   return {
     dir,
@@ -496,7 +495,7 @@ async function main(argv) {
   writeFileSync(REPORT, JSON.stringify(report, null, 2), 'utf8');
 
   if (has('--update-baseline')) {
-    const baselinePath = join(HERE, 'chains', chain, 'baseline.json');
+    const baselinePath = join(CHAINS_DIR, chain, 'baseline.json');
     writeFileSync(
       baselinePath,
       JSON.stringify(statistics, null, 2) + '\n',

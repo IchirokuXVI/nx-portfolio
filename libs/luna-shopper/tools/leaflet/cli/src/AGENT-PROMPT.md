@@ -14,10 +14,10 @@ Keep the two in step: a change to a procedure is a change here.
 
 ```text
 Read the supermarket leaflet PDF at <PATH TO PDF> (chain slug: <slug>, one of
-the folders under apps/luna-shopper-backend/harvester/tools/leaflet/chains/)
+the folders under libs/luna-shopper/tools/leaflet/chains/src/)
 into a HarvestDocument JSON that the Luna Shopper harvester can import.
 
-Read apps/luna-shopper-backend/harvester/tools/leaflet/README.md in full
+Read libs/luna-shopper/tools/leaflet/cli/src/README.md in full
 first, then follow its procedure (a) exactly. Do not build a script plus
 model hybrid and do not run OCR: read every page image yourself.
 
@@ -50,17 +50,17 @@ model hybrid and do not run OCR: read every page image yourself.
 
 5. Build, drift check, validate, in this order, from the repository root:
 
-   node apps/luna-shopper-backend/harvester/tools/leaflet/build-document.mjs \
+   node libs/luna-shopper/tools/leaflet/cli/src/build-document.mjs \
      --readings tmp/leaflet/<slug>-import \
      --leaflet tmp/leaflet/<slug>-import/leaflet.json \
      --chain <slug> \
      --out tmp/leaflet/<slug>.harvest-document.json
 
-   node apps/luna-shopper-backend/harvester/tools/leaflet/drift-check.mjs \
+   node libs/luna-shopper/tools/leaflet/cli/src/drift-check.mjs \
      --report tmp/leaflet/<slug>.harvest-document.report.json --chain <slug>
 
    node --experimental-strip-types \
-     apps/luna-shopper-backend/harvester/tools/leaflet/validate.mjs \
+     libs/luna-shopper/tools/leaflet/cli/src/validate.mjs \
      tmp/leaflet/<slug>.harvest-document.json
 
    If the drift check refuses the reading, do not run --update-baseline and
@@ -89,10 +89,10 @@ checked against, which is why step 6 asks you to spot check three pages.
 ```text
 A new supermarket chain, <CHAIN NAME> (slug <slug>), has its first leaflet PDF
 at <PATH TO PDF>. Prepare the chain under
-apps/luna-shopper-backend/harvester/tools/leaflet/chains/<slug>/ and then
+libs/luna-shopper/tools/leaflet/chains/src/<slug>/ and then
 read the leaflet into a HarvestDocument.
 
-Read apps/luna-shopper-backend/harvester/tools/leaflet/README.md in full
+Read libs/luna-shopper/tools/leaflet/cli/src/README.md in full
 first, then follow its procedure (b) exactly.
 
 1. Census and render the PDF as in procedure (a): page count, text layer per
@@ -129,7 +129,7 @@ first, then follow its procedure (b) exactly.
 When the spot check passes, create the baseline yourself:
 
 ```sh
-node apps/luna-shopper-backend/harvester/tools/leaflet/build-document.mjs \
+node libs/luna-shopper/tools/leaflet/cli/src/build-document.mjs \
   --readings tmp/leaflet/<slug>-import \
   --leaflet tmp/leaflet/<slug>-import/leaflet.json \
   --chain <slug> \
