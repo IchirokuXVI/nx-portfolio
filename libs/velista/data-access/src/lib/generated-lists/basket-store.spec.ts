@@ -6,6 +6,7 @@ import {
   type BasketLine,
   type BasketSession,
   type BasketSettleRequest,
+  type BasketView,
 } from '@portfolio/velista/models';
 import { Subject } from 'rxjs';
 import { GatewayError } from '../errors';
@@ -643,6 +644,190 @@ describe('BasketStore', () => {
       const { store } = build();
 
       expect(store.takesLines()).toBe(false);
+    });
+  });
+
+  /**
+   * A read cannot erase what landed while it was out (velista `0086`).
+   *
+   * Found by the browser suite, in the order it happens in a shop: somebody joins,
+   * the burst of events their arrival makes is coalesced into one re-read a second
+   * and a half later, and while that read is out the person holding the phone adds
+   * a line. The add answered first and its row was drawn. The read answered second,
+   * from before the add, and replaced the whole basket, so the row the shopper had
+   * just watched appear vanished with nothing on screen to say why.
+   *
+   * These drive it by hand rather than through the timer, because the timer is not
+   * what makes the defect: a read that is out when something lands is.
+   */
+  describe('a read that was out when something landed', () => {
+    /**
+     * A basket read the spec holds open, answering the basket **as it was when the
+     * read went out**.
+     *
+     * The snapshot is composed at the call and not at the release, which is the
+     * whole arrangement: releasing it later then delivers an answer that is
+     * genuinely older than whatever the spec did in between.
+     */
+    function holdReads(memory: BasketMemory) {
+      const waiting: (() => void)[] = [];
+      const counted = { reads: 0 };
+
+      return {
+        counted,
+        getBasket: (): Promise<BasketView> => {
+          counted.reads += 1;
+          const answer = memory.getBasket();
+          return new Promise<BasketView>((resolve) => {
+            waiting.push(() => resolve(answer));
+          });
+        },
+        /** Answer the oldest read still out, and let the store act on it. */
+        async release(): Promise<void> {
+          const next = waiting.shift();
+          if (next === undefined) {
+            throw new Error('no read was waiting to be answered');
+          }
+          next();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        },
+      };
+    }
+
+    /** A store whose reads are held, opened and settled on its first answer. */
+    async function opened(overrides: Partial<BasketServiceI> = {}) {
+      const memory = new BasketMemory();
+      const reads = holdReads(memory);
+      const built = build({
+        getBasket: reads.getBasket,
+        addLine: (id, body) => memory.addLine(id, body),
+        ...overrides,
+      });
+
+      const open = built.store.open('basket-saturday');
+      await reads.release();
+      await open;
+
+      return { ...built, memory, reads };
+    }
+
+    it('keeps a line the composer added, and asks again', async () => {
+      const { store, reads } = await opened();
+      const before = store.lines().length;
+
+      // The coalesced re-read goes out first, and is still out when the aisle line
+      // is typed.
+      const refreshed = store.refresh();
+      const line = await store.addLine({ content: 'Batteries' });
+      expect(line).not.toBeNull();
+      expect(store.lines()).toHaveLength(before + 1);
+
+      // The read answers, from before the add. Nothing of it is applied.
+      await reads.release();
+      expect(store.lines()).toHaveLength(before + 1);
+      expect(store.lines().at(-1)?.content).toBe('Batteries');
+      // And the store went back and asked again rather than living with an answer
+      // it knows is old.
+      expect(reads.counted.reads).toBe(3);
+
+      await reads.release();
+      await refreshed;
+      expect(store.lines().some((row) => row.content === 'Batteries')).toBe(
+        true
+      );
+    });
+
+    it('keeps a line somebody else added over the socket', async () => {
+      const { store, socket, memory, reads } = await opened();
+      const before = store.lines().length;
+
+      // The read goes out, and the other phone's add reaches the basket and then
+      // this screen while it is still out.
+      const refreshed = store.refresh();
+      const theirs = await memory.addLine('basket-saturday', {
+        content: 'Ice',
+      });
+      socket.events.next({
+        type: 'generatedList.lineAdded',
+        generatedListId: 'basket-saturday',
+        line: theirs,
+      });
+      expect(store.lines()).toHaveLength(before + 1);
+
+      await reads.release();
+      expect(store.lines().some((row) => row.id === theirs.id)).toBe(true);
+      expect(reads.counted.reads).toBe(3);
+
+      await reads.release();
+      await refreshed;
+      expect(store.lines().some((row) => row.id === theirs.id)).toBe(true);
+    });
+
+    it('asks once and applies the answer when nothing landed while it was out', async () => {
+      // The ordinary case, and the one the loop must not turn into a second
+      // request: a read that nothing overtook is the answer.
+      const { store, reads } = await opened();
+
+      const refreshed = store.refresh();
+      await reads.release();
+      await refreshed;
+
+      expect(reads.counted.reads).toBe(2);
+      expect(store.state()).toBe('ready');
+    });
+
+    it('resolves only once an answer that is not old has been applied', async () => {
+      // Several writes await this before they answer their caller, because the
+      // caller reads the true amount off the line the moment it has it (velista
+      // `0057`, section 6). A promise that resolved on the discarded answer would
+      // hand them the basket from before their own write.
+      const { store, reads } = await opened();
+      let settled = false;
+      const refreshed = store.refresh().then(() => {
+        settled = true;
+      });
+
+      await store.addLine({ content: 'Batteries' });
+      await reads.release();
+      expect(settled).toBe(false);
+
+      await reads.release();
+      await refreshed;
+      expect(settled).toBe(true);
+      expect(store.lines().some((row) => row.content === 'Batteries')).toBe(
+        true
+      );
+    });
+
+    it('ends the loop on a failure rather than asking forever', async () => {
+      const memory = new BasketMemory();
+      let reads = 0;
+      const { store } = build({
+        getBasket: () => {
+          reads += 1;
+          return reads === 1
+            ? memory.getBasket()
+            : Promise.reject(
+                new GatewayError({
+                  code: 'internal',
+                  status: 500,
+                  correlationId: 'spec',
+                })
+              );
+        },
+        addLine: (id, body) => memory.addLine(id, body),
+      });
+      await store.open('basket-saturday');
+
+      await store.addLine({ content: 'Batteries' });
+      await store.refresh();
+
+      expect(reads).toBe(2);
+      // The basket already drawn stays drawn, which is `_fail`'s rule untouched.
+      expect(store.state()).toBe('ready');
+      expect(store.lines().some((row) => row.content === 'Batteries')).toBe(
+        true
+      );
     });
   });
 
