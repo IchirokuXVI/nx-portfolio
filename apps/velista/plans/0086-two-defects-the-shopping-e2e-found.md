@@ -1,3 +1,5 @@
+> **PR:** [#372](https://github.com/IchirokuXVI/nx-portfolio/pull/372)
+
 # 0086: two defects the shopping e2e found
 
 > `0080` built `apps/velista-luna-e2e`, a browser suite that shops against a real backend
