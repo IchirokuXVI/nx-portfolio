@@ -3,6 +3,7 @@ import test from 'node:test';
 import { listChains } from './chains.mjs';
 import {
   DEFAULT_ENGINE,
+  LEAFLET_NUM_PREDICT,
   MANUAL,
   defaultOutDir,
   main,
@@ -142,6 +143,30 @@ test('--model overrides the engine default, and manual builds no engine at all',
   assert.equal(calls[1].engine, null);
   assert.equal(calls[1].manual, true);
   assert.equal(calls[1].isLocal, false);
+});
+
+test('the engine is built with the ceiling a page of offers needs', async () => {
+  const built = [];
+  const { options } = harness({
+    build: (entry, config) => {
+      built.push({ entry: entry.name, ...config });
+      return { name: entry.name, ask: async () => ({ text: '[]' }) };
+    },
+  });
+
+  await main(['--pdf', 'a.pdf', '--chain', 'el-jamon'], options);
+  assert.equal(built[0].entry, 'ollama');
+  // 1,024 was set for a curation decision. A dense page did not fit in it and
+  // came back as an unparseable answer, which is what a truncated one is.
+  assert.equal(built[0].numPredict, LEAFLET_NUM_PREDICT);
+  assert.equal(LEAFLET_NUM_PREDICT, 4096);
+
+  // Manual mode builds nothing at all, so it asks for no ceiling either.
+  await main(
+    ['--pdf', 'a.pdf', '--chain', 'el-jamon', '--engine', MANUAL],
+    options
+  );
+  assert.equal(built.length, 1);
 });
 
 test('--page-timeout is a whole number of seconds, and 120 by default', async () => {

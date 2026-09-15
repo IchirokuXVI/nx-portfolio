@@ -188,10 +188,15 @@ It does eight things, in order, and each one can refuse.
    line for each when it finds none. `--pdf <directory>` of `page_NN.png` skips
    this step, which is how LIDL is read.
 3. **Layout check.** `chains/<slug>/layout.md` against the first three pages. A
-   mismatch stops the run and names what differs.
+   mismatch stops the run and names what differs. An answer the check could not
+   read carries on, and the raw text of it is kept as
+   `<out>/import/layout-check.attempt_1.txt` so you can see what the model said.
 4. **Read.** One call per page, in order, writing `<out>/import/page_NN.json` as
    it goes. A page that answers nothing parseable is asked once more and then
-   recorded as an empty array with a named warning.
+   recorded as an empty array with a named warning. Each attempt that could not
+   be read is kept as `<out>/import/page_NN.attempt_K.txt`, and the warning
+   names the file. Once a page is recorded as empty, an answer cut off part way
+   through looks exactly like a page of prose.
 5. **Sanity pass.** Six checks against what a printed page can support, naming
    the page, the product and the rule for every row that fails. It runs for
    every engine, because every model has a systematic defect and only the defect
@@ -222,6 +227,11 @@ it costs is measured in the plan's section 7: it found every tile and invented
 nothing, and it got 63% of headline prices, 55% of ANTES prices and 31% of unit
 prices right, against 95%, 100% and 100% for Sonnet 5. On every price drop tile
 it invented a single unit price the page does not print.
+
+The command asks that engine for up to 4,096 tokens per page, because a dense
+page of nine offers does not fit in the 1,024 the model engines library defaults
+to and a cut off answer is recorded as an empty page. Set `OLLAMA_NUM_PREDICT`
+to override it.
 
 So the run prints that **before** it starts as well as after, because a warning
 is worth nothing to somebody who has already waited eleven minutes. The first

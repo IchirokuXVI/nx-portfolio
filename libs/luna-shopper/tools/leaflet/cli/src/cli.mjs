@@ -57,6 +57,23 @@ export const DEFAULT_ENGINE = 'ollama';
 /** Where a run's working material goes when the operator names no directory. */
 export const RUN_ROOT = 'tmp/leaflet';
 
+/**
+ * The longest answer one page of a leaflet has.
+ *
+ * The model engines default is 1,024 tokens, which was set for a curation
+ * decision: one JSON object of a few hundred tokens. A leaflet page is a JSON
+ * array of every offer printed on it, and three pages of El Jamon read live at
+ * 1,024 answered 2 offers, `not a JSON array` and `not a JSON array`, both
+ * dense pages recorded as empty with nothing saying why. The same three pages
+ * at 4,096 answered 2, 8 and 9 offers, which is all 19 of the plan's section 7
+ * table, in 63 seconds. A truncated answer is exactly the unparseable answer
+ * case, and nothing in it says which one it was.
+ *
+ * `OLLAMA_NUM_PREDICT` still overrides this, because it is the operator's
+ * override and outranks what a caller asked for.
+ */
+export const LEAFLET_NUM_PREDICT = 4096;
+
 /** Where a help line's description starts. */
 const HELP_COLUMN = 27;
 
@@ -172,6 +189,10 @@ export async function main(
     exists = existsSync,
     stat = statSync,
     read = runRead,
+    // How an entry becomes an engine. Injected because a built engine does not
+    // report what it was built with, so this is the one place a test can see
+    // the ceiling the leaflet workload asks for.
+    build = (entry, config) => entry.create(config),
     now = () => new Date(),
   } = {}
 ) {
@@ -234,7 +255,16 @@ export async function main(
     const gated = entry.gate
       ? await entry.gate({ env, isTty, askLine: ask, stdout })
       : null;
-    engine = entry.create({ env, model, usage, stderr, gated });
+    engine = build(entry, {
+      env,
+      model,
+      usage,
+      stderr,
+      gated,
+      // A page of offers is a longer answer than the library's own default was
+      // set for. An entry with no such ceiling ignores the key.
+      numPredict: LEAFLET_NUM_PREDICT,
+    });
   }
 
   const outcome = await read({

@@ -39,7 +39,7 @@ import {
   writeRunFile,
 } from './manual.mjs';
 import { localEngineNotice, localEngineShortNotice } from './notice.mjs';
-import { readPages } from './read-pages.mjs';
+import { keepAnswer, readPages } from './read-pages.mjs';
 import {
   installLines,
   pageImagePath,
@@ -48,6 +48,17 @@ import {
   renderPages,
 } from './render.mjs';
 import { sanityPass } from './sanity.mjs';
+
+/**
+ * Where a layout check answer nobody could read is kept.
+ *
+ * The page readings keep theirs as `page_NN.attempt_K.txt`, and this is the one
+ * other model call the run carries on from rather than stopping at. The
+ * validity answer is not kept beside them: an unreadable answer and a cover
+ * that prints no dates both parse to the same three nulls there, so a file
+ * would be written for a cover that answered perfectly well.
+ */
+export const LAYOUT_ANSWER_FILE = 'layout-check.attempt_1.txt';
 
 /** A directory that has to exist before anything writes into it. */
 const ensure = (mkdir, ...dirs) => {
@@ -290,6 +301,8 @@ export async function runRead({
       layout,
       images: checkPages(pages).flatMap(imagesFor),
       stripFence,
+      keep: (text) =>
+        keepAnswer(join(importDir, LAYOUT_ANSWER_FILE), text, writeFile),
     });
     if (!verdict.ok) {
       stdout.write(`\n${formatMismatch(chain.slug, verdict.differences)}\n`);
@@ -297,7 +310,7 @@ export async function runRead({
     }
     stdout.write(
       verdict.unreadable
-        ? `\nLayout check: the model's answer could not be read, so the run carries on. Look at the first pages yourself.\n`
+        ? `\nLayout check: the model's answer could not be read, so the run carries on.${verdict.kept ? ` The raw answer is in ${verdict.kept}.` : ''} Look at the first pages yourself.\n`
         : `\nLayout check: the first ${checkPages(pages).length} page(s) match chains/${chain.slug}/layout.md.\n`
     );
 

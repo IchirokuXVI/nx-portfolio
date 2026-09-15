@@ -77,19 +77,37 @@ export function parseVerdict(text, stripFence) {
 /**
  * The layout check.
  *
- * Answers `{ ok, differences, unreadable }`. The caller stops the run on a
- * false `ok` and prints what differs.
+ * Answers `{ ok, differences, unreadable, kept }`. The caller stops the run on
+ * a false `ok` and prints what differs.
+ *
+ * `keep` is given the raw text of an answer this could not read and answers
+ * where it put it, so `kept` is a file the operator can look at rather than a
+ * verdict that says only that there was none. A model that wrote prose and a
+ * model whose answer was cut off both land here and they are not the same
+ * problem.
  */
-export async function checkLayout({ engine, layout, images, stripFence }) {
+export async function checkLayout({
+  engine,
+  layout,
+  images,
+  stripFence,
+  keep = null,
+}) {
   const answer = await engine.ask(layoutPrompt(layout), { images });
   const verdict = parseVerdict(answer?.text, stripFence);
   if (verdict === null) {
-    return { ok: true, differences: [], unreadable: true };
+    return {
+      ok: true,
+      differences: [],
+      unreadable: true,
+      kept: keep ? keep(answer?.text) : null,
+    };
   }
   return {
     ok: verdict.matches || verdict.differences.length === 0,
     differences: verdict.differences,
     unreadable: false,
+    kept: null,
   };
 }
 

@@ -40,7 +40,12 @@ test('a matching leaflet carries on', async () => {
     stripFence,
   });
   assert.equal(engine.asked.length, 1);
-  assert.deepEqual(verdict, { ok: true, differences: [], unreadable: false });
+  assert.deepEqual(verdict, {
+    ok: true,
+    differences: [],
+    unreadable: false,
+    kept: null,
+  });
 });
 
 test('a mismatch stops the run and names what differs', async () => {
@@ -82,6 +87,38 @@ test('an answer that cannot be read carries on and says so', async () => {
     images: [],
     stripFence,
   });
-  assert.deepEqual(verdict, { ok: true, differences: [], unreadable: true });
+  assert.deepEqual(verdict, {
+    ok: true,
+    differences: [],
+    unreadable: true,
+    kept: null,
+  });
   assert.equal(parseVerdict('The pages look right to me.', stripFence), null);
+});
+
+test('an answer that cannot be read is handed to keep, and the path comes back', async () => {
+  const kept = [];
+  const engine = engineAnswering('{ "matches": tr');
+  const verdict = await checkLayout({
+    engine,
+    layout: 'x',
+    images: [],
+    stripFence,
+    keep: (text) => {
+      kept.push(text);
+      return '/import/layout-check.attempt_1.txt';
+    },
+  });
+  assert.deepEqual(kept, ['{ "matches": tr']);
+  assert.equal(verdict.kept, '/import/layout-check.attempt_1.txt');
+
+  // A verdict this could read keeps nothing: there is nothing to look at.
+  const ok = await checkLayout({
+    engine: engineAnswering('{"matches":true,"differences":[]}'),
+    layout: 'x',
+    images: [],
+    stripFence,
+    keep: () => assert.fail('a readable verdict keeps nothing'),
+  });
+  assert.equal(ok.kept, null);
 });

@@ -7,6 +7,12 @@
  * answer inside `--page-timeout` is recorded the same way. The run carries on to
  * page thirty eight.
  *
+ * **An answer nobody could read is kept**, as `page_NN.attempt_K.txt` beside
+ * the reading, and the warning names the file. An empty reading is the same
+ * empty array whether the page held no offers, the model wrote prose or the
+ * answer was cut off part way through, and the third of those is a setting to
+ * change rather than a page to look at. See `attemptPath`.
+ *
  * **The chain's prompt is sent as the user prompt, verbatim, with no system
  * half.** That is not the split the curator uses, which puts its standing rules
  * in `system` and the row in the user half, and the reason to differ is manual
@@ -36,6 +42,26 @@ export const DEFAULT_PAGE_TIMEOUT_S = 120;
 /** One page's reading, as `build-document.mjs` reads it. */
 export const readingPath = (dir, page) =>
   join(dir, `page_${String(page).padStart(2, '0')}.json`);
+
+/**
+ * Where the raw text of an answer that could not be read is kept.
+ *
+ * An empty page and a page whose answer was cut off look the same in the
+ * reading, which is an empty array either way, and the warning used to say only
+ * that the answer was not a JSON array. Read live, that was the whole of what
+ * an operator was told when a 1,024 token ceiling truncated a dense page: two
+ * pages recorded as empty and nothing saying why. The answer itself says which
+ * it was in one glance, so it is written down rather than thrown away.
+ */
+export const attemptPath = (dir, page, attempt) =>
+  join(dir, `page_${String(page).padStart(2, '0')}.attempt_${attempt}.txt`);
+
+/** The raw answer, written beside the reading it could not become. Answers the
+ * path, which is what the warning names. */
+export function keepAnswer(path, text, writeFile) {
+  writeFile(path, typeof text === 'string' ? text : String(text ?? ''), 'utf8');
+  return path;
+}
 
 /** A named warning. Every one of them names the page it is about. */
 export const warning = (name, page, message, product = null) => ({
@@ -136,6 +162,7 @@ export async function readPages({
 
     let rows = null;
     let timedOut = false;
+    const kept = [];
     for (
       let attempt = 1;
       attempt <= 2 && rows === null && !timedOut;
@@ -152,6 +179,17 @@ export async function readPages({
         break;
       }
       rows = parseReading(answer?.text, stripFence);
+      if (rows === null) {
+        // Kept on the attempt rather than at the end, so a first answer that
+        // was truncated survives even when the second one parsed.
+        kept.push(
+          keepAnswer(
+            attemptPath(importDir, page, attempt),
+            answer?.text,
+            writeFile
+          )
+        );
+      }
     }
 
     if (timedOut) {
@@ -164,11 +202,15 @@ export async function readPages({
       );
       rows = [];
     } else if (rows === null) {
+      const where =
+        kept.length > 0
+          ? `. The raw answers are in ${kept.join(' and ')}, where an answer that was cut off reads as one`
+          : '';
       warnings.push(
         warning(
           'unparseable answer',
           page,
-          'the model answered twice with something that is not a JSON array, so the page is recorded as empty'
+          `the model answered twice with something that is not a JSON array, so the page is recorded as empty${where}`
         )
       );
       rows = [];

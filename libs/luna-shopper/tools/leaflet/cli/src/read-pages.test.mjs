@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { stripFence } from '../../../../../shared/model-engines/src/index.mjs';
-import { parseReading, readPages, readingPath } from './read-pages.mjs';
+import {
+  attemptPath,
+  parseReading,
+  readPages,
+  readingPath,
+} from './read-pages.mjs';
 import { pageImagePath } from './render.mjs';
 
 /** A file system that is a Map, so no test writes anything. */
@@ -109,6 +114,35 @@ test('an unparseable answer is retried once, then recorded as empty with a named
   assert.equal(warnings[0].page, 1);
 });
 
+test('an answer nobody could read is kept, and the warning names the file', async () => {
+  // A page cut off part way through and a page of prose are the same empty
+  // reading, and only the raw text tells them apart.
+  const truncated = '[\n  { "name": "leche entera 1 L", "price": "0';
+  const engine = fakeEngine([truncated, 'I cannot read this page.']);
+  const fs = files();
+  const { warnings } = await readPages(options({ engine, pages: [5], ...fs }));
+
+  const first = attemptPath('/import', 5, 1);
+  const second = attemptPath('/import', 5, 2);
+  assert.equal(fs.store.get(first), truncated);
+  assert.equal(fs.store.get(second), 'I cannot read this page.');
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].name, 'unparseable answer');
+  assert.ok(warnings[0].message.includes(first), 'names the first attempt');
+  assert.ok(warnings[0].message.includes(second), 'names the second');
+  // The reading itself is still the empty array the rest of the run expects.
+  assert.deepEqual(JSON.parse(fs.store.get(readingPath('/import', 5))), []);
+});
+
+test('a first answer that could not be read is kept even when the second one parsed', async () => {
+  const engine = fakeEngine(['half an ans', '[{"name":"c"}]']);
+  const fs = files();
+  const { warnings } = await readPages(options({ engine, pages: [1], ...fs }));
+  assert.equal(fs.store.get(attemptPath('/import', 1, 1)), 'half an ans');
+  assert.equal(fs.store.has(attemptPath('/import', 1, 2)), false);
+  assert.deepEqual(warnings, []);
+});
+
 test('the retry is enough when the second answer parses', async () => {
   const engine = fakeEngine(['not json', '[{"name":"c"}]']);
   const fs = files();
@@ -150,6 +184,8 @@ test('a page that does not answer in time is empty, warned, and not asked again'
   assert.equal(warnings.length, 1);
   assert.equal(warnings[0].name, 'page timeout');
   assert.match(warnings[0].message, /A longer timeout collects nothing/);
+  // Nothing is kept for it: a page that never answered has no raw text.
+  assert.equal(fs.store.has(attemptPath('/import', 1, 1)), false);
 });
 
 test('--resume keeps a page whose reading is already there and asks nothing', async () => {
