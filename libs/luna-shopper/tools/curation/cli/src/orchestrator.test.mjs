@@ -321,6 +321,42 @@ test('the run picks a free slot, brings up three services, walks and tears down'
   assert.equal(decider.calls.at(-1).usage, usage);
 });
 
+test('what start says about the run reaches the operator', async () => {
+  // The suggestions decider reads the brand registry once and answers what it
+  // read, plus any warning about it. An operator watching the walk has to see
+  // that, so every note `start` answers is a line of progress like any other.
+  const slots = fakeSlots();
+  const stderr = sink();
+
+  await runCuration({
+    slots,
+    makeDeciderFor: () =>
+      fakeDecider({
+        startAnswer: {
+          runId: 'r1',
+          remaining: 0,
+          prompt: 'THE RULES',
+          brands: 212,
+          notes: [
+            'Read 212 brands. A brand registered after this moment is not seen by this run.',
+            '41 of them are private labels, and every one is a line of the system prompt.',
+          ],
+        },
+      }),
+    engine: fakeEngine([]),
+    runDir: '/runs/x',
+    mainUrl: 'http://localhost:3000',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr,
+    dumpPath: '/runs/x/dump.sql',
+  });
+
+  assert.match(stderr.text(), /Read 212 brands\./);
+  assert.match(stderr.text(), /41 of them are private labels/);
+});
+
 test('a login that fails ends the run before the first model call', async () => {
   const slots = fakeSlots();
   const engine = fakeEngine([]);

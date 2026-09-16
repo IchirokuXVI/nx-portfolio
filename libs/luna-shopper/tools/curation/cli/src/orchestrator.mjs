@@ -347,6 +347,11 @@ export async function runCuration({
     runId = opened.runId;
     const total = opened.remaining ?? 0;
     stderr.write(`run ${opened.runId}: ${total} rows\n`);
+    // Whatever `start` has to say about what it read, one line each. A decider
+    // that answers none says nothing, which keeps the two independent.
+    for (const note of opened.notes ?? []) {
+      stderr.write(`${note}\n`);
+    }
     if (limit !== null) {
       stderr.write(`limit ${limit}: the walk ends after ${limit} rows\n`);
     }
