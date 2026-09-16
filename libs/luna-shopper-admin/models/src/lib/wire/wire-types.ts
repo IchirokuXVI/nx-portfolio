@@ -637,6 +637,14 @@ export type ResolvePostalCodeDto = {
 };
 
 /**
+ * `ScopeCopyDto` in the gateway's OpenAPI document.
+ */
+export type ScopeCopyDto = {
+  from: string;
+  to: string[];
+};
+
+/**
  * `SetAdminLineApprovalDto` in the gateway's OpenAPI document.
  */
 export type SetAdminLineApprovalDto = {
@@ -796,6 +804,7 @@ export type SpawnHarvestRunDto = {
   brandKeys?: string[];
   postalCodes?: string[];
   detailBackfill?: boolean;
+  scopeCopies?: ScopeCopyDto[];
 };
 
 /**
@@ -1671,6 +1680,7 @@ export type CatalogAdminSupermarketItemView = {
   unitPriceLabel: string | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
+  priceCopiedFromScopeId?: string | null;
   stale: boolean;
   validUntil: string | null;
   itemPriceId: string | null;
@@ -1763,6 +1773,7 @@ export type CatalogItemOfferView = {
   unitPriceLabel: string | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
+  priceCopiedFromScopeId?: string | null;
   stale: boolean;
 };
 
@@ -1834,6 +1845,7 @@ export type CatalogItemPriceView = {
   validUntil: string | null;
   sourceRunId: string | null;
   lastObservedRunId: string | null;
+  copiedFromScopeId?: string | null;
   overrides: CatalogItemPriceOverrides | null;
   protectedUntil: string | null;
   details: CatalogItemPriceDetails | null;
@@ -2084,6 +2096,7 @@ export type CatalogSupermarketItemView = {
   unitPriceLabel: string | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
+  priceCopiedFromScopeId?: string | null;
   stale: boolean;
   validUntil: string | null;
   itemPriceId: string | null;
@@ -2292,7 +2305,9 @@ export type EnumsHarvestWarningCode =
   | 'ALREADY_QUEUED'
   | 'EXTRACTOR'
   | 'UNKNOWN_PRICE_SCOPE'
-  | 'NO_PRICE_SCOPE';
+  | 'NO_PRICE_SCOPE'
+  | 'COPY_TARGET_GONE'
+  | 'COPY_SOURCE_NOT_WRITTEN';
 
 /**
  * `enums.ItemCategory` in the gateway's OpenAPI document.

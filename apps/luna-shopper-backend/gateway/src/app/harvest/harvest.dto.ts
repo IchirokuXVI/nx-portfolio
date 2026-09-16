@@ -147,6 +147,38 @@ export class SpawnHarvestRunDto {
   @IsOptional()
   @IsBoolean()
   detailBackfill?: boolean;
+
+  @ApiPropertyOptional({
+    type: () => [ScopeCopyDto],
+    description:
+      'Scopes that also receive what the run writes at a walked scope (plan 0118). CATALOG_DISCOVERY only, and never with `detailBackfill`. A copy fetches nothing, so a target is any tier and needs no key of the chain’s own. `from` is a scope the run writes: one of `priceScopeIds` for `mercadona-api`, `priceScopeId` for an adapter given one scope, and any keyed scope of the chain for `lidl-api`. Each `from` appears once, every target once in the whole run, and no target is walked by the run. Every copied price records the scope it was read at.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ScopeCopyDto)
+  scopeCopies?: ScopeCopyDto[];
+}
+
+/** One walked scope and the scopes its prices and availability are copied to (plan 0118). */
+export class ScopeCopyDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'A scope the run writes, by id.',
+  })
+  @IsUUID()
+  from!: string;
+
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    description:
+      'The scopes that receive a copy of what the run wrote at `from`. At least one.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID(undefined, { each: true })
+  to!: string[];
 }
 
 /**

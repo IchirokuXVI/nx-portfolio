@@ -17,6 +17,7 @@ import {
   type HarvestRunPage,
   type HarvestRunView,
   type ListHarvestRunsRequest,
+  type ScopeCopy,
   type SpawnHarvestRunRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -417,6 +418,19 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     payload: Record<string, unknown>;
     documentSha256: string | null;
   }> {
+    // A copy writes what a walk read, and only a catalog discovery walks (plan
+    // 0118, section 3). Refused before the mode's own checks, so every other
+    // mode says so rather than ignoring the field.
+    const requestedCopies = req.scopeCopies ?? [];
+    if (
+      requestedCopies.length > 0 &&
+      req.mode !== HarvestRunMode.CATALOG_DISCOVERY
+    ) {
+      throw new ValidationException(
+        `A ${req.mode} run cannot copy scopes. Only a CATALOG_DISCOVERY walks a ` +
+          'scope whose prices can be copied to another.'
+      );
+    }
     if (req.mode === HarvestRunMode.FILE_IMPORT) {
       return this.validateFileImport(req);
     }
@@ -512,6 +526,15 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
             capabilities.walkablePriorities
           )
         : [];
+    const scopeCopies =
+      requestedCopies.length === 0
+        ? []
+        : await this.copyableScopes(req.supermarketId, requestedCopies, {
+            capabilities,
+            detailBackfill,
+            priceScopeId: req.priceScopeId ?? null,
+            priceScopeIds,
+          });
     return {
       supermarketId: req.supermarketId,
       priceScopeId: req.priceScopeId ?? null,
@@ -521,8 +544,128 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         priceScopeId: req.priceScopeId ?? null,
         priceScopeIds,
         detailBackfill,
+        scopeCopies,
       },
     };
+  }
+
+  /**
+   * The copies a walk was given, checked against what the walk writes (plan
+   * 0118, section 3).
+   *
+   * Every refusal names the scope it is about. What a copy may **not** be
+   * checked against is the adapter's priority band: the band says what a crawl
+   * of one warehouse may claim, and a copy fetches nothing, so a target is any
+   * tier and needs no key of the chain's own.
+   *
+   * Which scopes count as written depends on how the adapter is given them:
+   *
+   * - **A scope list** (`mercadona-api`): `from` is one of `priceScopeIds`.
+   * - **Its own scopes and no band** (`lidl-api`): `from` is any scope of the
+   *   chain with a key. The run cannot know which regions a week names, so a
+   *   `from` it never writes is a warning at the end, not a refusal here.
+   * - **One scope** (every other adapter): `from` is `priceScopeId`.
+   */
+  private async copyableScopes(
+    supermarketId: string,
+    requested: readonly ScopeCopy[],
+    walk: {
+      capabilities: AdapterCapabilities;
+      detailBackfill: boolean;
+      priceScopeId: string | null;
+      priceScopeIds: readonly string[];
+    }
+  ): Promise<ScopeCopy[]> {
+    if (walk.detailBackfill) {
+      throw new ValidationException(
+        'A backfill reads product pages for the EAN and writes no scope, so ' +
+          'there is nothing for it to copy. Start it without scope copies.'
+      );
+    }
+    const copies = requested.map((copy) => ({
+      from: String(copy.from ?? '').trim(),
+      to: (copy.to ?? []).map((id) => String(id).trim()),
+    }));
+
+    const held = new Map(
+      (await this.catalog.listAllPriceScopes(supermarketId)).map((scope) => [
+        scope.id,
+        scope,
+      ])
+    );
+    const ownsItsScopes =
+      walk.capabilities.scopesItsOwn &&
+      walk.capabilities.walkablePriorities === null;
+    const walked = new Set(
+      takesScopeList(walk.capabilities)
+        ? walk.priceScopeIds
+        : walk.priceScopeId
+          ? [walk.priceScopeId]
+          : []
+    );
+
+    const froms = new Set<string>();
+    for (const copy of copies) {
+      if (froms.has(copy.from)) {
+        throw new ValidationException(
+          `The price scope ${copy.from} is copied from twice. Name each scope ` +
+            'a run copies from once, with every scope it copies to.'
+        );
+      }
+      froms.add(copy.from);
+      const scope = held.get(copy.from);
+      if (!scope) {
+        throw new ValidationException(
+          `The price scope ${copy.from} does not belong to this chain, so ` +
+            'there is nothing of its to copy.'
+        );
+      }
+      if (ownsItsScopes) {
+        if (!scope.externalKey) {
+          throw new ValidationException(
+            `The price scope ${copy.from} carries no key of the chain's own, ` +
+              "so this chain's walk never writes it and there is nothing to copy."
+          );
+        }
+      } else if (!walked.has(copy.from)) {
+        throw new ValidationException(
+          `The price scope ${copy.from} is not a scope this run walks, so ` +
+            'there is nothing of its to copy. Copy from a scope the run writes.'
+        );
+      }
+    }
+
+    const targets = new Set<string>();
+    for (const copy of copies) {
+      if (copy.to.length === 0) {
+        throw new ValidationException(
+          `The copy from the price scope ${copy.from} names no scope to copy to.`
+        );
+      }
+      for (const id of copy.to) {
+        if (targets.has(id)) {
+          throw new ValidationException(
+            `The price scope ${id} receives two copies in this run. A scope ` +
+              'takes one copy at most, so it never holds two prices from one ' +
+              'run with nothing to choose between them.'
+          );
+        }
+        targets.add(id);
+        if (walked.has(id) || froms.has(id)) {
+          throw new ValidationException(
+            `The price scope ${id} is walked by this run, so it cannot also ` +
+              'receive a copy. A walked scope keeps its own prices.'
+          );
+        }
+        if (!held.has(id)) {
+          throw new ValidationException(
+            `The price scope ${id} does not belong to this chain, so it cannot ` +
+              'receive a copy of its prices.'
+          );
+        }
+      }
+    }
+    return copies;
   }
 
   /**

@@ -21,6 +21,12 @@ export interface ItemPriceWrite {
   sourceKind: PriceSourceKind;
   /** The run writing, or null for a person and for the reference seed. */
   sourceRunId: string | null;
+  /**
+   * The scope every entry was read at, when the run is copying it to
+   * {@link scope} (plan 0118, section 5). Absent and null both mean the prices
+   * were read at this scope.
+   */
+  copiedFromScopeId?: string | null;
   entries: readonly ItemPriceBatchEntry[];
   now: Date;
 }
@@ -94,6 +100,7 @@ export async function writeItemPrices(
     }
   }
 
+  const copiedFromScopeId = write.copiedFromScopeId ?? null;
   const toInsert: ItemPrice[] = [];
   const toConfirm: ItemPrice[] = [];
   /** The detail row each insert carries, by the price row it belongs to. */
@@ -104,7 +111,15 @@ export async function writeItemPrices(
   for (const entry of write.entries) {
     const values = normalize(entry, write.now);
     const held = currentByItem.get(entry.itemId);
-    if (held && sameValues(held, values)) {
+    // A copy is its own statement (plan 0118, section 5.2): the same number read
+    // at another scope does not confirm a row read here, or the other way
+    // round, because the provenance would then stay wrong for as long as the
+    // price does not change.
+    if (
+      held &&
+      sameValues(held, values) &&
+      (held.copiedFromScopeId ?? null) === copiedFromScopeId
+    ) {
       if (values.observedAt.getTime() > held.lastObservedAt.getTime()) {
         held.lastObservedAt = values.observedAt;
         held.lastObservedRunId = write.sourceRunId;
@@ -126,6 +141,7 @@ export async function writeItemPrices(
       validUntil: values.validUntil,
       sourceRunId: write.sourceRunId,
       lastObservedRunId: write.sourceRunId,
+      copiedFromScopeId,
       overrides: null,
       protectedUntil: null,
     });

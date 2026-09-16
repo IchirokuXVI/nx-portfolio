@@ -69,6 +69,11 @@ export interface RunReportSinkInput {
    * has no row to carry the flag, and its data is why the review queue exists.
    */
   autoImportPlaces: boolean;
+  /**
+   * The scopes that also receive what this run writes at a scope (plan 0118,
+   * section 4), resolved by the executor. Absent means the run copies nothing.
+   */
+  copiesOf?: (priceScopeId: string) => readonly string[];
 }
 
 /** What the run wrote, for the counters and the run's report. */
@@ -112,6 +117,18 @@ export interface RunReportResult {
   availabilityWritten: number;
   /** Availability rows a person had typed, which the run left alone. */
   conflicts: Record<string, unknown>[];
+  /** Every scope that received at least one price read at it (plan 0118). */
+  pricedScopes: string[];
+  /**
+   * Per scope copied from, the price rows sent to catalog for its targets (plan
+   * 0118, section 7). Not part of {@link pricesPublished}.
+   */
+  pricesCopied: Record<string, number>;
+  /**
+   * Per scope copied from, the availability rows written at its targets: every
+   * item once per target. Not part of {@link availabilityWritten}.
+   */
+  availabilityCopied: Record<string, number>;
 }
 
 export class RunReportSink implements RunReport {
@@ -157,6 +174,9 @@ export class RunReportSink implements RunReport {
     shopsWritten: 0,
     availabilityWritten: 0,
     conflicts: [],
+    pricedScopes: [],
+    pricesCopied: {},
+    availabilityCopied: {},
   };
 
   constructor(
@@ -242,10 +262,12 @@ export class RunReportSink implements RunReport {
       // used to be called for its side effect alone and the answer dropped on
       // the floor. That is why a walk's report named no price at all and the
       // screen fell back to `updated`, which is rows the ladder changed.
-      const { counters } = await this.session.close();
+      const { counters, copies } = await this.session.close();
       this.result.pricesRecorded += counters.pricesRecorded;
       this.result.pricesPublished += counters.pricesWritten;
       this.result.pricesConfirmed += counters.pricesConfirmed;
+      this.result.pricedScopes = [...copies.pricedScopes];
+      this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
     }
     this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
 
@@ -276,6 +298,7 @@ export class RunReportSink implements RunReport {
       // Read through the resolver on every price, so a scope declared just
       // before this chunk is already resolvable by it.
       scopeIdFor: (key) => this.deps.scopes?.idFor(key) ?? null,
+      copiesOf: this.input.copiesOf,
     });
 
     const outcomes = await this.session.push(chunk);
@@ -406,6 +429,11 @@ export class RunReportSink implements RunReport {
    * the chain's `ACTIVE` rows of this run's own source kind, because a leaflet
    * row is a printed name rather than a product id a walk could have listed, and
    * its absence from the tree is not a claim about stock.
+   *
+   * **A copy writes the same entries at each target** (plan 0118, section 6),
+   * the positives, the negatives and the explicit claims alike, because they
+   * are one statement about the assortment the walk read. A per shop claim is
+   * not copied: it names a shop, not a scope.
    */
   private async writeScopeAvailability(): Promise<void> {
     const supermarketId = this.input.supermarketId;
@@ -470,6 +498,16 @@ export class RunReportSink implements RunReport {
         );
       }
       this.result.availabilityWritten += entries.length;
+      for (const target of this.input.copiesOf?.(scopeId) ?? []) {
+        for (let i = 0; i < entries.length; i += AVAILABILITY_BATCH) {
+          await this.deps.catalog.setAvailability(
+            target,
+            entries.slice(i, i + AVAILABILITY_BATCH)
+          );
+        }
+        this.result.availabilityCopied[scopeId] =
+          (this.result.availabilityCopied[scopeId] ?? 0) + entries.length;
+      }
       this.logger.log(
         `Run ${this.context.runId}: availability for ${entries.length} item(s)`
       );

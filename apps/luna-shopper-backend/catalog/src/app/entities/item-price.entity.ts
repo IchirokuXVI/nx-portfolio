@@ -110,6 +110,17 @@ export class ItemPrice extends BaseEntity {
   lastObservedRunId!: string | null;
 
   /**
+   * The scope this price was read at, when a run copied it here from another
+   * (plan 0118, section 5.1). Null for a price read at this scope.
+   *
+   * **No foreign key, on purpose.** A deleted warehouse cascades its own prices
+   * away while its copies at a region stay priced, and a foreign key would
+   * either block that delete or null out exactly the fact this column records.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  copiedFromScopeId!: string | null;
+
+  /**
    * `ADMIN` rows only (section 4.2): what each automated kind said at the
    * instant the operator typed, so the protection test is a comparison against
    * a stored snapshot and never against the previous run.

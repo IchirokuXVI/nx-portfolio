@@ -49,6 +49,7 @@ interface PriceRow {
   details: Record<string, unknown> | null;
   observedAt: Date;
   runId: string;
+  copiedFromScopeId: string | null;
 }
 
 function build(options: {
@@ -340,7 +341,8 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
         },
       ],
       RUN,
-      PriceSourceKind.OFFICIAL_API
+      PriceSourceKind.OFFICIAL_API,
+      null
     );
   });
 
@@ -1086,5 +1088,152 @@ describe('SourceIngest, the scope a price names', () => {
       code: HarvestWarningCode.NO_PRICE_SCOPE,
       name: 'Leche',
     });
+  });
+});
+
+/**
+ * One walk written to several scopes (plan 0118, section 5).
+ *
+ * The copy happens here, where a resolved scope id becomes a write, so these
+ * cases hand the ingest a `copiesOf` and nothing else knows.
+ */
+describe('SourceIngest, a price copied to other scopes (plan 0118)', () => {
+  const W2 = '55555555-5555-4555-8555-555555555555';
+  const REGION = '66666666-6666-4666-8666-666666666666';
+
+  function bound() {
+    return build({
+      rows: [
+        {
+          externalId: '4241',
+          name: 'Leche entera',
+          status: SourceEntryStatus.ACTIVE,
+          itemId: 'item-1',
+          matchedBy: ItemSourceMatch.EAN,
+          confidence: 1,
+        },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+  }
+
+  it('writes the price at the walked scope and at each target, each copy naming where it was read', async () => {
+    const { ingest, context, priceRows, catalog, reported } = bound();
+
+    const { counters, copies } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      copiesOf: (scopeId) => (scopeId === SCOPE ? [W2, REGION] : []),
+      observations: [
+        observation({ externalId: '4241', name: 'Leche', price: PRICE }),
+      ],
+    });
+
+    expect(
+      priceRows.map((row) => [row.priceScopeId, row.copiedFromScopeId])
+    ).toEqual([
+      [SCOPE, null],
+      [W2, SCOPE],
+      [REGION, SCOPE],
+    ]);
+    // Every copied row carries the run, which is what a revert deletes by.
+    expect(priceRows.every((row) => row.runId === RUN)).toBe(true);
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(3);
+    const calls = (catalog.addPrices as jest.Mock).mock.calls;
+    expect(calls.map((call) => [call[0], call[4]])).toEqual([
+      [SCOPE, null],
+      [W2, SCOPE],
+      [REGION, SCOPE],
+    ]);
+    for (const call of calls) {
+      expect(call[1]).toEqual([
+        expect.objectContaining({ itemId: 'item-1', price: 1.19 }),
+      ]);
+      expect(call[2]).toBe(RUN);
+    }
+
+    // The walked scope's numbers keep their meaning, and the copies are apart.
+    expect(counters).toMatchObject({ pricesRecorded: 1, pricesWritten: 1 });
+    expect(copies.pricedScopes).toEqual(new Set([SCOPE]));
+    expect(copies.pricesCopied).toEqual(new Map([[SCOPE, 2]]));
+    expect(reported.filter((each) => !('processed' in each))).toEqual([
+      { updated: 1, unchanged: 0 },
+    ]);
+  });
+
+  it('copies the source row of a product nobody matched, and sends catalog nothing', async () => {
+    const { ingest, context, priceRows, catalog } = build({});
+
+    const { copies } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      copiesOf: () => [W2],
+      observations: [
+        observation({ externalId: 'k1', name: 'Nevera', price: PRICE }),
+      ],
+    });
+
+    expect(priceRows.map((row) => row.priceScopeId)).toEqual([SCOPE, W2]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(copies.pricesCopied.size).toBe(0);
+  });
+
+  it('never copies onto a scope the same product was priced at directly', async () => {
+    // A chain that names its own regions can state a price for a target this
+    // week. That price is the chain's own statement, and one upsert naming the
+    // same row twice would be refused.
+    const { ingest, context, priceRows } = build({});
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      scopeIdFor: (key) => (key === 'r1' ? 'scope-north' : 'scope-south'),
+      copiesOf: (scopeId) => (scopeId === 'scope-north' ? ['scope-south'] : []),
+      observations: [
+        observation({
+          externalId: 'k1',
+          name: 'Nevera',
+          prices: [
+            { ...PRICE, scopeKey: 'r1', price: 74.99 },
+            { ...PRICE, scopeKey: 'r58', price: 77.99 },
+          ],
+        }),
+      ],
+    });
+
+    expect(
+      priceRows.map((row) => [
+        row.priceScopeId,
+        row.price,
+        row.copiedFromScopeId,
+      ])
+    ).toEqual([
+      ['scope-north', 74.99, null],
+      ['scope-south', 77.99, null],
+    ]);
+  });
+
+  it('adds up the copies of every chunk a session is pushed', async () => {
+    const { ingest, context } = bound();
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      copiesOf: () => [W2],
+    });
+
+    await session.push([
+      observation({ externalId: '4241', name: 'Leche', price: PRICE }),
+    ]);
+    await session.push([
+      observation({ externalId: '4241', name: 'Leche', price: PRICE }),
+    ]);
+    const { copies } = await session.close();
+
+    expect(copies.pricesCopied).toEqual(new Map([[SCOPE, 2]]));
   });
 });

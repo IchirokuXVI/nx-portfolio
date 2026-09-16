@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestWarningCode,
   PriceSourceKind,
   type AdapterKey,
 } from '@portfolio/luna-shopper/contracts';
@@ -165,6 +166,54 @@ export class RunExecutor implements OnApplicationShutdown {
     return scopes;
   }
 
+  /**
+   * The copies a run was started with, resolved once before the sink opens
+   * (plan 0118, section 4): each scope copied from, against its targets.
+   *
+   * A target catalog no longer holds is dropped with a `COPY_TARGET_GONE`
+   * warning naming it, the treatment {@link walkedScopes} gives a walked scope
+   * that is gone. The spawn refused a missing scope, so this is a scope deleted
+   * while the run was pending, and the other targets still receive their copy.
+   *
+   * Empty for a run with no copies, and then catalog is not asked at all.
+   */
+  private async copyTargets(
+    context: RunContext,
+    supermarketId: string | null,
+    requested: unknown
+  ): Promise<Map<string, string[]>> {
+    const copies = readScopeCopies(requested);
+    const resolved = new Map<string, string[]>();
+    if (!supermarketId || copies.length === 0) {
+      return resolved;
+    }
+    const held = new Set(
+      (await this.catalog.listAllPriceScopes(supermarketId)).map(
+        (scope) => scope.id
+      )
+    );
+    for (const copy of copies) {
+      const targets: string[] = [];
+      for (const target of copy.to) {
+        if (held.has(target)) {
+          targets.push(target);
+          continue;
+        }
+        context.warn({
+          code: HarvestWarningCode.COPY_TARGET_GONE,
+          message:
+            `The price scope ${target} was to receive a copy of ${copy.from}, ` +
+            'but it was deleted after this run was started, so it received nothing.',
+          offerId: null,
+          page: null,
+          name: null,
+        });
+      }
+      resolved.set(copy.from, targets);
+    }
+    return resolved;
+  }
+
   /** True while this process is actually running that run. */
   isRunning(runId: string): boolean {
     return this.inFlight.has(runId);
@@ -235,6 +284,17 @@ export class RunExecutor implements OnApplicationShutdown {
         await this.sources.recordRunStarted(source);
       }
 
+      // Where a walked scope's writes are copied to (plan 0118). Resolved here,
+      // before the sink, so a runner never learns that a copy exists.
+      const copies =
+        run.mode === HarvestRunMode.CATALOG_DISCOVERY
+          ? await this.copyTargets(
+              context,
+              run.supermarketId,
+              run.input['scopeCopies']
+            )
+          : new Map<string, string[]>();
+
       // The write half of the run, and the only thing that has one (plan 0103,
       // section 2.3). Everything a runner has to say goes into this, and
       // everything that has to be done about it is done here.
@@ -252,6 +312,7 @@ export class RunExecutor implements OnApplicationShutdown {
                 // with no source names no chain, and a radius search is never
                 // trusted: `false` here is the whole of D3.
                 autoImportPlaces: source?.autoImportPlaces ?? false,
+                copiesOf: (scopeId) => copies.get(scopeId) ?? [],
               },
               {
                 ingest: this.ingest,
@@ -357,9 +418,21 @@ export class RunExecutor implements OnApplicationShutdown {
 
       if (sink) {
         const written = await sink.drain();
+        for (const from of copiesNotWritten(copies, written)) {
+          context.warn({
+            code: HarvestWarningCode.COPY_SOURCE_NOT_WRITTEN,
+            message:
+              `The price scope ${from} received no price in this run, so the ` +
+              'scopes it was to be copied to received none either.',
+            offerId: null,
+            page: null,
+            name: null,
+          });
+        }
         await this.store.setReport(runId, {
           ...(await this.store.load(runId)).report,
           ...describeWrites(written),
+          ...describeCopies(copies, written),
         });
       } else if (imported) {
         await this.store.setReport(runId, {
@@ -529,6 +602,58 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // Plan 0084, section 3: a person always wins, and the run reports the
     // disagreement rather than applying it.
     availabilityConflicts: written.conflicts,
+  };
+}
+
+/**
+ * The copies a run's input carries, read defensively: the input is a stored
+ * jsonb column, and a malformed entry is dropped rather than fatal.
+ */
+function readScopeCopies(value: unknown): { from: string; to: string[] }[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter(
+      (copy): copy is { from: unknown; to: unknown } =>
+        typeof copy === 'object' && copy !== null
+    )
+    .map((copy) => ({
+      from: String(copy.from ?? ''),
+      to: Array.isArray(copy.to) ? copy.to.map(String) : [],
+    }))
+    .filter((copy) => copy.from !== '');
+}
+
+/** The scopes copied from that received no price read at them (plan 0118, section 7). */
+export function copiesNotWritten(
+  copies: ReadonlyMap<string, string[]>,
+  written: RunReportResult
+): string[] {
+  const priced = new Set(written.pricedScopes);
+  return [...copies.keys()].filter((from) => !priced.has(from));
+}
+
+/**
+ * Each copy with what it wrote, for the run's report (plan 0118, section 7).
+ *
+ * Absent for a run with no copies, so the report of every other run reads as it
+ * did. `to` is the targets that were still there when the run started.
+ */
+export function describeCopies(
+  copies: ReadonlyMap<string, string[]>,
+  written: RunReportResult
+): Record<string, unknown> {
+  if (copies.size === 0) {
+    return {};
+  }
+  return {
+    copies: [...copies].map(([from, to]) => ({
+      from,
+      to,
+      pricesCopied: written.pricesCopied[from] ?? 0,
+      availabilityCopied: written.availabilityCopied[from] ?? 0,
+    })),
   };
 }
 

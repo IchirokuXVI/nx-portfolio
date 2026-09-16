@@ -108,6 +108,14 @@ export interface SourceIngestSessionInput {
    * declaration, and a declaration is a runner's to make.
    */
   scopeIdFor?: (scopeKey: string) => string | null;
+  /**
+   * The scopes that also receive what the run writes at a scope, by its id
+   * (plan 0118, section 4). Absent, or an empty answer, means no copy.
+   *
+   * Resolved by the executor before the run starts. A copy happens here, where a
+   * resolved scope id becomes a write, so a runner never learns about one.
+   */
+  copiesOf?: (priceScopeId: string) => readonly string[];
 }
 
 export interface SourceIngestInput extends SourceIngestSessionInput {
@@ -145,9 +153,24 @@ export interface SourceIngestCounters {
   pricesConfirmed: number;
 }
 
+/**
+ * What the copies of a run wrote (plan 0118, section 7).
+ *
+ * Kept apart from {@link SourceIngestCounters}, whose price numbers keep their
+ * meaning for walked scopes, so they stay comparable between runs with copies
+ * and runs without.
+ */
+export interface SourceIngestCopies {
+  /** Every scope that received at least one price read at it. */
+  pricedScopes: Set<string>;
+  /** Per scope copied from, the price rows sent to catalog for its targets. */
+  pricesCopied: Map<string, number>;
+}
+
 export interface SourceIngestResult {
   outcomes: SourceEntryOutcome[];
   counters: SourceIngestCounters;
+  copies: SourceIngestCopies;
 }
 
 /**
@@ -246,8 +269,11 @@ export class SourceIngest {
       pricesWritten: 0,
       pricesConfirmed: 0,
     };
+    const copies = emptyCopies();
     /** The `source_entry_prices` rows this chunk observed, one per price. */
     const observed: ObservedPrice[] = [];
+    /** Where each observation's prices landed, by its index, copies included. */
+    const placedByIndex: PlacedPrice[][] = [];
 
     // Steps 2 and 3, per observation and in the order the runner produced them.
     for (const observation of observations) {
@@ -285,6 +311,7 @@ export class SourceIngest {
       // Every price the source stated, each resolved to the scope it names.
       // A price nothing can place is a warning and no row (plan 0103, D4):
       // writing it to the default would put a Sevilla price on Madrid.
+      const placed: PlacedPrice[] = [];
       for (const price of observation.prices) {
         const priceScopeId = this.resolveScope(
           context,
@@ -293,54 +320,73 @@ export class SourceIngest {
           price
         );
         if (priceScopeId) {
-          observed.push({
-            price,
-            priceScopeId,
-            observation,
-            entry: outcome.entry,
-          });
+          placed.push({ price, priceScopeId, copiedFromScopeId: null });
         }
+      }
+      placed.push(...copiesFor(placed, input.copiesOf));
+      placedByIndex.push(placed);
+      for (const place of placed) {
+        observed.push({ ...place, observation, entry: outcome.entry });
       }
     }
 
     // Step 3, grouped by resolved scope, in one statement per chunk of rows.
     await this.replaceScopePrices(context.runId, observed);
-    // One row per price, so the count is the length. Counted here rather than
-    // inside the write, because a price that resolved to no scope was already
-    // dropped with a warning above and was never a row.
-    counters.pricesRecorded += observed.length;
+    // One row per price read at its scope. Counted here rather than inside the
+    // write, because a price that resolved to no scope was already dropped with
+    // a warning above and was never a row. A copy is not counted: the number
+    // stays what the chain stated, comparable with a run that copies nothing.
+    for (const place of observed) {
+      if (place.copiedFromScopeId === null) {
+        counters.pricesRecorded += 1;
+        copies.pricedScopes.add(place.priceScopeId);
+      }
+    }
 
     // Step 4. Only an `ACTIVE` row is owed a price: a fuzzy match never writes
     // one, because a wrong number on a real product is worse than no number.
-    // Grouped by scope, because `catalog.addPrices` writes one scope at a time.
-    const owed = new Map<string, ItemPriceBatchEntry[]>();
+    // Grouped by scope, because `catalog.addPrices` writes one scope at a time,
+    // and by where the price was read, because a batch states that once.
+    const owed = new Map<string, OwedBatch>();
     for (const [index, outcome] of outcomes.entries()) {
       const observation = observations[index];
       if (!outcome.itemId) {
         continue;
       }
-      for (const price of observation.prices) {
-        const priceScopeId = this.scopeOf(input, price);
-        if (!priceScopeId) {
-          continue;
-        }
-        const batch = owed.get(priceScopeId) ?? [];
-        batch.push(priceEntryFor(outcome.itemId, observation, price));
-        owed.set(priceScopeId, batch);
+      for (const place of placedByIndex[index]) {
+        const key = `${place.priceScopeId}|${place.copiedFromScopeId ?? ''}`;
+        const batch = owed.get(key) ?? {
+          priceScopeId: place.priceScopeId,
+          copiedFromScopeId: place.copiedFromScopeId,
+          entries: [],
+        };
+        batch.entries.push(
+          priceEntryFor(outcome.itemId, observation, place.price)
+        );
+        owed.set(key, batch);
       }
     }
 
     let owedCount = 0;
-    for (const [priceScopeId, entries] of owed) {
-      owedCount += entries.length;
+    for (const batch of owed.values()) {
       const written = await this.writePrices(
         context,
-        priceScopeId,
+        batch.priceScopeId,
         input.sourceKind,
-        entries
+        batch.entries,
+        batch.copiedFromScopeId
       );
-      counters.pricesWritten += written.inserted;
-      counters.pricesConfirmed += written.confirmed;
+      if (batch.copiedFromScopeId === null) {
+        owedCount += batch.entries.length;
+        counters.pricesWritten += written.inserted;
+        counters.pricesConfirmed += written.confirmed;
+      } else {
+        copies.pricesCopied.set(
+          batch.copiedFromScopeId,
+          (copies.pricesCopied.get(batch.copiedFromScopeId) ?? 0) +
+            batch.entries.length
+        );
+      }
     }
 
     this.logger.log(
@@ -350,7 +396,7 @@ export class SourceIngest {
         `${owedCount} price(s) owed across ${owed.size} scope(s), ` +
         `${counters.pricesWritten} written to catalog.`
     );
-    return { outcomes, counters };
+    return { outcomes, counters, copies };
   }
 
   /**
@@ -548,9 +594,12 @@ export class SourceIngest {
     // it writes, and a created entity carries the `entry` relation too, which
     // has no place in an `INSERT ... ON CONFLICT`.
     const rows = observed.map(
-      ({ price, priceScopeId, observation, entry }) => ({
+      ({ price, priceScopeId, copiedFromScopeId, observation, entry }) => ({
         entryId: entry.id,
         priceScopeId,
+        // Written on every row, null included, so a scope walked directly
+        // after an earlier copy loses the copy's provenance with its values.
+        copiedFromScopeId,
         price: price.price,
         currency: price.currency,
         unitPrice: price.unitPrice,
@@ -596,7 +645,8 @@ export class SourceIngest {
     context: RunContext,
     priceScopeId: string,
     sourceKind: PriceSourceKind,
-    entries: readonly ItemPriceBatchEntry[]
+    entries: readonly ItemPriceBatchEntry[],
+    copiedFromScopeId: string | null
   ): Promise<{ inserted: number; confirmed: number }> {
     if (entries.length === 0) {
       return { inserted: 0, confirmed: 0 };
@@ -608,25 +658,81 @@ export class SourceIngest {
         priceScopeId,
         entries.slice(i, i + PRICE_BATCH),
         context.runId,
-        sourceKind
+        sourceKind,
+        copiedFromScopeId
       );
       inserted += result.inserted;
       confirmed += result.confirmed;
-      await context.report({
-        updated: result.inserted,
-        unchanged: result.confirmed,
-      });
+      // A copy moves no progress counter, for the reason `pricesRecorded`
+      // leaves it out: the run's numbers describe what the chain stated.
+      if (copiedFromScopeId === null) {
+        await context.report({
+          updated: result.inserted,
+          unchanged: result.confirmed,
+        });
+      }
     }
     return { inserted, confirmed };
   }
 }
 
-/** One price of one observation, beside the row and the scope it landed on. */
-interface ObservedPrice {
+/** One price and the scope it is written to, read there or copied from another. */
+interface PlacedPrice {
   price: SourceObservationPrice;
   priceScopeId: string;
+  /** The scope the price was read at, or null when it was read at `priceScopeId`. */
+  copiedFromScopeId: string | null;
+}
+
+/** One price of one observation, beside the row and the scope it landed on. */
+interface ObservedPrice extends PlacedPrice {
   observation: SourceObservation;
   entry: SourceCatalogEntry;
+}
+
+/** The prices owed to one scope, all read at the same place. */
+interface OwedBatch {
+  priceScopeId: string;
+  copiedFromScopeId: string | null;
+  entries: ItemPriceBatchEntry[];
+}
+
+function emptyCopies(): SourceIngestCopies {
+  return { pricedScopes: new Set(), pricesCopied: new Map() };
+}
+
+/**
+ * The copies one observation's prices owe (plan 0118, section 5).
+ *
+ * **A copy never lands on a scope the observation priced itself.** The spawn
+ * already refuses a target the run walks, but a chain that names its own
+ * regions can still state a price for a target this week, and that price is
+ * the chain's own statement, so it wins. Without this, one upsert would name
+ * the same (entry, scope) twice and Postgres would refuse the statement.
+ */
+function copiesFor(
+  placed: readonly PlacedPrice[],
+  copiesOf: ((priceScopeId: string) => readonly string[]) | undefined
+): PlacedPrice[] {
+  if (!copiesOf) {
+    return [];
+  }
+  const read = new Set(placed.map((place) => place.priceScopeId));
+  const copies: PlacedPrice[] = [];
+  for (const place of placed) {
+    for (const target of copiesOf(place.priceScopeId)) {
+      if (read.has(target)) {
+        continue;
+      }
+      read.add(target);
+      copies.push({
+        price: place.price,
+        priceScopeId: target,
+        copiedFromScopeId: place.priceScopeId,
+      });
+    }
+  }
+  return copies;
 }
 
 /** The item an observation resolves to, which only an `ACTIVE` row states. */
@@ -711,6 +817,7 @@ export class SourceIngestSession {
     pricesWritten: 0,
     pricesConfirmed: 0,
   };
+  private readonly copies = emptyCopies();
   private closed = false;
 
   constructor(
@@ -759,6 +866,15 @@ export class SourceIngestSession {
     this.counters.pricesRecorded += result.counters.pricesRecorded;
     this.counters.pricesWritten += result.counters.pricesWritten;
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
+    for (const scopeId of result.copies.pricedScopes) {
+      this.copies.pricedScopes.add(scopeId);
+    }
+    for (const [from, count] of result.copies.pricesCopied) {
+      this.copies.pricesCopied.set(
+        from,
+        (this.copies.pricesCopied.get(from) ?? 0) + count
+      );
+    }
     return result.outcomes;
   }
 
@@ -771,6 +887,10 @@ export class SourceIngestSession {
    */
   async close(): Promise<SourceIngestResult> {
     this.closed = true;
-    return { outcomes: this.outcomes, counters: this.counters };
+    return {
+      outcomes: this.outcomes,
+      counters: this.counters,
+      copies: this.copies,
+    };
   }
 }
