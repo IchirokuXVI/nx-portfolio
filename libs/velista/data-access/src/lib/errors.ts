@@ -30,6 +30,12 @@ export class GatewayError extends Error {
    * rendered as a countdown from an invented number (plan 0009, rule C3).
    */
   readonly retryAfterSeconds?: number;
+  /**
+   * The server's machine readable facts about this failure, when the code publishes
+   * any (backend plan 0112, section 2). Unvalidated past being a record: the reader of
+   * a given code maps the keys it needs.
+   */
+  readonly details?: Readonly<Record<string, unknown>>;
 
   constructor(init: {
     code: ErrorCode;
@@ -39,6 +45,7 @@ export class GatewayError extends Error {
     serverMessage?: string;
     fieldErrors?: Readonly<Record<string, readonly string[]>>;
     retryAfterSeconds?: number;
+    details?: Readonly<Record<string, unknown>>;
   }) {
     // The message is for a stack trace and a log, not for a user. Every user-facing
     // string is chosen by the page from `code`.
@@ -51,6 +58,7 @@ export class GatewayError extends Error {
     this.serverMessage = init.serverMessage;
     this.fieldErrors = init.fieldErrors;
     this.retryAfterSeconds = init.retryAfterSeconds;
+    this.details = init.details;
   }
 }
 
@@ -158,6 +166,7 @@ export function toGatewayError(
     serverMessage: problem?.message,
     fieldErrors: problem?.errors,
     retryAfterSeconds: problem?.retryAfterSeconds,
+    details: problem?.details,
   });
 }
 
@@ -177,6 +186,7 @@ function asProblemDetails(body: unknown): Partial<ProblemDetails> | null {
     message: typeof body['message'] === 'string' ? body['message'] : undefined,
     errors: asFieldErrors(body['errors']),
     retryAfterSeconds: asWaitSeconds(body['retryAfterSeconds']),
+    details: isRecord(body['details']) ? body['details'] : undefined,
   };
 }
 

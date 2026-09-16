@@ -766,7 +766,6 @@ describe('ListPage', () => {
         // 5.1). It followed `DECIDE` while the tap was the tick.
         interactive: true,
         adjustable: false,
-        actions: ['comments'],
         decidable: false,
       });
       // Everything on the list is still there to be read, which is the whole of READ.
@@ -844,21 +843,15 @@ describe('ListPage', () => {
     it('opens each one as a route relative to this page', async () => {
       const { fixture, router } = await render();
 
-      await fixture.componentInstance.act({ action: 'edit', lineId: 'ln-1' });
-      await fixture.componentInstance.act({
-        action: 'comments',
-        lineId: 'ln-1',
-      });
-      await fixture.componentInstance.act({ action: 'delete', lineId: 'ln-1' });
+      fixture.componentInstance.openLine('ln-1');
       fixture.componentInstance.openSettings();
 
       const paths = router.navigate.mock.calls.map((call) => call[0]);
-      // Every one under the `sheet` marker, which `_openSheet` adds so the five
-      // callers cannot each be the one that forgets it.
+      // Every one under the `sheet` marker, which `_openSheet` adds so the callers
+      // cannot each be the one that forgets it. Edit, comments and delete are not
+      // here: they open from the detail sheet since velista plan 0083.
       expect(paths).toEqual([
-        ['sheet', 'lines', 'ln-1', 'edit'],
-        ['sheet', 'lines', 'ln-1', 'comments'],
-        ['sheet', 'lines', 'ln-1', 'confirm', 'delete'],
+        ['sheet', 'lines', 'ln-1', 'detail'],
         ['sheet', 'settings'],
       ]);
     });

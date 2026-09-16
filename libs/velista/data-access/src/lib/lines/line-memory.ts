@@ -17,7 +17,7 @@ import {
 import { GatewayError } from '../errors';
 import { ListMemory } from '../lists/list-memory';
 import { ZoneMemory } from '../zones/zone-memory';
-import type { LineServiceI } from './line-service';
+import type { LineServiceI, LineUpdateResult } from './line-service';
 import { SEED_LINES } from './static-line-data';
 
 /**
@@ -192,8 +192,9 @@ export class LineMemory implements LineServiceI {
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      confirmMerge?: boolean;
     }
-  ): Promise<Line> {
+  ): Promise<LineUpdateResult> {
     const line = this._lineOrThrow(lineId);
     const permissions = this._permissionsFor(line.listId);
     const approved = line.approvalStatus === 'APPROVED';
@@ -232,7 +233,25 @@ export class LineMemory implements LineServiceI {
 
     this._maybeFail();
 
-    return this._patch(lineId, (current) => ({
+    const other = this._collision(line, changes.content);
+    if (other !== null) {
+      if (changes.confirmMerge !== true) {
+        throw new GatewayError({
+          code: 'line_merge_required',
+          status: 409,
+          correlationId: `memory-${Math.random().toString(36).slice(2, 10)}`,
+          detail: 'produced by LineMemory, no request was sent',
+          details: {
+            otherLineId: other.id,
+            otherContent: other.content,
+            otherQuantity: other.quantity,
+          },
+        });
+      }
+      return this._merge(line, other, changes);
+    }
+
+    const updated = this._patch(lineId, (current) => ({
       ...current,
       content: changes.content ?? current.content,
       quantity: changes.quantity ?? current.quantity,
@@ -250,6 +269,73 @@ export class LineMemory implements LineServiceI {
           }
         : {}),
     }));
+    return { line: updated, absorbedLineId: null };
+  }
+
+  /**
+   * The line a rename collides with, or null (backend plan 0112, section 2).
+   *
+   * Case and surrounding space only, where the server also folds accents: enough for
+   * a development fake to reach the question, and not a second normalization rule.
+   */
+  private _collision(line: Line, content: string | undefined): Line | null {
+    if (content === undefined) {
+      return null;
+    }
+    const fold = (value: string) => value.trim().toLocaleLowerCase();
+    if (fold(content) === fold(line.content)) {
+      return null;
+    }
+
+    const others = this._lines(line.listId).filter(
+      (candidate) =>
+        candidate.id !== line.id &&
+        candidate.approvalStatus !== 'REJECTED' &&
+        fold(candidate.content) === fold(content)
+    );
+    return [...others].sort(earlierFirst)[0] ?? null;
+  }
+
+  /**
+   * The confirmed merge: the earlier line survives with its own spelling, the summed
+   * quantity and both lines' products (backend plan 0112, section 3). The approval and
+   * product bound refusals are the server's and are not repeated here.
+   */
+  private _merge(
+    line: Line,
+    other: Line,
+    changes: { content?: string; quantity?: number }
+  ): LineUpdateResult {
+    const renamed: Line = {
+      ...line,
+      content: changes.content ?? line.content,
+      quantity: changes.quantity ?? line.quantity,
+    };
+    const [survivor, absorbed] =
+      earlierFirst(renamed, other) < 0 ? [renamed, other] : [other, renamed];
+
+    const merged: Line = {
+      ...survivor,
+      quantity: Math.min(
+        LINE_QUANTITY_MAX,
+        survivor.quantity + absorbed.quantity
+      ),
+      itemIds: [...new Set([...survivor.itemIds, ...absorbed.itemIds])],
+      approvalStatus:
+        survivor.approvalStatus === 'APPROVED' ||
+        absorbed.approvalStatus === 'APPROVED'
+          ? 'APPROVED'
+          : survivor.approvalStatus,
+      version: survivor.version + 1,
+    };
+
+    this._write(
+      line.listId,
+      this._lines(line.listId)
+        .filter((current) => current.id !== absorbed.id)
+        .map((current) => (current.id === merged.id ? merged : current))
+    );
+    return { line: merged, absorbedLineId: absorbed.id };
   }
 
   /**
@@ -710,6 +796,11 @@ function statusFor(code: GatewayError['code']): number {
     default:
       return 500;
   }
+}
+
+/** Which of two lines of one list comes first: by position, then by id. */
+function earlierFirst(a: Line, b: Line): number {
+  return a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 function memoryFailure(

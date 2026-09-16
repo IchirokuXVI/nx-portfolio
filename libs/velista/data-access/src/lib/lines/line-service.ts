@@ -12,6 +12,18 @@ import type {
 import { LineApi } from './line-api';
 
 /**
+ * What an edit answers (backend plan 0112, section 6).
+ *
+ * After a merge `line` is the **surviving** line, whose id can differ from the line
+ * the edit addressed, and `absorbedLineId` names the one that went away. Null when
+ * nothing merged, which is every edit that did not rename onto a taken name.
+ */
+export interface LineUpdateResult {
+  readonly line: Line;
+  readonly absorbedLineId: string | null;
+}
+
+/**
  * The lines on a list, and every write the list screen makes to one.
  *
  * Split from `ListServiceI` on the same line that separates memberships from zones:
@@ -75,6 +87,10 @@ export interface LineServiceI {
    * Not the reel's path, deliberately. This is an absolute write, which is a last
    * writer wins race over a value somebody deliberately chose; a moving control
    * writes {@link addQuantity} instead.
+   *
+   * A rename onto a name another line of the list holds is refused with
+   * `line_merge_required` unless `confirmMerge` is true, and then the two lines merge
+   * into the earlier one (backend plan 0112).
    */
   updateLine(
     lineId: string,
@@ -83,8 +99,9 @@ export interface LineServiceI {
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      confirmMerge?: boolean;
     }
-  ): Promise<Line>;
+  ): Promise<LineUpdateResult>;
 
   /**
    * Move a line's quantity by a signed delta (`POST /v1/lines/:id/quantity`).

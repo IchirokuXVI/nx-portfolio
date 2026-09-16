@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { Line, Page } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { GatewayError } from '../errors';
 import { Mutations } from '../mutations';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
@@ -74,6 +75,8 @@ function service(seed: readonly Line[]) {
   };
 
   let readFailsWith: Error | null = null;
+  /** The line the next edit reports as absorbed by a merge (backend plan 0112). */
+  let absorbNext: string | null = null;
 
   const impl: LineServiceI = {
     listLines: async (): Promise<Page<Line>> => {
@@ -100,8 +103,14 @@ function service(seed: readonly Line[]) {
           version: 1,
         })
       ),
-    updateLine: async (lineId, changes) =>
-      answer(line(lineId, { ...changes, version: 2 })),
+    updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
+      const absorbedLineId = absorbNext;
+      absorbNext = null;
+      return {
+        line: await answer(line(lineId, { ...changes, version: 2 })),
+        absorbedLineId,
+      };
+    },
     addQuantity: async (lineId, delta) =>
       answer(line(lineId, { quantity: 1 + delta, version: 2 })),
     settle: async (lineId, outcome, options) => {
@@ -170,6 +179,9 @@ function service(seed: readonly Line[]) {
     },
     answerNext: (value: Line) => {
       answerWith = value;
+    },
+    absorbNext: (lineId: string) => {
+      absorbNext = lineId;
     },
     holdWrites: () => {
       held = new Promise<void>((resolve) => {
@@ -514,6 +526,59 @@ describe('LineStore', () => {
       expect(result.state).toBe('failed');
       expect(store.linesIn(LIST)[0].quantity).toBe(2);
       expect(store.writeNoteOf('a')?.outcome).toBe('failed');
+    });
+  });
+
+  describe('an edit that merges two lines (velista plan 0083, section 5)', () => {
+    it('removes the absorbed line at once and keeps the survivor', async () => {
+      const { store, lines, realtime } = await build([
+        line('a', { content: 'Milk', quantity: 2, position: 1 }),
+        line('b', { content: 'Bread', quantity: 3, position: 2 }),
+      ]);
+      await store.load(LIST);
+      lines.answerNext(
+        line('a', { content: 'Milk', quantity: 5, position: 1, version: 2 })
+      );
+      lines.absorbNext('b');
+
+      const outcome = await store.updateLine('b', {
+        content: 'Milk',
+        confirmMerge: true,
+      });
+
+      expect(outcome).toEqual(
+        expect.objectContaining({ state: 'succeeded', absorbedLineId: 'b' })
+      );
+      expect(store.linesIn(LIST).map((l) => [l.id, l.quantity])).toEqual([
+        ['a', 5],
+      ]);
+
+      // The event that follows finds nothing left to remove.
+      realtime.emit('line.deleted', { id: 'b', listId: LIST });
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['a']);
+    });
+
+    it('hands the refusal out and snaps the row back', async () => {
+      const { store, lines } = await build([
+        line('a', { content: 'Milk' }),
+        line('b', { content: 'Bread' }),
+      ]);
+      await store.load(LIST);
+      const refusal = new GatewayError({
+        code: 'line_merge_required',
+        status: 409,
+        correlationId: 'c',
+        details: { otherLineId: 'a', otherContent: 'Milk', otherQuantity: 1 },
+      });
+      lines.failNext(refusal);
+
+      const outcome = await store.updateLine('b', { content: 'Milk' });
+
+      expect(outcome).toEqual({ state: 'failed', error: refusal });
+      expect(store.linesIn(LIST).map((l) => l.content)).toEqual([
+        'Milk',
+        'Bread',
+      ]);
     });
   });
 

@@ -30,10 +30,6 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
     overwrittenBy: null,
     interactive: true,
     adjustable: true,
-    actions: ['edit', 'comments', 'delete'],
-    // Non-null exactly when `actions` includes `edit`, which is the invariant
-    // `LineRowVm.editScope` states and `select-list-state.spec.ts` guards.
-    editScope: 'full',
     decidable: false,
     restorable: false,
     editor: null,
@@ -131,9 +127,7 @@ describe('LineRow', () => {
     it('has no control anywhere on it that marks a line not available', async () => {
       // Every action a row can carry, so this cannot pass by the fixture happening
       // not to include one.
-      const fixture = await render(
-        vm({ actions: ['edit', 'comments', 'delete', 'moveUp', 'moveDown'] })
-      );
+      const fixture = await render(vm());
 
       const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
       expect(text).not.toContain('markNotAvailable');
@@ -343,21 +337,6 @@ describe('LineRow', () => {
       expect(opened).toEqual([]);
     });
 
-    it('leaves the overflow menu alone rather than opening it', async () => {
-      const fixture = await render(vm());
-      const acted: string[] = [];
-      fixture.componentInstance.act.subscribe(({ action }) =>
-        acted.push(action)
-      );
-
-      openReel(fixture);
-      tap(fixture.nativeElement.querySelector('.trigger') as HTMLElement);
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.querySelector('.menu')).toBeNull();
-      expect(acted).toEqual([]);
-    });
-
     it('hears the very next tap, which is the one that was meant for the row', async () => {
       const fixture = await render(vm());
       const opened: string[] = [];
@@ -541,27 +520,20 @@ describe('LineRow', () => {
   });
 
   describe('what the row offers', () => {
-    it('draws no overflow at all when there is nothing in it', async () => {
-      // An absent menu rather than a disabled one: a disabled control implies a
-      // permission that is merely unavailable right now.
-      const fixture = await render(vm({ actions: [], editScope: null }));
+    it('draws no menu, and a tap opens the line (velista plan 0083)', async () => {
+      // The three dots went: the detail sheet a tap opens edits the line and reaches
+      // its comments and its delete.
+      const fixture = await render(vm());
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
 
-      expect(fixture.nativeElement.querySelector('.trigger')).toBeNull();
-    });
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelector('[role="menu"]')).toBeNull();
+      expect(host.querySelector('[aria-haspopup]')).toBeNull();
+      expect(host.querySelector('lib-ellipsis-icon')).toBeNull();
 
-    it('gives a reader the comment affordance and nothing else', async () => {
-      const fixture = await render(
-        vm({ actions: ['comments'], editScope: null })
-      );
-      (fixture.nativeElement.querySelector('.trigger') as HTMLElement).click();
-      fixture.detectChanges();
-
-      const items = [
-        ...fixture.nativeElement.querySelectorAll('.item'),
-      ] as HTMLElement[];
-      expect(items.map((item) => item.textContent?.trim())).toEqual([
-        'list.line.comments',
-      ]);
+      row(fixture).click();
+      expect(opened).toEqual(['ln-1']);
     });
 
     it('shows the two decisions only when the row is decidable', async () => {

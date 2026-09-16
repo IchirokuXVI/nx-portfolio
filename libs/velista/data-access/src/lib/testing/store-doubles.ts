@@ -715,6 +715,9 @@ export type LineWriteCall =
        * the set where it was.
        */
       readonly adoptItemIds?: readonly string[];
+      readonly quantity?: number;
+      /** Whether the edit confirmed a merge (velista plan 0083, section 5). */
+      readonly confirmMerge?: boolean;
     }
   | { readonly kind: 'delete'; readonly lineId: string }
   | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] }
@@ -789,6 +792,24 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   let outcome = options.writeOutcome ?? 'succeeded';
   /** What an add answers with. APPROVED here makes rule L3's second call unnecessary. */
   let addedApproval: LineApprovalStatus = 'PENDING';
+  /**
+   * The answers the next edits give, in order, before falling back to `outcome`.
+   *
+   * A failure carries its error, because a merge refusal is a failure whose error is
+   * the whole of what the sheet draws next. A success may name an absorbed line, which
+   * leaves the list as it does in the real store (velista plan 0083, section 5).
+   */
+  const updateAnswers: (
+    | { readonly state: 'failed'; readonly error: unknown }
+    | {
+        readonly state: 'succeeded';
+        readonly line?: Partial<Line> & { readonly id: string };
+        readonly absorbedLineId?: string;
+      }
+  )[] = [];
+  /** Holds every edit in flight until released, for the states a save passes through. */
+  let updateHeld: Promise<void> | null = null;
+  let releaseUpdate: (() => void) | null = null;
 
   return {
     loadCount: loads.asReadonly(),
@@ -872,12 +893,58 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       lineId: string,
       patch?: {
         content?: string;
+        quantity?: number;
         itemIds?: readonly string[];
         adoptItemIds?: readonly string[];
+        confirmMerge?: boolean;
       }
     ) => {
       calls.push({ kind: 'update', lineId, ...patch });
-      if (outcome === 'succeeded' && patch !== undefined) {
+      if (updateHeld !== null) {
+        await updateHeld;
+      }
+
+      const staged = updateAnswers.shift();
+      if (staged?.state === 'failed') {
+        return { state: 'failed' as const, error: staged.error };
+      }
+      if (staged !== undefined) {
+        const target = staged.line?.id ?? lineId;
+        lines.update((current) =>
+          current
+            .filter(
+              (l) =>
+                l.id !== staged.absorbedLineId &&
+                (target === lineId || l.id !== lineId)
+            )
+            .map((l) =>
+              l.id === target
+                ? {
+                    ...l,
+                    ...(target === lineId && patch?.content !== undefined
+                      ? { content: patch.content }
+                      : {}),
+                    ...(target === lineId && patch?.quantity !== undefined
+                      ? { quantity: patch.quantity }
+                      : {}),
+                    ...staged.line,
+                  }
+                : l
+            )
+        );
+        const answered = lines().find((l) => l.id === target);
+        return {
+          state: 'succeeded' as const,
+          line: answered as Line,
+          absorbedLineId: staged.absorbedLineId ?? null,
+        };
+      }
+
+      if (outcome === 'failed') {
+        return { state: 'failed' as const, error: new Error('update failed') };
+      }
+
+      if (patch !== undefined) {
         const adopting = new Set(patch.adoptItemIds ?? []);
         const stillOn =
           patch.itemIds === undefined ? null : new Set(patch.itemIds);
@@ -890,6 +957,9 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
                   ...(patch.content === undefined
                     ? {}
                     : { content: patch.content }),
+                  ...(patch.quantity === undefined
+                    ? {}
+                    : { quantity: patch.quantity }),
                   ...(patch.itemIds === undefined
                     ? {}
                     : { itemIds: patch.itemIds }),
@@ -907,7 +977,14 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
           )
         );
       }
-      return outcome;
+      const edited = lines().find((l) => l.id === lineId);
+      return edited === undefined
+        ? { state: 'failed' as const, error: null }
+        : {
+            state: outcome as 'succeeded' | 'overwritten',
+            line: edited,
+            absorbedLineId: null,
+          };
     },
 
     addQuantity: async (lineId: string, delta: number) => {
@@ -1069,6 +1146,21 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     setComplete: (next: boolean) => complete.set(next),
     setWriteOutcome: (next: 'succeeded' | 'failed' | 'overwritten') => {
       outcome = next;
+    },
+    /** Stage what the next edit answers. See `updateAnswers`. */
+    answerNextUpdate: (answer: (typeof updateAnswers)[number]) => {
+      updateAnswers.push(answer);
+    },
+    /** Keep every edit in flight until `releaseUpdates`. */
+    holdUpdates: () => {
+      updateHeld = new Promise<void>((resolve) => {
+        releaseUpdate = resolve;
+      });
+    },
+    releaseUpdates: () => {
+      updateHeld = null;
+      releaseUpdate?.();
+      releaseUpdate = null;
     },
     /** What a created line comes back as. APPROVED is the backend's auto approve. */
     setAddedApproval: (next: LineApprovalStatus) => {
