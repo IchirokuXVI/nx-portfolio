@@ -19,19 +19,23 @@ import {
 import { CANDIDATE_LIMIT, makeGateway, toCreateItemBody } from './gateway.mjs';
 import { buildEntryPacket, toCandidate } from './packet.mjs';
 import {
+  PRIVATE_LABEL_WARN_LINES,
   buildDecisionSchema,
   buildSystemPrompt,
   chainName,
-  loadPrivateLabels,
+  indexBrands,
   loadVocabularies,
   normalizeName,
+  privateLabelLines,
 } from './rules.mjs';
 import {
   appendDecision,
   createRun,
   decisionsPath,
   loadRun,
+  readBrands,
   readJsonl,
+  writeBrands,
   writeReport,
   writeState,
 } from './run-dir.mjs';
@@ -103,7 +107,6 @@ export async function start({
   chain = null,
   makeSession = defaultMakeSession,
   vocabularies = loadVocabularies(),
-  privateLabels = loadPrivateLabels(),
 }) {
   const main = makeGateway(
     makeSession({
@@ -126,6 +129,13 @@ export async function start({
   await rehearsal.session.verify();
 
   const supermarkets = await main.listSupermarkets();
+
+  // The registry, read once, from the main gateway, which is the environment
+  // the decisions are written to (plan 0004). Every later step reads the file
+  // this writes and never the route, so one walk applies one registry from its
+  // first row to its last, the way it already applies one `local` flag.
+  const registry = await main.listBrands();
+
   const chains = supermarkets
     .filter((supermarket) => !chain || supermarket.id === chain)
     .map((supermarket) => ({
@@ -160,6 +170,24 @@ export async function start({
   }
 
   const runId = randomUUID();
+  const readAt = new Date().toISOString();
+  const brands = indexBrands(registry);
+  const labels = privateLabelLines(brands, supermarkets);
+
+  const notes = [
+    `Read ${brands.size} brands. A brand registered after this moment is not seen by this run.`,
+  ];
+  if (brands.size === 0) {
+    notes.push(
+      'The registry holds no brands, so every CREATE naming one is a REVIEW. That is the honest answer, and the back office is where a brand is registered.'
+    );
+  }
+  if (labels.length > PRIVATE_LABEL_WARN_LINES) {
+    notes.push(
+      `${labels.length} of them are private labels, and every one is a line of the system prompt billed on every row of this run.`
+    );
+  }
+
   createRun(runDir, {
     runId,
     mainUrl: normalizeUrl(mainUrl),
@@ -171,10 +199,16 @@ export async function start({
     supermarkets,
     total,
   });
+  writeBrands(runDir, { readAt, brands: registry });
 
   return {
     runId,
     remaining: total,
+    // What the registry held when this run opened, and what the operator has
+    // to know about it. stdout is the only thing this library writes, so the
+    // warnings are in the answer rather than on a stream of their own.
+    brands: brands.size,
+    notes,
     // How many rows `next --count` will hand out at once. The caller asks for
     // no more than this, and a decider that answers nothing here is walked one
     // row at a time, which is what keeps the two implementations independent:
@@ -184,7 +218,8 @@ export async function start({
     prompt: buildSystemPrompt({
       categories: vocabularies.categories,
       units: vocabularies.units,
-      privateLabels,
+      brands,
+      supermarkets,
     }),
     schema: buildDecisionSchema({
       categories: vocabularies.categories,
@@ -378,6 +413,9 @@ export async function next({
   mainPassword,
   makeSession = defaultMakeSession,
   gateways = null,
+  // The registry `start` wrote, read off disk rather than off the gateway, so
+  // a resumed walk annotates its packets with the brands it started with.
+  brands = loadBrands(runDir),
 }) {
   const { state } = loadRun(runDir);
   const { main, rehearsal } =
@@ -415,6 +453,8 @@ export async function next({
           supermarket: supermarketOf(state, row),
           candidates,
           eanMatch,
+          brands,
+          supermarkets: state.supermarkets ?? [],
         });
         handouts[row.id] = candidateIdentities(packet);
         rows.push(packet);
@@ -466,6 +506,11 @@ function openGateways({ state, makeSession, mainPassword }) {
   };
 }
 
+/** The registry `start` snapshotted, indexed the way the validators read it. */
+function loadBrands(runDir) {
+  return indexBrands(readBrands(runDir).brands);
+}
+
 /** The chain a row belongs to, from the list `start` recorded. */
 function supermarketOf(state, entry) {
   return (
@@ -510,7 +555,9 @@ export async function decide({
   makeSession = defaultMakeSession,
   gateways = null,
   vocabularies = loadVocabularies(),
-  privateLabels = loadPrivateLabels(),
+  // The same file `next` read. No step after `start` asks the gateway for a
+  // brand, which is what makes a resumed run one run (plan 0004).
+  brands = loadBrands(runDir),
 }) {
   const { state } = loadRun(runDir);
   if ((state.decidedIds ?? []).includes(entryId)) {
@@ -545,6 +592,8 @@ export async function decide({
         supermarket: supermarketOf(state, entry),
         candidates: collected.candidates,
         eanMatch: collected.eanMatch,
+        brands,
+        supermarkets: state.supermarkets ?? [],
       });
       // The refreshed set becomes the handout, so the answer to the refreshed
       // question is judged against the question that was asked. Without that
@@ -668,7 +717,8 @@ export async function decide({
       supermarket,
       linkTarget,
       eanOwner,
-      privateLabels,
+      brands,
+      supermarkets: state.supermarkets ?? [],
       categories: vocabularies.categories,
       units: vocabularies.units,
       // What the run was started against, not what is running now. A run
@@ -834,6 +884,46 @@ function record({
 // ---------------------------------------------------------------------------
 
 /**
+ * The brands this run wrote that the registry does not hold, by count.
+ *
+ * Read off the `BRAND_UNREGISTERED` issues the validators raised, which carry
+ * the key and the spelling beside the sentence for exactly this. `spelling` is
+ * the one the model wrote most often, because one key is usually several
+ * spellings and the operator registering it wants the one people write.
+ *
+ * The back office suggestions list reads the queue rather than this file, so
+ * this is the run's own summary and nothing downstream depends on it.
+ */
+export function countUnregisteredBrands(records) {
+  const byKey = new Map();
+  for (const row of records ?? []) {
+    for (const entry of row.issues ?? []) {
+      if (entry?.code !== 'BRAND_UNREGISTERED' || !entry.brandKey) {
+        continue;
+      }
+      const found = byKey.get(entry.brandKey) ?? {
+        key: entry.brandKey,
+        rows: 0,
+        spellings: new Map(),
+      };
+      found.rows += 1;
+      const spelling = entry.brand ?? entry.brandKey;
+      found.spellings.set(spelling, (found.spellings.get(spelling) ?? 0) + 1);
+      byKey.set(entry.brandKey, found);
+    }
+  }
+  return [...byKey.values()]
+    .map((found) => ({
+      key: found.key,
+      spelling: [...found.spellings.entries()].sort(
+        (a, b) => b[1] - a[1]
+      )[0][0],
+      rows: found.rows,
+    }))
+    .sort((a, b) => b.rows - a.rows || a.key.localeCompare(b.key));
+}
+
+/**
  * Counts per decision, every REVIEW with its issues, and the caller's usage.
  *
  * The re-ask rate is reported beside them (plan 0002), because the 2.6% the
@@ -867,6 +957,7 @@ export function end({ runDir, usage = null }) {
     decided: records.length,
     counts,
     reasks,
+    unregisteredBrands: countUnregisteredBrands(records),
     usage,
     reviews: records
       .filter((row) => row.decision === 'REVIEW')

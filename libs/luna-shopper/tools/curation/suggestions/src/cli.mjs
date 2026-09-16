@@ -32,8 +32,9 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|serve> [options]
           [--local]
           --local says the model answering this run is on this machine, which
           buys the run one extra validator (plan 0003).
-          Verifies both admin logins, counts the queue, and answers
-          { runId, remaining, prompt }.
+          Verifies both admin logins, counts the queue, snapshots the brand
+          registry into the run directory, and answers
+          { runId, remaining, brands, notes, prompt }.
 
   next    --run-dir <dir> [--count <n>] [--main-password <p>]
           Answers one row: { entry, candidates, eanMatch, remaining },

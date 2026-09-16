@@ -2,13 +2,16 @@
  * The run directory: the only state this library keeps (plan 0001).
  *
  * A killed run resumes for free because everything a subcommand needs is on
- * disk between invocations. There are two files and nothing else:
+ * disk between invocations. There are three files and nothing else:
  *
  * - `state.json`: the run's identity, the two urls, the chain walk cursor, the
  *   ids already decided, the candidate set each row of the current batch was
  *   handed, and how many rows have had to be asked again because that set
  *   changed underneath them.
  * - `decisions.jsonl`: a header line, then one line per decided row.
+ * - `brands.json`: the brand registry as `start` read it (plan 0004). Written
+ *   once, never rewritten, and read by every later step, so one walk applies
+ *   one registry from its first row to its last.
  *
  * The decided ids live in `state.json` *and* are recoverable from the JSONL, on
  * purpose. `state.json` is rewritten whole and could be lost to a kill between
@@ -28,6 +31,7 @@ import { join } from 'node:path';
 const STATE_FILE = 'state.json';
 const DECISIONS_FILE = 'decisions.jsonl';
 const REPORT_FILE = 'report.json';
+const BRANDS_FILE = 'brands.json';
 
 export function statePath(dir) {
   return join(dir, STATE_FILE);
@@ -39,6 +43,40 @@ export function decisionsPath(dir) {
 
 export function reportPath(dir) {
   return join(dir, REPORT_FILE);
+}
+
+export function brandsPath(dir) {
+  return join(dir, BRANDS_FILE);
+}
+
+/**
+ * The brand registry as `start` read it, and the moment it read it (plan 0004).
+ *
+ * A third file beside the state and the decisions, written once and never
+ * rewritten. It is separate from `state.json` because `state.json` is rewritten
+ * whole on every step and the registry is the one thing in a run that must not
+ * change under it: a resumed walk applies the brands it started with, the way
+ * it already applies the `local` flag it started with.
+ */
+export function writeBrands(dir, snapshot) {
+  const path = brandsPath(dir);
+  writeFileSync(
+    path,
+    `${JSON.stringify(snapshot, null, 2)}
+`,
+    'utf8'
+  );
+  return path;
+}
+
+export function readBrands(dir) {
+  const path = brandsPath(dir);
+  if (!existsSync(path)) {
+    throw new Error(
+      `${path} does not exist. It is written by start, so this run directory was started before the brand registry existed. Start a new run.`
+    );
+  }
+  return JSON.parse(readFileSync(path, 'utf8'));
 }
 
 /** Every non empty line of a JSONL file, parsed. */

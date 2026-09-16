@@ -6,14 +6,30 @@ import {
   retryableIssues,
   validateDecision,
 } from './decision.mjs';
-import { indexPrivateLabels } from './rules.mjs';
+import { indexBrands } from './rules.mjs';
 
 const CATEGORIES = ['DAIRY', 'PANTRY', 'OTHER'];
 const UNITS = ['UNIT', 'LITER', 'GRAM'];
-const LABELS = indexPrivateLabels({ Hacendado: 'Mercadona' });
 
 const MERCADONA = { id: 'sm-1', name: { es: 'Mercadona', en: 'Mercadona' } };
 const EL_JAMON = { id: 'sm-2', name: { es: 'El Jamón', en: 'El Jamón' } };
+const SUPERMARKETS = [MERCADONA, EL_JAMON];
+
+/** The registry as `start` snapshotted it: one house label and one free brand. */
+const BRANDS = indexBrands([
+  {
+    id: 'b-hacendado',
+    key: 'hacendado',
+    label: 'Hacendado',
+    privateLabelSupermarketId: 'sm-1',
+  },
+  {
+    id: 'b-carbonell',
+    key: 'carbonell',
+    label: 'Carbonell',
+    privateLabelSupermarketId: null,
+  },
+]);
 
 const ENTRY = {
   id: 'e1',
@@ -158,7 +174,8 @@ test('a clean CREATE and a clean LINK raise nothing', () => {
       decision: createDecision(),
       entry: ENTRY,
       supermarket: MERCADONA,
-      privateLabels: LABELS,
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
       categories: CATEGORIES,
       units: UNITS,
     }),
@@ -170,7 +187,8 @@ test('a clean CREATE and a clean LINK raise nothing', () => {
       entry: ENTRY,
       supermarket: MERCADONA,
       linkTarget: { id: 'i1', brand: 'Hacendado', unitSize: 1, ean: null },
-      privateLabels: LABELS,
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
       categories: CATEGORIES,
       units: UNITS,
     }),
@@ -194,7 +212,8 @@ test('NAME_CARRIES_BRAND fires on a name holding its brand', () => {
     decision: createDecision(goodItem({ nameEs: 'Leche Hacendado entera' })),
     entry: ENTRY,
     supermarket: MERCADONA,
-    privateLabels: LABELS,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
     categories: CATEGORIES,
     units: UNITS,
   });
@@ -206,7 +225,8 @@ test('NAME_CARRIES_SIZE fires on a name holding its size', () => {
     decision: createDecision(goodItem({ nameEs: 'Leche entera 1 L' })),
     entry: ENTRY,
     supermarket: MERCADONA,
-    privateLabels: LABELS,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
     categories: CATEGORIES,
     units: UNITS,
   });
@@ -225,7 +245,8 @@ test('NAME_GLITCH fires on a digit wedged inside a word, on either name', () => 
       decision: createDecision(item),
       entry: ENTRY,
       supermarket: MERCADONA,
-      privateLabels: LABELS,
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
       categories: CATEGORIES,
       units: UNITS,
     });
@@ -249,7 +270,8 @@ test('NAME_GLITCH leaves a real name alone, digit or no digit', () => {
       decision: createDecision(goodItem({ nameEs: name, nameEn: null })),
       entry: ENTRY,
       supermarket: MERCADONA,
-      privateLabels: LABELS,
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
       categories: CATEGORIES,
       units: UNITS,
     });
@@ -281,7 +303,8 @@ test('SIZELESS_CREATE fires on a CREATE with no size, from a local model only', 
       decision: sizeless,
       entry: { ...ENTRY, name: 'Sombra dúo Monochrome n30', unitSize: null },
       supermarket: MERCADONA,
-      privateLabels: LABELS,
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
       categories: CATEGORIES,
       units: UNITS,
       local,
@@ -311,7 +334,8 @@ test('SIZELESS_CREATE leaves a CREATE that states a size alone, local or not', (
         decision: createDecision(goodItem({ unitSize })),
         entry: ENTRY,
         supermarket: MERCADONA,
-        privateLabels: LABELS,
+        brands: BRANDS,
+        supermarkets: SUPERMARKETS,
         categories: CATEGORIES,
         units: UNITS,
         local,
@@ -333,7 +357,8 @@ test('SIZELESS_CREATE says nothing about a LINK, sizeless target or not', () => 
         entry: { ...ENTRY, unitSize: null },
         supermarket: MERCADONA,
         linkTarget: { id: 'i1', brand: null, ean: null, unitSize },
-        privateLabels: LABELS,
+        brands: BRANDS,
+        supermarkets: SUPERMARKETS,
         categories: CATEGORIES,
         units: UNITS,
         local,
@@ -365,7 +390,8 @@ test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the openapi vocabularies', 
     ),
     entry: ENTRY,
     supermarket: MERCADONA,
-    privateLabels: LABELS,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
     categories: CATEGORIES,
     units: UNITS,
   });
@@ -379,7 +405,8 @@ test('EAN_CONFLICT fires when a CREATE would duplicate a barcode', () => {
     entry: ENTRY,
     supermarket: MERCADONA,
     eanOwner: { id: 'i9' },
-    privateLabels: LABELS,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
     categories: CATEGORIES,
     units: UNITS,
   });
@@ -450,7 +477,8 @@ test('PRIVATE_LABEL_CROSSES_CHAIN fires on a CREATE and on a LINK', () => {
     decision: createDecision(),
     entry: { ...ENTRY, supermarketId: 'sm-2' },
     supermarket: EL_JAMON,
-    privateLabels: LABELS,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
     categories: CATEGORIES,
     units: UNITS,
   });
@@ -461,11 +489,124 @@ test('PRIVATE_LABEL_CROSSES_CHAIN fires on a CREATE and on a LINK', () => {
     entry: { ...ENTRY, supermarketId: 'sm-2' },
     supermarket: EL_JAMON,
     linkTarget: { id: 'i1', brand: 'Hacendado', unitSize: 1 },
-    privateLabels: LABELS,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
     categories: CATEGORIES,
     units: UNITS,
   });
   assert.ok(codes(onLink).includes('PRIVATE_LABEL_CROSSES_CHAIN'));
+});
+
+test('BRAND_UNREGISTERED fires on a CREATE the registry cannot place', () => {
+  const issues = validateDecision({
+    decision: createDecision(goodItem({ brand: '+Proteínas' })),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  const found = issues.find((i) => i.code === 'BRAND_UNREGISTERED');
+  assert.ok(found);
+  assert.match(found.detail, /\+Proteínas/);
+  // `end` counts the run's unregistered brands off these two fields rather
+  // than off the sentence.
+  assert.equal(found.brand, '+Proteínas');
+  assert.equal(found.brandKey, 'proteinas');
+});
+
+test('BRAND_UNREGISTERED leaves a LINK and a null brand alone', () => {
+  const onLink = validateDecision({
+    decision: linkDecision(),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    linkTarget: { id: 'i1', brand: '+Proteínas', unitSize: 1 },
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(!codes(onLink).includes('BRAND_UNREGISTERED'));
+
+  // A product with no brand is a real product, and null is a real answer.
+  const noBrand = validateDecision({
+    decision: createDecision(goodItem({ brand: null })),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.deepEqual(noBrand, []);
+});
+
+test('BRAND_UNREGISTERED is quiet on a registered key in another spelling', () => {
+  // Catalog stores the registered label whatever spelling the request sent
+  // (plan 0115 section 4), so a spelling difference is never a person's time.
+  const issues = validateDecision({
+    decision: createDecision(goodItem({ brand: 'HACENDADO' })),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.deepEqual(issues, []);
+});
+
+test('BRAND_DIFFERS_FROM_SOURCE fires for another brand and for null', () => {
+  const source = { ...ENTRY, brand: 'Hacendado' };
+
+  const other = validateDecision({
+    decision: createDecision(goodItem({ brand: 'Carbonell' })),
+    entry: source,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  const found = other.find((i) => i.code === 'BRAND_DIFFERS_FROM_SOURCE');
+  assert.ok(found);
+  assert.match(found.detail, /Hacendado/);
+  assert.match(found.detail, /Carbonell/);
+
+  const dropped = validateDecision({
+    decision: createDecision(goodItem({ brand: null })),
+    entry: source,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(codes(dropped).includes('BRAND_DIFFERS_FROM_SOURCE'));
+});
+
+test('BRAND_DIFFERS_FROM_SOURCE is quiet when the chain prints no registered brand', () => {
+  const issues = validateDecision({
+    decision: createDecision(goodItem({ brand: 'Hacendado' })),
+    entry: { ...ENTRY, brand: 'A range name' },
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.deepEqual(issues, []);
+});
+
+test('neither brand code is retryable', () => {
+  assert.deepEqual(
+    retryableIssues([
+      issue('BRAND_UNREGISTERED', 'x'),
+      issue('BRAND_DIFFERS_FROM_SOURCE', 'y'),
+    ]),
+    []
+  );
 });
 
 test('a private label stays quiet on its own chain', () => {
@@ -473,9 +614,26 @@ test('a private label stays quiet on its own chain', () => {
     decision: createDecision(),
     entry: ENTRY,
     supermarket: MERCADONA,
-    privateLabels: LABELS,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
     categories: CATEGORIES,
     units: UNITS,
   });
   assert.deepEqual(issues, []);
+});
+
+test('the private label comparison is by chain id, not by chain name', () => {
+  // The chain's name is not what the registry declares. A supermarket list
+  // that spells the chain differently, or does not hold it at all, changes
+  // nothing about who owns the brand.
+  const issues = validateDecision({
+    decision: createDecision(),
+    entry: { ...ENTRY, supermarketId: 'sm-2' },
+    supermarket: { id: 'sm-2', name: { es: 'MERCADONA S.A.' } },
+    brands: BRANDS,
+    supermarkets: [],
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(codes(issues).includes('PRIVATE_LABEL_CROSSES_CHAIN'));
 });

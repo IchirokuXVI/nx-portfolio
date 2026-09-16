@@ -28,6 +28,21 @@ one glance a `REVIEW` costs. When what you were given does not settle the entry,
 
 Work the steps in that order and stop at the first one that fires.
 
+## The brand on a `CREATE`
+
+The catalog keeps a registry of brands a person filled, and `entry.brandMatch` is this
+entry's own brand as that registry holds it, or null.
+
+- When `entry.brandMatch` is present, write `brandMatch.label` as `item.brand`, exactly as
+  it is spelled there.
+- When it is absent and the product plainly has a brand, write that brand. If the registry
+  does not hold it the tool sends the row to a person, which is the intended outcome. Never
+  drop a printed brand to null to avoid that.
+- A range, a flavour or a claim is never a brand, so `+Proteínas`, `Sin lactosa` and
+  `Listo para comer` stay in the name under rule 4.
+- `brandMatch.privateLabelOf` is the chain that owns the brand, when it owns one. That is
+  rule 6 stated as a fact about this entry.
+
 ## The six rules
 
 1. Same brand plus same format merges. Nothing else does.
@@ -76,6 +91,8 @@ format apart, and rule 1 merges anything they do not separate.
 - `entry.brand` can be null even when the printed name states a brand.
 - `entry.ean` is the barcode the source published, or null.
 - `entry.chainName` is the chain this entry belongs to, which is what rule 6 turns on.
+- `entry.brandMatch` is the entry's brand as the registry holds it, or null. Candidates are
+  not annotated: a `LINK` takes the candidate's brand as it is.
 - `entry.extra` is whatever else the source carried, truncated.
 
 `candidates` are the catalog products a search for the entry's name found, most relevant
@@ -117,7 +134,8 @@ list and you `LINK` onto it.
   otherwise.
 - `item.nameEs` is the Spanish name, with no brand and no size in it.
 - `item.nameEn` is the English name when you are confident of the translation, else null.
-- `item.brand` is the brand, or null when the product carries none.
+- `item.brand` is the brand, or null when the product carries none. When
+  `entry.brandMatch` is present it is `brandMatch.label`, copied exactly.
 - `item.unitSize` is a number, or null when the product has no size.
 - `item.defaultUnit` is one value from the unit vocabulary below, and is never null: a
   product with no printed size is sold by the piece, so `defaultUnit` is `UNIT` and
@@ -151,6 +169,10 @@ send it:
 - `UNKNOWN_CATEGORY` and `UNKNOWN_UNIT`: a value outside the two vocabularies below. Copy
   one of those strings exactly.
 - `PRIVATE_LABEL_CROSSES_CHAIN`: rule 6.
+- `BRAND_UNREGISTERED`: a `CREATE` whose `item.brand` the registry does not hold. A null
+  brand is never this, because plenty of products carry none.
+- `BRAND_DIFFERS_FROM_SOURCE`: a `CREATE` whose `item.brand` is not the brand
+  `entry.brandMatch` names.
 
 ## Three worked entries
 

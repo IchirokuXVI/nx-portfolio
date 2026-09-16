@@ -13,7 +13,6 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { decide, end, next, start } from './commands.mjs';
 import { makeGateway } from './gateway.mjs';
-import { indexPrivateLabels } from './rules.mjs';
 import { makeCatalog, makeFakeSession, makeQueue } from './test-fakes.mjs';
 
 function fixture(name) {
@@ -25,15 +24,12 @@ function fixture(name) {
 const QUEUE = fixture('queue-page.json');
 const SUPERMARKETS = fixture('supermarkets.json');
 const CATALOG = fixture('catalog-items.json');
+const BRANDS = fixture('brands.json');
 
 const VOCABULARIES = {
   categories: ['DAIRY', 'PANTRY', 'OTHER', 'SNACKS', 'BEVERAGES'],
   units: ['UNIT', 'LITER', 'GRAM', 'KILOGRAM', 'MILLILITER', 'PACK'],
 };
-const LABELS = indexPrivateLabels({
-  Hacendado: 'Mercadona',
-  'Ifa Unnia': 'El Jamón',
-});
 
 /**
  * The rows a walk can reach.
@@ -58,6 +54,7 @@ function build() {
     catalog: makeCatalog(CATALOG.items ?? CATALOG),
     queue: makeQueue(byChain),
     supermarkets: SUPERMARKETS.items ?? SUPERMARKETS,
+    brands: BRANDS.items,
     label: 'main',
   });
   const rehearsal = makeFakeSession({
@@ -83,7 +80,6 @@ test('a run walks every fixture row and reports what it decided', async () => {
     model: 'claude-sonnet-5',
     makeSession: world.makeSession,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
   assert.equal(started.remaining, REACHABLE.length);
 
@@ -94,12 +90,26 @@ test('a run walks every fixture row and reports what it decided', async () => {
       break;
     }
     seen.push(row.entry.id);
+    if (row.entry.id === 'entry-oil') {
+      // `Hacendado` is Mercadona's house label in the fixture registry, and
+      // this row is a Mercadona row, so the packet names both.
+      assert.deepEqual(row.entry.brandMatch, {
+        label: 'Hacendado',
+        privateLabelOf: 'Mercadona',
+      });
+    }
+    if (row.entry.id === 'entry-detergent') {
+      assert.equal(row.entry.brandMatch, null);
+    }
 
     // Every packet the model would see carries the chain it belongs to and a
     // candidate list, whatever the row's own fields happened to be.
     assert.equal(typeof row.entry.name, 'string');
     assert.equal(row.entry.chainRegistered, true);
     assert.ok(Array.isArray(row.candidates));
+    // Every packet names the field, present or null, so the prompt can speak
+    // about it on every row rather than on the rows that happen to have one.
+    assert.ok('brandMatch' in row.entry);
 
     await decide({
       runDir: dir,
@@ -111,7 +121,6 @@ test('a run walks every fixture row and reports what it decided', async () => {
       },
       gateways: world.gateways,
       vocabularies: VOCABULARIES,
-      privateLabels: LABELS,
     });
   }
 
@@ -132,7 +141,6 @@ test('a leaflet row carrying its brand and size in the name is a REVIEW', async 
     runDir: dir,
     makeSession: world.makeSession,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   // `Aceite de oliva Hacendado 1 L`, copied into the name it would create.
@@ -152,7 +160,6 @@ test('a leaflet row carrying its brand and size in the name is a REVIEW', async 
     },
     gateways: world.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.decision.decision, 'REVIEW');

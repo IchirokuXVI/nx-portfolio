@@ -90,6 +90,7 @@ export function makeFakeSession({
   catalog,
   queue = makeQueue(),
   supermarkets = [],
+  brands = [],
   label = null,
   verifyFails = false,
 }) {
@@ -115,6 +116,9 @@ export function makeFakeSession({
 
       if (path === '/v1/admin/catalog/supermarkets') {
         return { items: supermarkets, nextCursor: null };
+      }
+      if (path === '/v1/admin/catalog/brands') {
+        return { items: brands, nextCursor: null };
       }
       if (path === '/v1/admin/harvest/entries') {
         return queue.page(init.query.supermarketId, {

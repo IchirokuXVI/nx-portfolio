@@ -1,0 +1,41 @@
+{
+  "items": [
+    {
+      "id": "brand-hacendado",
+      "key": "hacendado",
+      "label": "Hacendado",
+      "privateLabelSupermarketId": "sm-mercadona",
+      "itemCount": 412,
+      "createdAt": "2026-09-16T09:00:00.000Z",
+      "updatedAt": "2026-09-16T09:00:00.000Z"
+    },
+    {
+      "id": "brand-ifa-unnia",
+      "key": "ifaunnia",
+      "label": "Ifa Unnia",
+      "privateLabelSupermarketId": "sm-el-jamon",
+      "itemCount": 63,
+      "createdAt": "2026-09-16T09:00:00.000Z",
+      "updatedAt": "2026-09-16T09:00:00.000Z"
+    },
+    {
+      "id": "brand-pascual",
+      "key": "pascual",
+      "label": "Pascual",
+      "privateLabelSupermarketId": null,
+      "itemCount": 31,
+      "createdAt": "2026-09-16T09:00:00.000Z",
+      "updatedAt": "2026-09-16T09:00:00.000Z"
+    },
+    {
+      "id": "brand-carbonell",
+      "key": "carbonell",
+      "label": "Carbonell",
+      "privateLabelSupermarketId": null,
+      "itemCount": 18,
+      "createdAt": "2026-09-16T09:00:00.000Z",
+      "updatedAt": "2026-09-16T09:00:00.000Z"
+    }
+  ],
+  "nextCursor": null
+}

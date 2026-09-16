@@ -1,19 +1,29 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   ISSUE_DETAIL_MAX,
   REASONING_MAX,
+  brandKey,
   buildDecisionSchema,
   buildSystemPrompt,
   carriesBrand,
   carriesGlitch,
   carriesSize,
-  indexPrivateLabels,
-  loadPrivateLabels,
+  indexBrands,
   loadPromptTemplate,
   loadVocabularies,
   normalizeName,
 } from './rules.mjs';
+
+function fixture(name) {
+  return JSON.parse(
+    readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')
+  );
+}
+
+const BRANDS = fixture('brands.json').items;
+const SUPERMARKETS = fixture('supermarkets.json').items;
 
 test('normalizeName folds case, accents and punctuation', () => {
   assert.equal(normalizeName('Leche Semidesnatada'), 'leche semidesnatada');
@@ -91,13 +101,45 @@ test('the prompt names the line rule, both domains, and the glitch code', () => 
   assert.match(template, new RegExp(String(ISSUE_DETAIL_MAX)));
 });
 
-test('the private label map is normalized on both sides', () => {
-  const labels = indexPrivateLabels({ Hacendado: 'Mercadona' });
-  assert.deepEqual(labels.get('hacendado'), {
-    brand: 'Hacendado',
-    chain: 'Mercadona',
-    chainKey: 'mercadona',
+test('the brandKey copy answers every pair the contracts cases pin', () => {
+  // The contracts function is TypeScript and this library is plain `.mjs` with
+  // no build step, so the two are held together by this file rather than by an
+  // import. A pair added on the backend side fails here until the copy agrees.
+  const cases = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../../../contracts/src/lib/brands/brand-key.cases.json',
+        import.meta.url
+      ),
+      'utf8'
+    )
+  );
+  assert.ok(cases.length > 0);
+  for (const [text, key] of cases) {
+    assert.equal(brandKey(text), key, `brandKey(${JSON.stringify(text)})`);
+  }
+});
+
+test('brandKey is not normalizeName, which is why the registry has its own', () => {
+  assert.equal(brandKey('El Pozo'), brandKey('ElPozo'));
+  assert.notEqual(normalizeName('El Pozo'), normalizeName('ElPozo'));
+});
+
+test('indexBrands keys the registry by brandKey', () => {
+  const brands = indexBrands(BRANDS);
+  assert.deepEqual(brands.get('hacendado'), {
+    id: 'brand-hacendado',
+    key: 'hacendado',
+    label: 'Hacendado',
+    privateLabelSupermarketId: 'sm-mercadona',
   });
+  assert.equal(brands.get('carbonell').privateLabelSupermarketId, null);
+  assert.equal(brands.get('Hacendado'), undefined);
+});
+
+test('indexBrands drops a row whose label has no key', () => {
+  const brands = indexBrands([{ id: 'b1', key: null, label: '---' }]);
+  assert.equal(brands.size, 0);
 });
 
 test('the vocabularies come from the committed OpenAPI document', () => {
@@ -118,7 +160,8 @@ test('the system prompt carries the rules, both vocabularies and the labels', ()
   const prompt = buildSystemPrompt({
     categories: ['DAIRY', 'PANTRY'],
     units: ['LITER', 'UNIT'],
-    privateLabels: loadPrivateLabels(),
+    brands: indexBrands(BRANDS),
+    supermarkets: SUPERMARKETS,
   });
   assert.match(prompt, /## Category vocabulary/);
   assert.match(prompt, /- `DAIRY`/);
@@ -128,6 +171,20 @@ test('the system prompt carries the rules, both vocabularies and the labels', ()
   assert.match(prompt, /`Hacendado` belongs to Mercadona/);
   // The six naming rules the validators enforce come from the markdown file.
   assert.match(prompt, /rule/i);
+  // The registry itself is not in here, only the private labels of it. A brand
+  // with no chain is a line the model is billed for on every row and does not
+  // need: the library resolves the brand and the packet carries the answer.
+  assert.doesNotMatch(prompt, /Pascual/);
+});
+
+test('the prompt names brandMatch and the range rule', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /entry\.brandMatch/);
+  assert.match(template, /brandMatch\.label/);
+  assert.match(template, /BRAND_UNREGISTERED/);
+  assert.match(template, /BRAND_DIFFERS_FROM_SOURCE/);
+  // A range is never a brand, which is the defect the registry was built for.
+  assert.match(template, /A range, a flavour or a claim is never a brand/);
 });
 
 test('the decision schema takes its enums from the same two vocabularies', () => {
