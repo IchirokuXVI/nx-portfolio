@@ -11,6 +11,8 @@ import type {
   BasketOriginSettledResult,
   BasketOutstandingRequest,
   BasketParticipant,
+  BasketRenameRequest,
+  BasketRenameResult,
   BasketSession,
   BasketSettleRequest,
   BasketSettleResult,
@@ -30,6 +32,7 @@ import {
   toBasketOriginQuantityResult,
   toBasketOriginSettledResult,
   toBasketParticipant,
+  toBasketRenameResult,
   toBasketSession,
   toBasketSettleResult,
   toBasketShareLink,
@@ -331,6 +334,36 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketSplitResult(answer), 'basket.splitLine');
+  }
+
+  /**
+   * Rename a basket line, and the zone lines it came from (velista `0084`).
+   *
+   * `confirmMerge` is **omitted unless true**, so the first request always asks: a
+   * body that carried `false` would mean the same thing today and would be one
+   * refactor away from carrying `true` by accident.
+   */
+  async renameLine(
+    generatedListId: string,
+    lineId: string,
+    body: BasketRenameRequest
+  ): Promise<BasketRenameResult> {
+    const request: Record<string, unknown> = { content: body.content };
+    if (body.confirmMerge === true) {
+      request['confirmMerge'] = true;
+    }
+
+    const answer = await firstValueFrom(
+      this._http.patch<unknown>(
+        `${this._basket(generatedListId)}/basket/lines/${encodeURIComponent(
+          lineId
+        )}`,
+        request,
+        this._participantOptions(generatedListId, 'basket.renameLine')
+      )
+    );
+
+    return required(toBasketRenameResult(answer), 'basket.renameLine');
   }
 
   /**

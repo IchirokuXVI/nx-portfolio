@@ -8,6 +8,182 @@
   line-height: var(--app-leading-heading);
   color: var(--app-text-primary);
   text-wrap: balance;
+
+  &:focus {
+    outline: none;
+  }
+}
+
+// The saved name, heard and not seen, while the name field stands in its place
+// (velista 0084, section 3).
+.visually-hidden {
+  @include shared.visually-hidden;
+}
+
+// --- The name (velista 0084) ------------------------------------------------
+
+// The field and its Save, with no rule under them: the outstanding count begins
+// the next block (section 3).
+.rename {
+  margin-block-end: var(--app-space-3);
+}
+
+.rename-label {
+  display: block;
+  margin-block-end: var(--app-space-2);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+// Rule T3: never under 16px, or iOS zooms the page on focus and throws Save off
+// screen at the moment it is about to be tapped.
+.rename-field {
+  inline-size: 100%;
+  block-size: var(--app-button-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+  font-family: inherit;
+  font-size: var(--app-field-font-size);
+  color: var(--app-text-primary);
+
+  &:focus {
+    border-color: var(--app-action-bg);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The quiet accent and not `.primary`: the solid amber stays on "Got all", and two
+// solid buttons on one sheet compete for the thumb (the line detail sheet's rule).
+.save {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  inline-size: 100%;
+  margin-block-start: var(--app-space-3);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-quiet-bg);
+  font-family: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  // Saved is a statement, not a disabled action: full strength, neutral colours,
+  // the check in the success colour.
+  &.saved {
+    border-color: var(--app-border-subtle);
+    background: transparent;
+    color: var(--app-text-secondary);
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.save-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.saved-glyph {
+  color: var(--app-status-success-fg);
+}
+
+// --- The merge question (velista 0084, section 4) ---------------------------
+
+.merge-title {
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.merge-explain {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+// One bordered group, a hairline between rows and none after the last.
+.merge-rows {
+  margin: var(--app-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  overflow: hidden;
+}
+
+.merge-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-2) var(--app-space-4);
+
+  & + & {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+}
+
+.merge-place {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.merge-name {
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.merge-zone {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// What the other line holds, on the trailing edge, in tabular numerals so a column
+// of rows lines up.
+.merge-amount {
+  flex: none;
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+}
+
+.merge-confirm {
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-5);
 }
 
 .outstanding {

@@ -157,8 +157,11 @@ export class GeneratedListStore {
         case 'generatedList.updated':
           this._upsert(event.list);
           break;
+        // `lineRemoved` is a merge by rename (velista `0084`), which takes a line
+        // away and moves `lineCount` exactly as an edit can.
         case 'generatedList.lineSettled':
         case 'generatedList.lineUpdated':
+        case 'generatedList.lineRemoved':
           // Only for a basket this client is actually holding. A settle on one that
           // was never read changes nothing on screen, and refetching for it would let
           // any basket in the account drive requests from a page that is not showing

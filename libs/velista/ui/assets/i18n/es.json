@@ -1280,7 +1280,22 @@
       "close": "Cerrar",
       "reverted": "Deshecho"
     },
+    "rename": {
+      "label": "Nombre",
+      "save": "Guardar",
+      "saved": "Guardado",
+      "mergeTitle": "Ya hay una línea llamada «{{name}}» aquí",
+      "mergeExplain": "Al juntarlas, cada una queda en una línea y se suman las cantidades.",
+      "mergeAsks": "pide {{quantity}}",
+      "mergeToGet": "{{quantity}} por coger",
+      "mergeBasketRow": "Esta cesta",
+      "merge": "Juntar",
+      "keepEditing": "Seguir editando"
+    },
     "error": {
+      "mergeNeedsApproval": "En {{list}}, ese nombre es de una línea aprobada, y esta aún no lo está.",
+      "mergeTooManyProducts": "En {{list}}, juntas tienen más de {{max}} productos.",
+      "renameForbidden": "Ya no puedes cambiar el nombre de esta línea.",
       "alreadyFinished": "Alguien ya ha terminado esta línea",
       "accessChanged": "Tu acceso a una de las listas de esta línea ha cambiado",
       "ownerOnly": "Esto solo lo puede hacer quien hizo la lista",

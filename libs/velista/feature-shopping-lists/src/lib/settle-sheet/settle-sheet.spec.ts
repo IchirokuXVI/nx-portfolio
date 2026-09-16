@@ -17,6 +17,7 @@ import type {
   BasketParticipant,
   BasketPriceScope,
   BasketProduct,
+  BasketRenameResult,
   BasketSettleResult,
   BasketSplitResult,
   BasketView,
@@ -190,6 +191,18 @@ function storeDouble(world: World) {
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
     reopen: jest.fn().mockResolvedValue(null),
+    // A rename that lands in place, renaming the held line as the store would.
+    renameLine: jest.fn(
+      async (
+        lineId: string,
+        body: { content: string }
+      ): Promise<BasketRenameResult> => {
+        const held = lines().find((row) => row.id === lineId) ?? line();
+        const renamed = { ...held, content: body.content };
+        lines.set(lines().map((row) => (row.id === lineId ? renamed : row)));
+        return { line: renamed, absorbedLineId: null };
+      }
+    ),
     // Answers what a split that changed nothing answers, so a spec that only
     // presses the button gets a success rather than a refusal. The ones that
     // care about the four collections override it.
@@ -1759,5 +1772,351 @@ describe('SettleSheet: the pick sheet splits the line', () => {
     fixture.detectChanges();
 
     expect(dismissedTo()).toEqual([`/velista/en/shopping-lists/${BASKET_ID}`]);
+  });
+});
+
+/**
+ * Velista `0084`: renaming a line from the basket.
+ *
+ * Who sees the field is the client half of backend `0113`'s rule, so most of these
+ * state a reader and assert a presence or an absence. The rest are the save, the
+ * merge question and where the sheet goes after a merge.
+ */
+describe('SettleSheet: renaming the line', () => {
+  const field = (fixture: ComponentFixture<SettleSheet>) =>
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      '#settle-name'
+    );
+  const saveButton = (fixture: ComponentFixture<SettleSheet>) =>
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '.save'
+    );
+
+  function type(fixture: ComponentFixture<SettleSheet>, value: string) {
+    const input = field(fixture) as HTMLInputElement;
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+  }
+
+  async function press(
+    fixture: ComponentFixture<SettleSheet>,
+    button: HTMLButtonElement | null
+  ) {
+    button?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  describe('who sees the field', () => {
+    it('is drawn for the owner, holding the line’s name', async () => {
+      const { fixture } = await render();
+
+      expect(field(fixture)?.value).toBe('Milk');
+    });
+
+    it('is drawn for the owner on a line with no origin', async () => {
+      const { fixture } = await render({
+        lines: [line({ kind: 'ADDED', origins: [], targetListId: null })],
+      });
+
+      expect(field(fixture)).not.toBeNull();
+    });
+
+    it('is drawn for a registered participant who sees zone data, on a line with origins', async () => {
+      const { fixture } = await render({
+        meKind: 'REGISTERED',
+        seesZoneData: true,
+      });
+
+      expect(field(fixture)).not.toBeNull();
+    });
+
+    it('is absent for a registered participant on a line with no origin', async () => {
+      const { fixture } = await render({
+        meKind: 'REGISTERED',
+        seesZoneData: true,
+        lines: [line({ kind: 'ADDED', origins: [], targetListId: null })],
+      });
+
+      expect(field(fixture)).toBeNull();
+    });
+
+    it('is absent for a registered participant without zone data', async () => {
+      const { fixture } = await render({
+        meKind: 'REGISTERED',
+        seesZoneData: false,
+      });
+
+      expect(field(fixture)).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.title')
+          ?.classList
+      ).not.toContain('visually-hidden');
+    });
+
+    it('is absent for a guest', async () => {
+      const { fixture } = await render({
+        meKind: 'GUEST',
+        seesZoneData: false,
+      });
+
+      expect(field(fixture)).toBeNull();
+    });
+
+    it('is absent once the trip is finished', async () => {
+      const { fixture } = await render({ basketFinished: true });
+
+      expect(field(fixture)).toBeNull();
+    });
+  });
+
+  describe('Save', () => {
+    it('is disabled until the name changes, and for a blank name', async () => {
+      const { fixture } = await render();
+      expect(saveButton(fixture)?.disabled).toBe(true);
+
+      type(fixture, 'Leche entera');
+      expect(saveButton(fixture)?.disabled).toBe(false);
+
+      type(fixture, '   ');
+      expect(saveButton(fixture)?.disabled).toBe(true);
+
+      type(fixture, ' Milk ');
+      expect(saveButton(fixture)?.disabled).toBe(true);
+    });
+
+    it('sends the trimmed name, says saved on the button, and stays open', async () => {
+      const { fixture, store } = await render();
+
+      type(fixture, '  Leche entera ');
+      await press(fixture, saveButton(fixture));
+
+      expect(store.renameLine).toHaveBeenCalledWith(LINE_ID, {
+        content: 'Leche entera',
+      });
+      expect(saveButton(fixture)?.textContent).toContain('basket.rename.saved');
+      expect(dismissedTo()).toEqual([]);
+    });
+
+    it('puts Save back on the next change', async () => {
+      const { fixture } = await render();
+
+      type(fixture, 'Leche entera');
+      await press(fixture, saveButton(fixture));
+      type(fixture, 'Leche entera sin lactosa');
+
+      expect(saveButton(fixture)?.textContent).not.toContain(
+        'basket.rename.saved'
+      );
+      expect(saveButton(fixture)?.textContent).toContain('basket.rename.save');
+    });
+  });
+
+  describe('the merge question', () => {
+    async function asked() {
+      const rendered = await render({
+        lines: [
+          line(),
+          line({
+            id: 'line-2',
+            content: 'leche entera',
+            quantity: 5,
+            settled: 3,
+            position: 1,
+          }),
+        ],
+      });
+      const { fixture, store } = rendered;
+      store.renameLine.mockImplementationOnce(async () => {
+        store.error.set(
+          new GatewayError({
+            code: 'line_merge_required',
+            status: 409,
+            correlationId: 'm1',
+            details: {
+              lists: [
+                {
+                  listId: 'l1',
+                  listName: 'Weekly shop',
+                  zoneName: 'Flat 3B',
+                  otherContent: 'Leche entera',
+                  otherQuantity: 2,
+                },
+                {
+                  listId: 'l2',
+                  listName: 'Groceries',
+                  zoneName: 'Parents',
+                  otherContent: 'leche entera',
+                  otherQuantity: 1,
+                },
+              ],
+              basket: {
+                otherLineId: 'line-2',
+                otherContent: 'leche entera',
+                otherQuantity: 5,
+              },
+            },
+          })
+        );
+        return null;
+      });
+
+      type(fixture, 'Leche entera');
+      await press(fixture, saveButton(fixture));
+      return rendered;
+    }
+
+    const rows = (fixture: ComponentFixture<SettleSheet>) =>
+      [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.merge-row'
+        ),
+      ].map((row) => row.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+    const mergeButton = (fixture: ComponentFixture<SettleSheet>) =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '.merge-confirm'
+      );
+
+    it('draws one row per list and one for the basket', async () => {
+      const { fixture } = await asked();
+
+      const drawn = rows(fixture);
+      expect(drawn).toHaveLength(3);
+      expect(drawn[0]).toContain('Weekly shop');
+      expect(drawn[0]).toContain('Flat 3B');
+      expect(drawn[0]).toContain('basket.rename.mergeAsks');
+      expect(drawn[2]).toContain('basket.rename.mergeBasketRow');
+      expect(drawn[2]).toContain('basket.rename.mergeToGet');
+      // The settle pane is gone while the question is asked.
+      expect(field(fixture)).toBeNull();
+    });
+
+    it('states what each other line holds, the basket row as still to get', async () => {
+      const { fixture } = await asked();
+
+      const question = fixture.componentInstance['merge']();
+      expect(question?.name).toBe('Leche entera');
+      expect(question?.rows.map((row) => row.quantity)).toEqual([2, 1, 2]);
+    });
+
+    it('resends the same name with confirmMerge from Merge', async () => {
+      const { fixture, store } = await asked();
+
+      await press(fixture, mergeButton(fixture));
+
+      expect(store.renameLine).toHaveBeenLastCalledWith(LINE_ID, {
+        content: 'Leche entera',
+        confirmMerge: true,
+      });
+    });
+
+    it('returns to the field with the typed name from Keep editing', async () => {
+      const { fixture, store } = await asked();
+
+      const keepEditing = [
+        ...(
+          fixture.nativeElement as HTMLElement
+        ).querySelectorAll<HTMLButtonElement>('button.quiet'),
+      ].find((button) =>
+        button.textContent?.includes('basket.rename.keepEditing')
+      );
+      await press(fixture, keepEditing ?? null);
+
+      expect(field(fixture)?.value).toBe('Leche entera');
+      expect(store.renameLine).toHaveBeenCalledTimes(1);
+    });
+
+    it('follows the survivor with leaveTo when this line was absorbed', async () => {
+      const { fixture, store } = await asked();
+      store.renameLine.mockImplementationOnce(async () => {
+        const survivor = line({ id: 'line-0', content: 'Leche Entera' });
+        store.lines.set([survivor]);
+        return { line: survivor, absorbedLineId: LINE_ID };
+      });
+
+      await press(fixture, mergeButton(fixture));
+
+      const leaveTo = TestBed.inject(SheetNavigation).leaveTo as jest.Mock;
+      expect(leaveTo).toHaveBeenCalledWith(
+        `/velista/en/shopping-lists/${BASKET_ID}/sheet/lines/line-0/settle`
+      );
+    });
+  });
+
+  describe('a refusal', () => {
+    async function refusedWith(error: GatewayError) {
+      const { fixture, store } = await render();
+      store.renameLine.mockImplementationOnce(async () => {
+        store.error.set(error);
+        return null;
+      });
+      type(fixture, 'Leche entera');
+      await press(fixture, saveButton(fixture));
+      return fixture;
+    }
+
+    const said = (fixture: ComponentFixture<SettleSheet>) =>
+      (fixture.nativeElement as HTMLElement).querySelector('.rename .failed')
+        ?.textContent ?? '';
+
+    it('names the list when a pending line would merge into an approved one', async () => {
+      const fixture = await refusedWith(
+        new GatewayError({
+          code: 'line_merge_needs_approval',
+          status: 409,
+          correlationId: 'a1',
+          details: { listName: 'Weekly shop' },
+        })
+      );
+
+      expect(said(fixture)).toContain('basket.error.mergeNeedsApproval');
+      expect(fixture.componentInstance['renameErrorArgs']()).toEqual({
+        list: 'Weekly shop',
+      });
+    });
+
+    it('says it without a list when the refusal names none', async () => {
+      // Backend `0113` puts the list's name only in the server's own sentence today.
+      const fixture = await refusedWith(
+        new GatewayError({
+          code: 'line_merge_needs_approval',
+          status: 409,
+          correlationId: 'a2',
+        })
+      );
+
+      expect(said(fixture)).toContain('list.error.mergeNeedsApproval');
+    });
+
+    it('names the list and the bound when the merged products are too many', async () => {
+      const fixture = await refusedWith(
+        new GatewayError({
+          code: 'line_merge_too_many_products',
+          status: 409,
+          correlationId: 'a3',
+          details: { listName: 'Weekly shop', max: 20, offered: 23 },
+        })
+      );
+
+      expect(said(fixture)).toContain('basket.error.mergeTooManyProducts');
+      expect(fixture.componentInstance['renameErrorArgs']()).toEqual({
+        list: 'Weekly shop',
+        max: 20,
+      });
+    });
+
+    it('says the reader can no longer rename on forbidden', async () => {
+      const fixture = await refusedWith(
+        new GatewayError({
+          code: 'forbidden',
+          status: 403,
+          correlationId: 'a4',
+        })
+      );
+
+      expect(said(fixture)).toContain('basket.error.renameForbidden');
+    });
   });
 });

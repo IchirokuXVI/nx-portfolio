@@ -325,6 +325,19 @@ export type RealtimeEvent =
     }
   | {
       /**
+       * A rename merged a basket line into another, and this one went away (backend
+       * `0113`, section 6).
+       *
+       * An id and nothing else, so it names no zone data. The surviving line arrives
+       * beside it as `generatedList.lineUpdated`. It reaches the basket's room and the
+       * owner's own sessions.
+       */
+      readonly type: 'generatedList.lineRemoved';
+      readonly generatedListId: string;
+      readonly lineId: string;
+    }
+  | {
+      /**
        * Somebody joined a shared basket, or was removed from it (backend `0051`,
        * section 3), on the basket's own room.
        *
@@ -406,6 +419,7 @@ export const REALTIME_EVENT_NAMES = [
   'generatedList.lineSettled',
   'generatedList.lineUpdated',
   'generatedList.lineAdded',
+  'generatedList.lineRemoved',
   'generatedList.participantJoined',
   'generatedList.participantLeft',
   'generatedList.deleted',

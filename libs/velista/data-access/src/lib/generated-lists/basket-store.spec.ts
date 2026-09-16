@@ -116,6 +116,7 @@ function build(
     settle: (id, lineId, body) => memory.settle(id, lineId, body),
     reopen: (id, lineId) => memory.reopen(id, lineId),
     splitLine: (id, lineId, body) => memory.splitLine(id, lineId, body),
+    renameLine: (id, lineId, body) => memory.renameLine(id, lineId, body),
     setOutstanding: (id, lineId, body) =>
       memory.setOutstanding(id, lineId, body),
     getLineOrigins: (id, lineId) => memory.getLineOrigins(id, lineId),
@@ -491,6 +492,92 @@ describe('BasketStore', () => {
    * request**. A request per settle is what four people in a shop would generate, and
    * stopping that is what a live basket is for.
    */
+  /**
+   * Renaming a line (velista `0084`, backend `0113`).
+   *
+   * The claim worth a spec is the merge: the line that goes away must leave the
+   * basket at once, whichever of the two it was, and so must a line another
+   * participant's rename took away.
+   */
+  describe('renaming a line', () => {
+    it('renames in place when the name is free', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.renameLine('line-eggs', {
+        content: 'Free range eggs',
+      });
+
+      expect(result?.absorbedLineId).toBeNull();
+      expect(store.lines().find((row) => row.id === 'line-eggs')?.content).toBe(
+        'Free range eggs'
+      );
+    });
+
+    it('answers null and keeps the question when the name is taken', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+      const before = store.lines().length;
+
+      const result = await store.renameLine('line-eggs', { content: 'milk' });
+
+      expect(result).toBeNull();
+      expect(store.lines()).toHaveLength(before);
+      const error = store.error() as GatewayError;
+      expect(error.code).toBe('line_merge_required');
+      expect(error.details?.['basket']).toMatchObject({
+        otherLineId: 'line-milk',
+      });
+    });
+
+    it('removes the absorbed line at once and merges the survivor', async () => {
+      // Eggs sits after milk, so milk survives a merge and eggs is the one absorbed:
+      // the answer's line is not the line the rename addressed.
+      const { store } = build();
+      await store.open('basket-saturday');
+      const milk = store.lines().find((row) => row.id === 'line-milk');
+
+      const result = await store.renameLine('line-eggs', {
+        content: 'milk',
+        confirmMerge: true,
+      });
+
+      expect(result?.absorbedLineId).toBe('line-eggs');
+      expect(result?.line.id).toBe('line-milk');
+      expect(store.lines().some((row) => row.id === 'line-eggs')).toBe(false);
+      expect(
+        store.lines().find((row) => row.id === 'line-milk')?.quantity
+      ).toBe((milk?.quantity ?? 0) + 12);
+    });
+
+    it('removes a line another participant’s rename took away', async () => {
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+
+      socket.events.next({
+        type: 'generatedList.lineRemoved',
+        generatedListId: 'basket-saturday',
+        lineId: 'line-eggs',
+      });
+
+      expect(store.lines().some((row) => row.id === 'line-eggs')).toBe(false);
+    });
+
+    it('ignores a removal addressed to another basket', async () => {
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+      const before = store.lines().length;
+
+      socket.events.next({
+        type: 'generatedList.lineRemoved',
+        generatedListId: 'somebody-elses-basket',
+        lineId: 'line-eggs',
+      });
+
+      expect(store.lines()).toHaveLength(before);
+    });
+  });
+
   /**
    * Plan 0053: a line added in a shop.
    *
